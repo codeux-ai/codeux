@@ -109,6 +109,13 @@ export type DocsSlug =
   | 'operations-server-mode'
   | 'settings-google-drive-mount'
   | 'user-dashboard-custom-dashboards'
+  | 'architecture-chat-connectors-discord'
+  | 'architecture-chat-connectors-imessage'
+  | 'architecture-chat-connectors-overview'
+  | 'architecture-chat-connectors-microsoft-teams'
+  | 'architecture-chat-connectors-slack'
+  | 'architecture-chat-connectors-telegram'
+  | 'architecture-chat-connectors-whatsapp'
   | 'architecture-custom-dashboard-foundation'
   | 'architecture-custom-nodes'
   | 'architecture-managed-container-runtime'
@@ -871,6 +878,55 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Custom Dashboards",
     description: "Custom dashboards are project-scoped dashboard apps generated and revised by agents, then validated in a detached Docker runtime before publication. Use them when the built-in dashboard pages do not match the operatio...",
   },
+  'architecture-chat-connectors-discord': {
+    id: 'architecture-chat-connectors-discord',
+    path: '/docs/architecture-chat-connectors-discord',
+    section: 'Architecture',
+    title: "Discord Connector Profile",
+    description: "Discord is registered only with the existing webhook bot/gateway transport. Its module owns the unchanged setup schema, message normalizer, authentication headers and signature bases, outbound gateway mapping, respons...",
+  },
+  'architecture-chat-connectors-imessage': {
+    id: 'architecture-chat-connectors-imessage',
+    path: '/docs/architecture-chat-connectors-imessage',
+    section: 'Architecture',
+    title: "iMessage Connector Profile",
+    description: "iMessage is registered with managed_bridge and native_bridge transports. Its module owns the unchanged setup schemas, iMessage bridge normalizer, bearer authentication metadata, managed HTTP mapping, native command ma...",
+  },
+  'architecture-chat-connectors-overview': {
+    id: 'architecture-chat-connectors-overview',
+    path: '/docs/architecture-chat-connectors-overview',
+    section: 'Architecture',
+    title: "Chat Connector Registry",
+    description: "Code UX registers one typed, independently editable profile for each external chat connector. Profiles own setup schemas, implemented transport modes, authentication and handshake metadata, inbound normalization, exte...",
+  },
+  'architecture-chat-connectors-microsoft-teams': {
+    id: 'architecture-chat-connectors-microsoft-teams',
+    path: '/docs/architecture-chat-connectors-microsoft-teams',
+    section: 'Architecture',
+    title: "Microsoft Teams Connector Profile",
+    description: "Microsoft Teams is registered with managed_bridge and webhook transports. Its module owns the unchanged setup schemas, Bot Framework activity normalizer, ingress authentication metadata, outbound request mapping, resp...",
+  },
+  'architecture-chat-connectors-slack': {
+    id: 'architecture-chat-connectors-slack',
+    path: '/docs/architecture-chat-connectors-slack',
+    section: 'Architecture',
+    title: "Slack Connector Profile",
+    description: "Slack is registered with managed_bridge and webhook transports. Its module owns the unchanged setup schemas, Events API normalizer, Slack-compatible signature bases and headers, acknowledgements, outbound mapping and...",
+  },
+  'architecture-chat-connectors-telegram': {
+    id: 'architecture-chat-connectors-telegram',
+    path: '/docs/architecture-chat-connectors-telegram',
+    section: 'Architecture',
+    title: "Telegram Connector Profile",
+    description: "Telegram is registered with managed_bridge and webhook transports. Its module owns the unchanged setup schemas, Bot API update normalizer, ingress authentication metadata, outbound mapping and response parsing, config...",
+  },
+  'architecture-chat-connectors-whatsapp': {
+    id: 'architecture-chat-connectors-whatsapp',
+    path: '/docs/architecture-chat-connectors-whatsapp',
+    section: 'Architecture',
+    title: "WhatsApp Connector Profile",
+    description: "WhatsApp is registered with managed_bridge and webhook transports. Its module owns the unchanged managed-plugin and webhook setup schemas, Cloud API-shaped inbound normalizer, bridge authentication metadata, outbound...",
+  },
   'architecture-custom-dashboard-foundation': {
     id: 'architecture-custom-dashboard-foundation',
     path: '/docs/architecture-custom-dashboard-foundation',
@@ -1050,6 +1106,13 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['operations-server-mode'],
   docsRegistry['settings-google-drive-mount'],
   docsRegistry['user-dashboard-custom-dashboards'],
+  docsRegistry['architecture-chat-connectors-discord'],
+  docsRegistry['architecture-chat-connectors-imessage'],
+  docsRegistry['architecture-chat-connectors-overview'],
+  docsRegistry['architecture-chat-connectors-microsoft-teams'],
+  docsRegistry['architecture-chat-connectors-slack'],
+  docsRegistry['architecture-chat-connectors-telegram'],
+  docsRegistry['architecture-chat-connectors-whatsapp'],
   docsRegistry['architecture-custom-dashboard-foundation'],
   docsRegistry['architecture-custom-nodes'],
   docsRegistry['architecture-managed-container-runtime'],

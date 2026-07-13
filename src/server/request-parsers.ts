@@ -291,7 +291,7 @@ function resolveChatProviderBridgeMode(providerKind: ChatProviderKind, value: un
   return parseChatProviderBridgeMode(providerKind, value) ?? getChatProviderSetupSchema(providerKind).defaultBridgeMode;
 }
 
-function validateSetupValue(value: unknown, fieldName: string, type: string, options?: string[]): void {
+function validateSetupValue(value: unknown, fieldName: string, type: string, options?: readonly string[]): void {
   if (value === null || value === undefined) {
     return;
   }

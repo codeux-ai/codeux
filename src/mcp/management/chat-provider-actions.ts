@@ -45,7 +45,7 @@ const PROVIDER_KINDS: readonly ChatProviderKind[] = [
   "discord",
 ];
 
-const BRIDGE_MODES: readonly ChatProviderBridgeMode[] = ["managed_bridge", "webhook", "native_bridge"];
+const BRIDGE_MODES: readonly ChatProviderBridgeMode[] = ["managed_bridge", "webhook", "native_bridge", "official_api"];
 const CONNECTION_STATUSES: readonly ChatProviderConnectionStatus[] = ["draft", "active", "disabled", "error"];
 const DELIVERY_STATUSES: readonly ChatProviderDeliveryStatus[] = [
   "pending",

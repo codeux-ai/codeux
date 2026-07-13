@@ -90,6 +90,7 @@
 - [Configuration and Storage](./settings/configuration-and-storage.md)
 - [Provider Routing](./settings/provider-routing.md)
 - [Chat Provider Integrations](./settings/chat-provider-integrations.md)
+- [Chat Connector Profiles](./settings/chat-connectors/index.md)
 - [Settings Reference](./settings/index.md)
   - [Google Drive Project Mount](./settings/google-drive-mount.md)
   - [Project Context](./settings/project-context.md)

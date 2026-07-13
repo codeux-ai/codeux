@@ -4,7 +4,7 @@ Code UX persists external chat provider configuration separately from MCP listen
 
 ## Contracts
 
-Typed contracts live in `src/contracts/chat-provider-types.ts`.
+Public compatibility contracts live in `src/contracts/chat-provider-types.ts`. Runtime behavior is statically registered through `src/domain/chat-connectors/registry.ts`, with one profile module per provider under `src/domain/chat-connectors/providers/`.
 
 Supported providers:
 
@@ -15,7 +15,7 @@ Supported providers:
 - `microsoft-teams`
 - `discord`
 
-Supported bridge modes are `managed_bridge`, `webhook`, and `native_bridge`. Provider setup schemas describe the executable bridge shape for future runtime adapters:
+The bridge-mode type includes `managed_bridge`, `webhook`, `native_bridge`, and the additive `official_api` value. A profile advertises only modes it implements; the baseline profiles preserve the existing schemas below and do not yet advertise `official_api`:
 
 - WhatsApp: managed bridge or webhook.
 - iMessage: managed bridge or macOS native bridge command.
@@ -25,6 +25,10 @@ Supported bridge modes are `managed_bridge`, `webhook`, and `native_bridge`. Pro
 - Discord: bot/webhook gateway.
 
 Public records expose redacted credential metadata only. Runtime code that needs secrets must call the explicit internal repository read path.
+
+Profiles also declare authentication and handshake behavior, normalization, external identity, outbound construction and parsing, verification and session requirements, official references, live-test availability, and lifecycle metadata. Registry construction is side-effect free; shared service facades retain HTTP, command execution, redaction, replay, and timing-safe comparison responsibilities.
+
+See [Chat Connector Profiles](../settings/chat-connectors/index.md) for provider-specific baselines.
 
 ## MCP management
 
