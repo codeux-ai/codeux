@@ -145,6 +145,8 @@ Retry uses the existing task rerun flow instead of inventing a dispatch-only exe
 
 When a dashboard task rerun has to create a fresh `running` sprint run because no active run exists, Code UX now resumes the watch loop automatically after launching the new task dispatch. That keeps post-task CI, merge-conflict handling, and sprint completion logic moving without requiring a second manual `orchestrate` click after the rerun finishes.
 
+Manual sprint completion uses `POST /api/sprints/:sprintId/complete` instead of a generic sprint-row patch. If the sprint has an active queued, running, paused, or cancellation-requested run, the control force-cancels that run first so active dispatches, provider invocations, runtime rows, and leases cannot restore the previous runtime status. Only after cleanup succeeds does it persist the sprint status as `completed`. The dashboard applies an optimistic completed state while the operation runs and refreshes both sprint structure and execution data afterward.
+
 ## Invocation Usage-Limit Controls
 
 The Chat -> Invocations detail header shows **Reset timer** for active invocations that are waiting on a provider quota or rate-limit retry timestamp.

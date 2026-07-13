@@ -117,6 +117,7 @@ export interface SprintLedgerRowProps {
   onExport: () => void;
   onOverrides: () => void;
   onMarkCompleted: () => void;
+  onMarkQaPassed?: () => void;
   onRollback?: () => void;
   onDelete: () => void;
 }
@@ -143,6 +144,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   onExport,
   onOverrides,
   onMarkCompleted,
+  onMarkQaPassed,
   onRollback,
   onDelete,
 }) => {
@@ -176,6 +178,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   const pinActionId = `sprint-showcase:${sprint.id}`;
   const deleteActionId = `sprint-delete:${sprint.id}`;
   const markCompletedActionId = `sprint-mark-completed:${sprint.id}`;
+  const markQaPassedActionId = `sprint-mark-qa-passed:${sprint.id}`;
   const isCompleted = sprint.status === "completed";
   const statusPresentation = getSprintStatusPresentation({
     state: sprint.status,
@@ -199,8 +202,9 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   const isPinPending = pendingActionIds.has(pinActionId);
   const isDeletePending = pendingActionIds.has(deleteActionId);
   const isMarkCompletedPending = pendingActionIds.has(markCompletedActionId);
+  const isMarkQaPassedPending = pendingActionIds.has(markQaPassedActionId);
   // The menu icon only needs to show a loader if deleting/pinning. toggle and pause are shown in their own controls.
-  const isRowPending = isPinPending || isDeletePending || isMarkCompletedPending;
+  const isRowPending = isPinPending || isDeletePending || isMarkCompletedPending || isMarkQaPassedPending;
 
   const rowTone = attentionIndicatorState
     ? "border-status-red/55 bg-status-red/[0.055] shadow-[0_14px_36px_rgba(227,0,15,0.14)]"
@@ -591,12 +595,14 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
                   isCompleted={isCompleted}
                   showcaseBusy={isPinPending}
                   markCompletedDisabled={isMarkCompletedPending || isDeletePending || isAnyBulkPending}
+                  markQaPassedDisabled={isMarkQaPassedPending || sprint.latestReview?.status === "running" || isDeletePending || isAnyBulkPending}
                   deleteBusy={isDeletePending}
                   onEdit={onEdit}
                   onExport={onExport}
                   onToggleShowcase={() => onToggleShowcase(sprint)}
                   onOverrides={onOverrides}
                   onMarkCompleted={onMarkCompleted}
+                  onMarkQaPassed={onMarkQaPassed}
                   onRollback={onRollback}
                   onDelete={onDelete}
                   onClose={() => setMenuOpen(false)}

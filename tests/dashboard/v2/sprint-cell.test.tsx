@@ -83,6 +83,44 @@ describe("SprintCell", () => {
     expect(onMarkCompleted).toHaveBeenCalled();
   });
 
+  it("calls onMarkQaPassed and hides the action after a passing verdict", async () => {
+    const onMarkQaPassed = vi.fn();
+    const { rerender } = render(
+      <SprintCell
+        sprint={defaultSprint}
+        isEven={true}
+        accentColor="text-blue-500"
+        onMarkQaPassed={onMarkQaPassed}
+      />
+    );
+
+    fireEvent.click(screen.getByTitle("Settings"));
+    fireEvent.click(await screen.findByText("Mark QA Pass"));
+    expect(onMarkQaPassed).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <SprintCell
+        sprint={{
+          ...defaultSprint,
+          latestReview: {
+            status: "completed",
+            outcome: "pass",
+            summary: "Passed manually.",
+            findings: [],
+            reviewer: "Manual QA",
+            finishedAt: "2024-01-02T00:00:00.000Z",
+          },
+        }}
+        isEven={true}
+        accentColor="text-blue-500"
+        onMarkQaPassed={onMarkQaPassed}
+      />
+    );
+
+    fireEvent.click(screen.getByTitle("Settings"));
+    expect(screen.queryByText("Mark QA Pass")).toBeNull();
+  });
+
   it("displays QA Reviewed badge and hover summary", async () => {
     const sprintWithReview = {
       ...defaultSprint,

@@ -70,6 +70,8 @@ interface SprintCellProps {
   sprintKeyPrefix?: string;
   primaryBusy?: boolean;
   showcaseBusy?: boolean;
+  markCompletedBusy?: boolean;
+  markQaPassedBusy?: boolean;
   isPaused?: boolean;
   pauseResumeBusy?: boolean;
   humanIntervention?: ExecutionHumanInterventionSummary | null;
@@ -82,6 +84,7 @@ interface SprintCellProps {
   onOverrides?: () => void;
   onToggleShowcase?: () => void;
   onMarkCompleted?: () => void;
+  onMarkQaPassed?: () => void;
   onRollback?: () => void;
 }
 
@@ -104,6 +107,8 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   sprintKeyPrefix = "SPR",
   primaryBusy = false,
   showcaseBusy = false,
+  markCompletedBusy = false,
+  markQaPassedBusy = false,
   isPaused = false,
   pauseResumeBusy = false,
   humanIntervention = null,
@@ -116,6 +121,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   onOverrides,
   onToggleShowcase,
   onMarkCompleted,
+  onMarkQaPassed,
   onRollback,
 }) => {
   const reducedMotion = useReducedMotion();
@@ -439,6 +445,8 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
                 sprint={sprint}
                 isCompleted={isCompleted}
                 showcaseBusy={showcaseBusy}
+                markCompletedDisabled={markCompletedBusy}
+                markQaPassedDisabled={markQaPassedBusy || sprint.latestReview?.status === "running"}
                 isRunning={isRunning}
                 isPaused={isPaused}
                 primaryBusy={primaryBusy}
@@ -452,6 +460,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
                 onToggleShowcase={onToggleShowcase}
                 onOverrides={onOverrides}
                 onMarkCompleted={onMarkCompleted}
+                onMarkQaPassed={onMarkQaPassed}
                 onRollback={onRollback}
                 onDelete={onDelete}
                 onClose={() => setMenuOpen(false)}

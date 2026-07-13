@@ -110,6 +110,15 @@ You can run any sprint multiple times. Each run has its own ID and its own row i
 
 Pausing / cancelling are also exposed as MCP actions via the `manage_sprints` tool (actions `pause`, `cancel`, `force_cancel`).
 
+## Manual completion and QA pass
+
+The sprint card and ledger action menus include two separate manual controls:
+
+- **Mark Completed** safely ends any active sprint run before saving the sprint as completed. Active dispatches, provider invocations, runtime rows, and leases are cleaned up first, so a still-running watch loop cannot change the sprint back to `running`.
+- **Mark QA Pass** records a durable sprint-level QA verdict with outcome `pass` and reviewer `Manual QA`. It also resolves a matching sprint-level QA handoff, without dismissing task QA or unrelated attention. The action is unavailable while sprint QA is actively reviewing and is hidden after the latest sprint QA verdict passes.
+
+These are operator overrides. Use **Mark Completed** when no more runtime work should continue, and use **Mark QA Pass** only after a person has reviewed the integrated sprint result and accepts it despite the automated QA state.
+
 ## Rolling back a completed sprint
 
 Open the action menu of a completed standard sprint and choose **Rollback Sprint**. Code UX first inspects the remote merge history and later sprint work, then explains the selected path:

@@ -257,6 +257,7 @@ export const SprintsPage: FunctionComponent = () => {
     handleSprintToggle,
     handleSprintPauseResume,
     handleMarkCompleted,
+    handleMarkQaPassed,
     handleSubmitSprint,
     handleImprovePrompt,
     handleCancelPlanningRequest,
@@ -595,6 +596,10 @@ export const SprintsPage: FunctionComponent = () => {
     void handleMarkCompleted(sprintId);
   }, [handleMarkCompleted]);
 
+  const handleMarkQaPassedFromLedger = useCallback((sprintId: string) => {
+    void handleMarkQaPassed(sprintId);
+  }, [handleMarkQaPassed]);
+
   const handleDeleteSprintFromLedger = useCallback((sprintId: string) => {
     void requestConfirm({
       title: "Delete Sprint?",
@@ -774,6 +779,8 @@ export const SprintsPage: FunctionComponent = () => {
                     const activeRun = activeRunsBySprintId.get(sprint.id);
                     const pendingActionId = activeRun ? `sprint-stop:${activeRun.id}` : `sprint-start:${sprint.id}`;
                     const pinActionId = `sprint-showcase:${sprint.id}`;
+                    const markCompletedActionId = `sprint-mark-completed:${sprint.id}`;
+                    const markQaPassedActionId = `sprint-mark-qa-passed:${sprint.id}`;
                     const pauseResumeRun = pauseResumeRunsBySprintId.get(sprint.id);
                     const isPaused = pauseResumeRun?.status === "paused";
                     const pauseResumeBusy = !!pauseResumeRun && (
@@ -790,6 +797,8 @@ export const SprintsPage: FunctionComponent = () => {
                         sprintKeyPrefix={sprintKeyPrefix}
                         primaryBusy={pendingActionIds.has(pendingActionId)}
                         showcaseBusy={pendingActionIds.has(pinActionId)}
+                        markCompletedBusy={pendingActionIds.has(markCompletedActionId)}
+                        markQaPassedBusy={pendingActionIds.has(markQaPassedActionId)}
                         isPaused={isPaused}
                         pauseResumeBusy={pauseResumeBusy}
                         humanIntervention={interventionBySprintId.get(sprint.id) || null}
@@ -797,6 +806,7 @@ export const SprintsPage: FunctionComponent = () => {
                         onPauseResume={pauseResumeRun ? () => { handleSprintPauseResume(sprint.id); } : undefined}
                         onAddTasks={() => { void handleOpenAppendTasks(sprint); }}
                         onMarkCompleted={() => { void handleMarkCompleted(sprint.id); }}
+                        onMarkQaPassed={() => { void handleMarkQaPassed(sprint.id); }}
                         onRollback={() => setRollbackSprint(sprint)}
                         onEdit={() => {
                       setEditingSprint(sprint);
@@ -970,6 +980,7 @@ export const SprintsPage: FunctionComponent = () => {
                 onExportSprint={handleExportSprintFromLedger}
                 onOverridesSprint={handleOverridesSprintFromLedger}
                 onMarkCompletedSprint={handleMarkCompletedFromLedger}
+                onMarkQaPassedSprint={handleMarkQaPassedFromLedger}
                 onRollbackSprint={setRollbackSprint}
                 onDeleteSprint={handleDeleteSprintFromLedger}
                 onBulkStart={handleBulkStart}
@@ -1130,6 +1141,7 @@ export const SprintsPage: FunctionComponent = () => {
               isCompleted={activeRowMenuSprint.status === "completed"}
               showcaseBusy={pendingActionIds.has(`sprint-showcase:${activeRowMenuSprint.id}`)}
               markCompletedDisabled={pendingActionIds.has(`sprint-mark-completed:${activeRowMenuSprint.id}`)}
+              markQaPassedDisabled={pendingActionIds.has(`sprint-mark-qa-passed:${activeRowMenuSprint.id}`) || activeRowMenuSprint.latestReview?.status === "running"}
               onEdit={() => {
                 setEditingSprint(activeRowMenuSprint);
                 setLinkedIssues(activeRowMenuSprint.linkedIssues || []);
@@ -1146,6 +1158,9 @@ export const SprintsPage: FunctionComponent = () => {
               }}
               onMarkCompleted={() => {
                 void handleMarkCompleted(activeRowMenuSprint.id);
+              }}
+              onMarkQaPassed={() => {
+                void handleMarkQaPassed(activeRowMenuSprint.id);
               }}
               onRollback={() => setRollbackSprint(activeRowMenuSprint)}
               onDelete={() => {
