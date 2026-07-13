@@ -613,6 +613,25 @@ describe("local-merge helpers", () => {
     expect((await git(repo, "status", "--porcelain")).stdout).toContain("?? dirty-note.txt");
   });
 
+  it("retries a transient non-conflict failure while restoring preserved dirty work", async () => {
+    await writeFile(path.join(repo, "dirty-note.txt"), "dirty work\n", "utf8");
+    const preserved = await preserveDirtyCheckout(repo);
+    expect(preserved).not.toBeNull();
+    let cherryPickAttempts = 0;
+
+    const result = await restorePreservedDirtyCheckout(repo, preserved!.dirtyRefBranch, async (command, args, cwd) => {
+      if (args[0] === "cherry-pick" && args[1] === "--no-commit" && cherryPickAttempts++ === 0) {
+        throw new Error("transient git index lock");
+      }
+      return runCommandStrict(command, args, cwd);
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.conflict).toBe(false);
+    expect(cherryPickAttempts).toBe(2);
+    expect((await git(repo, "status", "--porcelain")).stdout).toContain("?? dirty-note.txt");
+  });
+
   it("keeps the dirty branch and cleans the checkout when restored dirty work conflicts", async () => {
     await git(repo, "checkout", "feature");
     await commitFile(repo, "shared.txt", "feature\n", "feat: sprint shared edit");

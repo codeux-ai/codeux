@@ -188,18 +188,23 @@ export async function restorePreservedDirtyCheckout(
     restoredPaths = [];
   }
 
-  try {
-    await runner("git", ["cherry-pick", "--no-commit", branch], repoPath);
-    if (restoredPaths.length > 0) {
-      await runner("git", ["reset", "--", ...restoredPaths], repoPath).catch(() => undefined);
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await runner("git", ["cherry-pick", "--no-commit", branch], repoPath);
+      if (restoredPaths.length > 0) {
+        await runner("git", ["reset", "--", ...restoredPaths], repoPath).catch(() => undefined);
+      }
+      return {
+        ok: true,
+        conflict: false,
+        restoredPaths,
+        dirtyRefBranch: branch,
+      };
+    } catch (err) {
+      lastError = err;
     }
-    return {
-      ok: true,
-      conflict: false,
-      restoredPaths,
-      dirtyRefBranch: branch,
-    };
-  } catch (err) {
+
     const conflictPaths = await listUnmergedConflictPaths(repoPath, runner);
     try {
       await runner("git", ["cherry-pick", "--abort"], repoPath);
@@ -210,14 +215,24 @@ export async function restorePreservedDirtyCheckout(
         // Best-effort cleanup; the error below tells the caller what happened.
       }
     }
-    return {
-      ok: false,
-      conflict: conflictPaths.length > 0,
-      restoredPaths: conflictPaths.length > 0 ? conflictPaths : restoredPaths,
-      dirtyRefBranch: branch,
-      error: formatGitError(err),
-    };
+    if (conflictPaths.length > 0) {
+      return {
+        ok: false,
+        conflict: true,
+        restoredPaths: conflictPaths,
+        dirtyRefBranch: branch,
+        error: formatGitError(lastError),
+      };
+    }
   }
+
+  return {
+    ok: false,
+    conflict: false,
+    restoredPaths,
+    dirtyRefBranch: branch,
+    error: formatGitError(lastError),
+  };
 }
 
 /**
