@@ -49,6 +49,7 @@ describe("ManagementToolHandler", () => {
       },
       executionRepository: {
         listSprintRuns: vi.fn(),
+        listExecutionInvocations: vi.fn().mockReturnValue([]),
       },
       getDashboardSettings: vi.fn(() => ({
         git: {
