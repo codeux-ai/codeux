@@ -62,6 +62,8 @@ Persistence migrations must be replay-safe: startup can execute `runMigrations()
 
 Provider invocation persistence tests should cover required observability fields in `provider_invocations`, including status, provider, model/session identifiers, token and character counters, failure metadata, nullable timestamps, and zero-valued usage. Repository tests must keep default storage on `:memory:` through `VITEST_IN_MEMORY_DB=true` or use an isolated temporary home when file-backed SQLite behavior is under test.
 
+Automatic base-agent update regressions are covered by `tests/backend/integration/agent-base-update-invocation.test.ts`. Keep that harness on the real `AgentBaseUpdateService` → `StructuredAgentRequestService` → `StructuredProviderResponseService` → `AgentPresetSyncService` path, with only the provider execution boundary replaced by deterministic output. The suite must continue to verify the `planning` / `agent_base_update` invocation contract, same-session parse retries at the configured cap, and that parse or provider failures leave both instruction markdown and the stored bundled-revision baseline untouched.
+
 - Run the local fast CI mirror (strict TS validation plus tests)
 ```bash
 pnpm run ci
