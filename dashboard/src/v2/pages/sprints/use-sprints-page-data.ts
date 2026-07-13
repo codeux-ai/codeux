@@ -47,6 +47,8 @@ import {
 import {
   buildActualActiveRunsMap,
   buildActiveRunsMap,
+  areCiStatusPresentationsEqual,
+  buildCiStatusBySprintId,
   buildDisplaySprints,
   getDefaultPlanningProviderMetadata,
   buildPauseResumeRunsMap,
@@ -358,6 +360,19 @@ export function useSprintsPageData() {
       && a.attentionType === b.attentionType,
   );
 
+  const ciStatusBySprintId = useStableMapByContent(
+    useMemo(
+      () => buildCiStatusBySprintId(
+        sprints,
+        execution.taskDispatches ?? [],
+        execution.recentEvents ?? [],
+        execution.attentionItems ?? [],
+      ),
+      [execution.attentionItems, execution.recentEvents, execution.taskDispatches, sprints],
+    ),
+    areCiStatusPresentationsEqual,
+  );
+
   const displaySprints = useMemo(
     () =>
       buildDisplaySprints(
@@ -478,6 +493,7 @@ export function useSprintsPageData() {
     activeRunsBySprintId,
     pauseResumeRunsBySprintId,
     interventionBySprintId,
+    ciStatusBySprintId,
     showCreateComposer,
     setShowCreateComposer,
     editingSprint,
