@@ -7,7 +7,7 @@ Custom dashboards are project-scoped dashboard apps generated and revised by age
 1. Ask the Project Manager for the dashboard you want. Include the purpose, target audience, data sources, layout preferences, review criteria, and whether it should be published after validation.
 2. Review the draft at `/custom-dashboards`. Drafts expose manifest JSON, generated file bundle content, source-node graph JSON, styleguide JSON, and data catalog selections.
 3. Ask for changes or edit the draft before creating a revision. Draft edits do not change previous revisions or the currently published dashboard.
-4. If the manifest declares credential slots, review them through the credential-binding management surface. Bind each required slot to a compatible credential ID; no secret value is entered into the dashboard draft or generated code.
+4. If the manifest declares credential slots, open the editor's **Credentials** tab. It shows bounded declarations and current non-secret metadata, and offers only active, configured, project-authorized credentials that satisfy the declared kinds and capabilities. Bind every required slot; no secret value is entered into the dashboard draft or generated code.
 5. Create a revision when the draft is ready. A revision snapshots the current manifest, files, source graph, styleguide, runtime metadata, and credential-ID bindings.
 6. Run detached validation. Code UX reviews bindings before it builds the revision in Docker, captures the browser-ready Vite artifact, starts a detached preview container, and health-checks the root URL.
 7. Inspect validation status, logs, and the proxied preview link. Validation passes only after credential policy, install, build, artifact capture, container start, and root health checks succeed.
@@ -15,6 +15,8 @@ Custom dashboards are project-scoped dashboard apps generated and revised by age
 9. Roll back by publishing an earlier passed revision, or archive the dashboard to clear its active publication while preserving history.
 
 If validation fails, use the report and logs to create a new revision. Code UX rejects failed, queued, running, cancelled, missing, or mismatched validation sessions before publication state changes. When a dashboard is already published, validating later drafts keeps the active published dashboard open, and validation sessions for the active published revision do not replace its published validation snapshot.
+
+The Credentials tab appears only for manifests with declared slots. Unavailable secure custody and empty compatible lists link to credential management in Settings. Binding changes use the current optimistic revision; a conflict refreshes the dashboard and asks for an explicit retry. Required unbinding marks the next revision as not ready, while optional unbound slots remain valid. Successful changes refresh validation and publication readiness. The controls support keyboard selection, visible focus, focus restoration, and live save/error announcements. Credential IDs stay out of manifest, file, source, styleguide, and runtime text editors, and the editor never requests or displays secret values.
 
 ## Data Sources
 
