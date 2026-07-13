@@ -10,7 +10,12 @@ import type {
   ChatConnectorHttpOutboundRequest,
   ChatConnectorProfile,
 } from "../domain/chat-connectors/types.js";
+import type { ImessageBridgeEnvelope } from "../domain/chat-connectors/providers/imessage.js";
 import { redactText } from "../shared/security/redaction.js";
+import {
+  ImessageNativeBridge,
+  ImessageNativeBridgeError,
+} from "./chat-providers/imessage-native-bridge.js";
 
 export interface ChatProviderOutboundBridgePayload {
   providerKind: string;
@@ -62,6 +67,8 @@ export function createDefaultChatProviderOutboundAdapter(): ChatProviderOutbound
 }
 
 export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutboundAdapter {
+  private readonly imessageNativeBridge = new ImessageNativeBridge();
+
   async send(context: ChatProviderOutboundAdapterContext): Promise<ChatProviderOutboundAdapterResult> {
     let profile: ChatConnectorProfile;
     try {
@@ -129,8 +136,25 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
       throw new ChatProviderOutboundAdapterError("Native bridge command is not configured.", false);
     }
 
-    const env: NodeJS.ProcessEnv = { ...process.env };
     const bridgeToken = getFirstSecret(context.connection.secrets, request.tokenSecretKeys);
+    if (context.connection.providerKind === "imessage") {
+      try {
+        return await this.imessageNativeBridge.send({
+          command: request.command,
+          workingDirectory: request.workingDirectory,
+          bridgeToken,
+          correlationId: context.correlationId,
+          request: request.body as ImessageBridgeEnvelope,
+          timeoutMs: request.timeoutMs,
+        });
+      } catch (error) {
+        if (error instanceof ImessageNativeBridgeError) {
+          throw new ChatProviderOutboundAdapterError(error.message, error.retryable);
+        }
+        throw error;
+      }
+    }
+    const env: NodeJS.ProcessEnv = { ...process.env };
     if (bridgeToken) {
       env.CODEUX_CHAT_BRIDGE_TOKEN = bridgeToken;
     }
