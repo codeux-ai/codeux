@@ -14,6 +14,7 @@ import { HeadlessOperationalReadinessService } from "../../../src/services/headl
 import { DistributedNodeFlowRunnerService } from "../../../src/services/distributed-node-flow-runner-service.js";
 import type { CodeUxPrincipal, HeadlessSecurityConfiguration } from "../../../src/contracts/headless-security-types.js";
 import type { KeyProvider } from "../../../src/services/credentials/key-provider.js";
+import { selectCredentialKeyProvider } from "../../../src/services/credentials/key-provider-selection.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -117,6 +118,57 @@ describe("authenticated headless automation operations", () => {
     await expect(required.assertStartupReady()).rejects.toThrow(/encrypted credential data exists/i);
     expect(health).toHaveBeenCalledTimes(1);
     expect(required.snapshot()).toMatchObject({ status: "NOT_READY", components: { credentialKey: { provider: "vault" } } });
+  });
+
+  it("refuses automatic local-file custody outside the trusted local dashboard mode", async () => {
+    const { directory, storage } = await storageFixture();
+    storage.close();
+    const cases = [
+      {
+        name: "server mode",
+        appConfig: { serverMode: true, dashboardEnabled: false },
+        security: { mode: "service_token" as const, remoteCredentialManagement: false },
+        environment: {},
+      },
+      {
+        name: "dashboard-disabled headless mode",
+        appConfig: { serverMode: false, dashboardEnabled: false },
+        security: { mode: "local" as const, remoteCredentialManagement: false },
+        environment: {},
+      },
+      {
+        name: "authenticated dashboard mode",
+        appConfig: { serverMode: false, dashboardEnabled: true },
+        security: { mode: "trusted_proxy" as const, remoteCredentialManagement: false },
+        environment: {},
+      },
+      {
+        name: "remote credential management",
+        appConfig: { serverMode: false, dashboardEnabled: true },
+        security: { mode: "local" as const, remoteCredentialManagement: true },
+        environment: {},
+      },
+      {
+        name: "non-loopback dashboard binding",
+        appConfig: { serverMode: false, dashboardEnabled: true },
+        security: { mode: "local" as const, remoteCredentialManagement: false },
+        environment: { DASHBOARD_HOST: "0.0.0.0" },
+      },
+    ];
+
+    for (const fixture of cases) {
+      const localFilePath = path.join(directory, fixture.name.replaceAll(" ", "-"), "credential-root.key");
+      const provider = selectCredentialKeyProvider({
+        appConfig: fixture.appConfig,
+        security: fixture.security,
+        environment: fixture.environment,
+        processProvider: null,
+        localFilePath,
+      });
+      expect(provider.providerName, fixture.name).toBe("mounted-key-file");
+      await expect(provider.health()).resolves.toMatchObject({ available: false, secure: true });
+      await expect(fs.stat(localFilePath)).rejects.toMatchObject({ code: "ENOENT" });
+    }
   });
 
   it("grants a queued run to exactly one authorized project-scoped runner", async () => {

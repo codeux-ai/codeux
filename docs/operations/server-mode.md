@@ -105,7 +105,7 @@ Use `/ready` for runtime readiness. It reports whether the Code UX runtime finis
 
 Do not include `Authorization` headers in probe logs. The probe endpoints do not require bearer credentials.
 
-`/ready` also reports `credentialKey`, `auditStore`, and `distributedRunner`. `/health` remains live during a key-provider outage, while `/ready` returns `503`. Startup aborts before dashboard or MCP binding when encrypted credential rows exist but their key provider cannot recover the wrapping key. Select a provider with `CODE_UX_CREDENTIAL_KEY_PROVIDER=mounted-key-file|vault|kms`; mounted files use `CODE_UX_CREDENTIAL_KEY_FILE` and owner-only permissions. Vault/KMS modes require their host adapter to be configured and healthy.
+`/ready` also reports `credentialKey`, `auditStore`, and `distributedRunner`. `/health` remains live during a key-provider outage, while `/ready` returns `503`. Startup aborts before dashboard or MCP binding when encrypted credential rows exist but their key provider cannot recover the wrapping key. Server mode never auto-provisions local-file custody. Select a provider with `CODE_UX_CREDENTIAL_KEY_PROVIDER=mounted-key-file|vault|kms`; mounted files use `CODE_UX_CREDENTIAL_KEY_FILE` and owner-only permissions. Vault/KMS modes require their host adapter to be configured and healthy.
 
 Authenticated operators can inspect `/api/admin/readiness`, export redacted NDJSON from `/api/admin/audit/export`, and sample `/api/admin/metrics/slo`. Audit rows include the correlation id, principal, project, action, outcome, and redacted metadata for management requests, credential access, runs, attempts, approvals, and outbox delivery.
 
