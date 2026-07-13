@@ -112,6 +112,7 @@ const routingProfileOptions = [
 ];
 
 type IntegrationId =
+  | "automation-credentials"
   | "jules"
   | "gemini"
   | "codex"
@@ -139,6 +140,7 @@ interface IntegrationDefinition {
 }
 
 const INTEGRATIONS: IntegrationDefinition[] = [
+  { id: "automation-credentials", label: "Automation Credentials", description: "Write-only secrets for project automation, node flows, and custom runtime integrations" },
   { id: "jules", label: providerLabels.jules, description: providerDescriptions.jules },
   { id: "gemini", label: providerLabels.gemini, description: providerDescriptions.gemini },
   { id: "antigravity", label: providerLabels.antigravity, description: providerDescriptions.antigravity },
