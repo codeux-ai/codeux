@@ -2,16 +2,60 @@
  * @vitest-environment jsdom
  */
 import { act, renderHook, waitFor } from "@testing-library/preact";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { DashboardRealtimeServerMessage } from "../../../../types.js";
 import type { ExecutionInvocationRecord } from "../../../types.js";
+import { subscribeToDashboardRealtime } from "../../../../lib/realtime/dashboard-realtime-client.js";
 import { fetchProjectInvocations } from "../../../lib/invocation-api.js";
 import { useSystemViewData } from "../hooks/use-system-view-data.js";
+
+vi.mock("../../../../lib/realtime/dashboard-realtime-client.js", () => ({
+  subscribeToDashboardRealtime: vi.fn(),
+}));
 
 vi.mock("../../../lib/invocation-api.js", () => ({
   fetchProjectInvocations: vi.fn(),
 }));
 
+const mockedSubscribeToDashboardRealtime = vi.mocked(subscribeToDashboardRealtime);
 const mockedFetchProjectInvocations = vi.mocked(fetchProjectInvocations);
+
+const getRealtimeListener = (): ((message: DashboardRealtimeServerMessage) => void) => {
+  const subscriptionCall = mockedSubscribeToDashboardRealtime.mock.calls.at(-1);
+  if (!subscriptionCall) {
+    throw new Error("Expected a dashboard realtime subscription");
+  }
+  return subscriptionCall[1];
+};
+
+const createExecutionEvent = (projectId = "project-1"): DashboardRealtimeServerMessage => ({
+  type: "event",
+  event: {
+    sequence: 1,
+    emittedAt: "2026-06-01T10:06:00.000Z",
+    scopeType: "project",
+    scopeId: projectId,
+    scope: `project:${projectId}`,
+    eventType: "project.execution.updated",
+    entityType: "project",
+    entityId: projectId,
+    projectId,
+    sprintId: null,
+    threadId: null,
+    taskId: null,
+    dispatchId: null,
+    sprintRunId: null,
+    taskRunId: null,
+    connectionId: null,
+    correlationId: null,
+    payload: null,
+  },
+});
+
+const snapshotRequiredMessage: DashboardRealtimeServerMessage = {
+  type: "snapshot_required",
+  reason: "replay_gap",
+};
 
 const createInvocation = (overrides: Partial<ExecutionInvocationRecord>): ExecutionInvocationRecord => ({
   id: "inv-1",
@@ -55,6 +99,12 @@ const createInvocation = (overrides: Partial<ExecutionInvocationRecord>): Execut
 describe("useSystemViewData", () => {
   beforeEach(() => {
     mockedFetchProjectInvocations.mockReset();
+    mockedSubscribeToDashboardRealtime.mockReset();
+    mockedSubscribeToDashboardRealtime.mockImplementation(() => vi.fn());
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("returns the documented view model shape", async () => {
@@ -169,6 +219,67 @@ describe("useSystemViewData", () => {
     expect(result.current.summaryMetrics.completedCount).toBe(135);
   });
 
+  it.each([
+    ["project.execution.updated", createExecutionEvent()],
+    ["snapshot_required", snapshotRequiredMessage],
+  ])("refetches the current ledger query for %s", async (_eventType, message) => {
+    (mockedFetchProjectInvocations as any)
+      .mockResolvedValueOnce([createInvocation({ id: "inv-before" })])
+      .mockResolvedValueOnce([createInvocation({ id: "inv-after" })]);
+
+    const { result } = renderHook(() => useSystemViewData("project-1"));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+    expect(mockedSubscribeToDashboardRealtime).toHaveBeenCalledWith(
+      ["project:project-1"],
+      expect.any(Function),
+    );
+
+    vi.useFakeTimers();
+    act(() => {
+      getRealtimeListener()(message);
+      vi.advanceTimersByTime(150);
+    });
+    vi.useRealTimers();
+
+    await waitFor(() => {
+      expect(mockedFetchProjectInvocations).toHaveBeenCalledTimes(2);
+      expect(result.current.loading).toBe(false);
+    });
+    expect(result.current.invocations[0]?.id).toBe("inv-after");
+  });
+
+  it("coalesces bursts of execution and snapshot invalidations into one refetch", async () => {
+    (mockedFetchProjectInvocations as any).mockResolvedValue([createInvocation({ id: "inv-1" })]);
+    const { result } = renderHook(() => useSystemViewData("project-1"));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    vi.useFakeTimers();
+    act(() => {
+      const listener = getRealtimeListener();
+      listener(createExecutionEvent());
+      listener(snapshotRequiredMessage);
+      listener(createExecutionEvent());
+      vi.advanceTimersByTime(149);
+    });
+    expect(mockedFetchProjectInvocations).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    vi.useRealTimers();
+
+    await waitFor(() => {
+      expect(mockedFetchProjectInvocations).toHaveBeenCalledTimes(2);
+      expect(result.current.loading).toBe(false);
+    });
+  });
+
   it("filters invocations by failed status", async () => {
     (mockedFetchProjectInvocations as any).mockResolvedValue([
       createInvocation({ id: "inv-1", status: "completed", type: "analysis", provider: "gemini" }),
@@ -228,55 +339,147 @@ describe("useSystemViewData", () => {
     expect(result.current.errorsByCategory.cancelled).toBe(1);
   });
 
-  it("suppresses stale responses using AbortController", async () => {
-    let resolveFirstRequest: any;
-    let resolveSecondRequest: any;
-
-    const promise1 = new Promise((resolve) => {
+  it("aborts a superseded request and rejects its stale response when abort is ignored", async () => {
+    let resolveFirstRequest!: (value: ExecutionInvocationRecord[]) => void;
+    let resolveSecondRequest!: (value: ExecutionInvocationRecord[]) => void;
+    const firstRequest = new Promise<ExecutionInvocationRecord[]>((resolve) => {
       resolveFirstRequest = resolve;
     });
-    const promise2 = new Promise((resolve) => {
+    const secondRequest = new Promise<ExecutionInvocationRecord[]>((resolve) => {
       resolveSecondRequest = resolve;
     });
 
     (mockedFetchProjectInvocations as any)
-      .mockReturnValueOnce(promise1)
-      .mockReturnValueOnce(promise2);
+      .mockReturnValueOnce(firstRequest)
+      .mockReturnValueOnce(secondRequest);
 
     const { result } = renderHook(() => useSystemViewData("project-1"));
 
-    // First request is pending. Trigger a search change to cause a second request.
-    act(() => {
-      result.current.setSearch("new search");
+    await waitFor(() => {
+      expect(mockedFetchProjectInvocations).toHaveBeenCalledTimes(1);
+      expect(mockedSubscribeToDashboardRealtime).toHaveBeenCalledTimes(1);
     });
+    const firstSignal = mockedFetchProjectInvocations.mock.calls[0]?.[2]?.signal;
 
-    // The second request is now pending, and the first request's AbortController should have aborted it.
-    // However, since we mock fetchProjectInvocations, we just resolve the first one and verify it's ignored.
+    vi.useFakeTimers();
+    act(() => {
+      getRealtimeListener()(createExecutionEvent());
+      vi.advanceTimersByTime(150);
+    });
+    vi.useRealTimers();
 
-    const abortError = new Error("aborted");
-    abortError.name = "AbortError";
+    await waitFor(() => {
+      expect(mockedFetchProjectInvocations).toHaveBeenCalledTimes(2);
+    });
+    expect(firstSignal?.aborted).toBe(true);
 
     await act(async () => {
-      // Simulate fetch rejecting due to abort
-      try {
-        resolveFirstRequest(Promise.reject(abortError));
-      } catch (e) {}
-
-      resolveSecondRequest({
-        items: [
-          createInvocation({ id: "inv-second", status: "completed", type: "analysis", provider: "gemini" })
-        ],
-        totalCount: 1,
-      });
+      resolveSecondRequest([createInvocation({ id: "inv-newest" })]);
+    });
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.invocations[0]?.id).toBe("inv-newest");
     });
 
+    await act(async () => {
+      resolveFirstRequest([createInvocation({ id: "inv-stale" })]);
+    });
+    expect(result.current.invocations[0]?.id).toBe("inv-newest");
+    expect(result.current.error).toBeNull();
+  });
+
+  it("preserves rows, filters, sorting, search, and the current page during realtime refresh", async () => {
+    const currentPageResponse = {
+      items: [createInvocation({ id: "inv-current-page" })],
+      totalCount: 500,
+    } as any;
+    mockedFetchProjectInvocations.mockResolvedValue(currentPageResponse);
+
+    const { result } = renderHook(() => useSystemViewData("project-1"));
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(result.current.invocations).toHaveLength(1);
-    expect(result.current.invocations[0].id).toBe("inv-second");
-    expect(result.current.error).toBeNull(); // AbortError shouldn't set error
+    act(() => {
+      result.current.setSearch("telemetry");
+      result.current.setFilters({
+        status: ["failed"],
+        purpose: ["analysis"],
+        provider: ["codex"],
+        errorCategories: ["timeout", "rateLimit"],
+      });
+      result.current.setSort({ key: "totalTokens", dir: "asc" });
+    });
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.page).toBe(0);
+    });
+
+    act(() => {
+      result.current.setPage(2);
+    });
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(mockedFetchProjectInvocations).toHaveBeenLastCalledWith(
+        "project-1",
+        expect.objectContaining({ offset: 200 }),
+        expect.any(Object),
+      );
+    });
+
+    let resolveRefresh!: (value: typeof currentPageResponse) => void;
+    mockedFetchProjectInvocations.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveRefresh = resolve;
+    }));
+    const callCountBeforeRefresh = mockedFetchProjectInvocations.mock.calls.length;
+
+    vi.useFakeTimers();
+    act(() => {
+      getRealtimeListener()(createExecutionEvent());
+      vi.advanceTimersByTime(150);
+    });
+    vi.useRealTimers();
+
+    await waitFor(() => {
+      expect(mockedFetchProjectInvocations).toHaveBeenCalledTimes(callCountBeforeRefresh + 1);
+      expect(result.current.loading).toBe(true);
+    });
+    expect(result.current.invocations[0]?.id).toBe("inv-current-page");
+    expect(result.current.page).toBe(2);
+    expect(result.current.search).toBe("telemetry");
+    expect(result.current.filters).toEqual({
+      status: ["failed"],
+      purpose: ["analysis"],
+      provider: ["codex"],
+      errorCategories: ["timeout", "rateLimit"],
+    });
+    expect(result.current.sort).toEqual({ key: "totalTokens", dir: "asc" });
+    expect(mockedFetchProjectInvocations).toHaveBeenLastCalledWith(
+      "project-1",
+      {
+        limit: 100,
+        offset: 200,
+        search: "telemetry",
+        sortKey: "totalTokens",
+        sortDir: "asc",
+        status: "failed",
+        purpose: "analysis",
+        provider: "codex",
+        errorCategories: ["timeout", "rateLimit"],
+      },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+
+    await act(async () => {
+      resolveRefresh({
+        ...currentPageResponse,
+        items: [createInvocation({ id: "inv-refreshed-page" })],
+      });
+    });
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.invocations[0]?.id).toBe("inv-refreshed-page");
+    });
   });
 
   it("resets page to 0 on filter, search, or sort change", async () => {
