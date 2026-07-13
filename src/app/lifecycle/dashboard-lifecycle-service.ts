@@ -103,7 +103,6 @@ import type {
 } from "../../services/local-mcp-cli-config-service.js";
 import type { ProjectInitializationStateService } from "../../services/project-initialization-state-service.js";
 import type { CredentialBroker } from "../../services/credentials/credential-broker.js";
-import type { SettingsCredentialMigrationService } from "../../services/credentials/settings-credential-migration-service.js";
 import type { SettingsCredentialResolver } from "../../services/credentials/settings-credential-resolver.js";
 
 const updateCheckerService = new UpdateCheckerService();
@@ -149,7 +148,6 @@ export interface BootDashboardDeps {
   chatProviderOutboundService?: ChatProviderOutboundService;
   nodeFlowService?: NodeFlowService;
   credentialBroker: CredentialBroker;
-  settingsCredentialMigrationService?: SettingsCredentialMigrationService;
   settingsCredentialResolver?: SettingsCredentialResolver;
   headlessAuthService: HeadlessAuthService;
   automationAuditService: AutomationAuditExportService;
@@ -434,16 +432,6 @@ export function resolveImportedTaskAgentPresetId(
 }
 
 export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardServerHandle> {
-  if (deps.settingsCredentialMigrationService) {
-    const migration = await deps.settingsCredentialMigrationService.migrate();
-    deps.runtimeContext.dashboardSettings = deps.settingsRepository.getDefaultDashboardSettings();
-    deps.logger.info("Settings credential migration completed", {
-      migrated: migration.migrated,
-      scrubbed: migration.scrubbed,
-      recordsChanged: migration.recordsChanged,
-      secureStorageAvailable: migration.secureStorageAvailable,
-    });
-  }
   const dashboardDir = path.join(deps.projectRoot, "dashboard");
   const port = deps.getDashboardPort();
 

@@ -48,7 +48,7 @@ import { KnowledgeIngestionService } from "../../services/knowledge-ingestion-se
 import { KnowledgeService } from "../../services/knowledge-service.js";
 import { NodeFlowService } from "../../services/node-flow-service.js";
 import { ProviderConcurrencyService } from "../../services/provider-concurrency-service.js";
-import { DashboardSettings, ExternalSettingsHints } from "../../contracts/app-types.js";
+import { ExternalSettingsHints } from "../../contracts/app-types.js";
 import { buildExternalSettingsHints, loadExternalSettingsMigrationValues } from "../../config/external-settings.js";
 import { createLogger, type Logger } from "../../shared/logging/logger.js";
 import { ServerContext } from "../dependency-factory.js";
@@ -120,7 +120,6 @@ export interface CoreDependencies {
   activeDispatchRegistry: ActiveDispatchRegistry;
   runtimeCleanupService: RuntimeCleanupService;
   externalSettingsHints: ExternalSettingsHints;
-  dashboardSettings: DashboardSettings;
   memoryRepository: MemoryRepository;
   taskSelfReflectionRatingRepository: TaskSelfReflectionRatingRepository;
   schedulerRepository: SchedulerRepository;
@@ -161,8 +160,6 @@ export function createCoreDependencies(
   const externalSettingsMigrationValues = loadExternalSettingsMigrationValues(options.projectRoot);
   const externalSettingsHints = buildExternalSettingsHints(externalSettingsMigrationValues);
   const settingsRepository = new SettingsRepository();
-  const dashboardSettings = settingsRepository.getDefaultDashboardSettings();
-  context.runtimeContext.dashboardSettings = dashboardSettings;
   const resolveWorkerExecutionMode = (projectId: string, sprintId?: string | null) => (
     resolveEffectiveDashboardSettings(settingsRepository, projectId, sprintId).settings.workers.executionMode
   );
@@ -437,7 +434,6 @@ export function createCoreDependencies(
     activeDispatchRegistry,
     runtimeCleanupService,
     externalSettingsHints,
-    dashboardSettings,
     memoryRepository,
     taskSelfReflectionRatingRepository,
     schedulerRepository,

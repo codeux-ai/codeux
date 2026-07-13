@@ -30,8 +30,13 @@ import { bootDashboard } from "../../../src/app/lifecycle/dashboard-lifecycle-se
 import { bootMcpHttpTransport } from "../../../src/app/lifecycle/mcp-lifecycle-service.js";
 import axios from "axios";
 import path from "path";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import { DefaultRuntimeContext } from "../../../src/app/runtime-context.js";
+import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
+import { SettingsCredentialMigrationService } from "../../../src/services/credentials/settings-credential-migration-service.js";
+import type { CredentialBroker } from "../../../src/services/credentials/credential-broker.js";
 
 const stopServer = async (server: CodeUxServer): Promise<void> => {
   const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
@@ -102,6 +107,63 @@ describe("CodeUxServer", () => {
       }));
     } finally {
       await serverModeServer.close();
+    }
+  });
+
+  it("migrates and scrubs legacy credentials before headless server consumers start", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "code-ux-headless-migration-"));
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const sentinel = "legacy-headless-server-sentinel";
+    settingsRepository.getDatabase().prepare(
+      "INSERT INTO system_settings (id,payload,updated_at) VALUES (1,?,?)",
+    ).run(JSON.stringify({
+      integrations: {
+        providers: { jules: { provider: "jules", apiKey: sentinel } },
+      },
+    }), new Date().toISOString());
+    const unavailableBroker = {
+      health: vi.fn(async () => ({ available: false, secure: false })),
+      create: vi.fn(),
+    } as unknown as CredentialBroker;
+    const migrationService = new SettingsCredentialMigrationService({
+      settingsRepository,
+      credentialBroker: unavailableBroker,
+      listProjectIds: () => [],
+    });
+    const migrateSpy = vi.spyOn(migrationService, "migrate");
+    const serverModeConfig = loadAppConfig([
+      "node",
+      "index.js",
+      "--server-mode",
+      "--mcp-https-auth-token",
+      "cux_test_abcdefghijklmnopqrstuvwxyz123456",
+    ], projectRoot);
+    const serverModeServer = new CodeUxServer({ projectRoot, appConfig: serverModeConfig });
+    (serverModeServer as any).settingsRepository = settingsRepository;
+    (serverModeServer as any).settingsCredentialMigrationService = migrationService;
+
+    try {
+      await serverModeServer.run();
+      await (serverModeServer as any).migrateSettingsCredentials();
+
+      const raw = settingsRepository.getDatabase().prepare(
+        "SELECT payload FROM system_settings WHERE id=1",
+      ).get() as { payload: string };
+      expect(bootDashboard).not.toHaveBeenCalled();
+      expect(migrateSpy).toHaveBeenCalledTimes(1);
+      expect(unavailableBroker.create).not.toHaveBeenCalled();
+      expect(raw.payload).not.toContain(sentinel);
+      expect(raw.payload).toContain('"apiKeyCredentialRef":null');
+      expect(JSON.stringify((serverModeServer as any).runtimeContext.dashboardSettings)).not.toContain(sentinel);
+      const { bootSettings } = await import("../../../src/app/lifecycle/settings-lifecycle-service.js");
+      expect(migrateSpy.mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(bootSettings).mock.invocationCallOrder.at(-1)!,
+      );
+    } finally {
+      await serverModeServer.close();
+      settingsRepository.resetAllData();
+      settingsRepository.close();
+      await rm(dir, { recursive: true, force: true });
     }
   });
 
