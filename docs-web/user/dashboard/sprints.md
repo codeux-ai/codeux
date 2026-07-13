@@ -17,6 +17,37 @@ Failed execution and eligible human intervention receive a red border around the
 
 When reduced motion is enabled, the exclamation stops pulsing and the waiting cue stops bouncing; the red border, indicator, visible context, and semantic label remain. Worker- and system-owned transient pauses are not shown as requests for human action. Normal status, progress, review badges, links, and controls also remain available in both attention states.
 
+## QA review states and follow-up specifications
+
+Sprint cells and ledger rows use the same QA review badge as Tasks and Live. The badge represents the latest persisted review summary independently of the sprint lifecycle status, so a running or paused sprint can still retain an earlier requested-change verdict.
+
+| Presentation | Meaning |
+| --- | --- |
+| Green check, **QA passed** | The QA run completed with a passing verdict. |
+| Signal-colored spinner, **QA review running** | A QA provider is actively reviewing the work. Reduced motion replaces the spin and pulse with a static ring and label. |
+| Blue pencil, **QA edits** / **QA changes requested** | QA completed successfully and requested changes. This is an actionable review outcome, not a provider failure. |
+| Red X, **QA failed** | The QA provider run failed, errored, or was cancelled before returning a usable verdict. It does not mean QA requested code changes. |
+
+Hovering the badge, focusing it with the keyboard, or activating it opens an accessible, viewport-positioned review card. The card is named by its review heading and can include the outcome, summary, findings, fix instructions, target task key, reviewer, reviewed time, and generated follow-up tasks. Focus may move between the badge, card, and disclosure buttons without closing it. `Escape` closes the card and restores focus to the badge; moving the pointer away closes it after a short grace period when focus is not inside, and a mouse or touch press outside dismisses it. On touch devices, tap the badge to open it and tap outside to dismiss it.
+
+Generated follow-up task specifications are collapsed initially, so long prompts do not dominate the review. Each **Follow-up task N** button exposes `aria-expanded` and can be toggled with the keyboard or touch. Expansion reveals the generated title, description, priority, dependency task keys (or **None**), and full Markdown prompt in a bounded scrolling area. The card uses one column on constrained screens, may split summary and findings on wider screens, clamps to the viewport, and scrolls vertically when needed. Reduced motion removes spinner, pulse, rotation, and transition movement without removing labels, borders, focus rings, expanded content, or state semantics.
+
+## Pull request, checks, and merge workflow
+
+The CI badge summarizes a three-step workflow shared by Sprints, Tasks, and Live:
+
+1. **Pull request** — waiting for a PR, missing a required PR, or PR ready.
+2. **Checks** — pending, running, passed, or failed checks.
+3. **Merge** — waiting for checks, QA, or review; checking mergeability; ready to merge; merging; merged; not required; conflict; or failed merge attempt.
+
+The four first-class workflow states are `pending`, `in_progress`, `successful`, and `failed`. Pending uses a neutral clock, `in_progress` is presented as running with the signal-colored progress treatment, `successful` uses a green check, and `failed` uses a red X. A sprint aggregates the newest state for each task workflow plus the final feature-to-default-branch merge workflow. Failed wins over in progress, in progress wins over pending, and pending wins over successful, both for each step and for the overall badge.
+
+The red X is reserved for an actual failed workflow step: failed CI checks, a merge conflict, or a failed merge attempt. A review blocker is not a CI failure: checks remain passed and Merge reads **Waiting for review** in a pending state. A merge conflict fails the Merge step and is labelled **Merge conflict**, which keeps it distinct from **CI failed** at Checks. QA provider failure is shown by the separate QA badge and does not become a CI failure. Activate the CI badge to inspect all three step labels and states; `Escape` closes the details and returns focus to the badge.
+
+These badges do not poll per card. Task feature-PR gates are persisted as `ci_gate_status` task-run events, final feature-to-default-branch gates as `main_merge_gate_status` sprint-run events, and unresolved CI repair attention remains active while its item is `open` or `claimed`. For each task or main-merge entity, the projection selects the newest matching event by creation time and then event ID; the sprint presentation aggregates those latest entity states. Persisted task merge metadata is used only as durable fallback evidence when no matching event is available.
+
+Because the evidence is persisted and rehydrated into project and Live snapshots, server restarts and browser reconnects reconstruct the same state before realtime updates continue; cards do not need independent recovery timers. A newer recognized settled gate event supersedes an older failed or waiting event for the same entity, and resolved or dismissed attention no longer forces failure.
+
 Completion keeps one decimal when needed across sprint cards, ledger rows, active task streams, and sprint selectors: `7.5%` stays `7.5%`, while whole values such as `5.0%` display as `5%`. Progress bars and accessible values use the same completion number and remain bounded from `0%` to `100%`.
 
 Sprints can be **showcase-pinned** to surface them on the Overview page; toggle this from the cell menu or bulk actions.
