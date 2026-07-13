@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearSettingsApiCacheForTests,
   fetchProjectEffectiveSettings,
+  saveProjectSettings,
   saveProjectDesignGuidanceSettings,
   saveProjectTechstackSettings,
+  saveSystemSettings,
 } from "../../../dashboard/src/v2/lib/settings-api.js";
 
 const jsonResponse = (body: unknown): Response => (
@@ -106,6 +108,11 @@ describe("settings-api", () => {
     const [, putInit] = fetchMock.mock.calls[1]!;
     expect(JSON.parse(String(putInit?.body))).toEqual({
       ...existingOverride,
+      jira: {
+        host: "https://jira.example.test",
+        email: "user@example.test",
+        defaultProject: "APP",
+      },
       techstack: {
         selectedTechstackId: "code-ux-internal",
         applicationKind: "web",
@@ -150,7 +157,73 @@ describe("settings-api", () => {
     const [, putInit] = fetchMock.mock.calls[1]!;
     expect(JSON.parse(String(putInit?.body))).toEqual({
       ...existingOverride,
+      jira: {
+        host: "https://jira.example.test",
+        email: "user@example.test",
+        defaultProject: "APP",
+      },
       designGuidance: nextGuidance,
     });
+  });
+
+  it("sends credential references and non-secret speech and embedding configuration only", async () => {
+    const fetchMock = vi.fn((url: string, _init?: RequestInit) => Promise.resolve(jsonResponse(url === "/api/system-settings" ? {} : { ok: true })));
+    vi.stubGlobal("fetch", fetchMock);
+    const settings = {
+      defaults: {
+        speech: {
+          externalTranscription: {
+            baseUrl: "https://speech.example.test/transcriptions",
+            apiKey: "sentinel-transcription-secret",
+            apiKeyCredentialRef: { credentialId: "transcription-credential", capability: "read" },
+            model: "whisper-1",
+          },
+          synthesis: {
+            externalSynthesis: {
+              baseUrl: "https://speech.example.test/synthesis",
+              apiKey: "sentinel-synthesis-secret",
+              apiKeyCredentialRef: { credentialId: "synthesis-credential", capability: "read" },
+              model: "tts-1",
+              voice: "alloy",
+              format: "mp3",
+            },
+          },
+        },
+        memory: {
+          externalEmbedding: {
+            baseUrl: "https://embedding.example.test",
+            apiKey: "sentinel-embedding-secret",
+            apiKeyCredentialRef: { credentialId: "embedding-credential", capability: "read" },
+            model: "text-embedding-3-small",
+            dimensions: 1536,
+          },
+        },
+      },
+    };
+
+    await saveSystemSettings(settings as never);
+    await saveProjectSettings("project-1", settings.defaults as never);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [, init] of fetchMock.mock.calls) {
+      const payload = JSON.parse(String(init?.body));
+      const serialized = JSON.stringify(payload);
+      expect(serialized).not.toMatch(/sentinel-|\"apiKey\"/);
+      expect(payload.defaults?.speech.externalTranscription.apiKeyCredentialRef
+        ?? payload.speech.externalTranscription.apiKeyCredentialRef).toEqual({
+        credentialId: "transcription-credential",
+        capability: "read",
+      });
+      expect(payload.defaults?.speech.synthesis.externalSynthesis.apiKeyCredentialRef
+        ?? payload.speech.synthesis.externalSynthesis.apiKeyCredentialRef).toEqual({
+        credentialId: "synthesis-credential",
+        capability: "read",
+      });
+      expect(payload.defaults?.memory.externalEmbedding.apiKeyCredentialRef
+        ?? payload.memory.externalEmbedding.apiKeyCredentialRef).toEqual({
+        credentialId: "embedding-credential",
+        capability: "read",
+      });
+    }
   });
 });

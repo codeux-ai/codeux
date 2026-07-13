@@ -4,7 +4,7 @@ Speech output turns project-manager replies into audio through `POST /api/speech
 
 ## Settings And Activation
 
-Text-to-speech configuration lives under `speech.synthesis` in normal system/project settings. It stores the enabled state, `local_onnx` or `external_api` provider mode, local model id, voice, speed, and external endpoint credentials. Settings -> AI Models is the owner of the catalog and configuration UI. Local is the default; API fields are rendered only when API is selected.
+Text-to-speech configuration lives under `speech.synthesis` in normal system/project settings. It stores the enabled state, `local_onnx` or `external_api` provider mode, local model id, voice, speed, external endpoint configuration, and a metadata-only credential reference. Settings -> AI Models is the owner of the catalog and configuration UI. Local is the default; API fields are rendered only when API is selected.
 
 Model files are installed globally under `~/.code-ux/models/speech/<sanitized-model-id>`, but activation follows the current settings scope. Activating an installed TTS model selects its default voice, sets provider mode to `local_onnx`, and enables synthesis. The normal **Save Changes** action persists that draft.
 
@@ -29,7 +29,7 @@ Downloaded executable runtime files are pinned by SHA-256. Existing non-empty mo
 
 ## External API
 
-The external provider sends an authenticated JSON request to an OpenAI-compatible `/audio/speech` endpoint with `model`, `input`, `voice`, `response_format`, and `speed`. The response body is passed through as audio. API keys and provider error text are redacted before errors reach the dashboard.
+The external provider sends an authenticated JSON request to an OpenAI-compatible `/audio/speech` endpoint with `model`, `input`, `voice`, `response_format`, and `speed`. Settings binds credential metadata through `settings:speech.synthesis`, while create, rotate, and replace values travel only through write-only credential routes. Ordinary settings saves omit secret-shaped fields entirely. The response body is passed through as audio, and credential values plus provider error text are redacted before errors reach the dashboard.
 
 Provider selection is explicit: local mode never sends text to an external provider, and API mode never attempts local synthesis. Text is bounded to 8,000 characters per request, requests have a timeout, and generated audio is returned with `Cache-Control: no-store`.
 

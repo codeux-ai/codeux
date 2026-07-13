@@ -23,9 +23,22 @@ const memoryApi = vi.hoisted(() => ({
   selectEmbeddingModel: vi.fn(),
   startReembed: vi.fn(),
 }));
+const credentialApi = vi.hoisted(() => ({
+  fetchAutomationCredentials: vi.fn(),
+  fetchCredentialHealth: vi.fn(),
+  bindAutomationCredential: vi.fn(),
+}));
 
 vi.mock("../../../dashboard/src/v2/lib/speech-api.js", () => speechApi);
 vi.mock("../../../dashboard/src/v2/lib/memory-api.js", () => memoryApi);
+vi.mock("../../../dashboard/src/v2/lib/automation-credential-api.js", () => ({
+  ...credentialApi,
+  createAutomationCredential: vi.fn(),
+  testAutomationCredential: vi.fn(),
+  rotateAutomationCredential: vi.fn(),
+  replaceAutomationCredential: vi.fn(),
+  revokeAutomationCredential: vi.fn(),
+}));
 vi.mock("../../../dashboard/src/v2/components/memory/ModelBrowser.js", () => ({
   ModelBrowser: () => <div data-testid="embedding-model-browser">Embedding catalog</div>,
 }));
@@ -37,6 +50,27 @@ describe("AIModelCatalogPanel", () => {
     vi.clearAllMocks();
     memoryApi.listEmbeddingModels.mockResolvedValue([]);
     memoryApi.getMemoryStats.mockResolvedValue({ sprint: 0, agent: 0, project: 0, activeModel: null, staleEmbeddings: 0 });
+    credentialApi.fetchAutomationCredentials.mockResolvedValue([{
+      id: "speech-credential",
+      name: "Speech provider",
+      kind: "api-token",
+      scope: "project",
+      projectId: "project-1",
+      managementProjectId: "project-1",
+      allowedProjectIds: [],
+      capabilities: ["read"],
+      status: "active",
+      configured: true,
+      keyId: "root",
+      keyVersion: 1,
+      version: 3,
+      lastValidatedAt: null,
+      validationStatus: "valid",
+      createdAt: "now",
+      updatedAt: "now",
+    }]);
+    credentialApi.fetchCredentialHealth.mockResolvedValue({ available: true, secure: true, provider: "test", keyId: "root", keyVersion: 1 });
+    credentialApi.bindAutomationCredential.mockResolvedValue({});
     speechApi.listSpeechModels.mockResolvedValue([{
       id: "onnx-community/whisper-base.en",
       kind: "transcription",
@@ -185,13 +219,52 @@ describe("AIModelCatalogPanel", () => {
     expect(await screen.findByLabelText("Speech to text API endpoint")).toBeInTheDocument();
     expect(screen.getByLabelText("Speech to text language")).toBeInTheDocument();
     expect(screen.getByLabelText("Speech to text API model")).toBeInTheDocument();
-    expect(screen.getByLabelText("Speech to text API key")).toBeInTheDocument();
+    expect(screen.getByLabelText("Speech to text API credential")).toBeInTheDocument();
     expect(screen.getByLabelText("Text to speech API endpoint")).toBeInTheDocument();
     expect(screen.getByLabelText("Text to speech API model")).toBeInTheDocument();
     expect(screen.getByLabelText("Text to speech API voice")).toBeInTheDocument();
     expect(screen.getByLabelText("Text to speech API format")).toBeInTheDocument();
-    expect(screen.getByLabelText("Text to speech API key")).toBeInTheDocument();
+    expect(screen.getByLabelText("Text to speech API credential")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Speech to text API key")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Text to speech API key")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Local text to speech voice")).not.toBeInTheDocument();
+  });
+
+  it("binds project speech credentials without placing a secret in the settings draft", async () => {
+    const Harness = () => {
+      const [settings, setSettings] = useState({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        speech: {
+          ...DEFAULT_DASHBOARD_SETTINGS.speech,
+          providerMode: "external_api" as const,
+          externalTranscription: {
+            ...DEFAULT_DASHBOARD_SETTINGS.speech.externalTranscription,
+            apiKey: "sentinel-speech-secret",
+          },
+        },
+      });
+      return <AIModelCatalogPanel state={{
+        activeScope: "project",
+        editableSettings: settings,
+        selectedProject: { id: "project-1", name: "Test project" },
+        updateEditableSettings: (recipe: (current: typeof settings) => typeof settings) => setSettings((current) => recipe(current)),
+      } as any} />;
+    };
+
+    render(<Harness />);
+    await userEvent.click(screen.getByRole("button", { name: "Configure speech" }));
+    expect(document.body.textContent).not.toContain("sentinel-speech-secret");
+    await userEvent.click(await screen.findByLabelText("Speech to text API credential"));
+    await userEvent.click(await screen.findByRole("option", { name: /Speech provider.*active.*v3/ }));
+    await userEvent.click(screen.getAllByRole("button", { name: "Bind" })[0]!);
+
+    await waitFor(() => expect(credentialApi.bindAutomationCredential).toHaveBeenCalledWith(
+      "project-1",
+      "speech-credential",
+      { bindingKey: "settings:speech.transcription", capabilities: ["read"] },
+    ));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Speech to text API credential" })).toHaveTextContent("Speech provider"));
+    expect(document.body.textContent).not.toContain("sentinel-speech-secret");
   });
 
   it("requires the displayed speech-model license acceptance before download", async () => {

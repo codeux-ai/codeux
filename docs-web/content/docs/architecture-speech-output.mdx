@@ -25,7 +25,7 @@ The catalog excludes non-commercial and research-only models. Piper LJSpeech and
 
 ## API TTS
 
-The external variant uses an OpenAI-compatible `/audio/speech` endpoint. Configure the base URL, API key, model, voice, and output format under Text to speech. Code UX sends `model`, `input`, `voice`, `response_format`, and `speed`, and never caches the returned audio.
+The external variant uses an OpenAI-compatible `/audio/speech` endpoint. Configure the base URL, credential metadata, model, voice, and output format under Text to speech. The selector binds through `settings:speech.synthesis`; secret values travel only through write-only credential create, rotate, or replace routes, and ordinary settings saves omit secret-shaped fields. Code UX sends `model`, `input`, `voice`, `response_format`, and `speed`, and never caches the returned audio.
 
 Local model and voice settings resolve as a compatible pair across system, project, and sprint scopes. If an older child-scope voice override does not exist on a newly selected inherited model, Code UX uses that model's default voice and verifies the pair again before inference.
 

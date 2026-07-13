@@ -4,7 +4,7 @@ Speech input turns dashboard microphone or uploaded audio into prompt text throu
 
 ## Settings Boundary
 
-Speech settings are project-scoped and flow through the same defaults, override resolution, validation, and sanitization path as memory settings. The persisted `speech` object controls whether transcription is enabled, whether local ONNX or an external API is selected, the local model id, a bounded maximum audio duration, and external transcription configuration.
+Speech settings flow through system defaults plus project and sprint override resolution, validation, and sanitization. The persisted `speech` object controls whether transcription is enabled, whether local ONNX or an external API is selected, the local model id, a bounded maximum audio duration, and external transcription configuration.
 
 The default provider mode is `local_onnx`. API fields stay hidden until `external_api` is selected, and provider selection is strict: local mode does not send audio externally.
 
@@ -37,7 +37,7 @@ The shared contracts use two explicit provider modes:
 - `local_onnx` represents local model inference.
 - `external_api` represents an OpenAI-compatible transcription endpoint.
 
-The external transcription default uses an OpenAI-compatible `/v1/audio/transcriptions` URL with an empty API key. Runtime code must treat a missing key, missing model, unsupported audio format, client permission error, and provider failure as structured error outcomes rather than generic exceptions.
+The external transcription default uses an OpenAI-compatible `/v1/audio/transcriptions` URL with no credential reference. Settings -> AI Models selects credential metadata and explicitly binds it through `settings:speech.transcription`; the settings draft and save request never contain secret text. Secret values enter only through the credential manager's write-only create, rotate, or replace routes and are cleared from the input after a successful request. Runtime code must treat a missing, revoked, unavailable, or out-of-scope credential, missing model, unsupported audio format, client permission error, and provider failure as structured error outcomes rather than generic exceptions.
 
 Local speech bundles use deterministic cache directories under `~/.code-ux/models/speech/<sanitized-model-id>`, where slashes in model ids are normalized for filesystem safety. Whisper Base English remains the default and runs its encoder-decoder bundle entirely through `onnxruntime-node`; Whisper Tiny English is the faster, lower-footprint English alternative. The catalog also offers pinned multilingual Whisper Base and Tiny ONNX bundles. Each multilingual entry exposes its supported language codes and automatic-detection capability so dashboard clients can build a catalog-driven language selector without maintaining a second language list.
 
