@@ -522,14 +522,16 @@ export class WatchLoopRunner {
       activeMainMergeAttentionItems,
     } = params;
 
-    // Rollbacks are never allowed to bypass the remote PR boundary. Automatic
-    // rollbacks force green-check auto-merge; agent-assisted rollbacks retain the
-    // configured policy, with OFF promoted to a human CREATE_PR handoff.
+    // Remote rollbacks cannot bypass the PR boundary. Automatic remote rollbacks
+    // force green-check auto-merge; agent-assisted remote rollbacks retain the
+    // configured policy, with OFF promoted to a human CREATE_PR handoff. LOCAL
+    // rollbacks keep the normal branch-to-default local finalization path.
     const ciIntelligence = resolveRollbackFinalizationCiIntelligence(
       configuredCiIntelligence,
       scopedExecutionContext.sprint.kind === "rollback"
         ? scopedExecutionContext.sprint.rollbackMode
         : null,
+      githubMode,
     );
 
     let report = "";

@@ -4,8 +4,9 @@ import type { SprintRollbackMode } from "../../../contracts/project-management-t
 export function resolveRollbackFinalizationCiIntelligence(
   configured: CiIntelligenceSettings,
   rollbackMode: SprintRollbackMode | null,
+  githubMode: "REMOTE" | "LOCAL",
 ): CiIntelligenceSettings {
-  if (!rollbackMode) return configured;
+  if (!rollbackMode || githubMode === "LOCAL") return configured;
   const mainBranchAutoMergeMode = rollbackMode === "automatic"
     ? configured.mainBranchAutoMergeMode === "ALWAYS" ? "ALWAYS" : "WHEN_GREEN"
     : configured.mainBranchAutoMergeMode === "OFF" ? "CREATE_PR" : configured.mainBranchAutoMergeMode;

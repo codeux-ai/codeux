@@ -10,7 +10,7 @@ const configured = {
 
 describe("resolveRollbackFinalizationCiIntelligence", () => {
   it("forces automatic rollbacks to auto-merge through a green remote PR", () => {
-    expect(resolveRollbackFinalizationCiIntelligence(configured, "automatic")).toMatchObject({
+    expect(resolveRollbackFinalizationCiIntelligence(configured, "automatic", "REMOTE")).toMatchObject({
       enabled: true,
       enableLivePrMonitoring: true,
       mainBranchAutoMergeMode: "WHEN_GREEN",
@@ -21,11 +21,11 @@ describe("resolveRollbackFinalizationCiIntelligence", () => {
     expect(resolveRollbackFinalizationCiIntelligence({
       ...configured,
       mainBranchAutoMergeMode: "ALWAYS",
-    }, "automatic").mainBranchAutoMergeMode).toBe("ALWAYS");
+    }, "automatic", "REMOTE").mainBranchAutoMergeMode).toBe("ALWAYS");
   });
 
   it("uses a human PR handoff for agent rollbacks when normal auto-merge is off", () => {
-    expect(resolveRollbackFinalizationCiIntelligence(configured, "agent_assisted")).toMatchObject({
+    expect(resolveRollbackFinalizationCiIntelligence(configured, "agent_assisted", "REMOTE")).toMatchObject({
       enabled: true,
       enableLivePrMonitoring: true,
       mainBranchAutoMergeMode: "CREATE_PR",
@@ -33,6 +33,10 @@ describe("resolveRollbackFinalizationCiIntelligence", () => {
   });
 
   it("does not alter standard sprint settings", () => {
-    expect(resolveRollbackFinalizationCiIntelligence(configured, null)).toBe(configured);
+    expect(resolveRollbackFinalizationCiIntelligence(configured, null, "REMOTE")).toBe(configured);
+  });
+
+  it("keeps local rollback finalization on the local merge path without enabling PR monitoring", () => {
+    expect(resolveRollbackFinalizationCiIntelligence(configured, "automatic", "LOCAL")).toBe(configured);
   });
 });

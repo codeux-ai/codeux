@@ -212,6 +212,36 @@ describe("runBranchPreflightStep (Async)", () => {
     expect(result).toEqual({ existsLocal: false, existsRemote: false });
   });
 
+  it("keeps local-only orchestration preflight off the network even when origin exists", async () => {
+    vi.mocked(fs.stat).mockResolvedValue({ isDirectory: () => true } as any);
+    vi.mocked(commandRunner.run)
+      // runBranchPreflightStep -> is git repo
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "true\n", stderr: "" })
+      // runBranchPreflightStep -> local branch exists
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" });
+
+    const result = await prepareBranchForOrchestration(
+      "/valid-repo",
+      "rollback/1-local",
+      "main",
+      { localOnly: true },
+    );
+
+    expect(result).toEqual({
+      existsLocal: true,
+      existsRemote: false,
+      hasRemoteOrigin: false,
+      createdLocal: false,
+      checkedOutLocal: true,
+      pushedRemote: false,
+      baseCommitSha: null,
+    });
+    expect(vi.mocked(commandRunner.run).mock.calls).toEqual([
+      ["git", ["rev-parse", "--is-inside-work-tree"], { cwd: "/valid-repo" }],
+      ["git", ["show-ref", "--verify", "refs/heads/rollback/1-local"], { cwd: "/valid-repo" }],
+    ]);
+  });
+
   it("creates and pushes the feature branch during orchestration preparation when missing", async () => {
     vi.mocked(fs.stat).mockResolvedValue({ isDirectory: () => true } as any);
     vi.mocked(commandRunner.run)

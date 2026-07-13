@@ -69,6 +69,7 @@ describe("SprintRollbackModal", () => {
     render(<SprintRollbackModal sprint={sprint} onClose={vi.fn()} onCreated={onCreated} />);
 
     expect(await screen.findByText("Safe automatic rollback available")).toBeInTheDocument();
+    expect(screen.getByText(/local projects merge the branch locally/i)).toBeInTheDocument();
     expect(screen.getByText("No coding invocation will be started.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Create rollback" }));
     await waitFor(() => expect(createSprintRollback).toHaveBeenCalledWith("project-1", "sprint-1", ""));

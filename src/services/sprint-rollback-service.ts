@@ -42,6 +42,7 @@ interface RollbackPlan {
   project: ProjectSummary;
   sourceSprint: SprintRecord;
   defaultBranch: string;
+  githubMode: "REMOTE" | "LOCAL";
   integrationCommitSha: string | null;
   assessment: SprintRollbackAssessment;
 }
@@ -99,10 +100,11 @@ export class SprintRollbackService {
         await this.createAutomatedRollbackBranch({
           repoPath: plan.project.baseDir,
           defaultBranch: plan.defaultBranch,
+          githubMode: plan.githubMode,
           rollbackBranch,
           integrationCommitSha: plan.integrationCommitSha,
         });
-        this.createAutomatedTask(plan.sourceSprint, rollbackSprint);
+        this.createAutomatedTask(plan.sourceSprint, rollbackSprint, plan.githubMode);
       } catch (error) {
         mode = "agent_assisted";
         const detail = error instanceof Error ? error.message : String(error);
@@ -111,10 +113,10 @@ export class SprintRollbackService {
           rollbackMode: mode,
           rollbackSafetyReason: reasons.join(" "),
         });
-        this.createAgentTask(plan.sourceSprint, rollbackSprint, instructions, reasons);
+        this.createAgentTask(plan.sourceSprint, rollbackSprint, instructions, reasons, plan.githubMode);
       }
     } else {
-      this.createAgentTask(plan.sourceSprint, rollbackSprint, instructions, reasons);
+      this.createAgentTask(plan.sourceSprint, rollbackSprint, instructions, reasons, plan.githubMode);
     }
 
     await this.deps.orchestrateSprint(projectId, rollbackSprint.id);
@@ -142,13 +144,10 @@ export class SprintRollbackService {
 
     const settings = this.deps.settingsRepository.resolveSprintDashboardSettings(projectId, sourceSprintId).settings;
     const defaultBranch = settings.git.defaultBranch || project.defaultBranch || "main";
+    const githubMode = settings.git.githubMode;
     const reasons: string[] = [];
     let eligible = true;
 
-    if (settings.git.githubMode !== "REMOTE") {
-      eligible = false;
-      reasons.push("Sprint rollback requires REMOTE git mode because every rollback is delivered through a pull request.");
-    }
     if (sourceSprint.kind === "rollback") {
       eligible = false;
       reasons.push("Rollback sprints cannot be used as rollback sources; select the original sprint instead.");
@@ -194,6 +193,7 @@ export class SprintRollbackService {
           project.baseDir,
           defaultBranch,
           sourceSprint.featureBranch!,
+          githubMode,
         );
       } catch (error) {
         reasons.push(error instanceof Error ? error.message : String(error));
@@ -215,6 +215,7 @@ export class SprintRollbackService {
       project,
       sourceSprint,
       defaultBranch,
+      githubMode,
       integrationCommitSha,
       assessment: { sourceSprintId, eligible, recommendedMode, reasons },
     };
@@ -224,12 +225,21 @@ export class SprintRollbackService {
     repoPath: string,
     defaultBranch: string,
     featureBranch: string,
+    githubMode: "REMOTE" | "LOCAL",
   ): Promise<string> {
-    const authEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, this.deps.getGitAuth?.() ?? {});
-    await this.gitRunner("git", ["fetch", "--prune", "origin", defaultBranch], repoPath, authEnv);
+    const defaultBranchRef = githubMode === "REMOTE"
+      ? `refs/remotes/origin/${defaultBranch}`
+      : `refs/heads/${defaultBranch}`;
+    const featureBranchRef = githubMode === "REMOTE"
+      ? `refs/remotes/origin/${featureBranch}`
+      : `refs/heads/${featureBranch}`;
+    if (githubMode === "REMOTE") {
+      const authEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, this.deps.getGitAuth?.() ?? {});
+      await this.gitRunner("git", ["fetch", "--prune", "origin", defaultBranch], repoPath, authEnv);
+    }
     const head = (await this.gitRunner(
       "git",
-      ["rev-parse", "--verify", `refs/remotes/origin/${defaultBranch}^{commit}`],
+      ["rev-parse", "--verify", `${defaultBranchRef}^{commit}`],
       repoPath,
     )).stdout.trim();
     const details = (await this.gitRunner(
@@ -248,7 +258,7 @@ export class SprintRollbackService {
     try {
       const branchTip = (await this.gitRunner(
         "git",
-        ["rev-parse", "--verify", `refs/remotes/origin/${featureBranch}^{commit}`],
+        ["rev-parse", "--verify", `${featureBranchRef}^{commit}`],
         repoPath,
       )).stdout.trim();
       branchTipMatches = parents.slice(1).includes(branchTip);
@@ -264,16 +274,19 @@ export class SprintRollbackService {
   private async createAutomatedRollbackBranch(args: {
     repoPath: string;
     defaultBranch: string;
+    githubMode: "REMOTE" | "LOCAL";
     rollbackBranch: string;
     integrationCommitSha: string;
   }): Promise<void> {
     const worktreePath = await mkdtemp(path.join(os.tmpdir(), "code-ux-rollback-"));
-    const authEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(args.repoPath, this.deps.getGitAuth?.() ?? {});
     let worktreeAdded = false;
     try {
+      const defaultBranchRef = args.githubMode === "REMOTE"
+        ? `refs/remotes/origin/${args.defaultBranch}`
+        : `refs/heads/${args.defaultBranch}`;
       await this.gitRunner("git", [
         "worktree", "add", "--detach", worktreePath,
-        `refs/remotes/origin/${args.defaultBranch}`,
+        defaultBranchRef,
       ], args.repoPath);
       worktreeAdded = true;
       // Keep every worktree command rooted at the source repository. Git commands
@@ -288,10 +301,13 @@ export class SprintRollbackService {
         ...GIT_IDENTITY_ARGS,
         "revert", "--no-edit", "-m", "1", args.integrationCommitSha,
       ], args.repoPath);
-      await this.gitRunner("git", [
-        "-C", worktreePath,
-        "push", "--set-upstream", "origin", `HEAD:refs/heads/${args.rollbackBranch}`,
-      ], args.repoPath, authEnv);
+      if (args.githubMode === "REMOTE") {
+        const authEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(args.repoPath, this.deps.getGitAuth?.() ?? {});
+        await this.gitRunner("git", [
+          "-C", worktreePath,
+          "push", "--set-upstream", "origin", `HEAD:refs/heads/${args.rollbackBranch}`,
+        ], args.repoPath, authEnv);
+      }
     } finally {
       if (worktreeAdded) {
         await this.gitRunner("git", ["worktree", "remove", "--force", worktreePath], args.repoPath).catch(() => undefined);
@@ -301,12 +317,17 @@ export class SprintRollbackService {
     }
   }
 
-  private createAutomatedTask(source: SprintRecord, rollbackSprint: SprintRecord): void {
+  private createAutomatedTask(
+    source: SprintRecord,
+    rollbackSprint: SprintRecord,
+    githubMode: "REMOTE" | "LOCAL",
+  ): void {
+    const delivery = githubMode === "REMOTE" ? "created and pushed" : "created locally";
     this.deps.projectManagementRepository.createTask(source.projectId, {
       sprintId: rollbackSprint.id,
       taskKey: "ROLLBACK",
       title: `Revert sprint ${source.number ?? source.slug}`,
-      description: "Deterministic rollback commit created and pushed by Code UX.",
+      description: `Deterministic rollback commit ${delivery} by Code UX.`,
       promptMarkdown: "The source sprint integration merge was reverted automatically in a detached worktree. No provider invocation was used.",
       status: "completed",
       priority: "critical",
@@ -323,6 +344,7 @@ export class SprintRollbackService {
     rollbackSprint: SprintRecord,
     instructions: string,
     reasons: string[],
+    githubMode: "REMOTE" | "LOCAL",
   ): void {
     const requestedScope = instructions || "Fully revert the source sprint while preserving all later compatible work.";
     const prompt = [
@@ -343,8 +365,12 @@ export class SprintRollbackService {
       "- Remove only the requested behavior and preserve compatible later work.",
       "- Resolve conflicts conservatively and explain anything that cannot be safely removed.",
       "- Add or update tests for the resulting behavior.",
-      "- Commit and push the rollback changes on the provided rollback branch.",
-      "- Do not merge into the default branch; Code UX will create and gate the rollback pull request.",
+      githubMode === "REMOTE"
+        ? "- Commit and push the rollback changes on the provided rollback branch."
+        : "- Commit the rollback changes on the provided local rollback branch; do not push or create a pull request.",
+      githubMode === "REMOTE"
+        ? "- Do not merge into the default branch; Code UX will create and gate the rollback pull request."
+        : "- Do not merge into the default branch; Code UX will merge the rollback branch locally during sprint finalization.",
     ].join("\n");
     this.deps.projectManagementRepository.createTask(source.projectId, {
       sprintId: rollbackSprint.id,
@@ -363,7 +389,7 @@ export class SprintRollbackService {
 
   private buildRollbackGoal(source: SprintRecord, instructions: string): string {
     const scope = instructions || "Fully revert the sprint's integrated changes.";
-    return `Rollback source sprint ${source.number ?? source.slug} through a dedicated remote pull request. ${scope}`;
+    return `Rollback source sprint ${source.number ?? source.slug} through a dedicated rollback branch. ${scope}`;
   }
 
   private buildRollbackBranch(source: SprintRecord): string {

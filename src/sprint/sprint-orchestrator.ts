@@ -550,6 +550,9 @@ export class SprintOrchestrator {
       githubToken: dashboardSettings.git.githubToken,
       gitlabToken: dashboardSettings.git.gitlabToken,
     };
+    const branchPreflightOptions = githubMode === "LOCAL"
+      ? { localOnly: true }
+      : gitAuthOptions;
 
     const enabledProviders = Object.entries(dashboardSettings.aiProvider.providers)
       .filter(([, provider]) => provider.enabled)
@@ -587,7 +590,7 @@ export class SprintOrchestrator {
         && !args.feature_branch?.trim()
         && !executionContext.sprint.featureBranch?.trim();
       if (shouldAllocateFreshBranchName) {
-        const allocatedBranch = await resolveUniqueSprintBranchName(repoPath, defaultFeatureBranch, gitAuthOptions);
+        const allocatedBranch = await resolveUniqueSprintBranchName(repoPath, defaultFeatureBranch, branchPreflightOptions);
         if (allocatedBranch !== defaultFeatureBranch) {
           this.deps.logger.info("Allocated unique sprint feature branch because the generated branch already exists.", {
             projectId: executionContext.project.id,
@@ -602,10 +605,10 @@ export class SprintOrchestrator {
       }
 
       const branchPreparation = args.action === "orchestrate"
-        ? await prepareBranchForOrchestration(repoPath, defaultFeatureBranch, defaultBranch, gitAuthOptions)
+        ? await prepareBranchForOrchestration(repoPath, defaultFeatureBranch, defaultBranch, branchPreflightOptions)
         : null;
       const branchAvailability = branchPreparation
-        ?? await runBranchPreflightStep(repoPath, defaultFeatureBranch, gitAuthOptions);
+        ?? await runBranchPreflightStep(repoPath, defaultFeatureBranch, branchPreflightOptions);
 
       // Record the fork point the first time the branch is created. This is the stable
       // checkpoint the file browser diffs against, and it must be captured now — once the
