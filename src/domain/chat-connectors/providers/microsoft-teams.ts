@@ -137,7 +137,7 @@ export function normalizeMicrosoftTeamsActivity(
     externalSenderId: readString(sender?.aadObjectId, sender?.id),
     externalSenderName: readString(sender?.name, sender?.id),
     textBody: removeBotMention(readString(body.text, body.body, body.content), body),
-    externalMessageId: readString(body.id),
+    externalMessageId: readString(body.id, body.replyToId),
     timestamp: body.timestamp ?? body.localTimestamp,
     channelId: readString(body.channelId),
     locale: readString(body.locale),

@@ -73,6 +73,25 @@ describe("Microsoft Teams chat connector profile", () => {
     });
   });
 
+  it("retains replyToId as the external message ID for legacy bridge payloads without an ID", () => {
+    const normalized = normalizeInboundPayload({
+      ...buildOfficialConnection(),
+      bridgeMode: "managed_bridge",
+    }, {
+      replyToId: "legacy-reply-1",
+      text: "Legacy bridge message",
+      conversation: { id: "legacy-conversation" },
+      from: { id: "legacy-sender" },
+    });
+
+    expect(normalized).toMatchObject({
+      externalMessageId: "legacy-reply-1",
+      externalChannelId: "legacy-conversation",
+      externalSenderId: "legacy-sender",
+      textBody: "Legacy bridge message",
+    });
+  });
+
   it("rejects non-message Activities before generic ingress can create a chat message", () => {
     const connection = buildOfficialConnection();
     expect(() => normalizeInboundPayload(connection, {
