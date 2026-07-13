@@ -7,6 +7,7 @@ import { LiveTaskCard, QuotaCountdown, TaskDuration } from "../../../../../dashb
 import { LiveTaskInvocationRow } from "../../../../../dashboard/src/v2/components/live-session/LiveTaskInvocationRow.js";
 import type { ExecutionInvocationRecord, Subtask } from "../../../../../dashboard/src/types.js";
 import type { TaskSelfReflectionRating } from "../../../../../src/contracts/task-self-reflection-types.js";
+import type { CiStatusPresentation } from "../../../../../dashboard/src/v2/lib/ci-status-presentation.js";
 
 // Mock resize observer and match media
 window.ResizeObserver = vi.fn().mockImplementation(() => ({
@@ -123,6 +124,19 @@ describe("LiveTaskCard", () => {
     ...overrides,
   });
 
+  const getMockCiPresentation = (state: CiStatusPresentation["state"] = "failed"): CiStatusPresentation => ({
+    scope: "task",
+    state,
+    label: state === "failed" ? "CI failed" : state === "in_progress" ? "CI running" : state === "successful" ? "CI passed" : "CI pending",
+    accessibleLabel: "CI failed. Pull request: Pull request ready. Checks: Checks failed. Merge: Blocked by checks.",
+    steps: [
+      { id: "pull_request", label: "Pull request", state: "successful", statusLabel: "Pull request ready" },
+      { id: "checks", label: "Checks", state, statusLabel: state === "failed" ? "Checks failed" : "Checks running", ...(state === "failed" ? { failureKind: "ci_checks" as const } : {}) },
+      { id: "merge", label: "Merge", state: "pending", statusLabel: "Blocked by checks" },
+    ],
+    ...(state === "failed" ? { failureKind: "ci_checks" as const } : {}),
+  });
+
   it("renders running state properly", () => {
     const task = getMockTask("RUNNING");
     const { container } = render(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} onEdit={vi.fn()} onForceComplete={vi.fn()} isRerunning={false} />);
@@ -133,6 +147,28 @@ describe("LiveTaskCard", () => {
     const task = getMockTask("COMPLETED");
     const { container } = render(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} onEdit={vi.fn()} onForceComplete={vi.fn()} isRerunning={false} />);
     expect(container).toBeTruthy();
+  });
+
+  it("renders shared CI progression on a running card without a duplicate merge badge", () => {
+    const task = { ...getMockTask("RUNNING"), merge_indicator: "CI" as const };
+    const { container } = render(
+      <LiveTaskCard
+        task={task}
+        allTasks={[task]}
+        phase="RUNNING"
+        ciPresentation={getMockCiPresentation("failed")}
+        onRerun={vi.fn()}
+        onEdit={vi.fn()}
+        onForceComplete={vi.fn()}
+        isRerunning={false}
+      />,
+    );
+
+    expect(screen.getByRole("group", { name: "Status indicators for task test-task" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /CI status: CI failed/i })).toBeTruthy();
+    expect(screen.getByText("Running")).toBeTruthy();
+    expect(container.querySelectorAll('[data-ci-state="failed"]')).toHaveLength(1);
+    expect(screen.queryByText("CI")).toBeNull();
   });
 
   it("shows the QUOTA badge instead of Running when the live phase is QUOTA", () => {
@@ -223,6 +259,39 @@ describe("LiveTaskCard", () => {
     render(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} onEdit={vi.fn()} onForceComplete={vi.fn()} isRerunning={false} />);
     expect(screen.getByLabelText("QA review running")).toBeTruthy();
     expect(screen.getByText("QA")).toBeTruthy();
+  });
+
+  it("keeps complete requested-change guidance available on an active task card", async () => {
+    const task = {
+      ...getMockTask("RUNNING"),
+      latestReview: {
+        status: "completed",
+        outcome: "changes_requested",
+        summary: "One follow-up remains.",
+        findings: ["Cover reconnect replay"],
+        fixInstructions: "Preserve the persisted review projection.",
+        targetTaskKey: "test-task",
+        followUpTasks: [{
+          title: "Add reconnect coverage",
+          description: "Replay the unchanged snapshot.",
+          priority: "high" as const,
+          dependsOnTaskKeys: ["test-task"],
+          promptMarkdown: "Add deterministic reconnect coverage.",
+        }],
+        reviewer: "QA Bot",
+        finishedAt: "2026-07-13T10:00:00.000Z",
+      },
+    };
+
+    render(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} onEdit={vi.fn()} onForceComplete={vi.fn()} isRerunning={false} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "QA review details" }));
+    expect(await screen.findByText("Preserve the persisted review projection.")).toBeTruthy();
+    const followUp = screen.getByRole("button", { name: "Follow-up task 1" });
+    expect(followUp.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(followUp);
+    expect(screen.getByText("Add reconnect coverage")).toBeTruthy();
+    expect(screen.getByText("Add deterministic reconnect coverage.")).toBeTruthy();
   });
 
   it.each([

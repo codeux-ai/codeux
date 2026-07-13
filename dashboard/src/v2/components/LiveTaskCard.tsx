@@ -28,6 +28,8 @@ import { SelfReflectionRatingBadge } from "./tasks/SelfReflectionRatingBadge.js"
 import { getSafeUrl } from "../lib/safe-url.js";
 import { LiveTaskInvocationRow } from "./live-session/LiveTaskInvocationRow.js";
 import { QuotaCountdown, TaskDuration } from "./live-session/LiveTaskTiming.js";
+import { CiStatusBadge } from "./ui/CiStatusBadge.js";
+import type { CiStatusPresentation } from "../lib/ci-status-presentation.js";
 
 /* ─── LiveTaskCard ───────────────────────────────────────────────────────── */
 
@@ -49,6 +51,7 @@ export interface LiveTaskCardProps {
     taskTiming?: LiveTaskTimingSummary | null;
     events?: ExecutionRuntimeEventSummary[];
     invocations?: ExecutionInvocationRecord[];
+    ciPresentation?: CiStatusPresentation | null;
     onRerun: (id: string, options?: RerunOptions) => void;
     onEdit: (task: Subtask) => void;
     onForceComplete: (task: Subtask) => void;
@@ -71,6 +74,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     taskTiming,
     events,
     invocations = [],
+    ciPresentation = null,
     onRerun,
     onEdit,
     onForceComplete,
@@ -282,7 +286,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                         </div>
 
                         <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                            <div className="flex max-w-full flex-wrap items-center gap-2 mb-1.5" role="group" aria-label={`Status indicators for task ${task.id}`}>
                                 <span className="font-mono text-[10px] font-bold px-2.5 py-0.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.04] text-slate-400">
                                     #{task.id}
                                 </span>
@@ -291,12 +295,15 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                                     <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${cfg.dot}`} />
                                     <span className="sr-only">Task status: </span>{cfg.label}
                                 </span>
-                                {mergeCfg && taskPhase !== "RUNNING" && taskPhase !== "PENDING" && (
+                                {ciPresentation && (
+                                    <CiStatusBadge presentation={ciPresentation} compact />
+                                )}
+                                {mergeCfg && !ciPresentation && taskPhase !== "RUNNING" && taskPhase !== "PENDING" && (
                                     <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.14em] ${mergeCfg.bg} ${mergeCfg.text} border ${mergeCfg.border}`}>
                                         {mergeCfg.label}
                                     </span>
                                 )}
-                                {task.latestReview && taskPhase !== "RUNNING" && taskPhase !== "PENDING" && (
+                                {task.latestReview && (
                                     <SprintReviewBadge summary={task.latestReview} compact showCompactLabel align="right" />
                                 )}
                                 <SelfReflectionRatingBadge rating={task.selfReflectionRating} align="start" />
