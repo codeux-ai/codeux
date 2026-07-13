@@ -98,6 +98,7 @@ export type DocsSlug =
   | 'architecture-sprint-rollbacks'
   | 'architecture-virtual-workers'
   | 'architecture-ci-integration'
+  | 'architecture-card-ci-status-projection'
   | 'architecture-dashboard-architecture'
   | 'architecture-data-model'
   | 'architecture-execution-invocation-tracking'
@@ -795,6 +796,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "CI integration",
     description: "The CI gate is the bridge between Code UX's task graph and your real GitHub-based CI. It decides when each subtask's PR can be merged and how to react when CI is unhappy.",
   },
+  'architecture-card-ci-status-projection': {
+    id: 'architecture-card-ci-status-projection',
+    path: '/docs/architecture-card-ci-status-projection',
+    section: 'Architecture',
+    title: "Card CI Status Projection",
+    description: "How Task, Live, Sprint gallery, and Sprint ledger cards derive the same accessible QA and CI workflow outcomes from scoped runtime evidence.",
+  },
   'architecture-dashboard-architecture': {
     id: 'architecture-dashboard-architecture',
     path: '/docs/architecture-dashboard-architecture',
@@ -1047,6 +1055,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-sprint-rollbacks'],
   docsRegistry['architecture-virtual-workers'],
   docsRegistry['architecture-ci-integration'],
+  docsRegistry['architecture-card-ci-status-projection'],
   docsRegistry['architecture-dashboard-architecture'],
   docsRegistry['architecture-data-model'],
   docsRegistry['architecture-execution-invocation-tracking'],

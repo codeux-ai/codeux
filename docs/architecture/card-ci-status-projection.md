@@ -27,6 +27,10 @@ Task resolution follows these rules:
 
 Sprint resolution aggregates task results with its latest main-merge gate and active main-merge CI attention. Precedence is `failed`, then `running`, then `pending`.
 
+The dashboard expands this compact persisted state with project-scoped execution evidence at each page boundary. Tasks and Live derive task-scoped pull-request, checks, and merge steps; the Sprint gallery and ledger share the sprint-scoped aggregation. Every step uses outcome text in addition to its icon and tone. Successful pull-request evidence is announced as `Pull request ready`, running checks as `Checks running`, failed checks as `Checks failed`, and recovered checks as `Checks passed`, so assistive technology never receives raw enum values as the status label.
+
+Cross-surface integration coverage lives in `tests/dashboard/v2/qa-ci-card-status.integration.test.tsx`. Its deterministic fixture exercises pull-request creation, running checks, failure, recovery, active attention precedence, unrelated-event isolation, reconnect replay, and keyboard-only QA/CI disclosures across Task, Live, Sprint gallery, and Sprint ledger cards without Docker, provider CLIs, Git hosting, or a database.
+
 ## Configuration and defaults
 
 There is no new setting and no database migration. The projection uses existing task rows, task-run events, sprint-run events, and project attention rows. Consumers that do not understand `ciStatus` remain compatible because the contract field is optional and nullable.

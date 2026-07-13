@@ -64,6 +64,27 @@ const STEP_LABELS: Record<CiWorkflowStepId, string> = {
   merge: "Merge",
 };
 
+const DEFAULT_STEP_STATUS_LABELS: Record<CiWorkflowStepId, Record<CiWorkflowState, string>> = {
+  pull_request: {
+    pending: "Waiting for pull request",
+    in_progress: "Creating pull request",
+    successful: "Pull request ready",
+    failed: "Pull request failed",
+  },
+  checks: {
+    pending: "Checks pending",
+    in_progress: "Checks running",
+    successful: "Checks passed",
+    failed: "Checks failed",
+  },
+  merge: {
+    pending: "Merge pending",
+    in_progress: "Merge running",
+    successful: "Merged",
+    failed: "Merge failed",
+  },
+};
+
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
@@ -308,7 +329,7 @@ function buildPresentation(scope: "task" | "sprint", entities: readonly StepStat
       id,
       label: STEP_LABELS[id],
       state,
-      statusLabel: matchingEntity?.[labelField] ?? state.replace("_", " "),
+      statusLabel: matchingEntity?.[labelField] ?? DEFAULT_STEP_STATUS_LABELS[id][state],
       ...(failureKind ? { failureKind } : {}),
     };
   }) as CiStatusPresentation["steps"];
