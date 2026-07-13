@@ -336,6 +336,16 @@ Start/stop/retry/cancel buttons should:
 
 This removes current “wait for next poll” lag without inventing fake final states.
 
+### 5. Keep surface refresh contracts explicit
+
+The implemented dashboard surfaces share the transport but not the same read model:
+
+- Chat's invocation rail is server-authoritative. It loads the paginated `GET /api/projects/:projectId/execution/invocations` projection and never inserts frontend-only invocation records. `project.execution.updated` refetches the invocation page and selected transcript; `snapshot_required` refreshes the invocation, thread, connection, and selected-detail REST resources for the active project.
+- Stats uses `project.execution.updated` and `snapshot_required` as invalidations for both the project stats snapshot and the independent paginated System invocation ledger. The event does not replace either REST response, and cached analytics remain visible during the silent refresh.
+- Live retains the heavy `project.live.updated` snapshot for its live-session projection. `DashboardRealtimeService` keeps `PROJECT_LIVE_MIN_INTERVAL_MS = 5_000`, so steady-state heavy Live snapshots publish at most once per five seconds (urgent lifecycle scheduling may explicitly bypass that wait). This throttle must not delay the lighter execution invalidations used by Chat or Stats.
+
+These boundaries keep the database and REST projections authoritative while allowing each page to choose the smallest truthful refresh path.
+
 ## Backend Rollout Phases
 
 ## Phase 1: Realtime foundation

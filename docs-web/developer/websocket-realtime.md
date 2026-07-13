@@ -70,6 +70,16 @@ The official client (`dashboard/src/lib/realtime/dashboard-realtime-client.ts`) 
 
 The official client dispatches at most one `snapshot_required` notification every 3 seconds. Resource controllers also coalesce their silent REST refetches so one recovery handshake does not produce a refresh storm.
 
+## Dashboard resource invalidation
+
+Realtime events signal freshness; the database-backed REST projections remain authoritative:
+
+- Chat loads its invocation rail from paginated `GET /api/projects/:projectId/execution/invocations`. On `project.execution.updated`, it refetches that server-owned list and the selected transcript instead of inserting invocation rows from the event payload. On `snapshot_required`, it also refreshes the active project's thread, connection, and selected-detail resources.
+- Stats treats `project.execution.updated` and `snapshot_required` as invalidations for both `GET /api/projects/:projectId/stats` and its independent paginated System invocation query. Cached analytics stay visible during the silent/debounced refetch.
+- Live continues to consume the heavier `project.live.updated` snapshot. Steady-state publication of that snapshot has a five-second minimum interval; urgent lifecycle refreshes may bypass it. The heavy Live throttle does not govern the lighter Chat or Stats invalidation paths.
+
+Clients should preserve these read-model boundaries: do not infer provider usage from an early workflow execution row, and do not construct invocation records locally when the server projection can be refetched.
+
 ## Fallback to polling
 
 If the WebSocket connection cannot be established, consumers continue using their resource-specific REST snapshots. Common examples are `GET /api/live?projectId=:id`, `GET /api/projects/:id/execution`, `GET /api/git-status`, and the project conversation list/message endpoints. The WebSocket transports invalidations and deltas; REST remains the source for initial and recovery snapshots.

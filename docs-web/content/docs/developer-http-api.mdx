@@ -52,8 +52,6 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 | `GET` | `/api/projects/:projectId/sprints` | List. |
 | `POST` | `/api/projects/:projectId/sprints` | Create. |
 | `PATCH` | `/api/sprints/:sprintId` | Update. |
-| `POST` | `/api/sprints/:sprintId/complete` | Runtime-aware manual completion; force-cancels an active sprint run before persisting `completed`. |
-| `POST` | `/api/sprints/:sprintId/qa-pass` | Record a manual sprint-level QA pass and resolve its matching sprint QA handoff. |
 | `DELETE` | `/api/sprints/:sprintId` | Delete. |
 | `POST` | `/api/projects/:projectId/sprints/import` | Import from a markdown bundle. |
 | `GET` | `/api/projects/:projectId/sprints/:sprintId/export` | Export as a markdown bundle. |

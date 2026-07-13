@@ -134,10 +134,13 @@ export class RuntimeStartupRecoveryService {
     const reconciledStructuredInvocationIds = await invocationRecovery.reconcileInterruptedStructuredInvocations(activeContainerSessionIds);
     const rehydratedSprintRunIds = this.rehydrateDurableProviderSprintRuns();
     const restartPolicySyncedOrphanedSprintIds = this.syncOrphanedRunningSprintProjections();
-    const reconciledTaskCodingInvocationIds = await invocationRecovery.reconcileInterruptedTaskCodingInvocations(activeContainerSessionIds);
-    const reconciledTaskCodingProviderIds = invocationRecovery.reconcileOrphanedTaskCodingProviderInvocations();
     const reconciledTerminalProviderDispatchIds = this.reconcileTerminalProviderBackedDispatches();
     const reconciledTerminalDispatchIds = this.reconcileTerminalTaskRunDispatches();
+    // Settle task/dispatch truth before the workflow-level audit row. Provider
+    // completion alone does not mean a CLI workflow completed because Git and
+    // PR finalization happen after the provider exits.
+    const reconciledTaskCodingInvocationIds = await invocationRecovery.reconcileInterruptedTaskCodingInvocations(activeContainerSessionIds);
+    const reconciledTaskCodingProviderIds = invocationRecovery.reconcileOrphanedTaskCodingProviderInvocations();
     const reconciledDuplicateDispatchIds = this.reconcileDuplicateActiveTaskDispatches();
     const reconciledTaskRunIds = this.reconcileInterruptedTaskRuns();
     const reconciledPausedSprintRunIds = this.reconcileStalePausedSprintRuns();

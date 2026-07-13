@@ -278,6 +278,9 @@ export class ProviderExecutionService {
   async executeProvider(args: ExecutionProviderRunArgs): Promise<ProviderRunResult> {
     let execInvocationId: string | null = args.invocationId || null;
     let lastPersistedMessagesSignature: string | null = null;
+    if (execInvocationId) {
+      this.assertExecutionInvocationCanRun(execInvocationId);
+    }
     const effectiveModel = resolveEffectiveModel(args);
     const scopedSettings = args.projectId.trim() && this.deps.getDashboardSettings
       ? this.deps.getDashboardSettings({
@@ -315,7 +318,10 @@ export class ProviderExecutionService {
     });
 
     const runProviderInner = async (p: string, retrySystemMessage?: string, continueSessionId?: string | null, openCodeBaselineRawUsageJson?: Record<string, unknown> | null): Promise<ProviderRunResult> => {
-      const startedAt = new Date().toISOString();
+      if (execInvocationId) {
+        this.assertExecutionInvocationCanRun(execInvocationId);
+      }
+      const executionStartedAt = new Date().toISOString();
 
       // Coalesce the per-line streaming activity firehose into batched transactions so concurrent
       // sprints don't saturate the single thread with one INSERT per output line. Only used when
@@ -347,19 +353,19 @@ export class ProviderExecutionService {
           type: args.type,
           provider: args.provider,
           model: effectiveModel,
-          startedAt,
+          startedAt: executionStartedAt,
           invocationSource: args.invocationSource,
         })?.id || null;
       }
 
-      if (execInvocationId && retrySystemMessage) {
+      if (execInvocationId && retrySystemMessage && this.isExecutionInvocationStillRunning(execInvocationId)) {
         this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
           role: "system",
           contentMarkdown: retrySystemMessage,
         });
       }
 
-      if (execInvocationId && args.trackPromptInInvocation !== false) {
+      if (execInvocationId && args.trackPromptInInvocation !== false && this.isExecutionInvocationStillRunning(execInvocationId)) {
         this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
           role: "user",
           contentMarkdown: p,
@@ -384,7 +390,6 @@ export class ProviderExecutionService {
         purpose: args.purpose,
         model: effectiveModel,
         executionMode: args.workflowSettings.executionMode,
-        startedAt,
         promptChars: p.length,
       };
 
@@ -395,20 +400,26 @@ export class ProviderExecutionService {
           usageInput,
           args.signal,
           args.concurrencyWaitTimeoutMs,
+          execInvocationId ?? undefined,
         );
       } else {
         // Fallback for cases where ProviderConcurrencyService is not provided, 
         // e.g. in some specialized service tests, though in production it should be present
         // when an execution repository is present.
+        if (execInvocationId) {
+          this.assertExecutionInvocationCanRun(execInvocationId);
+        }
         invocation = this.deps.executionRepository?.createProviderInvocationUsage(usageInput);
+        if (invocation && execInvocationId) {
+          this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
+            providerInvocationId: invocation.id,
+          });
+        }
       }
 
-      if (invocation && execInvocationId) {
-        this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
-          providerInvocationId: invocation.id,
-        });
+      if (execInvocationId) {
+        this.assertExecutionInvocationCanRun(execInvocationId);
       }
-
       const startedMs = Date.now();
       this.deps.logger?.info("Provider invocation started", {
         logPurpose: "invocation",
@@ -483,7 +494,7 @@ export class ProviderExecutionService {
             usageSignature !== lastPersistedUsageSignature
             && invocation
             && this.deps.executionRepository
-            && this.isProviderInvocationStillRunning(invocation.id)
+            && this.isProviderWorkStillRunning(invocation.id, execInvocationId)
           ) {
             const durationMs = Date.now() - startedMs;
             this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
@@ -559,7 +570,7 @@ export class ProviderExecutionService {
             invocation
             && this.deps.executionRepository
             && !preserveForStartupRecovery
-            && this.isProviderInvocationStillRunning(invocation.id)
+            && this.isProviderWorkStillRunning(invocation.id, execInvocationId)
           ) {
             const finishedAt = new Date().toISOString();
             const durationMs = Date.now() - startedMs;
@@ -597,10 +608,16 @@ export class ProviderExecutionService {
       // Persist any buffered streaming activity from the completed run before recording usage.
       activityCoalescer?.stop();
 
+      if (args.invocationId && execInvocationId && !this.isExecutionInvocationStillRunning(execInvocationId)) {
+        this.assertExecutionInvocationCanRun(execInvocationId);
+      }
+
       if (invocation && this.deps.executionRepository) {
         const finishedAt = new Date().toISOString();
         const durationMs = Date.now() - startedMs;
-        if (this.isProviderInvocationStillRunning(invocation.id) && !isServerShutdownAbort(args.signal)) {
+        const shouldPersistTerminalUsage = this.isProviderWorkStillRunning(invocation.id, execInvocationId)
+          && !isServerShutdownAbort(args.signal);
+        if (shouldPersistTerminalUsage) {
           this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
             status: (args.signal?.aborted || isRuntimeShutdownInProgress()) ? "cancelled" : (result.ok ? "completed" : "failed"),
             model: effectiveModel,
@@ -625,8 +642,8 @@ export class ProviderExecutionService {
           });
         }
 
-        if (args.taskRunId) {
-            this.deps.executionRepository.appendTaskRunEvent(args.taskRunId, "cli_provider_usage_reported", "system", {
+        if (args.taskRunId && shouldPersistTerminalUsage) {
+          this.deps.executionRepository.appendTaskRunEvent(args.taskRunId, "cli_provider_usage_reported", "system", {
             provider: args.provider,
             model: effectiveModel,
             purpose: args.purpose,
@@ -758,7 +775,7 @@ export class ProviderExecutionService {
         && !(retryDecision.kind === "rate_limit" && rateLimitRetryCount >= args.workflowSettings.maxRateLimitRetries)
         ? retryDecision.retryAtIso
         : null;
-      if (execInvocationId) {
+      if (execInvocationId && this.isExecutionInvocationStillRunning(execInvocationId)) {
         this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
           lastErrorCategory: classification.category,
           lastErrorMessage: persistedUserMessage,
@@ -796,7 +813,7 @@ export class ProviderExecutionService {
             });
           }
 
-          if (execInvocationId) {
+          if (execInvocationId && this.isExecutionInvocationStillRunning(execInvocationId)) {
             this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
               role: "system",
               contentMarkdown: retryMessage,
@@ -891,6 +908,22 @@ export class ProviderExecutionService {
   private isProviderInvocationStillRunning(providerInvocationId: string): boolean {
     const current = this.deps.executionRepository?.getProviderInvocationUsage?.(providerInvocationId);
     return !current || current.status === "running";
+  }
+
+  private isProviderWorkStillRunning(providerInvocationId: string, executionInvocationId: string | null): boolean {
+    return this.isProviderInvocationStillRunning(providerInvocationId)
+      && (!executionInvocationId || !this.isExecutionInvocationCancelled(executionInvocationId));
+  }
+
+  private assertExecutionInvocationCanRun(executionInvocationId: string): void {
+    const current = this.deps.executionRepository?.getExecutionInvocation?.(executionInvocationId);
+    if (current?.status === "cancelled") {
+      throw new Error(`Execution invocation ${executionInvocationId} is ${current.status}; provider execution will not continue.`);
+    }
+  }
+
+  private isExecutionInvocationCancelled(executionInvocationId: string): boolean {
+    return this.deps.executionRepository?.getExecutionInvocation?.(executionInvocationId)?.status === "cancelled";
   }
 
   private isExecutionInvocationStillRunning(executionInvocationId: string): boolean {

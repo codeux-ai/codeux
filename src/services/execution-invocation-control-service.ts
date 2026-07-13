@@ -111,38 +111,50 @@ export class ExecutionInvocationControlService {
     const providerInvocation = invocation.providerInvocationId
       ? this.deps.executionRepository.getProviderInvocationUsage(invocation.providerInvocationId)
       : null;
-
-    await this.requestActiveDispatchStop(invocation, CANCEL_MESSAGE);
-    const stoppedContainerIds = await this.stopDockerContainers(invocation, providerInvocation);
     const finishedAt = new Date().toISOString();
 
-    if (providerInvocation?.status === "running") {
-      this.deps.executionRepository.updateProviderInvocationUsage(providerInvocation.id, {
-        status: "cancelled",
-        finishedAt,
-        durationMs: calculateDurationMs(providerInvocation.startedAt, finishedAt) ?? undefined,
-      });
-    }
-
-    this.closeTaskRuntimeForRetry(invocation, finishedAt);
-
+    // Close the durable invocation before asking the active workflow to stop.
+    // The abort rejection can race this control request, and workflow/provider
+    // finalizers intentionally refuse to replace an already-terminal row.
     this.deps.executionRepository.updateExecutionInvocation(invocation.id, {
       status: "cancelled",
       finishedAt,
       errorMessage: CANCEL_MESSAGE,
+      lastErrorCategory: null,
+      lastErrorMessage: CANCEL_MESSAGE,
+      lastRetryAfterIso: null,
     });
     this.deps.executionRepository.appendExecutionInvocationMessage(invocation.id, {
       role: "system",
-      contentMarkdown: stoppedContainerIds.length > 0
-        ? `${CANCEL_MESSAGE} Stopped Docker container${stoppedContainerIds.length === 1 ? "" : "s"} ${stoppedContainerIds.join(", ")}.`
-        : CANCEL_MESSAGE,
+      contentMarkdown: CANCEL_MESSAGE,
       metadata: {
         cancellation: "dashboard_invocation_cancel",
         providerInvocationId: providerInvocation?.id ?? null,
-        stoppedContainerIds,
       },
       createdAt: finishedAt,
     });
+
+    await this.requestActiveDispatchStop(invocation, CANCEL_MESSAGE);
+    const stoppedContainerIds = await this.stopDockerContainers(invocation, providerInvocation).catch((error: unknown) => {
+      this.deps.logger?.warn("Failed to stop all Docker containers for invocation cancellation", {
+        invocationId: invocation.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    });
+
+    const activeProviderInvocation = providerInvocation
+      ? this.deps.executionRepository.getProviderInvocationUsage(providerInvocation.id)
+      : null;
+    if (activeProviderInvocation?.status === "running") {
+      this.deps.executionRepository.updateProviderInvocationUsage(activeProviderInvocation.id, {
+        status: "cancelled",
+        finishedAt,
+        durationMs: calculateDurationMs(activeProviderInvocation.startedAt, finishedAt) ?? undefined,
+      });
+    }
+
+    this.closeTaskRuntimeForRetry(invocation, finishedAt);
 
     return {
       cancelled: true,

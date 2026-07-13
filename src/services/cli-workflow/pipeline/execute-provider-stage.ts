@@ -107,6 +107,8 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
     workspaceSessionId: ctx.workspaceSessionId,
     continueSessionId,
     openCodeBaselineRawUsageJson,
+    invocationId: ctx.executionInvocationId,
+    finalizeExecutionInvocation: ctx.executionInvocationId ? false : undefined,
     workflowSettings: ctx.workflowSettings,
     repoPath: ctx.repoPath,
     gitPolicy: {

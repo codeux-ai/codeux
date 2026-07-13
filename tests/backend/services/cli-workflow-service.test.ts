@@ -6,6 +6,7 @@ import { executeGitFinalizeStage } from "../../../src/services/cli-workflow/pipe
 import { executePrFinalizeStage } from "../../../src/services/cli-workflow/pipeline/pr-finalize-stage.js";
 import { executeCleanupStage } from "../../../src/services/cli-workflow/pipeline/cleanup-stage.js";
 import { ActiveDispatchRegistry, SERVER_SHUTDOWN_STOP_REASON } from "../../../src/services/active-dispatch-registry.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
 vi.mock("../../../src/services/cli-workflow/pipeline/prepare-stage.js");
 vi.mock("../../../src/services/cli-workflow/pipeline/execute-provider-stage.js");
@@ -108,10 +109,174 @@ describe("CliWorkflowService unpushed commit detection", () => {
     vi.mocked(executeProviderStage).mockResolvedValue(buildProviderStageResult());
   });
 
+  it("persists the scoped coding invocation after cancellation registration and before preparation", async () => {
+    const callOrder: string[] = [];
+    let storedInvocation: Record<string, unknown> | null = null;
+    let releasePreparation!: () => void;
+    let reportPreparationStarted!: () => void;
+    const preparationGate = new Promise<void>((resolve) => {
+      releasePreparation = resolve;
+    });
+    const preparationStarted = new Promise<void>((resolve) => {
+      reportPreparationStarted = resolve;
+    });
+    const taskRun = {
+      id: "task-run-1",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      taskId: "task-1",
+      sprintRunId: "sprint-run-1",
+      dispatchId: "dispatch-1",
+      startedAt: "2026-07-13T00:00:00.000Z",
+      prUrl: null,
+      workerBranch: null,
+    };
+    const executionRepository = {
+      getTaskRun: vi.fn().mockReturnValue(taskRun),
+      getExecutionInvocation: vi.fn().mockImplementation((id: string) => (
+        storedInvocation?.id === id ? storedInvocation : null
+      )),
+      createExecutionInvocation: vi.fn().mockImplementation((input: Record<string, unknown>) => {
+        callOrder.push("persist_invocation");
+        storedInvocation = { ...input, id: "xi-preparation" };
+        return storedInvocation;
+      }),
+      updateExecutionInvocation: vi.fn().mockImplementation((_id: string, input: Record<string, unknown>) => {
+        Object.assign(storedInvocation!, input);
+        return storedInvocation;
+      }),
+      appendExecutionInvocationMessage: vi.fn().mockImplementation(() => {
+        callOrder.push("persist_message");
+      }),
+      createProviderInvocationUsage: vi.fn(),
+      appendTaskRunEvent: vi.fn().mockImplementation((_taskRunId: string, eventType: string) => {
+        if (eventType === "cli_prepare_started") {
+          callOrder.push("prepare_event");
+        }
+      }),
+      updateTaskRun: vi.fn(),
+      updateTaskDispatch: vi.fn(),
+      getSprintRun: vi.fn().mockReturnValue({ status: "running" }),
+    };
+    const activeDispatchRegistry = {
+      register: vi.fn().mockImplementation(() => {
+        callOrder.push("register_dispatch");
+        return vi.fn();
+      }),
+    };
+    const workerAgent = {
+      id: "agent-preset-1",
+      instructionMarkdown: "Worker guide",
+    };
+    const deps = {
+      sessionTracking: {
+        appendActivity: vi.fn(),
+        updateSession: vi.fn(),
+      },
+      executionRepository,
+      activeDispatchRegistry,
+      getDashboardSettings: vi.fn().mockReturnValue(DEFAULT_DASHBOARD_SETTINGS),
+      agentPresetSyncService: {
+        resolveTargetedCodingAgent: vi.fn().mockResolvedValue(workerAgent),
+        getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue(workerAgent),
+      },
+      getGithubToken: vi.fn().mockReturnValue(undefined),
+      sprintRunLifecycleService: { finalizeCancellationIfIdle: vi.fn() },
+      logger: { error: vi.fn(), warn: vi.fn() },
+    };
+    const service = new CliWorkflowService(deps as any);
+
+    vi.mocked(executePrepareStage).mockImplementation(async () => {
+      callOrder.push("prepare_stage");
+      reportPreparationStarted();
+      await preparationGate;
+      return { providerPrompt: "mock prompt" } as any;
+    });
+    vi.mocked(executeProviderStage).mockResolvedValue(buildProviderStageResult(
+      "No repository changes were required.\nCODE_UX_TASK_OUTCOME: completed",
+    ));
+    vi.mocked(executeGitFinalizeStage).mockImplementation(async () => {
+      expect(storedInvocation).toMatchObject({ status: "running" });
+      return { hasChanges: true, committedChanges: true, pushedBranch: "worker-1" };
+    });
+    vi.mocked(executePrFinalizeStage).mockImplementation(async () => {
+      expect(storedInvocation).toMatchObject({ status: "running" });
+      return { prUrl: "https://example.test/pull/1" };
+    });
+    vi.mocked(executeCleanupStage).mockResolvedValue({ cleanedUp: false });
+
+    const workflow = (service as any).runTaskWorkflow({
+      provider: "codex",
+      providerSettingsOverride: {
+        model: "gpt-preparation-test",
+        thinkingMode: "medium",
+        apiKey: "",
+        maxConcurrentTasks: 2,
+      },
+      task: { id: "T1", record_id: "task-1", prompt: "prompt", title: "title" },
+      repoPath: "/repo",
+      featureBranch: "feature/sprint-1",
+      sprintNumber: 1,
+      settingsScope: { projectId: "project-1", sprintId: "sprint-1" },
+      sessionId: "session-1",
+      dispatchId: "dispatch-1",
+      taskRunId: "task-run-1",
+      workerBranch: "worker-1",
+      title: "Title",
+    });
+
+    await preparationStarted;
+
+    expect(callOrder).toEqual([
+      "register_dispatch",
+      "persist_invocation",
+      "persist_message",
+      "prepare_event",
+      "prepare_stage",
+    ]);
+    expect(executionRepository.getExecutionInvocation("xi-preparation")).toMatchObject({
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      taskId: "task-1",
+      sprintRunId: "sprint-run-1",
+      dispatchId: "dispatch-1",
+      taskRunId: "task-run-1",
+      type: "cli_task_coding",
+      status: "running",
+      provider: "codex",
+      model: "gpt-preparation-test",
+      invocationSource: "internal",
+      agentPresetId: "agent-preset-1",
+    });
+    expect(executionRepository.createExecutionInvocation).toHaveBeenCalledOnce();
+    expect(executionRepository.createProviderInvocationUsage).not.toHaveBeenCalled();
+    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+      "xi-preparation",
+      expect.objectContaining({
+        role: "system",
+        contentMarkdown: "Preparing the task workspace and codex configuration.",
+      }),
+    );
+
+    releasePreparation();
+    await workflow;
+
+    expect(executeProviderStage).toHaveBeenCalledWith(
+      expect.objectContaining({ executionInvocationId: "xi-preparation" }),
+      "mock prompt",
+    );
+    expect(storedInvocation).toMatchObject({ status: "completed" });
+  });
+
   it("runs task workflow pipeline and handles error", async () => {
+    let storedInvocation: Record<string, unknown> | null = null;
     const executionRepository = {
       getTaskRun: vi.fn().mockReturnValue({
         id: "run-1",
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        taskId: "task-1",
+        sprintRunId: null,
         dispatchId: "dispatch-1",
         startedAt: "2026-03-10T00:00:00.000Z",
         prUrl: null,
@@ -122,6 +287,18 @@ describe("CliWorkflowService unpushed commit detection", () => {
       updateTaskRun: vi.fn(),
       updateTaskDispatch: vi.fn(),
       getSprintRun: vi.fn().mockReturnValue(null),
+      createExecutionInvocation: vi.fn().mockImplementation((input: Record<string, unknown>) => {
+        storedInvocation = { ...input, id: "xi-preparation-failure" };
+        return storedInvocation;
+      }),
+      getExecutionInvocation: vi.fn().mockImplementation((id: string) => (
+        storedInvocation?.id === id ? storedInvocation : null
+      )),
+      updateExecutionInvocation: vi.fn().mockImplementation((_id: string, input: Record<string, unknown>) => {
+        Object.assign(storedInvocation!, input);
+        return storedInvocation;
+      }),
+      appendExecutionInvocationMessage: vi.fn(),
     };
     const deps = {
       sessionTracking: {
@@ -130,7 +307,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
         appendActivity: vi.fn(),
         updateSession: vi.fn(),
       },
-      getDashboardSettings: vi.fn().mockReturnValue({ cliWorkflow: { containerImage: "  " } }),
+      getDashboardSettings: vi.fn().mockReturnValue(DEFAULT_DASHBOARD_SETTINGS),
       agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue({ instructionMarkdown: "guide" }) },
       getGithubToken: vi.fn().mockReturnValue("token"),
       executionRepository,
@@ -179,13 +356,32 @@ describe("CliWorkflowService unpushed commit detection", () => {
       "dispatch-1",
       expect.objectContaining({ status: "failed", errorMessage: "Stage failed" }),
     );
+    expect(storedInvocation).toMatchObject({
+      status: "failed",
+      finishedAt: expect.any(String),
+      errorMessage: "Stage failed",
+      lastErrorMessage: "Stage failed",
+    });
+    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+      "xi-preparation-failure",
+      expect.objectContaining({
+        role: "system",
+        contentMarkdown: "CLI workflow failed: Stage failed",
+        metadata: expect.objectContaining({ kind: "cli_workflow_finalized", status: "failed" }),
+      }),
+    );
     expect(deps.logger.error).toHaveBeenCalled();
   });
 
   it("preserves running task state and workspace when server shutdown aborts workflow", async () => {
+    let storedInvocation: Record<string, unknown> | null = null;
     const executionRepository = {
       getTaskRun: vi.fn().mockReturnValue({
         id: "run-1",
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        taskId: "task-1",
+        sprintRunId: null,
         dispatchId: "dispatch-1",
         startedAt: "2026-03-10T00:00:00.000Z",
         prUrl: null,
@@ -196,6 +392,15 @@ describe("CliWorkflowService unpushed commit detection", () => {
       updateTaskRun: vi.fn(),
       updateTaskDispatch: vi.fn(),
       getSprintRun: vi.fn().mockReturnValue(null),
+      createExecutionInvocation: vi.fn().mockImplementation((input: Record<string, unknown>) => {
+        storedInvocation = { ...input, id: "xi-shutdown" };
+        return storedInvocation;
+      }),
+      getExecutionInvocation: vi.fn().mockImplementation((id: string) => (
+        storedInvocation?.id === id ? storedInvocation : null
+      )),
+      updateExecutionInvocation: vi.fn(),
+      appendExecutionInvocationMessage: vi.fn(),
     };
     const activeDispatchRegistry = new ActiveDispatchRegistry();
     const deps = {
@@ -206,7 +411,9 @@ describe("CliWorkflowService unpushed commit detection", () => {
         updateSession: vi.fn(),
       },
       getDashboardSettings: vi.fn().mockReturnValue({
+        ...DEFAULT_DASHBOARD_SETTINGS,
         cliWorkflow: {
+          ...DEFAULT_DASHBOARD_SETTINGS.cliWorkflow,
           containerImage: "node:24-bookworm-slim",
           executionMode: "DOCKER",
           cleanupWorktreeOnFailure: true,
@@ -216,6 +423,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
       getGithubToken: vi.fn().mockReturnValue("token"),
       executionRepository,
       activeDispatchRegistry,
+      sprintRunLifecycleService: { finalizeCancellationIfIdle: vi.fn() },
       logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
     };
     const service = new CliWorkflowService(deps as any);
@@ -242,6 +450,12 @@ describe("CliWorkflowService unpushed commit detection", () => {
     expect(deps.sessionTracking.updateSession).not.toHaveBeenCalledWith("sess-1", { state: "CANCELLED" });
     expect(executionRepository.updateTaskRun).not.toHaveBeenCalled();
     expect(executionRepository.updateTaskDispatch).not.toHaveBeenCalled();
+    expect(storedInvocation).toMatchObject({
+      id: "xi-shutdown",
+      status: "running",
+    });
+    expect(storedInvocation).not.toHaveProperty("finishedAt", expect.any(String));
+    expect(executionRepository.updateExecutionInvocation).not.toHaveBeenCalled();
     expect(executeCleanupStage).not.toHaveBeenCalled();
     expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
       "run-1",
@@ -257,6 +471,113 @@ describe("CliWorkflowService unpushed commit detection", () => {
       expect.objectContaining({ worktreePath: expect.any(String) }),
       expect.any(Object),
     );
+  });
+
+  it("cancels during preparation once and ignores late workflow finalizers", async () => {
+    let storedInvocation: Record<string, unknown> | null = null;
+    const taskRun = {
+      id: "run-cancel-preparation",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      taskId: "task-1",
+      sprintRunId: null,
+      dispatchId: "dispatch-cancel-preparation",
+      startedAt: "2026-07-13T00:00:00.000Z",
+      prUrl: null,
+      workerBranch: null,
+    };
+    const executionRepository = {
+      getTaskRun: vi.fn().mockReturnValue(taskRun),
+      getLatestTaskRunBySessionId: vi.fn(),
+      appendTaskRunEvent: vi.fn(),
+      updateTaskRun: vi.fn(),
+      updateTaskDispatch: vi.fn(),
+      getSprintRun: vi.fn().mockReturnValue(null),
+      createExecutionInvocation: vi.fn().mockImplementation((input: Record<string, unknown>) => {
+        storedInvocation = { ...input, id: "xi-cancel-preparation" };
+        return storedInvocation;
+      }),
+      getExecutionInvocation: vi.fn().mockImplementation((id: string) => (
+        storedInvocation?.id === id ? storedInvocation : null
+      )),
+      updateExecutionInvocation: vi.fn().mockImplementation((_id: string, input: Record<string, unknown>) => {
+        Object.assign(storedInvocation!, input);
+        return storedInvocation;
+      }),
+      appendExecutionInvocationMessage: vi.fn(),
+    };
+    const activeDispatchRegistry = new ActiveDispatchRegistry();
+    const deps = {
+      sessionTracking: {
+        appendActivity: vi.fn(),
+        updateSession: vi.fn(),
+      },
+      executionRepository,
+      activeDispatchRegistry,
+      getDashboardSettings: vi.fn().mockReturnValue(DEFAULT_DASHBOARD_SETTINGS),
+      agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue(null) },
+      getGithubToken: vi.fn().mockReturnValue(undefined),
+      sprintRunLifecycleService: { finalizeCancellationIfIdle: vi.fn() },
+      logger: { error: vi.fn(), warn: vi.fn() },
+    };
+    const service = new CliWorkflowService(deps as any);
+
+    vi.mocked(executePrepareStage).mockImplementation(async () => {
+      await activeDispatchRegistry.requestStop("dispatch-cancel-preparation", "dashboard_cancel");
+      throw new Error("Command aborted");
+    });
+    vi.mocked(executeCleanupStage).mockResolvedValue({ cleanedUp: false });
+
+    await (service as any).runTaskWorkflow({
+      provider: "codex",
+      task: { id: "T1", record_id: "task-1", prompt: "prompt", title: "title" },
+      repoPath: "/repo",
+      featureBranch: "main",
+      sprintNumber: 1,
+      sessionId: "session-cancel-preparation",
+      dispatchId: "dispatch-cancel-preparation",
+      taskRunId: "run-cancel-preparation",
+      workerBranch: "worker-1",
+      title: "Title",
+    });
+
+    expect(storedInvocation).toMatchObject({
+      status: "cancelled",
+      finishedAt: expect.any(String),
+      errorMessage: "Workflow cancelled by dashboard control.",
+      lastErrorMessage: "Workflow cancelled by dashboard control.",
+    });
+    expect(executionRepository.updateTaskDispatch).toHaveBeenCalledWith(
+      "dispatch-cancel-preparation",
+      expect.objectContaining({ status: "cancelled" }),
+    );
+    const finalAuditCalls = executionRepository.appendExecutionInvocationMessage.mock.calls.filter(([, input]) => (
+      input.metadata?.kind === "cli_workflow_finalized"
+    ));
+    expect(finalAuditCalls).toHaveLength(1);
+
+    const invocationUpdateCount = executionRepository.updateExecutionInvocation.mock.calls.length;
+    const taskRunUpdateCount = executionRepository.updateTaskRun.mock.calls.length;
+    (service as any).finalizeExecutionInvocation(
+      "xi-cancel-preparation",
+      "completed",
+      "2026-07-13T00:05:00.000Z",
+    );
+    (service as any).updateExecutionState({
+      taskRunId: taskRun.id,
+      sessionId: "session-cancel-preparation",
+      workerBranch: "worker-1",
+    }, {
+      state: "COMPLETED",
+      finishedAt: "2026-07-13T00:05:00.000Z",
+      dispatchStatus: "completed",
+    }, "xi-cancel-preparation");
+
+    expect(executionRepository.updateExecutionInvocation).toHaveBeenCalledTimes(invocationUpdateCount);
+    expect(executionRepository.updateTaskRun).toHaveBeenCalledTimes(taskRunUpdateCount);
+    expect(executionRepository.appendExecutionInvocationMessage.mock.calls.filter(([, input]) => (
+      input.metadata?.kind === "cli_workflow_finalized"
+    ))).toHaveLength(1);
   });
 
   it("blocks unrecoverable git credential failures instead of leaving the task retryable", async () => {
@@ -457,11 +778,14 @@ describe("CliWorkflowService unpushed commit detection", () => {
   });
 
   it("resumes Git finalization without invoking the provider twice after a restart crash window", async () => {
+    let storedInvocation: Record<string, unknown> | null = null;
     const executionRepository = {
       getTaskRun: vi.fn().mockReturnValue({
         id: "current-run",
         projectId: "project-1",
+        sprintId: "sprint-1",
         taskId: "task-1",
+        sprintRunId: "sprint-run-1",
         dispatchId: "current-dispatch",
         startedAt: "2026-07-11T00:25:28.000Z",
         prUrl: null,
@@ -497,7 +821,20 @@ describe("CliWorkflowService unpushed commit detection", () => {
       appendTaskRunEvent: vi.fn(),
       updateTaskRun: vi.fn(),
       updateTaskDispatch: vi.fn(),
-      getSprintRun: vi.fn().mockReturnValue(null),
+      getSprintRun: vi.fn().mockReturnValue({ status: "running" }),
+      createExecutionInvocation: vi.fn().mockImplementation((input: Record<string, unknown>) => {
+        storedInvocation = { ...input, id: "current-recovered-workflow" };
+        return storedInvocation;
+      }),
+      getExecutionInvocation: vi.fn().mockImplementation((id: string) => (
+        storedInvocation?.id === id ? storedInvocation : null
+      )),
+      updateExecutionInvocation: vi.fn().mockImplementation((_id: string, input: Record<string, unknown>) => {
+        Object.assign(storedInvocation!, input);
+        return storedInvocation;
+      }),
+      appendExecutionInvocationMessage: vi.fn(),
+      createProviderInvocationUsage: vi.fn(),
     };
     const deps = {
       sessionTracking: {
@@ -506,7 +843,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
         appendActivity: vi.fn(),
         updateSession: vi.fn(),
       },
-      getDashboardSettings: vi.fn().mockReturnValue({ cliWorkflow: { containerImage: "  " } }),
+      getDashboardSettings: vi.fn().mockReturnValue(DEFAULT_DASHBOARD_SETTINGS),
       agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue({ instructionMarkdown: "guide" }) },
       getGithubToken: vi.fn().mockReturnValue("token"),
       executionRepository,
@@ -549,7 +886,22 @@ describe("CliWorkflowService unpushed commit detection", () => {
       "task-1",
     );
     expect(executeProviderStage).not.toHaveBeenCalled();
+    expect(executionRepository.createProviderInvocationUsage).not.toHaveBeenCalled();
     expect(executeGitFinalizeStage).toHaveBeenCalledOnce();
+    expect(storedInvocation).toMatchObject({
+      id: "current-recovered-workflow",
+      status: "completed",
+      finishedAt: expect.any(String),
+      errorMessage: null,
+    });
+    expect(executionRepository.updateTaskRun).toHaveBeenLastCalledWith(
+      "current-run",
+      expect.objectContaining({ state: "COMPLETED" }),
+    );
+    expect(executionRepository.updateTaskDispatch).toHaveBeenLastCalledWith(
+      "current-dispatch",
+      expect.objectContaining({ status: "completed" }),
+    );
     expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
       "current-run",
       "cli_provider_completion_recovered",
