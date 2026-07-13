@@ -17,7 +17,7 @@ import type { ProjectManagementRepository } from "../repositories/project-manage
 import { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
 import { runCommandStrict, type CommandResult } from "./cli-process-runner.js";
 import { isReadFileNotFoundToolError, buildReadFileRetryPrompt } from "./cli-workflow-text-utils.js";
-import type { ProviderSettingsOverride } from "./provider-settings-override.js";
+import { buildProviderSettingsOverride, type ProviderSettingsOverride } from "./provider-settings-override.js";
 
 import {
   buildProviderPrompt,
@@ -57,6 +57,8 @@ import type { AgentPresetRepository } from "../repositories/agent-preset-reposit
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
 import { parseTaskExecutionOutcomeFromProviderOutput, type TaskExecutionOutcome } from "../domain/sprint/task-execution-outcome.js";
+import { resolveProviderForInvocation } from "./provider-routing.js";
+import { resolveEffectiveModel } from "./provider-execution-service.js";
 
 interface CliWorkflowServiceDependencies {
   sessionTracking: SessionTrackingRepository;
@@ -280,6 +282,33 @@ export class CliWorkflowService {
     const taskRun = args.taskRunId && this.deps.executionRepository
       ? this.deps.executionRepository.getTaskRun(args.taskRunId)
       : null;
+    const canPersistExecutionInvocation = Boolean(
+      taskRun
+      && this.deps.executionRepository
+      && typeof this.deps.executionRepository.createExecutionInvocation === "function",
+    );
+    const invocationModel = canPersistExecutionInvocation
+      ? (() => {
+        const resolvedProvider = resolveProviderForInvocation(settings, {
+          invocation: "task_coding",
+          task: args.task,
+        });
+        const resolvedProviderSettings = resolvedProvider.providers[args.provider];
+        const providerSettings = args.providerSettingsOverride
+          || buildProviderSettingsOverride(resolvedProviderSettings.model, resolvedProviderSettings);
+        return resolveEffectiveModel({
+          provider: args.provider,
+          model: providerSettings.model,
+          providerMountAuth: providerSettings.providerMountAuth,
+          customModel: providerSettings.customModel,
+          qwenAuthMode: providerSettings.qwenAuthMode,
+          qwenModelId: providerSettings.qwenModelId,
+          openCodeAuthMode: providerSettings.openCodeAuthMode,
+          openCodeProviderId: providerSettings.openCodeProviderId,
+          openCodeModelId: providerSettings.openCodeModelId,
+        });
+      })()
+      : null;
 
     const ctx: PipelineContext = {
       ...args,
@@ -348,6 +377,33 @@ export class CliWorkflowService {
 
     let preserveWorkspaceForShutdown = false;
     try {
+      if (taskRun && invocationModel && this.deps.executionRepository) {
+        const invocation = this.deps.executionRepository.createExecutionInvocation({
+          projectId: taskRun.projectId,
+          sprintId: taskRun.sprintId,
+          taskId: taskRun.taskId,
+          sprintRunId: taskRun.sprintRunId,
+          dispatchId: taskRun.dispatchId || args.dispatchId || null,
+          taskRunId: taskRun.id,
+          type: "cli_task_coding",
+          status: "running",
+          provider: args.provider,
+          model: invocationModel,
+          invocationSource: "internal",
+          agentPresetId: workerAgent?.id,
+        });
+        ctx.executionInvocationId = invocation.id;
+        this.deps.executionRepository.appendExecutionInvocationMessage(invocation.id, {
+          role: "system",
+          contentMarkdown: `Preparing the task workspace and ${args.provider} configuration.`,
+          metadata: {
+            kind: "preparation_started",
+            provider: args.provider,
+            model: invocationModel,
+          },
+        });
+      }
+
       this.appendExecutionEvent(args, "cli_workspace_bound", {
         provider: args.provider,
         repoPath: args.repoPath,

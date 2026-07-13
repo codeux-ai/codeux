@@ -6,6 +6,7 @@ import { executeGitFinalizeStage } from "../../../src/services/cli-workflow/pipe
 import { executePrFinalizeStage } from "../../../src/services/cli-workflow/pipeline/pr-finalize-stage.js";
 import { executeCleanupStage } from "../../../src/services/cli-workflow/pipeline/cleanup-stage.js";
 import { ActiveDispatchRegistry, SERVER_SHUTDOWN_STOP_REASON } from "../../../src/services/active-dispatch-registry.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
 vi.mock("../../../src/services/cli-workflow/pipeline/prepare-stage.js");
 vi.mock("../../../src/services/cli-workflow/pipeline/execute-provider-stage.js");
@@ -106,6 +107,153 @@ describe("CliWorkflowService unpushed commit detection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(executeProviderStage).mockResolvedValue(buildProviderStageResult());
+  });
+
+  it("persists the scoped coding invocation after cancellation registration and before preparation", async () => {
+    const callOrder: string[] = [];
+    let storedInvocation: Record<string, unknown> | null = null;
+    let releasePreparation!: () => void;
+    let reportPreparationStarted!: () => void;
+    const preparationGate = new Promise<void>((resolve) => {
+      releasePreparation = resolve;
+    });
+    const preparationStarted = new Promise<void>((resolve) => {
+      reportPreparationStarted = resolve;
+    });
+    const taskRun = {
+      id: "task-run-1",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      taskId: "task-1",
+      sprintRunId: "sprint-run-1",
+      dispatchId: "dispatch-1",
+      startedAt: "2026-07-13T00:00:00.000Z",
+      prUrl: null,
+      workerBranch: null,
+    };
+    const executionRepository = {
+      getTaskRun: vi.fn().mockReturnValue(taskRun),
+      getExecutionInvocation: vi.fn().mockImplementation((id: string) => (
+        storedInvocation?.id === id ? storedInvocation : null
+      )),
+      createExecutionInvocation: vi.fn().mockImplementation((input: Record<string, unknown>) => {
+        callOrder.push("persist_invocation");
+        storedInvocation = { ...input, id: "xi-preparation" };
+        return storedInvocation;
+      }),
+      appendExecutionInvocationMessage: vi.fn().mockImplementation(() => {
+        callOrder.push("persist_message");
+      }),
+      createProviderInvocationUsage: vi.fn(),
+      appendTaskRunEvent: vi.fn().mockImplementation((_taskRunId: string, eventType: string) => {
+        if (eventType === "cli_prepare_started") {
+          callOrder.push("prepare_event");
+        }
+      }),
+      updateTaskRun: vi.fn(),
+      updateTaskDispatch: vi.fn(),
+      getSprintRun: vi.fn().mockReturnValue({ status: "running" }),
+    };
+    const activeDispatchRegistry = {
+      register: vi.fn().mockImplementation(() => {
+        callOrder.push("register_dispatch");
+        return vi.fn();
+      }),
+    };
+    const workerAgent = {
+      id: "agent-preset-1",
+      instructionMarkdown: "Worker guide",
+    };
+    const deps = {
+      sessionTracking: {
+        appendActivity: vi.fn(),
+        updateSession: vi.fn(),
+      },
+      executionRepository,
+      activeDispatchRegistry,
+      getDashboardSettings: vi.fn().mockReturnValue(DEFAULT_DASHBOARD_SETTINGS),
+      agentPresetSyncService: {
+        resolveTargetedCodingAgent: vi.fn().mockResolvedValue(workerAgent),
+        getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue(workerAgent),
+      },
+      getGithubToken: vi.fn().mockReturnValue(undefined),
+      sprintRunLifecycleService: { finalizeCancellationIfIdle: vi.fn() },
+      logger: { error: vi.fn(), warn: vi.fn() },
+    };
+    const service = new CliWorkflowService(deps as any);
+
+    vi.mocked(executePrepareStage).mockImplementation(async () => {
+      callOrder.push("prepare_stage");
+      reportPreparationStarted();
+      await preparationGate;
+      return { providerPrompt: "mock prompt" } as any;
+    });
+    vi.mocked(executeProviderStage).mockResolvedValue(buildProviderStageResult(
+      "No repository changes were required.\nCODE_UX_TASK_OUTCOME: completed",
+    ));
+    vi.mocked(executeGitFinalizeStage).mockResolvedValue({ hasChanges: false, committedChanges: false });
+    vi.mocked(executeCleanupStage).mockResolvedValue({ cleanedUp: false });
+
+    const workflow = (service as any).runTaskWorkflow({
+      provider: "codex",
+      providerSettingsOverride: {
+        model: "gpt-preparation-test",
+        thinkingMode: "medium",
+        apiKey: "",
+        maxConcurrentTasks: 2,
+      },
+      task: { id: "T1", record_id: "task-1", prompt: "prompt", title: "title" },
+      repoPath: "/repo",
+      featureBranch: "feature/sprint-1",
+      sprintNumber: 1,
+      settingsScope: { projectId: "project-1", sprintId: "sprint-1" },
+      sessionId: "session-1",
+      dispatchId: "dispatch-1",
+      taskRunId: "task-run-1",
+      workerBranch: "worker-1",
+      title: "Title",
+    });
+
+    await preparationStarted;
+
+    expect(callOrder).toEqual([
+      "register_dispatch",
+      "persist_invocation",
+      "persist_message",
+      "prepare_event",
+      "prepare_stage",
+    ]);
+    expect(executionRepository.getExecutionInvocation("xi-preparation")).toMatchObject({
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      taskId: "task-1",
+      sprintRunId: "sprint-run-1",
+      dispatchId: "dispatch-1",
+      taskRunId: "task-run-1",
+      type: "cli_task_coding",
+      status: "running",
+      provider: "codex",
+      model: "gpt-preparation-test",
+      invocationSource: "internal",
+      agentPresetId: "agent-preset-1",
+    });
+    expect(executionRepository.createExecutionInvocation).toHaveBeenCalledOnce();
+    expect(executionRepository.createProviderInvocationUsage).not.toHaveBeenCalled();
+    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+      "xi-preparation",
+      expect.objectContaining({
+        role: "system",
+        contentMarkdown: "Preparing the task workspace and codex configuration.",
+      }),
+    );
+
+    releasePreparation();
+    await workflow;
+
+    expect(executeProviderStage).toHaveBeenCalledWith(
+      expect.objectContaining({ executionInvocationId: "xi-preparation" }),
+      "mock prompt",
+    );
   });
 
   it("runs task workflow pipeline and handles error", async () => {
