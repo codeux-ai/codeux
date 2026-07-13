@@ -351,6 +351,8 @@ describe("ChatPageShell", () => {
     expect(getByText("In progress")).toBeInTheDocument();
     expect(getByText("0 tools used")).toBeInTheDocument();
     expect(getByText("Preparing the first progress update…")).toBeInTheDocument();
+    expect(getByTestId("cinematic-exchange")).toHaveClass("top-[48%]", "bottom-32", "min-h-0");
+    expect(getByTestId("cinematic-exchange")).not.toHaveClass("top-full");
     const activityLabel = getByText(/Container starting/);
     expect(activityLabel).toBeInTheDocument();
     expect(activityLabel.closest('[role="status"]')).toHaveAttribute("aria-atomic", "true");
@@ -474,6 +476,7 @@ describe("ChatPageShell", () => {
     expect(view.queryByTestId("cinematic-invocation-progress")).not.toBeInTheDocument();
     expect(view.getByTestId("agent-avatar-scene")).toHaveAttribute("data-tool", "");
     expect(view.getAllByText("Final reply text.")).toHaveLength(1);
+    expect(view.getByTestId("cinematic-exchange")).toContainElement(view.getByText("Final reply text."));
   });
 
   it("keeps reduced-motion progress semantic, static, and safely rendered", () => {

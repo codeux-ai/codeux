@@ -626,7 +626,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
 
   return (
     <div
-      className="relative flex-1 min-h-0 overflow-x-hidden overflow-y-auto md:overflow-hidden"
+      className="relative flex-1 min-h-0 overflow-hidden"
       data-testid="cinematic-stage"
       data-background-activity-count={activityState.backgroundActivityCount}
     >
@@ -797,7 +797,10 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
       {/* ── Latest exchange — only the current beat of the conversation is
              staged: the newest agent reply plus any user messages sent after
              it. History lives one click away in Threads. ── */}
-      <div className="absolute inset-x-0 top-full z-20 flex flex-col justify-end px-4 py-6 md:inset-y-0 md:bottom-0 md:left-auto md:right-0 md:top-0 md:w-[46%] md:justify-end md:px-6 md:py-0 md:pb-36 md:pt-4 lg:w-[44%] lg:px-8 lg:pt-6 xl:w-[46%] xl:px-10 xl:pt-8 2xl:w-[48%] 2xl:justify-center 2xl:px-12 2xl:pb-32 2xl:pt-12">
+      <div
+        data-testid="cinematic-exchange"
+        className="absolute inset-x-0 bottom-32 top-[48%] z-20 flex min-h-0 flex-col justify-end px-4 pb-2 pt-3 md:inset-y-0 md:bottom-0 md:left-auto md:right-0 md:top-0 md:w-[46%] md:justify-end md:px-6 md:py-0 md:pb-36 md:pt-4 lg:w-[44%] lg:px-8 lg:pt-6 xl:w-[46%] xl:px-10 xl:pt-8 2xl:w-[48%] 2xl:justify-center 2xl:px-12 2xl:pb-32 2xl:pt-12"
+      >
         <div
           ref={exchangeLogRef}
           role="log"
