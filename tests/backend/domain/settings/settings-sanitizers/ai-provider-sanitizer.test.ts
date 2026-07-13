@@ -199,7 +199,7 @@ describe("sanitizeAiProvider", () => {
             enabled: true,
             model: "gpt-5.6-sol",
             weight: 20,
-            thinkingMode: "HIGH",
+            thinkingMode: "max",
           },
         },
         invocationRouting: {
@@ -210,7 +210,8 @@ describe("sanitizeAiProvider", () => {
             allowedProviders: ["codex"],
             providers: {
               codex: {
-                model: "gpt-5.6-terra",
+                model: "gpt-5.6-sol-pro",
+                thinkingMode: "ultra",
               },
             },
           },
@@ -219,7 +220,9 @@ describe("sanitizeAiProvider", () => {
     } as any);
 
     expect(result.providers.codex.model).toBe("gpt-5.6-sol");
-    expect(result.invocationRouting.task_coding.providers.codex?.model).toBe("gpt-5.6-terra");
+    expect(result.providers.codex.thinkingMode).toBe("max");
+    expect(result.invocationRouting.task_coding.providers.codex?.model).toBe("gpt-5.6-sol-pro");
+    expect(result.invocationRouting.task_coding.providers.codex?.thinkingMode).toBe("ultra");
   });
 
   it("normalizes legacy thinking modes to provider-specific persisted values", () => {
@@ -230,7 +233,7 @@ describe("sanitizeAiProvider", () => {
           codex: {
             provider: "codex",
             enabled: true,
-            model: "gpt-5.6-sol",
+            model: "gpt-5.6-luna",
             weight: 20,
             thinkingMode: "HIGH",
           },
@@ -275,7 +278,7 @@ describe("sanitizeAiProvider", () => {
           codex: {
             provider: "codex",
             enabled: true,
-            model: "gpt-5.6-sol",
+            model: "gpt-5.6-luna",
             weight: 20,
             thinkingMode: "max",
           },

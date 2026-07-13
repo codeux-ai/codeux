@@ -25,7 +25,7 @@ const realProviderSpecs: Record<CliProviderId, ProviderCommandSpec> = {
   },
   "codex": (model: string, prompt: string, thinkingMode?: ThinkingMode) => {
     const args = ["exec", "--yolo", "--json", "--output-last-message", "codex-last-message.txt"];
-    if (thinkingMode) args.push("-c", `model_reasoning_effort="${normalizeProviderThinkingMode("codex", thinkingMode)}"`);
+    if (thinkingMode) args.push("-c", `model_reasoning_effort="${normalizeProviderThinkingMode("codex", thinkingMode, undefined, model)}"`);
     if (model && model !== "default") args.push("--model", model);
     args.push(prompt);
     return { command: "codex", args };

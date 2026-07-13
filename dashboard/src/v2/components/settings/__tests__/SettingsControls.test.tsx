@@ -888,6 +888,26 @@ describe("SettingsControls Accessibility", () => {
     expect(screen.getByRole("button", { name: "Configure Secondary Area" })).toBeInTheDocument();
   });
 
+  it("SettingsDetailWorkspaceProvider clears a stale restored section", async () => {
+    const Harness = () => {
+      const [activeSection, setActiveSection] = useState<string | null>("Removed Area");
+      return (
+        <SettingsDetailWorkspaceProvider
+          activeSection={activeSection}
+          onActiveSectionChange={setActiveSection}
+        >
+          <SectionCard title="Current Area">
+            <button type="button">Current control</button>
+          </SectionCard>
+        </SettingsDetailWorkspaceProvider>
+      );
+    };
+
+    render(<Harness />);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Configure Current Area" })).toBeInTheDocument());
+  });
+
   it("BranchNameSchemeEditor passes aria-label and aria-description", () => {
     render(
       <BranchNameSchemeEditor

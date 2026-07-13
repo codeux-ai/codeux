@@ -12,6 +12,7 @@ import * as memoryApi from "../../../dashboard/src/v2/lib/memory-api.js";
 import * as agentPresetApi from "../../../dashboard/src/v2/lib/agent-preset-api.js";
 import * as dashboardApi from "../../../dashboard/src/lib/api/dashboard-api.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
+import { SETTINGS_NAVIGATION_SESSION_KEY } from "../../../dashboard/src/v2/lib/settings-navigation-state.js";
 
 import * as navigationBlocker from "../../../dashboard/src/v2/router/navigation-blocker.js";
 
@@ -84,6 +85,7 @@ const buildSystemSettings = (overrides: Record<string, any> = {}) => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.sessionStorage.removeItem(SETTINGS_NAVIGATION_SESSION_KEY);
   mockSaveSystem = vi.spyOn(settingsApi, 'saveSystemSettings').mockImplementation(async (settings) => settings as any);
   mockSaveProject = vi.spyOn(settingsApi, 'saveProjectSettings').mockResolvedValue({ settings: {}, sources: {} } as any);
   mockFetchSystem = vi.spyOn(settingsApi, 'fetchSystemSettings').mockResolvedValue(buildSystemSettings() as any);
@@ -126,6 +128,43 @@ afterEach(() => {
 });
 
 describe("useSettingsPageState", () => {
+  it("restores the active settings category, focused card, and invocation route after a hard refresh", async () => {
+    const first = renderHook(() => useSettingsPageState(CATEGORIES));
+    await waitFor(() => expect(first.result.current.loading).toBe(false));
+
+    act(() => {
+      first.result.current.setActiveCategory("models");
+      first.result.current.setActiveInvocationRoute("planning");
+    });
+    act(() => {
+      first.result.current.setActiveSettingsSection("Route Mapping");
+    });
+
+    expect(first.result.current.activeSettingsSection).toBe("Route Mapping");
+    first.unmount();
+
+    const refreshed = renderHook(() => useSettingsPageState(CATEGORIES));
+    await waitFor(() => expect(refreshed.result.current.loading).toBe(false));
+
+    expect(refreshed.result.current.activeCategory).toBe("models");
+    expect(refreshed.result.current.activeSettingsSection).toBe("Route Mapping");
+    expect(refreshed.result.current.activeInvocationRoute).toBe("planning");
+  });
+
+  it("ignores stale settings navigation values after a hard refresh", async () => {
+    window.sessionStorage.setItem(SETTINGS_NAVIGATION_SESSION_KEY, JSON.stringify({
+      activeCategory: "removed-category",
+      activeInvocationRoute: "removed-route",
+      focusedSections: {},
+    }));
+
+    const { result } = renderHook(() => useSettingsPageState(CATEGORIES));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.activeCategory).toBe("general");
+    expect(result.current.activeInvocationRoute).toBe("task_coding");
+  });
+
   it("loads updated default CI, memory, and QA settings", async () => {
     const { result } = renderHook(() => useSettingsPageState(CATEGORIES));
     await waitFor(() => expect(result.current.loading).toBe(false));

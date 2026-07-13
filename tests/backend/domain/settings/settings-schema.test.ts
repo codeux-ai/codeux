@@ -122,13 +122,15 @@ describe("validateSettingsPayload", () => {
       resolved: {},
     }));
     payload.aiProvider.providers.gemini.thinkingMode = "minimal";
-    payload.aiProvider.providers.codex.thinkingMode = "xhigh";
+    payload.aiProvider.providers.codex.model = "gpt-5.6-sol";
+    payload.aiProvider.providers.codex.thinkingMode = "max";
     payload.aiProvider.providers["claude-code"].thinkingMode = "max";
     payload.aiProvider.providers["qwen-code"].thinkingMode = "xhigh";
     payload.aiProvider.providers.opencode.thinkingMode = "none";
     payload.aiProvider.providers.antigravity.thinkingMode = "MEDIUM";
     payload.aiProvider.invocationRouting.task_coding.providers.codex = {
-      thinkingMode: "HIGH",
+      model: "gpt-5.6-sol-pro",
+      thinkingMode: "ultra",
     };
 
     const result = validateSettingsPayload(payload);

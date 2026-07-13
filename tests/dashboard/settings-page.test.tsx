@@ -291,6 +291,8 @@ describe("ProjectSettingsEditor", () => {
     expect(routeThinking).toHaveTextContent("High");
 
     fireEvent.click(routeThinking);
+    expect(await screen.findByRole("option", { name: "Max" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Ultra" })).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("option", { name: "Inherit base thinking (Extra High)" }));
 
     expect(updateEditableSettings).toHaveBeenCalled();

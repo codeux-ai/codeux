@@ -144,6 +144,7 @@ describe("settings view model source helpers", () => {
       { value: "minimal", label: "Minimal" },
       { value: "xhigh", label: "Extra High" },
       { value: "max", label: "Max" },
+      { value: "ultra", label: "Ultra" },
     ]));
     expect(thinkingModeOptions.some((option) => option.value === "SMALL")).toBe(false);
   });
@@ -155,6 +156,22 @@ describe("settings view model source helpers", () => {
       { value: "medium", label: "Medium" },
       { value: "high", label: "High" },
       { value: "xhigh", label: "Extra High" },
+    ]);
+    expect(getProviderThinkingModeOptions("codex", "gpt-5.6-sol")).toEqual([
+      { value: "low", label: "Low" },
+      { value: "medium", label: "Medium" },
+      { value: "high", label: "High" },
+      { value: "xhigh", label: "Extra High" },
+      { value: "max", label: "Max" },
+      { value: "ultra", label: "Ultra" },
+    ]);
+    expect(getProviderThinkingModeOptions("codex", "openai/gpt-5.7-sol-preview")).toEqual([
+      { value: "low", label: "Low" },
+      { value: "medium", label: "Medium" },
+      { value: "high", label: "High" },
+      { value: "xhigh", label: "Extra High" },
+      { value: "max", label: "Max" },
+      { value: "ultra", label: "Ultra" },
     ]);
     expect(getProviderThinkingModeOptions("antigravity")).toEqual([
       { value: "low", label: "Low" },
