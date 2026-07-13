@@ -658,27 +658,88 @@ describe("useSettingsPageState", () => {
     expect(result.current.error).toContain("project save failed");
   });
 
-  it.skip("handles saving project settings", async () => {
+  it("saves a project route thinking override without changing its inherited route model", async () => {
+    const initialSettings = cloneDashboardSettings();
+    initialSettings.aiProvider.providers.codex.model = "gpt-5.6-luna";
+    initialSettings.aiProvider.invocationRouting.planning = {
+      ...initialSettings.aiProvider.invocationRouting.planning,
+      provider: "codex",
+      allowedProviders: ["codex"],
+      providers: {
+        codex: {
+          model: "gpt-5.6-sol",
+          thinkingMode: "high",
+        },
+      },
+    };
+    const savedEffectiveSettings = cloneDashboardSettings();
+    savedEffectiveSettings.aiProvider.providers.codex.model = "gpt-5.6-luna";
+    savedEffectiveSettings.aiProvider.invocationRouting.planning = {
+      ...initialSettings.aiProvider.invocationRouting.planning,
+      providers: {
+        codex: {
+          model: "gpt-5.6-sol",
+          thinkingMode: "ultra",
+        },
+      },
+    };
+    mockFetchProject
+      .mockResolvedValueOnce({ settings: initialSettings, sources: {} } as any)
+      .mockResolvedValueOnce({
+        settings: savedEffectiveSettings,
+        sources: {
+          "aiProvider.invocationRouting.planning.providers.codex.model": "system",
+          "aiProvider.invocationRouting.planning.providers.codex.thinkingMode": "project",
+        },
+      } as any);
+
     const { result } = renderHook(() => useSettingsPageState(CATEGORIES));
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    if (!result.current.projectSettings) {
-      act(() => { result.current.updateProject(() => ({ aiProvider: {} } as any)); });
-    }
-
     act(() => {
-        result.current.setActiveScope("project");
-    });
-
-    act(() => {
-        result.current.updateProject((curr) => ({ ...curr, aiProvider: {} }));
+      result.current.updateProject((current) => ({
+        ...current,
+        aiProvider: {
+          ...current.aiProvider,
+          invocationRouting: {
+            ...current.aiProvider.invocationRouting,
+            planning: {
+              ...current.aiProvider.invocationRouting.planning,
+              providers: {
+                ...current.aiProvider.invocationRouting.planning.providers,
+                codex: {
+                  ...current.aiProvider.invocationRouting.planning.providers.codex,
+                  thinkingMode: "ultra",
+                },
+              },
+            },
+          },
+        },
+      }));
     });
 
     await act(async () => {
-        await result.current.handleSave();
+      await result.current.handleSave();
     });
 
-    expect(mockSaveProject).toHaveBeenCalled();
+    expect(mockSaveProject).toHaveBeenCalledWith("proj-1", expect.objectContaining({
+      aiProvider: expect.objectContaining({
+        invocationRouting: expect.objectContaining({
+          planning: expect.objectContaining({
+            providers: {
+              codex: {
+                model: "gpt-5.6-sol",
+                thinkingMode: "ultra",
+              },
+            },
+          }),
+        }),
+      }),
+    }));
+    expect(result.current.projectSettings?.aiProvider.invocationRouting.planning.providers.codex).toEqual({
+      model: "gpt-5.6-sol",
+      thinkingMode: "ultra",
+    });
   });
 
   it("handles reset project settings", async () => {

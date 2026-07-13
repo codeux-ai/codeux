@@ -475,6 +475,63 @@ describe("SettingsRepository", () => {
     expect(effectiveProject.sources["git.defaultBranch"]).toBe("project");
   });
 
+  it("preserves an inherited route model when a project overrides only its thinking mode", async () => {
+    const { repo } = await createRepo();
+    const system = repo.getSystemSettings();
+    const systemCodex = system.defaults.aiProvider.providers.codex;
+
+    repo.saveSystemSettings({
+      ...system,
+      defaults: {
+        ...system.defaults,
+        aiProvider: {
+          ...system.defaults.aiProvider,
+          providers: {
+            ...system.defaults.aiProvider.providers,
+            codex: {
+              ...systemCodex,
+              model: "gpt-5.6-luna",
+            },
+          },
+          invocationRouting: {
+            ...system.defaults.aiProvider.invocationRouting,
+            planning: {
+              ...system.defaults.aiProvider.invocationRouting.planning,
+              provider: "codex",
+              allowedProviders: ["codex"],
+              providers: {
+                codex: {
+                  model: "gpt-5.6-sol",
+                  thinkingMode: "high",
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const projectForm = repo.resolveProjectDashboardSettings("project-1").settings;
+    projectForm.aiProvider.invocationRouting.planning.providers.codex = {
+      ...projectForm.aiProvider.invocationRouting.planning.providers.codex,
+      thinkingMode: "ultra",
+    };
+
+    const savedProjectOverride = repo.saveProjectSettings("project-1", projectForm);
+    expect(savedProjectOverride.aiProvider?.invocationRouting?.planning?.providers?.codex).toEqual({
+      thinkingMode: "ultra",
+    });
+
+    const effectiveProject = repo.resolveProjectDashboardSettings("project-1");
+    expect(effectiveProject.settings.aiProvider.invocationRouting.planning.providers.codex).toEqual({
+      model: "gpt-5.6-sol",
+      thinkingMode: "ultra",
+    });
+    expect(effectiveProject.settings.aiProvider.providers.codex.model).toBe("gpt-5.6-luna");
+    expect(effectiveProject.sources["aiProvider.invocationRouting.planning.providers.codex.model"]).toBe("system");
+    expect(effectiveProject.sources["aiProvider.invocationRouting.planning.providers.codex.thinkingMode"]).toBe("project");
+  });
+
   it("keeps explicit sprint provider routes when modern integrations omit that provider", async () => {
     const { repo } = await createRepo();
     const system = repo.getSystemSettings();

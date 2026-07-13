@@ -24,6 +24,8 @@ Each route chooses a profile, strategy, primary instance, allowed weighted pool,
 
 The dashboard keeps the current category, focused settings card, and selected invocation route in session state. A hard refresh in the same browser tab returns to that Route Mapping context; saved setting values still come from the active system or project scope.
 
+Route provider pools resolve by provider instance id across `system -> project -> sprint`. A narrower scope can replace which provider ids participate, while each retained provider entry inherits `model`, `thinkingMode`, `enabled`, and `weight` independently. For example, a project-only thinking override keeps the system route model instead of falling back to that provider instance's base model.
+
 ## Recommended Configuration
 
 Use inherited defaults first, then override high-risk routes such as planning, QA, CI repair, and remediation.
