@@ -156,9 +156,9 @@ describe("credentialed automation authoring-to-execution", () => {
     let credentialRepository = new AutomationCredentialRepository(storage);
     let broker = new CredentialBroker(credentialRepository, new EncryptedSqliteSecretStore(credentialRepository, keyProvider), keyProvider, audit);
     const credential = await broker.create(project.id, {
-      name: "Mock jobs API", kind: "http", value: FIRST_SECRET_CANARY, capabilities: ["read"],
+      name: "Mock jobs API", kind: "http", value: FIRST_SECRET_CANARY, scope: "project", allowedProjectIds: [], capabilities: ["read"],
     });
-    broker.bind(project.id, credential.id, "jobs-api", ["read"]);
+    broker.bind(project.id, credential.id, { bindingKey: "jobs-api", requiredCapabilities: ["read"] });
 
     const fixtures = JSON.parse(await fs.readFile(path.resolve("tests/e2e/fixtures/headless-automation-records.json"), "utf8")) as JobFixture[];
     expect(fixtures).toHaveLength(EXPECTED_RECORD_COUNT);
@@ -349,8 +349,8 @@ describe("credentialed automation authoring-to-execution", () => {
     await expect(customRuntime.execute({ projectId: project.id, nodeType: "custom.fixture-record-selector", version: 1,
       input: {}, config: {}, credentialBindings: { jobs: "missing-credential" }, workspaceId: "missing", invocationId: "missing", correlationId: "missing" }))
       .rejects.toThrow(/credential is missing/i);
-    await broker.rotate(project.id, credential.id, ROTATED_SECRET_CANARY);
-    const rotated = await broker.resolve({ projectId: project.id, bindingKey: "jobs-api", capability: "read", workspaceId: "rotation" });
+    await broker.rotate(project.id, credential.id, { value: ROTATED_SECRET_CANARY, expectedVersion: credential.version });
+    const rotated = await broker.resolve({ projectId: project.id, bindingKey: "jobs-api", requiredCapabilities: ["read"], allowedKinds: ["http"], workspaceId: "rotation" });
     await jobApi.authenticate(rotated.value, rotated.version);
     expect(jobApi.authenticate).toHaveBeenCalledWith(ROTATED_SECRET_CANARY, 2);
     diagnosticMode = true;
@@ -366,7 +366,7 @@ describe("credentialed automation authoring-to-execution", () => {
       publicationId: latestAfterRollback.id, runId, nodeId: "send-unavailable", logicalItem: "provider-unavailable",
       effectType: "email", payload: { to: "nobody@example.test" } });
     expect(failedDelivery).toMatchObject({ status: "failed", attemptCount: 1 });
-    broker.revoke(project.id, credential.id);
+    broker.revoke(project.id, credential.id, { expectedVersion: rotated.version });
     await expect(customRuntime.execute({ projectId: project.id, nodeType: "custom.fixture-record-selector", version: 1,
       input: {}, config: {}, credentialBindings: { jobs: credential.id }, workspaceId: "revoked", invocationId: "revoked", correlationId: "revoked" }))
       .rejects.toThrow(/not active/i);
