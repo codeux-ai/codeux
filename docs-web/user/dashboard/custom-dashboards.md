@@ -7,11 +7,12 @@ Custom dashboards are project-scoped dashboard apps generated and revised by age
 1. Ask the Project Manager for the dashboard you want. Include the purpose, target audience, data sources, layout preferences, review criteria, and whether it should be published after validation.
 2. Review the draft at `/custom-dashboards`. Drafts expose manifest JSON, generated file bundle content, source-node graph JSON, styleguide JSON, and data catalog selections.
 3. Ask for changes or edit the draft before creating a revision. Draft edits do not change previous revisions or the currently published dashboard.
-4. Create a revision when the draft is ready. A revision snapshots the current manifest, files, source graph, styleguide, and runtime metadata.
-5. Run detached validation. Code UX builds the revision in Docker, captures the browser-ready Vite artifact, starts a detached preview container, and health-checks the root URL.
-6. Inspect validation status, logs, and the proxied preview link. Validation passes only after install, build, artifact capture, container start, and root health checks succeed.
-7. Publish the validated revision. Publication is blocked unless the revision has a passed validation report.
-8. Roll back by publishing an earlier passed revision, or archive the dashboard to clear its active publication while preserving history.
+4. If the manifest declares credential slots, review them through the credential-binding management surface. Bind each required slot to a compatible credential ID; no secret value is entered into the dashboard draft or generated code.
+5. Create a revision when the draft is ready. A revision snapshots the current manifest, files, source graph, styleguide, runtime metadata, and credential-ID bindings.
+6. Run detached validation. Code UX reviews bindings before it builds the revision in Docker, captures the browser-ready Vite artifact, starts a detached preview container, and health-checks the root URL.
+7. Inspect validation status, logs, and the proxied preview link. Validation passes only after credential policy, install, build, artifact capture, container start, and root health checks succeed.
+8. Publish the validated revision. Publication rechecks credential metadata and remains blocked unless the revision has a passed validation report.
+9. Roll back by publishing an earlier passed revision, or archive the dashboard to clear its active publication while preserving history.
 
 If validation fails, use the report and logs to create a new revision. Code UX rejects failed, queued, running, cancelled, missing, or mismatched validation sessions before publication state changes. When a dashboard is already published, validating later drafts keeps the active published dashboard open, and validation sessions for the active published revision do not replace its published validation snapshot.
 
@@ -31,7 +32,7 @@ Generated dashboards should handle unavailable-source errors visibly. External A
 
 ## Agent and API Notes
 
-Project Manager agents use the `manage_custom_dashboards` MCP tool to create drafts, create revisions, validate revisions, inspect logs, publish passed revisions, archive dashboards, and read the data catalog.
+Project Manager agents use the `manage_custom_dashboards` MCP tool to create drafts, list credential slots, bind or unbind credential IDs, create revisions, validate revisions, inspect logs, publish passed revisions, archive dashboards, and read the data catalog. Credential mutations require the normal stateful human-approval handshake and an optimistic `expectedBindingRevision`.
 
 The same workflow is available through the dashboard REST API:
 
@@ -41,10 +42,17 @@ The same workflow is available through the dashboard REST API:
 - `POST /api/custom-dashboards/:dashboardId/revisions`
 - `POST /api/custom-dashboards/:dashboardId/revisions/:revisionId/validate`
 - `POST /api/custom-dashboards/:dashboardId/revisions/:revisionId/publish`
+- `GET /api/projects/:projectId/custom-dashboards/:dashboardId/credential-bindings`
+- `PUT /api/projects/:projectId/custom-dashboards/:dashboardId/credential-bindings`
+- `DELETE /api/projects/:projectId/custom-dashboards/:dashboardId/credential-bindings/:slotId`
 - `GET /api/custom-dashboard-validations/:sessionId`
 - `GET /api/custom-dashboard-validations/:sessionId/logs`
 - `POST /api/custom-dashboard-validations/:sessionId/stop`
 - `DELETE /api/custom-dashboard-validations/:sessionId`
 - `ALL /api/custom-dashboard-validations/:sessionId/proxy{*rest}`
 
-Published dashboards render inside a sandboxed iframe. For TSX/Preact drafts such as the default `src/dashboard.tsx` bundle, the viewer uses the persisted validation artifact instead of the source entry file, so it can open after publication even when the detached validation preview is gone. The frame can request only declared source nodes through the Code UX bridge, and the parent dashboard returns data through same-origin API calls.
+Remote callers to credential-binding routes require the credential-administrator role, project access, and enabled remote credential management. Required missing bindings and bound credentials that are revoked, inaccessible, unconfigured, wrong-kind, missing capabilities, or blocked by unavailable key custody fail before workspace creation and are rechecked before publication. Optional unbound slots remain valid.
+
+Custom-dashboard binding is metadata-only: no secret is resolved, and credential values and binding IDs are excluded from generated files, bridges, Docker configuration, validation output, generic REST/MCP responses, iframe configuration, and browser messages. Dedicated binding-management responses may return credential IDs and non-secret metadata so operators and agents can select them.
+
+Published dashboards render inside a sandboxed iframe. For TSX/Preact drafts such as the default `src/dashboard.tsx` bundle, the viewer uses the persisted validation artifact instead of the source entry file, so it can open after publication even when the detached validation preview is gone. The frame can request only declared source nodes through the Code UX bridge, parent and frame handlers verify the expected window source, and the parent dashboard returns data through same-origin API calls.

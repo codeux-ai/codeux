@@ -11,6 +11,11 @@ import type {
 import type { CustomDashboardRepository } from "../../repositories/custom-dashboard-repository.js";
 import type { CustomDashboardValidationService } from "../../services/custom-dashboard-validation-service.js";
 import {
+  type CustomDashboardCredentialBindingService,
+  withoutCustomDashboardCredentialBindings,
+  withoutCustomDashboardRevisionCredentialBindings,
+} from "../../services/custom-dashboard-credential-binding-service.js";
+import {
   managementValidationError,
   parseOptionalObject,
   parseOptionalString,
@@ -21,6 +26,7 @@ import {
 export class CustomDashboardActions {
   constructor(
     private readonly customDashboardRepository: CustomDashboardRepository,
+    private readonly customDashboardCredentialBindingService: CustomDashboardCredentialBindingService,
     private readonly customDashboardValidationService: CustomDashboardValidationService,
   ) {}
 
@@ -49,6 +55,12 @@ export class CustomDashboardActions {
         return this.archiveDashboard(args, payload);
       case "data_catalog":
         return this.dataCatalog(payload);
+      case "list_credential_slots":
+        return await this.listCredentialSlots(payload);
+      case "bind_credential":
+        return await this.bindCredential(args, payload);
+      case "unbind_credential":
+        return await this.unbindCredential(args, payload);
       default:
         throw managementValidationError(`Unknown custom dashboard action: ${args.action}`, "action");
     }
@@ -56,7 +68,12 @@ export class CustomDashboardActions {
 
   private listDashboards(payload: Record<string, unknown>): ManagementResponseEnvelope {
     const projectId = parseRequiredString(payload, "projectId");
-    return { result: { dashboards: this.customDashboardRepository.listDashboardsByProject(projectId) } };
+    return {
+      result: {
+        dashboards: this.customDashboardRepository.listDashboardsByProject(projectId)
+          .map(withoutCustomDashboardCredentialBindings),
+      },
+    };
   }
 
   private getDashboard(payload: Record<string, unknown>): ManagementResponseEnvelope {
@@ -67,8 +84,9 @@ export class CustomDashboardActions {
     }
     return {
       result: {
-        dashboard,
-        revisions: this.customDashboardRepository.listRevisions(dashboard.id),
+        dashboard: withoutCustomDashboardCredentialBindings(dashboard),
+        revisions: this.customDashboardRepository.listRevisions(dashboard.id)
+          .map(withoutCustomDashboardRevisionCredentialBindings),
       },
     };
   }
@@ -85,7 +103,7 @@ export class CustomDashboardActions {
       styleguide: draft.styleguide,
       runtimeMetadata: draft.runtimeMetadata,
     });
-    return { result: { dashboard } };
+    return { result: { dashboard: withoutCustomDashboardCredentialBindings(dashboard) } };
   }
 
   private updateDashboard(payload: Record<string, unknown>): ManagementResponseEnvelope {
@@ -94,7 +112,7 @@ export class CustomDashboardActions {
       dashboardId,
       parseDashboardDraftPayload(payload, false),
     );
-    return { result: { dashboard } };
+    return { result: { dashboard: withoutCustomDashboardCredentialBindings(dashboard) } };
   }
 
   private createRevision(payload: Record<string, unknown>): ManagementResponseEnvelope {
@@ -103,7 +121,7 @@ export class CustomDashboardActions {
       dashboardId,
       parseRevisionPayload(payload),
     );
-    return { result: { revision } };
+    return { result: { revision: withoutCustomDashboardRevisionCredentialBindings(revision) } };
   }
 
   private async validateRevision(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
@@ -129,13 +147,24 @@ export class CustomDashboardActions {
     return { result: await this.customDashboardValidationService.getValidationLogs(sessionId, tail) };
   }
 
-  private publishRevision(payload: Record<string, unknown>): ManagementResponseEnvelope {
+  private async publishRevision(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
+    const dashboardId = parseRequiredString(payload, "dashboardId");
+    const revisionId = parseRequiredString(payload, "revisionId");
+    const dashboardRecord = this.customDashboardRepository.getDashboardById(dashboardId);
+    if (!dashboardRecord) {
+      throw managementValidationError(`Custom dashboard not found: ${dashboardId}`, "dashboardId");
+    }
+    await this.customDashboardCredentialBindingService.requireValidRevision(
+      dashboardRecord.projectId,
+      dashboardId,
+      revisionId,
+    );
     const dashboard = this.customDashboardRepository.publishRevision(
-      parseRequiredString(payload, "dashboardId"),
-      parseRequiredString(payload, "revisionId"),
+      dashboardId,
+      revisionId,
       parseOptionalString(payload, "validationSessionId"),
     );
-    return { result: { dashboard } };
+    return { result: { dashboard: withoutCustomDashboardCredentialBindings(dashboard) } };
   }
 
   private archiveDashboard(args: ManageCodeUxArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
@@ -146,7 +175,13 @@ export class CustomDashboardActions {
         approvalMessage: `Archiving custom dashboard ${dashboardId} removes its active publication. Call again with approval.confirmed true after human approval.`,
       };
     }
-    return { result: { dashboard: this.customDashboardRepository.archiveDashboard(dashboardId) } };
+    return {
+      result: {
+        dashboard: withoutCustomDashboardCredentialBindings(
+          this.customDashboardRepository.archiveDashboard(dashboardId),
+        ),
+      },
+    };
   }
 
   private dataCatalog(payload: Record<string, unknown>): ManagementResponseEnvelope {
@@ -173,6 +208,74 @@ export class CustomDashboardActions {
       },
     };
   }
+
+  private async listCredentialSlots(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
+    const projectId = parseRequiredString(payload, "projectId");
+    const dashboardId = parseRequiredString(payload, "dashboardId");
+    const revisionId = parseOptionalString(payload, "revisionId");
+    return {
+      result: {
+        bindings: await this.customDashboardCredentialBindingService.listCredentialSlots(
+          projectId,
+          dashboardId,
+          revisionId,
+        ),
+      },
+    };
+  }
+
+  private async bindCredential(
+    args: ManageCodeUxArgs,
+    payload: Record<string, unknown>,
+  ): Promise<ManagementResponseEnvelope> {
+    const dashboardId = parseRequiredString(payload, "dashboardId");
+    if (args.approval?.confirmed !== true) {
+      return {
+        approvalRequired: true,
+        approvalMessage: `Binding a credential to custom dashboard ${dashboardId} requires human approval. Review the metadata-only slot selection and call again with approval.confirmed true.`,
+      };
+    }
+    return {
+      result: {
+        bindings: await this.customDashboardCredentialBindingService.bindCredential(
+          parseRequiredString(payload, "projectId"),
+          dashboardId,
+          bindingMutationInput(payload, false),
+        ),
+      },
+    };
+  }
+
+  private async unbindCredential(
+    args: ManageCodeUxArgs,
+    payload: Record<string, unknown>,
+  ): Promise<ManagementResponseEnvelope> {
+    const dashboardId = parseRequiredString(payload, "dashboardId");
+    if (args.approval?.confirmed !== true) {
+      return {
+        approvalRequired: true,
+        approvalMessage: `Unbinding a credential from custom dashboard ${dashboardId} requires human approval. Review the affected slot and call again with approval.confirmed true.`,
+      };
+    }
+    return {
+      result: {
+        bindings: await this.customDashboardCredentialBindingService.unbindCredential(
+          parseRequiredString(payload, "projectId"),
+          dashboardId,
+          bindingMutationInput(payload, true),
+        ),
+      },
+    };
+  }
+}
+
+function bindingMutationInput(payload: Record<string, unknown>, unbind: boolean): Record<string, unknown> {
+  const envelopeKeys = new Set(["action", "approval", "projectId", "dashboardId"]);
+  const input = Object.fromEntries(Object.entries(payload).filter(([key]) => !envelopeKeys.has(key)));
+  if (unbind && "credentialId" in input) {
+    throw managementValidationError("unbind_credential does not accept credentialId or secret-bearing fields", "credentialId");
+  }
+  return input;
 }
 
 function parseDashboardDraftPayload(

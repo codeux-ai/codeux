@@ -78,17 +78,18 @@ export function resolvePublishedCustomDashboardRuntime(
   const publishedRevision = dashboard.publishedRevisionId
     ? revisions.find((revision) => revision.id === dashboard.publishedRevisionId) ?? null
     : null;
+  const safePublishedRevision = publishedRevision ? omitRevisionCredentialBindings(publishedRevision) : null;
   const validationReport = getLastValidationReport(revisions);
 
   if (dashboard.status === "archived") {
-    return { status: "blocked", reason: "Archived custom dashboards cannot be opened.", validationReport, publishedRevision };
+    return { status: "blocked", reason: "Archived custom dashboards cannot be opened.", validationReport, publishedRevision: safePublishedRevision };
   }
   if (dashboard.status !== "published") {
     return {
       status: "blocked",
       reason: "Only published custom dashboards can be opened. Validate and publish a revision first.",
       validationReport,
-      publishedRevision,
+      publishedRevision: safePublishedRevision,
     };
   }
   if (!dashboard.publishedRevisionId || !publishedRevision) {
@@ -96,7 +97,7 @@ export function resolvePublishedCustomDashboardRuntime(
       status: "blocked",
       reason: "This custom dashboard has no published revision.",
       validationReport,
-      publishedRevision,
+      publishedRevision: safePublishedRevision,
     };
   }
   if (publishedRevision.validationStatus !== "passed" || publishedRevision.validationReport?.valid !== true) {
@@ -104,16 +105,18 @@ export function resolvePublishedCustomDashboardRuntime(
       status: "blocked",
       reason: "The published revision no longer has a passed validation report.",
       validationReport: publishedRevision.validationReport ?? validationReport,
-      publishedRevision,
+      publishedRevision: safePublishedRevision,
     };
   }
+
+  const readyRevision = omitRevisionCredentialBindings(publishedRevision);
 
   return {
     status: "ready",
     runtime: {
-      dashboard,
-      revision: publishedRevision,
-      document: buildCustomDashboardFrameDocument(dashboard, publishedRevision),
+      dashboard: omitDashboardCredentialBindings(dashboard),
+      revision: readyRevision,
+      document: buildCustomDashboardFrameDocument(dashboard, readyRevision),
     },
   };
 }
@@ -351,7 +354,7 @@ function buildBridgeBootstrapScript(config: Record<string, unknown>): string {
     "    window.parent.postMessage({ type: 'codeux-custom-dashboard:source-request', requestId, sourceId }, '*');",
     "  });",
     "  window.addEventListener('message', (event) => {",
-    `    if (!event.data || event.data.type !== '${CUSTOM_DASHBOARD_SOURCE_RESPONSE_TYPE}') return;`,
+    `    if (event.source !== window.parent || !event.data || event.data.type !== '${CUSTOM_DASHBOARD_SOURCE_RESPONSE_TYPE}') return;`,
     "    const entry = pending.get(event.data.requestId);",
     "    if (!entry) return;",
     "    pending.delete(event.data.requestId);",
@@ -370,6 +373,16 @@ function buildBridgeBootstrapScript(config: Record<string, unknown>): string {
     "  window.addEventListener('unhandledrejection', (event) => report(event.reason?.message || String(event.reason || 'Unhandled custom dashboard rejection.')));",
     "})();",
   ].join("\n");
+}
+
+function omitDashboardCredentialBindings(dashboard: CustomDashboardRecord): CustomDashboardRecord {
+  const { credentialBindings: _credentialBindings, ...safe } = dashboard;
+  return safe;
+}
+
+function omitRevisionCredentialBindings(revision: CustomDashboardRevisionRecord): CustomDashboardRevisionRecord {
+  const { credentialBindings: _credentialBindings, ...safe } = revision;
+  return safe;
 }
 
 function injectBootstrapIntoHtml(html: string, bootstrap: string, title: string): string {

@@ -36,6 +36,11 @@ export function toHttpRouteError(error: unknown): HttpRouteError {
     return new HttpRouteError(409, msg);
   }
 
+  if (error && typeof error === "object" && "name" in error && error.name === "CustomDashboardCredentialBindingConflictError") {
+    const msg = "message" in error && typeof error.message === "string" ? error.message : "Custom dashboard credential bindings changed concurrently";
+    return new HttpRouteError(409, msg);
+  }
+
   if (error && typeof error === "object" && "name" in error && error.name === "CredentialKeyCustodyUnavailableError") {
     const msg = "message" in error && typeof error.message === "string" ? error.message : "Credential key custody is unavailable";
     return new HttpRouteError(503, msg);

@@ -56,10 +56,14 @@ const dashboard: CustomDashboardRecord = {
   },
   styleguide: { tone: "operational" },
   runtimeMetadata: {},
+  credentialBindings: [{ slotId: "metrics_api", credentialId: "viewer-binding-id-canary" }],
+  credentialBindingRevision: 2,
   publishedRevisionId: "revision-1",
   createdAt: "2026-07-07T00:00:00.000Z",
   updatedAt: "2026-07-07T00:00:00.000Z",
 };
+
+const STORED_CREDENTIAL_PLAINTEXT_CANARY = "CUSTOM_DASHBOARD_REAL_SECRET_CANARY_7f8d9a";
 
 const revision: CustomDashboardRevisionRecord = {
   id: "revision-1",
@@ -73,6 +77,7 @@ const revision: CustomDashboardRevisionRecord = {
   validationStatus: "passed",
   validationReport: { valid: true, summary: "Passed", issues: [] },
   runtimeMetadata: {},
+  credentialBindings: [{ slotId: "metrics_api", credentialId: "viewer-binding-id-canary" }],
   validatedAt: "2026-07-07T00:00:00.000Z",
   createdAt: "2026-07-07T00:00:00.000Z",
   updatedAt: "2026-07-07T00:00:00.000Z",
@@ -109,6 +114,8 @@ describe("CustomDashboardViewer", () => {
     const iframe = screen.getByTitle("Published custom dashboard: Delivery Pulse");
     expect(iframe).toHaveAttribute("sandbox", "allow-forms allow-popups allow-scripts");
     expect(iframe).toHaveAttribute("srcdoc", expect.stringContaining("Published dashboard"));
+    expect(iframe).not.toHaveAttribute("srcdoc", expect.stringContaining("viewer-binding-id-canary"));
+    expect(iframe).not.toHaveAttribute("srcdoc", expect.stringContaining(STORED_CREDENTIAL_PLAINTEXT_CANARY));
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh published dashboard" }));
     expect(onRefresh).toHaveBeenCalledTimes(1);
@@ -219,6 +226,25 @@ describe("CustomDashboardViewer", () => {
     expect(await screen.findByRole("alert", { name: "Custom dashboard runtime failure" })).toHaveTextContent("Frame exploded");
   });
 
+  it("ignores runtime messages from any window other than the isolated dashboard frame", async () => {
+    render(
+      <CustomDashboardViewer
+        dashboard={dashboard}
+        revisions={[revision]}
+        onRefresh={onRefresh}
+        onReturnToEditor={onReturnToEditor}
+      />,
+    );
+
+    window.dispatchEvent(new MessageEvent("message", {
+      data: { type: "codeux-custom-dashboard:runtime-error", message: "Hostile message" },
+      source: window,
+    }));
+
+    await Promise.resolve();
+    expect(screen.queryByRole("alert", { name: "Custom dashboard runtime failure" })).not.toBeInTheDocument();
+  });
+
   it("returns source errors to the isolated frame without throwing in the app shell", async () => {
     render(
       <CustomDashboardViewer
@@ -247,5 +273,7 @@ describe("CustomDashboardViewer", () => {
         "*",
       );
     });
+    expect(JSON.stringify(postMessage.mock.calls)).not.toContain("viewer-binding-id-canary");
+    expect(JSON.stringify(postMessage.mock.calls)).not.toContain(STORED_CREDENTIAL_PLAINTEXT_CANARY);
   });
 });

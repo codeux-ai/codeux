@@ -66,6 +66,7 @@ import { SprintFileBrowserRepository } from "../../repositories/sprint-file-brow
 import { DockerService } from "../../services/docker-service.js";
 import { CustomDashboardRepository } from "../../repositories/custom-dashboard-repository.js";
 import { CustomDashboardValidationService } from "../../services/custom-dashboard-validation-service.js";
+import { CustomDashboardCredentialBindingService } from "../../services/custom-dashboard-credential-binding-service.js";
 import { AutomationCredentialRepository } from "../../repositories/automation-credential-repository.js";
 import { AutomationApprovalRepository } from "../../repositories/automation-approval-repository.js";
 import { AutomationOutboxRepository } from "../../repositories/automation-outbox-repository.js";
@@ -135,6 +136,7 @@ export interface CoreDependencies {
   sprintFileBrowserService: SprintFileBrowserService;
   sprintFileBrowserRepository: SprintFileBrowserRepository;
   customDashboardRepository: CustomDashboardRepository;
+  customDashboardCredentialBindingService: CustomDashboardCredentialBindingService;
   customDashboardValidationService: CustomDashboardValidationService;
   automationCredentialRepository: AutomationCredentialRepository;
   automationApprovalRepository: AutomationApprovalRepository;
@@ -288,8 +290,15 @@ export function createCoreDependencies(
     logger: logger.child({ component: "sprint-file-browser-service" }),
   });
   const customDashboardRepository = new CustomDashboardRepository(appDbStorage);
+  const customDashboardCredentialBindingService = new CustomDashboardCredentialBindingService({
+    customDashboardRepository,
+    projectManagementRepository,
+    credentialBroker,
+    auditService: automationAuditService,
+  });
   const customDashboardValidationService = new CustomDashboardValidationService({
     customDashboardRepository,
+    customDashboardCredentialBindingService,
     projectManagementRepository,
     settingsRepository,
     logger: logger.child({ component: "custom-dashboard-validation-service" }),
@@ -434,6 +443,7 @@ export function createCoreDependencies(
     sprintFileBrowserService,
     sprintFileBrowserRepository,
     customDashboardRepository,
+    customDashboardCredentialBindingService,
     customDashboardValidationService,
     automationCredentialRepository,
     automationApprovalRepository,

@@ -78,10 +78,12 @@ import { SkillActions } from "./management/skill-actions.js";
 import { ChatProviderActions } from "./management/chat-provider-actions.js";
 import { buildMcpApprovalFingerprint, formatManagementErrorEnvelope } from "./management/payload-parsers.js";
 import { resolveLateBoundDependency, type LateBoundOrValue } from "../shared/late-bound-dependency.js";
+import type { CustomDashboardCredentialBindingService } from "../services/custom-dashboard-credential-binding-service.js";
 
 export interface ManagementToolHandlerDeps {
   sprintPreviewService: SprintPreviewService;
   customDashboardRepository: CustomDashboardRepository;
+  customDashboardCredentialBindingService: CustomDashboardCredentialBindingService;
   customDashboardValidationService: CustomDashboardValidationService;
   executionRepository: ExecutionRepository;
   getDashboardSettings: () => DashboardSettings;
@@ -135,6 +137,7 @@ export class ManagementToolHandler {
     this.previewActions = new PreviewActions(deps.sprintPreviewService);
     this.customDashboardActions = new CustomDashboardActions(
       deps.customDashboardRepository,
+      deps.customDashboardCredentialBindingService,
       deps.customDashboardValidationService,
     );
     this.chatProviderActions = new ChatProviderActions(deps.chatProviderRepository);
@@ -243,6 +246,8 @@ export class ManagementToolHandler {
       || args.action.startsWith("replace_")
       || args.action === "remove_session"
       || args.action === "archive"
+      || args.action === "bind_credential"
+      || args.action === "unbind_credential"
       || args.action === "publish"
       || args.action === "rollback"
       || args.action === "deprecate_claim";

@@ -89,6 +89,7 @@ export async function materializeCustomDashboardWorkspace(args: {
   workspacePath: ValidatedCustomDashboardPath;
   bridgeConfig: CustomDashboardBridgeConfig;
 }): Promise<MaterializedCustomDashboardWorkspace> {
+  assertBundleOmitsCredentialBindingIds(args.revision);
   // workspacePath is returned by resolveContainedCustomDashboardPath after
   // lexical and realpath containment checks against the project runtime root.
   // codeql[js/path-injection]
@@ -131,13 +132,14 @@ export async function materializeCustomDashboardWorkspace(args: {
   const tsConfigPath = await resolveContainedCustomDashboardPath(args.workspacePath, path.join(args.workspacePath, "tsconfig.json"));
   const dataBridgePath = await resolveContainedCustomDashboardPath(args.workspacePath, path.join(harnessDir, "codeux-data-bridge.ts"));
   const harnessEntryPath = await resolveContainedCustomDashboardPath(args.workspacePath, path.join(harnessDir, "main.tsx"));
+  const safeBridgeConfig = sanitizeBridgeValue(args.bridgeConfig, credentialBindingIds(args.revision));
 
   await Promise.all([
     writeJsonFile(packageJsonPath, buildPackageJson()),
     writeTextFile(indexHtmlPath, buildIndexHtml()),
     writeTextFile(viteConfigPath, buildViteConfig()),
     writeTextFile(tsConfigPath, buildTsConfig()),
-    writeTextFile(dataBridgePath, buildDataBridgeModule(args.bridgeConfig)),
+    writeTextFile(dataBridgePath, buildDataBridgeModule(safeBridgeConfig)),
     writeTextFile(harnessEntryPath, buildHarnessEntry(entryImportPath)),
   ]);
 
@@ -193,7 +195,7 @@ export async function readValidationLog(logPath: ValidatedCustomDashboardPath | 
 }
 
 export function buildBridgeConfig(revision: CustomDashboardRevisionRecord): CustomDashboardBridgeConfig {
-  return {
+  const config: CustomDashboardBridgeConfig = {
     projectId: revision.projectId,
     dashboardId: revision.dashboardId,
     revisionId: revision.id,
@@ -211,6 +213,48 @@ export function buildBridgeConfig(revision: CustomDashboardRevisionRecord): Cust
         config: extractJsonObject(node.config),
       })),
   };
+  return sanitizeBridgeValue(config, credentialBindingIds(revision));
+}
+
+function assertBundleOmitsCredentialBindingIds(revision: CustomDashboardRevisionRecord): void {
+  const bindingIds = credentialBindingIds(revision);
+  if (bindingIds.size === 0) return;
+  if (revision.fileBundle.files.some((file) => [...bindingIds].some((credentialId) => file.content.includes(credentialId)))) {
+    throw new Error("Custom dashboard file bundles cannot contain credential binding identifiers.");
+  }
+}
+
+function credentialBindingIds(revision: CustomDashboardRevisionRecord): Set<string> {
+  return new Set((revision.credentialBindings ?? []).map((binding) => binding.credentialId));
+}
+
+function sanitizeBridgeValue<T>(value: T, excludedIdentifiers: ReadonlySet<string>): T {
+  return sanitizeBridgeUnknown(value, excludedIdentifiers) as T;
+}
+
+function sanitizeBridgeUnknown(value: unknown, excludedIdentifiers: ReadonlySet<string>): unknown {
+  if (typeof value === "string") {
+    return excludedIdentifiers.has(value) ? undefined : value;
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => sanitizeBridgeUnknown(entry, excludedIdentifiers))
+      .filter((entry) => entry !== undefined);
+  }
+  if (!value || typeof value !== "object") return value;
+
+  const safe: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    const normalizedKey = key.toLowerCase();
+    if (normalizedKey === "credentialbindings"
+      || normalizedKey === "credentialbindingrevision"
+      || normalizedKey === "credentialid") {
+      continue;
+    }
+    const sanitized = sanitizeBridgeUnknown(entry, excludedIdentifiers);
+    if (sanitized !== undefined) safe[key] = sanitized;
+  }
+  return safe;
 }
 
 function extractJsonObject(value: unknown): CustomDashboardJsonObject {

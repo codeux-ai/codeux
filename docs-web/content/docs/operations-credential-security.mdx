@@ -37,6 +37,8 @@ Back up root keys separately from `app.db`; the database alone cannot recover cr
 
 Lifecycle success and denial audits carry correlation IDs, credential IDs, and policy metadata only. Validation records `valid`, `invalid`, or `unavailable` without exposing tested values or cryptographic internals.
 
+Custom dashboards use a stricter metadata-only consumer boundary. Dedicated slot declarations define allowed kinds and required capabilities, while separate draft and immutable-revision binding columns store credential IDs. Binding review delegates to the broker's compatibility assessment and never resolves plaintext. Required or invalid bindings stop validation before workspace creation and are rechecked before publication. Credential values and binding IDs are excluded from generated dashboard artifacts, Docker configuration, validation output, generic REST/MCP responses, and iframe messages; only the dedicated binding-management response may expose IDs with non-secret metadata.
+
 Legacy global records use their first valid allowlisted project as the migrated management owner; verify that owner before expanding an old global allowlist.
 
 ## Dashboard API

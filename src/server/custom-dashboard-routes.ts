@@ -8,19 +8,26 @@ import { HttpRouteError } from "./http-errors.js";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute } from "./route-utils.js";
 import { requireTrimmedString } from "./request-parsers.js";
+import {
+  withoutCustomDashboardCredentialBindings,
+  withoutCustomDashboardRevisionCredentialBindings,
+} from "../services/custom-dashboard-credential-binding-service.js";
 
 export function registerCustomDashboardRoutes(app: Express, deps: DashboardDependencies): void {
   app.get("/api/projects/:projectId/custom-dashboards", asyncRoute(async (req, res) => {
     const repository = requireCustomDashboardRepository(deps);
     const projectId = requireTrimmedString(req.params.projectId, "projectId");
-    res.json({ dashboards: repository.listDashboardsByProject(projectId) });
+    res.json({
+      dashboards: repository.listDashboardsByProject(projectId)
+        .map(withoutCustomDashboardCredentialBindings),
+    });
   }));
 
   app.post("/api/projects/:projectId/custom-dashboards", asyncRoute(async (req, res) => {
     const repository = requireCustomDashboardRepository(deps);
     const projectId = requireTrimmedString(req.params.projectId, "projectId");
     const dashboard = repository.createDraft(projectId, requireObjectBody<CreateCustomDashboardDraftInput>(req.body));
-    res.status(201).json(dashboard);
+    res.status(201).json(withoutCustomDashboardCredentialBindings(dashboard));
   }));
 
   app.get("/api/projects/:projectId/custom-dashboards/data-catalog", asyncRoute(async (req, res) => {
@@ -53,7 +60,11 @@ export function registerCustomDashboardRoutes(app: Express, deps: DashboardDepen
     if (!dashboard) {
       throw new HttpRouteError(404, `Custom dashboard not found: ${dashboardId}`);
     }
-    res.json({ dashboard, revisions: repository.listRevisions(dashboard.id) });
+    res.json({
+      dashboard: withoutCustomDashboardCredentialBindings(dashboard),
+      revisions: repository.listRevisions(dashboard.id)
+        .map(withoutCustomDashboardRevisionCredentialBindings),
+    });
   }));
 
   app.patch("/api/custom-dashboards/:dashboardId", asyncRoute(async (req, res) => {
@@ -62,12 +73,14 @@ export function registerCustomDashboardRoutes(app: Express, deps: DashboardDepen
       requireTrimmedString(req.params.dashboardId, "dashboardId"),
       requireObjectBody<UpdateCustomDashboardDraftInput>(req.body),
     );
-    res.json(dashboard);
+    res.json(withoutCustomDashboardCredentialBindings(dashboard));
   }));
 
   app.delete("/api/custom-dashboards/:dashboardId", asyncRoute(async (req, res) => {
     const repository = requireCustomDashboardRepository(deps);
-    res.json(repository.archiveDashboard(requireTrimmedString(req.params.dashboardId, "dashboardId")));
+    res.json(withoutCustomDashboardCredentialBindings(
+      repository.archiveDashboard(requireTrimmedString(req.params.dashboardId, "dashboardId")),
+    ));
   }));
 
   app.post("/api/custom-dashboards/:dashboardId/revisions", asyncRoute(async (req, res) => {
@@ -77,7 +90,7 @@ export function registerCustomDashboardRoutes(app: Express, deps: DashboardDepen
       requireTrimmedString(req.params.dashboardId, "dashboardId"),
       body,
     );
-    res.status(201).json(revision);
+    res.status(201).json(withoutCustomDashboardRevisionCredentialBindings(revision));
   }));
 
   app.post("/api/custom-dashboards/:dashboardId/revisions/:revisionId/validate", asyncRoute(async (req, res) => {
@@ -97,12 +110,50 @@ export function registerCustomDashboardRoutes(app: Express, deps: DashboardDepen
     const validationSessionId = typeof body.validationSessionId === "string"
       ? body.validationSessionId
       : undefined;
+    const dashboardId = requireTrimmedString(req.params.dashboardId, "dashboardId");
+    const existing = repository.getDashboardById(dashboardId);
+    if (!existing) {
+      throw new HttpRouteError(404, `Custom dashboard not found: ${dashboardId}`);
+    }
+    await requireCustomDashboardCredentialBindingService(deps).requireValidRevision(
+      existing.projectId,
+      dashboardId,
+      revisionId,
+    );
     const dashboard = repository.publishRevision(
-      requireTrimmedString(req.params.dashboardId, "dashboardId"),
+      dashboardId,
       revisionId,
       validationSessionId,
     );
-    res.json(dashboard);
+    res.json(withoutCustomDashboardCredentialBindings(dashboard));
+  }));
+
+  app.get("/api/projects/:projectId/custom-dashboards/:dashboardId/credential-bindings", asyncRoute(async (req, res) => {
+    const revisionId = typeof req.query.revisionId === "string" && req.query.revisionId.trim()
+      ? req.query.revisionId
+      : undefined;
+    res.json(await requireCustomDashboardCredentialBindingService(deps).listCredentialSlots(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      requireTrimmedString(req.params.dashboardId, "dashboardId"),
+      revisionId,
+    ));
+  }));
+
+  app.put("/api/projects/:projectId/custom-dashboards/:dashboardId/credential-bindings", asyncRoute(async (req, res) => {
+    res.json(await requireCustomDashboardCredentialBindingService(deps).bindCredential(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      requireTrimmedString(req.params.dashboardId, "dashboardId"),
+      req.body,
+    ));
+  }));
+
+  app.delete("/api/projects/:projectId/custom-dashboards/:dashboardId/credential-bindings/:slotId", asyncRoute(async (req, res) => {
+    const body = requireObjectBody<Record<string, unknown>>(req.body);
+    res.json(await requireCustomDashboardCredentialBindingService(deps).unbindCredential(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      requireTrimmedString(req.params.dashboardId, "dashboardId"),
+      { ...body, slotId: requireTrimmedString(req.params.slotId, "slotId") },
+    ));
   }));
 
   app.get("/api/custom-dashboard-validations/:sessionId", asyncRoute(async (req, res) => {
@@ -162,6 +213,15 @@ function requireCustomDashboardValidationService(
     throw new Error("Custom dashboard validation runtime is unavailable.");
   }
   return deps.customDashboardValidationService;
+}
+
+function requireCustomDashboardCredentialBindingService(
+  deps: DashboardDependencies,
+): NonNullable<DashboardDependencies["customDashboardCredentialBindingService"]> {
+  if (!deps.customDashboardCredentialBindingService) {
+    throw new Error("Custom dashboard credential binding service is unavailable.");
+  }
+  return deps.customDashboardCredentialBindingService;
 }
 
 function requireProjectIdForRevisionValidation(deps: DashboardDependencies, req: Request): string {

@@ -4,6 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import type { CustomDashboardRevisionRecord } from "../../../src/contracts/custom-dashboard-types.js";
 import {
+  buildBridgeConfig,
   materializeCustomDashboardWorkspace,
   resolveContainedCustomDashboardPath,
 } from "../../../src/services/custom-dashboard-validation-utils.js";
@@ -84,4 +85,70 @@ describe("custom dashboard validation filesystem utilities", () => {
       resolveContainedCustomDashboardPath(runtimeRoot, path.join(runtimeRoot, "linked-out", "artifact.js")),
     ).rejects.toThrow("must stay inside the custom dashboard runtime directory");
   });
+
+  it("omits credential binding identifiers from generated bridge and workspace files", async () => {
+    const runtimeRoot = await mkTempDir("custom-dashboard-runtime-");
+    const workspacePath = await resolveContainedCustomDashboardPath(runtimeRoot, path.join(runtimeRoot, "workspace"));
+    const credentialId = "credential-binding-id-canary";
+    const boundRevision = revision({
+      manifest: {
+        ...revision().manifest,
+        credentialSlots: [{
+          slotId: "metrics_api",
+          label: "Metrics API",
+          phase: "runtime",
+          required: true,
+          allowedKinds: ["http.token"],
+          requiredCapabilities: ["metrics.read"],
+        }],
+      },
+      credentialBindings: [{ slotId: "metrics_api", credentialId }],
+      runtimeMetadata: {
+        credentialBindings: [{ slotId: "metrics_api", credentialId }],
+        nested: { credentialId },
+      },
+    });
+    const bridgeConfig = buildBridgeConfig(boundRevision);
+
+    await materializeCustomDashboardWorkspace({
+      revision: boundRevision,
+      workspacePath,
+      bridgeConfig,
+    });
+
+    expect(JSON.stringify(bridgeConfig)).not.toContain(credentialId);
+    expect(await readDirectoryText(workspacePath)).not.toContain(credentialId);
+  });
+
+  it("rejects generated source that embeds a bound credential identifier", async () => {
+    const runtimeRoot = await mkTempDir("custom-dashboard-runtime-");
+    const workspacePath = await resolveContainedCustomDashboardPath(runtimeRoot, path.join(runtimeRoot, "workspace"));
+    const credentialId = "credential-binding-id-canary";
+    const boundRevision = revision({
+      fileBundle: {
+        files: [{ path: "src/dashboard.tsx", content: `export const embedded = ${JSON.stringify(credentialId)};` }],
+      },
+      credentialBindings: [{ slotId: "metrics_api", credentialId }],
+    });
+
+    await expect(materializeCustomDashboardWorkspace({
+      revision: boundRevision,
+      workspacePath,
+      bridgeConfig: buildBridgeConfig(boundRevision),
+    })).rejects.toThrow("cannot contain credential binding identifiers");
+    await expect(fs.stat(workspacePath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
 });
+
+async function readDirectoryText(root: string): Promise<string> {
+  const chunks: string[] = [];
+  const visit = async (directory: string): Promise<void> => {
+    for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+      const target = path.join(directory, entry.name);
+      if (entry.isDirectory()) await visit(target);
+      else if (entry.isFile()) chunks.push(await fs.readFile(target, "utf8"));
+    }
+  };
+  await visit(root);
+  return chunks.join("\n");
+}

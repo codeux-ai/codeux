@@ -303,8 +303,11 @@ Project-scoped generated dashboards, immutable revisions, detached validation se
 | `publish_revision` | – | `dashboardId`, `revisionId`, optional `validationSessionId` | Publish only a passed revision with a valid report. |
 | `archive` | ✅ | `dashboardId` | Clear active publication and mark the dashboard archived. |
 | `data_catalog` | – | `projectId` | Return dashboard summaries and declared source nodes. |
+| `list_credential_slots` | – | `projectId`, `dashboardId` | Return a bounded metadata-only review of declared slots, bindings, backend health, and compatible candidates. Optional `revisionId` reviews an immutable revision. |
+| `bind_credential` | ✅ | `projectId`, `dashboardId`, `slotId`, `credentialId`, `expectedBindingRevision` | Bind or replace a slot by credential ID after the stateful approval handshake. |
+| `unbind_credential` | ✅ | `projectId`, `dashboardId`, `slotId`, `expectedBindingRevision` | Remove a slot binding after the stateful approval handshake. |
 
-Publication rejects failed, queued, running, cancelled, missing, or cross-revision validation sessions before the active publication pointer changes.
+Credential actions reject secret-bearing or undeclared fields and never resolve plaintext. Validation and publication review required and bound slots against backend health, project access, status, kind, and required capabilities; a denial blocks the operation before the active publication pointer changes. Generic custom-dashboard responses omit binding IDs.
 
 ---
 
