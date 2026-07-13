@@ -9,11 +9,12 @@ The source of truth is the Code UX database. Drafts stay mutable, revisions are 
 1. Ask the Project Manager for the dashboard you want. Include the purpose, target audience, data sources, layout preferences, review criteria, and whether the dashboard should be published after validation.
 2. Review the draft in the dashboard workspace at `/custom-dashboards`. The draft includes editable manifest JSON, generated file bundle content, source-node graph JSON, styleguide JSON, and data catalog selections.
 3. Ask for changes or edit the draft before creating a revision. Draft edits do not change previous revisions or the currently published dashboard.
-4. Create a revision when the draft is ready. A revision snapshots the current manifest, file bundle, source graph, styleguide, and runtime metadata.
-5. Run detached validation for the revision. Code UX materializes the bundle under the project `.code-ux/runtime/custom-dashboards/...` directory, builds it in Docker, starts a detached preview container, and health-checks the root URL.
-6. Inspect validation status, logs, and the proxied preview link. Validation passes only after install, build, browser artifact capture, container start, and root health checks succeed. A passed validation does not publish by itself.
-7. Publish the validated revision. The UI and repository gate publication to revisions with `validationStatus: "passed"` and a valid validation report. Publishing another passed revision is the rollback path.
-8. Archive dashboards you no longer want active. Archiving clears the active publication and marks the dashboard archived while preserving revision and validation history.
+4. If the manifest declares credential slots, review them through the credential-binding management surface. Bind each required slot to a compatible credential ID; no secret value is entered into the dashboard draft or generated code.
+5. Create a revision when the draft is ready. A revision snapshots the current manifest, file bundle, source graph, styleguide, runtime metadata, and credential-ID bindings.
+6. Run detached validation for the revision. Code UX reviews bindings before it materializes the bundle, builds it in Docker, starts a detached preview container, and health-checks the root URL.
+7. Inspect validation status, logs, and the proxied preview link. Validation passes only after credential policy, install, build, browser artifact capture, container start, and root health checks succeed. A passed validation does not publish by itself.
+8. Publish the validated revision. Publication rechecks credential metadata and requires `validationStatus: "passed"` with a valid validation report. Publishing another passed revision is the rollback path.
+9. Archive dashboards you no longer want active. Archiving clears the active publication and marks the dashboard archived while preserving revision and validation history.
 
 If validation fails, use the report and logs to create a new revision. Do not publish around the failure; the repository rejects failed, queued, running, cancelled, missing, or mismatched validation sessions before publication state changes. When a dashboard is already published, validating later drafts keeps the active published dashboard open, and validation sessions for the active published revision do not replace its published validation snapshot.
 
@@ -26,11 +27,12 @@ Recommended sequence:
 1. Gather missing requirements for purpose, audience, source data, style, accessibility, and publication intent.
 2. Call `data_catalog` for the project when reusing existing custom-dashboard source declarations.
 3. Call `create` or `update` with a complete manifest, file bundle, source-node graph, styleguide, and runtime metadata.
-4. Call `create_revision` to snapshot the draft.
-5. Call `validate_revision`, then poll `validation_status` and read `validation_logs` when the session is not passed.
-6. Repair failures by updating the draft and creating a new revision.
-7. Call `publish_revision` only after validation passed. Include `validationSessionId` when publishing from the session just reviewed.
-8. Use `archive` only after human approval; the action follows the standard destructive-action approval flow.
+4. Call `list_credential_slots` when the manifest declares slots. Select only candidate credential IDs reported compatible, then call `bind_credential` with the current `expectedBindingRevision` and complete the human-approval flow. Use `unbind_credential` before changing a bound slot's policy.
+5. Call `create_revision` to snapshot the draft and binding IDs.
+6. Call `validate_revision`, then poll `validation_status` and read `validation_logs` when the session is not passed.
+7. Repair failures by updating the draft or binding metadata and creating a new revision.
+8. Call `publish_revision` only after validation passed. Include `validationSessionId` when publishing from the session just reviewed.
+9. Use `archive` only after human approval; the action follows the standard destructive-action approval flow.
 
 ## Data-Source Node Graph
 
@@ -76,6 +78,9 @@ Custom dashboard routes are registered with the dashboard server:
 | `POST` | `/api/custom-dashboards/:dashboardId/revisions` | Create an immutable revision from the draft or supplied overrides. |
 | `POST` | `/api/custom-dashboards/:dashboardId/revisions/:revisionId/validate` | Start a detached validation session. Body may include `projectId`; otherwise the server resolves it from the revision. |
 | `POST` | `/api/custom-dashboards/:dashboardId/revisions/:revisionId/publish` | Publish a validated revision, optionally with `validationSessionId`. |
+| `GET` | `/api/projects/:projectId/custom-dashboards/:dashboardId/credential-bindings?revisionId=...` | Review draft or revision slots, current bindings, backend health, and bounded compatible credential metadata. |
+| `PUT` | `/api/projects/:projectId/custom-dashboards/:dashboardId/credential-bindings` | Bind or replace one slot using `slotId`, `credentialId`, and `expectedBindingRevision`. |
+| `DELETE` | `/api/projects/:projectId/custom-dashboards/:dashboardId/credential-bindings/:slotId` | Unbind one slot using `expectedBindingRevision`. |
 | `GET` | `/api/custom-dashboard-validations/:sessionId` | Read validation session status and runtime metadata. |
 | `GET` | `/api/custom-dashboard-validations/:sessionId/logs?tail=200` | Read bounded validation and container logs. |
 | `POST` | `/api/custom-dashboard-validations/:sessionId/stop` | Stop the detached validation container. |
@@ -83,7 +88,7 @@ Custom dashboard routes are registered with the dashboard server:
 | `ALL` | `/api/custom-dashboard-validations/:sessionId/proxy{*rest}` | Same-origin proxy to the detached validation runtime. |
 | `ALL` | `/api/custom-dashboards/validation-sessions/:sessionId/proxy{*rest}` | Backward-compatible validation proxy route. |
 
-Publication is gated in `CustomDashboardRepository.publishRevision`. The requested revision must belong to the dashboard, must be marked `passed`, must have `validatedAt`, and must have `validationReport.valid === true`. If `validationSessionId` is supplied, that session must also belong to the same dashboard/revision/project and be passed with a valid report. Active publications remain the opening source of truth while later validation sessions run.
+The binding routes are credential-management routes: authenticated remote callers require `credential_admin`, project access, and enabled remote credential management. Stale binding revisions return `409`; incompatible credential selection returns `403`. Publication first repeats metadata-only binding review, then applies the repository validation gate. REST and MCP denials preserve a sanitized `issues` array with slot-specific `field`, `code`, and `message` values while omitting credential IDs and values. Active publications remain the opening source of truth while later validation sessions run.
 
 ## MCP Surface
 
@@ -95,8 +100,9 @@ The dedicated MCP tool is `manage_custom_dashboards` and is available to the pro
 - `publish_revision`
 - `archive`
 - `data_catalog`
+- `list_credential_slots`, `bind_credential`, `unbind_credential`
 
-Important payload fields include `projectId`, `dashboardId`, `revisionId`, `sessionId`, `validationSessionId`, `title`, `description`, `manifest`, `fileBundle`, `sourceNodeGraph`, `styleguide`, `runtimeMetadata`, `tail`, and `approval`.
+Credential actions use `projectId`, `dashboardId`, `slotId`, `credentialId`, and `expectedBindingRevision`; an optional `revisionId` reviews an immutable snapshot. Bind and unbind require the normal stateful human-approval handshake. Before creating any approval fingerprint, Code UX rejects secret, header, environment, malformed approval, and other undeclared fields, then rebuilds the approval payload from only the allowed metadata. Other important fields include `sessionId`, `validationSessionId`, `title`, `description`, `manifest`, `fileBundle`, `sourceNodeGraph`, `styleguide`, `runtimeMetadata`, `tail`, and `approval`.
 
 The dashboard chat JSON-action bridge also understands the legacy `custom_dashboards` management domain, but agents should prefer the dedicated MCP tool when it is available.
 
@@ -106,6 +112,7 @@ Validation sessions move through `queued`, `building`, `running`, `passed`, `fai
 
 During validation, Code UX:
 
+- performs metadata-only compatibility review for every bound slot and every required slot
 - creates a validation session row and runtime directory under the selected project
 - writes the generated bundle plus a known Vite/Preact harness
 - injects a read-only `codeUxDataBridge` / `CodeUXCustomDashboard` object
@@ -114,6 +121,8 @@ During validation, Code UX:
 - starts a detached preview container on an allocated localhost port
 - health-checks the root URL before marking the session passed
 - records workspace path, log path, container id/name, host port, validation proxy path, commands, and log excerpts in runtime metadata
+
+Required missing bindings and bound credentials that are missing, revoked, inaccessible, unconfigured, wrong-kind, missing capabilities, or blocked by unavailable/insecure key custody fail with slot-specific issues before workspace creation. Optional unbound slots remain valid. No custom-dashboard path resolves secret plaintext: credential values and binding IDs stay out of generated source, file bundles, bridge files, Docker arguments and mounts, validation reports and logs, viewer records, iframe configuration, and browser messages. Generic response and viewer boundaries recursively redact known binding IDs from nested manifests, file content and metadata, source graphs, styleguides, runtime metadata, validation reports, and persisted viewer artifacts. Dedicated credential-binding management responses may return credential IDs and non-secret metadata so operators and agents can select them.
 
 Stopping a validation session removes the detached container. It does not invalidate a passed revision report. Removing a validation session deletes the session row after cleanup; the revision's validation metadata remains the publication gate.
 

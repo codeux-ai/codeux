@@ -53,6 +53,8 @@ Credential creation commits metadata and its first envelope in one SQLite transa
 
 Lifecycle successes and denials emit correlation-aware automation audit records containing credential IDs and policy metadata only. Validation updates report `valid`, `invalid`, or `unavailable` without including tested values or low-level cryptographic errors.
 
+Custom dashboards use a stricter metadata-only consumer boundary. Dedicated slot declarations define allowed kinds and required capabilities, while separate draft and immutable-revision binding columns store credential IDs. Binding review delegates to the broker's compatibility assessment and never resolves plaintext. Required or invalid bindings stop validation before workspace creation and are rechecked before publication. Credential values and binding IDs are excluded from generated dashboard artifacts, Docker configuration, validation output, generic REST/MCP responses, and iframe messages; only the dedicated binding-management response may expose IDs with non-secret metadata.
+
 Existing global credentials created before management ownership was stored are migrated with their first valid allowlisted project as the management owner. Operators should verify that owner before expanding a legacy global credential's allowlist.
 
 ## API surface

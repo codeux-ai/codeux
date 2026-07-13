@@ -8,10 +8,10 @@ The shared contracts live in `src/contracts/custom-dashboard-types.ts`.
 
 Primary records:
 
-- `CustomDashboardRecord` stores the mutable project-scoped draft state, status, manifest, generated file bundle, source node graph, styleguide JSON, runtime metadata JSON, and active published revision id.
-- `CustomDashboardRevisionRecord` stores immutable dashboard bundle snapshots. Manifest, files, source node graph, and styleguide data are copied into each revision so future draft edits do not mutate validation or publication history.
+- `CustomDashboardRecord` stores the mutable project-scoped draft state, status, manifest, generated file bundle, source node graph, styleguide JSON, runtime metadata JSON, credential-ID bindings, an optimistic binding revision, and the active published revision id.
+- `CustomDashboardRevisionRecord` stores immutable dashboard bundle snapshots. Manifest, files, source node graph, styleguide data, and credential-ID bindings are copied into each revision so future draft edits or rebindings do not mutate validation or publication history.
 - `CustomDashboardValidationSessionRecord` stores validation attempts for a revision, including queued/building/running/passed/failed/cancelled status, validation report JSON, runtime metadata, and timestamps.
-- `CustomDashboardManifest` describes the generated dashboard bundle with schema version, title, entry file, file paths, optional data-source graph, and metadata.
+- `CustomDashboardManifest` describes the generated dashboard bundle with schema version, title, entry file, file paths, optional data-source graph, bounded credential-slot declarations, and metadata. A slot declares its build/runtime phase, required state, allowed credential kinds, and required capabilities; it never contains secret material.
 
 Dashboard status values are `draft`, `validating`, `validated`, `published`, `rejected`, and `archived`. Validation status values are `queued`, `building`, `running`, `passed`, `failed`, and `cancelled`.
 
@@ -21,8 +21,8 @@ SQLite tables are created in both the initial schema and startup migrations:
 
 | Table | Purpose |
 | --- | --- |
-| `custom_dashboards` | Current mutable project-scoped draft state, including manifest JSON, file bundle JSON, source node graph JSON, styleguide JSON, runtime metadata JSON, status, and timestamps. |
-| `custom_dashboard_revisions` | Immutable revision snapshots with copied manifest, files, source graph, styleguide, runtime metadata, validation status/report, validated timestamp, and revision number. |
+| `custom_dashboards` | Current mutable project-scoped draft state, including manifest JSON, file bundle JSON, source node graph JSON, styleguide JSON, runtime metadata JSON, dedicated credential binding JSON, optimistic binding revision, status, and timestamps. |
+| `custom_dashboard_revisions` | Immutable revision snapshots with copied manifest, files, source graph, styleguide, runtime metadata, dedicated credential binding JSON, validation status/report, validated timestamp, and revision number. |
 | `custom_dashboard_validation_sessions` | Validation history for revisions, including status transitions, report JSON, runtime metadata, and start/finish timestamps. |
 | `custom_dashboard_publications` | The active publication pointer for a dashboard. The table is keyed by `dashboard_id`, so each dashboard has at most one active published revision. |
 
@@ -39,22 +39,27 @@ All dashboard JSON payloads are stored as text and hydrated through `CustomDashb
 - publish only validated revisions
 - archive or delete dashboards
 
+Credential IDs mutate only through `updateCredentialBindings`, using compare-and-swap against `credentialBindingRevision`. Generic draft and revision payloads cannot write binding columns. A bound slot must be unbound before its required state, phase, allowed kinds, or required capabilities can change.
+
 Publishing rejects unvalidated, failed, cancelled, or cross-dashboard revisions. Publishing a new validated revision replaces the prior `custom_dashboard_publications` row for the dashboard, preserving the single-active-publication invariant.
 
 ## Validation Runtime
 
-`src/services/custom-dashboard-validation-service.ts` owns server-side validation execution. It consumes `CustomDashboardRepository`, `ProjectManagementRepository`, and `SettingsRepository` through the core dependency factory and is exposed to dashboard routes through the dashboard lifecycle dependency object.
+`src/services/custom-dashboard-credential-binding-service.ts` owns metadata-only binding orchestration. It loads the project, dashboard or immutable revision, declared slots, secure-backend health, and accessible credential metadata, then delegates every policy decision to `CredentialBroker.assessCompatibility`. Bind/replace/unbind calls use the repository's optimistic mutation and emit correlation-aware audit records containing only project, dashboard, binding revision, slot, credential ID, outcome, and denial reason.
+
+`src/services/custom-dashboard-validation-service.ts` owns server-side validation execution. It consumes the binding service, `CustomDashboardRepository`, `ProjectManagementRepository`, and `SettingsRepository` through the core dependency factory and is exposed to dashboard routes through the dashboard lifecycle dependency object.
 
 Validation flow:
 
-- `startValidation(projectId, dashboardId, revisionId)` creates a validation session, materializes the immutable revision bundle under `.code-ux/runtime/custom-dashboards/<dashboardId>/<revisionId>/workspace`, and writes a generated Vite/Preact harness.
+- `startValidation(projectId, dashboardId, revisionId)` first performs a metadata-only revision binding review. A required unbound slot or any missing, revoked, inaccessible, wrong-kind, insufficient-capability, unconfigured, or unavailable-backend binding creates a failed session with slot-specific issues before a workspace or Docker command exists. Optional unbound slots remain valid.
+- After that gate passes, validation creates a session, materializes the immutable revision bundle under `.code-ux/runtime/custom-dashboards/<dashboardId>/<revisionId>/workspace`, and writes a generated Vite/Preact harness.
 - Validation runtime paths are canonicalized under the selected project before filesystem reads or writes, including bundle materialization, logs, and persisted viewer artifacts.
 - The harness injects a read-only Code UX data bridge containing the revision manifest, source node graph, styleguide, runtime metadata, integrations, and declared `external_api` nodes.
 - The service runs install/build inside Docker using the resolved `cliWorkflow.containerImage`, then creates and starts a detached serving container on an allocated localhost port.
 - A validation session is marked `passed` only after install, build, start, and root URL health checks succeed. Build/start/health failures are recorded as failed validation reports with bounded log excerpts.
 - Runtime metadata persists the workspace path, log path, host port, container id/name, image, validation URL path, commands, latest error/log excerpt, and a browser-ready Vite `dist` artifact for passed revisions so the published viewer can render TSX-based drafts without a live validation container.
 
-Validation does not publish or activate dashboards. A successful run only marks the revision validation status as `passed`; publication remains gated by `publishRevision`. Publication accepts either a revision already marked `passed` with a valid report or an explicit passed validation session for that revision. Failed, queued, running, cancelled, missing, or cross-revision validation sessions are rejected before the publication pointer changes.
+Validation does not publish or activate dashboards. A successful run only marks the revision validation status as `passed`; publication remains gated by `publishRevision`. REST and MCP publication re-run metadata-only binding review immediately before calling the repository, then require either a revision already marked `passed` with a valid report or an explicit passed validation session for that revision. Failed binding review returns sanitized slot-specific issues without credential IDs or values; queued/running/cancelled validation, missing state, and cross-revision sessions are rejected before the publication pointer changes.
 
 ## REST and MCP Surface
 
@@ -64,8 +69,9 @@ Dashboard HTTP routes live in `src/server/custom-dashboard-routes.ts` and are re
 - dashboard routes get/update/archive a dashboard and create revisions
 - validation routes start validation, read status/logs, stop/remove validation sessions, and publish revisions
 - validation proxy routes forward same-origin requests to a running validation host port when the session runtime metadata exposes one
+- credential-protected project routes list/review slots and optimistically bind, replace, or unbind credential IDs at `/api/projects/:projectId/custom-dashboards/:dashboardId/credential-bindings`
 
-The MCP management surface is `manage_custom_dashboards` in `src/mcp/management/custom-dashboard-actions.ts`. It supports `list`, `get`, `create`, `update`, `create_revision`, `validate_revision`, `validation_status`, `validation_logs`, `publish_revision`, `archive`, and `data_catalog`. `archive` follows the same approval fingerprint flow as other destructive management actions.
+Remote HTTP access to the credential-binding route requires the `credential_admin` role, project access, and enabled remote credential management. The MCP management surface is `manage_custom_dashboards` in `src/mcp/management/custom-dashboard-actions.ts`. In addition to the dashboard lifecycle actions, it supports bounded `list_credential_slots`, `bind_credential`, and `unbind_credential`; binding mutations follow the stateful human-approval fingerprint flow and require the owning project ID.
 
 Project Manager and dashboard chat prompts steer user-created dashboard requests through this management surface. Agents should gather missing purpose, data-source, styleguide, layout, and publication intent details, then create or update drafts and revisions with complete manifests, file bundles, source node graphs, styleguide tokens, runtime metadata, accessibility notes, and validation expectations. Generated bundles are dependency-free Preact/Tailwind-compatible validation-harness code and must not be written directly into `dashboard/src`.
 
@@ -89,12 +95,12 @@ Draft edits remain persisted bundle text sent back through API calls; generated 
 
 Published dashboards open through `CustomDashboardViewer`, which resolves the active `publishedRevisionId` from the loaded dashboard detail and renders only when the dashboard status is `published`, the published revision exists, and that revision still has a valid passed validation report. Draft, rejected, archived, unvalidated, and missing-publication states render a local blocked panel with the last validation report and a return-to-editor action rather than executing the bundle.
 
-The viewer uses a sandboxed iframe `srcdoc` document so generated dashboard code never runs inside the main Preact bundle. For validated TSX/Preact revisions, it prefers the persisted Vite `dist` viewer artifact from revision runtime metadata and inlines the artifact's HTML, CSS, and JavaScript into the frame document. Older direct HTML or browser-ready JavaScript entry files still render through the previous entry-file path. The frame receives a frozen `codeUxDataBridge` / `CodeUXCustomDashboard` object and can request only declared source nodes by `id` through `postMessage`. The parent page handles those requests with explicit same-origin API calls for project execution data, project stats, and overview telemetry; integration metadata is limited to non-secret source-node metadata; external API nodes are placeholders and return clear unavailable-source errors. Frame `error` and `unhandledrejection` events are reported back to the viewer and displayed as dashboard-specific failures without breaking the surrounding app shell.
+The viewer uses a sandboxed iframe `srcdoc` document so generated dashboard code never runs inside the main Preact bundle. For validated TSX/Preact revisions, it prefers the persisted Vite `dist` viewer artifact from revision runtime metadata and inlines the artifact's HTML, CSS, and JavaScript into the frame document. Older direct HTML or browser-ready JavaScript entry files still render through the previous entry-file path. The frame receives a frozen `codeUxDataBridge` / `CodeUXCustomDashboard` object and can request only declared source nodes by `id` through `postMessage`. Parent and frame handlers verify the expected window source. Generic dashboard/viewer records and frame configuration recursively redact known binding IDs from nested dashboard, revision, source, runtime-metadata, file, validation-report, and viewer-artifact content; only the dedicated metadata-management responses expose IDs. The parent page handles source requests with explicit same-origin API calls for project execution data, project stats, and overview telemetry; integration metadata is limited to non-secret source-node metadata; external API nodes are placeholders and return clear unavailable-source errors.
 
 Navigation is centralized through `dashboard/src/v2/lib/navigation-items.ts`, so both the kinetic dock and sidebar expose the Dashboards destination with stable labels, tour markers, and route prefetching.
 
 ## Docker and Logs
 
-Docker argument construction lives in `src/services/custom-dashboard-docker-plan.ts`. Validation containers use the configured CLI workflow image, bind-mount only the generated workspace/runtime home plus an optional setup script, and do not mount provider credential directories.
+Docker argument construction lives in `src/services/custom-dashboard-docker-plan.ts`. Validation containers use the configured CLI workflow image, bind-mount only the generated workspace/runtime home plus an optional setup script, and do not mount provider credential directories. The binding service never calls secret resolution, and credential values and binding IDs are not written to generated files, bridges, validation reports/logs, Docker arguments, iframe configuration, or browser messages. Before bridge configuration is materialized, credential-related properties are removed and known binding IDs are recursively replaced even when they are embedded within larger runtime-metadata or source-node strings.
 
 Logs are captured in the validation runtime directory and combined with bounded `docker logs` output through `getValidationLogs(sessionId, tail)`. `stopValidation` removes the detached container while preserving a passed revision report, and `removeValidation` removes the session row after container cleanup.

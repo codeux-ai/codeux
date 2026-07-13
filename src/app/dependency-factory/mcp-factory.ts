@@ -70,6 +70,7 @@ export function createMcpDependencies(
   const managementToolHandler = new ManagementToolHandler({
     sprintPreviewService: coreDeps.sprintPreviewService,
     customDashboardRepository: coreDeps.customDashboardRepository,
+    customDashboardCredentialBindingService: coreDeps.customDashboardCredentialBindingService,
     customDashboardValidationService: coreDeps.customDashboardValidationService,
     executionRepository: coreDeps.executionRepository,
     getDashboardSettings: () => getDashboardSettings(),

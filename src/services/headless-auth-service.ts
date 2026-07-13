@@ -109,7 +109,8 @@ function isCredentialManagementRequest(req: Request): boolean {
   const pathname = req.path.toLowerCase();
   return pathname.startsWith("/api/credentials")
     || pathname.startsWith("/credentials")
-    || /\/credentials(?:\/|$)/.test(pathname);
+    || /\/credentials(?:\/|$)/.test(pathname)
+    || /\/custom-dashboards\/[^/]+\/credential-bindings(?:\/|$)/.test(pathname);
 }
 
 export function requiredRoleForDashboardRequest(req: Request): CodeUxRole {

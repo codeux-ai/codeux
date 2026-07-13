@@ -143,6 +143,7 @@ import type { SpeechModelManager } from "../services/speech-model-manager.js";
 import type { NodeFlowService } from "../services/node-flow-service.js";
 import type { CustomDashboardRepository } from "../repositories/custom-dashboard-repository.js";
 import type { CustomDashboardValidationService } from "../services/custom-dashboard-validation-service.js";
+import type { CustomDashboardCredentialBindingService } from "../services/custom-dashboard-credential-binding-service.js";
 import type { SkillService } from "../services/skill-service.js";
 import type { CredentialBroker } from "../services/credentials/credential-broker.js";
 import type { ApprovalService } from "../services/node-flows/approval-service.js";
@@ -199,6 +200,7 @@ export interface DashboardServerOptions {
   approvalService?: ApprovalService;
   automationWebhookTriggerRepository?: AutomationWebhookTriggerRepository;
   customDashboardRepository?: CustomDashboardRepository;
+  customDashboardCredentialBindingService?: CustomDashboardCredentialBindingService;
   customDashboardValidationService?: CustomDashboardValidationService;
   skillService?: SkillService;
   credentialBroker?: CredentialBroker;

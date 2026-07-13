@@ -63,7 +63,7 @@ action-specific fields, and an optional `approval` object for destructive action
 | `search_skills` | agents & memory | Semantic retrieval over persistent project skills, optionally scoped to an agent or storage. |
 | `manage_settings` | platform | Get/resolve/patch/replace/reset system, project, and sprint settings. |
 | `manage_preview` | platform | Manage sprint preview containers (start/stop/rebuild, logs, scripts). |
-| `manage_custom_dashboards` | platform | Manage project custom dashboard drafts, revisions, detached validation sessions, publication, archiving, and data catalog lookup. |
+| `manage_custom_dashboards` | platform | Manage project custom dashboard drafts, metadata-only credential bindings, revisions, detached validation sessions, publication, archiving, and data catalog lookup. |
 | `manage_chat_providers` | platform | Manage external chat provider setup definitions, connections, bindings, and outbound delivery state. |
 | `manage_telemetry` | platform | Read execution snapshots, invocations, sprint runs, and dispatches. |
 
@@ -132,13 +132,15 @@ Clarification states are `pending`, `replied`, `expired`, and `cancelled`. Repea
 | `manage_skills` | `authoring_prompt`, `list_storages`, `get_storage`, `create_storage`, `update_storage`, `delete_storage`, `reset_storage`, `list_agent_storages`, `attach_storage`, `detach_storage`, `list_skills`, `get_skill`, `create_skill`, `update_skill`, `delete_skill`, `import_markdown`, `export_markdown` |
 | `manage_settings` | `get_system`, `get_project_override`, `resolve_project_effective`, `get_sprint_override`, `resolve_sprint_effective`, `replace_system_settings`, `patch_system_setting`, `replace_project_settings`, `patch_project_setting`, `reset_project_settings`, `replace_sprint_settings`, `patch_sprint_setting`, `reset_sprint_settings`, `export_settings_bundle`, `apply_settings_bundle` |
 | `manage_preview` | `list_sessions`, `start_session`, `stop_session`, `rebuild_session`, `remove_session`, `get_logs`, `get_url`, `get_script`, `update_script` |
-| `manage_custom_dashboards` | `list`, `get`, `create`, `update`, `create_revision`, `validate_revision`, `validation_status`, `validation_logs`, `publish_revision`, `archive`, `data_catalog` |
+| `manage_custom_dashboards` | `list`, `get`, `create`, `update`, `create_revision`, `validate_revision`, `validation_status`, `validation_logs`, `publish_revision`, `archive`, `data_catalog`, `list_credential_slots`, `bind_credential`, `unbind_credential` |
 | `manage_chat_providers` | `list_provider_definitions`, `list_connections`, `get_connection`, `create_connection`, `update_connection`, `delete_connection`, `list_channel_bindings`, `create_channel_binding`, `update_channel_binding`, `delete_channel_binding`, `list_outbound_deliveries` |
 | `manage_telemetry` | `get_project_stats_snapshot`, `get_project_execution_snapshot`, `list_execution_invocations`, `list_execution_invocation_messages`, `list_sprint_runs`, `list_task_dispatches` |
 
 For `manage_projects` setup, clients may send setup options either as `setup.options` or as top-level `options`. `options.docs: true` is opt-in and embeds discovered repository documentation into the Knowledge docs library.
 
 For the full per-action payloads and return shapes, see [Management actions](./management-actions.md).
+
+Custom-dashboard credential actions are project-scoped and metadata-only. `list_credential_slots` returns bounded compatible credential metadata; `bind_credential` and `unbind_credential` require `projectId`, `dashboardId`, `slotId`, `expectedBindingRevision`, and the stateful approval handshake, with `credentialId` added for bind/replace. Before fingerprinting, their arguments are strictly validated and rebuilt from only those allowed metadata fields, so secret-bearing, malformed approval, or undeclared fields cannot enter pending approval state. Validation and publication fail closed on required or incompatible bindings without resolving plaintext; publication errors retain sanitized slot-specific issues, and generic custom-dashboard MCP responses recursively redact known binding IDs from nested content.
 
 ### Background sprint planning
 
