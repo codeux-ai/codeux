@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCustomDashboardLocation,
+  getCustomDashboardRoutes,
+  isCustomDashboardRouteDeclared,
   normalizeCustomDashboardPath,
   readCustomDashboardLocation,
   selectCustomDashboardRoute,
@@ -25,5 +27,19 @@ describe("custom dashboard router", () => {
     ];
     expect(selectCustomDashboardRoute(routes, "//logs/")?.label).toBe("Logs");
     expect(selectCustomDashboardRoute(routes, "/missing")?.label).toBe("Overview");
+  });
+
+  it("falls back to the first declaration and preserves a route-less root entry", () => {
+    const routes = [
+      { path: "/details", label: "Details", entryFile: "src/details.tsx" },
+      { path: "/activity", label: "Activity", entryFile: "src/activity.tsx" },
+    ];
+    expect(selectCustomDashboardRoute(routes, "/missing")?.path).toBe("/details");
+    expect(getCustomDashboardRoutes([], "src/main.tsx")).toEqual([
+      { path: "/", label: "Overview", entryFile: "src/main.tsx" },
+    ]);
+    expect(selectCustomDashboardRoute([], "/missing", "src/main.tsx")?.path).toBe("/");
+    expect(isCustomDashboardRouteDeclared(routes, "/details")).toBe(true);
+    expect(isCustomDashboardRouteDeclared(routes, "/missing")).toBe(false);
   });
 });

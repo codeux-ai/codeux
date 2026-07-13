@@ -244,6 +244,33 @@ describe("CustomDashboardViewer", () => {
     expect(onRouteChange).toHaveBeenCalledWith("/");
   });
 
+  it("keeps browser back and forward controls connected to host history", () => {
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => undefined);
+    const forward = vi.spyOn(window.history, "forward").mockImplementation(() => undefined);
+    render(<CustomDashboardViewer dashboard={dashboard} revisions={[revision]} onRefresh={onRefresh} onReturnToEditor={onReturnToEditor} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Previous dashboard route" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next dashboard route" }));
+
+    expect(back).toHaveBeenCalledOnce();
+    expect(forward).toHaveBeenCalledOnce();
+  });
+
+  it("replaces an unknown deep link with the declared fallback route", () => {
+    const onRouteChange = vi.fn();
+    render(<CustomDashboardViewer dashboard={dashboard} revisions={[revision]} routePath="/unknown" onRouteChange={onRouteChange} onRefresh={onRefresh} onReturnToEditor={onReturnToEditor} />);
+    const iframe = screen.getByTitle("Published custom dashboard: Delivery Pulse") as HTMLIFrameElement;
+    const bridgeSessionId = iframe.getAttribute("srcdoc")?.match(/"bridgeSessionId":"([^"]+)"/)?.[1];
+
+    window.dispatchEvent(new MessageEvent("message", {
+      data: { type: "codeux-custom-dashboard:route-change", bridgeSessionId, route: "/" },
+      source: iframe.contentWindow,
+      origin: "null",
+    }));
+
+    expect(onRouteChange).toHaveBeenCalledWith("/", { replace: true });
+  });
+
   it("offers explicit validated resume and rollback recovery when halted", () => {
     const onResume = vi.fn();
     render(<CustomDashboardViewer dashboard={{ ...dashboard, runtimeState: { ...dashboard.runtimeState, status: "halted", haltedReason: "Frame crashed", haltedRevisionId: revision.id, haltedAt: "2026-07-07T01:00:00.000Z" } }} revisions={[revision]} onResume={onResume} onRefresh={onRefresh} onReturnToEditor={onReturnToEditor} />);

@@ -41,6 +41,7 @@ export interface CustomDashboardBridgeConfig {
   runtimeMetadata: CustomDashboardJsonObject;
   integrations: CustomDashboardJsonObject;
   externalApiNodes: CustomDashboardJsonObject[];
+  routes: CustomDashboardRevisionRecord["routes"];
   runtimeAccess: { kind: "validation"; sessionId: string };
 }
 
@@ -363,6 +364,7 @@ export function buildBridgeConfig(
         title: node.title,
         config: extractJsonObject(node.config),
       })),
+    routes: revision.routes,
     runtimeAccess: { kind: "validation", sessionId: validationSessionId },
   };
 }
@@ -445,6 +447,16 @@ function buildTsConfig(): string {
 function buildDataBridgeModule(config: CustomDashboardBridgeConfig): string {
   return [
     `const config = Object.freeze(${JSON.stringify(config, null, 2)});`,
+    "const normalizePath = (value: string): string => { const parts = String(value || '/').split(/[?#]/, 1)[0].replace(/\\\\/g, '/').split('/').filter(Boolean); const out: string[] = []; for (const part of parts) { if (part === '.') continue; if (part === '..') out.pop(); else out.push(part); } return `/${out.join('/')}`; };",
+    "const declaredRoutes = config.routes.length > 0 ? config.routes : [{ path: '/', label: 'Overview', entryFile: config.manifest.entryFile }];",
+    "const selectDeclaredRoute = (value: string) => { const normalized = normalizePath(value); return declaredRoutes.find((route) => normalizePath(route.path) === normalized) ?? declaredRoutes.find((route) => normalizePath(route.path) === '/') ?? declaredRoutes[0]; };",
+    "const initialRoute = new URLSearchParams(window.location.search).get('route') ?? window.location.hash.slice(1) ?? '/';",
+    "let currentRoute = normalizePath(selectDeclaredRoute(initialRoute)?.path ?? '/');",
+    "const isDeclared = (value: string): boolean => { const normalized = normalizePath(value); return declaredRoutes.some((route) => normalizePath(route.path) === normalized); };",
+    "const emitRoute = (): void => window.dispatchEvent(new CustomEvent('codeux:dashboard-route', { detail: { path: currentRoute } }));",
+    "const navigate = (value: string, options: { replace?: boolean } = {}): string => { const next = normalizePath(value); if (!isDeclared(next)) throw new Error(`Custom dashboard route is not declared: ${next}`); currentRoute = next; if (options.replace) history.replaceState({ route: next }, '', `#${next}`); else history.pushState({ route: next }, '', `#${next}`); emitRoute(); return next; };",
+    "window.addEventListener('popstate', (event) => { const restored = normalizePath((event.state as { route?: string } | null)?.route ?? window.location.hash.slice(1) ?? initialRoute); currentRoute = normalizePath(selectDeclaredRoute(restored)?.path ?? '/'); emitRoute(); });",
+    "history.replaceState({ route: currentRoute }, '', `#${currentRoute}`);",
     "let sequence = 0;",
     "const readSource = async (sourceId: string, options: { route?: string; method?: string; credentialSlot?: string; capability?: string; headers?: Record<string, string>; body?: unknown; signal?: AbortSignal } = {}) => {",
     "  const requestId = `validation-${Date.now()}-${++sequence}`;",
@@ -459,7 +471,7 @@ function buildDataBridgeModule(config: CustomDashboardBridgeConfig): string {
     "  if (!response.ok) throw new Error(payload?.error?.message || 'Custom dashboard source request failed.');",
     "  return payload.data;",
     "};",
-    "export const codeUxDataBridge = Object.freeze({ ...config, listSources: () => [...config.sourceNodeGraph.nodes], readSource });",
+    "export const codeUxDataBridge = Object.freeze({ ...config, get routePath() { return currentRoute; }, navigate, listSources: () => [...config.sourceNodeGraph.nodes], readSource });",
     "",
     "export type CodeUxDataBridge = typeof codeUxDataBridge;",
     "",
@@ -489,21 +501,24 @@ function buildHarnessEntry(buildManifest: CustomDashboardBuildManifest): string 
     "const root = document.getElementById(\"app\");",
     `const dashboardModules = [${entries.map((_entry, index) => `DashboardModule${index}`).join(", ")}];`,
     `const routes = ${JSON.stringify(routes)} as const;`,
-    "const route = [...routes].sort((left, right) => right.path.length - left.path.length).find((candidate) => window.location.pathname === candidate.path || window.location.pathname.startsWith(`${candidate.path}/`));",
-    "const DashboardModule = dashboardModules[route?.moduleIndex ?? 0];",
-    "const Candidate = (DashboardModule.default ?? DashboardModule.Dashboard ?? DashboardModule.App) as unknown;",
+    "const runtimeWindow = window as Window & { CodeUXCustomDashboard?: typeof codeUxDataBridge; codeUxDataBridge?: typeof codeUxDataBridge };",
+    "const runtimeBridge = runtimeWindow.CodeUXCustomDashboard ?? runtimeWindow.codeUxDataBridge ?? codeUxDataBridge;",
+    "const normalizePath = (value: string): string => { const parts = String(value || '/').split(/[?#]/, 1)[0].replace(/\\\\/g, '/').split('/').filter(Boolean); const out: string[] = []; for (const part of parts) { if (part === '.') continue; if (part === '..') out.pop(); else out.push(part); } return `/${out.join('/')}`; };",
+    "const selectRoute = (value: string) => { const normalized = normalizePath(value); return routes.find((candidate) => normalizePath(candidate.path) === normalized) ?? routes.find((candidate) => normalizePath(candidate.path) === '/') ?? routes[0]; };",
+    "const renderRoute = (): void => {",
+    "  const DashboardModule = dashboardModules[selectRoute(runtimeBridge.routePath)?.moduleIndex ?? 0];",
+    "  const Candidate = (DashboardModule.default ?? DashboardModule.Dashboard ?? DashboardModule.App) as unknown;",
     "",
-    "if (root && typeof Candidate === \"function\") {",
-    "  render(h(Candidate as never, { codeUxDataBridge }), root);",
-    "} else if (root) {",
-    "  root.dataset.codeUxValidationReady = \"true\";",
-    "}",
+    "  if (root && typeof Candidate === \"function\") {",
+    "    render(h(Candidate as never, { codeUxDataBridge: runtimeBridge }), root);",
+    "  } else if (root) {",
+    "    root.dataset.codeUxValidationReady = \"true\";",
+    "  }",
+    "};",
+    "renderRoute();",
+    "window.addEventListener('codeux:dashboard-route', renderRoute);",
     "",
-    "Object.defineProperty(window, \"codeUxDataBridge\", {",
-    "  value: codeUxDataBridge,",
-    "  writable: false,",
-    "  configurable: false,",
-    "});",
+    "if (!runtimeWindow.codeUxDataBridge) Object.defineProperty(window, \"codeUxDataBridge\", { value: runtimeBridge, writable: false, configurable: false });",
     "",
   ].join("\n");
 }

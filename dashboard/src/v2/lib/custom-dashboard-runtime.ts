@@ -5,7 +5,12 @@ import type {
   CustomDashboardRevisionRecord,
   CustomDashboardValidationReport,
 } from "../types.js";
-import { buildCustomDashboardLocation, normalizeCustomDashboardPath } from "./custom-dashboard-router.js";
+import {
+  buildCustomDashboardLocation,
+  getCustomDashboardRoutes,
+  isCustomDashboardRouteDeclared,
+  selectCustomDashboardRoute,
+} from "./custom-dashboard-router.js";
 
 type CustomDashboardDataSourceNode = CustomDashboardRevisionRecord["sourceNodeGraph"]["nodes"][number];
 
@@ -28,6 +33,7 @@ export interface CustomDashboardPublishedRuntime {
   revision: CustomDashboardRevisionRecord;
   document: string;
   bridgeSessionId: string;
+  routePath: string;
 }
 
 export type CustomDashboardRuntimeResolution =
@@ -116,13 +122,20 @@ export function resolvePublishedCustomDashboardRuntime(
   }
 
   const bridgeSessionId = createBridgeSessionId();
+  const selectedRoute = selectCustomDashboardRoute(
+    publishedRevision.routes,
+    routePath,
+    publishedRevision.manifest.entryFile,
+  );
+  const selectedRoutePath = selectedRoute?.path ?? "/";
   return {
     status: "ready",
     runtime: {
       dashboard,
       revision: publishedRevision,
-      document: buildCustomDashboardFrameDocument(dashboard, publishedRevision, bridgeSessionId, routePath),
+      document: buildCustomDashboardFrameDocument(dashboard, publishedRevision, bridgeSessionId, selectedRoutePath),
       bridgeSessionId,
+      routePath: selectedRoutePath,
     },
   };
 }
@@ -142,8 +155,8 @@ export function buildCustomDashboardFrameDocument(
     sourceNodeGraph: revision.sourceNodeGraph,
     styleguide: revision.styleguide,
     runtimeMetadata: revision.runtimeMetadata,
-    routes: revision.routes,
-    routePath: normalizeCustomDashboardPath(routePath),
+    routes: getCustomDashboardRoutes(revision.routes, revision.manifest.entryFile),
+    routePath: selectCustomDashboardRoute(revision.routes, routePath, revision.manifest.entryFile)?.path ?? "/",
     bridgeSessionId,
   };
   const bootstrap = buildBridgeBootstrapScript(bridgeConfig);
@@ -263,7 +276,17 @@ export function createCustomDashboardRuntimeMessageHandler(args: {
       return;
     }
     if (event.data.type === "codeux-custom-dashboard:route-change") {
-      args.onRouteChange?.(normalizeCustomDashboardPath(event.data.route));
+      if (typeof event.data.route === "string" && isCustomDashboardRouteDeclared(
+        args.runtime.revision.routes,
+        event.data.route,
+        args.runtime.revision.manifest.entryFile,
+      )) {
+        args.onRouteChange?.(selectCustomDashboardRoute(
+          args.runtime.revision.routes,
+          event.data.route,
+          args.runtime.revision.manifest.entryFile,
+        )?.path ?? "/");
+      }
       return;
     }
     if (event.data.type === "codeux-custom-dashboard:runtime-error") {
@@ -411,13 +434,14 @@ function buildBridgeBootstrapScript(config: Record<string, unknown>): string {
     "  Object.defineProperty(window, 'codeUxDataBridge', { value: bridge, writable: false, configurable: false });",
     "  Object.defineProperty(window, 'CodeUXCustomDashboard', { value: bridge, writable: false, configurable: false });",
     "  const normalizePath = (value) => { const parts = String(value || '/').split(/[?#]/, 1)[0].replace(/\\\\/g, '/').split('/').filter(Boolean); const out = []; for (const part of parts) { if (part === '.') continue; if (part === '..') out.pop(); else out.push(part); } return `/${out.join('/')}`; };",
-    "  let currentRoute = normalizePath(config.routePath);",
     "  const declaredRoutes = Array.isArray(config.routes) ? config.routes : [];",
     "  const isDeclared = (path) => declaredRoutes.length === 0 || declaredRoutes.some((route) => normalizePath(route.path) === path);",
+    "  const selectDeclared = (path) => { const normalized = normalizePath(path); return declaredRoutes.find((route) => normalizePath(route.path) === normalized) || declaredRoutes.find((route) => normalizePath(route.path) === '/') || declaredRoutes[0] || { path: '/' }; };",
+    "  let currentRoute = normalizePath(selectDeclared(config.routePath).path);",
     "  const emitRoute = () => window.parent.postMessage({ type: 'codeux-custom-dashboard:route-change', bridgeSessionId: config.bridgeSessionId, route: currentRoute }, parentOrigin);",
     "  const navigate = (path, options = {}) => { const next = normalizePath(path); if (!isDeclared(next)) throw new Error(`Custom dashboard route is not declared: ${next}`); currentRoute = next; const hash = `#${next}`; if (options.replace) history.replaceState({ route: next }, '', hash); else history.pushState({ route: next }, '', hash); emitRoute(); window.dispatchEvent(new CustomEvent('codeux:dashboard-route', { detail: { path: next } })); return next; };",
-    "  window.addEventListener('popstate', () => { currentRoute = normalizePath(location.hash.slice(1) || config.routePath); emitRoute(); window.dispatchEvent(new CustomEvent('codeux:dashboard-route', { detail: { path: currentRoute } })); });",
-    "  if (location.hash) currentRoute = normalizePath(location.hash.slice(1)); else history.replaceState({ route: currentRoute }, '', `#${currentRoute}`);",
+    "  window.addEventListener('popstate', (event) => { const restored = normalizePath(event.state?.route || location.hash.slice(1) || config.routePath); currentRoute = normalizePath(selectDeclared(restored).path); emitRoute(); window.dispatchEvent(new CustomEvent('codeux:dashboard-route', { detail: { path: currentRoute } })); });",
+    "  history.replaceState({ route: currentRoute }, '', `#${currentRoute}`);",
     "  let runtimeStateReported = false;",
     "  const report = (message) => { if (runtimeStateReported) return; runtimeStateReported = true; window.parent.postMessage({ type: 'codeux-custom-dashboard:runtime-error', bridgeSessionId: config.bridgeSessionId, message: String(message).slice(0, 320) }, parentOrigin); };",
     "  window.addEventListener('error', (event) => report(event.message || 'Custom dashboard runtime error.'));",

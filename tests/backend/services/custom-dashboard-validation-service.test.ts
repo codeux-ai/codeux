@@ -339,6 +339,21 @@ describe("CustomDashboardValidationService", () => {
     })).rejects.toThrow("Request body exceeds maximum allowed size");
   });
 
+  it("preserves declared route context in validation proxy preview queries", async () => {
+    const { service, projectId, dashboardId, revisionId } = await createFixture();
+    const session = await service.startValidation(projectId, dashboardId, revisionId);
+    const fetchMock = vi.mocked((service as unknown as { fetchImpl: typeof fetch }).fetchImpl);
+
+    await service.proxyValidationRequest({
+      sessionId: session.id,
+      method: "GET",
+      path: "/?route=%2Fdetails",
+    });
+
+    const proxiedUrl = fetchMock.mock.calls.at(-1)?.[0];
+    expect(String(proxiedUrl)).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/\?route=%2Fdetails$/);
+  });
+
   it("stops and removes validation sessions without invalidating passed revisions", async () => {
     const { dashboards, service, projectId, dashboardId, revisionId } = await createFixture();
     const session = await service.startValidation(projectId, dashboardId, revisionId);

@@ -259,4 +259,65 @@ describe("custom dashboard runtime", () => {
       "http://localhost:4444/custom-dashboards?dashboard=dashboard+1&mode=viewer&route=%2Flogs",
     );
   });
+
+  it("selects route-specific entries from host route state and normalizes unknown routes", () => {
+    const routedRevision: CustomDashboardRevisionRecord = {
+      ...revision,
+      manifest: { ...revision.manifest, entryFile: "src/overview.tsx", filePaths: ["src/overview.tsx", "src/details.tsx"] },
+      fileBundle: {
+        files: [
+          { path: "src/overview.tsx", content: "export default () => 'Overview';" },
+          { path: "src/details.tsx", content: "export default () => 'Details';" },
+        ],
+      },
+      routes: [
+        { path: "/", label: "Overview", entryFile: "src/overview.tsx" },
+        { path: "/details", label: "Details", entryFile: "src/details.tsx" },
+      ],
+    };
+
+    const details = resolvePublishedCustomDashboardRuntime(dashboard, [routedRevision], "/details");
+    expect(details.status).toBe("ready");
+    expect(details.status === "ready" ? details.runtime.routePath : null).toBe("/details");
+    expect(details.status === "ready" ? details.runtime.document : "").toContain('"routePath":"/details"');
+
+    const unknown = resolvePublishedCustomDashboardRuntime(dashboard, [routedRevision], "/undeclared");
+    expect(unknown.status === "ready" ? unknown.runtime.routePath : null).toBe("/");
+    expect(unknown.status === "ready" ? unknown.runtime.document : "").toContain('"routePath":"/"');
+  });
+
+  it("rejects undeclared frame navigation while accepting declared history restoration", () => {
+    const routedRevision = {
+      ...revision,
+      routes: [{ path: "/details", label: "Details", entryFile: revision.manifest.entryFile }],
+    };
+    const resolved = resolvePublishedCustomDashboardRuntime(dashboard, [routedRevision], "/details");
+    expect(resolved.status).toBe("ready");
+    if (resolved.status !== "ready") return;
+    const frameWindow = { postMessage: vi.fn() } as unknown as Window;
+    const onRouteChange = vi.fn();
+    const controller = new AbortController();
+    const handler = createCustomDashboardRuntimeMessageHandler({
+      frameWindow,
+      runtime: resolved.runtime,
+      onRuntimeError: vi.fn(),
+      onRouteChange,
+      signal: controller.signal,
+      readinessTimeoutMs: 60_000,
+    });
+    const routeEvent = (route: string): MessageEvent => ({
+      source: frameWindow,
+      origin: "null",
+      data: { type: "codeux-custom-dashboard:route-change", bridgeSessionId: resolved.runtime.bridgeSessionId, route },
+    }) as MessageEvent;
+
+    handler(routeEvent("/undeclared"));
+    handler(routeEvent("/details"));
+
+    expect(onRouteChange).toHaveBeenCalledOnce();
+    expect(onRouteChange).toHaveBeenCalledWith("/details");
+    expect(resolved.runtime.document).toContain("window.addEventListener('popstate'");
+    expect(resolved.runtime.document).toContain("event.state?.route");
+    controller.abort();
+  });
 });
