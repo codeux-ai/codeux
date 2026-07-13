@@ -121,7 +121,7 @@ describe("createGitHubRepo", () => {
   });
 
   it("preserves environment and local CLI authentication when no broker token is provided", async () => {
-    resolveGitHostTokenWithFallbacks.mockResolvedValueOnce("ambient-github-token");
+    resolveGitHostTokenWithFallbacks.mockResolvedValue("ambient-github-token");
     vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
       expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer ambient-github-token");
       return new Response(JSON.stringify({ clone_url: "https://github.com/me/r.git" }), { status: 201 });
@@ -147,6 +147,38 @@ describe("createGitHubRepo", () => {
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toContain("[REDACTED]");
     expect((error as Error).message).not.toContain(secret);
+  });
+
+  it("re-resolves broker credentials for the API, clone, and push boundaries", async () => {
+    const values = ["rotation-api", "rotation-clone", "rotation-push"];
+    const operations: string[] = [];
+    const withHostCredential = vi.fn(async (operation, consumer) => {
+      operations.push(operation);
+      return await consumer(values.shift());
+    });
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
+      expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer rotation-api");
+      return new Response(JSON.stringify({ clone_url: "https://github.com/me/r.git" }), { status: 201 });
+    }));
+
+    await createGitHubRepo({
+      repoName: "r",
+      isPrivate: false,
+      cloneParentDir: "/tmp/p",
+      withHostCredential,
+    });
+
+    expect(operations).toEqual(["api", "clone", "push"]);
+    expect(buildGitHttpAuthEnvWithFallbacks).toHaveBeenNthCalledWith(
+      1,
+      "https://github.com/me/r.git",
+      { githubToken: "rotation-clone", gitlabToken: "rotation-clone" },
+    );
+    expect(buildGitHttpAuthEnvWithFallbacks).toHaveBeenNthCalledWith(
+      2,
+      "https://github.com/me/r.git",
+      { githubToken: "rotation-push", gitlabToken: "rotation-push" },
+    );
   });
 
   it("surfaces the GitHub API message on non-ok responses", async () => {

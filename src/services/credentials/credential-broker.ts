@@ -83,6 +83,20 @@ export class CredentialBroker {
     return this.repository.list(boundedString(projectId, "projectId", MAX_IDENTIFIER_LENGTH));
   }
 
+  /** Checks management-scope readiness without decrypting credential material. */
+  isManagementCredentialAvailable(credentialIdValue: string, capabilityValue: string): boolean {
+    const credentialId = boundedString(credentialIdValue, "credentialId", MAX_IDENTIFIER_LENGTH);
+    const capability = boundedString(capabilityValue, "capability", MAX_CAPABILITY_LENGTH);
+    const credential = this.repository.get(credentialId);
+    const managementProjectId = credential?.managementProjectId?.trim() || "";
+    return credential !== null
+      && managementProjectId.length > 0
+      && this.canAccess(credential, managementProjectId)
+      && credential.status === "active"
+      && credential.configured
+      && credential.capabilities.includes(capability);
+  }
+
   async create(projectIdValue: string, input: CreateAutomationCredentialInput): Promise<AutomationCredentialMetadata> {
     const projectId = boundedString(projectIdValue, "projectId", MAX_IDENTIFIER_LENGTH);
     this.repository.requireProject(projectId);

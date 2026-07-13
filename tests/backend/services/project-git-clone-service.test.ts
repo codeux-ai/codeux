@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -66,5 +66,31 @@ describe("project git clone service", () => {
       sourceRef: "https://github.com/example/repo.git",
       cloneDir: cloneRoot,
     })).rejects.toThrow("not a repository root");
+  });
+
+  it("resolves a rotated broker value immediately around the next clone operation", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "project-git-clone-"));
+    cleanupPaths.push(tempRoot);
+    const cloneRoot = path.join(tempRoot, "projects");
+    const observed: string[] = [];
+    const values = ["rotation-v1", "rotation-v2"];
+    const withRemoteGitCredential = vi.fn(async (_provider, operation, consumer) => {
+      expect(operation).toBe("clone");
+      const value = values.shift()!;
+      observed.push(value);
+      throw new Error(`stopped before command ${value.replace(/./g, "x")}`);
+    });
+
+    const input = {
+      name: "Repo",
+      sourceType: "git" as const,
+      sourceRef: "https://github.com/example/repo.git",
+      cloneDir: cloneRoot,
+    };
+    await expect(prepareGitProjectCreateInput(input, { withRemoteGitCredential })).rejects.toThrow("stopped before command");
+    await expect(prepareGitProjectCreateInput(input, { withRemoteGitCredential })).rejects.toThrow("stopped before command");
+
+    expect(observed).toEqual(["rotation-v1", "rotation-v2"]);
+    expect(withRemoteGitCredential).toHaveBeenCalledTimes(2);
   });
 });

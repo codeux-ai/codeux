@@ -88,6 +88,19 @@ describe("settings credential migration and resolution", () => {
     const resolver = new SettingsCredentialResolver(f.broker);
     const reference = { credentialId: credential.id, capability: "read" as const };
 
+    await expect(resolver.isManagementCredentialAvailable(reference)).resolves.toBe(true);
+    await expect(resolver.isManagementCredentialAvailable({ credentialId: "", capability: "read" })).rejects.toThrow("malformed");
+    await expect(resolver.isManagementCredentialAvailable({ credentialId: "missing", capability: "read" })).resolves.toBe(false);
+    const health = vi.spyOn(f.broker, "health").mockResolvedValue({
+      available: false,
+      secure: false,
+      provider: "test",
+      keyId: null,
+      keyVersion: null,
+    });
+    await expect(resolver.isManagementCredentialAvailable(reference)).resolves.toBe(false);
+    health.mockRestore();
+
     await expect(resolver.withManagementCredential(reference, {
       consumer: "git.github.project-create",
     }, (secret) => secret.toString("utf8"))).resolves.toBe("first-value");
@@ -98,6 +111,7 @@ describe("settings credential migration and resolution", () => {
     }, (secret) => secret.toString("utf8"))).resolves.toBe("rotated-value");
 
     f.broker.restrict(f.first.id, credential.id, [f.first.id, f.second.id], []);
+    await expect(resolver.isManagementCredentialAvailable(reference)).resolves.toBe(false);
     await expect(resolver.withManagementCredential(reference, {
       consumer: "git.github.project-create",
     }, () => undefined)).rejects.toThrow("Required capability is not approved");

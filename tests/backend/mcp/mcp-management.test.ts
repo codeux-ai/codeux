@@ -804,11 +804,26 @@ describe("ManagementToolHandler", () => {
       sourceRef: "https://github.com/codeux-ai/example-project.git",
       cloneDir: "/home/test/.code-ux/projects",
     };
-    vi.mocked(prepareGitProjectCreateInput).mockResolvedValue(preparedInput as any);
+    const observedAuth: string[] = [];
+    vi.mocked(prepareGitProjectCreateInput).mockImplementation(async (_input, options) => {
+      await options.withRemoteGitCredential?.("github", "clone", async (auth) => {
+        observedAuth.push(auth.githubToken || "");
+      });
+      return preparedInput as any;
+    });
+    const withManagementCredential = vi.fn(async (_reference, context, consumer) => {
+      expect(context).toMatchObject({
+        consumer: "git.github.project-create.clone",
+        workspaceId: "project-management",
+      });
+      return await consumer(Buffer.from("broker-clone-token"));
+    });
+    deps.settingsCredentialResolver = { withManagementCredential };
     deps.getDashboardSettings.mockReturnValue({
       git: {
-        githubToken: "git-token",
-        gitlabToken: "lab-token",
+        githubToken: "sanitized-token",
+        gitlabToken: "",
+        githubTokenCredentialRef: { credentialId: "credential-1", capability: "read" },
       },
       integrations: {
         githubToken: "",
@@ -834,10 +849,9 @@ describe("ManagementToolHandler", () => {
       name: "Remote Project",
       sourceType: "git",
       sourceRef: "https://github.com/codeux-ai/example-project.git",
-    }), {
-      githubToken: "git-token",
-      gitlabToken: "lab-token",
-    });
+    }), expect.objectContaining({ withRemoteGitCredential: expect.any(Function) }));
+    expect(observedAuth).toEqual(["broker-clone-token"]);
+    expect(withManagementCredential).toHaveBeenCalledOnce();
     expect(deps.projectManagementRepository.createProject).toHaveBeenCalledWith(preparedInput);
     expect(parsed.result).toEqual({
       id: "p1",

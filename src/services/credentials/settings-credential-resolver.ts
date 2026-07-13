@@ -36,6 +36,14 @@ function validateReference(value: unknown): SettingsCredentialReference {
 export class SettingsCredentialResolver {
   constructor(private readonly broker: CredentialBroker) {}
 
+  /** Reports reference readiness from broker metadata without resolving plaintext. */
+  async isManagementCredentialAvailable(referenceValue: unknown): Promise<boolean> {
+    const reference = validateReference(referenceValue);
+    const health = await this.broker.health().catch(() => null);
+    if (!health?.available || !health.secure) return false;
+    return this.broker.isManagementCredentialAvailable(reference.credentialId, reference.capability);
+  }
+
   async withCredential<T>(
     referenceValue: unknown,
     context: SettingsCredentialRuntimeContext,
