@@ -7,6 +7,7 @@ import { render, screen, cleanup } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { SprintsPage } from "../../../dashboard/src/v2/pages/sprints/SprintsPage.js";
 import { useSprintsPageData } from "../../../dashboard/src/v2/pages/sprints/use-sprints-page-data.js";
+import type { CiStatusPresentation } from "../../../dashboard/src/v2/lib/ci-status-presentation.js";
 import { 
   createSprintRunFixture, 
   createManualPauseIntervention, 
@@ -51,7 +52,21 @@ describe("SprintsPage Status Regression", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    window.localStorage.clear();
   });
+
+  const failedCiStatus: CiStatusPresentation = {
+    scope: "sprint",
+    state: "failed",
+    label: "CI failed",
+    accessibleLabel: "CI failed. Pull request: Pull request ready. Checks: Checks failed. Merge: Blocked by checks.",
+    failureKind: "ci_checks",
+    steps: [
+      { id: "pull_request", label: "Pull request", state: "successful", statusLabel: "Pull request ready" },
+      { id: "checks", label: "Checks", state: "failed", statusLabel: "Checks failed", failureKind: "ci_checks" },
+      { id: "merge", label: "Merge", state: "pending", statusLabel: "Blocked by checks" },
+    ],
+  };
 
   const basePageData = {
     selectedProject: { id: "proj-1" },
@@ -72,6 +87,7 @@ describe("SprintsPage Status Regression", () => {
     showcaseSprints: [],
     activeRunsBySprintId: new Map(),
     interventionBySprintId: new Map(),
+    ciStatusBySprintId: new Map(),
     pauseResumeRunsBySprintId: new Map(),
     actionableInterventionBySprintId: new Map(),
     nextId: "sprint-2",
@@ -132,5 +148,42 @@ describe("SprintsPage Status Regression", () => {
 
     // Assert "Needs you" badge is absent
     expect(screen.queryByText("Needs you")).not.toBeInTheDocument();
+  });
+
+  it("renders the same accessible failed CI and requested-change QA state in gallery and ledger", () => {
+    const sprintWithReview = {
+      ...basePageData.sortedSprints[0],
+      status: "running",
+      tasksCount: 2,
+      completion: 50,
+      projectId: "proj-1",
+      kind: "standard",
+      latestReview: {
+        status: "completed",
+        outcome: "changes_requested",
+        summary: "A recovery case needs another assertion.",
+        findings: [],
+        fixInstructions: "Assert the newer successful gate clears the old failure.",
+        targetTaskKey: "T04",
+        reviewer: "QA Worker",
+        finishedAt: "2026-07-13T10:00:00.000Z",
+      },
+    };
+    vi.mocked(useSprintsPageData).mockReturnValue({
+      ...basePageData,
+      sortedSprints: [sprintWithReview],
+      showcaseSprints: [sprintWithReview],
+      ciStatusBySprintId: new Map([["sprint-1", failedCiStatus]]),
+    } as any);
+
+    const { container } = render(<SprintsPage />);
+
+    expect(screen.getAllByRole("button", { name: /CI status: CI failed.*Show workflow details/i })).toHaveLength(2);
+    expect(container.querySelectorAll('[data-ci-icon="failure"]')).toHaveLength(2);
+    const reviewTriggers = screen.getAllByRole("button", { name: "QA review details" });
+    expect(reviewTriggers).toHaveLength(2);
+    for (const trigger of reviewTriggers) {
+      expect(trigger).toHaveAccessibleDescription(/QA changes requested/i);
+    }
   });
 });

@@ -3,7 +3,7 @@ import { h, Fragment } from "preact";
 /** @jsx h */
 /** @jsxFrag Fragment */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/preact";
+import { fireEvent, render, screen, cleanup } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { LiveSessionPage } from "../../../dashboard/src/v2/LiveSessionPage.js";
 import { useDashboardRuntimeData } from "../../../dashboard/src/hooks/use-dashboard-runtime-data.js";
@@ -88,6 +88,114 @@ describe("LiveSessionPage Status Regression", () => {
     ...overrides,
   } as any);
 
+  const liveTask = (overrides: Record<string, unknown> = {}) => ({
+    id: "T-100",
+    record_id: "task-100",
+    project_id: "proj-1",
+    sprint_id: "sprint-1",
+    title: "Live implementation task",
+    prompt: "Implement the live task state.",
+    status: "RUNNING",
+    merge_indicator: "CI",
+    pr_url: "https://example.test/pr/100",
+    depends_on: [],
+    is_independent: true,
+    ...overrides,
+  });
+
+  const liveDispatch = (overrides: Record<string, unknown> = {}) => ({
+    id: "dispatch-100",
+    projectId: "proj-1",
+    sprintId: "sprint-1",
+    sprintRunId: "run-1",
+    sprintName: "Sprint 1",
+    sprintNumber: 1,
+    taskId: "task-100",
+    taskKey: "T-100",
+    taskTitle: "Live implementation task",
+    status: "running",
+    executorType: "docker_cli",
+    priority: 0,
+    connectionId: null,
+    connectionDisplayName: null,
+    connectionRole: null,
+    taskRunId: "task-run-100",
+    taskRunState: "RUNNING",
+    provider: "codex",
+    sessionId: "session-100",
+    sessionName: "session-100",
+    workerBranch: "worker/t-100",
+    prUrl: "https://example.test/pr/100",
+    queuedAt: "2026-07-13T09:59:00.000Z",
+    claimedAt: "2026-07-13T09:59:30.000Z",
+    startedAt: "2026-07-13T10:00:00.000Z",
+    finishedAt: null,
+    lastHeartbeatAt: "2026-07-13T10:01:00.000Z",
+    errorMessage: null,
+    activeLeaseOwnerKey: null,
+    activeLeaseExpiresAt: null,
+    ...overrides,
+  });
+
+  const gateEvent = (overrides: Record<string, unknown> = {}) => ({
+    id: "gate-100",
+    scopeType: "task_run",
+    taskRunId: "task-run-100",
+    sprintRunId: "run-1",
+    dispatchId: "dispatch-100",
+    projectId: "proj-1",
+    sprintId: "sprint-1",
+    sprintName: "Sprint 1",
+    sprintNumber: 1,
+    sprintRunStatus: "running",
+    taskId: "task-100",
+    taskKey: "T-100",
+    taskTitle: "Live implementation task",
+    taskRunState: "RUNNING",
+    eventType: "ci_gate_status",
+    originator: "system",
+    sourceEventKey: null,
+    provider: "codex",
+    sessionId: "session-100",
+    sessionName: "session-100",
+    workerBranch: "worker/t-100",
+    prUrl: "https://example.test/pr/100",
+    connectionId: null,
+    connectionDisplayName: null,
+    connectionRole: null,
+    createdAt: "2026-07-13T10:01:00.000Z",
+    payload: { state: "waiting_checks", prNumber: 100, hasPendingChecks: true },
+    ...overrides,
+  });
+
+  const ciAttention = (overrides: Record<string, unknown> = {}) => ({
+    id: "attention-100",
+    sprintId: "sprint-1",
+    taskId: "task-100",
+    sprintRunId: "run-1",
+    dispatchId: "dispatch-100",
+    attentionType: "ci_fix_required",
+    severity: "high",
+    ownerType: "worker",
+    status: "open",
+    assignedWorkerEndpointId: null,
+    title: "CI fix required",
+    summaryMarkdown: "Checks failed.",
+    payload: { taskKey: "T-100", prNumber: 100 },
+    openedAt: "2026-07-13T10:01:00.000Z",
+    claimedAt: null,
+    resolvedAt: null,
+    updatedAt: "2026-07-13T10:01:00.000Z",
+    ...overrides,
+  });
+
+  const liveExecution = (overrides: Record<string, unknown> = {}) => ({
+    ...baseRuntimeData().execution,
+    sprintRuns: [createSprintRunFixture()],
+    taskDispatches: [liveDispatch()],
+    ...overrides,
+  });
+
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -155,6 +263,121 @@ describe("LiveSessionPage Status Regression", () => {
 
     expect(screen.getByText("Recovered implementation task")).toBeInTheDocument();
     expect(screen.getAllByRole("status").some((status) => status.textContent?.includes("DAG view selected."))).toBe(true);
+  });
+
+  it("updates persisted CI evidence live and ignores newer events from unrelated tasks", () => {
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      tasksWithLiveActivities: [liveTask()],
+      execution: liveExecution({ recentEvents: [gateEvent()] }),
+    }));
+
+    const { rerender } = render(<LiveSessionPage />);
+    expect(screen.getByRole("button", { name: /CI status: CI running/i })).toBeInTheDocument();
+
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      tasksWithLiveActivities: [liveTask({ status: "COMPLETED", is_merged: true, merge_indicator: "MERGED" })],
+      execution: liveExecution({
+        recentEvents: [
+          gateEvent(),
+          gateEvent({ id: "gate-success", createdAt: "2026-07-13T10:02:00.000Z", payload: { state: "merge_confirmed", prNumber: 100 } }),
+          gateEvent({
+            id: "other-task-failure",
+            taskId: "task-200",
+            taskKey: "T-200",
+            taskRunId: "task-run-200",
+            dispatchId: "dispatch-200",
+            createdAt: "2026-07-13T10:03:00.000Z",
+            payload: { state: "waiting_checks", hasFailedChecks: true },
+          }),
+        ],
+      }),
+    }));
+    rerender(<LiveSessionPage />);
+
+    expect(screen.getByRole("button", { name: /CI status: CI passed/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /CI status: CI failed/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Merged")).not.toBeInTheDocument();
+  });
+
+  it("replays active CI attention through reconnects without inventing disconnect failures", () => {
+    const execution = liveExecution({
+      attentionItems: [ciAttention()],
+      recentEvents: [gateEvent({ payload: { state: "ready_for_merge", prNumber: 100 } })],
+    });
+    const taskSnapshot = [liveTask({ status: "PENDING" })];
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      transportState: "disconnected",
+      tasksWithLiveActivities: taskSnapshot,
+      execution,
+    }));
+
+    const { rerender } = render(<LiveSessionPage />);
+    expect(screen.getByRole("button", { name: /CI status: CI failed/i })).toBeInTheDocument();
+
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      transportState: "reconnecting",
+      isRecovering: true,
+      tasksWithLiveActivities: taskSnapshot,
+      execution,
+    }));
+    rerender(<LiveSessionPage />);
+
+    expect(screen.getByRole("button", { name: /CI status: CI failed/i })).toBeInTheDocument();
+    expect(screen.getAllByText("Reconnecting").length).toBeGreaterThan(0);
+
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      transportState: "disconnected",
+      tasksWithLiveActivities: taskSnapshot,
+      execution: liveExecution({ attentionItems: [], recentEvents: [] }),
+    }));
+    rerender(<LiveSessionPage />);
+
+    expect(screen.queryByRole("button", { name: /CI status: CI failed/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /CI status: CI running/i })).toBeInTheDocument();
+  });
+
+  it("preserves QA disclosures, runtime feed, prompt disclosure, and task controls", async () => {
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      tasksWithLiveActivities: [liveTask({
+        merge_indicator: "QA_PENDING",
+        latestReview: {
+          status: "completed",
+          outcome: "changes_requested",
+          summary: "Reconnect behavior needs coverage.",
+          findings: ["Replay the snapshot"],
+          fixInstructions: "Keep the existing snapshot visible while reconnecting.",
+          targetTaskKey: "T-100",
+          followUpTasks: [{
+            title: "Cover reconnect replay",
+            description: "Verify unchanged data survives reconnect.",
+            priority: "high",
+            dependsOnTaskKeys: ["T-100"],
+            promptMarkdown: "Add the reconnect regression.",
+          }],
+          reviewer: "QA Bot",
+          finishedAt: "2026-07-13T10:04:00.000Z",
+        },
+      })],
+      execution: liveExecution({ recentEvents: [gateEvent({ eventType: "run_started", payload: null })] }),
+    }));
+
+    render(<LiveSessionPage />);
+
+    expect(screen.getByRole("button", { name: "Edit task T-100" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Force complete task T-100" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rerun task T-100" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Show runtime feed for task T-100" }));
+    expect(screen.getByRole("button", { name: "Hide runtime feed for task T-100" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Expand prompt for task T-100" }));
+    expect(screen.getByText("Task Prompt")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "QA review details" }));
+    expect(await screen.findByText("Keep the existing snapshot visible while reconnecting.")).toBeInTheDocument();
+    const followUp = screen.getByRole("button", { name: "Follow-up task 1" });
+    expect(followUp).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(followUp);
+    expect(screen.getByText("Cover reconnect replay")).toBeInTheDocument();
+    expect(screen.getByText("Add the reconnect regression.")).toBeInTheDocument();
   });
 
   it("shows manual pause copy and intervention badge when manually paused", () => {

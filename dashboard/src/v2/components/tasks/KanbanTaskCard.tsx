@@ -20,43 +20,8 @@ import type { AgentAvatarConfig } from "../../types.js";
 import './kanban-task-card.css';
 import { getSafeUrl } from "../../lib/safe-url.js";
 import { SelfReflectionRatingBadge } from "./SelfReflectionRatingBadge.js";
-
-function getQaReviewBadge(task: Task, fallbackLabel: string): { label: string; ariaLabel: string; className: string } {
-  if (!task.latestReview) {
-    return {
-      label: fallbackLabel,
-      ariaLabel: "QA review state: no review recorded.",
-      className: "border-slate-400/20 bg-slate-400/[0.08] text-slate-500 dark:text-slate-300",
-    };
-  }
-
-  const status = task.latestReview.status.toLowerCase();
-  const outcome = task.latestReview.outcome?.toLowerCase() ?? "";
-  const summary = task.latestReview.summary ? ` ${task.latestReview.summary}` : "";
-  const outcomeCopy = task.latestReview.outcome ? ` Review outcome ${task.latestReview.outcome}.` : "";
-
-  if (status === "running" || status === "in_progress") {
-    return {
-      label: fallbackLabel,
-      ariaLabel: `QA review state: in progress.${outcomeCopy}${summary}`,
-      className: "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 dark:text-signal-400",
-    };
-  }
-
-  if (status === "failed" || outcome === "fail" || outcome === "failed" || outcome === "rejected") {
-    return {
-      label: fallbackLabel,
-      ariaLabel: `QA review state: failed.${outcomeCopy}${summary}`,
-      className: "border-status-red/25 bg-status-red/[0.08] text-status-red",
-    };
-  }
-
-  return {
-    label: fallbackLabel,
-    ariaLabel: `QA review state: ${task.latestReview.status}.${outcomeCopy}${summary}`,
-    className: "border-status-green/20 bg-status-green/[0.08] text-status-green",
-  };
-}
+import { SprintReviewBadge } from "../sprints/SprintReviewBadge.js";
+import { CiStatusBadge } from "../ui/CiStatusBadge.js";
 
 export const KanbanTaskCard: FunctionComponent<{
   viewModel: TaskCardViewModel;
@@ -69,15 +34,14 @@ export const KanbanTaskCard: FunctionComponent<{
   onDragStart?: (e: DragEvent) => void;
   onDragEnd?: (e: DragEvent) => void;
 }> = memo(({ viewModel, index = 0, onEdit, onDelete, agentPresetName, agentPresetAvatarConfig, isDragging = false, onDragStart, onDragEnd }) => {
-  const { task, humanizedCreatedAt, dependencyIndicators, selfReflectionRating, sessionId, sessionState, prUrl, liveRunningTime, liveStartedAt } = viewModel;
+  const { task, humanizedCreatedAt, dependencyIndicators, selfReflectionRating, ciStatusPresentation, sessionId, sessionState, prUrl, liveRunningTime, liveStartedAt } = viewModel;
   const cardRef = useRef<HTMLDivElement>(null);
   const pri = PRIORITY_CFG[task.priority];
   const statusLabel = STATUS_CFG[task.status].label;
   const interactionTokens = useInteractionTokens();
   const blockerCount = dependencyIndicators.filter((dep) => dep.isBlocking ?? dep.status !== "completed").length;
   const dependencyActionLabel = viewModel.dependencyActionLabel ?? (blockerCount > 0 ? `${blockerCount} dependency ${blockerCount === 1 ? "blocker" : "blockers"}` : "Dependencies clear");
-  const qaReviewLabel = viewModel.qaReviewLabel ?? (task.latestReview ? `QA ${task.latestReview.status}` : "QA no review");
-  const qaReviewBadge = getQaReviewBadge(task, qaReviewLabel);
+  const qaNoReviewLabel = viewModel.qaReviewLabel ?? "QA no review";
   const dragStateLabel = viewModel.dragStateLabel ?? "Pointer drag only; keyboard reordering is not supported";
   const shouldShowExecutorLabel = viewModel.executorLabel !== "Auto";
   const cardActions = viewModel.actions ?? [];
@@ -85,9 +49,13 @@ export const KanbanTaskCard: FunctionComponent<{
   const dependencySummary = dependencyIndicators.length === 0
     ? "No dependency blockers."
     : `${dependencyIndicators.length} ${dependencyIndicators.length === 1 ? "dependency" : "dependencies"}; ${blockerCount === 0 ? "no blockers" : `${blockerCount} ${blockerCount === 1 ? "blocker" : "blockers"}`}: ${dependencyIndicators.map((dep) => `${dep.id} ${dep.stateLabel ?? dep.status.replace(/_/g, " ")}`).join(", ")}.`;
+  const reviewDetails = task.latestReview?.summary?.trim();
   const reviewSummary = task.latestReview
-    ? `QA review ${task.latestReview.status}${task.latestReview.outcome ? `, outcome ${task.latestReview.outcome}` : ""}.`
+    ? reviewDetails
+      ? `QA review details available: ${reviewDetails}${/[.!?]$/.test(reviewDetails) ? "" : "."}`
+      : "QA review details available."
     : "No QA review recorded.";
+  const ciSummary = ciStatusPresentation?.accessibleLabel ?? "No CI workflow evidence.";
   const runtimeSummary = liveRunningTime
     ? `Live runtime ${liveRunningTime}${sessionState ? `, session ${sessionState}` : ""}.`
     : sessionState
@@ -105,7 +73,8 @@ export const KanbanTaskCard: FunctionComponent<{
         ? `Dependency blockers resolved for task ${task.id}.`
         : `${dependencyActionLabel} for task ${task.id}.`
       : `No dependency blockers for task ${task.id}.`,
-    qaReviewBadge.ariaLabel,
+    reviewSummary,
+    ciSummary,
     prSummary,
     runtimeSummary,
     task.isOptimistic ? `Saving task ${task.id}; actions that would change this task are temporarily unavailable.` : null,
@@ -152,7 +121,7 @@ export const KanbanTaskCard: FunctionComponent<{
       onDragStart={!isDragDisabled ? (onDragStart as any) : undefined}
       onDragEnd={!isDragDisabled ? (onDragEnd as any) : undefined}
       aria-describedby={savingDescriptionId ? `task-card-kbd-${task.recordId} ${savingDescriptionId}` : `task-card-kbd-${task.recordId}`}
-      aria-label={`Task ${task.id}: ${task.title}. Status ${statusLabel}. Priority ${pri.label}. ${dependencySummary} ${reviewSummary} ${runtimeSummary} ${prSummary} ${dragStateLabel}.`}
+      aria-label={`Task ${task.id}: ${task.title}. Status ${statusLabel}. Priority ${pri.label}. ${dependencySummary} ${reviewSummary} ${ciSummary} ${runtimeSummary} ${prSummary} ${dragStateLabel}.`}
       data-optimistic={task.isOptimistic ? "true" : undefined}
       data-blocked={blockerCount > 0 ? "true" : undefined}
       data-dragging={effectiveIsDragging ? "true" : undefined}
@@ -247,12 +216,21 @@ export const KanbanTaskCard: FunctionComponent<{
           <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 font-mono min-w-0 break-all max-w-full"><span className="sr-only">Session ID: </span>{sessionId}
           </span>
         )}
-        <span
-          className={`rounded-full border px-2.5 py-1 min-w-0 max-w-full truncate ${qaReviewBadge.className}`}
-          aria-label={qaReviewBadge.ariaLabel}
-        >
-          {qaReviewBadge.label}
-        </span>
+        {task.latestReview ? (
+          <SprintReviewBadge summary={task.latestReview} compact showCompactLabel align="right" />
+        ) : (
+          <span
+            className="min-w-0 max-w-full truncate rounded-full border border-slate-400/20 bg-slate-400/[0.08] px-2.5 py-1 text-slate-500 dark:text-slate-300"
+            aria-label="QA review state: no review recorded."
+          >
+            {qaNoReviewLabel}
+          </span>
+        )}
+        <CiStatusBadge
+          presentation={ciStatusPresentation ?? null}
+          compact
+          className="min-w-0 max-w-full"
+        />
         {dependencyIndicators.length > 0 && (
           <span
             className={`rounded-full border px-2.5 py-1 ${blockerCount > 0 ? "border-status-amber/25 bg-status-amber/[0.08] text-status-amber" : "border-status-green/20 bg-status-green/[0.08] text-status-green"}`}

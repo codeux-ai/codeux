@@ -4,12 +4,114 @@ import {
   buildPlanningRoute,
   getDefaultPlanningProviderMetadata,
   buildDisplaySprints,
+  buildCiStatusBySprintId,
   countSprintsByStatus,
   countInWorkSprints,
 } from "../../../../../dashboard/src/v2/pages/sprints/sprints-page-view-models.js";
 import type { Sprint } from "../../../../../dashboard/src/v2/types.js";
 import type { ConnectionState, DashboardSettings } from "../../../../../dashboard/src/types.js";
+import type {
+  ExecutionAttentionItemSummary,
+  ExecutionRuntimeEventSummary,
+  ExecutionTaskDispatchSummary,
+} from "../../../../../src/contracts/app-types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../../src/repositories/settings-defaults.js";
+
+const dispatch = (
+  taskId: string,
+  taskKey: string,
+  sprintId = "sprint-1",
+): ExecutionTaskDispatchSummary => ({
+  id: `dispatch-${taskId}`,
+  projectId: "project-1",
+  sprintId,
+  sprintRunId: `run-${sprintId}`,
+  sprintName: "Sprint",
+  sprintNumber: 1,
+  taskId,
+  taskKey,
+  taskTitle: taskKey,
+  status: "running",
+  executorType: "virtual",
+  priority: 1,
+  connectionId: null,
+  connectionDisplayName: null,
+  connectionRole: null,
+  taskRunId: `run-${taskId}`,
+  taskRunState: "in_progress",
+  provider: null,
+  sessionId: null,
+  sessionName: null,
+  workerBranch: null,
+  prUrl: `https://example.test/pull/${taskId}`,
+  queuedAt: "2026-07-13T09:00:00.000Z",
+  claimedAt: null,
+  startedAt: null,
+  finishedAt: null,
+  lastHeartbeatAt: null,
+  errorMessage: null,
+  activeLeaseOwnerKey: null,
+  activeLeaseExpiresAt: null,
+});
+
+const ciEvent = (
+  id: string,
+  payload: Record<string, unknown>,
+  overrides: Partial<ExecutionRuntimeEventSummary> = {},
+): ExecutionRuntimeEventSummary => ({
+  id,
+  scopeType: "task_run",
+  taskRunId: "run-task-1",
+  sprintRunId: "run-sprint-1",
+  dispatchId: "dispatch-task-1",
+  projectId: "project-1",
+  sprintId: "sprint-1",
+  sprintName: "Sprint",
+  sprintNumber: 1,
+  sprintRunStatus: "running",
+  taskId: "task-1",
+  taskKey: "T01",
+  taskTitle: "Task one",
+  taskRunState: "in_progress",
+  eventType: "ci_gate_status",
+  originator: "system",
+  sourceEventKey: null,
+  provider: null,
+  sessionId: null,
+  sessionName: null,
+  workerBranch: null,
+  prUrl: "https://example.test/pull/1",
+  connectionId: null,
+  connectionDisplayName: null,
+  connectionRole: null,
+  createdAt: "2026-07-13T10:00:00.000Z",
+  payload,
+  ...overrides,
+});
+
+const ciAttention = (
+  status: ExecutionAttentionItemSummary["status"] = "open",
+  overrides: Partial<ExecutionAttentionItemSummary> = {},
+): ExecutionAttentionItemSummary => ({
+  id: "attention-1",
+  sprintId: "sprint-1",
+  taskId: "task-1",
+  sprintRunId: "run-sprint-1",
+  dispatchId: "dispatch-task-1",
+  attentionType: "ci_fix_required",
+  severity: "high",
+  ownerType: "worker",
+  status,
+  assignedWorkerEndpointId: null,
+  title: "CI fix required",
+  summaryMarkdown: "Checks failed.",
+  payload: { taskKey: "T01", prNumber: 1 },
+  openedAt: "2026-07-13T10:00:00.000Z",
+  claimedAt: null,
+  resolvedAt: status === "resolved" ? "2026-07-13T10:05:00.000Z" : null,
+  updatedAt: "2026-07-13T10:05:00.000Z",
+  ...overrides,
+});
 
 describe("Sprints Page View Models", () => {
   describe("buildPlanningConnection", () => {
@@ -155,6 +257,112 @@ describe("Sprints Page View Models", () => {
       const suppressed = new Set(["1"]);
       const result = buildDisplaySprints(sprints, optimistic, suppressed);
       expect(result[0].status).toBe("cancelled");
+    });
+  });
+
+  describe("buildCiStatusBySprintId", () => {
+    it("projects task-level and main-merge progress without merging their identities", () => {
+      const taskProgress = buildCiStatusBySprintId(
+        [{ id: "sprint-1" }],
+        [dispatch("task-1", "T01")],
+        [ciEvent("task-progress", { state: "waiting_checks", prNumber: 1, hasPendingChecks: true })],
+        [],
+      ).get("sprint-1");
+      expect(taskProgress).toMatchObject({ state: "in_progress", label: "CI running" });
+
+      const mainProgress = buildCiStatusBySprintId(
+        [{ id: "sprint-1" }],
+        [dispatch("task-1", "T01")],
+        [
+          ciEvent("task-success", { state: "merge_confirmed", prNumber: 1 }),
+          ciEvent("main-progress", { state: "pending_checks", prNumber: 8 }, {
+            scopeType: "sprint_run",
+            taskRunId: null,
+            dispatchId: null,
+            taskId: null,
+            taskKey: null,
+            taskTitle: null,
+            eventType: "main_merge_gate_status",
+            createdAt: "2026-07-13T10:01:00.000Z",
+          }),
+        ],
+        [],
+      ).get("sprint-1");
+      expect(mainProgress).toMatchObject({ state: "in_progress", label: "CI running" });
+      expect(mainProgress?.steps[2]).toMatchObject({ id: "merge", state: "pending" });
+    });
+
+    it("gives active CI attention failure precedence and clears it once resolved with newer success", () => {
+      const events = [ciEvent("success", { state: "ready_for_merge", prNumber: 1 })];
+      const active = buildCiStatusBySprintId(
+        [{ id: "sprint-1" }],
+        [dispatch("task-1", "T01")],
+        events,
+        [ciAttention()],
+      ).get("sprint-1");
+      expect(active).toMatchObject({ state: "failed", label: "CI failed", failureKind: "ci_checks" });
+
+      const resolved = buildCiStatusBySprintId(
+        [{ id: "sprint-1" }],
+        [dispatch("task-1", "T01")],
+        events,
+        [ciAttention("resolved")],
+      ).get("sprint-1");
+      expect(resolved).toMatchObject({ state: "pending", label: "CI pending" });
+      expect(resolved?.failureKind).toBeUndefined();
+    });
+
+    it("supersedes stale per-task failures and aggregates mixed tasks by failure then progress precedence", () => {
+      const associations = [dispatch("task-1", "T01"), dispatch("task-2", "T02")];
+      const recoveredAndRunning = [
+        ciEvent("t1-failure", { state: "waiting_checks", prNumber: 1, hasFailedChecks: true }),
+        ciEvent("t1-success", { state: "merge_confirmed", prNumber: 1 }, {
+          taskId: null,
+          taskKey: "T01",
+          createdAt: "2026-07-13T10:01:00.000Z",
+        }),
+        ciEvent("t2-progress", { state: "waiting_checks", prNumber: 2, hasPendingChecks: true }, {
+          taskId: "task-2",
+          taskKey: "T02",
+          createdAt: "2026-07-13T10:02:00.000Z",
+        }),
+      ];
+      const running = buildCiStatusBySprintId(
+        [{ id: "sprint-1" }],
+        associations,
+        recoveredAndRunning,
+        [],
+      ).get("sprint-1");
+      expect(running).toMatchObject({ state: "in_progress", label: "CI running" });
+
+      const failed = buildCiStatusBySprintId(
+        [{ id: "sprint-1" }],
+        associations,
+        [...recoveredAndRunning, ciEvent("t2-failure", { state: "waiting_checks", prNumber: 2, hasFailedChecks: true }, {
+          taskId: "task-2",
+          taskKey: "T02",
+          createdAt: "2026-07-13T10:03:00.000Z",
+        })],
+        [],
+      ).get("sprint-1");
+      expect(failed).toMatchObject({ state: "failed", label: "CI failed" });
+    });
+
+    it("isolates unrelated sprint evidence", () => {
+      const statuses = buildCiStatusBySprintId(
+        [{ id: "sprint-1" }, { id: "sprint-2" }],
+        [dispatch("task-2", "T02", "sprint-2")],
+        [ciEvent("other-failure", { state: "waiting_checks", hasFailedChecks: true }, {
+          sprintId: "sprint-2",
+          sprintRunId: "run-sprint-2",
+          taskId: "task-2",
+          taskKey: "T02",
+        })],
+        [],
+      );
+
+      expect(statuses.has("sprint-1")).toBe(false);
+      expect(statuses.get("sprint-2")).toMatchObject({ state: "failed", label: "CI failed" });
     });
   });
 

@@ -22,6 +22,8 @@ import {
 } from "lucide-preact";
 import { useState, useRef, useEffect } from "preact/hooks";
 import { HumanInterventionBadge } from "../ui/HumanInterventionBadge.js";
+import { CiStatusBadge } from "../ui/CiStatusBadge.js";
+import type { CiStatusPresentation } from "../../lib/ci-status-presentation.js";
 import { SprintReviewBadge } from "./SprintReviewBadge.js";
 import { SprintActionMenu } from "./SprintActionMenu.js";
 import {
@@ -102,6 +104,7 @@ export interface SprintLedgerRowProps {
   activeRun: { id: string; status: string } | undefined;
   pauseResumeRun: { id: string; status: string } | undefined;
   humanIntervention: ExecutionHumanInterventionSummary | null;
+  ciStatus?: CiStatusPresentation | null;
   sprintKeyPrefix?: string;
   pendingActionIds: Set<string>;
   isAnyBulkPending?: boolean;
@@ -129,6 +132,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   activeRun,
   pauseResumeRun,
   humanIntervention,
+  ciStatus = null,
   sprintKeyPrefix = "SPR",
   pendingActionIds,
   isAnyBulkPending,
@@ -230,6 +234,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   const routeSearch = { projectId: sprint.projectId, sprintId: sprint.id } as any;
 
   const attentionOverride = humanIntervention?.attentionType
+    && !(ciStatus && humanIntervention.attentionType === "ci_fix_required")
     ? ATTENTION_BADGE_OVERRIDES[humanIntervention.attentionType]
     : undefined;
 
@@ -424,6 +429,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           <span className={`inline-flex rounded-full border px-4 py-1.5 text-[11px] font-bold ${badgeTone}`}>
             {badgeLabel}
           </span>
+          <CiStatusBadge presentation={ciStatus} compact />
           {isDeletePending ? (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-status-red/25 bg-status-red/10 px-3 py-1.5 text-[11px] font-bold text-status-red">
               <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" strokeWidth={2.2} /> Deleting

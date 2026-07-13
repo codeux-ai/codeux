@@ -14,6 +14,7 @@
 - [Execution Dashboard Projection](./architecture/execution-dashboard-projection.md)
 - [Execution Invocation Tracking](./architecture/execution-invocation-tracking.md)
 - [Code Quality And Performance Contracts](./architecture/code-quality-performance-contracts.md)
+- [Card CI Status Projection](./architecture/card-ci-status-projection.md)
 - [Dashboard Realtime Transport Plan](./architecture/dashboard-realtime-transport-plan.md)
 - [Dashboard Realtime Foundation](./architecture/dashboard-realtime-foundation.md)
 - [Live Runtime Contract](./architecture/live-runtime-contract.md)
