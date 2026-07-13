@@ -205,10 +205,11 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
   const getThinkingSelectValue = (
     provider: ProjectSettings["aiProvider"]["providers"][ProviderConfigId],
     value: string | undefined,
+    model: string = provider.model,
   ): string => {
-    const options = getProviderThinkingModeOptions(provider.provider);
+    const options = getProviderThinkingModeOptions(provider.provider, model);
     const candidate = value || provider.thinkingMode;
-    const normalized = getProviderThinkingModeValue(provider.provider, candidate as ThinkingMode);
+    const normalized = getProviderThinkingModeValue(provider.provider, candidate as ThinkingMode, model);
     return options.some((option) => option.value === normalized)
       ? normalized
       : options[0]?.value || candidate;
@@ -628,7 +629,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                   </div>
                   <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
                     <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Thinking</div>
-                    <div className="mt-1 truncate text-sm font-semibold text-slate-900 dark:text-white">{providerSupportsThinkingMode(provider.provider) ? getProviderThinkingModeLabel(provider.provider, provider.thinkingMode) : "n/a"}</div>
+                    <div className="mt-1 truncate text-sm font-semibold text-slate-900 dark:text-white">{providerSupportsThinkingMode(provider.provider) ? getProviderThinkingModeLabel(provider.provider, provider.thinkingMode, provider.model) : "n/a"}</div>
                   </div>
                   <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
                     <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Cap</div>
@@ -654,10 +655,10 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                   {providerSupportsThinkingMode(provider.provider) ? (
                     <Row label="Base thinking" description="Inherited reasoning depth for this provider instance.">
                         <SelectInput
-                          value={getThinkingSelectValue(provider, provider.thinkingMode)}
+                          value={getThinkingSelectValue(provider, provider.thinkingMode, provider.model)}
                           aria-label={`${provider.name} base thinking`}
                           onChange={(value) => updateProviderSettings(providerConfigId, { thinkingMode: value as ThinkingMode })}
-                        options={getProviderThinkingModeOptions(provider.provider)}
+                        options={getProviderThinkingModeOptions(provider.provider, provider.model)}
                       />
                     </Row>
                   ) : null}
@@ -951,8 +952,9 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                 const detailsId = `route-override-details-${cardKey}`;
                 const effectiveModel = getEffectiveProviderDisplayModel(providerConfigId, provider, override.model || provider.model);
                 const inheritedModel = getEffectiveProviderDisplayModel(providerConfigId, provider);
-                const effectiveThinking = getThinkingSelectValue(provider, override.thinkingMode);
-                const inheritedThinkingLabel = getProviderThinkingModeLabel(provider.provider, provider.thinkingMode);
+                const effectiveThinkingModel = override.model || provider.model;
+                const effectiveThinking = getThinkingSelectValue(provider, override.thinkingMode, effectiveThinkingModel);
+                const inheritedThinkingLabel = getProviderThinkingModeLabel(provider.provider, provider.thinkingMode, provider.model);
                 const hasThinkingOverride = typeof override.thinkingMode === "string";
                 const effectiveWeight = override.weight ?? provider.weight;
                 const supportsModel = providerSupportsModelSelection(provider.provider);
@@ -1023,7 +1025,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                         </div>
                         <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
                           <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Thinking</div>
-                          <div className="mt-1 truncate text-sm font-semibold text-slate-900 dark:text-white">{providerSupportsThinkingMode(provider.provider) ? getProviderThinkingModeLabel(provider.provider, effectiveThinking as ThinkingMode) : "n/a"}</div>
+                          <div className="mt-1 truncate text-sm font-semibold text-slate-900 dark:text-white">{providerSupportsThinkingMode(provider.provider) ? getProviderThinkingModeLabel(provider.provider, effectiveThinking as ThinkingMode, effectiveThinkingModel) : "n/a"}</div>
                         </div>
                         <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
                           <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Cap</div>
@@ -1060,7 +1062,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                                 }}
                               options={[
                                 { value: INHERIT_VALUE, label: `Inherit base thinking (${inheritedThinkingLabel})` },
-                                ...getProviderThinkingModeOptions(provider.provider),
+                                ...getProviderThinkingModeOptions(provider.provider, effectiveThinkingModel),
                               ]}
                             />
                           </Row>

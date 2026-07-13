@@ -384,8 +384,13 @@ const normalizeWeight = (value: unknown, fallback: number): number => {
   return Math.max(0, Math.round(value));
 };
 
-const normalizeThinkingMode = (providerId: ProviderId, value: unknown, fallback: ThinkingMode): ThinkingMode => (
-  normalizeProviderThinkingMode(providerId, value, fallback)
+const normalizeThinkingMode = (
+  providerId: ProviderId,
+  value: unknown,
+  fallback: ThinkingMode,
+  model?: string | null,
+): ThinkingMode => (
+  normalizeProviderThinkingMode(providerId, value, fallback, model)
 );
 
 const normalizeMaxConcurrentTasks = (value: unknown, fallback: number): number => (
@@ -458,17 +463,18 @@ export const buildProjectProviderSettings = (
   for (const [providerConfigId, integration] of Object.entries(availableIntegrations)) {
     const directSource = isRecord(input[providerConfigId]) ? input[providerConfigId] : {};
     const defaults = DEFAULT_PROVIDER_SETTINGS[integration.provider];
+    const model = typeof directSource.model === "string" && directSource.model.trim().length > 0
+      ? directSource.model.trim()
+      : defaults.model;
     result[providerConfigId] = {
       provider: integration.provider,
       name: typeof directSource.name === "string" && directSource.name.trim().length > 0
         ? directSource.name.trim()
         : integration.name,
       enabled: typeof directSource.enabled === "boolean" ? directSource.enabled : defaults.enabled,
-      model: typeof directSource.model === "string" && directSource.model.trim().length > 0
-        ? directSource.model.trim()
-        : defaults.model,
+      model,
       weight: normalizeWeight(directSource.weight, defaults.weight),
-      thinkingMode: normalizeThinkingMode(integration.provider, directSource.thinkingMode, defaults.thinkingMode),
+      thinkingMode: normalizeThinkingMode(integration.provider, directSource.thinkingMode, defaults.thinkingMode, model),
       maxConcurrentTasks: normalizeMaxConcurrentTasks(directSource.maxConcurrentTasks, defaults.maxConcurrentTasks),
     };
   }
@@ -494,7 +500,7 @@ export const buildDashboardProviderSettings = (
             ? projectProvider.model
             : defaults.model,
           weight: normalizeWeight(projectProvider.weight, defaults.weight),
-          thinkingMode: normalizeThinkingMode(providerId, projectProvider.thinkingMode, defaults.thinkingMode),
+          thinkingMode: normalizeThinkingMode(providerId, projectProvider.thinkingMode, defaults.thinkingMode, projectProvider.model),
           maxConcurrentTasks: normalizeMaxConcurrentTasks(projectProvider.maxConcurrentTasks, defaults.maxConcurrentTasks),
           apiKey: integrationProviders[providerConfigId]?.apiKey || "",
           mountAuth: integrationProviders[providerConfigId]?.mountAuth
@@ -567,7 +573,7 @@ export const resolveAllowedProviderConfigIds = (
 
 export const resolveInvocationProviderOverrides = (
   input: unknown,
-  providers: Record<ProviderConfigId, { provider: ProviderId }>,
+  providers: Record<ProviderConfigId, { provider: ProviderId; model?: string }>,
 ): Record<ProviderConfigId, InvocationProviderOverrideSettings> => {
   if (!isRecord(input)) {
     return {};
@@ -593,8 +599,16 @@ export const resolveInvocationProviderOverrides = (
     if (typeof rawValue.weight === "number" && Number.isFinite(rawValue.weight)) {
       override.weight = Math.max(0, Math.round(rawValue.weight));
     }
-    if (typeof rawValue.thinkingMode === "string" && isProviderThinkingModeSupported(providers[providerConfigId].provider, rawValue.thinkingMode)) {
-      override.thinkingMode = normalizeProviderThinkingMode(providers[providerConfigId].provider, rawValue.thinkingMode);
+    const effectiveModel = typeof rawValue.model === "string" && rawValue.model.trim().length > 0
+      ? rawValue.model.trim()
+      : providers[providerConfigId].model;
+    if (typeof rawValue.thinkingMode === "string" && isProviderThinkingModeSupported(providers[providerConfigId].provider, rawValue.thinkingMode, effectiveModel)) {
+      override.thinkingMode = normalizeProviderThinkingMode(
+        providers[providerConfigId].provider,
+        rawValue.thinkingMode,
+        undefined,
+        effectiveModel,
+      );
     }
 
     if (Object.keys(override).length > 0) {

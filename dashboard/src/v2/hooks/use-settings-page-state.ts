@@ -46,6 +46,10 @@ import {
   clearAppearancePreview,
   publishAppearancePreview,
 } from "../lib/appearance-preview.js";
+import {
+  readSettingsNavigationState,
+  writeSettingsNavigationState,
+} from "../lib/settings-navigation-state.js";
 import type {
   InvocationRoutingId,
   ProviderConfigId,
@@ -237,11 +241,23 @@ export const useSettingsPageState = (
   }, []);
 
 
-  const [activeCategory, setActiveCategory] = useState<CategoryId>("general");
+  const [initialNavigationState] = useState(() => readSettingsNavigationState());
+  const [activeCategory, setActiveCategory] = useState<CategoryId>(() => (
+    categories.some((category) => category.id === initialNavigationState?.activeCategory)
+      ? initialNavigationState!.activeCategory as CategoryId
+      : "general"
+  ));
   const [activeScope, setActiveScopeState] = useState<SettingsScope>("system");
   const [selectedIntegration, setSelectedIntegration] = useState<IntegrationId | null>(null);
   const [selectedAgentTemplate, setSelectedAgentTemplate] = useState<AgentInstructionTemplateId>("planningMissing");
-  const [activeInvocationRoute, setActiveInvocationRoute] = useState<InvocationRoutingId>("task_coding");
+  const [activeInvocationRoute, setActiveInvocationRoute] = useState<InvocationRoutingId>(() => (
+    invocationRouteDefinitions.some((route) => route.id === initialNavigationState?.activeInvocationRoute)
+      ? initialNavigationState!.activeInvocationRoute as InvocationRoutingId
+      : "task_coding"
+  ));
+  const [focusedSettingsSections, setFocusedSettingsSections] = useState<Record<string, string>>(
+    () => initialNavigationState?.focusedSections ?? {},
+  );
   const [activeProviderPanel, setActiveProviderPanel] = useState<ProviderConfigId | null>(null);
   const [settingsSearch, setSettingsSearch] = useState("");
   const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
@@ -275,6 +291,26 @@ export const useSettingsPageState = (
   const [chatProvidersError, setChatProvidersError] = useState<string | null>(null);
   const previousCategoryRef = useRef<CategoryId>("general");
   const scopePersistenceRequestRef = useRef(0);
+
+  const activeSettingsSection = focusedSettingsSections[activeCategory] ?? null;
+  const setActiveSettingsSection = useCallback((sectionId: string | null): void => {
+    setFocusedSettingsSections((current) => {
+      if (sectionId) {
+        return { ...current, [activeCategory]: sectionId };
+      }
+      const next = { ...current };
+      delete next[activeCategory];
+      return next;
+    });
+  }, [activeCategory]);
+
+  useEffect(() => {
+    writeSettingsNavigationState({
+      activeCategory,
+      activeInvocationRoute,
+      focusedSections: focusedSettingsSections,
+    });
+  }, [activeCategory, activeInvocationRoute, focusedSettingsSections]);
 
   const loadSettings = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -958,6 +994,7 @@ export const useSettingsPageState = (
     selectedIntegration, setSelectedIntegration,
     selectedAgentTemplate, setSelectedAgentTemplate,
     activeInvocationRoute, setActiveInvocationRoute,
+    activeSettingsSection, setActiveSettingsSection,
     activeProviderPanel, setActiveProviderPanel,
     settingsSearch, setSettingsSearch,
     systemSettings,

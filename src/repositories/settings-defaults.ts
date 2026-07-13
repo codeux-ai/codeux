@@ -153,10 +153,15 @@ export const PROVIDER_THINKING_MODE_CATALOG = {
     { value: "high", label: "High" },
   ],
 } as const satisfies Partial<Record<ProviderId, readonly ThinkingModeOption[]>>;
+const CODEX_SOL_THINKING_MODE_OPTIONS = [
+  { value: "max", label: "Max" },
+  { value: "ultra", label: "Ultra" },
+] as const satisfies readonly ThinkingModeOption[];
 export const THINKING_MODES: ThinkingMode[] = [
   ...new Set<ThinkingMode>([
     ...LEGACY_THINKING_MODES,
     ...Object.values(PROVIDER_THINKING_MODE_CATALOG).flat().map((option) => option.value),
+    ...CODEX_SOL_THINKING_MODE_OPTIONS.map((option) => option.value),
   ]),
 ];
 export const DEFAULT_PROVIDER_THINKING_MODES: Record<ProviderId, ThinkingMode> = {
@@ -177,9 +182,22 @@ const LEGACY_THINKING_MODE_ALIASES_BY_PROVIDER: Partial<Record<ProviderId, Recor
   opencode: { SMALL: "low", MEDIUM: "medium", HIGH: "high" },
   antigravity: { SMALL: "low", MEDIUM: "high", HIGH: "high" },
 };
-export const getProviderThinkingModeOptions = (providerId: ProviderId): readonly ThinkingModeOption[] => (
-  (PROVIDER_THINKING_MODE_CATALOG as Partial<Record<ProviderId, readonly ThinkingModeOption[]>>)[providerId] ?? []
-);
+export const isCodexSolModel = (model: unknown): boolean => {
+  if (typeof model !== "string") {
+    return false;
+  }
+  const normalized = model.trim().toLowerCase().replace(/^openai\//, "");
+  return /^gpt-[0-9.]+-sol(?:-|$)/.test(normalized);
+};
+export const getProviderThinkingModeOptions = (
+  providerId: ProviderId,
+  model?: string | null,
+): readonly ThinkingModeOption[] => {
+  const baseOptions = (PROVIDER_THINKING_MODE_CATALOG as Partial<Record<ProviderId, readonly ThinkingModeOption[]>>)[providerId] ?? [];
+  return providerId === "codex" && isCodexSolModel(model)
+    ? [...baseOptions, ...CODEX_SOL_THINKING_MODE_OPTIONS]
+    : baseOptions;
+};
 export const providerSupportsThinkingModeSelection = (providerId: ProviderId): boolean => (
   getProviderThinkingModeOptions(providerId).length > 0
 );
@@ -189,11 +207,12 @@ export const getDefaultThinkingModeForProvider = (providerId: ProviderId): Think
 export const isProviderThinkingModeSupported = (
   providerId: ProviderId,
   value: unknown,
+  model?: string | null,
 ): value is ThinkingMode => {
   if (typeof value !== "string") {
     return false;
   }
-  if (getProviderThinkingModeOptions(providerId).some((option) => option.value === value)) {
+  if (getProviderThinkingModeOptions(providerId, model).some((option) => option.value === value)) {
     return true;
   }
   if (LEGACY_THINKING_MODES.includes(value as LegacyThinkingMode)) {
@@ -207,9 +226,10 @@ export const normalizeProviderThinkingMode = (
   providerId: ProviderId,
   value: unknown,
   fallback: ThinkingMode = getDefaultThinkingModeForProvider(providerId),
+  model?: string | null,
 ): ThinkingMode => {
   if (typeof value === "string") {
-    const options = getProviderThinkingModeOptions(providerId);
+    const options = getProviderThinkingModeOptions(providerId, model);
     if (options.some((option) => option.value === value)) {
       return value as ThinkingMode;
     }
@@ -221,7 +241,7 @@ export const normalizeProviderThinkingMode = (
       return fallback;
     }
   }
-  if (isProviderThinkingModeSupported(providerId, fallback)) {
+  if (isProviderThinkingModeSupported(providerId, fallback, model)) {
     return fallback;
   }
   return getDefaultThinkingModeForProvider(providerId);

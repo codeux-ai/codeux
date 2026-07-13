@@ -1075,7 +1075,7 @@ export class ProviderRunner implements IProviderRunner {
         : ["exec", "--yolo", "--json", "--output-last-message", codexOutputPath];
       args.push(...codexProviderArgs);
       if (thinkingMode) {
-        args.push("-c", `model_reasoning_effort="${normalizeProviderThinkingMode("codex", thinkingMode)}"`);
+        args.push("-c", `model_reasoning_effort="${normalizeProviderThinkingMode("codex", thinkingMode, undefined, model)}"`);
       }
       if (model && model !== "default") {
         args.push("--model", model);

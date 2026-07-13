@@ -213,6 +213,7 @@ describe("SettingsPage data interactions", () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    window.sessionStorage.clear();
     mockFetchProjectSettings = vi.mocked(fetchProjectEffectiveSettings).mockResolvedValue(mockEffectiveSettingsData);
     vi.mocked(fetchAgentPresets).mockResolvedValue([
       { id: "worker-1", name: "Delivery Agent", labels: ["worker"] },

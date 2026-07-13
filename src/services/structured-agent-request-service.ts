@@ -8,6 +8,7 @@ import type {
   ProviderConfigMode,
   ProviderId,
   QwenModelProviderSettings,
+  ThinkingMode,
   VirtualWorkerProvider,
 } from "../contracts/app-types.js";
 import type { ProviderInvocationPurpose } from "../contracts/execution-types.js";
@@ -27,6 +28,7 @@ export interface StructuredRequestArgs<T> {
   type: string;
   provider: ProviderId;
   model: string;
+  thinkingMode?: ThinkingMode;
   apiKey: string;
   maxConcurrentTasks?: number;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
@@ -164,6 +166,7 @@ export class StructuredAgentRequestService {
       prompt: args.providerPrompt,
       cwd: args.cwd,
       model: args.model,
+      thinkingMode: args.thinkingMode,
       apiKey: args.apiKey,
       qwenAuthMode: args.qwenAuthMode,
       qwenRegion: args.qwenRegion,
@@ -441,6 +444,7 @@ export class StructuredAgentRequestService {
       prompt: "",
       cwd: args.cwd,
       model: args.model,
+      thinkingMode: args.thinkingMode,
       apiKey: args.apiKey,
       qwenAuthMode: args.qwenAuthMode,
       qwenRegion: args.qwenRegion,

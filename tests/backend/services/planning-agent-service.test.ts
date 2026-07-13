@@ -340,6 +340,18 @@ describe("PlanningAgentService", () => {
         executionMode: "VIRTUAL",
         virtualWorkerProvider: "codex",
       },
+      aiProvider: {
+        invocationRouting: {
+          planning: {
+            providers: {
+              codex: {
+                model: "gpt-5.6-sol",
+                thinkingMode: "xhigh",
+              },
+            },
+          },
+        },
+      },
       designGuidance: {
         selectedTechStackId: "planning-stack",
         selectedStyleguideId: "planning-style",
@@ -383,6 +395,16 @@ describe("PlanningAgentService", () => {
     expect(executionControlService.orchestrateSprint).toHaveBeenCalledWith(project.id, sprint.id);
 
     expect(providerRunner.runProviderForText).toHaveBeenCalledTimes(2);
+    expect(providerRunner.runProviderForText).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      provider: "codex",
+      model: "gpt-5.6-sol",
+      thinkingMode: "xhigh",
+    }));
+    expect(providerRunner.runProviderForText).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      provider: "codex",
+      model: "gpt-5.6-sol",
+      thinkingMode: "xhigh",
+    }));
     const planPrompt = vi.mocked(providerRunner.runProviderForText).mock.calls[1]?.[0]?.prompt ?? "";
     expect(planPrompt).toContain("Plan as a DAG, not as a flat checklist.");
     expect(planPrompt).toContain("Each task key must use `T01`, `T02`, `T03`, ... in topological order.");
