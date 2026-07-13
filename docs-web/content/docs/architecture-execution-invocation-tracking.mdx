@@ -2,6 +2,8 @@
 
 Code UX records provider work in `execution_invocations` and `execution_invocation_messages` so the dashboard can show prompt history, live agent transcripts, tool activity, token usage, and terminal status for each provider-backed run.
 
+Asynchronous planning guidance uses a shared, side-effect-free domain projection. ETA samples come from the ten most recently started, completed planning invocations for the project; active, unsuccessful, paused, non-planning, and malformed samples are ignored, and no usable history falls back to three minutes. The initial check is scheduled at the calculated ETA. If the invocation is still running when checked, the next check is exactly one minute later even after that ETA has elapsed. Elapsed time alone never changes status or justifies duplicate planning; only completed, failed, cancelled, or paused invocation records produce terminal guidance, always without a next check.
+
 Provider transcript parsing is intentionally provider-specific at the edge and normalized before persistence. The shared boundary is `ParsedConversationTurn` from `src/infrastructure/providers/cli/provider-logs/provider-conversation-types.ts`, and persistence maps those turns through `src/services/provider-conversation-message-mapper.ts`.
 
 That mapper keeps the existing message-role contract: readable reasoning becomes an assistant message marked with `metadata.kind = "reasoning"`, injected context becomes a system message, and tool calls/results become tool messages with capped payloads. Provider/model identity, call ids, status, timestamps, and per-turn token evidence remain in message metadata when available.
