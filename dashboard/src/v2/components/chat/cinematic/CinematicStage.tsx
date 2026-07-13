@@ -9,11 +9,6 @@ import { getChatWidgetData } from "../../../lib/chat-widget-view-models.js";
 import { PlanningRequestWidget } from "../widgets/PlanningRequestWidget.js";
 import { ExternalReferenceWidget } from "../widgets/ExternalReferenceWidget.js";
 import { LazyAgentAvatarScene } from "../../agents/LazyAgentAvatarScene.js";
-import {
-  AGENT_SCENE_TOOL_IDS,
-  isAgentSceneTool,
-  type AgentSceneTool,
-} from "../../../lib/agent-scene-tools.js";
 import { DEFAULT_AGENT_AVATAR_CONFIG } from "../../../lib/agent-avatar.js";
 import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
 import { resolveDisplayDeliveryStatus } from "../../../hooks/use-chat-thread-data.js";
@@ -35,6 +30,7 @@ import {
 import { STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS } from "../../../lib/agent-humor-messages.js";
 import { resolveCinematicActivityDisplayState } from "../../../lib/cinematic-activity.js";
 import { StageActivityStrip } from "./StageActivityStrip.js";
+import { useCinematicWorkTool } from "./use-cinematic-work-tool.js";
 
 /* ════════════════════════════════════════════════════════════════════════
  *  CinematicStage — the default "3D Chat" view of the chat page.
@@ -79,10 +75,6 @@ export interface CinematicStageProps {
   agentPreset?: AgentPresetRecord;
   onOpenThreads: () => void;
 }
-
-/** The bot cycles through its toolbox while the runtime is executing. */
-const WORK_TOOLS: readonly AgentSceneTool[] = AGENT_SCENE_TOOL_IDS;
-const TOOL_SWAP_MS = 7_000;
 
 const CREATE_APP_ACTION_ICONS: Record<DashboardCreateAppQuickactionKind, typeof Monitor> = {
   web_app: Globe2,
@@ -140,13 +132,6 @@ const QUICK_ACTION_GROUPS = [
   { zone: "insight", label: "Project pulse" },
   { zone: "workflow", label: "Workflows" },
 ] as const;
-
-/** Debug override: /chat?stageTool=wrench pins a specific tool on the stage. */
-const readForcedTool = (): AgentSceneTool | null => {
-  if (typeof window === "undefined") return null;
-  const value = new URLSearchParams(window.location.search).get("stageTool");
-  return isAgentSceneTool(value) ? value : null;
-};
 
 const canSpeakAgentMessage = (message: ChatMessageRecord): boolean => (
   !getChatWidgetData(message).suppressBodyMarkdown
@@ -544,23 +529,14 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     }
   };
 
-  /* Work tools — while the runtime is executing, the bot pulls a tool from
-     its toolbox and swaps to a fresh one every few seconds. */
-  const [activeTool, setActiveTool] = useState<AgentSceneTool | null>(readForcedTool);
-  useEffect(() => {
-    if (readForcedTool()) return; // pinned via ?stageTool= for design review
-    if (workingPhase !== "working") {
-      setActiveTool(null);
-      return;
-    }
-    let index = Math.floor(Math.random() * WORK_TOOLS.length);
-    setActiveTool(WORK_TOOLS[index]);
-    const timer = window.setInterval(() => {
-      index = (index + 1) % WORK_TOOLS.length;
-      setActiveTool(WORK_TOOLS[index]);
-    }, TOOL_SWAP_MS);
-    return () => window.clearInterval(timer);
-  }, [workingPhase]);
+  const activeTool = useCinematicWorkTool({
+    active: workingPhase === "working",
+    activityKey: activityState.foregroundCue?.id
+      ?? selectedThread?.id
+      ?? agentPreset?.id
+      ?? "project-manager",
+    reducedMotion,
+  });
 
   const mood: AgentMoodState = useAgentMood({
     error,
