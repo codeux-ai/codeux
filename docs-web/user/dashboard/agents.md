@@ -90,6 +90,14 @@ To apply a notice, the dashboard uses `POST /api/projects/:projectId/agent-prese
 
 The merge cannot change the main prompt, custom behavior, avatar, labels, routing, provider/model, memory, MCP access, persistent skills, or source metadata. A failed provider call, unsupported provider, malformed or destructive response, stale notice, or route change leaves both the preset and its stored bundled revision unchanged, so the notice remains available for retry. A successful merge records the current bundled revision even when the preserved custom markdown differs from the bundle, preventing the same notice from returning.
 
+## Planning decomposition quality
+
+The bundled Planning agent does not force every sprint into a fixed task-count range. It chooses task count from repository ownership boundaries, integration seams, and risk: small localized changes can remain compact, while broad security, persistence, distributed-runtime, or client/server work can produce a larger DAG when completeness requires it.
+
+Before returning tasks, the planner checks the relevant contracts, migrations, producers, runtime consumers, registration and entrypoint wiring, UI/API surfaces, failure and lifecycle behavior, executable acceptance coverage, and documentation. Changed shared contracts must have their required consumers and compatibility paths assigned. Applicable authorization, validation failure, timeout/error, retry, concurrency, idempotency, restart/reconnect, stale-state, and cleanup behavior must belong to concrete tasks rather than being deferred to sprint QA.
+
+Cross-task integration work is allowed only when it produces a real repository delta such as runtime wiring, an integration harness, or executable E2E coverage. Generic review, final-polish, coordination, branch, and merge tasks remain prohibited. The strict planning JSON schema and required task prompt sections are unchanged.
+
 ## Deleting an agent
 
 Destructive. Requires confirmation. Threads and tasks that referenced the deleted preset fall back to the project default agent.

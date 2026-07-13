@@ -12,6 +12,33 @@ afterEach(async () => {
 });
 
 describe("Code UX default assets service", () => {
+  it("keeps the bundled Planning agent integration-aware and free of fixed task-count pressure", async () => {
+    const instructions = await fs.readFile(
+      path.join(process.cwd(), ".code-ux", "agents", "planning_agent.md"),
+      "utf8",
+    );
+
+    for (const requiredSection of [
+      "## Coverage And Risk Inventory",
+      "## Decomposition Protocol",
+      "## Granularity Rules",
+    ]) {
+      expect(instructions).toContain(requiredSection);
+    }
+
+    for (const requiredGuidance of [
+      "every runtime consumer",
+      "startup, shutdown, restart, reconnect, recovery, stale state, and cleanup",
+      "executable integration/E2E coverage",
+      "A large or security-sensitive sprint may legitimately require more than eight tasks",
+      "a skeptical sprint-completion reviewer",
+    ]) {
+      expect(instructions).toContain(requiredGuidance);
+    }
+
+    expect(instructions).not.toContain("Prefer 3 to 8 tasks");
+  });
+
   it("keeps the bundled Project Manager operating manual comprehensive", async () => {
     const instructions = await fs.readFile(
       path.join(process.cwd(), ".code-ux", "agents", "project_manager.md"),

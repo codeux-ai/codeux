@@ -155,6 +155,16 @@ When memory is enabled, planning prompts also include:
 
 Planning prompts also resolve `designGuidance` from the effective project settings. Selected non-`none` tech-stack and styleguide entries are injected as a compact `Project Guidance` section before the task/output instructions; `none` selections are omitted so the planner receives active guidance without copying inactive defaults into every generated task prompt.
 
+### Planning decomposition quality
+
+The bundled Planning agent and the universal planning prompt no longer optimize toward a fixed `3..8` task range. Task count follows repository ownership boundaries, integration seams, and risk: a localized change may need fewer than three tasks, while a broad security, persistence, distributed-runtime, or client/server sprint may need more than eight.
+
+Before returning the strict DAG JSON, the planner builds an internal coverage inventory across the relevant contracts, schemas, migrations, producers, runtime consumers, dependency injection and registration, entrypoints, user-facing surfaces, lifecycle behavior, failure paths, tests, and documentation. The inventory is reasoning guidance rather than a new output field, so the existing `PlanningPayloadValidator` contract remains unchanged.
+
+Plans must explicitly assign applicable authorization, validation-failure, timeout/error, retry, concurrency, idempotency, compatibility, restart/reconnect, stale-state, and cleanup behavior. A shared contract or helper is not considered complete until its required production consumers and activation paths are owned by tasks. When multiple branches must be exercised together, the planner may create a dependent fan-in integration task only when it owns executable integration/E2E coverage, test harness changes, or concrete runtime wiring; review-only and final-polish placeholders remain prohibited.
+
+The final planning self-check maps every sprint requirement to an observable acceptance signal and asks whether an exacting sprint-completion review would still find obvious missing consumers, wiring, lifecycle handling, documentation, or integrated verification. This reduces remediation deferred to sprint QA without converting speculative risks into tasks or creating one task per file.
+
 In Docker execution mode, planning runs against a snapshot workspace and captures `.task-learnings.md` back out of that snapshot volume so memory capture still works even though the provider never writes directly into the host repo path. In `REMOTE` git mode, fresh planning invocations refresh `origin` and resolve only the explicit sprint feature branch when present, otherwise the effective runtime git default branch. Snapshots seed from `origin/<branch>` only and never inspect the host repo's currently checked-out branch. If the remote tracking branch or fallback cannot be prepared, planning fails instead of falling back to a stale local branch. Planning restart/continue actions reuse the preserved snapshot workspace so cancelled or interrupted provider sessions can still resume.
 
 ## Project Setup Agent Flow
