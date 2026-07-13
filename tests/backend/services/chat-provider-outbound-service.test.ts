@@ -303,6 +303,39 @@ describe("ChatProviderOutboundService", () => {
     });
   });
 
+  it("uses a provider Retry-After delay when it exceeds exponential backoff", async () => {
+    const now = new Date("2026-07-07T00:00:00.000Z");
+    const context = await createContext();
+    const fixture = await createOutboundFixture(context, {
+      bridgeMode: "official_api",
+      providerKind: "slack",
+      setup: { appId: "A-test", workspaceId: "T-test" },
+      secrets: { botToken: "xoxb-test-token-value", signingSecret: "signing-secret" },
+    });
+    const adapter: ChatProviderOutboundAdapter = {
+      send: vi.fn().mockRejectedValue(new ChatProviderOutboundAdapterError(
+        "Slack rate limited the request.",
+        true,
+        429,
+        42_000,
+      )),
+    };
+    const service = new ChatProviderOutboundService({
+      chatProviderRepository: context.providerRepository,
+      adapter,
+      initialBackoffMs: 1_000,
+      now: () => now,
+    });
+
+    const retryable = await service.deliverReply(fixture);
+
+    expect(retryable).toMatchObject({ status: "retryable_failure" });
+    expect(retryable?.payload?.delivery).toMatchObject({
+      retryable: true,
+      nextAttemptAt: "2026-07-07T00:00:42.000Z",
+    });
+  });
+
   it("processes due retries as a single flight when calls overlap", async () => {
     let now = new Date("2026-07-07T00:00:00.000Z");
     const context = await createContext();
@@ -375,7 +408,7 @@ async function createOutboundFixture(
   context: Awaited<ReturnType<typeof createContext>>,
   options: {
     bridgeMode: "managed_bridge" | "webhook" | "native_bridge" | "official_api";
-    providerKind: "telegram" | "discord" | "imessage";
+    providerKind: "telegram" | "discord" | "imessage" | "slack";
     setup: Record<string, unknown>;
     secrets: Record<string, unknown>;
     externalChannelId?: string;
