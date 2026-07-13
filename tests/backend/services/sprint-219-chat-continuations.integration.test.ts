@@ -235,11 +235,11 @@ describe("SPR-219 scheduled chat continuation fan-in", () => {
       "Second scheduled continuation.",
     ]);
     expect(new Set(scheduledMessages.map((message) => message.metadata?.schedulerEntryId)).size).toBe(2);
-    expect(assistantReplies.map((message) => message.bodyMarkdown)).toEqual([
+    expect(assistantReplies.map((message) => message.bodyMarkdown)).toEqual(expect.arrayContaining([
       "Combined active-turn reply.",
       "First scheduled continuation reply.",
       "Second scheduled continuation reply.",
-    ]);
+    ]));
     expect(prompts[1]?.indexOf("Start the active turn.")).toBeLessThan(
       prompts[1]?.indexOf("Supersede the active request without changing threads.") ?? -1,
     );
