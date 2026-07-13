@@ -121,6 +121,8 @@ export const getBridgeModeLabel = (bridgeMode: ChatProviderBridgeMode): string =
       return "Webhook";
     case "native_bridge":
       return "Native bridge";
+    case "official_api":
+      return "Official API";
   }
 };
 

@@ -17,6 +17,8 @@ Code UX supports external chat channels through the bridge contracts implemented
 
 These connector labels describe the normalized payloads Code UX can accept and the bridge setup schemas it exposes. Code UX does not call WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, or Discord APIs directly. A managed bridge, webhook gateway, or native command owns provider-specific API interaction.
 
+The contract also defines an additive `official_api` mode for future direct connectors. None of the baseline profiles advertise it, so unsupported provider/mode combinations fail validation without changing existing stored bridge records. Provider-specific baseline details are listed in [Chat Connector Profiles](./chat-connectors/index.md).
+
 Bridge modes:
 
 - `managed_bridge`: HTTP delivery to a configured managed bridge URL, with bridge credentials used as transport credentials.

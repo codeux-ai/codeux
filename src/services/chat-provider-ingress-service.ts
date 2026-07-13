@@ -10,6 +10,8 @@ import type { ChatThreadRuntimeService } from "./chat-thread-runtime-service.js"
 import type { Logger } from "../shared/logging/logger.js";
 import { getCorrelationId } from "../shared/logging/correlation-id.js";
 import { redactMetadata } from "../shared/security/redaction.js";
+import { getChatConnectorProfileForMode } from "../domain/chat-connectors/registry.js";
+import type { PartialNormalizedChatConnectorInbound } from "../domain/chat-connectors/types.js";
 
 export interface ChatProviderIngressPayload {
   providerConnectionId: string;
@@ -267,7 +269,11 @@ export function normalizeInboundPayload(
 ): NormalizedChatProviderInboundMessage {
   const body = requireRecord(payload, "payload");
   const providerKind = connection.providerKind;
-  const normalized = normalizeByProvider(providerKind, body);
+  const profile = getChatConnectorProfileForMode(providerKind, connection.bridgeMode);
+  const normalized = {
+    ...profile.ingress.normalize(body),
+    ...definedInboundFields(normalizeGeneric(body)),
+  };
   const timestamp = parseTimestamp(normalized.timestamp) ?? new Date().toISOString();
   const externalChannelId = requireNonEmpty(normalized.externalChannelId, "external channel id");
   const externalSenderId = requireNonEmpty(normalized.externalSenderId, "external sender id");
@@ -285,35 +291,7 @@ export function normalizeInboundPayload(
   };
 }
 
-interface PartialNormalizedInbound {
-  externalChannelId?: string;
-  externalChannelName?: string;
-  externalSenderId?: string;
-  externalSenderName?: string;
-  textBody?: string;
-  externalMessageId?: string;
-  timestamp?: unknown;
-}
-
-function normalizeByProvider(providerKind: ChatProviderKind, body: Record<string, unknown>): PartialNormalizedInbound {
-  const generic = normalizeGeneric(body);
-  switch (providerKind) {
-    case "whatsapp":
-      return { ...normalizeWhatsApp(body), ...definedInboundFields(generic) };
-    case "imessage":
-      return { ...normalizeIMessage(body), ...definedInboundFields(generic) };
-    case "telegram":
-      return { ...normalizeTelegram(body), ...definedInboundFields(generic) };
-    case "slack":
-      return { ...normalizeSlack(body), ...definedInboundFields(generic) };
-    case "microsoft-teams":
-      return { ...normalizeTeams(body), ...definedInboundFields(generic) };
-    case "discord":
-      return { ...normalizeDiscord(body), ...definedInboundFields(generic) };
-  }
-}
-
-function normalizeGeneric(body: Record<string, unknown>): PartialNormalizedInbound {
+function normalizeGeneric(body: Record<string, unknown>): PartialNormalizedChatConnectorInbound {
   const channel = readRecord(body.channel) ?? readRecord(body.externalChannel);
   const sender = readRecord(body.sender) ?? readRecord(body.externalSender) ?? readRecord(body.from) ?? readRecord(body.author);
   const message = readRecord(body.message);
@@ -325,95 +303,6 @@ function normalizeGeneric(body: Record<string, unknown>): PartialNormalizedInbou
     textBody: readString(body.textBody, body.text, body.body, body.content, message?.text, message?.body, message?.content),
     externalMessageId: readString(body.externalMessageId, body.messageId, body.id, message?.id, message?.messageId),
     timestamp: body.timestamp ?? body.createdAt ?? message?.timestamp,
-  };
-}
-
-function normalizeWhatsApp(body: Record<string, unknown>): PartialNormalizedInbound {
-  const value = readRecord(readArray(readRecord(readArray(body.entry)?.[0])?.changes)?.[0])?.value;
-  const valueRecord = readRecord(value);
-  const message = readRecord(readArray(valueRecord?.messages)?.[0]);
-  const contact = readRecord(readArray(valueRecord?.contacts)?.[0]);
-  const metadata = readRecord(valueRecord?.metadata);
-  const text = readRecord(message?.text);
-  return {
-    externalChannelId: readString(metadata?.phone_number_id, body.phone_number_id),
-    externalChannelName: readString(metadata?.display_phone_number, metadata?.phone_number_id),
-    externalSenderId: readString(message?.from, contact?.wa_id),
-    externalSenderName: readString(readRecord(contact?.profile)?.name, contact?.wa_id),
-    textBody: readString(text?.body, message?.body),
-    externalMessageId: readString(message?.id),
-    timestamp: message?.timestamp,
-  };
-}
-
-function normalizeIMessage(body: Record<string, unknown>): PartialNormalizedInbound {
-  const sender = readRecord(body.sender) ?? readRecord(body.from);
-  return {
-    externalChannelId: readString(body.chatGuid, body.chatId, body.channelId, body.groupId),
-    externalChannelName: readString(body.chatName, body.channelName, body.groupName),
-    externalSenderId: readString(body.senderId, body.handle, sender?.id, sender?.handle),
-    externalSenderName: readString(body.senderName, sender?.name, sender?.handle),
-    textBody: readString(body.text, body.body, body.content),
-    externalMessageId: readString(body.guid, body.messageGuid, body.messageId, body.id),
-    timestamp: body.timestamp ?? body.date,
-  };
-}
-
-function normalizeTelegram(body: Record<string, unknown>): PartialNormalizedInbound {
-  const message = readRecord(body.message) ?? readRecord(body.channel_post);
-  const chat = readRecord(message?.chat);
-  const sender = readRecord(message?.from) ?? readRecord(message?.sender_chat);
-  return {
-    externalChannelId: readString(chat?.id),
-    externalChannelName: readString(chat?.title, chat?.username, chat?.id),
-    externalSenderId: readString(sender?.id, sender?.username),
-    externalSenderName: joinName(sender?.first_name, sender?.last_name) || readString(sender?.username, sender?.title, sender?.id),
-    textBody: readString(message?.text, message?.caption),
-    externalMessageId: readString(message?.message_id),
-    timestamp: message?.date,
-  };
-}
-
-function normalizeSlack(body: Record<string, unknown>): PartialNormalizedInbound {
-  const event = readRecord(body.event) ?? body;
-  const eventRecord = readRecord(event) ?? {};
-  return {
-    externalChannelId: readString(eventRecord.channel, eventRecord.channel_id),
-    externalChannelName: readString(eventRecord.channel_name, eventRecord.channel),
-    externalSenderId: readString(eventRecord.user, eventRecord.user_id, eventRecord.bot_id),
-    externalSenderName: readString(eventRecord.username, eventRecord.user_name, eventRecord.user),
-    textBody: readString(eventRecord.text),
-    externalMessageId: readString(eventRecord.client_msg_id, body.event_id, eventRecord.event_ts, eventRecord.ts),
-    timestamp: eventRecord.event_ts ?? eventRecord.ts,
-  };
-}
-
-function normalizeTeams(body: Record<string, unknown>): PartialNormalizedInbound {
-  const conversation = readRecord(body.conversation);
-  const sender = readRecord(body.from);
-  return {
-    externalChannelId: readString(conversation?.id, body.channelId),
-    externalChannelName: readString(conversation?.name, conversation?.id),
-    externalSenderId: readString(sender?.id),
-    externalSenderName: readString(sender?.name, sender?.id),
-    textBody: readString(body.text, body.body, body.content),
-    externalMessageId: readString(body.id, body.replyToId),
-    timestamp: body.timestamp ?? body.localTimestamp,
-  };
-}
-
-function normalizeDiscord(body: Record<string, unknown>): PartialNormalizedInbound {
-  const channel = readRecord(body.channel);
-  const author = readRecord(body.author) ?? readRecord(body.member);
-  const user = readRecord(author?.user) ?? author;
-  return {
-    externalChannelId: readString(body.channel_id, channel?.id),
-    externalChannelName: readString(channel?.name, body.channel_name, body.channel_id),
-    externalSenderId: readString(user?.id),
-    externalSenderName: readString(user?.global_name, user?.username, user?.name, user?.id),
-    textBody: readString(body.content, body.text),
-    externalMessageId: readString(body.id, body.message_id),
-    timestamp: body.timestamp,
   };
 }
 
@@ -567,10 +456,6 @@ function readRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
-function readArray(value: unknown): unknown[] | null {
-  return Array.isArray(value) ? value : null;
-}
-
 function readString(...values: unknown[]): string | undefined {
   for (const value of values) {
     if (typeof value === "string" && value.trim()) {
@@ -583,13 +468,12 @@ function readString(...values: unknown[]): string | undefined {
   return undefined;
 }
 
-function joinName(first: unknown, last: unknown): string | undefined {
-  const joined = [first, last].filter((value): value is string => typeof value === "string" && value.trim().length > 0).join(" ").trim();
-  return joined || undefined;
-}
-
-function definedInboundFields(value: PartialNormalizedInbound): PartialNormalizedInbound {
-  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as PartialNormalizedInbound;
+function definedInboundFields(
+  value: PartialNormalizedChatConnectorInbound,
+): PartialNormalizedChatConnectorInbound {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
+  ) as PartialNormalizedChatConnectorInbound;
 }
 
 function escapeRegExp(value: string): string {

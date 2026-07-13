@@ -1,5 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import type { ChatProviderConnectionInternalRecord, ChatProviderSecretConfig } from "../contracts/chat-provider-types.js";
+import { getChatConnectorProfileForMode } from "../domain/chat-connectors/registry.js";
+import type { ChatConnectorHmacAuthentication } from "../domain/chat-connectors/types.js";
 
 export interface ChatProviderIngressSecurityRequest {
   headers: Record<string, string | string[] | undefined>;
@@ -25,8 +27,6 @@ interface ReplayEntry {
 
 const DEFAULT_TIMESTAMP_TOLERANCE_MS = 5 * 60 * 1000;
 const MAX_REPLAY_CACHE_SIZE = 2_000;
-const HMAC_SECRET_KEYS = ["signingSecret", "webhookSecret", "botAppPassword"];
-
 export class ChatProviderIngressSecurity {
   private readonly replayCache = new Map<string, ReplayEntry>();
 
@@ -40,20 +40,20 @@ export class ChatProviderIngressSecurity {
       throw new ChatProviderIngressSecurityError("connection_disabled", "Chat provider connection is not enabled.", 403);
     }
 
+    const profile = getChatConnectorProfileForMode(connection.providerKind, connection.bridgeMode);
+    const authentication = profile.ingress.authentication[connection.bridgeMode];
+    if (!authentication) {
+      throw new ChatProviderIngressSecurityError("unsupported_authentication", "Unsupported chat provider authentication mode.", 403);
+    }
     const nowMs = (request.now ?? new Date()).getTime();
-    const timestamp = this.requireFreshTimestamp(request.headers, nowMs);
-    const signature = firstHeader(request.headers, [
-      "x-code-ux-signature",
-      "x-hub-signature-256",
-      "x-slack-signature",
-      "x-signature",
-    ]);
+    const timestamp = this.requireFreshTimestamp(request.headers, authentication.timestampHeaders, nowMs);
 
-    if (connection.bridgeMode === "webhook") {
-      const hmacSecret = firstConfiguredSecret(connection.secrets, HMAC_SECRET_KEYS);
+    if (authentication.type === "hmac_sha256") {
+      const hmacSecret = firstConfiguredSecret(connection.secrets, authentication.secretKeys);
       if (!hmacSecret) {
         throw new ChatProviderIngressSecurityError("missing_hmac_secret", "Webhook signing secret is not configured.", 403);
       }
+      const signature = firstHeader(request.headers, authentication.signatureHeaders);
       if (!signature) {
         throw new ChatProviderIngressSecurityError("missing_signature", "Missing chat provider ingress signature.", 401);
       }
@@ -64,19 +64,17 @@ export class ChatProviderIngressSecurity {
         rawBody: request.rawBody,
         secret: hmacSecret,
         nowMs,
+        authentication,
       });
       return { authenticated: true, method: "hmac" };
     }
 
-    const expectedBearer = firstConfiguredSecret(
-      connection.secrets,
-      connection.bridgeMode === "native_bridge" ? ["bridgeToken"] : ["bridgeApiKey"],
-    );
+    const expectedBearer = firstConfiguredSecret(connection.secrets, authentication.secretKeys);
     if (!expectedBearer) {
       throw new ChatProviderIngressSecurityError("missing_bridge_secret", "Chat provider bridge secret is not configured.", 403);
     }
 
-    const actualBearer = parseBearerToken(request.headers);
+    const actualBearer = parseBearerToken(request.headers, authentication.tokenHeaders);
     if (!actualBearer || !constantTimeEquals(actualBearer, expectedBearer)) {
       throw new ChatProviderIngressSecurityError("invalid_bearer_token", "Invalid chat provider bridge token.", 401);
     }
@@ -92,12 +90,12 @@ export class ChatProviderIngressSecurity {
     return { authenticated: true, method: "bearer" };
   }
 
-  private requireFreshTimestamp(headers: Record<string, string | string[] | undefined>, nowMs: number): { raw: string; value: number } {
-    const rawTimestamp = firstHeader(headers, [
-      "x-code-ux-timestamp",
-      "x-provider-timestamp",
-      "x-slack-request-timestamp",
-    ]);
+  private requireFreshTimestamp(
+    headers: Record<string, string | string[] | undefined>,
+    timestampHeaders: readonly string[],
+    nowMs: number,
+  ): { raw: string; value: number } {
+    const rawTimestamp = firstHeader(headers, timestampHeaders);
     if (!rawTimestamp) {
       throw new ChatProviderIngressSecurityError("missing_timestamp", "Missing chat provider ingress timestamp.", 401);
     }
@@ -124,17 +122,16 @@ export class ChatProviderIngressSecurity {
     rawBody: string;
     secret: string;
     nowMs: number;
+    authentication: ChatConnectorHmacAuthentication;
   }): void {
     const normalizedSignature = normalizeSignature(input.signature);
     if (!normalizedSignature) {
       throw new ChatProviderIngressSecurityError("invalid_signature", "Invalid chat provider ingress signature.", 401);
     }
 
-    const candidates = [
-      createHmac("sha256", input.secret).update(`${input.timestamp.raw}.${input.rawBody}`).digest("hex"),
-      createHmac("sha256", input.secret).update(`v0:${input.timestamp.raw}:${input.rawBody}`).digest("hex"),
-      createHmac("sha256", input.secret).update(input.rawBody).digest("hex"),
-    ];
+    const candidates = input.authentication
+      .signatureBases({ timestamp: input.timestamp.raw, rawBody: input.rawBody })
+      .map((base) => createHmac("sha256", input.secret).update(base).digest("hex"));
     const valid = candidates.some((candidate) => constantTimeEquals(candidate, normalizedSignature));
     if (!valid) {
       throw new ChatProviderIngressSecurityError("signature_mismatch", "Invalid chat provider ingress signature.", 401);
@@ -171,13 +168,20 @@ export class ChatProviderIngressSecurity {
   }
 }
 
-function parseBearerToken(headers: Record<string, string | string[] | undefined>): string | null {
-  const authorization = firstHeader(headers, ["authorization"]);
+function parseBearerToken(
+  headers: Record<string, string | string[] | undefined>,
+  tokenHeaders: readonly string[],
+): string | null {
+  const authorization = tokenHeaders.includes("authorization")
+    ? firstHeader(headers, ["authorization"])
+    : undefined;
   const match = authorization?.match(/^Bearer\s+(.+)$/i);
-  return match?.[1]?.trim() || firstHeader(headers, ["x-code-ux-bridge-token"]) || null;
+  return match?.[1]?.trim()
+    || firstHeader(headers, tokenHeaders.filter((header) => header !== "authorization"))
+    || null;
 }
 
-function firstConfiguredSecret(secrets: ChatProviderSecretConfig | null, keys: string[]): string | null {
+function firstConfiguredSecret(secrets: ChatProviderSecretConfig | null, keys: readonly string[]): string | null {
   for (const key of keys) {
     const value = secrets?.[key];
     if (typeof value === "string" && value.trim()) {
@@ -187,7 +191,7 @@ function firstConfiguredSecret(secrets: ChatProviderSecretConfig | null, keys: s
   return null;
 }
 
-function firstHeader(headers: Record<string, string | string[] | undefined>, names: string[]): string | undefined {
+function firstHeader(headers: Record<string, string | string[] | undefined>, names: readonly string[]): string | undefined {
   const normalized = new Map(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]));
   for (const name of names) {
     const value = normalized.get(name.toLowerCase());

@@ -17,12 +17,13 @@ It is for contributors and integrators who need to reason about *how* Code UX ma
 | 7 | [Data model](./data-model.md) | Projects, sprints, tasks, runs, dispatches, memory, conversations |
 | 8 | [Custom dashboard foundation](./custom-dashboard-foundation.md) | Persisted dashboard manifests, generated bundles, validation history, and publication state |
 | 9 | [Execution invocation tracking](./execution-invocation-tracking.md) | Provider parser normalization, usage isolation, live telemetry, transcript persistence |
-| 10 | [External chat connectors](./external-chat-providers.md) | Provider setup, channel bindings, inbound dedupe, outbound delivery state |
-| 11 | [Configuration resolution](./configuration-resolution.md) | Cascade order, search paths, settings hierarchy |
-| 12 | [Speech input](./speech-input.md) | Persisted transcription settings, privacy boundary, provider fallback contract |
-| 13 | [Security model](./security.md) | Authentication, authorisation, secrets, network surface |
-| 14 | [Worker clarification contract](./worker-clarification-contract.md) | Durable human-owned worker questions, idempotent replies, and continuation boundary |
-| 15 | [Custom nodes](./custom-nodes.md) | Generated TypeScript packages, validation/publication gates, and hardened container execution |
+| 10 | [Chat connector registry](./chat-connectors/index.md) | Typed provider profiles, capabilities, transport ownership, and lifecycle metadata |
+| 11 | [External chat connectors](./external-chat-providers.md) | Provider setup, channel bindings, inbound dedupe, outbound delivery state |
+| 12 | [Configuration resolution](./configuration-resolution.md) | Cascade order, search paths, settings hierarchy |
+| 13 | [Speech input](./speech-input.md) | Persisted transcription settings, privacy boundary, provider fallback contract |
+| 14 | [Security model](./security.md) | Authentication, authorisation, secrets, network surface |
+| 15 | [Worker clarification contract](./worker-clarification-contract.md) | Durable human-owned worker questions, idempotent replies, and continuation boundary |
+| 16 | [Custom nodes](./custom-nodes.md) | Generated TypeScript packages, validation/publication gates, and hardened container execution |
 
 ## Runtime Notes
 

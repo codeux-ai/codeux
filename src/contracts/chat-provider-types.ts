@@ -6,7 +6,7 @@ export type ChatProviderKind =
   | "microsoft-teams"
   | "discord";
 
-export type ChatProviderBridgeMode = "managed_bridge" | "webhook" | "native_bridge";
+export type ChatProviderBridgeMode = "managed_bridge" | "webhook" | "native_bridge" | "official_api";
 
 export type ChatProviderConnectionStatus =
   | "draft"
@@ -38,6 +38,7 @@ export type ChatProviderBridgeIntegration =
   | "managed_plugin"
   | "webhook"
   | "native_bridge"
+  | "official_api"
   | "bot_gateway";
 
 export interface ChatProviderSetupFieldSchema {
@@ -46,7 +47,7 @@ export interface ChatProviderSetupFieldSchema {
   type: ChatProviderSetupFieldType;
   required: boolean;
   defaultValue?: string | boolean;
-  options?: string[];
+  options?: readonly string[];
 }
 
 export interface ChatProviderSecretFieldSchema {
@@ -59,15 +60,15 @@ export interface ChatProviderBridgeSetupSchema {
   mode: ChatProviderBridgeMode;
   label: string;
   integration: ChatProviderBridgeIntegration;
-  setupFields: ChatProviderSetupFieldSchema[];
-  secretFields: ChatProviderSecretFieldSchema[];
+  setupFields: readonly ChatProviderSetupFieldSchema[];
+  secretFields: readonly ChatProviderSecretFieldSchema[];
 }
 
 export interface ChatProviderSetupSchema {
   kind: ChatProviderKind;
   label: string;
   defaultBridgeMode: ChatProviderBridgeMode;
-  bridgeModes: ChatProviderBridgeSetupSchema[];
+  bridgeModes: readonly ChatProviderBridgeSetupSchema[];
 }
 
 export type ChatProviderSetupConfig = Record<string, unknown>;
@@ -214,192 +215,7 @@ export interface ChatProviderMessageDeliveryRecord {
   updatedAt: string;
 }
 
-export const CHAT_PROVIDER_SETUP_SCHEMAS: readonly ChatProviderSetupSchema[] = [
-  {
-    kind: "whatsapp",
-    label: "WhatsApp",
-    defaultBridgeMode: "managed_bridge",
-    bridgeModes: [
-      {
-        mode: "managed_bridge",
-        label: "Managed WhatsApp bridge",
-        integration: "managed_plugin",
-        setupFields: [
-          { key: "pluginName", label: "Plugin name", type: "string", required: true, defaultValue: "whatsapp" },
-          { key: "workspaceId", label: "Connector workspace", type: "string", required: false },
-        ],
-        secretFields: [
-          { key: "bridgeApiKey", label: "Bridge API key", required: true },
-        ],
-      },
-      {
-        mode: "webhook",
-        label: "WhatsApp webhook",
-        integration: "webhook",
-        setupFields: [
-          { key: "webhookUrl", label: "Webhook URL", type: "url", required: true },
-          { key: "verifyTokenName", label: "Verify token name", type: "string", required: false },
-        ],
-        secretFields: [
-          { key: "webhookSecret", label: "Webhook signing secret", required: true },
-          { key: "verifyToken", label: "Verify token", required: false },
-        ],
-      },
-    ],
-  },
-  {
-    kind: "imessage",
-    label: "iMessage",
-    defaultBridgeMode: "managed_bridge",
-    bridgeModes: [
-      {
-        mode: "managed_bridge",
-        label: "Managed iMessage bridge",
-        integration: "managed_core",
-        setupFields: [
-          { key: "workspaceId", label: "Connector workspace", type: "string", required: false },
-          { key: "deviceLabel", label: "Device label", type: "string", required: false },
-        ],
-        secretFields: [
-          { key: "bridgeApiKey", label: "Bridge API key", required: true },
-        ],
-      },
-      {
-        mode: "native_bridge",
-        label: "macOS native bridge command",
-        integration: "native_bridge",
-        setupFields: [
-          { key: "command", label: "Bridge command", type: "command", required: true },
-          { key: "workingDirectory", label: "Working directory", type: "string", required: false },
-        ],
-        secretFields: [
-          { key: "bridgeToken", label: "Bridge token", required: false },
-        ],
-      },
-    ],
-  },
-  {
-    kind: "telegram",
-    label: "Telegram",
-    defaultBridgeMode: "managed_bridge",
-    bridgeModes: [
-      {
-        mode: "managed_bridge",
-        label: "Managed Telegram bridge",
-        integration: "managed_core",
-        setupFields: [
-          { key: "workspaceId", label: "Connector workspace", type: "string", required: false },
-          { key: "botUsername", label: "Bot username", type: "string", required: false },
-        ],
-        secretFields: [
-          { key: "bridgeApiKey", label: "Bridge API key", required: true },
-        ],
-      },
-      {
-        mode: "webhook",
-        label: "Telegram bot webhook",
-        integration: "webhook",
-        setupFields: [
-          { key: "webhookUrl", label: "Webhook URL", type: "url", required: true },
-          { key: "botUsername", label: "Bot username", type: "string", required: false },
-        ],
-        secretFields: [
-          { key: "botToken", label: "Bot token", required: true },
-          { key: "webhookSecret", label: "Webhook secret token", required: false },
-        ],
-      },
-    ],
-  },
-  {
-    kind: "slack",
-    label: "Slack",
-    defaultBridgeMode: "managed_bridge",
-    bridgeModes: [
-      {
-        mode: "managed_bridge",
-        label: "Managed Slack bridge",
-        integration: "managed_plugin",
-        setupFields: [
-          { key: "pluginName", label: "Plugin name", type: "string", required: true, defaultValue: "slack" },
-          { key: "workspaceId", label: "Connector workspace", type: "string", required: false },
-        ],
-        secretFields: [
-          { key: "bridgeApiKey", label: "Bridge API key", required: true },
-        ],
-      },
-      {
-        mode: "webhook",
-        label: "Slack Events webhook",
-        integration: "webhook",
-        setupFields: [
-          { key: "eventsUrl", label: "Events webhook URL", type: "url", required: true },
-          { key: "appId", label: "Slack app ID", type: "string", required: false },
-        ],
-        secretFields: [
-          { key: "signingSecret", label: "Signing secret", required: true },
-          { key: "botToken", label: "Bot token", required: false },
-        ],
-      },
-    ],
-  },
-  {
-    kind: "microsoft-teams",
-    label: "Microsoft Teams",
-    defaultBridgeMode: "managed_bridge",
-    bridgeModes: [
-      {
-        mode: "managed_bridge",
-        label: "Managed Teams bridge",
-        integration: "managed_plugin",
-        setupFields: [
-          { key: "pluginName", label: "Plugin name", type: "string", required: true, defaultValue: "microsoft-teams" },
-          { key: "tenantId", label: "Tenant ID", type: "string", required: false },
-        ],
-        secretFields: [
-          { key: "bridgeApiKey", label: "Bridge API key", required: true },
-        ],
-      },
-      {
-        mode: "webhook",
-        label: "Teams bot webhook",
-        integration: "webhook",
-        setupFields: [
-          { key: "botEndpointUrl", label: "Bot endpoint URL", type: "url", required: true },
-          { key: "tenantId", label: "Tenant ID", type: "string", required: false },
-        ],
-        secretFields: [
-          { key: "botAppPassword", label: "Bot app password", required: true },
-          { key: "webhookSecret", label: "Webhook signing secret", required: false },
-        ],
-      },
-    ],
-  },
-  {
-    kind: "discord",
-    label: "Discord",
-    defaultBridgeMode: "webhook",
-    bridgeModes: [
-      {
-        mode: "webhook",
-        label: "Discord bot/webhook gateway",
-        integration: "bot_gateway",
-        setupFields: [
-          { key: "gatewayUrl", label: "Gateway URL", type: "url", required: false },
-          { key: "applicationId", label: "Application ID", type: "string", required: false },
-        ],
-        secretFields: [
-          { key: "botToken", label: "Bot token", required: true },
-          { key: "webhookSecret", label: "Webhook signing secret", required: false },
-        ],
-      },
-    ],
-  },
-];
-
-export function getChatProviderSetupSchema(kind: ChatProviderKind): ChatProviderSetupSchema {
-  const schema = CHAT_PROVIDER_SETUP_SCHEMAS.find((entry) => entry.kind === kind);
-  if (!schema) {
-    throw new Error(`Unsupported chat provider kind: ${kind}`);
-  }
-  return schema;
-}
+export {
+  CHAT_PROVIDER_SETUP_SCHEMAS,
+  getChatProviderSetupSchema,
+} from "../domain/chat-connectors/registry.js";

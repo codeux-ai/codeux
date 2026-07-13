@@ -4,7 +4,13 @@ import type {
   ChatProviderConnectionInternalRecord,
   ChatProviderMessageDeliveryRecord,
 } from "../contracts/chat-provider-types.js";
-import { redactMetadata, redactText } from "../shared/security/redaction.js";
+import { getChatConnectorProfileForMode } from "../domain/chat-connectors/registry.js";
+import type {
+  ChatConnectorCommandOutboundRequest,
+  ChatConnectorHttpOutboundRequest,
+  ChatConnectorProfile,
+} from "../domain/chat-connectors/types.js";
+import { redactText } from "../shared/security/redaction.js";
 
 export interface ChatProviderOutboundBridgePayload {
   providerKind: string;
@@ -51,46 +57,38 @@ interface NativeCommandResult {
   stderr: string;
 }
 
-const DEFAULT_TIMEOUT_MS = 15_000;
-
 export function createDefaultChatProviderOutboundAdapter(): ChatProviderOutboundAdapter {
   return new ConfiguredChatProviderOutboundAdapter();
 }
 
 export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutboundAdapter {
   async send(context: ChatProviderOutboundAdapterContext): Promise<ChatProviderOutboundAdapterResult> {
-    switch (context.connection.bridgeMode) {
-      case "managed_bridge":
-        return this.sendHttp(context, resolveManagedUrl(context.connection.setup), "managed_bridge");
-      case "webhook":
-        return this.sendHttp(context, resolveWebhookUrl(context.connection.setup), "webhook");
-      case "native_bridge":
-        return this.sendNative(context);
-      default:
-        throw new ChatProviderOutboundAdapterError("Unsupported chat provider bridge mode.", false);
+    let profile: ChatConnectorProfile;
+    try {
+      profile = getChatConnectorProfileForMode(context.connection.providerKind, context.connection.bridgeMode);
+      const request = profile.outbound.buildRequest(context);
+      return request.transport === "http"
+        ? this.sendHttp(context, profile, request)
+        : this.sendNative(context, profile, request);
+    } catch (error) {
+      if (error instanceof ChatProviderOutboundAdapterError) {
+        throw error;
+      }
+      throw new ChatProviderOutboundAdapterError(
+        error instanceof Error ? error.message : "Unsupported chat provider bridge mode.",
+        false,
+      );
     }
   }
 
   private async sendHttp(
     context: ChatProviderOutboundAdapterContext,
-    url: string,
-    mode: "managed_bridge" | "webhook",
+    profile: ChatConnectorProfile,
+    request: ChatConnectorHttpOutboundRequest,
   ): Promise<ChatProviderOutboundAdapterResult> {
-    const normalizedUrl = requireHttpUrl(url, `${mode} bridge URL`);
-    const headers: Record<string, string> = {
-      "content-type": "application/json",
-      "x-correlation-id": context.correlationId,
-      "x-codeux-provider-kind": context.connection.providerKind,
-      "x-codeux-bridge-mode": context.connection.bridgeMode,
-    };
-    const bearer = getFirstSecret(context.connection.secrets, [
-      "bridgeApiKey",
-      "bridgeToken",
-      "botToken",
-      "webhookSecret",
-      "signingSecret",
-      "botAppPassword",
-    ]);
+    const normalizedUrl = requireHttpUrl(request.url, request.label);
+    const headers = { ...request.headers };
+    const bearer = getFirstSecret(context.connection.secrets, request.bearerSecretKeys);
     if (bearer) {
       headers.authorization = `Bearer ${bearer}`;
     }
@@ -100,12 +98,12 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
       response = await fetch(normalizedUrl, {
         method: "POST",
         headers,
-        body: JSON.stringify(context.payload),
-        signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+        body: JSON.stringify(request.body),
+        signal: AbortSignal.timeout(request.timeoutMs),
       });
     } catch (error) {
       throw new ChatProviderOutboundAdapterError(
-        `Failed to reach ${mode} bridge: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to reach ${context.connection.bridgeMode} bridge: ${error instanceof Error ? error.message : String(error)}`,
         true,
       );
     }
@@ -113,29 +111,36 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
     const responseText = await response.text().catch(() => "");
     if (!response.ok) {
       throw new ChatProviderOutboundAdapterError(
-        `${mode} bridge returned HTTP ${response.status}${responseText ? `: ${responseText.slice(0, 500)}` : ""}`,
-        isRetryableHttpStatus(response.status),
+        `${context.connection.bridgeMode} bridge returned HTTP ${response.status}${responseText ? `: ${responseText.slice(0, 500)}` : ""}`,
+        profile.outbound.isRetryableStatus(response.status),
         response.status,
       );
     }
 
-    return parseAdapterResponse(responseText);
+    return profile.outbound.parseResponse(responseText);
   }
 
-  private async sendNative(context: ChatProviderOutboundAdapterContext): Promise<ChatProviderOutboundAdapterResult> {
-    const command = getString(context.connection.setup.command);
-    if (!command) {
+  private async sendNative(
+    context: ChatProviderOutboundAdapterContext,
+    profile: ChatConnectorProfile,
+    request: ChatConnectorCommandOutboundRequest,
+  ): Promise<ChatProviderOutboundAdapterResult> {
+    if (!request.command) {
       throw new ChatProviderOutboundAdapterError("Native bridge command is not configured.", false);
     }
 
     const env: NodeJS.ProcessEnv = { ...process.env };
-    const bridgeToken = getFirstSecret(context.connection.secrets, ["bridgeToken", "botToken", "webhookSecret"]);
+    const bridgeToken = getFirstSecret(context.connection.secrets, request.tokenSecretKeys);
     if (bridgeToken) {
       env.CODEUX_CHAT_BRIDGE_TOKEN = bridgeToken;
     }
-    const cwd = getString(context.connection.setup.workingDirectory) || process.cwd();
-
-    const result = await runNativeCommand(command, JSON.stringify(context.payload), cwd, env);
+    const result = await runNativeCommand(
+      request.command,
+      JSON.stringify(request.body),
+      request.workingDirectory,
+      env,
+      request.timeoutMs,
+    );
     if (result.code !== 0) {
       const detail = result.stderr.trim() || result.stdout.trim() || `exit code ${result.code ?? "unknown"}`;
       throw new ChatProviderOutboundAdapterError(
@@ -144,29 +149,8 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
       );
     }
 
-    return parseAdapterResponse(result.stdout);
+    return profile.outbound.parseResponse(result.stdout);
   }
-}
-
-function resolveManagedUrl(setup: Record<string, unknown>): string {
-  return getString(
-    setup.bridgeUrl,
-    setup.outboundUrl,
-    setup.endpointUrl,
-    setup.url,
-  );
-}
-
-function resolveWebhookUrl(setup: Record<string, unknown>): string {
-  return getString(
-    setup.outboundWebhookUrl,
-    setup.webhookUrl,
-    setup.eventsUrl,
-    setup.botEndpointUrl,
-    setup.gatewayUrl,
-    setup.bridgeUrl,
-    setup.url,
-  );
 }
 
 function requireHttpUrl(value: string, label: string): string {
@@ -187,16 +171,7 @@ function requireHttpUrl(value: string, label: string): string {
   }
 }
 
-function getString(...values: unknown[]): string {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-  return "";
-}
-
-function getFirstSecret(secrets: Record<string, unknown> | null, keys: string[]): string {
+function getFirstSecret(secrets: Record<string, unknown> | null, keys: readonly string[]): string {
   if (!secrets) {
     return "";
   }
@@ -209,35 +184,12 @@ function getFirstSecret(secrets: Record<string, unknown> | null, keys: string[])
   return "";
 }
 
-function isRetryableHttpStatus(status: number): boolean {
-  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
-}
-
-function parseAdapterResponse(text: string): ChatProviderOutboundAdapterResult {
-  const trimmed = text.trim();
-  if (!trimmed) {
-    return {};
-  }
-  try {
-    const parsed = JSON.parse(trimmed) as unknown;
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      const record = parsed as Record<string, unknown>;
-      return {
-        externalMessageId: getString(record.externalMessageId, record.messageId, record.id) || null,
-        responseMetadata: redactMetadata(record) as Record<string, unknown>,
-      };
-    }
-  } catch {
-    return { responseMetadata: { raw: redactText(trimmed.slice(0, 500)) } };
-  }
-  return { responseMetadata: { raw: redactText(trimmed.slice(0, 500)) } };
-}
-
 function runNativeCommand(
   command: string,
   stdin: string,
   cwd: string,
   env: NodeJS.ProcessEnv,
+  timeoutMs: number,
 ): Promise<NativeCommandResult> {
   const [spawnCommand, ...spawnArgs] = splitCommandLine(command);
   return new Promise((resolve, reject) => {
@@ -251,7 +203,7 @@ function runNativeCommand(
     const timeout = setTimeout(() => {
       child.kill("SIGTERM");
       reject(new ChatProviderOutboundAdapterError("Native bridge command timed out.", true));
-    }, DEFAULT_TIMEOUT_MS);
+    }, timeoutMs);
 
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
