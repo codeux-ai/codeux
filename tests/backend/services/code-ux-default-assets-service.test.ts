@@ -74,6 +74,23 @@ describe("Code UX default assets service", () => {
     ]) {
       expect(instructions).toContain(requiredCapability);
     }
+
+    for (const requiredPlanningGuidance of [
+      "planningGuidance.estimatedCompletionAt",
+      "planningGuidance.nextCheckAt",
+      "planningGuidance.recheckIntervalMs",
+      "planningGuidance.status",
+      "planningGuidance.isTerminal",
+      "the initial check is at `estimatedCompletionAt`",
+      "matching `recheckIntervalMs` of 60,000 milliseconds",
+      "do not diagnose failure, call `plan` again, requeue or resubmit work",
+      "change the provider, model, or settings",
+      "present missing tasks as an error",
+      "list and cancel every obsolete pending planning-status wakeup created by you",
+      "Never use a recurring schedule for planning status",
+    ]) {
+      expect(instructions).toContain(requiredPlanningGuidance);
+    }
   });
 
   it("installs missing base agents and container setup into the user directory without overwriting existing files", async () => {

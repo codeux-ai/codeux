@@ -142,11 +142,13 @@ For the full per-action payloads and return shapes, see [Management actions](/do
 
 ### Background sprint planning
 
-`manage_sprints` with `action: "plan"` returns a `status: "started"` acknowledgement immediately after synchronous precondition validation, while planning continues server-side. The stable `result` fields are `status`, `message`, `projectId`, and `sprintId`; the acknowledgement does not mean generated tasks already exist or that optional auto-start has completed.
+`manage_sprints` with `action: "plan"` returns a `status: "started"` acknowledgement immediately after synchronous precondition validation, while planning continues server-side. The stable `result` fields are `status`, `message`, `projectId`, and `sprintId`; additive `planningGuidance` supplies status, terminality, invocation/start identity, calculated duration and ETA, next-check timing, one-minute recheck cadence, sample/fallback metadata, an actionable message, and optional failure evidence. See [Management actions](/docs/developer-management-actions#sprints) for the field-by-field contract. The acknowledgement does not mean generated tasks already exist or that optional auto-start has completed.
 
-For dashboard chat-originated calls, Code UX queues a due-now, non-recurring `agent_wakeup` after planning settles. It targets the originating thread and asks the chat agent to recap the generated task count and whether execution actually started. Planning failures queue a same-thread wakeup containing the failure reason and a request for a concise failure recap.
+The first recommended status check is at `estimatedCompletionAt`. Every later `in_progress` read recommends a `nextCheckAt` one minute after that read. Passing the ETA does not prove failure. Repeating `plan` while the same project/sprint request is unsettled reuses the active request without another provider submission or terminal callback. Terminal `succeeded`, `failed`, `cancelled`, and `paused` guidance sets `nextCheckAt` to `null`; failed guidance includes available error evidence.
 
-Standalone MCP clients do not have originating dashboard chat-thread context. They receive the same acknowledgement without a completion wakeup and should poll `manage_sprints` and `manage_tasks`, or inspect relevant `manage_telemetry` state, for completion.
+For dashboard chat-originated calls, Code UX queues one due-now, non-recurring `agent_wakeup` after planning settles. It targets the originating thread and asks the chat agent to recap the generated task count and whether execution actually started. Planning failures queue a same-thread wakeup containing the failure reason and a request for a concise failure recap. The assigned Project Manager uses separate one-shot wakeups for ETA/status checks, never recurrence; it avoids replanning, requeueing, or configuration changes while status is active and cancels obsolete checks when terminal state or the runtime terminal wakeup arrives.
+
+Standalone MCP clients do not have originating dashboard chat-thread context. They receive the same acknowledgement without completion or Project Manager wakeups and should poll `manage_sprints` at `nextCheckAt`, inspect `manage_tasks`, or inspect relevant `manage_telemetry` state for completion. Reads do not create scheduler entries.
 
 ## `add_long_term_memory`
 

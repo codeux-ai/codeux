@@ -963,6 +963,39 @@ describe("ExecutionRepository", () => {
     expect(paginatedList[0]!.id).toBe(invocation2.id);
   });
 
+  it("filters listed execution invocations by sprint", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Sprint Invocation Query Project",
+      sourceType: "local",
+      sourceRef: "/workspace/sprint-invocation-query",
+    });
+    const firstSprint = projectRepository.createSprint(project.id, { name: "First sprint" });
+    const secondSprint = projectRepository.createSprint(project.id, { name: "Second sprint" });
+    const firstInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: firstSprint.id,
+      type: "planning",
+      status: "completed",
+      startedAt: "2026-07-13T10:00:00.000Z",
+    });
+    executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: secondSprint.id,
+      type: "planning",
+      status: "running",
+      startedAt: "2026-07-13T10:01:00.000Z",
+    });
+
+    const result = executionRepository.listExecutionInvocations({
+      projectId: project.id,
+      sprintId: firstSprint.id,
+    });
+
+    expect(result.map((invocation) => invocation.id)).toEqual([firstInvocation.id]);
+    expect(result[0]?.sprintId).toBe(firstSprint.id);
+  });
+
   it("enriches listed invocations with sprint number and task key for display/linking", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({

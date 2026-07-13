@@ -134,12 +134,24 @@ Default flow:
 
 1. Identify the correct project and capture the user's outcome, constraints, exclusions, and validation expectations.
 2. Use `manage_sprints` with `action: "plan"`. Supply the project and source goal; use planning overrides only when the user requested them or project routing requires them.
-3. If the user asked to begin immediately, use `autoStart` when appropriate. Otherwise return the planned sprint for review.
-4. Inspect planning status or schedule a wakeup when planning is asynchronous.
+3. If the user asked to begin immediately, use `autoStart` when appropriate. Otherwise leave the planned sprint for review after planning succeeds.
+4. Follow asynchronous planning through the returned `planningGuidance` contract and the one-shot wakeup flow below.
 5. Start and monitor only to the extent the user requested.
-6. Report the sprint identity, state, meaningful blockers, and next action.
+6. Report the sprint identity, observed state, meaningful blockers, and next action.
 
 Do not create artificial tasks for branching, pull requests, merging, generic coordination, vague investigation, or final polish. Code UX owns Git/CI/merge mechanics, and every implementation task should deliver a concrete, independently verifiable result.
+
+### Asynchronous Planning Guidance
+
+Every dashboard-assigned Project Manager owns planning follow-through until the planning invocation succeeds or reaches another terminal status.
+
+1. Read `planningGuidance.estimatedCompletionAt`, `planningGuidance.nextCheckAt`, `planningGuidance.recheckIntervalMs`, `planningGuidance.status`, and `planningGuidance.isTerminal` from the `manage_sprints` result. Keep the returned planning invocation and sprint identifiers in every continuation. These fields are authoritative; never infer completion from elapsed wall time or from whether tasks are present.
+2. After the initial `plan` result reports `status: "in_progress"` and `isTerminal: false`, list your pending wakeups and create exactly one non-duplicate, one-shot `scheduler_code_ux` wakeup with `scheduledFor` equal to the returned `nextCheckAt` (the initial check is at `estimatedCompletionAt`). Never use a recurring schedule for planning status.
+3. When that wakeup runs, call `manage_sprints` with `action: "get"` for the same sprint and read the new `planningGuidance`. If it remains `status: "in_progress"` and `isTerminal: false`, schedule exactly one next one-shot check at its returned `nextCheckAt`. The subsequent `nextCheckAt` must be one minute after the current check, matching `recheckIntervalMs` of 60,000 milliseconds; use the returned timestamp rather than inventing a cadence.
+4. While guidance remains non-terminal, do not diagnose failure, call `plan` again, requeue or resubmit work, change the provider, model, or settings, or present missing tasks as an error. This prohibition still applies after `estimatedCompletionAt` has elapsed: an ETA overrun is not a failed invocation.
+5. When guidance reports `status: "succeeded"` and `isTerminal: true`, stop polling, inspect the generated tasks, and inspect the actual sprint/run state to verify whether requested auto-start really began before reporting success.
+6. When guidance reports `status: "failed"`, `"cancelled"`, or `"paused"` with `isTerminal: true`, stop polling and report the terminal status plus the returned message or error evidence. Do not retry planning or change configuration without justified recovery direction from the user or concrete terminal evidence.
+7. On every terminal planning wakeup, first use `scheduler_code_ux` to list and cancel every obsolete pending planning-status wakeup created by you for the same invocation or sprint. Do not cancel the wakeup currently executing. This terminal cleanup is mandatory when the existing completion/failure wakeup arrives before an ETA status check, so the obsolete check cannot produce a later duplicate turn.
 
 ## Concise Manual Sprint-Planning Guide
 
