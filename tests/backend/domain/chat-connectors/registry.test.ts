@@ -78,6 +78,7 @@ describe("chat connector registry", () => {
         defaultMode: "webhook",
         modes: [
           { mode: "webhook", integration: "bot_gateway", setup: ["gatewayUrl", "applicationId"], secrets: ["botToken", "webhookSecret"] },
+          { mode: "official_api", integration: "official_api", setup: ["applicationId", "publicKey", "intents"], secrets: ["botToken"] },
         ],
       },
     });
@@ -92,11 +93,12 @@ describe("chat connector registry", () => {
     expect(() => getChatConnectorProfileForMode("discord", "managed_bridge")).toThrow(
       "Unsupported bridge mode for discord: managed_bridge",
     );
-    for (const kind of CHAT_CONNECTOR_KINDS) {
+    for (const kind of CHAT_CONNECTOR_KINDS.filter((candidate) => candidate !== "discord")) {
       expect(() => getChatConnectorProfileForMode(kind, "official_api" as ChatProviderBridgeMode)).toThrow(
         `Unsupported bridge mode for ${kind}: official_api`,
       );
     }
+    expect(getChatConnectorProfileForMode("discord", "official_api").kind).toBe("discord");
   });
 
   it("constructs the registry without network or process side effects", async () => {

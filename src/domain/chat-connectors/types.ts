@@ -17,6 +17,7 @@ export interface PartialNormalizedChatConnectorInbound {
   textBody?: string;
   externalMessageId?: string;
   timestamp?: unknown;
+  externalThreadId?: string;
 }
 
 export interface ChatConnectorAuthenticationInput {
