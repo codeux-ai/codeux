@@ -821,16 +821,32 @@ The direct MCP `manage_sprints` call with `action: "plan"` validates the project
     "status": "started",
     "message": "Sprint planning started in the background. You will be notified when it completes or fails.",
     "projectId": "project-123",
-    "sprintId": "sprint-123"
+    "sprintId": "sprint-123",
+    "planningGuidance": {
+      "status": "in_progress",
+      "asynchronous": true,
+      "isTerminal": false,
+      "invocationId": "planning-request-id",
+      "startedAt": "2026-07-13T10:00:00.000Z",
+      "estimatedDurationMs": 180000,
+      "estimatedCompletionAt": "2026-07-13T10:03:00.000Z",
+      "nextCheckAt": "2026-07-13T10:03:00.000Z",
+      "recheckIntervalMs": 60000,
+      "sampleSize": 2,
+      "isFallbackEstimate": false,
+      "message": "Planning is running asynchronously. Check the same invocation again at the recommended time."
+    }
   }
 }
 ```
 
-The stable result fields are `status`, `message`, `projectId`, and `sprintId`. The acknowledgement means only that background planning started after synchronous validation. It does not mean tasks already exist, planning self-reflection has finished, or optional `autoStart` has completed.
+The existing result fields `status`, `message`, `projectId`, and `sprintId` remain stable, and `planningGuidance` is additive. Its estimate uses the project's recent completed planning durations, with the shared three-minute fallback when no usable history exists. The acknowledgement means only that background planning started after synchronous validation. It does not mean tasks already exist, planning self-reflection has finished, or optional `autoStart` has completed.
+
+A repeated `plan` call for the same project and sprint while that request is unsettled does not submit another provider request. It returns `status: "in_progress"` with guidance to check again one minute later. `manage_sprints` `get` preserves every sprint field and adds `planningGuidance` while an in-memory request or sprint-linked planning invocation is available. A still-running request advances `nextCheckAt` by one minute on each read. Completed planning maps to `succeeded`; failed, cancelled, and paused planning surfaces its terminal state and available error detail. All terminal guidance sets `nextCheckAt` to `null`.
 
 When the call originates from an MCP-backed dashboard chat turn, Code UX captures the originating agent and thread before the background promise settles. Successful completion then persists an existing due-now, non-recurring `agent_wakeup` targeted to that thread. The scheduler delivers the wakeup through the normal chat-agent path and asks the agent to review the generated tasks, recap their count, and state whether execution actually started. If planning fails, Code UX queues the same kind of same-thread wakeup with the failure reason and asks the agent to provide a concise failure recap.
 
-Standalone MCP clients have no originating dashboard chat-thread context, so they receive the same immediate acknowledgement without a completion wakeup. They should poll with `manage_sprints` and `manage_tasks`, or inspect the relevant `manage_telemetry` sprint-run, task-dispatch, and invocation state, to determine when planning and any requested auto-start work have completed.
+Standalone MCP clients have no originating dashboard chat-thread context, so they receive the same immediate acknowledgement without a completion wakeup. They should poll `manage_sprints` with `action: "get"`, or inspect tasks and relevant telemetry, to determine when planning and any requested auto-start work have completed. Status reads never create scheduler entries.
 
 This asynchronous response applies only to the direct MCP `manage_sprints` `plan` action. `import_issues` with `planAfterImport`, dashboard planning routes, scheduled sprint planning, quicksprints, and internal callers continue to await planning completion.
 

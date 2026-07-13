@@ -129,7 +129,7 @@ export const TOOL_DEFINITIONS = [
     name: "manage_sprints",
     runtimeRoles: ["project_manager"],
     category: "orchestration",
-    description: "Manage Code UX sprints. Used to list, get, create, update, delete, start, pause, cancel, force_cancel, inspect_run, import_issues, and plan. Destructive actions require approval.",
+    description: "Manage Code UX sprints. Used to list, get, create, update, delete, start, pause, cancel, force_cancel, inspect_run, import_issues, and plan. Direct planning returns immediately with ETA and polling guidance; get reports current or terminal planning guidance without resubmitting work. Destructive actions require approval.",
     inputSchema: {
       type: "object",
       properties: {

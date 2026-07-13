@@ -10,6 +10,7 @@ import { validateToolArguments } from "../../../src/api/mcp/validators/tool-vali
 import { runWithMcpAgentContext } from "../../../src/server/mcp-agent-context.js";
 import type { SchedulerService } from "../../../src/services/scheduler-service.js";
 import type { Logger } from "../../../src/shared/logging/logger.js";
+import type { ExecutionInvocationRecord } from "../../../src/contracts/invocation-types.js";
 
 describe("SprintActions", () => {
   let projectRepo: ProjectManagementRepository;
@@ -40,6 +41,7 @@ describe("SprintActions", () => {
 
     execRepo = {
       listSprintRuns: vi.fn(),
+      listExecutionInvocations: vi.fn().mockReturnValue([]),
     } as unknown as ExecutionRepository;
 
     planningAgentService = {
@@ -88,6 +90,36 @@ describe("SprintActions", () => {
     };
   };
 
+  const makeInvocation = (
+    overrides: Partial<ExecutionInvocationRecord> = {},
+  ): ExecutionInvocationRecord => ({
+    id: "inv-1",
+    projectId: "p1",
+    sprintId: "s1",
+    taskId: null,
+    sprintRunId: null,
+    dispatchId: null,
+    taskRunId: null,
+    attentionItemId: null,
+    providerInvocationId: null,
+    type: "planning",
+    status: "running",
+    provider: null,
+    model: null,
+    systemPrompt: null,
+    startedAt: "2026-07-13T10:00:00.000Z",
+    finishedAt: null,
+    errorMessage: null,
+    lastErrorCategory: null,
+    lastErrorMessage: null,
+    lastRetryAfterIso: null,
+    messageCount: 0,
+    lastMessageAt: null,
+    createdAt: "2026-07-13T10:00:00.000Z",
+    updatedAt: "2026-07-13T10:00:00.000Z",
+    ...overrides,
+  });
+
   it("lists sprints", async () => {
     const mockResult = { sprints: [], selectedSprintId: null };
     vi.mocked(projectRepo.listSprints).mockReturnValue(mockResult);
@@ -98,12 +130,80 @@ describe("SprintActions", () => {
   });
 
   it("gets sprint", async () => {
-    const mockSprint = { id: "s1" };
+    const mockSprint = { id: "s1", projectId: "p1" };
     vi.mocked(projectRepo.getSprint).mockReturnValue(mockSprint as any);
 
     const result = await sprintActions.handleSprintAction(makeArgs("get", { sprintId: "s1" }));
     expect(projectRepo.getSprint).toHaveBeenCalledWith("s1");
     expect(result.result).toEqual(mockSprint);
+    expect(execRepo.listExecutionInvocations).toHaveBeenCalledWith({ projectId: "p1", sprintId: "s1" });
+  });
+
+  it("adds one-minute guidance to get while the latest durable planning invocation is running", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-13T10:05:00.000Z"));
+    try {
+      const sprint = { id: "s1", projectId: "p1", name: "Planning sprint" };
+      const running = makeInvocation();
+      const completedSample = makeInvocation({
+        id: "sample-1",
+        sprintId: "older-sprint",
+        status: "completed",
+        startedAt: "2026-07-13T09:00:00.000Z",
+        finishedAt: "2026-07-13T09:02:00.000Z",
+      });
+      vi.mocked(projectRepo.getSprint).mockReturnValue(sprint as any);
+      vi.mocked(execRepo.listExecutionInvocations).mockImplementation((params) => (
+        params.sprintId ? [running] : [running, completedSample]
+      ));
+
+      const response = await sprintActions.handleSprintAction(makeArgs("get", { sprintId: "s1" }));
+
+      expect(response.result).toMatchObject({
+        ...sprint,
+        planningGuidance: {
+          status: "in_progress",
+          invocationId: "inv-1",
+          estimatedDurationMs: 120_000,
+          nextCheckAt: "2026-07-13T10:06:00.000Z",
+          isTerminal: false,
+        },
+      });
+      expect(schedulerService.createEntry).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    ["completed", "succeeded"],
+    ["failed", "failed"],
+    ["cancelled", "cancelled"],
+    ["paused", "paused"],
+  ] as const)("maps durable %s planning to terminal %s get guidance", async (status, guidanceStatus) => {
+    const sprint = { id: "s1", projectId: "p1", name: "Planning sprint" };
+    const terminal = makeInvocation({
+      status,
+      finishedAt: "2026-07-13T10:02:00.000Z",
+      errorMessage: status === "failed" ? "Provider unavailable." : null,
+    });
+    vi.mocked(projectRepo.getSprint).mockReturnValue(sprint as any);
+    vi.mocked(execRepo.listExecutionInvocations).mockImplementation((params) => (
+      params.sprintId ? [terminal] : [terminal]
+    ));
+
+    const response = await sprintActions.handleSprintAction(makeArgs("get", { sprintId: "s1" }));
+
+    expect(response.result).toMatchObject({
+      ...sprint,
+      planningGuidance: {
+        status: guidanceStatus,
+        invocationId: "inv-1",
+        isTerminal: true,
+        nextCheckAt: null,
+        ...(status === "failed" ? { errorMessage: "Provider unavailable." } : {}),
+      },
+    });
   });
 
   it("creates sprint", async () => {
@@ -1004,6 +1104,20 @@ describe("SprintActions", () => {
       resolvePlanning = resolve;
     });
     vi.mocked(planningAgentService.startPlanSprint).mockReturnValue(planning);
+    vi.mocked(execRepo.listExecutionInvocations).mockReturnValue([
+      makeInvocation({
+        id: "sample-new",
+        status: "completed",
+        startedAt: "2026-07-13T09:00:00.000Z",
+        finishedAt: "2026-07-13T09:02:00.000Z",
+      }),
+      makeInvocation({
+        id: "sample-old",
+        status: "completed",
+        startedAt: "2026-07-12T09:00:00.000Z",
+        finishedAt: "2026-07-12T09:04:00.000Z",
+      }),
+    ]);
 
     const payload = {
       projectId: "p1",
@@ -1023,12 +1137,23 @@ describe("SprintActions", () => {
       planningAgentPresetId: "agent-1",
       overrides: { workerId: "w1" }
     });
-    expect(result.result).toEqual({
+    expect(result.result).toMatchObject({
       status: "started",
       message: "Sprint planning started in the background. You will be notified when it completes or fails.",
       projectId: "p1",
       sprintId: "s1",
+      planningGuidance: {
+        status: "in_progress",
+        asynchronous: true,
+        isTerminal: false,
+        estimatedDurationMs: 180_000,
+        sampleSize: 2,
+        isFallbackEstimate: false,
+      },
     });
+    expect((result.result as any).planningGuidance.invocationId).toMatch(/^mcp-plan:p1:s1:/);
+    expect((result.result as any).planningGuidance.nextCheckAt)
+      .toBe((result.result as any).planningGuidance.estimatedCompletionAt);
     expect(schedulerService.createEntry).not.toHaveBeenCalled();
 
     resolvePlanning({ ok: true, invocationId: "inv-1", agentId: "planner-1", createdTaskIds: ["t1", "t2"], started: true });
@@ -1045,6 +1170,104 @@ describe("SprintActions", () => {
         bodyMarkdown: expect.stringMatching(/2 task\(s\).*Execution started: yes/s),
       }),
     }));
+  });
+
+  it("suppresses duplicate in-flight planning and returns one-minute guidance", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-13T10:00:00.000Z"));
+    try {
+      let resolvePlanning!: (value: any) => void;
+      const planning = new Promise<any>((resolve) => {
+        resolvePlanning = resolve;
+      });
+      const persisted = makeInvocation({
+        id: "inv-active",
+        startedAt: "2026-07-13T10:00:01.000Z",
+      });
+      vi.mocked(planningAgentService.startPlanSprint).mockReturnValue(planning);
+      vi.mocked(execRepo.listExecutionInvocations)
+        .mockReturnValueOnce([])
+        .mockReturnValue([persisted]);
+
+      const first = await runWithMcpAgentContext("agent-1", "thread-1", () =>
+        sprintActions.handleSprintAction(makeArgs("plan", { projectId: "p1", sprintId: "s1" })));
+      vi.setSystemTime(new Date("2026-07-13T10:00:30.000Z"));
+      const duplicate = await runWithMcpAgentContext("agent-1", "thread-1", () =>
+        sprintActions.handleSprintAction(makeArgs("plan", { projectId: "p1", sprintId: "s1" })));
+
+      expect(first.result).toMatchObject({ status: "started" });
+      expect(duplicate.result).toMatchObject({
+        status: "in_progress",
+        projectId: "p1",
+        sprintId: "s1",
+        planningGuidance: {
+          status: "in_progress",
+          invocationId: "inv-active",
+          nextCheckAt: "2026-07-13T10:01:30.000Z",
+          isTerminal: false,
+        },
+      });
+      expect(planningAgentService.startPlanSprint).toHaveBeenCalledTimes(1);
+      expect(schedulerService.createEntry).not.toHaveBeenCalled();
+
+      resolvePlanning({ ok: true, invocationId: "inv-active", agentId: "planner-1", createdTaskIds: [], started: false });
+      await vi.runAllTimersAsync();
+      expect(schedulerService.createEntry).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("prefers the active planning promise over a prematurely completed audit row", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-13T10:00:00.000Z"));
+    try {
+      const planning = new Promise<any>(() => undefined);
+      const completedAudit = makeInvocation({
+        id: "inv-active",
+        status: "completed",
+        startedAt: "2026-07-13T10:00:01.000Z",
+        finishedAt: "2026-07-13T10:00:20.000Z",
+      });
+      vi.mocked(projectRepo.getSprint).mockReturnValue({ id: "s1", projectId: "p1", name: "Sprint" } as any);
+      vi.mocked(planningAgentService.startPlanSprint).mockReturnValue(planning);
+      vi.mocked(execRepo.listExecutionInvocations)
+        .mockReturnValueOnce([])
+        .mockReturnValue([completedAudit]);
+
+      await sprintActions.handleSprintAction(makeArgs("plan", { projectId: "p1", sprintId: "s1" }));
+      vi.setSystemTime(new Date("2026-07-13T10:00:30.000Z"));
+      const response = await sprintActions.handleSprintAction(makeArgs("get", { sprintId: "s1" }));
+
+      expect(response.result).toMatchObject({
+        planningGuidance: {
+          status: "in_progress",
+          invocationId: "inv-active",
+          nextCheckAt: "2026-07-13T10:01:30.000Z",
+          isTerminal: false,
+        },
+      });
+      expect(schedulerService.createEntry).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps synchronous planning precondition failures on the error path", async () => {
+    vi.mocked(planningAgentService.startPlanSprint).mockImplementation(() => {
+      throw new Error("Sprint already has tasks; replan is required.");
+    });
+
+    await expect(sprintActions.handleSprintAction(makeArgs("plan", {
+      projectId: "p1",
+      sprintId: "s1",
+    }))).rejects.toThrow("Sprint already has tasks; replan is required.");
+
+    await expect(sprintActions.handleSprintAction(makeArgs("plan", {
+      projectId: "p1",
+      sprintId: "s1",
+    }))).rejects.toThrow("Sprint already has tasks; replan is required.");
+    expect(planningAgentService.startPlanSprint).toHaveBeenCalledTimes(2);
   });
 
   it("queues a same-thread failure wakeup after background planning rejects", async () => {
