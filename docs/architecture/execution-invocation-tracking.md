@@ -17,6 +17,8 @@ Execution invocations span various purposes:
 
 Failed invocations can be explicitly preserved with `preserved_at`. Preservation is used for high-value transcripts such as quota-expensive planning runs that should remain available for operator review. Preserved sprint-scoped invocation rows block sprint deletion through the repository boundary so their transcripts are not removed by a foreign-key cascade.
 
+Planning callers share a pure MCP guidance projection in `src/domain/planning/mcp-planning-guidance.ts`. It derives ETA from the ten most recently started, completed planning invocations for the project and ignores running, failed, cancelled, paused, non-planning, and malformed duration samples. With no usable sample it retains the three-minute composer fallback. Initial guidance schedules its first check at the calculated completion estimate; later checks for a still-running invocation schedule exactly one minute from the explicit check time, even when the estimate has elapsed. Only persisted invocation status determines completion: completed, failed, cancelled, and paused projections are terminal and have no next check, while elapsed ETA alone never implies failure or authorizes a duplicate planning submission.
+
 For supported local CLI models, tracking prefers provider-reported usage. Jules retains a separate remote-session synchronization path that computes **estimated** tokens by accumulating input and output characters divided by 4 (the characters-per-token heuristic), keeping it accounted for without inventing authoritative native counts.
 
 ### `execution_invocation_messages`
