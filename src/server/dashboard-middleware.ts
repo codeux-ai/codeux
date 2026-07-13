@@ -212,7 +212,7 @@ function resolveNodeFlowProjectId(pathname: string, options: DashboardServerOpti
 }
 
 function captureRawJsonBody(req: IncomingMessage, _res: unknown, buf: Buffer): void {
-  (req as IncomingMessage & { rawBody?: string }).rawBody = buf.toString("utf8");
+  (req as IncomingMessage & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
 }
 
 function createDashboardJsonContentTypeGuard(dashboardLogger: Logger): RequestHandler {

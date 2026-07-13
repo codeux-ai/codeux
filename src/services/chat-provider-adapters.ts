@@ -5,9 +5,11 @@ import type {
   ChatProviderMessageDeliveryRecord,
 } from "../contracts/chat-provider-types.js";
 import { getChatConnectorProfileForMode } from "../domain/chat-connectors/registry.js";
+import { ChatConnectorOutboundExecutionError } from "../domain/chat-connectors/types.js";
 import type {
   ChatConnectorCommandOutboundRequest,
   ChatConnectorHttpOutboundRequest,
+  ChatConnectorOutboundExecutor,
   ChatConnectorProfile,
 } from "../domain/chat-connectors/types.js";
 import { redactText } from "../shared/security/redaction.js";
@@ -62,13 +64,29 @@ export function createDefaultChatProviderOutboundAdapter(): ChatProviderOutbound
   return new ConfiguredChatProviderOutboundAdapter();
 }
 
+export interface ConfiguredChatProviderOutboundAdapterOptions {
+  fetch?: typeof fetch;
+  now?: () => number;
+  wait?: (delayMs: number, signal?: AbortSignal) => Promise<void>;
+}
+
 export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutboundAdapter {
+  private readonly executors = new Map<string, ChatConnectorOutboundExecutor | null>();
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(private readonly options: ConfiguredChatProviderOutboundAdapterOptions = {}) {
+    this.fetchImpl = options.fetch ?? fetch;
+  }
   private readonly rateLimitReadyAt = new Map<string, number>();
 
   async send(context: ChatProviderOutboundAdapterContext): Promise<ChatProviderOutboundAdapterResult> {
     let profile: ChatConnectorProfile;
     try {
       profile = getChatConnectorProfileForMode(context.connection.providerKind, context.connection.bridgeMode);
+      const executor = this.getExecutor(profile, context.connection.bridgeMode);
+      if (executor) {
+        return await executor.send(context);
+      }
       const request = profile.outbound.buildRequest(context);
       return request.transport === "http"
         ? this.sendHttp(context, profile, request)
@@ -77,11 +95,29 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
       if (error instanceof ChatProviderOutboundAdapterError) {
         throw error;
       }
+      if (error instanceof ChatConnectorOutboundExecutionError) {
+        throw new ChatProviderOutboundAdapterError(error.message, error.retryable, error.statusCode);
+      }
       throw new ChatProviderOutboundAdapterError(
         error instanceof Error ? error.message : "Unsupported chat provider bridge mode.",
         false,
       );
     }
+  }
+
+  private getExecutor(
+    profile: ChatConnectorProfile,
+    mode: ChatProviderConnectionInternalRecord["bridgeMode"],
+  ): ChatConnectorOutboundExecutor | null {
+    const key = `${profile.kind}:${mode}`;
+    if (this.executors.has(key)) return this.executors.get(key) ?? null;
+    const executor = profile.outbound.createExecutor?.(mode, {
+      fetch: this.fetchImpl,
+      now: this.options.now,
+      wait: this.options.wait,
+    }) ?? null;
+    this.executors.set(key, executor);
+    return executor;
   }
 
   private async sendHttp(
@@ -100,7 +136,7 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
 
     let response: Response;
     try {
-      response = await fetch(normalizedUrl, {
+      response = await this.fetchImpl(normalizedUrl, {
         method: "POST",
         headers,
         body: JSON.stringify(request.body),
