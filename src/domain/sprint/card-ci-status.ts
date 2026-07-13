@@ -96,7 +96,7 @@ export function resolveMainMergeCardCiStatus(
     return null;
   }
   const state = payloadState(payload);
-  if (payload.hasFailedChecks === true || state === "failed_checks" || state === "review_blocked") {
+  if (payload.hasFailedChecks === true || state === "failed_checks") {
     return "failed";
   }
   if (payload.hasPendingChecks === true || state === "pending_checks") {

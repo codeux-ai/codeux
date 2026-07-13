@@ -27,6 +27,8 @@ Task resolution follows these rules:
 
 Sprint resolution aggregates task results with its latest main-merge gate and active main-merge CI attention. Precedence is `failed`, then `running`, then `pending`.
 
+A review-only `review_blocked` main-merge event does not produce a failed CI status. Explicit failed-check evidence (`state = failed_checks` or `hasFailedChecks = true`) and active main-merge CI repair attention still produce `failed`.
+
 The dashboard expands this compact persisted state with project-scoped execution evidence at each page boundary. Tasks and Live derive task-scoped pull-request, checks, and merge steps; the Sprint gallery and ledger share the sprint-scoped aggregation. Every step uses outcome text in addition to its icon and tone. Successful pull-request evidence is announced as `Pull request ready`, running checks as `Checks running`, failed checks as `Checks failed`, and recovered checks as `Checks passed`, so assistive technology never receives raw enum values as the status label.
 
 Cross-surface integration coverage lives in `tests/dashboard/v2/qa-ci-card-status.integration.test.tsx`. Its deterministic fixture exercises pull-request creation, running checks, failure, recovery, active attention precedence, unrelated-event isolation, reconnect replay, and keyboard-only QA/CI disclosures across Task, Live, Sprint gallery, and Sprint ledger cards without Docker, provider CLIs, Git hosting, or a database.

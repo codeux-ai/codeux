@@ -15,9 +15,12 @@ Only the compact status crosses the card contract. Failed logs, credentials, and
 | Durable task `merge_indicator = CI` without usable newer detail | `pending` |
 | Latest task or main-merge gate is waiting on checks | `running` |
 | Failed checks, blocked task gate, or active CI repair attention | `failed` |
+| Review-only main-merge blocker without failed checks | `null` |
 | Gate settled or relevant attention resolved | `null` |
 
 Sprint cards aggregate their task statuses and latest main-merge gate with failure-before-running-before-pending precedence. Task cards and Live subtasks call the same pure resolver, so all three surfaces interpret persisted state identically.
+
+Review gating remains separate from CI failure presentation. A main-merge `review_blocked` event becomes `failed` only when it also carries failed-check evidence or matching CI repair attention is active.
 
 The dashboard expands that evidence into the same three labelled workflow steps on Task, Live, Sprint gallery, and Sprint ledger cards: **Pull request**, **Checks**, and **Merge**. Icons and color reinforce visible and accessible text such as **Pull request ready**, **Checks running**, **Checks failed**, and **Checks passed**. A newer successful observation replaces stale failure, while active matching CI attention restores the failure state.
 
