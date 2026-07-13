@@ -235,12 +235,15 @@ describe("KanbanTaskCard Integration", () => {
   });
 
   it("uses the shared QA details badge for changes requested and keeps follow-up prompts collapsed", async () => {
+    const user = userEvent.setup();
     const followUpPrompt = "Implement the requested keyboard fix with regression coverage.";
     const latestReview = {
       status: "completed",
       outcome: "changes_requested",
       summary: "Keyboard behavior needs another pass.",
       findings: ["Focus is lost after closing the menu."],
+      fixInstructions: "Restore focus to the task action trigger.",
+      targetTaskKey: "TASK-123",
       reviewer: "QA Reviewer",
       finishedAt: "2026-07-13T12:00:00.000Z",
       followUpTasks: [{
@@ -256,7 +259,7 @@ describe("KanbanTaskCard Integration", () => {
       task: { ...mockViewModel.task, latestReview },
       qaReviewLabel: undefined,
     };
-    const { getByLabelText, getAllByText, getByText, queryByText, queryByRole } = render(
+    const { getByLabelText, getByRole, getByText, queryByText } = render(
       <KanbanTaskCard viewModel={viewModel} onEdit={onEdit} onDelete={onDelete} />,
     );
 
@@ -265,17 +268,54 @@ describe("KanbanTaskCard Integration", () => {
     expect(trigger.querySelector(".lucide-pencil-line")).toBeTruthy();
     expect(queryByText("QA completed, changes_requested")).not.toBeInTheDocument();
 
-    fireEvent.mouseEnter(trigger.parentElement as Element);
-    await waitFor(() => expect(getAllByText("QA Changes Requested").length).toBeGreaterThan(0));
-    expect(getByText("Keyboard behavior needs another pass.")).toBeInTheDocument();
-    expect(getByText("Focus is lost after closing the menu.")).toBeInTheDocument();
+    await user.click(trigger);
+    const details = await waitFor(() => getByRole("region", { name: "QA Changes Requested" }));
+    expect(within(details).getByText("Keyboard behavior needs another pass.")).toBeInTheDocument();
+    expect(within(details).getByText("Focus is lost after closing the menu.")).toBeInTheDocument();
+    expect(within(details).getByText("Restore focus to the task action trigger.")).toBeInTheDocument();
+    expect(within(details).getByText("TASK-123")).toBeInTheDocument();
     expect(queryByText("Repair keyboard focus")).not.toBeInTheDocument();
     expect(queryByText(followUpPrompt)).not.toBeInTheDocument();
 
-    const followUpTrigger = queryByRole("button", { name: "Follow-up task 1" });
-    if (followUpTrigger) {
-      expect(followUpTrigger).toHaveAttribute("aria-expanded", "false");
-    }
+    const followUpTrigger = within(details).getByRole("button", { name: "Follow-up task 1" });
+    expect(followUpTrigger).toHaveAttribute("aria-expanded", "false");
+    await user.click(followUpTrigger);
+    expect(followUpTrigger).toHaveAttribute("aria-expanded", "true");
+    expect(getByText("Repair keyboard focus")).toBeInTheDocument();
+    expect(getByText(followUpPrompt)).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    expect(trigger).toHaveFocus();
+    expect(getByRole("button", { name: /Edit task TASK-123/i })).toBeInTheDocument();
+    expect(getByRole("button", { name: /Delete task TASK-123/i })).toBeInTheDocument();
+  });
+
+  it("uses the shared provider-failure treatment without disabling task actions", () => {
+    const viewModel: TaskCardViewModel = {
+      ...mockViewModel,
+      task: {
+        ...mockViewModel.task,
+        latestReview: {
+          status: "failed",
+          outcome: null,
+          summary: "The QA provider stopped before returning a verdict.",
+          findings: [],
+          reviewer: null,
+          finishedAt: null,
+        },
+      },
+      qaReviewLabel: undefined,
+    };
+    const { container, getByLabelText, getByRole } = render(
+      <KanbanTaskCard viewModel={viewModel} onEdit={onEdit} onDelete={onDelete} />,
+    );
+
+    const trigger = getByLabelText("QA review details");
+    expect(trigger).toHaveClass("text-status-red");
+    expect(container.querySelector('[data-qa-state="failed"]')).toBeTruthy();
+    expect(container.querySelector('[data-qa-icon="failed"]')).toBeTruthy();
+    expect(getByRole("button", { name: /Edit task TASK-123/i })).toBeInTheDocument();
+    expect(getByRole("button", { name: /Delete task TASK-123/i })).toBeInTheDocument();
   });
 
   it.each([

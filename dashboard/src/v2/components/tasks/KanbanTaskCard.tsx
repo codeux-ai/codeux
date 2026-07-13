@@ -22,7 +22,6 @@ import { getSafeUrl } from "../../lib/safe-url.js";
 import { SelfReflectionRatingBadge } from "./SelfReflectionRatingBadge.js";
 import { SprintReviewBadge } from "../sprints/SprintReviewBadge.js";
 import { CiStatusBadge } from "../ui/CiStatusBadge.js";
-import { getQaReviewPresentation } from "../../lib/qa-review-presentation.js";
 
 export const KanbanTaskCard: FunctionComponent<{
   viewModel: TaskCardViewModel;
@@ -50,8 +49,11 @@ export const KanbanTaskCard: FunctionComponent<{
   const dependencySummary = dependencyIndicators.length === 0
     ? "No dependency blockers."
     : `${dependencyIndicators.length} ${dependencyIndicators.length === 1 ? "dependency" : "dependencies"}; ${blockerCount === 0 ? "no blockers" : `${blockerCount} ${blockerCount === 1 ? "blocker" : "blockers"}`}: ${dependencyIndicators.map((dep) => `${dep.id} ${dep.stateLabel ?? dep.status.replace(/_/g, " ")}`).join(", ")}.`;
+  const reviewDetails = task.latestReview?.summary?.trim();
   const reviewSummary = task.latestReview
-    ? getQaReviewPresentation(task.latestReview).screenReaderLabel
+    ? reviewDetails
+      ? `QA review details available: ${reviewDetails}${/[.!?]$/.test(reviewDetails) ? "" : "."}`
+      : "QA review details available."
     : "No QA review recorded.";
   const ciSummary = ciStatusPresentation?.accessibleLabel ?? "No CI workflow evidence.";
   const runtimeSummary = liveRunningTime

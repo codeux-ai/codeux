@@ -17,8 +17,6 @@ Failed execution and eligible human intervention receive a red border around the
 
 When reduced motion is enabled, the exclamation stops pulsing and the waiting cue stops bouncing; the red border, indicator, visible context, and semantic label remain. Worker- and system-owned transient pauses are not shown as requests for human action. Normal status, progress, review badges, links, and controls also remain available in both attention states.
 
-QA review badges distinguish active review, successful review, and requested changes before the detail overlay opens. Requested changes use a blue `QA` badge with an edit icon instead of the green success check. Hovering the badge or focusing it from the keyboard opens the same mobile-safe, viewport-clamped overlay with the requested-change summary, every finding, and reviewer or review-finished metadata when available. Reduced-motion preferences stop decorative badge animation while preserving the visible and screen-reader state text.
-
 Completion keeps one decimal when needed across sprint cards, ledger rows, active task streams, and sprint selectors: `7.5%` stays `7.5%`, while whole values such as `5.0%` display as `5%`. Progress bars and accessible values use the same completion number and remain bounded from `0%` to `100%`.
 
 Sprints can be **showcase-pinned** to surface them on the Overview page; toggle this from the cell menu or bulk actions.

@@ -1,139 +1,233 @@
-/** @jsx h */
 /** @vitest-environment happy-dom */
-import { h } from "preact";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+
+import "@testing-library/jest-dom/vitest";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SprintReviewBadge } from "../../../../../dashboard/src/v2/components/sprints/SprintReviewBadge";
+import { SprintReviewBadge } from "../../../../../dashboard/src/v2/components/sprints/SprintReviewBadge.js";
+import type { SprintReviewSummary } from "../../../../../dashboard/src/v2/types.js";
 
-const requestedChangesSummary = {
-  status: "completed",
-  outcome: "changes_requested",
-  summary: "Please address the blocking review notes.",
-  findings: ["Add the missing validation", "Cover the keyboard path"],
-  reviewer: "QA Reviewer",
-  finishedAt: "2024-01-01T00:00:00.000Z",
-};
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
-const passedSummary = {
+const baseSummary: SprintReviewSummary = {
   status: "completed",
-  outcome: "passed",
+  outcome: "pass",
   summary: "Looks perfect.",
-  findings: ["Optional naming note"],
-  reviewer: "QA Reviewer",
+  findings: [],
+  reviewer: "QA Bot",
   finishedAt: "2024-01-01T00:00:00.000Z",
 };
 
-function getTrigger(): HTMLElement {
-  return screen.getByLabelText("QA review details");
+function trigger(): HTMLButtonElement {
+  return screen.getByRole("button", { name: "QA review details" });
 }
 
-async function expectOverlayOpen(): Promise<HTMLElement> {
-  return waitFor(() => screen.getByRole("tooltip"));
+async function openWithPointer(): Promise<HTMLElement> {
+  fireEvent.mouseEnter(trigger().parentElement as Element);
+  return screen.findByRole("region", { name: /QA/i });
 }
 
 describe("SprintReviewBadge", () => {
-  afterEach(() => {
-    cleanup();
-    vi.useRealTimers();
-    vi.restoreAllMocks();
+  it("renders running review progress with reduced-motion-safe cues", () => {
+    render(<SprintReviewBadge summary={{
+      status: "running",
+      outcome: null,
+      summary: null,
+      findings: [],
+      reviewer: null,
+      finishedAt: null,
+    }} />);
+
+    expect(screen.getByRole("status", { name: "QA review running" })).toHaveTextContent("Reviewing...");
+    expect(document.querySelector("svg")).toHaveClass("motion-safe:animate-spin", "motion-reduce:animate-none");
+    expect(screen.queryByRole("button", { name: "QA review details" })).toBeNull();
   });
 
-  it("renders requested changes as a visible blue QA edit badge in regular mode", () => {
-    render(<SprintReviewBadge summary={requestedChangesSummary} />);
-
-    const trigger = getTrigger();
-    expect(trigger.textContent).toContain("QA Changes Requested");
-    expect(trigger.className).toContain("border-blue-500/30");
-    expect(trigger.querySelector("svg")?.getAttribute("class")).toContain("lucide-pencil-line");
-    expect(document.getElementById(trigger.getAttribute("aria-describedby") ?? "")?.textContent).toContain("QA changes requested.");
-  });
-
-  it("always keeps visible QA text on the compact requested-change badge", () => {
-    render(<SprintReviewBadge summary={requestedChangesSummary} compact />);
-
-    expect(getTrigger().textContent).toContain("QA");
-  });
-
-  it.each(["hover", "focus"] as const)(
-    "opens requested-change details on %s and exposes the summary and every finding",
-    async (interaction) => {
-      render(<SprintReviewBadge summary={requestedChangesSummary} />);
-      const trigger = getTrigger();
-
-      if (interaction === "hover") {
-        fireEvent.mouseEnter(trigger.parentElement as HTMLElement);
-      } else {
-        fireEvent.focus(trigger);
-      }
-
-      await expectOverlayOpen();
-      expect(screen.getAllByText("QA Changes Requested").length).toBeGreaterThan(1);
-      expect(screen.getByText("Requested-change summary")).toBeTruthy();
-      expect(screen.getByText(requestedChangesSummary.summary)).toBeTruthy();
-      expect(screen.getByText("2 Requested Changes")).toBeTruthy();
-      for (const finding of requestedChangesSummary.findings) {
-        expect(screen.getByText(finding)).toBeTruthy();
-      }
-      expect(screen.getByText("Reviewed by QA Reviewer")).toBeTruthy();
-      expect(screen.getByText(/Review finished Jan 1/)).toBeTruthy();
+  it.each([
+    {
+      name: "passed",
+      summary: baseSummary,
+      label: "QA passed",
+      state: "passed",
+      tone: "text-signal-600",
     },
-  );
+    {
+      name: "changes requested",
+      summary: { ...baseSummary, outcome: "changes_requested", summary: "Please address the requested edits." },
+      label: "QA changes requested",
+      state: "changes_requested",
+      tone: "text-blue-700",
+    },
+    {
+      name: "provider failure",
+      summary: { ...baseSummary, status: "failed", outcome: null, summary: "The provider stopped before returning a verdict." },
+      label: "QA review failed",
+      state: "failed",
+      tone: "text-status-red",
+    },
+  ])("renders the $name state with distinct text, icon, and tone", ({ summary, label, state, tone }) => {
+    const { container } = render(<SprintReviewBadge summary={summary} />);
 
-  it("retains partial requested-change content and standalone completion metadata", async () => {
-    render(
-      <SprintReviewBadge
-        summary={{
-          ...requestedChangesSummary,
-          status: "changes-requested",
-          outcome: null,
-          reviewer: null,
-          summary: "Summary returned without reviewer metadata.",
-          findings: ["Only finding returned"],
-        }}
-      />,
-    );
-
-    fireEvent.focus(getTrigger());
-    await expectOverlayOpen();
-    expect(screen.getByText("Summary returned without reviewer metadata.")).toBeTruthy();
-    expect(screen.getByText("Only finding returned")).toBeTruthy();
-    expect(screen.getByText(/Review finished Jan 1/)).toBeTruthy();
+    expect(screen.getByText(label)).toBeVisible();
+    expect(trigger()).toHaveClass(tone);
+    expect(trigger()).toHaveAccessibleDescription(new RegExp(label, "i"));
+    expect(container.querySelector(`[data-qa-state="${state}"]`)).toBeTruthy();
+    expect(container.querySelector(`[data-qa-icon="${state}"]`)).toBeTruthy();
   });
 
-  it("delays closing and cancels the close while the pointer crosses into the portal", async () => {
-    vi.useFakeTimers();
-    render(<SprintReviewBadge summary={requestedChangesSummary} />);
-    const wrapper = getTrigger().parentElement as HTMLElement;
+  it("opens on pointer hover and keeps the card open while the pointer moves into it", async () => {
+    render(<SprintReviewBadge summary={baseSummary} />);
+    const card = await openWithPointer();
 
-    fireEvent.mouseEnter(wrapper);
-    const overlay = screen.getByRole("tooltip");
-    fireEvent.mouseLeave(wrapper);
-    act(() => vi.advanceTimersByTime(119));
-    expect(screen.getByRole("tooltip")).toBeTruthy();
+    expect(trigger()).toHaveAttribute("aria-expanded", "true");
+    expect(card).toHaveTextContent("Looks perfect.");
 
-    fireEvent.mouseEnter(overlay);
-    act(() => vi.advanceTimersByTime(1));
-    expect(screen.getByRole("tooltip")).toBeTruthy();
-
-    fireEvent.mouseLeave(overlay);
-    act(() => vi.advanceTimersByTime(120));
-    expect(screen.queryByRole("tooltip")).toBeNull();
+    fireEvent.mouseLeave(trigger().parentElement as Element);
+    fireEvent.mouseEnter(card);
+    await new Promise((resolve) => window.setTimeout(resolve, 140));
+    expect(card).toBeVisible();
   });
 
-  it("clamps the overlay to the viewport beside an edge trigger", async () => {
-    Object.defineProperty(window, "innerWidth", { configurable: true, value: 240 });
-    Object.defineProperty(window, "innerHeight", { configurable: true, value: 180 });
+  it("opens from keyboard focus, retains focus in disclosures, and restores the trigger on Escape", async () => {
+    const user = userEvent.setup();
+    render(<SprintReviewBadge summary={{
+      ...baseSummary,
+      outcome: "changes_requested",
+      followUpTasks: [{
+        title: "Repair the edge case",
+        description: "Cover the missing path.",
+        priority: "high",
+        dependsOnTaskKeys: [],
+        promptMarkdown: "Implement and test the edge-case repair.",
+      }],
+    }} />);
+
+    await user.tab();
+    expect(trigger()).toHaveFocus();
+    const card = await screen.findByRole("region", { name: "QA Changes Requested" });
+
+    await user.tab();
+    const disclosure = within(card).getByRole("button", { name: "Follow-up task 1" });
+    expect(disclosure).toHaveFocus();
+    expect(card).toBeVisible();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("region", { name: "QA Changes Requested" })).toBeNull();
+    expect(trigger()).toHaveFocus();
+  });
+
+  it("supports click and touch-style activation and dismisses on an outside pointer", async () => {
+    render(<SprintReviewBadge summary={baseSummary} />);
+
+    fireEvent.click(trigger());
+    expect(await screen.findByRole("region", { name: "QA Review Passed" })).toBeVisible();
+
+    fireEvent.mouseDown(document.body);
+    await waitFor(() => {
+      expect(screen.queryByRole("region", { name: "QA Review Passed" })).toBeNull();
+    });
+  });
+
+  it("shows labelled review context and all requested-change guidance without relying on color", async () => {
+    render(<SprintReviewBadge summary={{
+      ...baseSummary,
+      outcome: "changes_requested",
+      summary: "Authentication needs one more guard.",
+      findings: ["Reject expired sessions", "Cover the timeout branch"],
+      fixInstructions: "Validate expiry before loading the protected resource.",
+      targetTaskKey: "T17",
+    }} />);
+
+    const card = await openWithPointer();
+    expect(within(card).getByText("QA Changes Requested")).toBeVisible();
+    expect(within(card).getByText("Summary")).toBeVisible();
+    expect(within(card).getByText("Authentication needs one more guard.")).toBeVisible();
+    expect(within(card).getByRole("region", { name: "Review findings" })).toHaveTextContent("Findings (2)");
+    expect(within(card).getByText("Reject expired sessions")).toBeVisible();
+    expect(within(card).getByText("Fix instructions")).toBeVisible();
+    expect(within(card).getByText("Validate expiry before loading the protected resource.")).toBeVisible();
+    expect(within(card).getByText("Target task")).toBeVisible();
+    expect(within(card).getByText("T17")).toBeVisible();
+    expect(within(card).getByText("Reviewer")).toBeVisible();
+    expect(within(card).getByText("Reviewed by QA Bot")).toBeVisible();
+  });
+
+  it("keeps follow-up specifications collapsed until their native disclosures are expanded", async () => {
+    const user = userEvent.setup();
+    render(<SprintReviewBadge summary={{
+      ...baseSummary,
+      outcome: "changes_requested",
+      followUpTasks: [{
+        title: "Harden session expiry",
+        description: "Reject stale sessions before data access.",
+        priority: "critical",
+        dependsOnTaskKeys: ["T15", "T16"],
+        promptMarkdown: "Add expiry validation.\nInclude deterministic regression coverage.",
+      }],
+    }} />);
+
+    fireEvent.click(trigger());
+    const disclosure = await screen.findByRole("button", { name: "Follow-up task 1" });
+    expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Harden session expiry")).toBeNull();
+    expect(screen.queryByText(/Add expiry validation/)).toBeNull();
+
+    await user.click(disclosure);
+    expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Harden session expiry")).toBeVisible();
+    expect(screen.getByText("Reject stale sessions before data access.")).toBeVisible();
+    expect(screen.getByText("critical")).toBeVisible();
+    expect(screen.getByText("T15, T16")).toBeVisible();
+    expect(screen.getByText(/Add expiry validation/)).toBeVisible();
+  });
+
+  it("handles long wrapping content and missing optional metadata", async () => {
+    const longSummary = "A long review explanation ".repeat(40);
+    render(<SprintReviewBadge summary={{
+      status: "completed",
+      outcome: "pass",
+      summary: longSummary,
+      findings: [],
+      reviewer: null,
+      finishedAt: null,
+    }} />);
+
+    const card = await openWithPointer();
+    expect(card).toHaveClass("max-h-[calc(100vh-1.5rem)]", "max-w-[calc(100vw-1.5rem)]", "overflow-y-auto");
+    expect(within(card).getByText(/A long review explanation/)).toHaveClass("break-words");
+    expect(within(card).queryByText("Reviewer")).toBeNull();
+    expect(within(card).queryByText("Fix instructions")).toBeNull();
+    expect(within(card).queryByRole("region", { name: "Follow-up tasks" })).toBeNull();
+  });
+
+  it("provides an honest fallback when all optional details are missing", async () => {
+    render(<SprintReviewBadge summary={{
+      status: "completed",
+      outcome: "pass",
+      summary: null,
+      findings: [],
+      reviewer: null,
+      finishedAt: null,
+    }} />);
+
+    const card = await openWithPointer();
+    expect(within(card).getByText("No additional review details were provided.")).toBeVisible();
+  });
+
+  it("positions the viewport-aware card beside its trigger", async () => {
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function getRect() {
-      const element = this as HTMLElement;
-      if (element.getAttribute("aria-label") === "QA review details") {
+      if (this.getAttribute("aria-label") === "QA review details") {
         return {
-          x: 220, y: 165, top: 165, left: 220, right: 236, bottom: 181, width: 16, height: 16,
+          x: 120, y: 80, top: 80, left: 120, right: 136, bottom: 96, width: 16, height: 16,
           toJSON: () => ({}),
         } as DOMRect;
       }
-      if (element.getAttribute("role") === "tooltip") {
+      if (this.getAttribute("role") === "region") {
         return {
-          x: 0, y: 0, top: 0, left: 0, right: 320, bottom: 200, width: 320, height: 200,
+          x: 0, y: 0, top: 0, left: 0, right: 320, bottom: 180, width: 320, height: 180,
           toJSON: () => ({}),
         } as DOMRect;
       }
@@ -143,62 +237,10 @@ describe("SprintReviewBadge", () => {
       } as DOMRect;
     });
 
-    render(<SprintReviewBadge summary={requestedChangesSummary} align="left" />);
-    fireEvent.focus(getTrigger());
-    const overlay = await expectOverlayOpen();
-
+    render(<SprintReviewBadge summary={baseSummary} align="left" />);
+    const card = await openWithPointer();
     await waitFor(() => {
-      expect(overlay.style.left).toBe("12px");
-      expect(overlay.style.top).toBe("12px");
+      expect(card.style.left).toBe("146px");
     });
-    expect(overlay.firstElementChild?.className).toContain("calc(100vw-1.5rem)");
-  });
-
-  it("uses mobile-safe width and disables decorative transitions for reduced motion", async () => {
-    render(<SprintReviewBadge summary={requestedChangesSummary} compact />);
-    const trigger = getTrigger();
-    expect(trigger.className).toContain("motion-reduce:transition-none");
-
-    fireEvent.focus(trigger);
-    const overlay = await expectOverlayOpen();
-    expect(overlay.className).toContain("motion-reduce:transition-none");
-    expect(overlay.firstElementChild?.className).toContain("w-[min(41rem,calc(100vw-1.5rem))]");
-  });
-
-  it("preserves the running review presentation with static reduced-motion copy", () => {
-    render(
-      <SprintReviewBadge
-        summary={{
-          status: "IN_PROGRESS",
-          outcome: null,
-          summary: null,
-          findings: [],
-          reviewer: null,
-          finishedAt: null,
-        }}
-      />,
-    );
-
-    const status = screen.getByLabelText("QA review running");
-    expect(status.textContent).toContain("Reviewing...");
-    expect(status.parentElement?.className).toContain("motion-safe:animate-pulse");
-    expect(status.querySelector("svg")?.getAttribute("class")).toContain("motion-reduce:animate-none");
-  });
-
-  it("preserves the successful green reviewed presentation and accurate details", async () => {
-    render(<SprintReviewBadge summary={passedSummary} />);
-    const trigger = getTrigger();
-
-    expect(trigger.textContent).toContain("QA Reviewed");
-    expect(trigger.className).toContain("border-signal-500/30");
-    expect(trigger.querySelector("svg")?.getAttribute("class")).toContain("lucide-circle-check");
-    const descriptionId = trigger.getAttribute("aria-describedby") ?? "";
-    expect(document.getElementById(descriptionId)?.textContent).toContain("QA review complete.");
-
-    fireEvent.focus(trigger);
-    await expectOverlayOpen();
-    expect(screen.getByText("QA Review Complete")).toBeTruthy();
-    expect(screen.getByText("1 Findings")).toBeTruthy();
-    expect(screen.getByText("Optional naming note")).toBeTruthy();
   });
 });

@@ -518,13 +518,7 @@ test("buildTaskBoardViewModel keeps CI source signatures stable and refreshes on
 });
 
 test("buildTaskBoardViewModel refreshes cards when structured QA follow-up content changes", () => {
-  type ReviewWithFollowUps = NonNullable<Task["latestReview"]> & {
-    followUpTasks: Array<{
-      title: string;
-      promptMarkdown: string;
-    }>;
-  };
-  const review: ReviewWithFollowUps = {
+  const review: NonNullable<Task["latestReview"]> = {
     status: "completed",
     outcome: "changes_requested",
     summary: "Follow-up work is required.",
@@ -534,6 +528,9 @@ test("buildTaskBoardViewModel refreshes cards when structured QA follow-up conte
     followUpTasks: [{
       title: "Repair focus",
       promptMarkdown: "Restore focus after closing the menu.",
+      description: "Keep focus on the action trigger.",
+      priority: "high",
+      dependsOnTaskKeys: [],
     }],
   };
   const task = createMockTask("task-1", { latestReview: review });
@@ -548,7 +545,7 @@ test("buildTaskBoardViewModel refreshes cards when structured QA follow-up conte
         ...review.followUpTasks[0],
         promptMarkdown: "Restore focus and add keyboard regression coverage.",
       }],
-    } as ReviewWithFollowUps,
+    },
   });
   const updated = buildTaskBoardViewModel({
     tasks: [updatedTask], optimisticTasks: [], statusFilter: "all", priorityFilter: "all", listWindow: 50,
