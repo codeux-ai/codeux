@@ -291,6 +291,14 @@ Dashboard inbox reply generation resolves the configured dashboard reply preset 
 
 Dashboard reply execution grants the assigned Project Manager the normal reply management surface plus the restricted self-wakeup and direct long-term-memory lanes. The bundled `project_manager.md` is the comprehensive operating manual for orchestration, manual planning fallback, scheduler continuation, custom dashboards, node flows, persistent skills, rich widgets, and durable-memory judgment.
 
+### Asynchronous MCP planning follow-through
+
+Direct MCP `manage_sprints plan` is an asynchronous management contract. After synchronous project, sprint, and replan precondition checks, the serialized acknowledgement keeps the existing result fields and adds `planningGuidance`. The initial check time is the calculated `estimatedCompletionAt`; every later non-terminal read returns a `nextCheckAt` one minute after that read. ETA overrun is not a timeout and never changes an invocation to failed by itself. Repeating `plan` while the project/sprint request is unsettled returns the current in-progress guidance without starting another provider request or registering another terminal continuation.
+
+The assigned Project Manager uses its restricted scheduler surface to create one non-recurring status wakeup at a time. It schedules the first for the returned ETA, schedules a subsequent check only when the refreshed guidance remains `in_progress`, and does not requeue planning, change provider/model/settings, or interpret missing tasks as failure while the contract remains non-terminal. `succeeded`, `failed`, `cancelled`, and `paused` are terminal projections: they set `nextCheckAt` to `null`, stop polling, and expose available failure evidence.
+
+This agent-owned polling path coexists with the runtime-owned planning terminal wakeup. A dashboard-thread planning promise produces exactly one due-now, non-recurring completion or failure wakeup through the existing `agent_wakeup` delivery path. When that terminal wakeup wins the race with an ETA check, the Project Manager lists and cancels its obsolete pending planning-status wakeups for the same invocation or sprint, excluding the currently executing wakeup. Standalone MCP clients have no dashboard thread, receive no completion wakeup, and must poll sprint, task, or telemetry state according to the returned timestamps.
+
 This replaces the old `worker.md` and `listener.md` guide-loading path.
 
 ## Instruction Templates

@@ -834,17 +834,37 @@ The direct MCP `manage_sprints` call with `action: "plan"` validates the project
       "recheckIntervalMs": 60000,
       "sampleSize": 2,
       "isFallbackEstimate": false,
-      "message": "Planning is running asynchronously. Check the same invocation again at the recommended time."
+      "message": "Planning is running asynchronously. Exceeding the estimated completion time is not evidence of failure. Do not requeue, resubmit, or change settings while this invocation remains in progress. Check the same invocation again at 2026-07-13T10:03:00.000Z."
     }
   }
 }
 ```
 
-The existing result fields `status`, `message`, `projectId`, and `sprintId` remain stable, and `planningGuidance` is additive. Its estimate uses the project's recent completed planning durations, with the shared three-minute fallback when no usable history exists. The acknowledgement means only that background planning started after synchronous validation. It does not mean tasks already exist, planning self-reflection has finished, or optional `autoStart` has completed.
+`planningGuidance` has this serialized contract:
 
-A repeated `plan` call for the same project and sprint while that request is unsettled does not submit another provider request. It returns `status: "in_progress"` with guidance to check again one minute later. `manage_sprints` `get` preserves every sprint field and adds `planningGuidance` while an in-memory request or sprint-linked planning invocation is available. A still-running request advances `nextCheckAt` by one minute on each read. Completed planning maps to `succeeded`; failed, cancelled, and paused planning surfaces its terminal state and available error detail. All terminal guidance sets `nextCheckAt` to `null`.
+| Field | Meaning |
+| --- | --- |
+| `status` | Projected planning state: `in_progress`, `succeeded`, `failed`, `cancelled`, or `paused`. Execution invocation `running` and `completed` values project as `in_progress` and `succeeded`. |
+| `asynchronous` | Always `true`; the planning workflow continues beyond the management response. |
+| `isTerminal` | `false` only for `in_progress`; `true` for every other projected state. |
+| `invocationId` | Stable planning request/invocation identity that clients carry through follow-up checks. The initial acknowledgement may use a request identity until the durable invocation exists. |
+| `startedAt` | ISO timestamp used as the estimate origin. |
+| `estimatedDurationMs` | Calculated duration from recent completed project planning samples, or the shared three-minute fallback. |
+| `estimatedCompletionAt` | `startedAt + estimatedDurationMs`; it is an estimate, not a timeout or failure deadline. |
+| `nextCheckAt` | The recommended next status read. On the initial acknowledgement it equals `estimatedCompletionAt`; later in-progress reads set it to one minute after that read; terminal reads set it to `null`. |
+| `recheckIntervalMs` | The subsequent in-progress polling cadence, currently `60000`. |
+| `sampleSize` | Number of usable completed planning durations included in the estimate. |
+| `isFallbackEstimate` | `true` when the estimate used the fallback instead of project history. |
+| `message` | Actionable state guidance. In-progress text explicitly prohibits treating ETA overrun as failure or changing/requeuing active work; terminal text summarizes the projection. |
+| `errorMessage` | Optional terminal failure evidence, populated from the invocation's available error detail and omitted when none exists or planning succeeded. |
 
-When the call originates from an MCP-backed dashboard chat turn, Code UX captures the originating agent and thread before the background promise settles. Successful completion then persists an existing due-now, non-recurring `agent_wakeup` targeted to that thread. The scheduler delivers the wakeup through the normal chat-agent path and asks the agent to review the generated tasks, recap their count, and state whether execution actually started. If planning fails, Code UX queues the same kind of same-thread wakeup with the failure reason and asks the agent to provide a concise failure recap.
+The existing result fields `status`, `message`, `projectId`, and `sprintId` remain stable, and `planningGuidance` is an additive backward-compatible field. Its estimate uses the project's recent completed planning durations, with the shared three-minute fallback when no usable history exists. The acknowledgement means only that background planning started after synchronous validation. It does not mean tasks already exist, planning self-reflection has finished, or optional `autoStart` has completed.
+
+A repeated `plan` call for the same project and sprint while that request is unsettled does not submit another provider request or attach another terminal callback. It returns `status: "in_progress"` with guidance to check again one minute later. `manage_sprints` `get` preserves every sprint field and adds `planningGuidance` while an in-memory request or sprint-linked planning invocation is available. A still-running request advances `nextCheckAt` by one minute on each read, even after `estimatedCompletionAt`; elapsed ETA alone never changes status or proves failure. Completed planning maps to `succeeded`; failed, cancelled, and paused planning surfaces its terminal state and available error detail. All terminal guidance sets `isTerminal` to `true` and `nextCheckAt` to `null`, so clients stop polling.
+
+When the call originates from an MCP-backed dashboard chat turn, Code UX captures the originating agent and thread before the background promise settles. Successful completion then persists one existing due-now, non-recurring `agent_wakeup` targeted to that thread. The scheduler delivers the wakeup through the normal chat-agent path and asks the agent to review the generated tasks, recap their count, and state whether execution actually started. If planning fails, Code UX queues the same kind of same-thread wakeup with the failure reason and asks the agent to provide a concise failure recap.
+
+The assigned Project Manager separately follows the returned check schedule with agent-owned, one-shot `scheduler_code_ux` wakeups: first at `estimatedCompletionAt`, then at each in-progress response's one-minute `nextCheckAt`. It lists before scheduling to avoid duplicates and never uses recurrence. While planning remains active it does not call `plan` again, requeue/resubmit work, change provider/model/settings, or treat absent tasks or ETA overrun as failure. When terminal guidance or the runtime-owned completion/failure wakeup arrives, it stops polling and cancels its obsolete pending planning-status checks for that invocation or sprint, without cancelling the wakeup currently executing. This prevents the runtime terminal wakeup and an already-scheduled ETA check from producing duplicate dashboard turns.
 
 Standalone MCP clients have no originating dashboard chat-thread context, so they receive the same immediate acknowledgement without a completion wakeup. They should poll `manage_sprints` with `action: "get"`, or inspect tasks and relevant telemetry, to determine when planning and any requested auto-start work have completed. Status reads never create scheduler entries.
 
