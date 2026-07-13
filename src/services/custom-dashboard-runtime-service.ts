@@ -187,8 +187,14 @@ export class CustomDashboardRuntimeService {
     if (request.credentialSlot && !slot) {
       throw new CustomDashboardRuntimeError(403, "credential_slot_denied", "The requested credential slot is not declared for this source.");
     }
-    if (binding && (binding.capability !== capability || binding.credential.status !== "active"
-      || !slot?.allowedKinds.includes(binding.credential.kind))) {
+    if (binding && (binding.slot !== slot?.slot
+      || binding.credentialId !== binding.credential.id
+      || binding.bindingKey !== `custom-dashboard:${revision.dashboardId}:${binding.slot}`
+      || binding.capability !== capability
+      || binding.credential.status !== "active"
+      || binding.credential.configured !== true
+      || !binding.credential.capabilities.includes(capability)
+      || !slot.allowedKinds.includes(binding.credential.kind))) {
       throw new CustomDashboardRuntimeError(403, "credential_denied", "The declared source credential is unavailable.");
     }
 
@@ -267,7 +273,9 @@ function normalizeRequest(input: CustomDashboardRuntimeSourceRequest): Normalize
   if (input.body !== undefined && Buffer.byteLength(JSON.stringify(input.body)) > MAX_REQUEST_BODY_BYTES) {
     throw new CustomDashboardRuntimeError(413, "request_too_large", "The runtime source request body is too large.");
   }
-  return { ...input, projectId, dashboardId, revisionId, sourceId, access, method };
+  const credentialSlot = optionalRequestIdentifier(input.credentialSlot, "credentialSlot");
+  const capability = optionalRequestIdentifier(input.capability, "capability");
+  return { ...input, projectId, dashboardId, revisionId, sourceId, access, method, credentialSlot, capability };
 }
 
 function boundedIdentifier(value: unknown, field: string): string {
@@ -276,6 +284,10 @@ function boundedIdentifier(value: unknown, field: string): string {
     throw new CustomDashboardRuntimeError(400, "invalid_request", `Invalid ${field}.`);
   }
   return result;
+}
+
+function optionalRequestIdentifier(value: unknown, field: string): string | undefined {
+  return value === undefined ? undefined : boundedIdentifier(value, field);
 }
 
 function parseExternalRoutes(value: CustomDashboardJsonValue | undefined): ExternalRoutePolicy[] {
@@ -302,6 +314,15 @@ function parseExternalRoutes(value: CustomDashboardJsonValue | undefined): Exter
 function resolveCredentialSlot(source: CustomDashboardDataSourceNode, requested?: string) {
   const slots = source.credentialSlots ?? [];
   if (requested) return slots.find((slot) => slot.slot === requested);
+  const requiredSlots = slots.filter((slot) => slot.required);
+  if (requiredSlots.length > 1) {
+    throw new CustomDashboardRuntimeError(
+      403,
+      "credential_slot_required",
+      "An explicit credential slot is required for this source.",
+    );
+  }
+  if (requiredSlots.length === 1) return requiredSlots[0];
   return slots.length === 1 ? slots[0] : undefined;
 }
 
