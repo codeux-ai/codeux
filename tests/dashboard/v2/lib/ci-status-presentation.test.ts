@@ -167,6 +167,21 @@ describe("CI status presentation", () => {
     expect(missingPr?.failureKind).toBeUndefined();
   });
 
+  it("keeps PR_ONLY checks pending when no CI event evidence exists", () => {
+    const presentation = deriveTaskCiStatusPresentation({
+      task: { ...task, merge_indicator: "PR_ONLY" },
+      events: [],
+    });
+
+    expect(presentation?.state).toBe("pending");
+    expect(presentation?.steps).toEqual([
+      expect.objectContaining({ id: "pull_request", state: "successful", statusLabel: "Pull request ready" }),
+      expect.objectContaining({ id: "checks", state: "pending", statusLabel: "Checks pending" }),
+      expect.objectContaining({ id: "merge", state: "successful", statusLabel: "Merge not required" }),
+    ]);
+    expect(presentation?.failureKind).toBeUndefined();
+  });
+
   it("returns no badge for absent, unrelated, or unknown evidence", () => {
     const taskWithoutFallback = { ...task, merge_indicator: undefined, pr_url: undefined };
     expect(deriveTaskCiStatusPresentation({ task: taskWithoutFallback })).toBeNull();

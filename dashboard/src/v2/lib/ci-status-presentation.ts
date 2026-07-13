@@ -249,7 +249,14 @@ function normalizeMergeIndicator(evidence: CiTaskMergeEvidence): StepStates | nu
     case "AUTOMERGE":
       return completedWorkflow();
     case "PR_ONLY":
-      return completedWorkflow("Merge not required");
+      return {
+        pullRequest: "successful",
+        checks: "pending",
+        merge: "successful",
+        pullRequestLabel: "Pull request ready",
+        checksLabel: "Checks pending",
+        mergeLabel: "Merge not required",
+      };
     case "MERGE_CONFLICT":
       return { pullRequest, checks: "pending", merge: "failed", checksLabel: "Checks pending", mergeLabel: "Merge conflict", mergeFailureKind: "merge_conflict" };
     case "MERGE_BLOCKED":
