@@ -197,6 +197,24 @@ describe("credential key providers", () => {
     });
   });
 
+  it("rejects a symbolic-link Code UX home without provisioning at its target", async () => {
+    const dir = await tempDir();
+    const redirectedHome = join(dir, "redirected-home");
+    const linkedCodeUxHome = join(dir, "linked-code-ux-home");
+    const filePath = join(linkedCodeUxHome, "security", "credential-root.key");
+    const redirectedKeyPath = join(redirectedHome, "security", "credential-root.key");
+    await mkdir(redirectedHome, { mode: 0o700 });
+    await symlink(redirectedHome, linkedCodeUxHome);
+
+    await expect(new LocalFileKeyProvider(filePath).health()).resolves.toMatchObject({
+      available: false,
+      secure: false,
+      provider: "local-file",
+      reason: expect.stringMatching(/symbolic link/),
+    });
+    await expect(stat(redirectedKeyPath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("gives the Electron process provider precedence over environment configuration", () => {
     const electronProvider = {
       providerName: "electron-safe-storage",

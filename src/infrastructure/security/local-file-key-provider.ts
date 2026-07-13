@@ -28,6 +28,10 @@ function isMissing(error: unknown): boolean {
   return (error as NodeJS.ErrnoException).code === "ENOENT";
 }
 
+function alreadyExists(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException).code === "EEXIST";
+}
+
 async function syncWhereSupported(handle: FileHandle): Promise<void> {
   try {
     await handle.sync();
@@ -94,24 +98,43 @@ export class LocalFileKeyProvider implements KeyProvider {
 
   private async ensureParentDirectory(): Promise<void> {
     const parentPath = dirname(this.filePath);
+    const codeUxHomePath = dirname(parentPath);
     try {
-      await mkdir(parentPath, { recursive: true, mode: DIRECTORY_MODE });
-      const info = await lstat(parentPath);
-      if (info.isSymbolicLink()) {
-        throw unavailable("Local credential root-key directory must not be a symbolic link.");
-      }
-      if (!info.isDirectory()) {
-        throw unavailable("Local credential root-key parent must be a directory.");
-      }
-      if ((info.mode & 0o777) !== DIRECTORY_MODE) {
-        throw unavailable("Local credential root-key directory must use owner-only permissions (0700).");
-      }
-      if (!hasExpectedOwner(info)) {
-        throw unavailable("Local credential root-key directory must be owned by the current user.");
-      }
+      await this.createDirectoryIfMissing(codeUxHomePath);
+      await this.validateDirectory(codeUxHomePath, false);
+      await this.createDirectoryIfMissing(parentPath);
+
+      // Revalidate the complete custody chain after creation so lstat checks each
+      // component itself instead of following an ancestor symlink implicitly.
+      await this.validateDirectory(codeUxHomePath, false);
+      await this.validateDirectory(parentPath, true);
     } catch (error) {
       if (error instanceof KeyProviderUnavailableError) throw error;
       throw unavailable("Local credential root-key directory is unavailable; ensure it is owner-controlled with 0700 permissions.");
+    }
+  }
+
+  private async createDirectoryIfMissing(directoryPath: string): Promise<void> {
+    try {
+      await mkdir(directoryPath, { mode: DIRECTORY_MODE });
+    } catch (error) {
+      if (!alreadyExists(error)) throw error;
+    }
+  }
+
+  private async validateDirectory(directoryPath: string, requireOwnerOnlyMode: boolean): Promise<void> {
+    const info = await lstat(directoryPath);
+    if (info.isSymbolicLink()) {
+      throw unavailable("Local credential root-key directory chain must not contain a symbolic link.");
+    }
+    if (!info.isDirectory()) {
+      throw unavailable("Local credential root-key directory chain must contain directories only.");
+    }
+    if (!hasExpectedOwner(info)) {
+      throw unavailable("Local credential root-key directory chain must be owned by the current user.");
+    }
+    if (requireOwnerOnlyMode && (info.mode & 0o777) !== DIRECTORY_MODE) {
+      throw unavailable("Local credential root-key directory must use owner-only permissions (0700).");
     }
   }
 
