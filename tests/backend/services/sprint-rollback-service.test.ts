@@ -2,12 +2,20 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import type { SettingsRepository } from "../../../src/repositories/settings-repository.js";
 import { SprintRollbackService, type SprintRollbackGitRunner } from "../../../src/services/sprint-rollback-service.js";
 
 const tempDirs: string[] = [];
+const execFileAsync = promisify(execFile);
+
+async function runGit(cwd: string, ...args: string[]): Promise<string> {
+  const result = await execFileAsync("git", args, { cwd });
+  return result.stdout.trim();
+}
 
 async function createHarness(options: {
   mode?: "REMOTE" | "LOCAL";
@@ -31,7 +39,7 @@ async function createHarness(options: {
   const calls: Array<{ command: string; args: string[]; cwd: string }> = [];
   const gitRunner: SprintRollbackGitRunner = vi.fn(async (command, args, cwd) => {
     calls.push({ command, args, cwd });
-    if (args[0] === "rev-parse" && args.join(" ").includes("origin/main")) {
+    if (args[0] === "rev-parse" && /(?:origin\/main|refs\/heads\/main)/.test(args.join(" "))) {
       return { ok: true, code: 0, stdout: "merge-sha\n", stderr: "" };
     }
     if (args[0] === "show") {
@@ -42,7 +50,7 @@ async function createHarness(options: {
         stderr: "",
       };
     }
-    if (args[0] === "rev-parse" && args.join(" ").includes("origin/feature/source-sprint")) {
+    if (args[0] === "rev-parse" && /(?:origin\/feature\/source-sprint|refs\/heads\/feature\/source-sprint)/.test(args.join(" "))) {
       return { ok: true, code: 0, stdout: "parent-two\n", stderr: "" };
     }
     if (options.failRevert && args.includes("revert")) {
@@ -152,11 +160,80 @@ describe("SprintRollbackService", () => {
     expect(repository.listTasks(project.id, result.rollbackSprint.id)[0]).toMatchObject({ status: "pending" });
   });
 
-  it("rejects rollback creation outside remote git mode", async () => {
-    const { project, sourceSprint, service } = await createHarness({ mode: "LOCAL" });
+  it("creates an automatic local rollback branch without fetching or pushing", async () => {
+    const { project, sourceSprint, service, calls } = await createHarness({ mode: "LOCAL" });
     const assessment = await service.assess(project.id, sourceSprint.id);
-    expect(assessment).toMatchObject({ eligible: false });
-    await expect(service.create(project.id, sourceSprint.id)).rejects.toThrow("REMOTE git mode");
+    expect(assessment).toMatchObject({ eligible: true, recommendedMode: "automatic" });
+
+    const result = await service.create(project.id, sourceSprint.id);
+
+    expect(result.mode).toBe("automatic");
+    expect(calls.some(({ args }) => args.includes("fetch"))).toBe(false);
+    expect(calls.some(({ args }) => args.includes("push"))).toBe(false);
+    expect(calls.some(({ args }) => args.includes("refs/heads/main"))).toBe(true);
+    expect(calls.some(({ args }) => args.includes("revert") && args.includes("merge-sha"))).toBe(true);
+  });
+
+  it("gives agent-assisted local rollbacks local-only Git instructions", async () => {
+    const { repository, project, sourceSprint, service } = await createHarness({ mode: "LOCAL" });
+
+    const result = await service.create(project.id, sourceSprint.id, {
+      instructions: "Remove only the user-facing behavior.",
+    });
+
+    const task = repository.listTasks(project.id, result.rollbackSprint.id)[0];
+    expect(task?.promptMarkdown).toContain("do not push or create a pull request");
+    expect(task?.promptMarkdown).toContain("merge the rollback branch locally");
+  });
+
+  it("materializes a local rollback branch in a repository with no remote", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-local-rollback-integration-"));
+    tempDirs.push(root);
+    const repoDir = path.join(root, "repo");
+    await fs.mkdir(repoDir);
+    await runGit(repoDir, "init", "-b", "main");
+    await runGit(repoDir, "config", "user.name", "Code UX Test");
+    await runGit(repoDir, "config", "user.email", "test@codeux.invalid");
+    await fs.writeFile(path.join(repoDir, "feature.txt"), "before\n", "utf8");
+    await runGit(repoDir, "add", "feature.txt");
+    await runGit(repoDir, "commit", "-m", "Initial state");
+    await runGit(repoDir, "switch", "-c", "feature/source-sprint");
+    await fs.writeFile(path.join(repoDir, "feature.txt"), "after\n", "utf8");
+    await runGit(repoDir, "commit", "-am", "Add feature");
+    await runGit(repoDir, "switch", "main");
+    await runGit(repoDir, "merge", "--no-ff", "feature/source-sprint", "-m", "Merge branch 'feature/source-sprint'");
+    await runGit(repoDir, "branch", "-D", "feature/source-sprint");
+
+    const storage = new AppDbStorage(path.join(root, "app.db"));
+    const repository = new ProjectManagementRepository(storage);
+    const project = repository.createProject({
+      name: "Local Rollback Project",
+      sourceType: "local",
+      sourceRef: repoDir,
+      defaultBranch: "main",
+    });
+    const sourceSprint = repository.createSprint(project.id, {
+      name: "Source Sprint",
+      status: "completed",
+      featureBranch: "feature/source-sprint",
+    });
+    const service = new SprintRollbackService({
+      projectManagementRepository: repository,
+      settingsRepository: {
+        resolveSprintDashboardSettings: () => ({
+          settings: { git: { githubMode: "LOCAL", defaultBranch: "main" } },
+        }),
+      } as unknown as SettingsRepository,
+      orchestrateSprint: vi.fn().mockResolvedValue({ ok: true }),
+    });
+
+    const result = await service.create(project.id, sourceSprint.id);
+    const rollbackBranch = result.rollbackSprint.featureBranch;
+
+    expect(result.mode).toBe("automatic");
+    expect(rollbackBranch).toMatch(/^rollback\//);
+    expect(await runGit(repoDir, "show", `${rollbackBranch}:feature.txt`)).toBe("before");
+    expect(await runGit(repoDir, "remote")).toBe("");
   });
 
   it("rejects oversized rollback instructions before creating a sprint", async () => {

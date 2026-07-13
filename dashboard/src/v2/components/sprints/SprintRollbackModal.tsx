@@ -83,7 +83,7 @@ export const SprintRollbackModal: FunctionComponent<SprintRollbackModalProps> = 
                 Revert {sprint?.name || "sprint"}
               </h2>
               <p id="sprint-rollback-description" className="mt-2 max-w-xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                Code UX will preserve the original sprint and create a separately tracked rollback branch, sprint, and remote pull request.
+                Code UX will preserve the original sprint and create a separately tracked rollback branch and sprint. Remote projects use a pull request; local projects merge the branch locally.
               </p>
             </div>
           </div>

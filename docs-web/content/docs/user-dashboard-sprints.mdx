@@ -121,14 +121,14 @@ These are operator overrides. Use **Mark Completed** when no more runtime work s
 
 ## Rolling back a completed sprint
 
-Open the action menu of a completed standard sprint and choose **Rollback Sprint**. Code UX first inspects the remote merge history and later sprint work, then explains the selected path:
+Open the action menu of a completed standard sprint and choose **Rollback Sprint**. Code UX first inspects the applicable local or remote merge history and later sprint work, then explains the selected path:
 
 - **Automatic** means the sprint is the latest proven isolated merge and no later sprint work exists. Code UX creates the revert in a detached worktree without a coding invocation.
 - **Agent-assisted** means later work, ambiguous history, or a revert conflict requires an agent to isolate the safe change set.
 
 Use the optional instruction field for partial rollbacks such as “remove only feature XY.” Any entered instruction starts an agent invocation so dependent behavior can be preserved deliberately.
 
-The original sprint is never rewritten. Every request creates an orange, visibly labelled rollback sprint with its own task history and branch. Every rollback uses a remote pull request, even if ordinary sprint PR monitoring is disabled, and the rollback sprint is not complete until that PR is merged. See [Sprint Rollbacks](/docs/architecture-sprint-rollbacks) for the safety model.
+The original sprint is never rewritten. Every request creates an orange, visibly labelled rollback sprint with its own task history and branch. Remote projects deliver the rollback through a pull request even if ordinary sprint PR monitoring is disabled. Local projects merge the rollback branch directly into the configured local default branch without creating a PR. See [Sprint Rollbacks](/docs/architecture-sprint-rollbacks) for the safety model.
 
 ## Importing & exporting sprints
 
