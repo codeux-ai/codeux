@@ -39,6 +39,6 @@ Legacy global records use their first valid allowlisted project as the migrated 
 
 ## Dashboard API
 
-Credential management uses project-scoped dashboard routes. The API includes create, bounded-name update, bind, metadata-only compatibility assessment, test, rotate, replace, revoke, confirmed promotion, and monotonic restriction. Compatibility checks backend readiness, configured/active state, project access, allowed kinds, and all required capabilities without reading plaintext. List, health, compatibility, and mutation responses never contain secret values; secrets are accepted only by create, rotate, and replace operations.
+Credential management uses project-scoped dashboard routes. The API includes create, bounded-name update, bind, metadata-only compatibility assessment, test, rotate, replace, revoke, confirmed promotion, and monotonic restriction. Compatibility checks backend readiness, configured/active state, project access, allowed kinds, and all required capabilities without reading plaintext. Backend readiness requires an available, secure backend with a non-empty key ID and a reported key version; missing identity metadata produces `backend_unavailable`. List, health, compatibility, and mutation responses never contain secret values; secrets are accepted only by create, rotate, and replace operations.
 
 Validation failures return `400`, project/management denials return `403`, concurrent-write conflicts return `409`, invalid encrypted state returns `422`, and unavailable key custody returns `503` with a safe recovery message.

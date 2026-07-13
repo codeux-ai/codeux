@@ -110,6 +110,14 @@ function sameCredentialSnapshot(left: AutomationCredentialMetadata, right: Autom
     && left.capabilities.every((capability, index) => capability === right.capabilities[index]);
 }
 
+function hasBackendIdentity(health: CredentialBackendHealth): boolean {
+  return typeof health.keyId === "string" && health.keyId.length > 0 && health.keyVersion !== null;
+}
+
+function isBackendReady(health: CredentialBackendHealth): boolean {
+  return health.available && health.secure && hasBackendIdentity(health);
+}
+
 export class CredentialBroker {
   constructor(
     private readonly repository: AutomationCredentialRepository,
@@ -240,7 +248,8 @@ export class CredentialBroker {
       : [...requiredCapabilities];
     const capabilitiesAllowed = projectAccess && missingCapabilities.length === 0;
     const issues: AutomationCredentialCompatibilityIssue[] = [];
-    if (!health.available) issues.push("backend_unavailable");
+    const backendReady = isBackendReady(health);
+    if (!health.available || !hasBackendIdentity(health)) issues.push("backend_unavailable");
     else if (!health.secure) issues.push("backend_insecure");
     if (!configured) issues.push("not_configured");
     if (!active) issues.push("not_active");
@@ -251,7 +260,7 @@ export class CredentialBroker {
       credentialId,
       projectId,
       compatible: issues.length === 0,
-      backendReady: health.available && health.secure,
+      backendReady,
       configured,
       active,
       projectAccess,
@@ -630,7 +639,7 @@ export class CredentialBroker {
 
   private async requireBackendReady(): Promise<void> {
     const health = await this.safeHealth();
-    if (!health.available || !health.secure || !health.keyId || health.keyVersion === null) {
+    if (!isBackendReady(health)) {
       throw new CredentialKeyCustodyUnavailableError();
     }
   }

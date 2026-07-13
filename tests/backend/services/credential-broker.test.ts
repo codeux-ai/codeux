@@ -33,7 +33,7 @@ async function fixture() {
   const secretStore = new EncryptedSqliteSecretStore(repository, provider);
   const audit = new AutomationAuditExportService(storage);
   const broker = new CredentialBroker(repository, secretStore, provider, audit);
-  return { directory, keyPath, storage, managingProject, consumerProject, repository, secretStore, audit, broker };
+  return { directory, keyPath, storage, managingProject, consumerProject, repository, provider, secretStore, audit, broker };
 }
 
 afterEach(async () => {
@@ -80,6 +80,48 @@ describe("credential broker lifecycle policy", () => {
     expect(denied).toMatchObject({ compatible: false, kindAllowed: false, capabilitiesAllowed: false });
     expect(denied.missingCapabilities).toEqual(["jobs.write"]);
     expect(denied.issues).toEqual(expect.arrayContaining(["kind_not_allowed", "capability_missing"]));
+    expect(get).not.toHaveBeenCalled();
+    f.storage.close();
+  });
+
+  it.each([
+    { keyId: "", keyVersion: 1 },
+    { keyId: "mounted-file", keyVersion: null },
+  ])("reports missing backend identity metadata as unavailable without resolving plaintext", async ({ keyId, keyVersion }) => {
+    const f = await fixture();
+    const created = await f.broker.create(f.managingProject.id, {
+      name: "Jobs API",
+      kind: "http.token",
+      value: "backend-readiness-secret-canary",
+      scope: "project",
+      allowedProjectIds: [],
+      capabilities: ["jobs.list"],
+    });
+    vi.spyOn(f.provider, "health").mockResolvedValue({
+      available: true,
+      secure: true,
+      provider: f.provider.providerName,
+      keyId,
+      keyVersion,
+    });
+    const get = vi.spyOn(f.secretStore, "get");
+
+    const assessment = await f.broker.assessCompatibility(created.id, {
+      projectId: f.managingProject.id,
+      allowedKinds: ["http.token"],
+      requiredCapabilities: ["jobs.list"],
+    });
+
+    expect(assessment).toMatchObject({
+      compatible: false,
+      backendReady: false,
+      configured: true,
+      active: true,
+      projectAccess: true,
+      kindAllowed: true,
+      capabilitiesAllowed: true,
+      issues: ["backend_unavailable"],
+    });
     expect(get).not.toHaveBeenCalled();
     f.storage.close();
   });
