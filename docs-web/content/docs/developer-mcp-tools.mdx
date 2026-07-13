@@ -183,6 +183,12 @@ the current reply is sent, allowing an agent to answer first and continue with M
 turn. `afterSprintId` and `afterTaskId` create one-time completion anchors; `offsetMinutes` delays the
 wakeup after the source sprint or task finishes.
 
+For MCP-backed dashboard chat turns, an omitted, null, or blank `threadId` defaults to the originating
+dashboard thread and the resolved id is persisted in the scheduler target. An explicit non-empty
+`threadId` overrides that default. Standalone MCP calls have no originating thread, so an omitted or
+empty target remains threadless. The normal project/thread ownership check applies to contextual and
+explicit targets when the wakeup is delivered.
+
 Security model: Code UX stamps restricted scheduler entries with `origin: "agent_scheduler"`,
 `source: "agent_scheduler"`, and `createdByAgentId` from the current MCP agent context. The server
 enforces this metadata on list and cancel, so an agent cannot cancel dashboard-created entries,

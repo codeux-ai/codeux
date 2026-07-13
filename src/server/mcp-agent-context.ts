@@ -26,4 +26,5 @@ export function runWithMcpAgentContext<T>(
 
 export const getCurrentMcpAgentId = (): string | null => storage.getStore()?.agentId ?? null;
 
+/** Returns the originating dashboard thread, or null for standalone MCP requests. */
 export const getCurrentMcpThreadId = (): string | null => storage.getStore()?.threadId ?? null;

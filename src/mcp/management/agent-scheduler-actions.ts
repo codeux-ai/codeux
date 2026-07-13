@@ -7,6 +7,7 @@ import type {
   SchedulerEntryRecord,
 } from "../../contracts/scheduler-types.js";
 import type { SchedulerService } from "../../services/scheduler-service.js";
+import { getCurrentMcpThreadId } from "../../server/mcp-agent-context.js";
 import {
   managementValidationError,
   parseOptionalNullableString,
@@ -186,10 +187,10 @@ export class AgentSchedulerActions {
           source: AGENT_SCHEDULER_SOURCE,
           createdByAgentId: agentId,
         };
-        const threadId = parseOptionalNullableString(payload, "threadId");
+        const threadId = parseOptionalString(payload, "threadId") ?? getCurrentMcpThreadId();
         const connectionId = parseOptionalNullableString(payload, "connectionId");
         if (title) agentWakeupTarget.title = title;
-        if (threadId !== undefined) agentWakeupTarget.threadId = threadId;
+        if (threadId) agentWakeupTarget.threadId = threadId;
         if (connectionId !== undefined) agentWakeupTarget.connectionId = connectionId;
 
         const entry = this.schedulerService.createEntry(projectId, {
