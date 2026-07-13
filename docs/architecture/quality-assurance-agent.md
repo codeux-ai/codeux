@@ -276,6 +276,29 @@ Result parsing and structure normalization are fully delegated to `src/domain/qa
 
 That contract keeps the follow-up automation deterministic instead of scraping prose heuristically.
 
+### Shared summary projection
+
+Tasks, Sprints, and Live expose one backward-compatible `SprintReviewSummary` contract from `src/contracts/qa-review-summary.ts`. The original fields remain unchanged:
+
+- `status`
+- `outcome`
+- `summary`
+- `findings`
+- `reviewer`
+- `finishedAt`
+
+When approved structured data exists, the same summary can also include:
+
+- `fixInstructions`
+- `targetTaskKey`
+- `followUpTasks`, normalized to `title`, `promptMarkdown`, nullable `description`, `dependsOnTaskKeys`, and `priority`
+
+`src/repositories/project-management/qa-review-summary-query.ts` owns the batched task-level and sprint-level read path. It selects the newest `run_index` for each task or sprint, then applies the same fail-closed representative-row precedence as `QaReviewRepository`: `running`, `changes_requested`, `failed`, `pass`, then other states. Start time and row identity provide deterministic ordering inside the same precedence tier. This prevents a passing reviewer from hiding a blocking reviewer in the same multi-reviewer cycle.
+
+The query reads only dedicated summary columns and the approved `findings`, `fixInstructions`, `targetTaskKey`, and `followUpTasks` payload fields. Unknown payload keys, raw provider responses, prompts, credentials, and malformed follow-up entries are not projected. Dedicated `fix_instructions` and `target_task_key` columns take precedence, with approved payload values used only as compatibility fallbacks.
+
+No migration is required. Legacy rows without structured follow-up fields retain the original six-field response, malformed payload JSON yields safe empty findings and absent optional fields, and explicit `followUpTasks: []` remains an approved empty specification. `ProjectManagementRepository`, `sprint-summary-query.ts`, and `RuntimeStatusProjection` all use this shared query, so Tasks, Sprints, and Live return identical normalization behavior without per-card database fetches.
+
 QA agent responses are processed using the shared structured response helper (`StructuredProviderResponseService`). This ensures that if the agent returns malformed JSON or omits required fields, Code UX automatically triggers an in-session retry to correct the output shape before failing the review.
 
 ## Gemini Workspace Trust

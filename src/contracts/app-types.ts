@@ -4,6 +4,7 @@ import type { ExecutionInvocationRecord } from "./invocation-types.js";
 import type { MemorySettings } from "./memory-types.js";
 import type { SpeechSettings } from "./speech-types.js";
 import type { TaskSelfReflectionRating } from "./task-self-reflection-types.js";
+import type { SprintReviewSummary } from "./qa-review-summary.js";
 
 export interface JulesSource {
   name: string;
@@ -80,6 +81,7 @@ export interface JulesActivity {
 
 export type SubtaskStatus = "PENDING" | "RUNNING" | "CODING_COMPLETED" | "COMPLETED" | "FAILED" | "BLOCKED" | "QUOTA" | "QA_REVIEW_FAILED";
 export type SubtaskMergeIndicator = "CI" | "AUTOMERGE" | "MERGED" | "MERGE_BLOCKED" | "MERGE_CONFLICT" | "PR_ONLY" | "QA_PENDING";
+export type CardCiStatus = "pending" | "running" | "failed";
 export type ProviderId = "jules" | "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity" | "mockup-cli";
 export type ProviderConfigId = string;
 export type ProviderStrategy = "MANUAL" | "WEIGHTED" | "AGENT";
@@ -142,17 +144,11 @@ export interface Subtask {
     error_reason?: string;
     [key: string]: any;
   };
-  latestReview?: {
-    status: string;
-    outcome: string | null;
-    summary: string | null;
-    findings: string[];
-    reviewer: string | null;
-    finishedAt: string | null;
-  };
+  latestReview?: SprintReviewSummary;
   selfReflectionRating?: TaskSelfReflectionRating;
   is_merged?: boolean;
   merge_indicator?: SubtaskMergeIndicator;
+  ciStatus?: CardCiStatus | null;
   intervention_owner?: InterventionOwner;
   intervention_hint?: string;
 }
