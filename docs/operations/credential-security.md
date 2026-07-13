@@ -11,6 +11,12 @@ Code UX stores automation credentials through a broker rather than exposing secr
 
 The dashboard accepts secret values only on create, rotate, and replace requests. Responses contain configuration, scope, status, key-version, and validation metadata but never stored values. Access-event rows contain identifiers, binding keys, capabilities, outcomes, and denial reasons; they never contain secret material.
 
+The Settings Integrations catalog exposes this broker as its first standard card. The card derives unavailable, ready/unconfigured, and configured states from backend health and project-visible metadata; **Manage** opens a project-aware detail view without rendering a secret, request body, or raw server error. Allowlisted non-owner projects can understand and use compatible global credentials but see management actions disabled.
+
+Create controls require deliberate capability selection and explicit project or global scope. Global allowlists retain the management owner, and scope-expanding creation or promotion is confirmed. Rename, test, rotation/replacement, restriction, promotion, and revocation report typed inline status, disable overlapping actions, and refresh after stale-version conflicts. Destructive and scope-expanding actions use keyboard-operable confirmation dialogs with focus restoration.
+
+All create, rotate, and replacement fields are controlled write-only inputs. They are never hydrated from metadata and are cleared after every submission outcome, project change, and component teardown. Credential metadata drafts and browser stores do not receive secret values.
+
 Management inputs are validated at runtime rather than trusted from TypeScript types. Create requests must explicitly declare kind, scope, capabilities, and an allowlist (an empty array for project credentials). Names, kinds, binding keys, project ids, capabilities, and list counts are bounded; malformed arrays, unknown mutation fields, and control characters are rejected instead of being silently coerced. A stored value is limited to 64 KiB of UTF-8 data. Global allowlists must explicitly retain the management owner.
 
 Every lifecycle mutation carries `expectedVersion`. Successful name updates, validation tests, rotations/replacements, promotions, restrictions, and first-time revocations increment the version. A repeated revoke against an already-revoked credential at its current version is an idempotent no-op; stale requests return a conflict. Metadata updates may change only the bounded display name, so kind and management ownership remain immutable.
