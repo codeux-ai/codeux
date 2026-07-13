@@ -9,6 +9,8 @@ Code UX resolves canonical node credential IDs and named project binding keys th
 - The credential kind must be allowed, and both the binding and credential must approve every declared capability before one secret read.
 - Revoked, unavailable, missing, cross-project, or insufficiently capable credentials fail closed.
 
+Node-flow definition slots explicitly declare required/optional state, allowed kinds, and required capabilities. Draft review and every publication path use the broker's metadata-only compatibility assessment; runtime sends the same declaration to direct credential-id resolution immediately before execution. Graph `credentialBindings` are canonical. The legacy credential-request endpoint records no binding and identifies its result as non-persistent.
+
 Create, rotate, and replace requests are write-only. API responses contain configuration and status metadata but never stored values.
 
 Create requests explicitly declare kind, scope, capabilities, and an allowlist (empty for project credentials). Runtime validation bounds names, identifiers, capabilities, list counts, and secret size (64 KiB UTF-8). Malformed arrays, unknown mutation fields, and control characters are rejected rather than coerced.

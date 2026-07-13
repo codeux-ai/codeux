@@ -218,7 +218,10 @@ export function customNodeDefinitionFromArtifact(artifact: CustomNodeArtifact): 
       slot: slot.slot,
       label: slot.label,
       required: slot.required,
-      allowedKinds: [...slot.allowedKinds],
+      allowedKinds: [...new Set(slot.allowedKinds.map((kind) => kind.trim()))],
+      // Published custom-node schema v1 manifests use the singular field. Carry it
+      // into the node-definition slot policy instead of applying a flow-level default.
+      requiredCapabilities: [slot.requiredCapability.trim()],
     })),
     capabilities: [...manifest.capabilities],
     sideEffect: manifest.capabilities.includes("network.http") ? "external" : "none",

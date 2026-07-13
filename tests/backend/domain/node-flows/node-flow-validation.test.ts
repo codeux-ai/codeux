@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { normalizeNodeFlowGraph, validateNodeFlowGraph } from "../../../../src/domain/node-flows/node-flow-validation.js";
 import type { NodeFlowGraph } from "../../../../src/contracts/node-flow-types.js";
+import { resolveNodeDefinition } from "../../../../src/domain/node-flows/node-definition-registry.js";
 
 const validGraph = (): NodeFlowGraph => ({
   inputSchema: {
@@ -185,6 +186,41 @@ describe("node flow validation", () => {
       expect.objectContaining({ field: "nodes[1].policy", code: "invalid_policy" }),
       expect.objectContaining({ field: "edges[0]", code: "invalid_edge" }),
     ]));
+  });
+
+  it("validates credential bindings against the declared slot policy", () => {
+    const graph: NodeFlowGraph = {
+      nodes: [{
+        id: "request",
+        type: "http_request",
+        title: "Request",
+        data: { url: "https://example.test" },
+        credentialBindings: [{ slot: "undeclared", credentialId: "credential-1" }],
+      }],
+      edges: [],
+    };
+
+    expect(validateNodeFlowGraph(graph).errors).toContainEqual(expect.objectContaining({
+      field: "nodes[0].credentialBindings[0].slot",
+      code: "unknown_credential_slot",
+    }));
+  });
+
+  it("fails closed when a resolved definition exposes an unbounded credential policy", () => {
+    const definition = resolveNodeDefinition("http_request", 1)!;
+    const original = definition.credentials[0]!.requiredCapabilities;
+    definition.credentials[0]!.requiredCapabilities = [];
+    try {
+      expect(validateNodeFlowGraph({
+        nodes: [{ id: "request", type: "http_request", title: "Request", data: { url: "https://example.test" } }],
+        edges: [],
+      }).errors).toContainEqual(expect.objectContaining({
+        field: "nodes[0].definition",
+        code: "invalid_credential_policy",
+      }));
+    } finally {
+      definition.credentials[0]!.requiredCapabilities = original;
+    }
   });
 
   it.each([

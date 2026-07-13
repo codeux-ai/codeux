@@ -32,39 +32,39 @@ export function registerNodeFlowRoutes(app: Express, deps: DashboardDependencies
     res.json(definition);
   }));
 
-  app.post("/api/projects/:projectId/node-flow-drafts", syncRoute((req, res) => {
-    res.status(201).json(requireNodeFlowService(deps).createDraft(
+  app.post("/api/projects/:projectId/node-flow-drafts", asyncRoute(async (req, res) => {
+    res.status(201).json(await requireNodeFlowService(deps).createDraft(
       requireTrimmedString(req.params.projectId, "projectId"), req.body as CreateNodeFlowInput,
     ));
   }));
 
-  app.patch("/api/node-flow-drafts/:flowId", syncRoute((req, res) => {
-    const result = requireNodeFlowService(deps).patchDraft(
+  app.patch("/api/node-flow-drafts/:flowId", asyncRoute(async (req, res) => {
+    const result = await requireNodeFlowService(deps).patchDraft(
       requireTrimmedString(req.params.flowId, "flowId"), req.body,
     );
     res.status(result.conflict ? 409 : 200).json(result);
   }));
 
-  app.post("/api/node-flow-drafts/:flowId/validate", syncRoute((req, res) => {
-    res.json(requireNodeFlowService(deps).validateDraft(
+  app.post("/api/node-flow-drafts/:flowId/validate", asyncRoute(async (req, res) => {
+    res.json(await requireNodeFlowService(deps).validateDraft(
       requireTrimmedString(req.body?.projectId, "projectId"), requireTrimmedString(req.params.flowId, "flowId"),
     ));
   }));
 
-  app.post("/api/node-flow-drafts/:flowId/dry-run", syncRoute((req, res) => {
-    res.json(requireNodeFlowService(deps).dryRun(
+  app.post("/api/node-flow-drafts/:flowId/dry-run", asyncRoute(async (req, res) => {
+    res.json(await requireNodeFlowService(deps).dryRun(
       requireTrimmedString(req.body?.projectId, "projectId"), requireTrimmedString(req.params.flowId, "flowId"), req.body?.input ?? {},
     ));
   }));
 
-  app.get("/api/node-flow-drafts/:flowId/bindings", syncRoute((req, res) => {
-    res.json(requireNodeFlowService(deps).inspectBindings(
+  app.get("/api/node-flow-drafts/:flowId/bindings", asyncRoute(async (req, res) => {
+    res.json(await requireNodeFlowService(deps).inspectBindings(
       requireTrimmedString(req.query.projectId, "projectId"), requireTrimmedString(req.params.flowId, "flowId"),
     ));
   }));
 
-  app.post("/api/node-flow-drafts/:flowId/credential-requests", syncRoute((req, res) => {
-    res.status(201).json(requireNodeFlowService(deps).requestCredential(
+  app.post("/api/node-flow-drafts/:flowId/credential-requests", asyncRoute(async (req, res) => {
+    res.status(201).json(await requireNodeFlowService(deps).requestCredential(
       requireTrimmedString(req.body?.projectId, "projectId"), requireTrimmedString(req.params.flowId, "flowId"),
       requireTrimmedString(req.body?.nodeId, "nodeId"), requireTrimmedString(req.body?.slot, "slot"),
     ));
@@ -87,8 +87,8 @@ export function registerNodeFlowRoutes(app: Express, deps: DashboardDependencies
     ));
   }));
 
-  app.post("/api/node-flow-drafts/:flowId/publish", syncRoute((req, res) => {
-    res.json(requireNodeFlowService(deps).publishDraft(
+  app.post("/api/node-flow-drafts/:flowId/publish", asyncRoute(async (req, res) => {
+    res.json(await requireNodeFlowService(deps).publishDraft(
       requireTrimmedString(req.body?.projectId, "projectId"), requireTrimmedString(req.params.flowId, "flowId"),
       parseRequiredBodyInteger(req.body?.draftRevision, "draftRevision"), requireTrimmedString(req.body?.publishedBy, "publishedBy"),
     ));
@@ -101,8 +101,8 @@ export function registerNodeFlowRoutes(app: Express, deps: DashboardDependencies
     ));
   }));
 
-  app.post("/api/node-flows/:flowId/rollback", syncRoute((req, res) => {
-    res.json(requireNodeFlowService(deps).rollback(
+  app.post("/api/node-flows/:flowId/rollback", asyncRoute(async (req, res) => {
+    res.json(await requireNodeFlowService(deps).rollback(
       requireTrimmedString(req.body?.projectId, "projectId"), requireTrimmedString(req.params.flowId, "flowId"),
       parseRequiredBodyInteger(req.body?.version, "version"), parseRequiredBodyInteger(req.body?.draftRevision, "draftRevision"),
     ));
@@ -127,8 +127,8 @@ export function registerNodeFlowRoutes(app: Express, deps: DashboardDependencies
     res.json(requireNodeFlowService(deps).list(requireTrimmedString(req.params.projectId, "projectId")));
   }));
 
-  app.post("/api/projects/:projectId/node-flows", syncRoute((req, res) => {
-    const flow = requireNodeFlowService(deps).create(
+  app.post("/api/projects/:projectId/node-flows", asyncRoute(async (req, res) => {
+    const flow = await requireNodeFlowService(deps).create(
       requireTrimmedString(req.params.projectId, "projectId"),
       req.body as CreateNodeFlowInput,
     );
@@ -144,8 +144,8 @@ export function registerNodeFlowRoutes(app: Express, deps: DashboardDependencies
     res.json(flow);
   }));
 
-  app.patch("/api/node-flows/:flowId", syncRoute((req, res) => {
-    res.json(requireNodeFlowService(deps).update(
+  app.patch("/api/node-flows/:flowId", asyncRoute(async (req, res) => {
+    res.json(await requireNodeFlowService(deps).update(
       requireTrimmedString(req.params.flowId, "flowId"),
       req.body as UpdateNodeFlowInput,
     ));
