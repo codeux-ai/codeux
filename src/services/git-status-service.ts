@@ -372,16 +372,45 @@ export class GitStatusService {
         tokens.githubTokenCredentialRef ? { name: "github", reference: tokens.githubTokenCredentialRef, consumer: "git.status.github" } : null,
         tokens.gitlabTokenCredentialRef ? { name: "gitlab", reference: tokens.gitlabTokenCredentialRef, consumer: "git.status.gitlab" } : null,
       ].filter((value): value is NonNullable<typeof value> => value !== null);
-      if (references.length === 0 || !this.settingsCredentialResolver) {
+      if (references.length === 0) {
+        return await this.getStatusResolved(mode, {}, trackingRequest, cacheTtlMs);
+      }
+      if (!this.settingsCredentialResolver) {
         throw new Error("Git host credential resolution is unavailable.");
       }
       return await this.settingsCredentialResolver.withCredentials(references, {
         projectId: tokens.projectId,
         workspaceId: tokens.projectId,
-      }, async (resolved) => await this.getStatusResolved(mode, {
-        githubToken: resolved.get("github")?.toString("utf8"),
-        gitlabToken: resolved.get("gitlab")?.toString("utf8"),
-      }, trackingRequest, cacheTtlMs, references.map((item) => (item.reference as SettingsCredentialReference).credentialId)));
+      }, async (resolved) => {
+        const resolvedTokens: GitHostTokens = {
+          githubToken: resolved.get("github")?.toString("utf8"),
+          gitlabToken: resolved.get("gitlab")?.toString("utf8"),
+        };
+        try {
+          return await this.getStatusResolved(
+            mode,
+            resolvedTokens,
+            trackingRequest,
+            cacheTtlMs,
+            references.map((item) => (item.reference as SettingsCredentialReference).credentialId),
+          );
+        } catch (error) {
+          const secrets = [resolvedTokens.githubToken, resolvedTokens.gitlabToken]
+            .filter((value): value is string => Boolean(value));
+          let message = error instanceof Error ? error.message : String(error);
+          let name = error instanceof Error ? error.name : "Error";
+          for (const secret of secrets) {
+            message = message.split(secret).join("[REDACTED]");
+            name = name.split(secret).join("[REDACTED]");
+          }
+          const safeError = new Error(message);
+          safeError.name = name;
+          throw safeError;
+        } finally {
+          resolvedTokens.githubToken = undefined;
+          resolvedTokens.gitlabToken = undefined;
+        }
+      });
     }
     return await this.getStatusResolved(mode, tokens, trackingRequest, cacheTtlMs);
   }

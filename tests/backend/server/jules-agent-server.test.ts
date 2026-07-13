@@ -210,6 +210,63 @@ describe("CodeUxServer", () => {
     });
   });
 
+  describe("getSelectedProjectGitCredentialContext", () => {
+    it("preserves environment token compatibility for a selected project without credential references", () => {
+      const originalGithubToken = process.env.GITHUB_TOKEN;
+      const originalGitlabToken = process.env.GITLAB_TOKEN;
+      process.env.GITHUB_TOKEN = "environment-github-token";
+      process.env.GITLAB_TOKEN = "environment-gitlab-token";
+      vi.spyOn((server as any).projectManagementRepository, "getSelectedProjectId").mockReturnValue("project-1");
+      vi.spyOn((server as any).settingsRepository, "resolveProjectDashboardSettings").mockReturnValue({
+        settings: {
+          ...DEFAULT_DASHBOARD_SETTINGS,
+          git: {
+            ...DEFAULT_DASHBOARD_SETTINGS.git,
+            githubTokenCredentialRef: null,
+            gitlabTokenCredentialRef: null,
+          },
+        },
+        sources: {},
+      });
+
+      try {
+        expect((server as any).getSelectedProjectGitCredentialContext()).toEqual({
+          githubToken: "environment-github-token",
+          gitlabToken: "environment-gitlab-token",
+        });
+      } finally {
+        if (originalGithubToken === undefined) delete process.env.GITHUB_TOKEN;
+        else process.env.GITHUB_TOKEN = originalGithubToken;
+        if (originalGitlabToken === undefined) delete process.env.GITLAB_TOKEN;
+        else process.env.GITLAB_TOKEN = originalGitlabToken;
+      }
+    });
+
+    it("returns only project-scoped references when a selected project configures broker credentials", () => {
+      const githubTokenCredentialRef = { credentialId: "github-credential", capability: "read" };
+      vi.spyOn((server as any).projectManagementRepository, "getSelectedProjectId").mockReturnValue("project-1");
+      vi.spyOn((server as any).settingsRepository, "resolveProjectDashboardSettings").mockReturnValue({
+        settings: {
+          ...DEFAULT_DASHBOARD_SETTINGS,
+          git: {
+            ...DEFAULT_DASHBOARD_SETTINGS.git,
+            githubTokenCredentialRef,
+            gitlabTokenCredentialRef: null,
+          },
+        },
+        sources: {},
+      });
+      const fallbackSpy = vi.spyOn(server as any, "getEffectiveGitHostTokens");
+
+      expect((server as any).getSelectedProjectGitCredentialContext()).toEqual({
+        projectId: "project-1",
+        githubTokenCredentialRef,
+        gitlabTokenCredentialRef: null,
+      });
+      expect(fallbackSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe("resolveGitTrackingRequest", () => {
     it("should return FEATURE_PR_CI when there are running tasks and a feature branch", () => {
       const runtimeContext = (server as any).runtimeContext;

@@ -31,6 +31,8 @@ Hosted Jules calls keep only project scope, a credential reference, and a consum
 
 Remote repository operations resolve credentials independently at their execution boundary. Task and QA refreshes, preview and file-browser snapshots, provider and virtual-worker workspace preparation, project setup, agent-preset pushes, and pull-request queries resolve only the credential for the detected GitHub or GitLab origin. Legacy token fields remain empty, and a configured invalid or inaccessible reference fails closed rather than using ambient authentication. Environment or Git CLI authentication remains compatible only when no broker reference is configured.
 
+Selected-project Git status uses that same boundary. With no Git host reference, environment-token and Git CLI compatibility remain available. With a reference, each status request resolves it using the selected project scope and `read` capability; broker denial cannot fall through to ambient authentication, and resolved values are removed from propagated status errors.
+
 Sprint orchestration uses separate broker consumers for origin fetch, unique branch discovery, branch preparation, and branch preflight, so rotation and revocation are observed by each remote operation without changing local-only Git behavior.
 
 Jira, external importers, speech, and external embeddings use the same bounded callback around each HTTP request. Temporary environments and request headers receive the value, while telemetry, errors, and invocation messages are exact-value redacted before the broker clears its buffer.
