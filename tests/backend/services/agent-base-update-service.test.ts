@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AgentPresetRecord, BaseAgentUpdateContext } from "../../../src/contracts/agent-preset-types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
+import { ValidationError } from "../../../src/repositories/repository-utils.js";
 import { AgentBaseUpdateService } from "../../../src/services/agent-base-update-service.js";
+
+const SELECTED_INSTRUCTIONS = "# Main prompt\nPlan carefully.\n\n## Custom behavior\nKeep the user's custom workflow.";
+const COMPATIBLE_INSTRUCTIONS = `${SELECTED_INSTRUCTIONS}\n\n## System compatibility\nUse the current strict JSON schema.`;
 
 function createPreset(overrides: Partial<AgentPresetRecord> = {}): AgentPresetRecord {
   return {
@@ -42,7 +46,7 @@ function createContext(overrides: Partial<BaseAgentUpdateContext> = {}): BaseAge
   const selectedAgentPreset = createPreset({
     id: "selected-planning",
     name: "Specialist planner",
-    instructionMarkdown: "# Main prompt\nPlan carefully.\n\n## Custom behavior\nKeep the user's custom workflow.",
+    instructionMarkdown: SELECTED_INSTRUCTIONS,
   });
   return {
     role: "planning_agent",
@@ -99,7 +103,7 @@ function createHarness(options: {
     if (options.providerError) throw options.providerError;
     const bodyMarkdown = options.providerOutput
       ?? JSON.stringify({
-        instructionMarkdown: `${context!.selectedAgentPreset.instructionMarkdown}\n\n## System compatibility\nUse the current strict JSON schema.`,
+        instructionMarkdown: COMPATIBLE_INSTRUCTIONS,
       });
     return {
       parsed: args.parseFn(bodyMarkdown),
@@ -167,6 +171,37 @@ describe("AgentBaseUpdateService", () => {
     });
   });
 
+  it.each([
+    ["raw JSON", JSON.stringify({ instructionMarkdown: `  ${COMPATIBLE_INSTRUCTIONS}\n` })],
+    [
+      "fenced JSON",
+      `Here is the requested update:\n\`\`\`json\n${JSON.stringify({ instructionMarkdown: COMPATIBLE_INSTRUCTIONS })}\n\`\`\``,
+    ],
+    [
+      "JSON with presentation noise",
+      `Update follows.\n${JSON.stringify({ instructionMarkdown: COMPATIBLE_INSTRUCTIONS })}\nEnd of update.`,
+    ],
+    [
+      "a supported object envelope",
+      JSON.stringify({ response: { instructionMarkdown: COMPATIBLE_INSTRUCTIONS } }),
+    ],
+    [
+      "a supported string envelope",
+      JSON.stringify({ content: JSON.stringify({ instructionMarkdown: COMPATIBLE_INSTRUCTIONS }) }),
+    ],
+  ])("accepts %s without changing the update contract", async (_label, providerOutput) => {
+    const { service, applyBaseAgentInstructionUpdate } = createHarness({ providerOutput });
+
+    await service.applyUpdate("project-1", "planning_agent");
+
+    expect(applyBaseAgentInstructionUpdate).toHaveBeenCalledWith(
+      "project-1",
+      "planning_agent",
+      COMPATIBLE_INSTRUCTIONS,
+      "selected-planning",
+    );
+  });
+
   it("does not invoke a provider when no base update is available", async () => {
     const { service, executeRequest, applyBaseAgentInstructionUpdate } = createHarness({ context: null });
 
@@ -175,12 +210,29 @@ describe("AgentBaseUpdateService", () => {
     expect(applyBaseAgentInstructionUpdate).not.toHaveBeenCalled();
   });
 
-  it("leaves the preset and baseline untouched when provider output is malformed", async () => {
+  it.each([
+    ["malformed output", '{"instructionMarkdown":"unterminated} ', "was not raw valid JSON"],
+    ["empty output", "   \n", "was not raw valid JSON"],
+    ["an array", JSON.stringify([{ instructionMarkdown: COMPATIBLE_INSTRUCTIONS }]), "must be a JSON object"],
+    ["an empty instructionMarkdown value", JSON.stringify({ instructionMarkdown: "   \n" }), "must contain only"],
+    [
+      "extra payload properties",
+      JSON.stringify({ instructionMarkdown: COMPATIBLE_INSTRUCTIONS, avatarConfig: { accent: "red" } }),
+      "must contain only",
+    ],
+    [
+      "extra properties inside a supported envelope",
+      JSON.stringify({ response: { instructionMarkdown: COMPATIBLE_INSTRUCTIONS, model: "other-model" } }),
+      "must contain only",
+    ],
+  ])("leaves the preset and baseline untouched for %s", async (_label, providerOutput, expectedMessage) => {
     const { service, applyBaseAgentInstructionUpdate } = createHarness({
-      providerOutput: '{"instructionMarkdown":"valid","avatarConfig":{"accent":"red"}}',
+      providerOutput,
     });
 
-    await expect(service.applyUpdate("project-1", "planning_agent")).rejects.toThrow("must contain only");
+    const update = service.applyUpdate("project-1", "planning_agent");
+    await expect(update).rejects.toBeInstanceOf(ValidationError);
+    await expect(update).rejects.toThrow(expectedMessage);
     expect(applyBaseAgentInstructionUpdate).not.toHaveBeenCalled();
   });
 
