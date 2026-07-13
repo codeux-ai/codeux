@@ -17,6 +17,7 @@ import {
   upsertConversationDraft,
 } from "../../../dashboard/src/v2/lib/connection-api.js";
 import { fetchInvocationMessages, fetchProjectInvocations } from "../../../dashboard/src/v2/lib/invocation-api.js";
+import type { ExecutionInvocationMessageRecord, ExecutionInvocationRecord } from "../../../dashboard/src/v2/types.js";
 
 // Mock connection-api calls to prevent external requests
 vi.mock("../../../dashboard/src/v2/lib/connection-api.js", () => ({
@@ -62,6 +63,55 @@ vi.mock("../../../dashboard/src/v2/lib/invocation-api.js", () => ({
 
 let mockRealtimeCallback: any = null;
 
+const buildInvocation = (
+  overrides: Partial<ExecutionInvocationRecord> = {},
+): ExecutionInvocationRecord => ({
+  id: "persisted-cli-preparation-1",
+  projectId: "proj-1",
+  sprintId: "sprint-1",
+  taskId: "task-1",
+  sprintRunId: "sprint-run-1",
+  dispatchId: "dispatch-1",
+  taskRunId: "task-run-1",
+  attentionItemId: null,
+  providerInvocationId: "provider-invocation-1",
+  type: "cli_task_coding",
+  status: "running",
+  provider: "codex",
+  model: "test-model",
+  systemPrompt: null,
+  startedAt: "2026-07-13T10:00:00.000Z",
+  finishedAt: null,
+  errorMessage: null,
+  lastErrorCategory: null,
+  lastErrorMessage: null,
+  lastRetryAfterIso: null,
+  messageCount: 1,
+  lastMessageAt: "2026-07-13T10:00:00.000Z",
+  invocationSource: "cli",
+  agentPresetId: null,
+  inputTokens: 0,
+  cachedInputTokens: 0,
+  outputTokens: 0,
+  totalTokens: 0,
+  createdAt: "2026-07-13T10:00:00.000Z",
+  updatedAt: "2026-07-13T10:00:00.000Z",
+  ...overrides,
+});
+
+const buildInvocationMessage = (
+  invocationId: string,
+  contentMarkdown = "Preparing the task workspace.",
+): ExecutionInvocationMessageRecord => ({
+  id: `message-${invocationId}`,
+  invocationId,
+  role: "system",
+  contentMarkdown,
+  toolCallsJson: null,
+  metadata: { phase: "preparation" },
+  createdAt: "2026-07-13T10:00:00.000Z",
+});
+
 vi.mock("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js", () => ({
   subscribeToDashboardRealtime: vi.fn((scopes, callback) => {
     mockRealtimeCallback = callback;
@@ -102,6 +152,8 @@ describe("useChatPageResources integration", () => {
       id: "thread-new", messageCount: 0, projectId: "project-1", scope: "project"
     } as any);
     vi.mocked(cancelThreadTurn).mockResolvedValue({ cancelled: true });
+    vi.mocked(fetchProjectInvocations).mockResolvedValue([]);
+    vi.mocked(fetchInvocationMessages).mockResolvedValue([]);
   });
 
   it("treats invocation messages as changed when reasoning content or metadata mutates in place", () => {
@@ -674,11 +726,18 @@ describe("useChatPageResources integration", () => {
     expect(reply?.deliveryStatus).toBe("delivered");
   });
 
-  it("force-refreshes the selected invocation's messages on a project.execution.updated event", async () => {
-    const refreshInvocationMessages = vi.fn();
-    const selectedInvocationIdRef = { current: "inv-1" };
+  it("waits for project.execution.updated to return an early persisted CLI invocation", async () => {
+    const persistedInvocation = buildInvocation();
+    const preparationMessage = buildInvocationMessage(persistedInvocation.id);
+    let resolveRealtimeList: ((value: ExecutionInvocationRecord[]) => void) | null = null;
+    vi.mocked(fetchProjectInvocations)
+      .mockResolvedValueOnce([])
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveRealtimeList = resolve;
+      }));
+    vi.mocked(fetchInvocationMessages).mockResolvedValue([preparationMessage]);
 
-    renderHook(() => {
+    const { result } = renderHook(() => {
       const cache = useMessageCache();
       const threadData = useChatThreadData({
         selectedProject: { id: "proj-1" },
@@ -687,17 +746,11 @@ describe("useChatPageResources integration", () => {
         workerRouting: null,
       });
 
-      const invocationData = {
-        selectedInvocationIdRef,
-        setInvocationsSnapshot: vi.fn(),
-        setInvocationMessagesSnapshot: vi.fn(),
-        setSelectedInvocationId: vi.fn(),
-        setError: vi.fn(),
-        activateInvocation: vi.fn(),
-        refreshInvocationMessages,
-      } as any;
-
-      useChatPageResources({
+      const invocationData = useInvocationPaneData({
+        selectedProject: { id: "proj-1" },
+        cache,
+      });
+      const resources = useChatPageResources({
         selectedProject: { id: "proj-1" },
         cache,
         chatMode: "invocations",
@@ -705,8 +758,12 @@ describe("useChatPageResources integration", () => {
         invocationData,
       });
 
-      return { cache, threadData };
+      return { invocationData, resources };
     });
+
+    await waitFor(() => expect(fetchProjectInvocations).toHaveBeenCalledTimes(1));
+    expect(result.current.invocationData.invocations).toEqual([]);
+    expect(result.current.invocationData.selectedInvocationId).toBeNull();
 
     await act(async () => {
       if (mockRealtimeCallback) {
@@ -720,7 +777,85 @@ describe("useChatPageResources integration", () => {
       }
     });
 
-    expect(refreshInvocationMessages).toHaveBeenCalledWith("inv-1", { force: true });
+    await waitFor(() => expect(fetchProjectInvocations).toHaveBeenCalledTimes(2));
+    expect(result.current.invocationData.invocations).toEqual([]);
+    expect(result.current.invocationData.invocationIndex.has("optimistic:proj-1")).toBe(false);
+
+    await act(async () => {
+      resolveRealtimeList?.([persistedInvocation]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.invocationData.selectedInvocationId).toBe(persistedInvocation.id);
+    });
+    expect(result.current.invocationData.invocations).toEqual([persistedInvocation]);
+    expect(result.current.invocationData.selectedInvocation).toBe(persistedInvocation);
+    expect(result.current.invocationData.invocationMessages).toEqual([preparationMessage]);
+    expect(fetchInvocationMessages).toHaveBeenCalledWith(persistedInvocation.id);
+  });
+
+  it("refreshes the server list on snapshot_required without replacing selection or messages", async () => {
+    const selectedInvocation = buildInvocation({
+      id: "persisted-selected-1",
+      type: "planning",
+      status: "completed",
+      finishedAt: "2026-07-13T10:05:00.000Z",
+    });
+    const selectedMessage = buildInvocationMessage(selectedInvocation.id, "Existing selected transcript.");
+    const earlyPreparationInvocation = buildInvocation({
+      id: "persisted-cli-preparation-2",
+      startedAt: "2026-07-13T10:06:00.000Z",
+      createdAt: "2026-07-13T10:06:00.000Z",
+      updatedAt: "2026-07-13T10:06:00.000Z",
+    });
+    vi.mocked(fetchProjectInvocations)
+      .mockResolvedValueOnce([selectedInvocation])
+      .mockResolvedValueOnce([earlyPreparationInvocation, selectedInvocation]);
+    vi.mocked(fetchInvocationMessages).mockResolvedValue([selectedMessage]);
+
+    const { result } = renderHook(() => {
+      const cache = useMessageCache();
+      const threadData = useChatThreadData({
+        selectedProject: { id: "proj-1" },
+        cache,
+        execution: null,
+        workerRouting: null,
+      });
+      const invocationData = useInvocationPaneData({
+        selectedProject: { id: "proj-1" },
+        cache,
+      });
+      useChatPageResources({
+        selectedProject: { id: "proj-1" },
+        cache,
+        chatMode: "invocations",
+        threadData,
+        invocationData,
+      });
+
+      return { invocationData };
+    });
+
+    await waitFor(() => {
+      expect(result.current.invocationData.selectedInvocationId).toBe(selectedInvocation.id);
+    });
+    expect(result.current.invocationData.invocationMessages).toEqual([selectedMessage]);
+    vi.mocked(fetchInvocationMessages).mockClear();
+
+    await act(async () => {
+      mockRealtimeCallback?.({ type: "snapshot_required" });
+    });
+
+    await waitFor(() => {
+      expect(result.current.invocationData.invocations).toEqual([
+        earlyPreparationInvocation,
+        selectedInvocation,
+      ]);
+    });
+    expect(result.current.invocationData.selectedInvocationId).toBe(selectedInvocation.id);
+    expect(result.current.invocationData.selectedInvocation).toBe(selectedInvocation);
+    expect(result.current.invocationData.invocationMessages).toEqual([selectedMessage]);
+    expect(fetchInvocationMessages).toHaveBeenCalledWith(selectedInvocation.id);
   });
 
   it("loads chat invocations in 40-row pages and preserves the server total", async () => {
