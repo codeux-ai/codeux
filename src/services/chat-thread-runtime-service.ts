@@ -121,6 +121,16 @@ export interface ThreadRouteResolution {
 interface InFlightChatTurn {
   abortController: AbortController;
   latestMessage: ConversationMessageRecord;
+  messageIds: string[];
+}
+
+type ChatTurnAbortKind = "cancellation" | "supersession";
+
+class ChatTurnAbortError extends Error {
+  constructor(public readonly kind: ChatTurnAbortKind, message: string) {
+    super(message);
+    this.name = "ChatTurnAbortError";
+  }
 }
 
 const resolveEffectiveDefaultBranch = (
@@ -165,6 +175,10 @@ function getThreadSessionTitlePath(repoPath: string, threadId: string): string {
 
 function isChatProviderSourcedMessage(message: Pick<ConversationMessageRecord, "metadata"> | null | undefined): boolean {
   return message?.metadata?.source === "chat_provider" || message?.metadata?.suppressRichWidgets === true;
+}
+
+function isAgentSchedulerMessage(message: Pick<ConversationMessageRecord, "metadata"> | null | undefined): boolean {
+  return message?.metadata?.source === "agent_scheduler" || message?.metadata?.origin === "agent_scheduler";
 }
 
 function readRecord(value: unknown): Record<string, unknown> | null {
@@ -534,8 +548,12 @@ export class ChatThreadRuntimeService {
       return { cancelled: false };
     }
 
-    existingTurn.abortController.abort(new Error("Cancelled from the dashboard"));
+    existingTurn.abortController.abort(new ChatTurnAbortError("cancellation", "Cancelled from the dashboard"));
     return { cancelled: true };
+  }
+
+  public isThreadBusy(threadId: string): boolean {
+    return this.inFlightTurns.has(threadId);
   }
 
   async postMessage(projectId: string, input: CreateDashboardConversationMessageInput): Promise<ConversationMessageRecord> {
@@ -629,20 +647,26 @@ export class ChatThreadRuntimeService {
 
     const existingTurn = this.inFlightTurns.get(thread.id);
     if (existingTurn) {
+      if (isAgentSchedulerMessage(userMessage)) {
+        return userMessage;
+      }
       // A turn for this thread is already in flight — either still waiting on a provider
       // concurrency slot or already running inside its docker container. Abort it; the
       // owning call below will notice the abort, fold this (and any other still-pending)
       // message into a single follow-up turn instead of racing two invocations against
       // the same provider session.
-      existingTurn.abortController.abort(new Error("Superseded by a newer chat message"));
+      existingTurn.abortController.abort(new ChatTurnAbortError("supersession", "Superseded by a newer chat message"));
       return userMessage;
     }
 
     const turnHandle: InFlightChatTurn = {
       abortController: new AbortController(),
       latestMessage: userMessage,
+      messageIds: [userMessage.id],
     };
     this.inFlightTurns.set(thread.id, turnHandle);
+    const settledMessageIds = new Set<string>();
+    let ownerMessageFailed = false;
 
     try {
       const assignments = this.deps.projectWorkerAssignmentRepository.listAssignmentsForProject(projectId, { activeOnly: true });
@@ -653,52 +677,100 @@ export class ChatThreadRuntimeService {
         try {
           const route = await this.resolveThreadRoute(currentThread, assignments, settings, turnHandle.latestMessage.bodyMarkdown);
           await this.runVirtualProvider(projectId, currentThread, turnHandle.latestMessage, route, turnHandle.abortController.signal);
-          break;
-        } catch (err) {
-          if (!turnHandle.abortController.signal.aborted) {
-            throw err;
+          for (const messageId of turnHandle.messageIds) {
+            settledMessageIds.add(messageId);
           }
+        } catch (err: unknown) {
+          const abortReason = turnHandle.abortController.signal.reason;
+          const abortKind = abortReason instanceof ChatTurnAbortError ? abortReason.kind : null;
 
-          // Superseded mid-flight: gather every dashboard message still awaiting a reply
-          // (the one that triggered this abort, plus any others sent while it ran) and
-          // retry as a single combined follow-up against the same (resumed) session.
-          const pendingMessages = this.deps.connectionChatRepository
-            .listMessages(thread.id)
-            .filter((candidate) => candidate.direction === "dashboard_to_connection" && candidate.deliveryStatus === "pending");
-          if (pendingMessages.length === 0) {
-            break;
+          if (abortKind === "supersession") {
+            // Leave the interrupted messages pending. The deterministic drain below folds
+            // them together with the newer ordinary dashboard message that superseded them.
+          } else if (abortKind === "cancellation") {
+            this.deps.connectionChatRepository.markDashboardMessagesFailed(thread.id, {
+              upToMessageId: turnHandle.latestMessage.id,
+            });
+            for (const messageId of turnHandle.messageIds) {
+              settledMessageIds.add(messageId);
+            }
+            if (turnHandle.messageIds.includes(userMessage.id)) {
+              ownerMessageFailed = true;
+            }
+          } else {
+            const message = err instanceof Error ? err.message : String(err);
+            this.deps.logger?.error("Dashboard chat turn failed", {
+              projectId,
+              threadId: thread.id,
+              messageId: turnHandle.latestMessage.id,
+              error: message,
+            });
+            this.deps.connectionChatRepository.markDashboardMessagesFailed(thread.id, {
+              upToMessageId: turnHandle.latestMessage.id,
+            });
+            for (const messageId of turnHandle.messageIds) {
+              settledMessageIds.add(messageId);
+            }
+            if (turnHandle.messageIds.includes(userMessage.id)) {
+              ownerMessageFailed = true;
+            }
+            const failureReply = this.deps.connectionChatRepository.postSystemMessage(projectId, {
+              threadId: thread.id,
+              bodyMarkdown: `Worker execution failed: ${message}`,
+            });
+            await this.deliverChatProviderReplyIfNeeded(projectId, thread, turnHandle.latestMessage, failureReply);
           }
-
-          const combinedBody = pendingMessages.map((candidate) => candidate.bodyMarkdown).join("\n\n");
-          turnHandle.latestMessage = { ...pendingMessages[pendingMessages.length - 1], bodyMarkdown: combinedBody };
-          turnHandle.abortController = new AbortController();
         }
+
+        const nextBatch = this.getNextPendingMessageBatch(thread.id, settledMessageIds);
+        if (!nextBatch) {
+          break;
+        }
+
+        turnHandle.latestMessage = nextBatch.message;
+        turnHandle.messageIds = nextBatch.messageIds;
+        turnHandle.abortController = new AbortController();
       }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.deps.logger?.error("Dashboard chat turn failed", {
-        projectId,
-        threadId: thread.id,
-        messageId: turnHandle.latestMessage.id,
-        error: message,
-      });
-      this.deps.connectionChatRepository.markDashboardMessagesFailed(thread.id, {
-        upToMessageId: turnHandle.latestMessage.id,
-      });
-      const failureReply = this.deps.connectionChatRepository.postSystemMessage(projectId, {
-        threadId: thread.id,
-        bodyMarkdown: `Worker execution failed: ${message}`,
-      });
-      await this.deliverChatProviderReplyIfNeeded(projectId, thread, turnHandle.latestMessage, failureReply);
-      return {
-        ...userMessage,
-        deliveryStatus: "failed",
-      };
     } finally {
       this.inFlightTurns.delete(thread.id);
       await this.runDueSchedulerEntriesAfterReply(projectId, thread.id);
     }
-    return userMessage;
+    return ownerMessageFailed ? { ...userMessage, deliveryStatus: "failed" } : userMessage;
+  }
+
+  private getNextPendingMessageBatch(
+    threadId: string,
+    settledMessageIds: ReadonlySet<string>,
+  ): { message: ConversationMessageRecord; messageIds: string[] } | null {
+    const pendingMessages = this.deps.connectionChatRepository
+      .listMessages(threadId)
+      .filter((candidate) => (
+        candidate.direction === "dashboard_to_connection"
+        && candidate.deliveryStatus === "pending"
+        && !settledMessageIds.has(candidate.id)
+      ));
+    const firstMessage = pendingMessages[0];
+    if (!firstMessage) {
+      return null;
+    }
+
+    const schedulerBatch = isAgentSchedulerMessage(firstMessage);
+    const batch: ConversationMessageRecord[] = [];
+    for (const candidate of pendingMessages) {
+      if (isAgentSchedulerMessage(candidate) !== schedulerBatch) {
+        break;
+      }
+      batch.push(candidate);
+    }
+
+    const latestMessage = batch[batch.length - 1];
+    return {
+      message: {
+        ...latestMessage,
+        bodyMarkdown: batch.map((candidate) => candidate.bodyMarkdown).join("\n\n"),
+      },
+      messageIds: batch.map((candidate) => candidate.id),
+    };
   }
 
   private async runDueSchedulerEntriesAfterReply(projectId: string, threadId: string): Promise<void> {

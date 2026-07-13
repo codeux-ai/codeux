@@ -194,6 +194,118 @@ describe("SchedulerService", () => {
     expect(schedulerRepository.markRunSucceeded).toHaveBeenCalledWith("entry-1", "2026-05-18T09:00:00.000Z", null);
   });
 
+  it("keeps a due agent wakeup eligible while its originating thread is busy", async () => {
+    const entry = createEntry({
+      targetType: "agent_wakeup",
+      sprintTarget: undefined,
+      agentWakeupTarget: {
+        bodyMarkdown: "Continue after the active reply.",
+        threadId: "thread-1",
+        origin: "agent_scheduler",
+        source: "agent_scheduler",
+      },
+      recurrence: normalizeRecurrenceRule(),
+    });
+    const schedulerRepository = {
+      listDueEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
+      markRunSucceeded: vi.fn(),
+      markRunFailed: vi.fn(),
+    };
+    let busy = true;
+    const chatThreadRuntimeService = {
+      isThreadBusy: vi.fn(() => busy),
+      postMessage: vi.fn().mockResolvedValue({ id: "message-1" }),
+    };
+    const service = buildService(schedulerRepository, { chatThreadRuntimeService });
+    const now = new Date("2026-05-18T09:00:01.000Z");
+
+    await service.runDueEntries(now);
+
+    expect(chatThreadRuntimeService.isThreadBusy).toHaveBeenCalledWith("thread-1");
+    expect(chatThreadRuntimeService.postMessage).not.toHaveBeenCalled();
+    expect(schedulerRepository.markRunSucceeded).not.toHaveBeenCalled();
+    expect(schedulerRepository.markRunFailed).not.toHaveBeenCalled();
+
+    busy = false;
+    await service.runDueEntries(now);
+
+    expect(chatThreadRuntimeService.postMessage).toHaveBeenCalledTimes(1);
+    expect(schedulerRepository.markRunSucceeded).toHaveBeenCalledWith(
+      "entry-1",
+      "2026-05-18T09:00:00.000Z",
+      null,
+    );
+  });
+
+  it("accepts multiple due wakeups for one thread one flight at a time", async () => {
+    const firstEntry = createEntry({
+      id: "entry-1",
+      targetType: "agent_wakeup",
+      sprintTarget: undefined,
+      agentWakeupTarget: {
+        bodyMarkdown: "First continuation.",
+        threadId: "thread-1",
+        origin: "agent_scheduler",
+        source: "agent_scheduler",
+      },
+      recurrence: normalizeRecurrenceRule(),
+    });
+    const secondEntry = createEntry({
+      id: "entry-2",
+      targetType: "agent_wakeup",
+      sprintTarget: undefined,
+      agentWakeupTarget: {
+        bodyMarkdown: "Second continuation.",
+        threadId: "thread-1",
+        origin: "agent_scheduler",
+        source: "agent_scheduler",
+      },
+      recurrence: normalizeRecurrenceRule(),
+    });
+    const entries = new Map([
+      [firstEntry.id, firstEntry],
+      [secondEntry.id, secondEntry],
+    ]);
+    const schedulerRepository = {
+      listDueEntries: vi.fn(() => [...entries.values()].filter((entry) => entry.status === "scheduled")),
+      getEntry: vi.fn((entryId: string) => entries.get(entryId) ?? null),
+      markRunSucceeded: vi.fn((entryId: string) => {
+        const entry = entries.get(entryId)!;
+        entries.set(entryId, { ...entry, status: "completed" });
+      }),
+      markRunFailed: vi.fn(),
+    };
+    let busy = false;
+    const chatThreadRuntimeService = {
+      isThreadBusy: vi.fn(() => busy),
+      postMessage: vi.fn().mockImplementation(async () => {
+        busy = true;
+        return { id: "message-1" };
+      }),
+    };
+    const service = buildService(schedulerRepository, { chatThreadRuntimeService });
+    const now = new Date("2026-05-18T09:00:01.000Z");
+
+    await service.runDueEntries(now);
+
+    expect(chatThreadRuntimeService.postMessage).toHaveBeenCalledTimes(1);
+    expect(chatThreadRuntimeService.postMessage.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      bodyMarkdown: "First continuation.",
+    }));
+    expect(schedulerRepository.markRunSucceeded).toHaveBeenCalledTimes(1);
+
+    await flush();
+    busy = false;
+    await service.runDueEntries(now);
+
+    expect(chatThreadRuntimeService.postMessage).toHaveBeenCalledTimes(2);
+    expect(chatThreadRuntimeService.postMessage.mock.calls[1]?.[1]).toEqual(expect.objectContaining({
+      bodyMarkdown: "Second continuation.",
+    }));
+    expect(schedulerRepository.markRunSucceeded).toHaveBeenCalledTimes(2);
+  });
+
   it("reruns due task targets through the task rerun service", async () => {
     const entry = createEntry({
       targetType: "task",

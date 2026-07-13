@@ -211,6 +211,17 @@ export class SchedulerService {
         continue;
       }
 
+      const wakeupThreadId = freshEntry.targetType === "agent_wakeup"
+        ? freshEntry.agentWakeupTarget?.threadId?.trim()
+        : null;
+      if (
+        wakeupThreadId
+        && typeof this.deps.chatThreadRuntimeService.isThreadBusy === "function"
+        && this.deps.chatThreadRuntimeService.isThreadBusy(wakeupThreadId)
+      ) {
+        continue;
+      }
+
       this.inFlightEntryIds.add(entry.id);
       
       const nextRunAt = freshEntry.scheduleAnchor
