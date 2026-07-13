@@ -14,6 +14,12 @@ export type ChatProviderConnectionStatus =
   | "disabled"
   | "error";
 
+export type ChatProviderVerificationStatus =
+  | "unverified"
+  | "pending"
+  | "verified"
+  | "failed";
+
 export type ChatProviderDeliveryDirection = "inbound" | "outbound";
 
 export type ChatProviderDeliveryStatus =
@@ -111,6 +117,10 @@ export interface ChatProviderConnectionRecord {
   enabled: boolean;
   setup: ChatProviderSetupConfig;
   credentials: RedactedCredentialField[];
+  verificationStatus: ChatProviderVerificationStatus;
+  verificationDetails: Record<string, unknown> | null;
+  verifiedAt: string | null;
+  secretVersion: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -185,6 +195,7 @@ export interface UpsertOutboundChatProviderDeliveryInput {
   status?: ChatProviderDeliveryStatus;
   attemptCount?: number;
   lastError?: string | null;
+  nextAttemptAt?: string | null;
 }
 
 export interface UpdateChatProviderDeliveryStateInput {
@@ -195,6 +206,7 @@ export interface UpdateChatProviderDeliveryStateInput {
   conversationThreadId?: string | null;
   conversationMessageId?: string | null;
   payload?: Record<string, unknown> | null;
+  nextAttemptAt?: string | null;
 }
 
 export interface ChatProviderMessageDeliveryRecord {
@@ -211,8 +223,54 @@ export interface ChatProviderMessageDeliveryRecord {
   conversationThreadId: string | null;
   conversationMessageId: string | null;
   payload: Record<string, unknown> | null;
+  nextAttemptAt: string | null;
+  leaseOwner: string | null;
+  leaseExpiresAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ChatProviderIngressReplayReceiptRecord {
+  id: string;
+  providerConnectionId: string;
+  receiptKey: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface ChatProviderSessionStateRecord {
+  id: string;
+  providerConnectionId: string;
+  channelBindingId: string | null;
+  externalChannelId: string;
+  sessionKey: string;
+  state: Record<string, unknown>;
+  version: number;
+  expiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateChatProviderSessionStateInput {
+  providerConnectionId: string;
+  channelBindingId?: string | null;
+  externalChannelId: string;
+  sessionKey: string;
+  state: Record<string, unknown>;
+  expiresAt?: string | null;
+}
+
+export interface ClaimChatProviderDeliveriesInput {
+  leaseOwner: string;
+  leaseDurationMs: number;
+  limit?: number;
+  now?: Date;
+}
+
+export interface ReleaseChatProviderDeliveryInput {
+  status?: "pending" | "retryable_failure";
+  nextAttemptAt?: string | null;
+  lastError?: string | null;
 }
 
 export {

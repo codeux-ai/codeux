@@ -5,25 +5,26 @@ import { HttpRouteError } from "./http-errors.js";
 import { requireTrimmedString } from "./request-parsers.js";
 import { ChatProviderIngressSecurity, ChatProviderIngressSecurityError } from "../services/chat-provider-security.js";
 
-const defaultSecurityVerifier = new ChatProviderIngressSecurity();
-
 export function registerChatProviderIngressRoutes(router: Express, deps: DashboardDependencies): void {
   if (!deps.chatProviderRepository || !deps.chatProviderIngressService) {
     return;
   }
+  const securityVerifier = new ChatProviderIngressSecurity(undefined, deps.chatProviderRepository);
 
   const handler = asyncRoute(async (req, res) => {
     const providerConnectionId = requireTrimmedString(
       req.params.providerConnectionId ?? req.params.connectionId,
       "providerConnectionId",
     );
-    const connection = deps.chatProviderRepository!.getConnectionInternal(providerConnectionId);
+    const connection = deps.chatProviderSecretService
+      ? await deps.chatProviderSecretService.resolveConnection(providerConnectionId).catch(() => null)
+      : deps.chatProviderRepository!.getConnectionInternal(providerConnectionId);
     if (!connection) {
       throw new HttpRouteError(404, "Chat provider connection not found.");
     }
 
     try {
-      defaultSecurityVerifier.verify(connection, {
+      securityVerifier.verify(connection, {
         headers: req.headers,
         rawBody: buildRequestBodyForSignature(req),
       });

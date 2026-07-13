@@ -28,6 +28,7 @@ import { ProjectManagementRepository } from "../repositories/project-management-
 import { ProjectRuntimeRepository } from "../repositories/project-runtime-repository.js";
 import { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
 import { ChatProviderRepository } from "../repositories/chat-provider-repository.js";
+import type { ChatProviderSecretService } from "../services/chat-provider-secret-service.js";
 import { ExecutionRepository } from "../repositories/execution-repository.js";
 import { QaReviewRepository } from "../repositories/qa-review-repository.js";
 import { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
@@ -171,6 +172,7 @@ export class CodeUxServer {
   private projectRuntimeRepository: ProjectRuntimeRepository;
   private connectionChatRepository: ConnectionChatRepository;
   private chatProviderRepository: ChatProviderRepository;
+  private chatProviderSecretService: ChatProviderSecretService;
   private projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   private projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   private projectAttentionRepository: ProjectAttentionRepository;
@@ -266,6 +268,7 @@ export class CodeUxServer {
     this.projectRuntimeRepository = deps.projectRuntimeRepository;
     this.connectionChatRepository = deps.connectionChatRepository;
     this.chatProviderRepository = deps.chatProviderRepository;
+    this.chatProviderSecretService = deps.chatProviderSecretService;
     this.projectWorkerAssignmentRepository = deps.projectWorkerAssignmentRepository;
     this.projectWorkerAssignmentService = deps.projectWorkerAssignmentService;
     this.projectAttentionRepository = deps.projectAttentionRepository;
@@ -1432,6 +1435,7 @@ export class CodeUxServer {
         getDashboardNotifications: () => this.executionRepository.getDashboardNotifications(),
         connectionChatRepository: this.connectionChatRepository,
         chatProviderRepository: this.chatProviderRepository,
+        chatProviderSecretService: this.chatProviderSecretService,
         projectWorkerAssignmentRepository: this.projectWorkerAssignmentRepository,
         projectWorkerAssignmentService: this.projectWorkerAssignmentService,
         projectAttentionRepository: this.projectAttentionRepository,

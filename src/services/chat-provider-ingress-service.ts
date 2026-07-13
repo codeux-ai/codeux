@@ -12,6 +12,7 @@ import { getCorrelationId } from "../shared/logging/correlation-id.js";
 import { redactMetadata } from "../shared/security/redaction.js";
 import { getChatConnectorProfileForMode } from "../domain/chat-connectors/registry.js";
 import type { PartialNormalizedChatConnectorInbound } from "../domain/chat-connectors/types.js";
+import type { ChatProviderSecretService } from "./chat-provider-secret-service.js";
 
 export interface ChatProviderIngressPayload {
   providerConnectionId: string;
@@ -50,6 +51,7 @@ export interface ChatProviderIngressResult {
 
 interface ChatProviderIngressServiceDependencies {
   chatProviderRepository: ChatProviderRepository;
+  chatProviderSecretService?: ChatProviderSecretService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
   logger?: Logger;
 }
@@ -77,7 +79,9 @@ export class ChatProviderIngressService {
   constructor(private readonly deps: ChatProviderIngressServiceDependencies) {}
 
   async processInbound(input: ChatProviderIngressPayload): Promise<ChatProviderIngressResult> {
-    const connection = this.deps.chatProviderRepository.getConnectionInternal(input.providerConnectionId);
+    const connection = this.deps.chatProviderSecretService
+      ? await this.deps.chatProviderSecretService.resolveConnection(input.providerConnectionId).catch(() => null)
+      : this.deps.chatProviderRepository.getConnectionInternal(input.providerConnectionId);
     if (!connection) {
       this.log("warn", "Rejected chat provider ingress for unknown connection", {
         providerConnectionId: input.providerConnectionId,

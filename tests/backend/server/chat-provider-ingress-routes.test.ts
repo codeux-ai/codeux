@@ -11,6 +11,8 @@ import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ChatProviderRepository } from "../../../src/repositories/chat-provider-repository.js";
 import { ConnectionChatRepository } from "../../../src/repositories/connection-chat-repository.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
+import { createChatProviderSecretFixture } from "../helpers/chat-provider-secret-fixture.js";
+import type { ChatProviderSecretService } from "../../../src/services/chat-provider-secret-service.js";
 import { ChatProviderIngressService } from "../../../src/services/chat-provider-ingress-service.js";
 import type { ChatThreadRuntimeService } from "../../../src/services/chat-thread-runtime-service.js";
 
@@ -20,6 +22,7 @@ interface TestServerContext {
   tempDir: string;
   storage: AppDbStorage;
   chatProviderRepository: ChatProviderRepository;
+  chatProviderSecretService: ChatProviderSecretService;
   connectionChatRepository: ConnectionChatRepository;
   projectManagementRepository: ProjectManagementRepository;
   postMessage: ReturnType<typeof vi.fn>;
@@ -43,7 +46,7 @@ describe("chat provider ingress routes", () => {
   it("accepts an authenticated bearer bridge request and deduplicates repeated external messages", async () => {
     const context = await startTestServer();
     const project = createProject(context, "bearer-ingress");
-    const connection = context.chatProviderRepository.createConnection({
+    const connection = await context.chatProviderSecretService.createConnection({
       providerKind: "slack",
       displayName: "Slack bridge",
       bridgeMode: "managed_bridge",
@@ -99,7 +102,7 @@ describe("chat provider ingress routes", () => {
   it("verifies webhook HMAC signatures before processing inbound payloads", async () => {
     const context = await startTestServer();
     const project = createProject(context, "hmac-ingress");
-    const connection = context.chatProviderRepository.createConnection({
+    const connection = await context.chatProviderSecretService.createConnection({
       providerKind: "discord",
       displayName: "Discord gateway",
       bridgeMode: "webhook",
@@ -145,7 +148,7 @@ describe("chat provider ingress routes", () => {
   it("rejects unauthenticated and stale bridge requests without creating messages", async () => {
     const context = await startTestServer();
     const project = createProject(context, "rejected-ingress");
-    const connection = context.chatProviderRepository.createConnection({
+    const connection = await context.chatProviderSecretService.createConnection({
       providerKind: "slack",
       displayName: "Slack bridge",
       bridgeMode: "managed_bridge",
@@ -180,7 +183,7 @@ describe("chat provider ingress routes", () => {
     const context = await startTestServer();
     const projectA = createProject(context, "ambiguous-route-a");
     const projectB = createProject(context, "ambiguous-route-b");
-    const connection = context.chatProviderRepository.createConnection({
+    const connection = await context.chatProviderSecretService.createConnection({
       providerKind: "telegram",
       displayName: "Telegram gateway",
       bridgeMode: "managed_bridge",
@@ -230,6 +233,7 @@ async function startTestServer(): Promise<TestServerContext> {
   const storage = new AppDbStorage(path.join(tempDir, "app.db"));
   openStorages.push(storage);
   const chatProviderRepository = new ChatProviderRepository(storage);
+  const chatProviderSecretService = createChatProviderSecretFixture(chatProviderRepository);
   const connectionChatRepository = new ConnectionChatRepository(storage);
   const projectManagementRepository = new ProjectManagementRepository(storage);
   const postMessage = vi.fn(async (projectId: string, input: Parameters<ChatThreadRuntimeService["postMessage"]>[1]) => (
@@ -237,6 +241,7 @@ async function startTestServer(): Promise<TestServerContext> {
   ));
   const chatProviderIngressService = new ChatProviderIngressService({
     chatProviderRepository,
+    chatProviderSecretService,
     chatThreadRuntimeService: { postMessage } as unknown as ChatThreadRuntimeService,
   });
   const app = express();
@@ -247,6 +252,7 @@ async function startTestServer(): Promise<TestServerContext> {
   }));
   registerChatProviderIngressRoutes(app, {
     chatProviderRepository,
+    chatProviderSecretService,
     chatProviderIngressService,
   } as DashboardDependencies);
   const server = await new Promise<Server>((resolve) => {
@@ -263,6 +269,7 @@ async function startTestServer(): Promise<TestServerContext> {
     tempDir,
     storage,
     chatProviderRepository,
+    chatProviderSecretService,
     connectionChatRepository,
     projectManagementRepository,
     postMessage,

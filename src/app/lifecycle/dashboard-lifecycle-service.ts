@@ -103,6 +103,7 @@ import type {
 } from "../../services/local-mcp-cli-config-service.js";
 import type { ProjectInitializationStateService } from "../../services/project-initialization-state-service.js";
 import type { CredentialBroker } from "../../services/credentials/credential-broker.js";
+import type { ChatProviderSecretService } from "../../services/chat-provider-secret-service.js";
 
 const updateCheckerService = new UpdateCheckerService();
 
@@ -121,6 +122,7 @@ export interface BootDashboardDeps {
   getDashboardNotifications?: () => ReturnType<ExecutionRepository["getDashboardNotifications"]>;
   connectionChatRepository: ConnectionChatRepository;
   chatProviderRepository: ChatProviderRepository;
+  chatProviderSecretService?: ChatProviderSecretService;
   projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   projectAttentionRepository: ProjectAttentionRepository;
@@ -510,6 +512,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     knowledgeService: deps.knowledgeService,
     agentPresetRepository: deps.agentPresetRepository,
     chatProviderRepository: deps.chatProviderRepository,
+    chatProviderSecretService: deps.chatProviderSecretService,
     chatProviderIngressService: deps.chatProviderIngressService,
     speechTranscriptionService: deps.speechTranscriptionService,
     speechSynthesisService: deps.speechSynthesisService,

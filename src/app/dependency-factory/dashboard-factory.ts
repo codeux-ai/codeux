@@ -55,6 +55,7 @@ export interface DashboardDependencies {
   automationSloService: CoreDependencies["automationSloService"];
   chatThreadRuntimeService: ChatThreadRuntimeService;
   chatProviderRepository: CoreDependencies["chatProviderRepository"];
+  chatProviderSecretService: CoreDependencies["chatProviderSecretService"];
   chatProviderIngressService: ChatProviderIngressService;
   chatProviderOutboundService: ChatProviderOutboundService;
   speechTranscriptionService: SpeechTranscriptionService;
@@ -92,6 +93,7 @@ export function createDashboardDependencies(
     projectManagementRepository,
     connectionChatRepository,
     chatProviderRepository,
+    chatProviderSecretService,
     projectWorkerAssignmentRepository,
     projectAttentionService,
     agentPresetSyncService,
@@ -156,6 +158,7 @@ export function createDashboardDependencies(
     taskRerunService: taskRerunServiceRef,
     settingsRepository: coreDeps.settingsRepository,
     chatProviderRepository: coreDeps.chatProviderRepository,
+    chatProviderSecretService: coreDeps.chatProviderSecretService,
     agentPresetSyncService: coreDeps.agentPresetSyncService,
     memoryService: coreDeps.memoryService,
     memoryPromotionService: coreDeps.memoryPromotionService,
@@ -208,6 +211,7 @@ export function createDashboardDependencies(
 
   const chatProviderOutboundService = new ChatProviderOutboundService({
     chatProviderRepository,
+    chatProviderSecretService,
     logger: logger.child({ component: "chat-provider-outbound-service" }),
   });
 
@@ -238,6 +242,7 @@ export function createDashboardDependencies(
 
   const chatProviderIngressService = new ChatProviderIngressService({
     chatProviderRepository,
+    chatProviderSecretService,
     chatThreadRuntimeService,
     logger: logger.child({ component: "chat-provider-ingress-service" }),
   });
@@ -628,6 +633,7 @@ export function createDashboardDependencies(
     headlessReadinessService: coreDeps.headlessReadinessService,
     automationSloService: coreDeps.automationSloService,
     chatProviderRepository,
+    chatProviderSecretService,
     chatThreadRuntimeService,
     chatProviderIngressService,
     chatProviderOutboundService,

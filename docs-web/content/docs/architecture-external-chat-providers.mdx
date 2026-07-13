@@ -24,7 +24,7 @@ The bridge-mode type includes `managed_bridge`, `webhook`, `native_bridge`, and 
 - Microsoft Teams: managed bridge or bot webhook.
 - Discord: bot/webhook gateway.
 
-Public records expose redacted credential metadata only. Runtime code that needs secrets must call the explicit internal repository read path.
+Public records expose redacted credential metadata only. Runtime code that needs secrets resolves an ephemeral connection profile through `ChatProviderSecretService`; repository reads never decrypt connector credentials.
 
 Profiles declare setup, authentication and handshake behavior, normalization, external identity, outbound mapping and parsing, verification, session requirements, official references, live-test availability, and lifecycle metadata. The registry itself is side-effect free; network and process execution stay in shared runtime services. See the [Chat Connector Registry](/docs/architecture-chat-connectors-overview) and its provider pages.
 
@@ -52,9 +52,12 @@ SQLite tables are created for fresh databases and during startup migrations for 
 
 | Table | Purpose |
 | --- | --- |
-| `chat_provider_connections` | Provider kind, bridge mode, status, enabled flag, setup JSON, and secret JSON. |
+| `chat_provider_connections` | Provider kind, bridge mode, status, enabled flag, setup JSON, sanitized verification results, and connector secret version. The nullable `secret_json` column is retained only as a legacy migration source. |
+| `chat_provider_connection_secrets` | AES-256-GCM envelope fields, root-key id/version, and non-secret configured-field metadata. |
 | `chat_provider_channel_bindings` | Links external channels to projects with routing hints, optional project-manager agent preset, inbound/outbound flags, and `suppress_rich_widgets` defaulting to true. |
-| `chat_provider_message_deliveries` | Inbound idempotency keys and outbound delivery status, attempts, errors, linked conversation message IDs, and payload snapshots. |
+| `chat_provider_message_deliveries` | Inbound idempotency keys plus outbound status, attempts, explicit retry schedule, compare-and-set lease ownership, linked conversation IDs, and payload snapshots. |
+| `chat_provider_ingress_replay_receipts` | Expiring authenticated-ingress replay receipts, unique per connection and replay key. |
+| `chat_provider_sessions` | Resumable provider-native session state with connection/binding ownership and compare-and-set versions. |
 
 Bindings allow many projects to point at the same external channel and one project to use multiple channels. Provider deletion cascades bindings and delivery rows. Existing MCP connection and conversation tables remain unchanged.
 
@@ -64,11 +67,13 @@ Bindings allow many projects to point at the same external channel and one proje
 
 - Connection create/update/list/get/delete.
 - Redacted public reads and unredacted internal reads.
-- Secret-preserving updates when an update omits the `secrets` field.
+- Atomic encrypted-envelope create, rotation, clearing, and resumable post-key-readiness sealing of legacy plaintext.
+- Verification reset after authentication, transport, enabled/status, or setup changes while display-name-only edits preserve the last result.
 - Channel binding create/update/list/get/delete.
-- Inbound duplicate lookup by `(providerConnectionId, externalMessageId)`.
+- Atomic inbound duplicate insertion by `(providerConnectionId, externalMessageId)` and atomic expiring replay-receipt insertion.
+- Compare-and-set provider session updates and expiry cleanup.
 - Outbound delivery upsert and state transitions.
-- Outbound delivery listing scoped to a provider connection or channel binding for dashboard status views, plus pending/retryable outbound delivery scans for retry workers.
+- Outbound delivery listing plus lease claim/complete/release operations with due-time filtering and stale-lease recovery.
 
 Indexes cover provider kind, enabled status, project lookup, provider/channel lookup, inbound dedupe, and pending/retryable outbound delivery scans.
 
@@ -98,10 +103,10 @@ Outbound delivery lifecycle:
 - `pending`: reply has been persisted and queued for bridge delivery.
 - `sending`: an adapter attempt is in progress.
 - `delivered`: the bridge accepted the reply; `externalMessageId` is stored when the bridge returns one.
-- `retryable_failure`: a retryable bridge failure occurred and the payload contains `delivery.nextAttemptAt`.
+- `retryable_failure`: a retryable bridge failure occurred and `next_attempt_at` records the durable schedule (the redacted payload mirrors it for display).
 - `failed`: delivery is terminal, such as disabled outbound routing, missing bridge configuration, non-retryable HTTP response, or exhausted attempts.
 
-Retryable HTTP/network/native bridge failures use exponential backoff. The dashboard lifecycle starts the outbound retry loop, and status APIs/MCP reads expose delivery status, attempt count, last error, linked conversation message id, and redacted payload state. Secrets are redacted from logs, payloads, stored errors, dashboard responses, and MCP responses.
+Retryable HTTP/network/native bridge failures use exponential backoff. Retry workers acquire bounded delivery leases before network or native command execution; competing workers cannot claim the same row, and expired leases are recoverable after a crash. The dashboard lifecycle starts the outbound retry loop, and status APIs/MCP reads expose delivery status, attempt count, last error, linked conversation message id, and redacted payload state. Secrets are redacted from logs, payloads, stored errors, dashboard responses, and MCP responses.
 
 ## Dashboard API
 
@@ -134,7 +139,7 @@ Channel binding controls support multiple projects on the same external channel 
 
 Provider cards and connection detail views surface enabled state, bridge mode, ingress URL, authentication status, configured channels, bound projects, outbound reply state, pending outbound delivery count, and failed outbound delivery count. Recent failed outbound messages are shown with retryable labels and redacted error text.
 
-The ingress endpoint supports Managed, webhook, and native bridge payloads for WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, and Discord. Managed and native bridges authenticate with bearer tokens from the configured bridge secret. Webhook bridges require a configured signing secret and a valid HMAC signature; they do not accept bearer-only fallback. All ingress requests require a fresh timestamp, and signed requests or requests with explicit nonces are replay-checked before processing.
+The ingress endpoint supports Managed, webhook, and native bridge payloads for WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, and Discord. Managed and native bridges authenticate with bearer tokens resolved ephemerally from the encrypted envelope. Webhook bridges require a configured signing secret and a valid HMAC signature; they do not accept bearer-only fallback. All ingress requests require a fresh timestamp, and signed requests or requests with explicit nonces are atomically replay-checked through expiring SQLite receipts before processing.
 
 Inbound messages normalize to provider connection id, provider kind, external channel id/name, external sender id/name, text, external message id, timestamp, and redacted raw metadata. The repository idempotency lookup runs before chat posting; duplicate external messages return the existing delivery record without creating another conversation message.
 

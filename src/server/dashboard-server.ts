@@ -137,6 +137,7 @@ import type { UpdateStatus } from "../services/update-checker-service.js";
 import type { LocalMcpCliProvider, LocalMcpInstallResult, LocalMcpSetupInfo } from "../services/local-mcp-cli-config-service.js";
 import { resolveDashboardBindHost } from "../config/app-config.js";
 import type { ChatProviderIngressService } from "../services/chat-provider-ingress-service.js";
+import type { ChatProviderSecretService } from "../services/chat-provider-secret-service.js";
 import type { SpeechTranscriptionService } from "../services/speech-transcription-service.js";
 import type { SpeechSynthesisService } from "../services/speech-synthesis-service.js";
 import type { SpeechModelManager } from "../services/speech-model-manager.js";
@@ -191,6 +192,7 @@ export interface DashboardServerOptions {
   knowledgeService?: KnowledgeService;
   agentPresetRepository?: AgentPresetRepository;
   chatProviderRepository?: ChatProviderRepository;
+  chatProviderSecretService?: ChatProviderSecretService;
   chatProviderIngressService?: ChatProviderIngressService;
   speechTranscriptionService?: SpeechTranscriptionService;
   speechSynthesisService?: SpeechSynthesisService;

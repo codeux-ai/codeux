@@ -39,7 +39,6 @@ describe("ChatProviderIngressService", () => {
       displayName: "Slack ingress",
       bridgeMode: "managed_bridge",
       status: "active",
-      secrets: { bridgeApiKey: "bridge-token" },
     });
     const bindingA = context.providerRepository.createChannelBinding({
       providerConnectionId: connection.id,
@@ -112,7 +111,6 @@ describe("ChatProviderIngressService", () => {
       displayName: "Discord ingress",
       bridgeMode: "webhook",
       status: "active",
-      secrets: { botToken: "bot-token" },
     });
     context.providerRepository.createChannelBinding({
       providerConnectionId: connection.id,
@@ -156,7 +154,6 @@ describe("ChatProviderIngressService", () => {
       displayName: "Telegram ingress",
       bridgeMode: "webhook",
       status: "active",
-      secrets: { botToken: "telegram-token" },
     });
     for (const project of [projectA, projectB]) {
       context.providerRepository.createChannelBinding({

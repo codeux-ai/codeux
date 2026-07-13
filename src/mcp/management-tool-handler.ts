@@ -76,6 +76,7 @@ import { NodeFlowActions, formatRunSummary } from "./management/node-flow-action
 import { MemoryActions } from "./management/memory-actions.js";
 import { SkillActions } from "./management/skill-actions.js";
 import { ChatProviderActions } from "./management/chat-provider-actions.js";
+import type { ChatProviderSecretService } from "../services/chat-provider-secret-service.js";
 import { buildMcpApprovalFingerprint, formatManagementErrorEnvelope } from "./management/payload-parsers.js";
 import { resolveLateBoundDependency, type LateBoundOrValue } from "../shared/late-bound-dependency.js";
 
@@ -90,6 +91,7 @@ export interface ManagementToolHandlerDeps {
   taskRerunService: LateBoundOrValue<TaskRerunService>;
   settingsRepository: SettingsRepository;
   chatProviderRepository: ChatProviderRepository;
+  chatProviderSecretService?: ChatProviderSecretService;
   agentPresetSyncService: AgentPresetSyncService;
   memoryService: MemoryService;
   memoryPromotionService: MemoryPromotionService;
@@ -137,7 +139,7 @@ export class ManagementToolHandler {
       deps.customDashboardRepository,
       deps.customDashboardValidationService,
     );
-    this.chatProviderActions = new ChatProviderActions(deps.chatProviderRepository);
+    this.chatProviderActions = new ChatProviderActions(deps.chatProviderRepository, deps.chatProviderSecretService);
   }
 
   private getSprintActions(): SprintActions {

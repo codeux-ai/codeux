@@ -25,12 +25,19 @@ interface ReplayEntry {
   expiresAt: number;
 }
 
+export interface ChatProviderReplayReceiptStore {
+  insertIngressReplayReceipt(providerConnectionId: string, receiptKey: string, expiresAt: string, now?: Date): boolean;
+}
+
 const DEFAULT_TIMESTAMP_TOLERANCE_MS = 5 * 60 * 1000;
 const MAX_REPLAY_CACHE_SIZE = 2_000;
 export class ChatProviderIngressSecurity {
   private readonly replayCache = new Map<string, ReplayEntry>();
 
-  constructor(private readonly timestampToleranceMs = DEFAULT_TIMESTAMP_TOLERANCE_MS) {}
+  constructor(
+    private readonly timestampToleranceMs = DEFAULT_TIMESTAMP_TOLERANCE_MS,
+    private readonly replayReceiptStore?: ChatProviderReplayReceiptStore,
+  ) {}
 
   verify(
     connection: ChatProviderConnectionInternalRecord,
@@ -145,6 +152,18 @@ export class ChatProviderIngressSecurity {
   }
 
   private preventReplay(input: { connectionId: string; key: string; nowMs: number }): void {
+    if (this.replayReceiptStore) {
+      const inserted = this.replayReceiptStore.insertIngressReplayReceipt(
+        input.connectionId,
+        input.key,
+        new Date(input.nowMs + this.timestampToleranceMs).toISOString(),
+        new Date(input.nowMs),
+      );
+      if (!inserted) {
+        throw new ChatProviderIngressSecurityError("replay_detected", "Duplicate chat provider ingress request.", 409);
+      }
+      return;
+    }
     this.pruneReplayCache(input.nowMs);
     const replayKey = `${input.connectionId}:${input.key}`;
     if (this.replayCache.has(replayKey)) {

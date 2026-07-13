@@ -1,10 +1,13 @@
 import type { KeyProvider } from "../../services/credentials/key-provider.js";
 import type { SecretContext, SecretStore, StoredSecretEnvelope } from "../../services/credentials/secret-store.js";
 import { decryptEnvelope, encryptEnvelope } from "../../services/credentials/encryption-utils.js";
-import type { AutomationCredentialRepository } from "../../repositories/automation-credential-repository.js";
+
+export interface SecretEnvelopeRepository {
+  getEnvelope(credentialId: string): StoredSecretEnvelope | null;
+}
 
 export class EncryptedSqliteSecretStore implements SecretStore {
-  constructor(private readonly repository: AutomationCredentialRepository, private readonly keyProvider: KeyProvider) {}
+  constructor(private readonly repository: SecretEnvelopeRepository, private readonly keyProvider: KeyProvider) {}
   async seal(context: SecretContext, plaintext: Buffer): Promise<StoredSecretEnvelope> {
     const health = await this.keyProvider.health();
     if (!health.available || !health.secure) throw new Error(health.reason ?? "Secure key provider is unavailable.");

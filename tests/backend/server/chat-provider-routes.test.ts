@@ -10,6 +10,7 @@ import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ConnectionChatRepository } from "../../../src/repositories/connection-chat-repository.js";
 import { ChatProviderRepository } from "../../../src/repositories/chat-provider-repository.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
+import { createChatProviderSecretFixture } from "../helpers/chat-provider-secret-fixture.js";
 
 interface TestServerContext {
   baseUrl: string;
@@ -347,12 +348,14 @@ async function startTestServer(): Promise<TestServerContext> {
   tempDirs.push(tempDir);
   const storage = new AppDbStorage(path.join(tempDir, "app.db"));
   const chatProviderRepository = new ChatProviderRepository(storage);
+  const chatProviderSecretService = createChatProviderSecretFixture(chatProviderRepository);
   const connectionChatRepository = new ConnectionChatRepository(storage);
   const projectManagementRepository = new ProjectManagementRepository(storage);
   const app = express();
   app.use(express.json());
   registerChatProviderRoutes(app, {
     chatProviderRepository,
+    chatProviderSecretService,
   } as DashboardDependencies);
   const server = await new Promise<Server>((resolve) => {
     const listening = app.listen(0, "127.0.0.1", () => resolve(listening));
