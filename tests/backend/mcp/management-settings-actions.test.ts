@@ -368,14 +368,26 @@ describe("SettingsActions", () => {
   });
 
   describe("settings bundles", () => {
+    const systemSecret = "sk-system-secret-sentinel";
+    const systemGitSecret = "ghp-system-secret-sentinel";
+    const projectGitSecret = "ghp-project-secret-sentinel";
+    const sprintSecret = "jira-sprint-secret-sentinel";
+
     beforeEach(() => {
       vi.mocked((settingsRepository as any).getSystemSettings).mockReturnValue({
         runtime: { dashboardPort: 4444 },
         integrations: {
           providers: {
-            codex: { provider: "codex", name: "Codex", apiKey: "sk-system-secret", authType: "apiKey" },
+            codex: {
+              provider: "codex",
+              name: "Codex",
+              apiKey: systemSecret,
+              apiKeyCredentialRef: { credentialId: "credential-system", capability: "read" },
+              authType: "apiKey",
+            },
           },
-          githubToken: "ghp-system-secret",
+          githubToken: systemGitSecret,
+          githubTokenCredentialRef: { credentialId: "credential-git", capability: "read" },
           gitlabToken: "",
           jira: { apiToken: "" },
         },
@@ -386,11 +398,11 @@ describe("SettingsActions", () => {
       });
       vi.mocked((settingsRepository as any).getProjectSettings).mockReturnValue({
         automationLevel: "SEMI_AUTO",
-        git: { githubToken: "ghp-project-secret" },
+        git: { githubToken: projectGitSecret },
       });
       vi.mocked((settingsRepository as any).getSprintSettings).mockReturnValue({
         automationLevel: "MANUAL",
-        jira: { apiToken: "jira-sprint-secret" },
+        jira: { apiToken: sprintSecret },
       });
     });
 
@@ -409,13 +421,29 @@ describe("SettingsActions", () => {
       expect(bundle.metadata.containsSecrets).toBe(true);
       expect(bundle.system.integrations.providers.codex.apiKey).toBe("[REDACTED]");
       expect(bundle.system.integrations.githubToken).toBe("[REDACTED]");
+      expect(bundle.system.integrations.providers.codex.apiKeyCredentialRef).toEqual({
+        credentialId: "credential-system",
+        capability: "read",
+      });
+      expect(bundle.system.integrations.githubTokenCredentialRef).toEqual({
+        credentialId: "credential-git",
+        capability: "read",
+      });
+      expect(JSON.stringify(res)).not.toContain(systemSecret);
+      expect(JSON.stringify(res)).not.toContain(systemGitSecret);
     });
 
-    it("requires one-use approval before exporting secrets", async () => {
+    it("keeps approved includeSecrets exports redacted and secret-free throughout approval", async () => {
       const payload = { includeSecrets: true };
+      const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
       const first = await actions.handleSettingsAction({ domain: "settings", action: "export_settings_bundle", payload });
       expect(first.approvalRequired).toBe(true);
+      expect(JSON.stringify(first)).not.toContain(systemSecret);
+      expect(JSON.stringify((actions as any).pendingSettingsApprovals)).not.toContain(systemSecret);
+      expect(JSON.stringify([...((actions as any).pendingSettingsApprovals.keys())])).not.toContain(systemSecret);
 
       const approved = await actions.handleSettingsAction({
         domain: "settings",
@@ -423,7 +451,13 @@ describe("SettingsActions", () => {
         payload,
         approval: { confirmed: true },
       });
-      expect((approved.result as any).bundle.system.integrations.providers.codex.apiKey).toBe("sk-system-secret");
+      expect((approved.result as any).bundle.system.integrations.providers.codex.apiKey).toBe("[REDACTED]");
+      expect((approved.result as any).bundle.system.integrations.providers.codex.apiKeyCredentialRef).toEqual({
+        credentialId: "credential-system",
+        capability: "read",
+      });
+      expect(JSON.stringify(approved)).not.toContain(systemSecret);
+      expect((approved.result as any).bundle.metadata.fingerprint).not.toContain(systemSecret);
 
       const replay = await actions.handleSettingsAction({
         domain: "settings",
@@ -432,6 +466,40 @@ describe("SettingsActions", () => {
         approval: { confirmed: true },
       });
       expect(replay.approvalRequired).toBe(true);
+      expect(JSON.stringify(replay)).not.toContain(systemSecret);
+      expect(JSON.stringify([...((actions as any).pendingSettingsApprovals.keys())])).not.toContain(systemSecret);
+      expect(JSON.stringify(log.mock.calls)).not.toContain(systemSecret);
+      expect(JSON.stringify(warn.mock.calls)).not.toContain(systemSecret);
+      expect(JSON.stringify(error.mock.calls)).not.toContain(systemSecret);
+      log.mockRestore();
+      warn.mockRestore();
+      error.mockRestore();
+    });
+
+    it("hashes secret-shaped patch values out of pending approval fingerprints", async () => {
+      const secret = "sk-patch-secret-sentinel";
+      const differentSecret = "sk-different-secret-sentinel";
+      const response = await actions.handleSettingsAction({
+        domain: "settings",
+        action: "patch_system_setting",
+        payload: { path: "defaults.aiProvider.providers.codex.apiKey", value: secret },
+      });
+
+      expect(response.approvalRequired).toBe(true);
+      expect(JSON.stringify(response)).not.toContain(secret);
+      const fingerprints = [...((actions as any).pendingSettingsApprovals.keys())];
+      expect(JSON.stringify(fingerprints)).not.toContain(secret);
+      expect(JSON.stringify(fingerprints)).toMatch(/[a-f0-9]{64}/);
+
+      const mismatchedConfirmation = await actions.handleSettingsAction({
+        domain: "settings",
+        action: "patch_system_setting",
+        payload: { path: "defaults.aiProvider.providers.codex.apiKey", value: differentSecret },
+        approval: { confirmed: true },
+      });
+      expect(mismatchedConfirmation.approvalRequired).toBe(true);
+      expect(settingsRepository.saveSystemSettings).not.toHaveBeenCalled();
+      expect(JSON.stringify([...((actions as any).pendingSettingsApprovals.keys())])).not.toContain(differentSecret);
     });
 
     it("applies a complete secret-bearing bundle only after approval", async () => {
@@ -472,6 +540,9 @@ describe("SettingsActions", () => {
       });
 
       expect((approved.result as any).applied).toEqual({ system: 1, projects: 1, sprints: 1 });
+      expect(JSON.stringify(first)).not.toContain("sk-imported");
+      expect(JSON.stringify(approved)).not.toContain("sk-imported");
+      expect(JSON.stringify([...((actions as any).pendingSettingsApprovals.keys())])).not.toContain("sk-imported");
       expect(settingsRepository.saveSystemSettings).toHaveBeenCalledWith(bundle.system);
       expect(settingsRepository.saveProjectSettings).toHaveBeenCalledWith("proj-1", { automationLevel: "FULL" });
       expect(settingsRepository.getProjectResolvedSettings).toHaveBeenCalledWith("proj-1");
@@ -513,16 +584,24 @@ describe("SettingsActions", () => {
 
     it("does not include secret values in validation errors", async () => {
       const secret = "ghp-leaked-secret";
-      await expect(actions.handleSettingsAction({
-        domain: "settings",
-        action: "apply_settings_bundle",
-        payload: {
-          bundle: {
-            metadata: { schemaVersion: 1, includedScopes: ["projects"], fingerprint: "fp", containsSecrets: true },
-            projects: [{ projectId: "proj-1", settings: "bad", githubToken: secret }],
+      let thrown: unknown;
+      try {
+        await actions.handleSettingsAction({
+          domain: "settings",
+          action: "apply_settings_bundle",
+          payload: {
+            bundle: {
+              metadata: { schemaVersion: 1, includedScopes: ["projects"], fingerprint: "fp", containsSecrets: true },
+              projects: [{ projectId: "proj-1", settings: "bad", githubToken: secret }],
+            },
           },
-        },
-      })).rejects.not.toThrow(secret);
+        });
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(Error);
+      expect(String(thrown)).not.toContain(secret);
+      expect(JSON.stringify([...((actions as any).pendingSettingsApprovals.keys())])).not.toContain(secret);
     });
   });
 });

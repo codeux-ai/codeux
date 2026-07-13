@@ -198,12 +198,12 @@ Safe token rotation is a planned reconnect: generate a new token, update client 
 
 Server-mode instances synchronize settings through `manage_settings` bundle actions:
 
-- `export_settings_bundle` exports system, project, and/or sprint settings. Secret-bearing fields are redacted by default.
+- `export_settings_bundle` exports system, project, and/or sprint settings as credential references, configured-state metadata, or redacted fields. It never returns credential plaintext.
 - `apply_settings_bundle` imports the bundle through the same settings repository APIs used by dashboard saves.
-- `includeSecrets: true` on export, or applying a bundle that contains secrets, requires the one-use approval flow for the exact same payload.
+- The compatibility `includeSecrets: true` export input, or applying a bundle marked or shaped as containing secrets, retains the one-use approval flow for the exact same payload. Approval never makes export plaintext available, and apply never echoes submitted values.
 - Partial rollout or rollback uses the `scopes` field to apply only `system`, `projects`, or `sprints`.
 
-Keep redacted bundles in normal review channels. Keep secret-bearing bundles only in approved secret storage, and export a known-good bundle before applying changes so rollback is another approved apply.
+Bundles synchronize non-secret settings and credential references only. Create, replace, or rotate provider, Git, issue-tracker, and login credential values through write-only broker operations; bind or revoke them through metadata-only operations. Export a known-good bundle before applying changes so settings rollback is another approved apply; credential values require a separate broker rollback.
 
 ## Cluster workers
 
