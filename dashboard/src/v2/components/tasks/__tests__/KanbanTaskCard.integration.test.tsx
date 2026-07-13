@@ -2,12 +2,13 @@
 /// <reference types="@testing-library/jest-dom" />
 import { readFileSync } from "node:fs";
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, cleanup, fireEvent, within } from "@testing-library/preact";
+import { render, cleanup, fireEvent, waitFor, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import userEvent from "@testing-library/user-event";
 import gsap from "gsap";
 import { KanbanTaskCard } from "../KanbanTaskCard.js";
 import type { TaskCardViewModel } from "../../../lib/tasks/task-card-view-model.js";
+import type { CiStatusPresentation } from "../../../lib/ci-status-presentation.js";
 import type { TaskSelfReflectionRating } from "../../../../../../src/contracts/task-self-reflection-types.js";
 
 expect.extend(matchers);
@@ -40,6 +41,25 @@ const createRating = (overrides: Partial<TaskSelfReflectionRating> = {}): TaskSe
   createdAt: "2026-07-07T00:00:00.000Z",
   updatedAt: "2026-07-07T00:00:00.000Z",
   ...overrides,
+});
+
+const createCiPresentation = (
+  state: CiStatusPresentation["state"],
+): CiStatusPresentation => ({
+  scope: "task",
+  state,
+  label: state === "failed" ? "CI failed" : state === "successful" ? "CI passed" : state === "in_progress" ? "CI running" : "CI pending",
+  accessibleLabel: state === "failed"
+    ? "CI failed. Pull request: Pull request ready. Checks: Checks failed. Merge: Blocked by checks."
+    : state === "successful"
+      ? "CI passed. Pull request: Pull request ready. Checks: Checks passed. Merge: Merged."
+      : "CI running. Pull request: Pull request ready. Checks: Checks running. Merge: Waiting for checks.",
+  steps: [
+    { id: "pull_request", label: "Pull request", state: "successful", statusLabel: "Pull request ready" },
+    { id: "checks", label: "Checks", state, statusLabel: state === "failed" ? "Checks failed" : state === "successful" ? "Checks passed" : "Checks running", ...(state === "failed" ? { failureKind: "ci_checks" as const } : {}) },
+    { id: "merge", label: "Merge", state: state === "successful" ? "successful" : "pending", statusLabel: state === "successful" ? "Merged" : state === "failed" ? "Blocked by checks" : "Waiting for checks" },
+  ],
+  ...(state === "failed" ? { failureKind: "ci_checks" as const } : {}),
 });
 
 vi.mock("../../../hooks/use-confirm-dialog.js", () => ({
@@ -212,6 +232,88 @@ describe("KanbanTaskCard Integration", () => {
     expect(scopeControlRow).not.toBeNull();
     expect(within(scopeControlRow as HTMLElement).getByText("4/5")).toBeInTheDocument();
     expect(within(scopeControlRow as HTMLElement).getByText("Stayed focused.")).toBeInTheDocument();
+  });
+
+  it("uses the shared QA details badge for changes requested and keeps follow-up prompts collapsed", async () => {
+    const followUpPrompt = "Implement the requested keyboard fix with regression coverage.";
+    const latestReview = {
+      status: "completed",
+      outcome: "changes_requested",
+      summary: "Keyboard behavior needs another pass.",
+      findings: ["Focus is lost after closing the menu."],
+      reviewer: "QA Reviewer",
+      finishedAt: "2026-07-13T12:00:00.000Z",
+      followUpTasks: [{
+        title: "Repair keyboard focus",
+        promptMarkdown: followUpPrompt,
+        description: "Keep focus on the action trigger.",
+        dependsOnTaskKeys: [],
+        priority: "high" as const,
+      }],
+    };
+    const viewModel: TaskCardViewModel = {
+      ...mockViewModel,
+      task: { ...mockViewModel.task, latestReview },
+      qaReviewLabel: undefined,
+    };
+    const { getByLabelText, getAllByText, getByText, queryByText, queryByRole } = render(
+      <KanbanTaskCard viewModel={viewModel} onEdit={onEdit} onDelete={onDelete} />,
+    );
+
+    const trigger = getByLabelText("QA review details");
+    expect(trigger.textContent).toContain("QA");
+    expect(trigger.querySelector(".lucide-pencil-line")).toBeTruthy();
+    expect(queryByText("QA completed, changes_requested")).not.toBeInTheDocument();
+
+    fireEvent.mouseEnter(trigger.parentElement as Element);
+    await waitFor(() => expect(getAllByText("QA Changes Requested").length).toBeGreaterThan(0));
+    expect(getByText("Keyboard behavior needs another pass.")).toBeInTheDocument();
+    expect(getByText("Focus is lost after closing the menu.")).toBeInTheDocument();
+    expect(queryByText("Repair keyboard focus")).not.toBeInTheDocument();
+    expect(queryByText(followUpPrompt)).not.toBeInTheDocument();
+
+    const followUpTrigger = queryByRole("button", { name: "Follow-up task 1" });
+    if (followUpTrigger) {
+      expect(followUpTrigger).toHaveAttribute("aria-expanded", "false");
+    }
+  });
+
+  it.each([
+    ["in_progress", "CI running", "in_progress"],
+    ["failed", "CI failed", "failure"],
+  ] as const)("renders %s CI workflow status without disturbing card actions or drag", async (state, label, iconState) => {
+    const onDragStart = vi.fn();
+    const viewModel: TaskCardViewModel = {
+      ...mockViewModel,
+      ciStatusPresentation: createCiPresentation(state),
+      ciStatusSourceSignature: `ci-${state}`,
+    };
+    const user = userEvent.setup();
+    const { container, getByRole, getByText } = render(
+      <KanbanTaskCard
+        viewModel={viewModel}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onDragStart={onDragStart}
+      />,
+    );
+
+    const card = container.querySelector(".kanban-card");
+    const badge = getByRole("button", { name: /CI status:/i });
+    expect(getByText(label)).toBeInTheDocument();
+    expect(badge.querySelector(`[data-ci-icon="${iconState}"]`)).toBeTruthy();
+    expect(badge.className).toContain("sm:text-[10px]");
+    expect(badge.closest("[data-ci-state]")?.parentElement).toHaveClass("flex-wrap");
+    expect(card).toHaveAttribute("draggable", "true");
+    expect(card).toHaveAccessibleName(new RegExp(label, "i"));
+
+    await user.click(badge);
+    expect(getByRole("region", { name: "CI workflow details" })).toBeInTheDocument();
+    expect(getByRole("button", { name: /Edit task TASK-123/i })).toBeInTheDocument();
+    expect(getByRole("button", { name: /Delete task TASK-123/i })).toBeInTheDocument();
+
+    if (card) fireEvent.dragStart(card);
+    expect(onDragStart).toHaveBeenCalledTimes(1);
   });
 
   it("does not render a self-reflection placeholder when no rating exists", () => {
