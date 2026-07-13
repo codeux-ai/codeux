@@ -122,6 +122,8 @@ If a QA agent preset is wired to `qa_review` in routing, completed tasks pass th
 
 Provider or infrastructure errors do not immediately create this handoff. Recovered failed, cancelled, and errored attempts retry within a bounded infrastructure grace, and every terminal attempt counts toward the hard ceiling. A CLI QA fix that produces no new patch is escalated as no progress instead of starting another QA cycle; existing branch commits do not renew the cycle. A coding run that produces no changes must explicitly confirm completion or it is blocked for attention. The sprint watch loop stays alive while worker or human attention is active.
 
+Task and sprint summary badges select one reviewer from the newest QA cycle. Within that cycle, running reviews appear first, followed by requested changes, provider failures (`failed`, `cancelled`, or `errored`), passes, and other states. This keeps a passing reviewer from hiding another reviewer that is still active, has blocked the work, or did not return a usable verdict.
+
 ## Attention items: who handles them
 
 Anything not auto-handled becomes an attention item. The dashboard's **Live Session** page surfaces them.

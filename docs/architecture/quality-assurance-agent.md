@@ -124,6 +124,8 @@ Runtime aggregation is fail-closed for the latest cycle:
 - review budgets count distinct `run_index` values, not reviewer rows, so two reviewers in one cycle consume one QA attempt
 - reviewer rows stay visible independently in `qa_review_runs`, task events, and dashboard history with their own agent identity and payload details
 
+Task and sprint cards project one representative reviewer from the newest `run_index`. Within that cycle, the shared projection prioritizes `running`, then `changes_requested`, provider failures (`failed`, `cancelled`, or `errored`), `pass`, and finally other states. A passing reviewer therefore cannot hide an active, blocking, or provider-failed reviewer from the summary badge.
+
 Example trigger settings:
 
 ```json

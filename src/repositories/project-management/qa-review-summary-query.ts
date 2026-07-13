@@ -23,7 +23,7 @@ const REPRESENTATIVE_REVIEW_ORDER = `
   CASE
     WHEN q.status = 'running' THEN 0
     WHEN q.outcome = 'changes_requested' THEN 1
-    WHEN q.status = 'failed' THEN 2
+    WHEN q.status IN ('failed', 'cancelled', 'errored') THEN 2
     WHEN q.outcome = 'pass' THEN 3
     ELSE 4
   END,

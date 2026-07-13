@@ -217,11 +217,35 @@ describe("QA review summary query", () => {
     });
   });
 
+  it("projects a cancelled task reviewer ahead of a passing reviewer in the latest cycle", async () => {
+    const { storage, repository } = await createFixture();
+    const project = repository.createProject({ name: "Cancelled task QA", sourceType: "local", sourceRef: "/workspace/cancelled-task-qa" });
+    const sprint = repository.createSprint(project.id, { name: "Sprint" });
+    const task = repository.createTask(project.id, { sprintId: sprint.id, taskKey: "T01", title: "Task" });
+    const db = storage.getDatabase();
+    const insert = db.prepare(`
+      INSERT INTO qa_review_runs (
+        id, project_id, sprint_id, task_id, trigger_type, status, outcome, run_index,
+        summary_markdown, agent_name, started_at, finished_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 'task_completion', ?, ?, 2, ?, ?, ?, ?, ?, ?)
+    `);
+    insert.run("task-pass", project.id, sprint.id, task.id, "completed", "pass", "Pass", "Pass reviewer", "2026-07-13T11:05:00.000Z", "2026-07-13T11:06:00.000Z", "2026-07-13T11:05:00.000Z", "2026-07-13T11:06:00.000Z");
+    insert.run("task-cancelled", project.id, sprint.id, task.id, "cancelled", null, "Provider cancelled", "Cancelled reviewer", "2026-07-13T11:00:00.000Z", "2026-07-13T11:01:00.000Z", "2026-07-13T11:00:00.000Z", "2026-07-13T11:01:00.000Z");
+
+    expect(loadLatestTaskReviewSummaryMap(storage, [task.id]).get(task.id)).toMatchObject({
+      status: "cancelled",
+      outcome: null,
+      summary: "Provider cancelled",
+      reviewer: "Cancelled reviewer",
+    });
+  });
+
   it("uses blocking-state precedence for sprint reviewers in the latest run index", async () => {
     const { storage, repository } = await createFixture();
     const project = repository.createProject({ name: "Sprint QA", sourceType: "local", sourceRef: "/workspace/sprint-qa" });
     const runningSprint = repository.createSprint(project.id, { name: "Running review" });
     const failedSprint = repository.createSprint(project.id, { name: "Failed review" });
+    const erroredSprint = repository.createSprint(project.id, { name: "Errored review" });
     const db = storage.getDatabase();
     const insert = db.prepare(`
       INSERT INTO qa_review_runs (
@@ -233,11 +257,15 @@ describe("QA review summary query", () => {
     insert.run("running-blocker", project.id, runningSprint.id, "running", null, 3, "Still reviewing", "Running reviewer", "2026-07-13T12:00:00.000Z", null, "2026-07-13T12:00:00.000Z", "2026-07-13T12:00:00.000Z");
     insert.run("failed-pass", project.id, failedSprint.id, "completed", "pass", 2, "Pass", "Pass reviewer", "2026-07-13T12:05:00.000Z", "2026-07-13T12:06:00.000Z", "2026-07-13T12:05:00.000Z", "2026-07-13T12:06:00.000Z");
     insert.run("failed-blocker", project.id, failedSprint.id, "failed", null, 2, "Reviewer failed", "Failed reviewer", "2026-07-13T12:00:00.000Z", "2026-07-13T12:01:00.000Z", "2026-07-13T12:00:00.000Z", "2026-07-13T12:01:00.000Z");
+    insert.run("errored-pass", project.id, erroredSprint.id, "completed", "pass", 4, "Pass", "Pass reviewer", "2026-07-13T12:05:00.000Z", "2026-07-13T12:06:00.000Z", "2026-07-13T12:05:00.000Z", "2026-07-13T12:06:00.000Z");
+    insert.run("errored-blocker", project.id, erroredSprint.id, "errored", null, 4, "Reviewer errored", "Errored reviewer", "2026-07-13T12:00:00.000Z", "2026-07-13T12:01:00.000Z", "2026-07-13T12:00:00.000Z", "2026-07-13T12:01:00.000Z");
 
-    const summaries = loadLatestSprintReviewSummaryMap(storage, [runningSprint.id, failedSprint.id]);
+    const summaries = loadLatestSprintReviewSummaryMap(storage, [runningSprint.id, failedSprint.id, erroredSprint.id]);
     expect(summaries.get(runningSprint.id)?.status).toBe("running");
     expect(summaries.get(runningSprint.id)?.reviewer).toBe("Running reviewer");
     expect(summaries.get(failedSprint.id)?.status).toBe("failed");
     expect(summaries.get(failedSprint.id)?.reviewer).toBe("Failed reviewer");
+    expect(summaries.get(erroredSprint.id)?.status).toBe("errored");
+    expect(summaries.get(erroredSprint.id)?.reviewer).toBe("Errored reviewer");
   });
 });
