@@ -59,6 +59,10 @@ The composer also keeps a recent-message history for successful project chat sen
 
 When the Project Manager schedules its own continuation, that follow-up is visibly different from a message you wrote. Thread and 3D Chat render an agent-scheduled wakeup as a dedicated Project Manager continuation card, with the exact next-step instruction and its queued, running, completed, or failed state. The card explicitly says it was scheduled by the agent, so automated follow-ups remain auditable without being mistaken for user-authored prompts.
 
+Scheduled continuations are single-flight within their originating thread. If that thread is already generating a reply, the scheduler leaves the wakeup due instead of claiming it, then checks again as soon as the active reply finishes. If a wakeup is accepted during the narrow reply-finalization window, it stays queued without interrupting the current response. Multiple queued wakeups are combined in their stored order into one continuation, while messages you type keep their normal newer-message supersession behavior and are never merged into an agent-scheduled continuation.
+
+Cancelling from the dashboard stops only the selected active turn. The cancelled prompt is not automatically replayed and does not produce an additional worker-failure reply; other threads and separately queued scheduled continuations remain eligible to run. Genuine provider failures still appear as one visible failure reply and leave the affected message in a failed delivery state for inspection.
+
 ## Create app quickactions
 
 Use **Create Web App**, **Create Desktop App**, **Create Onlineshop** (the Online shop action), **Create Portfolio**, or **Create Game** when you want Code UX to start an app-building sprint in the selected project from chat. In Threads mode, the buttons sit beside the composer and are also available in an empty thread whenever project chat is idle. They hide while sending, working, or showing an error.
