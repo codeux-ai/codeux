@@ -119,6 +119,7 @@ export type DocsSlug =
   | 'architecture-node-flows'
   | 'architecture-speech-input'
   | 'architecture-speech-output'
+  | 'architecture-sprint-rollbacks'
   | 'architecture-worker-clarification-contract'
 
 export interface DocsRegistryEntry extends Partial<Omit<PageMeta, 'title' | 'description'>> {
@@ -942,6 +943,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Speech Output Architecture",
     description: "Speech output turns project-manager replies into audio through POST /api/speech/synthesis. Code UX supports local ONNX synthesis and OpenAI-compatible TTS APIs, and 3D Chat provides playback plus a voice on/off control.",
   },
+  'architecture-sprint-rollbacks': {
+    id: 'architecture-sprint-rollbacks',
+    path: '/docs/architecture-sprint-rollbacks',
+    section: 'Architecture',
+    title: "Sprint Rollbacks",
+    description: "Code UX models a rollback as a new sprint, not as destructive history editing. The original sprint remains auditable, while the rollback receives its own branch, tasks, execution history, and visual identity. Remote p...",
+  },
   'architecture-worker-clarification-contract': {
     id: 'architecture-worker-clarification-contract',
     path: '/docs/architecture-worker-clarification-contract',
@@ -1068,6 +1076,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-node-flows'],
   docsRegistry['architecture-speech-input'],
   docsRegistry['architecture-speech-output'],
+  docsRegistry['architecture-sprint-rollbacks'],
   docsRegistry['architecture-worker-clarification-contract'],
 ]
 

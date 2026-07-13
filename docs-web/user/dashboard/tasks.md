@@ -50,13 +50,13 @@ The CI badge summarizes a three-step workflow shared by Sprints, Tasks, and Live
 2. **Checks** — pending, running, passed, or failed checks.
 3. **Merge** — waiting for checks, QA, or review; checking mergeability; ready to merge; merging; merged; not required; conflict; or failed merge attempt.
 
-Pending uses a neutral clock, running uses the signal-colored progress treatment, success uses a green check, and failure uses a red X. Failure wins over running, running wins over pending, and pending wins over success when the overall badge is derived from the three steps.
+The four first-class workflow states are `pending`, `in_progress`, `successful`, and `failed`. Pending uses a neutral clock, `in_progress` is presented as running with the signal-colored progress treatment, `successful` uses a green check, and `failed` uses a red X. Failed wins over in progress, in progress wins over pending, and pending wins over successful when the overall badge is derived from the three steps.
 
 The red X is reserved for an actual failed workflow step: failed CI checks, a merge conflict, or a failed merge attempt. A review blocker is not a CI failure: checks remain passed and Merge reads **Waiting for review** in a pending state. A merge conflict fails the Merge step and is labelled **Merge conflict**, which keeps it distinct from **CI failed** at Checks. QA provider failure is shown by the separate QA badge and does not become a CI failure. Activate the CI badge to inspect all three step labels and states; `Escape` closes the details and returns focus to the badge.
 
 These badges do not poll per card. Task feature-PR gates are persisted as `ci_gate_status` task-run events, and unresolved CI repair attention remains active while its item is `open` or `claimed`. The card projection selects the newest matching task event by creation time and then event ID, combines it with active attention, and uses persisted task merge metadata only as durable fallback evidence when no matching event is available.
 
-Because the evidence is persisted and rehydrated into project and Live snapshots, server restarts and browser reconnects reconstruct the same state before realtime updates continue; cards do not need independent recovery timers. A newer settled event supersedes an older failed or waiting event, resolved or dismissed attention no longer forces failure, and clearing or settling the durable task merge indicator prevents historical CI events from resurrecting a stale badge.
+Because the evidence is persisted and rehydrated into project and Live snapshots, server restarts and browser reconnects reconstruct the same state before realtime updates continue; cards do not need independent recovery timers. A newer recognized settled gate event supersedes an older failed or waiting event for the same task, and resolved or dismissed attention no longer forces failure.
 
 ## Create and edit tasks
 
