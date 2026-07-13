@@ -14,6 +14,7 @@ describe("ProviderConcurrencyService", () => {
       tryCreateProviderInvocationUsage: vi.fn(),
       createProviderInvocationUsage: vi.fn(),
       updateProviderInvocationUsage: vi.fn(),
+      getExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-1", status: "running", providerInvocationId: null }),
       listExecutionInvocationsByProviderInvocationId: vi.fn().mockReturnValue([]),
       updateExecutionInvocation: vi.fn(),
       appendExecutionInvocationMessage: vi.fn(),
@@ -186,6 +187,59 @@ describe("ProviderConcurrencyService", () => {
 
       expect(result.id).toBe("inv-1");
       expect(executionRepository.tryCreateProviderInvocationUsage).toHaveBeenCalledWith(input, 5);
+    });
+
+    it("links a claimed provider usage to the active execution invocation", async () => {
+      const input = { provider: "jules", startedAt: "2026-07-13T12:00:00.000Z" } as any;
+      executionRepository.tryCreateProviderInvocationUsage.mockReturnValue({ id: "inv-linked" });
+
+      const result = await service.waitForSlotAndClaim(
+        "jules",
+        5,
+        input,
+        undefined,
+        undefined,
+        "exec-1",
+      );
+
+      expect(result.id).toBe("inv-linked");
+      expect(executionRepository.tryCreateProviderInvocationUsage).toHaveBeenCalledWith(input, 5);
+      expect(executionRepository.updateExecutionInvocation).toHaveBeenCalledOnce();
+      expect(executionRepository.updateExecutionInvocation).toHaveBeenCalledWith("exec-1", {
+        providerInvocationId: "inv-linked",
+      });
+    });
+
+    it("does not claim provider usage when the execution is cancelled while waiting", async () => {
+      vi.useFakeTimers();
+      try {
+        const executionInvocation = { id: "exec-1", status: "running", providerInvocationId: null };
+        executionRepository.getExecutionInvocation.mockImplementation(() => executionInvocation);
+        executionRepository.tryCreateProviderInvocationUsage.mockReturnValue(null);
+        executionRepository.listRunningProviderInvocationUsages.mockReturnValue([{}]);
+
+        const waitPromise = service.waitForSlotAndClaim(
+          "jules",
+          1,
+          { provider: "jules" } as any,
+          undefined,
+          undefined,
+          "exec-1",
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        expect(executionRepository.tryCreateProviderInvocationUsage).toHaveBeenCalledTimes(1);
+
+        executionInvocation.status = "cancelled";
+        const assertion = expect(waitPromise).rejects.toThrow("provider slot will not be claimed");
+        await vi.advanceTimersByTimeAsync(2000);
+        await assertion;
+
+        expect(executionRepository.tryCreateProviderInvocationUsage).toHaveBeenCalledTimes(1);
+        expect(executionRepository.createProviderInvocationUsage).not.toHaveBeenCalled();
+        expect(executionRepository.updateExecutionInvocation).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("should wait and retry if tryCreate returns null", async () => {

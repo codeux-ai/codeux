@@ -97,11 +97,18 @@ export class ProviderConcurrencyService {
     limit: number,
     input: CreateProviderInvocationUsageInput,
     signal?: AbortSignal,
-    maxWaitMs?: number
+    maxWaitMs?: number,
+    executionInvocationId?: string,
   ): Promise<ProviderInvocationUsageRecord> {
     if (limit <= 0) {
       await this.reconcileStaleProviderInvocations(provider, true);
-      return this.deps.executionRepository.createProviderInvocationUsage(input);
+      if (signal?.aborted) {
+        throw signal.reason instanceof Error ? signal.reason : new Error(String(signal.reason || "AbortSignal triggered"));
+      }
+      this.assertExecutionInvocationCanClaim(executionInvocationId);
+      const invocation = this.deps.executionRepository.createProviderInvocationUsage(input);
+      this.linkExecutionInvocation(executionInvocationId, invocation.id);
+      return invocation;
     }
 
     const startMs = Date.now();
@@ -120,8 +127,13 @@ export class ProviderConcurrencyService {
       await this.reconcileStaleProviderInvocations(provider, isFirstCheck);
       isFirstCheck = false;
 
+      // Keep the status check and synchronous repository claim in the same event-loop turn.
+      // Dashboard cancellation can therefore stop a waiting execution before it manufactures
+      // provider usage or consumes capacity.
+      this.assertExecutionInvocationCanClaim(executionInvocationId);
       const invocation = this.deps.executionRepository.tryCreateProviderInvocationUsage(input, limit);
       if (invocation) {
+        this.linkExecutionInvocation(executionInvocationId, invocation.id);
         return invocation;
       }
 
@@ -137,6 +149,25 @@ export class ProviderConcurrencyService {
 
       await sleepWithSignal(delayMs, signal);
     }
+  }
+
+  private assertExecutionInvocationCanClaim(executionInvocationId: string | undefined): void {
+    if (!executionInvocationId) {
+      return;
+    }
+    const invocation = this.deps.executionRepository.getExecutionInvocation(executionInvocationId);
+    if (invocation && invocation.status !== "running" && invocation.status !== "paused") {
+      throw new Error(`Execution invocation ${executionInvocationId} is ${invocation.status}; provider slot will not be claimed.`);
+    }
+  }
+
+  private linkExecutionInvocation(executionInvocationId: string | undefined, providerInvocationId: string): void {
+    if (!executionInvocationId) {
+      return;
+    }
+    this.deps.executionRepository.updateExecutionInvocation(executionInvocationId, {
+      providerInvocationId,
+    });
   }
 
   /**
