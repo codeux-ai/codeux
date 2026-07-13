@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHash, createHmac, timingSafeEqual } from "crypto";
 import type { ChatProviderConnectionInternalRecord, ChatProviderSecretConfig } from "../contracts/chat-provider-types.js";
 import { getChatConnectorProfileForMode } from "../domain/chat-connectors/registry.js";
 import type { ChatConnectorHmacAuthentication } from "../domain/chat-connectors/types.js";
@@ -11,7 +11,7 @@ export interface ChatProviderIngressSecurityRequest {
 
 export interface ChatProviderIngressSecurityResult {
   authenticated: true;
-  method: "bearer" | "hmac";
+  method: "bearer" | "header_secret" | "hmac";
 }
 
 export class ChatProviderIngressSecurityError extends Error {
@@ -45,6 +45,18 @@ export class ChatProviderIngressSecurity {
     if (!authentication) {
       throw new ChatProviderIngressSecurityError("unsupported_authentication", "Unsupported chat provider authentication mode.", 403);
     }
+    if (authentication.type === "header_secret") {
+      const expectedToken = firstConfiguredSecretExact(connection.secrets, authentication.secretKeys);
+      if (!expectedToken) {
+        throw new ChatProviderIngressSecurityError("missing_header_secret", "Webhook secret token is not configured.", 403);
+      }
+      const actualToken = firstHeaderExact(request.headers, authentication.tokenHeaders);
+      if (actualToken === undefined || !constantTimeEqualsExact(actualToken, expectedToken)) {
+        throw new ChatProviderIngressSecurityError("invalid_header_secret", "Invalid webhook secret token.", 401);
+      }
+      return { authenticated: true, method: "header_secret" };
+    }
+
     const nowMs = (request.now ?? new Date()).getTime();
     const timestamp = this.requireFreshTimestamp(request.headers, authentication.timestampHeaders, nowMs);
 
@@ -191,6 +203,16 @@ function firstConfiguredSecret(secrets: ChatProviderSecretConfig | null, keys: r
   return null;
 }
 
+function firstConfiguredSecretExact(secrets: ChatProviderSecretConfig | null, keys: readonly string[]): string | null {
+  for (const key of keys) {
+    const value = secrets?.[key];
+    if (typeof value === "string" && value.length > 0) {
+      return value;
+    }
+  }
+  return null;
+}
+
 function firstHeader(headers: Record<string, string | string[] | undefined>, names: readonly string[]): string | undefined {
   const normalized = new Map(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]));
   for (const name of names) {
@@ -198,6 +220,21 @@ function firstHeader(headers: Record<string, string | string[] | undefined>, nam
     const candidate = Array.isArray(value) ? value[0] : value;
     if (typeof candidate === "string" && candidate.trim()) {
       return candidate.trim();
+    }
+  }
+  return undefined;
+}
+
+function firstHeaderExact(
+  headers: Record<string, string | string[] | undefined>,
+  names: readonly string[],
+): string | undefined {
+  const normalized = new Map(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]));
+  for (const name of names) {
+    const value = normalized.get(name.toLowerCase());
+    const candidate = Array.isArray(value) ? value[0] : value;
+    if (typeof candidate === "string") {
+      return candidate;
     }
   }
   return undefined;
@@ -216,4 +253,12 @@ function constantTimeEquals(left: string, right: string): boolean {
     return false;
   }
   return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function constantTimeEqualsExact(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  const leftDigest = createHash("sha256").update(leftBuffer).digest();
+  const rightDigest = createHash("sha256").update(rightBuffer).digest();
+  return timingSafeEqual(leftDigest, rightDigest) && leftBuffer.length === rightBuffer.length;
 }

@@ -34,6 +34,7 @@ export interface NormalizedChatProviderInboundMessage {
 export type ChatProviderIngressStatus =
   | "accepted"
   | "duplicate"
+  | "ignored"
   | "ambiguous"
   | "unbound"
   | "rejected";
@@ -87,6 +88,25 @@ export class ChatProviderIngressService {
         status: "rejected",
         message: "Chat provider connection not found.",
         providerConnectionId: input.providerConnectionId,
+      };
+    }
+
+    const profile = getChatConnectorProfileForMode(connection.providerKind, connection.bridgeMode);
+    const ignoreResult = profile.ingress.ignore?.(
+      requireRecord(input.payload, "payload"),
+      connection.bridgeMode,
+    );
+    if (ignoreResult?.ignored) {
+      this.log("info", "Ignored chat provider ingress update", {
+        providerConnectionId: connection.id,
+        providerKind: connection.providerKind,
+        reason: ignoreResult.reason ?? "provider_profile",
+      });
+      return {
+        status: "ignored",
+        message: "Inbound chat provider update ignored.",
+        providerConnectionId: connection.id,
+        providerKind: connection.providerKind,
       };
     }
 
@@ -271,7 +291,7 @@ export function normalizeInboundPayload(
   const providerKind = connection.providerKind;
   const profile = getChatConnectorProfileForMode(providerKind, connection.bridgeMode);
   const normalized = {
-    ...profile.ingress.normalize(body),
+    ...profile.ingress.normalize(body, connection.bridgeMode),
     ...definedInboundFields(normalizeGeneric(body)),
   };
   const timestamp = parseTimestamp(normalized.timestamp) ?? new Date().toISOString();

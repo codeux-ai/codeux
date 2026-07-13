@@ -70,6 +70,7 @@ function statusCodeForIngressResult(status: string): number {
     case "accepted":
       return 202;
     case "duplicate":
+    case "ignored":
       return 200;
     case "ambiguous":
       return 409;
