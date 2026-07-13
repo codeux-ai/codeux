@@ -29,6 +29,11 @@ export function getHomeCodeUxPath(...segments: string[]): string {
   return path.join(getHomeCodeUxDir(), ...segments);
 }
 
+/** Root-key custody for the local dashboard is always global, never repository-scoped. */
+export function getLocalCredentialRootKeyPath(): string {
+  return getHomeCodeUxPath("security", "credential-root.key");
+}
+
 export function getCodeUxSubtasksDir(repoPath: string, sprintNumber: number): string {
   return getRepoCodeUxPath(repoPath, "sprints", `sprint${sprintNumber}-subtasks`);
 }

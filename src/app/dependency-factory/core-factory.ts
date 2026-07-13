@@ -71,11 +71,8 @@ import { AutomationApprovalRepository } from "../../repositories/automation-appr
 import { AutomationOutboxRepository } from "../../repositories/automation-outbox-repository.js";
 import { AutomationWebhookTriggerRepository } from "../../repositories/automation-webhook-trigger-repository.js";
 import { CredentialBroker } from "../../services/credentials/credential-broker.js";
-import { MountedKeyFileProvider } from "../../infrastructure/security/mounted-key-file-provider.js";
 import { EncryptedSqliteSecretStore } from "../../infrastructure/security/encrypted-sqlite-secret-store.js";
-import { KmsKeyProviderAdapter, VaultKeyProviderAdapter } from "../../infrastructure/security/external-key-provider-adapters.js";
-import { getProcessCredentialKeyProvider } from "../../services/credentials/key-provider-registry.js";
-import type { KeyProvider } from "../../services/credentials/key-provider.js";
+import { selectCredentialKeyProvider } from "../../services/credentials/key-provider-selection.js";
 import { HeadlessAuthService, loadHeadlessSecurityConfiguration } from "../../services/headless-auth-service.js";
 import { AutomationAuditExportService } from "../../services/automation-audit-export-service.js";
 import { HeadlessOperationalReadinessService } from "../../services/headless-operational-readiness-service.js";
@@ -208,13 +205,10 @@ export function createCoreDependencies(
   const automationOutboxRepository = new AutomationOutboxRepository(appDbStorage);
   const automationWebhookTriggerRepository = new AutomationWebhookTriggerRepository(appDbStorage);
   const securityConfiguration = loadHeadlessSecurityConfiguration();
-  const configuredKeyProvider = (): KeyProvider => {
-    const provider = process.env.CODE_UX_CREDENTIAL_KEY_PROVIDER?.trim().toLowerCase();
-    if (provider === "vault") return new VaultKeyProviderAdapter();
-    if (provider === "kms") return new KmsKeyProviderAdapter();
-    return new MountedKeyFileProvider(process.env.CODE_UX_CREDENTIAL_KEY_FILE);
-  };
-  const credentialKeyProvider = getProcessCredentialKeyProvider() ?? configuredKeyProvider();
+  const credentialKeyProvider = selectCredentialKeyProvider({
+    appConfig: options.appConfig,
+    security: securityConfiguration,
+  });
   const automationAuditService = new AutomationAuditExportService(appDbStorage);
   const credentialBroker = new CredentialBroker(
     automationCredentialRepository,

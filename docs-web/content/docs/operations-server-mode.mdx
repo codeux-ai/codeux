@@ -14,7 +14,7 @@ The `credential_admin` role can still read administrative readiness, audit expor
 
 ## Probes, audit, and SLOs
 
-`/health` is liveness. `/ready` also checks credential-key recovery, the audit store, and distributed-runner identities and returns `503` when required components are unavailable. If encrypted credential rows exist and their key cannot be recovered, startup aborts before listeners bind.
+`/health` is liveness. `/ready` also checks credential-key recovery, the audit store, and distributed-runner identities and returns `503` when required components are unavailable. If encrypted credential rows exist and their key cannot be recovered, startup aborts before listeners bind. Server mode never auto-provisions local-file custody; configure `mounted-key-file`, Vault, or KMS explicitly.
 
 Authenticated operators can use `/api/admin/readiness`, `/api/admin/audit/export` (redacted NDJSON), and `/api/admin/metrics/slo`. Audit covers management calls, credential access, runs, attempts, approvals, and outbox delivery with correlation ids.
 
