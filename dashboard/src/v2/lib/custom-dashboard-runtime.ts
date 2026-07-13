@@ -70,21 +70,26 @@ const supportedSourceTypes = new Set<string>([
   "integrations",
   "external_api",
 ]);
+const CREDENTIAL_BINDING_ID_REDACTION = "[REDACTED_CREDENTIAL_BINDING_ID]";
+const CREDENTIAL_BINDING_PROPERTY_NAMES = new Set(["credentialbindings", "credentialid"]);
 
 export function resolvePublishedCustomDashboardRuntime(
   dashboard: CustomDashboardRecord,
   revisions: CustomDashboardRevisionRecord[],
 ): CustomDashboardRuntimeResolution {
+  const credentialIds = collectCredentialBindingIds(dashboard, revisions);
+  const safeDashboard = sanitizeViewerValue(dashboard, credentialIds);
+  const safeRevisions = sanitizeViewerValue(revisions, credentialIds);
   const publishedRevision = dashboard.publishedRevisionId
     ? revisions.find((revision) => revision.id === dashboard.publishedRevisionId) ?? null
     : null;
-  const safePublishedRevision = publishedRevision ? omitRevisionCredentialBindings(publishedRevision) : null;
-  const validationReport = getLastValidationReport(revisions);
+  const safePublishedRevision = publishedRevision ? sanitizeViewerValue(publishedRevision, credentialIds) : null;
+  const validationReport = getLastValidationReport(safeRevisions);
 
-  if (dashboard.status === "archived") {
+  if (safeDashboard.status === "archived") {
     return { status: "blocked", reason: "Archived custom dashboards cannot be opened.", validationReport, publishedRevision: safePublishedRevision };
   }
-  if (dashboard.status !== "published") {
+  if (safeDashboard.status !== "published") {
     return {
       status: "blocked",
       reason: "Only published custom dashboards can be opened. Validate and publish a revision first.",
@@ -92,7 +97,7 @@ export function resolvePublishedCustomDashboardRuntime(
       publishedRevision: safePublishedRevision,
     };
   }
-  if (!dashboard.publishedRevisionId || !publishedRevision) {
+  if (!safeDashboard.publishedRevisionId || !publishedRevision) {
     return {
       status: "blocked",
       reason: "This custom dashboard has no published revision.",
@@ -104,24 +109,35 @@ export function resolvePublishedCustomDashboardRuntime(
     return {
       status: "blocked",
       reason: "The published revision no longer has a passed validation report.",
-      validationReport: publishedRevision.validationReport ?? validationReport,
+      validationReport: safePublishedRevision?.validationReport ?? validationReport,
       publishedRevision: safePublishedRevision,
     };
   }
 
-  const readyRevision = omitRevisionCredentialBindings(publishedRevision);
+  const readyRevision = sanitizeViewerValue(publishedRevision, credentialIds);
 
   return {
     status: "ready",
     runtime: {
-      dashboard: omitDashboardCredentialBindings(dashboard),
+      dashboard: safeDashboard,
       revision: readyRevision,
-      document: buildCustomDashboardFrameDocument(dashboard, readyRevision),
+      document: buildCustomDashboardFrameDocument(safeDashboard, readyRevision),
     },
   };
 }
 
 export function buildCustomDashboardFrameDocument(
+  dashboard: CustomDashboardRecord,
+  revision: CustomDashboardRevisionRecord,
+): string {
+  const credentialIds = collectCredentialBindingIds(dashboard, [revision]);
+  return buildSanitizedCustomDashboardFrameDocument(
+    sanitizeViewerValue(dashboard, credentialIds),
+    sanitizeViewerValue(revision, credentialIds),
+  );
+}
+
+function buildSanitizedCustomDashboardFrameDocument(
   dashboard: CustomDashboardRecord,
   revision: CustomDashboardRevisionRecord,
 ): string {
@@ -375,13 +391,44 @@ function buildBridgeBootstrapScript(config: Record<string, unknown>): string {
   ].join("\n");
 }
 
-function omitDashboardCredentialBindings(dashboard: CustomDashboardRecord): CustomDashboardRecord {
-  const { credentialBindings: _credentialBindings, ...safe } = dashboard;
-  return safe;
+function collectCredentialBindingIds(
+  dashboard: CustomDashboardRecord,
+  revisions: CustomDashboardRevisionRecord[],
+): string[] {
+  const credentialIds = new Set<string>();
+  for (const record of [dashboard, ...revisions]) {
+    for (const binding of record.credentialBindings ?? []) {
+      if (binding.credentialId) credentialIds.add(binding.credentialId);
+    }
+  }
+  return [...credentialIds].sort((left, right) => right.length - left.length);
 }
 
-function omitRevisionCredentialBindings(revision: CustomDashboardRevisionRecord): CustomDashboardRevisionRecord {
-  const { credentialBindings: _credentialBindings, ...safe } = revision;
+function sanitizeViewerValue<T>(value: T, credentialIds: readonly string[]): T {
+  return sanitizeViewerUnknown(value, credentialIds) as T;
+}
+
+function sanitizeViewerUnknown(value: unknown, credentialIds: readonly string[]): unknown {
+  if (typeof value === "string") {
+    return credentialIds.reduce(
+      (safe, credentialId) => safe.split(credentialId).join(CREDENTIAL_BINDING_ID_REDACTION),
+      value,
+    );
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeViewerUnknown(entry, credentialIds));
+  }
+  if (!value || typeof value !== "object") return value;
+
+  const safe: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    const normalizedKey = key.toLowerCase();
+    if (CREDENTIAL_BINDING_PROPERTY_NAMES.has(normalizedKey)
+      || credentialIds.some((credentialId) => key.includes(credentialId))) {
+      continue;
+    }
+    safe[key] = sanitizeViewerUnknown(entry, credentialIds);
+  }
   return safe;
 }
 

@@ -9,6 +9,7 @@ import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute } from "./route-utils.js";
 import { requireTrimmedString } from "./request-parsers.js";
 import {
+  collectCustomDashboardCredentialBindingIds,
   withoutCustomDashboardCredentialBindings,
   withoutCustomDashboardRevisionCredentialBindings,
 } from "../services/custom-dashboard-credential-binding-service.js";
@@ -19,7 +20,7 @@ export function registerCustomDashboardRoutes(app: Express, deps: DashboardDepen
     const projectId = requireTrimmedString(req.params.projectId, "projectId");
     res.json({
       dashboards: repository.listDashboardsByProject(projectId)
-        .map(withoutCustomDashboardCredentialBindings),
+        .map((dashboard) => withoutCustomDashboardCredentialBindings(dashboard)),
     });
   }));
 
@@ -33,7 +34,8 @@ export function registerCustomDashboardRoutes(app: Express, deps: DashboardDepen
   app.get("/api/projects/:projectId/custom-dashboards/data-catalog", asyncRoute(async (req, res) => {
     const repository = requireCustomDashboardRepository(deps);
     const projectId = requireTrimmedString(req.params.projectId, "projectId");
-    const dashboards = repository.listDashboardsByProject(projectId);
+    const dashboards = repository.listDashboardsByProject(projectId)
+      .map((dashboard) => withoutCustomDashboardCredentialBindings(dashboard));
     res.json({
       projectId,
       dashboards: dashboards.map((dashboard) => ({
@@ -60,10 +62,12 @@ export function registerCustomDashboardRoutes(app: Express, deps: DashboardDepen
     if (!dashboard) {
       throw new HttpRouteError(404, `Custom dashboard not found: ${dashboardId}`);
     }
+    const revisions = repository.listRevisions(dashboard.id);
+    const credentialIds = collectCustomDashboardCredentialBindingIds([dashboard, ...revisions]);
     res.json({
-      dashboard: withoutCustomDashboardCredentialBindings(dashboard),
-      revisions: repository.listRevisions(dashboard.id)
-        .map(withoutCustomDashboardRevisionCredentialBindings),
+      dashboard: withoutCustomDashboardCredentialBindings(dashboard, credentialIds),
+      revisions: revisions.map((revision) =>
+        withoutCustomDashboardRevisionCredentialBindings(revision, credentialIds)),
     });
   }));
 

@@ -27,6 +27,8 @@ import {
 const MAX_IDENTIFIER_LENGTH = 256;
 const MAX_CREDENTIAL_CANDIDATES = 100;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
+const CREDENTIAL_BINDING_ID_REDACTION = "[REDACTED_CREDENTIAL_BINDING_ID]";
+const CREDENTIAL_BINDING_PROPERTY_NAMES = new Set(["credentialbindings", "credentialid"]);
 
 export interface CustomDashboardCredentialCandidate {
   credentialId: string;
@@ -59,9 +61,14 @@ export interface CustomDashboardCredentialBindingReview {
 }
 
 export class CustomDashboardCredentialBindingValidationError extends ValidationError {
+  readonly issues: CustomDashboardValidationIssue[];
+
   constructor(readonly review: CustomDashboardCredentialBindingReview) {
-    super(review.issues[0]?.message ?? "Custom dashboard credential bindings are invalid.");
+    const credentialIds = review.slots.flatMap((slot) => slot.binding ? [slot.binding.credentialId] : []);
+    const issues = sanitizeCustomDashboardCredentialBindingIds(review.issues, credentialIds);
+    super(issues[0]?.message ?? "Custom dashboard credential bindings are invalid.");
     this.name = "CustomDashboardCredentialBindingValidationError";
+    this.issues = issues;
   }
 }
 
@@ -380,15 +387,75 @@ export class CustomDashboardCredentialBindingService {
 
 export function withoutCustomDashboardCredentialBindings(
   dashboard: CustomDashboardRecord,
+  additionalCredentialIds: Iterable<string> = [],
 ): Omit<CustomDashboardRecord, "credentialBindings"> {
-  const { credentialBindings: _credentialBindings, ...safe } = dashboard;
+  const credentialIds = customDashboardCredentialBindingIds(dashboard, additionalCredentialIds);
+  const sanitized = sanitizeCustomDashboardCredentialBindingIds(dashboard, credentialIds);
+  const { credentialBindings: _credentialBindings, ...safe } = sanitized;
   return safe;
 }
 
 export function withoutCustomDashboardRevisionCredentialBindings(
   revision: CustomDashboardRevisionRecord,
+  additionalCredentialIds: Iterable<string> = [],
 ): Omit<CustomDashboardRevisionRecord, "credentialBindings"> {
-  const { credentialBindings: _credentialBindings, ...safe } = revision;
+  const credentialIds = customDashboardCredentialBindingIds(revision, additionalCredentialIds);
+  const sanitized = sanitizeCustomDashboardCredentialBindingIds(revision, credentialIds);
+  const { credentialBindings: _credentialBindings, ...safe } = sanitized;
+  return safe;
+}
+
+export function collectCustomDashboardCredentialBindingIds(
+  records: Iterable<CustomDashboardRecord | CustomDashboardRevisionRecord>,
+): string[] {
+  const credentialIds = new Set<string>();
+  for (const record of records) {
+    for (const binding of record.credentialBindings ?? []) {
+      if (binding.credentialId) credentialIds.add(binding.credentialId);
+    }
+  }
+  return [...credentialIds];
+}
+
+export function sanitizeCustomDashboardCredentialBindingIds<T>(
+  value: T,
+  credentialIds: Iterable<string>,
+): T {
+  const identifiers = [...new Set(credentialIds)]
+    .filter((credentialId) => credentialId.length > 0)
+    .sort((left, right) => right.length - left.length);
+  return sanitizeCredentialBindingValue(value, identifiers) as T;
+}
+
+function customDashboardCredentialBindingIds(
+  record: CustomDashboardRecord | CustomDashboardRevisionRecord,
+  additionalCredentialIds: Iterable<string>,
+): string[] {
+  return collectCustomDashboardCredentialBindingIds([record])
+    .concat([...additionalCredentialIds]);
+}
+
+function sanitizeCredentialBindingValue(value: unknown, credentialIds: readonly string[]): unknown {
+  if (typeof value === "string") {
+    return credentialIds.reduce(
+      (safe, credentialId) => safe.split(credentialId).join(CREDENTIAL_BINDING_ID_REDACTION),
+      value,
+    );
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeCredentialBindingValue(entry, credentialIds));
+  }
+  if (!value || typeof value !== "object") return value;
+
+  const safe: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    const normalizedKey = key.toLowerCase();
+    if (CREDENTIAL_BINDING_PROPERTY_NAMES.has(normalizedKey)
+      || credentialIds.some((credentialId) => key.includes(credentialId))) {
+      continue;
+    }
+    safe[key] = sanitizeCredentialBindingValue(entry, credentialIds);
+  }
   return safe;
 }
 

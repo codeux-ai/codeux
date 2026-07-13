@@ -307,7 +307,7 @@ Project-scoped generated dashboards, immutable revisions, detached validation se
 | `bind_credential` | ✅ | `projectId`, `dashboardId`, `slotId`, `credentialId`, `expectedBindingRevision` | Bind or replace a slot by credential ID after the stateful approval handshake. |
 | `unbind_credential` | ✅ | `projectId`, `dashboardId`, `slotId`, `expectedBindingRevision` | Remove a slot binding after the stateful approval handshake. |
 
-Credential actions reject secret-bearing or undeclared fields and never resolve plaintext. Validation and publication review required and bound slots against backend health, project access, status, kind, and required capabilities; a denial blocks the operation before the active publication pointer changes. Generic custom-dashboard responses omit binding IDs.
+Credential actions reject secret-bearing or undeclared fields and never resolve plaintext. Validation and publication review required and bound slots against backend health, project access, status, kind, and required capabilities; a denial blocks the operation before the active publication pointer changes and returns sanitized slot-specific issues. Generic custom-dashboard responses recursively redact known binding IDs from nested content.
 
 ---
 

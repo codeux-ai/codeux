@@ -11,6 +11,8 @@ import type {
 import type { CustomDashboardRepository } from "../../repositories/custom-dashboard-repository.js";
 import type { CustomDashboardValidationService } from "../../services/custom-dashboard-validation-service.js";
 import {
+  collectCustomDashboardCredentialBindingIds,
+  CustomDashboardCredentialBindingValidationError,
   type CustomDashboardCredentialBindingService,
   withoutCustomDashboardCredentialBindings,
   withoutCustomDashboardRevisionCredentialBindings,
@@ -71,7 +73,7 @@ export class CustomDashboardActions {
     return {
       result: {
         dashboards: this.customDashboardRepository.listDashboardsByProject(projectId)
-          .map(withoutCustomDashboardCredentialBindings),
+          .map((dashboard) => withoutCustomDashboardCredentialBindings(dashboard)),
       },
     };
   }
@@ -82,11 +84,13 @@ export class CustomDashboardActions {
     if (!dashboard) {
       throw managementValidationError(`Custom dashboard not found: ${dashboardId}`, "dashboardId");
     }
+    const revisions = this.customDashboardRepository.listRevisions(dashboard.id);
+    const credentialIds = collectCustomDashboardCredentialBindingIds([dashboard, ...revisions]);
     return {
       result: {
-        dashboard: withoutCustomDashboardCredentialBindings(dashboard),
-        revisions: this.customDashboardRepository.listRevisions(dashboard.id)
-          .map(withoutCustomDashboardRevisionCredentialBindings),
+        dashboard: withoutCustomDashboardCredentialBindings(dashboard, credentialIds),
+        revisions: revisions.map((revision) =>
+          withoutCustomDashboardRevisionCredentialBindings(revision, credentialIds)),
       },
     };
   }
@@ -154,11 +158,18 @@ export class CustomDashboardActions {
     if (!dashboardRecord) {
       throw managementValidationError(`Custom dashboard not found: ${dashboardId}`, "dashboardId");
     }
-    await this.customDashboardCredentialBindingService.requireValidRevision(
-      dashboardRecord.projectId,
-      dashboardId,
-      revisionId,
-    );
+    try {
+      await this.customDashboardCredentialBindingService.requireValidRevision(
+        dashboardRecord.projectId,
+        dashboardId,
+        revisionId,
+      );
+    } catch (error) {
+      if (error instanceof CustomDashboardCredentialBindingValidationError) {
+        throw managementValidationError(error.message, undefined, error.issues);
+      }
+      throw error;
+    }
     const dashboard = this.customDashboardRepository.publishRevision(
       dashboardId,
       revisionId,
@@ -186,7 +197,8 @@ export class CustomDashboardActions {
 
   private dataCatalog(payload: Record<string, unknown>): ManagementResponseEnvelope {
     const projectId = parseRequiredString(payload, "projectId");
-    const dashboards = this.customDashboardRepository.listDashboardsByProject(projectId);
+    const dashboards = this.customDashboardRepository.listDashboardsByProject(projectId)
+      .map((dashboard) => withoutCustomDashboardCredentialBindings(dashboard));
     const sources: Array<CustomDashboardDataSourceNode & { dashboardId: string; dashboardTitle: string }> = dashboards.flatMap((dashboard) =>
       dashboard.sourceNodeGraph.nodes.map((node) => ({
         ...node,

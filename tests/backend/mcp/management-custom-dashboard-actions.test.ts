@@ -327,9 +327,64 @@ describe("manage_custom_dashboards", () => {
     expect(bound.result.bindings).toMatchObject({ valid: true, credentialBindingRevision: 2 });
     expect(JSON.stringify(bound)).not.toContain(canary);
 
+    const boundDashboard = repository.getDashboardById(dashboard.id)!;
+    repository.updateDraft(dashboard.id, {
+      manifest: {
+        ...boundDashboard.manifest,
+        metadata: { nested: { credentialId: credential.id, value: `prefix-${credential.id}-suffix` } },
+      },
+      fileBundle: fileBundle(`export const nested = ${JSON.stringify(credential.id)};`),
+      sourceNodeGraph: {
+        nodes: [{
+          id: "metrics",
+          type: "integrations_metadata",
+          title: "Metrics",
+          config: { nested: { credentialId: credential.id, value: credential.id } },
+        }],
+        edges: [],
+      },
+      runtimeMetadata: {
+        validation: {
+          viewerArtifact: {
+            kind: "vite-dist",
+            entryFile: "index.html",
+            files: [{
+              path: "index.html",
+              content: `<main data-binding="${credential.id}">Nested</main>`,
+              contentType: "text/html",
+            }],
+          },
+        },
+      },
+    });
+    const revision = repository.createRevision(dashboard.id);
+    const validation = repository.createValidationSession(revision.id, {
+      status: "passed",
+      validationReport: passedReport(),
+      finishedAt: new Date().toISOString(),
+    });
+
     const generic = parseResponse(await handler.handleManageCustomDashboards({ action: "get", dashboardId: dashboard.id }));
     expect(JSON.stringify(generic)).not.toContain("credentialBindings");
     expect(JSON.stringify(generic)).not.toContain(credential.id);
+    const catalog = parseResponse(await handler.handleManageCustomDashboards({ action: "data_catalog", projectId }));
+    expect(JSON.stringify(catalog)).not.toContain(credential.id);
+
+    credentialBroker.revoke(projectId, credential.id, { expectedVersion: credential.version });
+    const deniedPublication = parseResponse(await handler.handleManageCustomDashboards({
+      action: "publish_revision",
+      dashboardId: dashboard.id,
+      revisionId: revision.id,
+      validationSessionId: validation.id,
+    }));
+    expect(deniedPublication.result).toMatchObject({
+      status: "error",
+      errorType: "validation",
+      issues: [expect.objectContaining({ field: "credentialBindings.metrics_api", code: "not_active" })],
+    });
+    expect(JSON.stringify(deniedPublication)).not.toContain(credential.id);
+    expect(JSON.stringify(deniedPublication)).not.toContain(canary);
+    expect(repository.getDashboardById(dashboard.id)?.publishedRevisionId).toBeNull();
 
     const unbindArgs = {
       action: "unbind_credential" as const,

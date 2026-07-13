@@ -140,7 +140,7 @@ For `manage_projects` setup, clients may send setup options either as `setup.opt
 
 For the full per-action payloads and return shapes, see [Management actions](/docs/developer-management-actions).
 
-Custom-dashboard credential actions are project-scoped and metadata-only. `list_credential_slots` returns bounded compatible credential metadata; `bind_credential` and `unbind_credential` require `projectId`, `dashboardId`, `slotId`, `expectedBindingRevision`, and the stateful approval handshake, with `credentialId` added for bind/replace. They reject secret-bearing or undeclared fields. Validation and publication fail closed on required or incompatible bindings without resolving plaintext, and generic custom-dashboard MCP responses omit binding IDs.
+Custom-dashboard credential actions are project-scoped and metadata-only. `list_credential_slots` returns bounded compatible credential metadata; `bind_credential` and `unbind_credential` require `projectId`, `dashboardId`, `slotId`, `expectedBindingRevision`, and the stateful approval handshake, with `credentialId` added for bind/replace. They reject secret-bearing or undeclared fields. Validation and publication fail closed on required or incompatible bindings without resolving plaintext; publication errors retain sanitized slot-specific issues, and generic custom-dashboard MCP responses recursively redact known binding IDs from nested content.
 
 ### Background sprint planning
 

@@ -322,6 +322,38 @@ describe("custom dashboard routes", () => {
     expect(replaced.body).toMatchObject({ valid: true, credentialBindingRevision: 3 });
     expect(replaced.body.slots[0].binding.credentialId).toBe(second.id);
 
+    const boundDashboard = repository.getDashboardById(dashboard.id)!;
+    repository.updateDraft(dashboard.id, {
+      manifest: {
+        ...boundDashboard.manifest,
+        metadata: { nested: { credentialId: second.id, value: `prefix-${second.id}-suffix` } },
+      },
+      fileBundle: fileBundle(`export const nested = ${JSON.stringify(second.id)};`),
+      sourceNodeGraph: {
+        nodes: [{
+          id: "metrics",
+          type: "integrations_metadata",
+          title: "Metrics",
+          config: { nested: { credentialId: second.id, value: second.id } },
+        }],
+        edges: [],
+      },
+      styleguide: { nested: { value: second.id } },
+      runtimeMetadata: {
+        validation: {
+          viewerArtifact: {
+            kind: "vite-dist",
+            entryFile: "index.html",
+            files: [{
+              path: "index.html",
+              content: `<main data-binding="${second.id}">Nested</main>`,
+              contentType: "text/html",
+            }],
+          },
+        },
+      },
+    });
+
     const stale = await request(app).put(route).send({
       slotId: "metrics_api",
       credentialId: first.id,
@@ -338,11 +370,13 @@ describe("custom dashboard routes", () => {
     expect(rejectedSecretField.status).toBe(400);
     expect(JSON.stringify(rejectedSecretField.body)).not.toContain(canary);
 
+    const revision = repository.createRevision(dashboard.id);
     const generic = await request(app).get(`/api/custom-dashboards/${dashboard.id}`);
     expect(JSON.stringify(generic.body)).not.toContain("credentialBindings");
     expect(JSON.stringify(generic.body)).not.toContain(second.id);
+    const catalog = await request(app).get(`/api/projects/${projectId}/custom-dashboards/data-catalog`);
+    expect(JSON.stringify(catalog.body)).not.toContain(second.id);
 
-    const revision = repository.createRevision(dashboard.id);
     const validation = repository.createValidationSession(revision.id, {
       status: "passed",
       validationReport: passedReport(),
@@ -354,7 +388,11 @@ describe("custom dashboard routes", () => {
       .send({ validationSessionId: validation.id });
     expect(deniedPublication.status).toBe(400);
     expect(deniedPublication.body.error).toContain("not active");
+    expect(deniedPublication.body.issues).toEqual([
+      expect.objectContaining({ field: "credentialBindings.metrics_api", code: "not_active" }),
+    ]);
     expect(JSON.stringify(deniedPublication.body)).not.toContain(second.id);
+    expect(JSON.stringify(deniedPublication.body)).not.toContain(canary);
     expect(repository.getDashboardById(dashboard.id)?.publishedRevisionId).toBeNull();
 
     const unbound = await request(app)

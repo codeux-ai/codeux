@@ -285,7 +285,7 @@ Only instruction markdown is writable, and only compatibility-critical system ad
 | `DELETE` | `/api/custom-dashboard-validations/:sessionId` | Remove a validation session after cleanup. |
 | `ALL` | `/api/custom-dashboard-validations/:sessionId/proxy{*rest}` | Proxy same-origin traffic to the validation runtime host port. |
 
-Authenticated remote access to binding routes requires the credential-administrator role, project access, and enabled remote credential management. Binding responses contain credential IDs and metadata only; generic dashboard responses omit them. Validation and publication fail closed for required or incompatible bindings without resolving secret values, and publication keeps the previously published revision unchanged on any denial.
+Authenticated remote access to binding routes requires the credential-administrator role, project access, and enabled remote credential management. Binding responses contain credential IDs and metadata only; generic dashboard responses recursively redact known IDs from nested content. Validation and publication fail closed for required or incompatible bindings without resolving secret values, publication denials return sanitized slot-specific issues, and the previously published revision remains unchanged on any denial.
 
 ---
 

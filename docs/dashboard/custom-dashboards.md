@@ -88,7 +88,7 @@ Custom dashboard routes are registered with the dashboard server:
 | `ALL` | `/api/custom-dashboard-validations/:sessionId/proxy{*rest}` | Same-origin proxy to the detached validation runtime. |
 | `ALL` | `/api/custom-dashboards/validation-sessions/:sessionId/proxy{*rest}` | Backward-compatible validation proxy route. |
 
-The binding routes are credential-management routes: authenticated remote callers require `credential_admin`, project access, and enabled remote credential management. Stale binding revisions return `409`; incompatible credential selection returns `403`. Publication first repeats metadata-only binding review, then applies the repository validation gate. Active publications remain the opening source of truth while later validation sessions run.
+The binding routes are credential-management routes: authenticated remote callers require `credential_admin`, project access, and enabled remote credential management. Stale binding revisions return `409`; incompatible credential selection returns `403`. Publication first repeats metadata-only binding review, then applies the repository validation gate. REST and MCP denials preserve a sanitized `issues` array with slot-specific `field`, `code`, and `message` values while omitting credential IDs and values. Active publications remain the opening source of truth while later validation sessions run.
 
 ## MCP Surface
 
@@ -122,7 +122,7 @@ During validation, Code UX:
 - health-checks the root URL before marking the session passed
 - records workspace path, log path, container id/name, host port, validation proxy path, commands, and log excerpts in runtime metadata
 
-Required missing bindings and bound credentials that are missing, revoked, inaccessible, unconfigured, wrong-kind, missing capabilities, or blocked by unavailable/insecure key custody fail with slot-specific issues before workspace creation. Optional unbound slots remain valid. No custom-dashboard path resolves secret plaintext: credential values and binding IDs stay out of generated source, file bundles, bridge files, Docker arguments and mounts, validation reports and logs, viewer records, iframe configuration, and browser messages. Dedicated credential-binding management responses may return credential IDs and non-secret metadata so operators and agents can select them.
+Required missing bindings and bound credentials that are missing, revoked, inaccessible, unconfigured, wrong-kind, missing capabilities, or blocked by unavailable/insecure key custody fail with slot-specific issues before workspace creation. Optional unbound slots remain valid. No custom-dashboard path resolves secret plaintext: credential values and binding IDs stay out of generated source, file bundles, bridge files, Docker arguments and mounts, validation reports and logs, viewer records, iframe configuration, and browser messages. Generic response and viewer boundaries recursively redact known binding IDs from nested manifests, file content and metadata, source graphs, styleguides, runtime metadata, validation reports, and persisted viewer artifacts. Dedicated credential-binding management responses may return credential IDs and non-secret metadata so operators and agents can select them.
 
 Stopping a validation session removes the detached container. It does not invalidate a passed revision report. Removing a validation session deletes the session row after cleanup; the revision's validation metadata remains the publication gate.
 
