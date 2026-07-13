@@ -327,6 +327,9 @@ function deepMerge<T>(base: T, patch: unknown): T {
 
 function mergeSettingsPatch<T>(base: T, patch: unknown): T {
   const merged = deepMerge(base, patch) as Record<string, unknown>;
+  const baseRecord = toRecord(base);
+  const baseAiProvider = toRecord(baseRecord.aiProvider);
+  const baseInvocationRouting = toRecord(baseAiProvider.invocationRouting);
   const patchRecord = toRecord(patch);
   const patchAiProvider = toRecord(patchRecord.aiProvider);
   const patchInvocationRouting = toRecord(patchAiProvider.invocationRouting);
@@ -338,10 +341,21 @@ function mergeSettingsPatch<T>(base: T, patch: unknown): T {
     if (!Object.prototype.hasOwnProperty.call(routePatch, "providers")) {
       continue;
     }
+    const baseRoute = toRecord(baseInvocationRouting[routeId]);
+    const baseProviders = toRecord(baseRoute.providers);
+    const patchProviders = toRecord(routePatch.providers);
     const mergedRoute = toRecord(mergedInvocationRouting[routeId]);
     mergedInvocationRouting[routeId] = {
       ...mergedRoute,
-      providers: cloneUnknown(routePatch.providers),
+      // Provider ids form a scoped pool and are replaced as a set, but an entry that
+      // remains in the pool is a sparse override. Merge that entry with its inherited
+      // model/thinking fields so changing one cannot discard the other.
+      providers: Object.fromEntries(
+        Object.entries(patchProviders).map(([providerConfigId, providerPatch]) => [
+          providerConfigId,
+          deepMerge(baseProviders[providerConfigId] ?? {}, providerPatch),
+        ]),
+      ),
     };
   }
 
