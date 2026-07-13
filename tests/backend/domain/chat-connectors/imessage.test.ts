@@ -40,6 +40,7 @@ describe("iMessage connector profile", () => {
       transport: "command",
       command: '"/Applications/Bridge App/bridge" --profile "Personal Relay"',
       workingDirectory: "/Users/operator/Bridge Workspace",
+      tokenSecretKeys: ["bridgeToken", "botToken", "webhookSecret"],
       body: {
         protocolVersion: IMESSAGE_BRIDGE_PROTOCOL_VERSION,
         operation: "send",
@@ -54,6 +55,14 @@ describe("iMessage connector profile", () => {
     });
     expect((request.body as Record<string, unknown>).channelId).toBe("chat-guid-1");
     expect((request.body as Record<string, unknown>).replyToExternalMessageId).toBe("message-guid-1");
+
+    const managedContext = buildOutboundContext();
+    managedContext.connection.bridgeMode = "managed_bridge";
+    managedContext.connection.setup = { bridgeUrl: "https://third-party-bridge.example.test/send" };
+    expect(imessageChatConnectorProfile.outbound.buildRequest(managedContext)).toMatchObject({
+      transport: "http",
+      bearerSecretKeys: ["bridgeApiKey", "bridgeToken", "botToken", "webhookSecret"],
+    });
 
     expect(buildImessageBridgeRequest("health_check", "health-1")).toEqual({
       protocolVersion: IMESSAGE_BRIDGE_PROTOCOL_VERSION,
@@ -119,6 +128,38 @@ describe("iMessage connector profile", () => {
     });
     expect(() => parseImessageBridgeResponse(JSON.stringify({ protocolVersion: "2.0", result: null, error: null })))
       .toThrow("Unsupported iMessage bridge protocol version: 2.0");
+  });
+
+  it("rejects health-check and malformed envelopes as send responses", () => {
+    const sendResponse = {
+      protocolVersion: IMESSAGE_BRIDGE_PROTOCOL_VERSION,
+      operation: "send",
+      correlation: { id: "corr-1" },
+      message: null,
+      chat: null,
+      sender: null,
+      reply: null,
+      result: { status: "sent", messageGuid: "out-guid-1", chatGuid: "chat-guid-1", metadata: {} },
+      error: null,
+    };
+
+    expect(() => parseImessageBridgeResponse(JSON.stringify({
+      ...sendResponse,
+      operation: "health_check",
+      result: { ...sendResponse.result, status: "healthy" },
+    }))).toThrow("operation must be send");
+    expect(() => parseImessageBridgeResponse(JSON.stringify(sendResponse), "different-correlation"))
+      .toThrow("correlation.id does not match the request");
+    expect(() => parseImessageBridgeResponse(JSON.stringify({
+      protocolVersion: IMESSAGE_BRIDGE_PROTOCOL_VERSION,
+      operation: "send",
+      result: sendResponse.result,
+      error: null,
+    }))).toThrow("required protocol fields are missing");
+    expect(() => parseImessageBridgeResponse("{}"))
+      .toThrow("Malformed legacy iMessage bridge send response");
+    expect(() => parseImessageBridgeResponse("{not-json"))
+      .toThrow("Malformed iMessage bridge response: invalid JSON");
   });
 
   it.each([

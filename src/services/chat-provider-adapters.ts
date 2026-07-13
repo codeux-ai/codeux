@@ -10,7 +10,10 @@ import type {
   ChatConnectorHttpOutboundRequest,
   ChatConnectorProfile,
 } from "../domain/chat-connectors/types.js";
-import type { ImessageBridgeEnvelope } from "../domain/chat-connectors/providers/imessage.js";
+import {
+  parseImessageBridgeResponse,
+  type ImessageBridgeEnvelope,
+} from "../domain/chat-connectors/providers/imessage.js";
 import { redactText } from "../shared/security/redaction.js";
 import {
   ImessageNativeBridge,
@@ -75,8 +78,8 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
       profile = getChatConnectorProfileForMode(context.connection.providerKind, context.connection.bridgeMode);
       const request = profile.outbound.buildRequest(context);
       return request.transport === "http"
-        ? this.sendHttp(context, profile, request)
-        : this.sendNative(context, profile, request);
+        ? await this.sendHttp(context, profile, request)
+        : await this.sendNative(context, profile, request);
     } catch (error) {
       if (error instanceof ChatProviderOutboundAdapterError) {
         throw error;
@@ -124,7 +127,9 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
       );
     }
 
-    return profile.outbound.parseResponse(responseText);
+    return context.connection.providerKind === "imessage"
+      ? parseImessageBridgeResponse(responseText, context.correlationId)
+      : profile.outbound.parseResponse(responseText);
   }
 
   private async sendNative(

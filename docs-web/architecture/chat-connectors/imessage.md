@@ -15,9 +15,11 @@ Apple documents the [Messages framework](https://developer.apple.com/documentati
 - managed HTTP and native command request mapping; and
 - the explicit `liveTest.available = false` provider-native verification declaration.
 
-The protocol envelope always contains `protocolVersion`, `operation`, `correlation`, `message`, `chat`, `sender`, `reply`, `result`, and `error`. Send requests fill message/chat/reply data and leave result/error null. Health requests leave identity fields null. Successful responses return `result.status` as `sent` or `healthy`; failures return stable `error.code`, `error.message`, and `error.retryable` values. Protocol-aware responses must echo correlation identity. Existing native records receive transitional top-level send aliases, and legacy `externalMessageId` send responses remain readable; health negotiation is strict.
+The protocol envelope always contains `protocolVersion`, `operation`, `correlation`, `message`, `chat`, `sender`, `reply`, `result`, and `error`. Send requests fill message/chat/reply data and leave result/error null. Health requests leave identity fields null. Send parsing requires `operation: send`, `result.status: sent`, every stable field, and the request's correlation id, so a health response or malformed envelope cannot complete outbound delivery. Failures return stable `error.code`, `error.message`, and `error.retryable` values. Existing native records receive transitional top-level send aliases, and recognized legacy message-id send responses remain readable; health negotiation is strict.
 
 Inbound HTTP routes still pass through `ChatProviderIngressSecurity`. Both modes require a fresh timestamp and use the shared constant-time bearer check plus nonce replay cache. The native setup schema keeps `bridgeToken` optional for outbound-only commands, but a native bridge posting inbound events must configure it because ingress fails closed without a secret.
+
+Outbound credential lookup preserves stored-record compatibility. Managed delivery checks `bridgeApiKey`, `bridgeToken`, `botToken`, then `webhookSecret`; native delivery checks `bridgeToken`, `botToken`, then `webhookSecret`. Inbound verification remains restricted to the declared credential for its mode.
 
 ## Native execution boundary
 

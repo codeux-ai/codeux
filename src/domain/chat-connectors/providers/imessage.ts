@@ -4,7 +4,6 @@ import {
   buildLegacyCommandOutboundRequest,
   buildLegacyHttpOutboundRequest,
   isLegacyRetryableHttpStatus,
-  parseLegacyOutboundResponse,
   readRecord,
   readString,
   verifyConnectorConfiguration,
@@ -113,21 +112,44 @@ export function buildImessageBridgeRequest(
   return request;
 }
 
-export function parseImessageBridgeResponse(text: string): ChatConnectorOutboundResult {
+export function parseImessageBridgeResponse(
+  text: string,
+  expectedCorrelationId?: string,
+): ChatConnectorOutboundResult {
   const parsed = parseBridgeResponseRecord(text);
-  if (!parsed) {
-    return parseLegacyOutboundResponse(text);
-  }
+  const isProtocolEnvelope = "protocolVersion" in parsed || "result" in parsed || "error" in parsed;
+  if (!isProtocolEnvelope) return parseLegacyImessageSendResponse(parsed);
+
   if (parsed.protocolVersion !== IMESSAGE_BRIDGE_PROTOCOL_VERSION) {
     throw new Error(`Unsupported iMessage bridge protocol version: ${readString(parsed.protocolVersion) ?? "missing"}.`);
+  }
+  if (parsed.operation !== "send") {
+    throw new Error("Malformed iMessage bridge send response: operation must be send.");
+  }
+  const requiredFields = ["correlation", "message", "chat", "sender", "reply", "result", "error"];
+  if (requiredFields.some((field) => !(field in parsed))) {
+    throw new Error("Malformed iMessage bridge send response: required protocol fields are missing.");
+  }
+  const correlation = readRecord(parsed.correlation);
+  if (typeof correlation?.id !== "string" || !correlation.id.trim()) {
+    throw new Error("Malformed iMessage bridge send response: correlation.id is required.");
+  }
+  if (expectedCorrelationId && correlation.id !== expectedCorrelationId) {
+    throw new Error("Malformed iMessage bridge send response: correlation.id does not match the request.");
   }
   const error = readRecord(parsed.error);
   if (error) {
     throw new Error(`iMessage bridge error (${readString(error.code) ?? "unknown"}): ${readString(error.message) ?? "Unknown bridge error."}`);
   }
+  if (parsed.error !== null) {
+    throw new Error("Malformed iMessage bridge send response: error must be null or an error object.");
+  }
   const result = readRecord(parsed.result);
-  if (!result || (result.status !== "sent" && result.status !== "healthy")) {
-    throw new Error("Malformed iMessage bridge response: missing result status.");
+  if (!result || result.status !== "sent") {
+    throw new Error("Malformed iMessage bridge send response: result.status must be sent.");
+  }
+  if (!["messageGuid", "chatGuid", "metadata"].every((field) => field in result) || !readRecord(result.metadata)) {
+    throw new Error("Malformed iMessage bridge send response: result fields are missing or invalid.");
   }
   return {
     externalMessageId: normalizeImessageBridgeGuid(result.messageGuid) ?? null,
@@ -140,20 +162,31 @@ export function parseImessageBridgeResponse(text: string): ChatConnectorOutbound
   };
 }
 
-function parseBridgeResponseRecord(text: string): Record<string, unknown> | null {
+function parseBridgeResponseRecord(text: string): Record<string, unknown> {
   try {
     const parsed = JSON.parse(text.trim()) as unknown;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       throw new Error("Malformed iMessage bridge response: expected a JSON object.");
     }
-    const record = parsed as Record<string, unknown>;
-    return "protocolVersion" in record || "result" in record || "error" in record ? record : null;
+    return parsed as Record<string, unknown>;
   } catch (error) {
     if (error instanceof SyntaxError) {
       throw new Error("Malformed iMessage bridge response: invalid JSON.");
     }
     throw error;
   }
+}
+
+function parseLegacyImessageSendResponse(parsed: Record<string, unknown>): ChatConnectorOutboundResult {
+  const messageGuid = readString(parsed.externalMessageId, parsed.messageId, parsed.id);
+  const normalizedMessageGuid = normalizeImessageBridgeGuid(messageGuid);
+  if (!normalizedMessageGuid) {
+    throw new Error("Malformed legacy iMessage bridge send response: a message id is required.");
+  }
+  return {
+    externalMessageId: normalizedMessageGuid,
+    responseMetadata: redactMetadata(parsed) as Record<string, unknown>,
+  };
 }
 
 export const imessageChatConnectorProfile: ChatConnectorProfile = {
@@ -214,7 +247,7 @@ export const imessageChatConnectorProfile: ChatConnectorProfile = {
           ...buildLegacyHttpOutboundRequest(context, {
             mode: "managed_bridge",
             urlKeys: ["bridgeUrl", "outboundUrl", "endpointUrl", "url"],
-            bearerSecretKeys: ["bridgeApiKey"],
+            bearerSecretKeys: ["bridgeApiKey", "bridgeToken", "botToken", "webhookSecret"],
             label: "third-party managed iMessage bridge URL",
           }),
           body,
@@ -222,7 +255,7 @@ export const imessageChatConnectorProfile: ChatConnectorProfile = {
       }
       if (context.connection.bridgeMode === "native_bridge") {
         return {
-          ...buildLegacyCommandOutboundRequest(context, ["bridgeToken"]),
+          ...buildLegacyCommandOutboundRequest(context, ["bridgeToken", "botToken", "webhookSecret"]),
           body,
         };
       }

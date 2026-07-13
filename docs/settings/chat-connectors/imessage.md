@@ -52,7 +52,7 @@ Health checks use `"operation": "health_check"`; `message`, `chat`, `sender`, an
 }
 ```
 
-A send result uses `"status": "sent"` and returns the bridge's opaque `messageGuid` and `chatGuid`. An error response sets `result` to `null` and returns stable `code`, `message`, and `retryable` fields under `error`. GUIDs are treated as opaque Unicode identifiers: Code UX trims them, normalizes Unicode composition, rejects control characters and unreasonable lengths, and never infers undocumented Apple payload structure.
+A send result uses `"operation": "send"`, `"status": "sent"`, the request correlation id, and the bridge's opaque `messageGuid` and `chatGuid`. Managed and native send delivery reject health-check responses, mismatched correlations, missing protocol fields, and malformed result/error values. An error response sets `result` to `null` and returns stable `code`, `message`, and `retryable` fields under `error`. GUIDs are treated as opaque Unicode identifiers: Code UX trims them, normalizes Unicode composition, rejects control characters and unreasonable lengths, and never infers undocumented Apple payload structure.
 
 For existing native command records, v1 send requests also contain the former top-level send aliases during migration. A legacy response containing `externalMessageId` remains accepted for sends. Health checks always require protocol `1.0` and matching correlation identity.
 
@@ -61,6 +61,8 @@ For existing native command records, v1 send requests also contain the former to
 The native command string is parsed into an executable and argument array, then spawned with shell interpretation disabled. Quoted paths, spaces, macOS application paths, and Windows drive paths remain arguments rather than executable shell text. The configured executable and working directory remain under explicit operator control.
 
 The child receives a minimal operating-system environment. The bridge credential is exposed only as `CODEUX_CHAT_BRIDGE_TOKEN`; it is never added to argv or stdin. Stdout and stderr have byte limits, error diagnostics redact the configured credential, and every execution has a timeout. Cancellation, runtime shutdown, timeout, or output overflow terminates the complete spawned process group, with a forced-kill fallback.
+
+New records should use `bridgeApiKey` for managed delivery and `bridgeToken` for native delivery. Existing stored outbound records remain compatible with the prior managed fallback order (`bridgeToken`, `botToken`, then `webhookSecret`) and native fallback order (`botToken`, then `webhookSecret`). These outbound fallbacks do not weaken inbound authentication, which still resolves only the mode's declared bearer credential.
 
 Inbound callbacks in both modes use the shared timestamped bearer verifier and replay-nonce cache. Senders should provide `Authorization: Bearer <credential>` (or `X-Code-UX-Bridge-Token`), `X-Code-UX-Timestamp`, and a unique `X-Code-UX-Nonce` or `X-Request-Id`.
 

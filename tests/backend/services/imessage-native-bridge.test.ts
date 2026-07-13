@@ -12,6 +12,10 @@ import {
   ImessageNativeBridgeError,
   parseImessageNativeBridgeCommand,
 } from "../../../src/services/chat-providers/imessage-native-bridge.js";
+import {
+  ConfiguredChatProviderOutboundAdapter,
+  type ChatProviderOutboundAdapterContext,
+} from "../../../src/services/chat-provider-adapters.js";
 
 const tempDirs: string[] = [];
 const bridges: ImessageNativeBridge[] = [];
@@ -24,6 +28,7 @@ afterEach(async () => {
   await Promise.allSettled(bridges.splice(0).map((bridge) => bridge.dispose()));
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
 
@@ -239,6 +244,85 @@ describe("ImessageNativeBridge", () => {
     expect(apple).toMatchObject({ ok: false, code: "provider_native_verification_unavailable" });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("delivers managed sends with a legacy stored secret fallback", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (_url, init) => {
+      const request = JSON.parse(String(init?.body)) as ImessageBridgeEnvelope;
+      expect(init?.headers).toMatchObject({ authorization: "Bearer legacy-managed-secret" });
+      return Response.json({
+        ...request,
+        result: { status: "sent", messageGuid: "managed-message-guid", chatGuid: "chat-guid", metadata: {} },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const adapter = new ConfiguredChatProviderOutboundAdapter();
+
+    await expect(adapter.send(adapterContext(
+      "managed_bridge",
+      { bridgeUrl: "https://third-party-bridge.example.test/send" },
+      { webhookSecret: "legacy-managed-secret" },
+    ))).resolves.toMatchObject({ externalMessageId: "managed-message-guid" });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("delivers native sends with a legacy stored secret fallback", async () => {
+    const fixture = await createFixture(`
+      let input = '';
+      process.stdin.setEncoding('utf8');
+      process.stdin.on('data', chunk => input += chunk);
+      process.stdin.on('end', () => {
+        const request = JSON.parse(input);
+        if (process.env.CODEUX_CHAT_BRIDGE_TOKEN !== 'legacy-native-secret') process.exit(19);
+        process.stdout.write(JSON.stringify({
+          ...request,
+          result: { status: 'sent', messageGuid: 'native-message-guid', chatGuid: request.chat.guid, metadata: {} },
+        }));
+      });
+    `);
+    const adapter = new ConfiguredChatProviderOutboundAdapter();
+
+    await expect(adapter.send(adapterContext(
+      "native_bridge",
+      { command: `${quote(process.execPath)} ${quote(fixture)}`, workingDirectory: path.dirname(fixture) },
+      { botToken: "legacy-native-secret" },
+    ))).resolves.toMatchObject({ externalMessageId: "native-message-guid" });
+  });
+
+  it.each([
+    ["health-check", (request: ImessageBridgeEnvelope) => ({
+      ...request,
+      operation: "health_check",
+      message: null,
+      chat: null,
+      sender: null,
+      reply: null,
+      result: { status: "healthy", messageGuid: null, chatGuid: null, metadata: {} },
+    })],
+    ["malformed", (_request: ImessageBridgeEnvelope) => ({
+      protocolVersion: IMESSAGE_BRIDGE_PROTOCOL_VERSION,
+      operation: "send",
+      result: { status: "sent", messageGuid: "invalid-send", chatGuid: null, metadata: {} },
+      error: null,
+    })],
+    ["mismatched-correlation", (request: ImessageBridgeEnvelope) => ({
+      ...request,
+      correlation: { id: "stale-correlation" },
+      result: { status: "sent", messageGuid: "stale-send", chatGuid: "chat-guid", metadata: {} },
+    })],
+  ] as const)("rejects %s managed responses as completed sends", async (_label, buildResponse) => {
+    const fetchMock = vi.fn<typeof fetch>(async (_url, init) => {
+      const request = JSON.parse(String(init?.body)) as ImessageBridgeEnvelope;
+      return Response.json(buildResponse(request));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const adapter = new ConfiguredChatProviderOutboundAdapter();
+
+    await expect(adapter.send(adapterContext(
+      "managed_bridge",
+      { bridgeUrl: "https://third-party-bridge.example.test/send" },
+      { bridgeApiKey: "managed-secret" },
+    ))).rejects.toMatchObject({ name: "ChatProviderOutboundAdapterError", retryable: false });
+  });
 });
 
 function sendRequest(correlationId: string): ImessageBridgeEnvelope {
@@ -252,6 +336,72 @@ function sendRequest(correlationId: string): ImessageBridgeEnvelope {
     reply: { messageGuid: "reply-guid", threadId: "thread-id" },
     result: null,
     error: null,
+  };
+}
+
+function adapterContext(
+  bridgeMode: "managed_bridge" | "native_bridge",
+  setup: Record<string, unknown>,
+  secrets: Record<string, unknown>,
+): ChatProviderOutboundAdapterContext {
+  return {
+    connection: {
+      id: "imessage-connection",
+      providerKind: "imessage",
+      displayName: "Fixture iMessage bridge",
+      bridgeMode,
+      status: "active",
+      enabled: true,
+      setup,
+      secrets,
+      createdAt: "2026-07-13T00:00:00.000Z",
+      updatedAt: "2026-07-13T00:00:00.000Z",
+    },
+    binding: {
+      id: "binding-1",
+      providerConnectionId: "imessage-connection",
+      providerKind: "imessage",
+      externalChannelId: "chat-guid",
+      externalChannelName: "Fixture chat",
+      externalChannelMetadata: null,
+      projectId: "project-1",
+      agentPresetId: null,
+      routingHints: null,
+      enabled: true,
+      inboundEnabled: true,
+      outboundEnabled: true,
+      suppressRichWidgets: true,
+      createdAt: "2026-07-13T00:00:00.000Z",
+      updatedAt: "2026-07-13T00:00:00.000Z",
+    },
+    delivery: {
+      id: "delivery-1",
+      providerConnectionId: "imessage-connection",
+      providerKind: "imessage",
+      channelBindingId: "binding-1",
+      externalChannelId: "chat-guid",
+      externalMessageId: null,
+      direction: "outbound",
+      status: "sending",
+      attemptCount: 1,
+      lastError: null,
+      conversationThreadId: "thread-1",
+      conversationMessageId: "message-1",
+      payload: null,
+      createdAt: "2026-07-13T00:00:00.000Z",
+      updatedAt: "2026-07-13T00:00:00.000Z",
+    },
+    payload: {
+      providerKind: "imessage",
+      providerConnectionId: "imessage-connection",
+      channelId: "chat-guid",
+      threadId: "thread-1",
+      conversationMessageId: "message-1",
+      replyText: "Fixture reply",
+      replyToExternalMessageId: "inbound-guid",
+      metadata: {},
+    },
+    correlationId: "delivery-correlation",
   };
 }
 
