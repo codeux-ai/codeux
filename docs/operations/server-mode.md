@@ -155,19 +155,21 @@ Bundles can include system, project, and sprint scopes. Metadata includes `schem
 
 Approved workflow:
 
-1. Export a redacted bundle from the source runtime. Export defaults to the `system` scope and redacts provider API keys, git tokens, issue-tracker tokens, login credentials, and other secret-bearing fields.
-2. Review the bundle before moving it to the destination. Redacted placeholders are expected and must not be replaced in shared artifacts.
+1. Export a bundle from the source runtime. Export defaults to the `system` scope and always returns credential references, configured-state metadata, or redacted fields; provider API keys, git tokens, issue-tracker tokens, login credentials, and other credential plaintext are never returned.
+2. Review the bundle before moving it to the destination. Redacted placeholders are expected and must not be replaced with plaintext in shared artifacts.
 3. If project or sprint settings are required, include `scopes`, `projectIds`, and `sprintIds`. Sprint exports require the owning `projectId` so imports can normalize sprint overrides against the resolved project base.
 4. Apply the bundle on the destination with `apply_settings_bundle`. The importer persists through `saveSystemSettings`, `saveProjectSettings`, and `saveSprintSettings`, so values follow the same sanitizer and override normalization as dashboard saves.
 5. For partial rollout or rollback, pass `scopes` on apply to limit which bundle scopes are written.
 
-Secret-bearing exports and imports require the stateful settings approval flow:
+Secret-shaped requests retain the stateful settings approval flow:
 
-- `includeSecrets: true` on export returns secrets only after the first response asks for approval and the exact same request is repeated with `approval.confirmed: true`.
-- A bundle marked `containsSecrets: true`, or one whose payload contains secret-bearing fields, is applied only after the same one-use approval flow.
+- The compatibility `includeSecrets: true` export input asks for approval when secret-shaped source settings are detected. Repeating the exact request with `approval.confirmed: true` still returns only references and redacted fields, never plaintext.
+- A bundle marked `containsSecrets: true`, or one whose payload contains secret-shaped fields, is applied only after the same one-use approval flow. Apply runs through the normal sanitizer and does not echo submitted values.
 - Approval is bound to the exact normalized payload, expires after 15 minutes, and is consumed after one successful execution.
 
-Rollback is another approved apply. Export a known-good bundle before changing a destination runtime, then apply that bundle back to the affected scopes if the rollout must be reverted. Do not rely on logs or chat transcripts as backups because redaction intentionally removes sensitive values.
+Bundles move non-secret configuration and broker credential references only. Create, replace, or rotate values through write-only credential operations on the destination; bind or revoke credentials through metadata-only broker operations. The one-way startup migration converts supported legacy plaintext into broker references locally; settings export/apply does not migrate or back up broker plaintext.
+
+Rollback is another approved apply. Export a known-good bundle before changing a destination runtime, then apply that bundle back to the affected scopes if the rollout must be reverted. This restores settings and reference bindings, not credential values; roll back credential material separately through broker rotation or replacement. Do not rely on logs or chat transcripts as backups because MCP responses intentionally omit credential plaintext.
 
 ## Cluster Workers
 
@@ -235,7 +237,7 @@ Existing HTTP sessions authenticated with the previous token should be treated a
 | Worker appears stale or offline | Heartbeats stopped, the worker process is down, network access failed, or the stable connection key changed unexpectedly. | Restart the worker with the same `--connection-key`, verify `/ready`, and check logs for bounded connection metadata. |
 | Worker connects but does not claim work | No active project assignment, project not included in `--project-id` / `--active-project-id`, stale endpoint status, task executor mismatch, or no lease returned. | Confirm project assignment and worker status, then verify queued dispatches. Do not start local execution without a lease token. |
 | `/health` passes but `/ready` fails | Listener is alive but runtime readiness has not completed or the server is degraded. | Wait for startup recovery to finish, then inspect structured logs. Use `/ready` for load balancer readiness gates. |
-| Secret values appear in an exported settings bundle | The export was explicitly approved with `includeSecrets: true`. | Store the bundle only in approved secret storage, rotate exposed credentials if it was shared, and prefer redacted exports for review. |
+| A raw secret appears in an exported settings bundle | This violates the reference-only export contract. | Stop sharing the artifact, rotate the exposed credential through the write-only broker operation, preserve only redacted diagnostics, and report the incident. `includeSecrets: true` must not return plaintext even after approval. |
 
 ## Related Docs
 

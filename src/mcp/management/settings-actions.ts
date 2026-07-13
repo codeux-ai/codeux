@@ -147,6 +147,33 @@ function redactSecretValues(value: unknown, path: string[] = []): unknown {
   return value;
 }
 
+function fingerprintSettingsApprovalPayload(value: unknown, path: string[] = []): unknown {
+  if (isSecretPath(path) && hasSecretValue(value, path)) {
+    return {
+      redacted: true,
+      sha256: createHash("sha256").update(stableStringify(value)).digest("hex"),
+    };
+  }
+  if (Array.isArray(value)) {
+    return value.map((item, index) => fingerprintSettingsApprovalPayload(item, [...path, String(index)]));
+  }
+  if (isPlainObject(value)) {
+    const secretPatchPath = path.length === 0 && typeof value.path === "string"
+      ? value.path.split(".")
+      : null;
+    return Object.fromEntries(
+      Object.entries(value).map(([key, child]) => [
+        key,
+        fingerprintSettingsApprovalPayload(
+          child,
+          key === "value" && secretPatchPath && isSecretPath(secretPatchPath) ? secretPatchPath : [...path, key],
+        ),
+      ]),
+    );
+  }
+  return value;
+}
+
 function stableStringify(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map((item) => stableStringify(item)).join(",")}]`;
@@ -290,7 +317,11 @@ export class SettingsActions {
       }
     }
 
-    const fingerprint = buildMcpApprovalFingerprint({ domain: "settings", action: args.action, payload });
+    const fingerprint = buildMcpApprovalFingerprint({
+      domain: "settings",
+      action: args.action,
+      payload: fingerprintSettingsApprovalPayload(payload) as Record<string, unknown>,
+    });
     const pendingCreatedAt = this.pendingSettingsApprovals.get(fingerprint);
     if (args.approval?.confirmed === true && pendingCreatedAt !== undefined && now - pendingCreatedAt <= SETTINGS_APPROVAL_TTL_MS) {
       this.pendingSettingsApprovals.delete(fingerprint);
@@ -437,11 +468,7 @@ export class SettingsActions {
 
     const resultBundle: SettingsBundle = {
       metadata,
-      ...(
-        includeSecrets
-          ? bundle
-          : redactSecretValues(bundle) as Omit<SettingsBundle, "metadata">
-      ),
+      ...redactSecretValues(bundle) as Omit<SettingsBundle, "metadata">,
     };
     return { result: { bundle: resultBundle } };
   }

@@ -276,16 +276,23 @@ requirement; you then retry the *same* action and payload with `approval: { "con
 Settings mutations are stricter: only the same action and payload may execute once with
 `approval.confirmed: true`, within a 15-minute window.
 
-Secret-bearing settings synchronization also uses that one-use approval handshake:
+Secret-shaped settings synchronization also uses that one-use approval handshake:
 
 - `export_settings_bundle` returns a schema-versioned bundle with `exportedAt`, `includedScopes`,
-  a secret-redacted SHA-256 `fingerprint`, and `containsSecrets`. Export redacts provider API keys,
-  git tokens, issue-tracker tokens, and login credential markers unless `includeSecrets: true` is
-  approved for the exact export payload.
+  a secret-redacted SHA-256 `fingerprint`, and `containsSecrets`. Every export is reference-only or
+  redacted: provider API keys, git tokens, issue-tracker tokens, passwords, bearer tokens, and login
+  credential material are never returned. The compatibility `includeSecrets: true` input retains
+  exact-payload approval when secret-shaped source settings are detected, but approval does not
+  make plaintext exportable.
 - `apply_settings_bundle` accepts a `bundle` and optional `scopes` for partial import. It persists
   through the same system, project, and sprint settings repository APIs used by the dashboard, so
   imported values are normalized before storage. Any bundle marked as containing secrets, or whose
-  payload includes secret-bearing fields, requires approval before it is applied.
+  payload includes secret-shaped fields, requires approval before it is applied. Responses return
+  only applied counts and secret-free metadata, never submitted values.
+
+Settings bundles synchronize non-secret configuration and credential references. Broker values are
+created, replaced, or rotated separately through write-only credential operations; bind and revoke
+use metadata-only operations. Export/apply does not migrate or back up broker plaintext.
 
 Chat provider management uses the same safety model for sensitive operations:
 

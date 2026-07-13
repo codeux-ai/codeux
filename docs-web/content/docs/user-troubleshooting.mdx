@@ -90,11 +90,11 @@ The worker may not have an active project assignment, the project may be missing
 
 **Fix:** confirm the worker status and project assignment, verify queued dispatches, and do not start local execution without a lease token.
 
-### Settings bundle import requires approval
+### Settings bundle export or import requires approval
 
-Secret-bearing `manage_settings` bundle exports and imports use a one-use approval flow tied to the exact payload.
+The compatibility `includeSecrets: true` export input and secret-shaped bundle imports use a one-use approval flow tied to the exact payload. Export remains reference-only or redacted after approval, and apply never echoes submitted values.
 
-**Fix:** review the bundle, then repeat the same request with `approval.confirmed: true` within the approval window. Keep redacted bundles in review channels and secret-bearing bundles only in approved secret storage.
+**Fix:** review the request, then repeat the exact payload with `approval.confirmed: true` within the approval window. Manage credential values separately through write-only broker operations; settings bundles transfer only non-secret configuration and credential references.
 
 ## Sprint orchestration
 
