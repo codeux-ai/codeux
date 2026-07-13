@@ -70,8 +70,8 @@ const json = (method: string, body?: unknown): RequestInit => ({
 const base = (projectId: string) => `/api/projects/${encodeURIComponent(projectId)}/credentials`;
 const credential = (projectId: string, id: string) => `${base(projectId)}/${encodeURIComponent(id)}`;
 
-export const fetchCredentialHealth = (): Promise<CredentialBackendHealth> => request(() => fetchJson("/api/credentials/health"));
-export const fetchAutomationCredentials = (projectId: string): Promise<AutomationCredentialMetadata[]> => request(() => fetchJson(base(projectId)));
+export const fetchCredentialHealth = (signal?: AbortSignal): Promise<CredentialBackendHealth> => request(() => fetchJson("/api/credentials/health", { signal }));
+export const fetchAutomationCredentials = (projectId: string, signal?: AbortSignal): Promise<AutomationCredentialMetadata[]> => request(() => fetchJson(base(projectId), { signal }));
 export const createAutomationCredential = (projectId: string, input: CreateAutomationCredentialInput): Promise<AutomationCredentialMetadata> => request(() => fetchJson(base(projectId), json("POST", input)));
 export const updateAutomationCredential = (projectId: string, id: string, input: UpdateAutomationCredentialMetadataInput): Promise<AutomationCredentialMetadata> => request(() => fetchJson(credential(projectId, id), json("PATCH", input)));
 export const bindAutomationCredential = (projectId: string, id: string, input: BindAutomationCredentialInput): Promise<AutomationCredentialBinding> => request(() => fetchJson(`${credential(projectId, id)}/bind`, json("POST", input)));

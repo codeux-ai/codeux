@@ -9,7 +9,7 @@ The source of truth is the Code UX database. Drafts stay mutable, revisions are 
 1. Ask the Project Manager for the dashboard you want. Include the purpose, target audience, data sources, layout preferences, review criteria, and whether the dashboard should be published after validation.
 2. Review the draft in the dashboard workspace at `/custom-dashboards`. The draft includes editable manifest JSON, generated file bundle content, source-node graph JSON, styleguide JSON, and data catalog selections.
 3. Ask for changes or edit the draft before creating a revision. Draft edits do not change previous revisions or the currently published dashboard.
-4. If the manifest declares credential slots, review them through the credential-binding management surface. Bind each required slot to a compatible credential ID; no secret value is entered into the dashboard draft or generated code.
+4. If the manifest declares credential slots, open the editor's **Credentials** tab. It shows each bounded declaration and current non-secret credential metadata, and offers only active, configured, project-authorized credentials that satisfy the allowed kinds and required capabilities. Bind every required slot; no secret value is entered into the dashboard draft or generated code.
 5. Create a revision when the draft is ready. A revision snapshots the current manifest, file bundle, source graph, styleguide, runtime metadata, and credential-ID bindings.
 6. Run detached validation for the revision. Code UX reviews bindings before it materializes the bundle, builds it in Docker, starts a detached preview container, and health-checks the root URL.
 7. Inspect validation status, logs, and the proxied preview link. Validation passes only after credential policy, install, build, browser artifact capture, container start, and root health checks succeed. A passed validation does not publish by itself.
@@ -17,6 +17,10 @@ The source of truth is the Code UX database. Drafts stay mutable, revisions are 
 9. Archive dashboards you no longer want active. Archiving clears the active publication and marks the dashboard archived while preserving revision and validation history.
 
 If validation fails, use the report and logs to create a new revision. Do not publish around the failure; the repository rejects failed, queued, running, cancelled, missing, or mismatched validation sessions before publication state changes. When a dashboard is already published, validating later drafts keeps the active published dashboard open, and validation sessions for the active published revision do not replace its published validation snapshot.
+
+The Credentials tab appears only when the saved manifest declares slots. Secure-backend failures and empty compatible lists link to credential management in Settings. Binding, replacement, and unbinding use the current optimistic binding revision; a concurrent edit refreshes the dashboard and requires an explicit retry instead of overwriting the other operator. Required unbinding immediately shows the draft as not ready for its next revision, while optional unbound slots remain valid. Every successful binding change refreshes validation and publication readiness.
+
+Credential selection and actions are keyboard accessible, restore focus after completion, and announce saving or error state. Credential IDs remain confined to the dedicated metadata-management request state and never enter manifest, generated-file, source-graph, styleguide, runtime-text, or secret-value fields.
 
 ## Agent Workflow
 
