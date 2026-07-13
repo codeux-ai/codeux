@@ -38,6 +38,8 @@ pnpm run test:dashboard
 
 Use focused dashboard tests first when changing pure view-model helpers, resource hooks, page state, or components under `dashboard/src/`. Broaden to `pnpm run test:dashboard` for user-facing Live, Tasks, Stats, settings, accessibility, or realtime behavior.
 
+Shared QA/CI card changes must keep `tests/dashboard/v2/qa-ci-card-status.integration.test.tsx` green. The suite sends one deterministic QA review and execution-event history through the real Task, Live, and Sprint page projections, then renders Task, Live, Sprint gallery, and Sprint ledger cards. It verifies accessible state labels, keyboard-only review details and follow-up expansion, CI workflow steps, failure recovery and attention precedence, event isolation, Escape focus restoration, and unchanged snapshot replay without external services.
+
 Chat composer persistence regressions should cover both sides of the contract: backend route/repository tests for dashboard-user and project isolation, and dashboard hook/component tests for remount restoration plus ArrowUp/ArrowDown message-history traversal. Prefer deterministic in-memory fixtures and direct key events over wall-clock waits for debounced draft writes.
 
 - Run coverage report (verifies the configured global and per-file thresholds)

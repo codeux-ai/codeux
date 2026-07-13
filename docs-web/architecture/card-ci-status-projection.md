@@ -19,6 +19,10 @@ Only the compact status crosses the card contract. Failed logs, credentials, and
 
 Sprint cards aggregate their task statuses and latest main-merge gate with failure-before-running-before-pending precedence. Task cards and Live subtasks call the same pure resolver, so all three surfaces interpret persisted state identically.
 
+The dashboard expands that evidence into the same three labelled workflow steps on Task, Live, Sprint gallery, and Sprint ledger cards: **Pull request**, **Checks**, and **Merge**. Icons and color reinforce visible and accessible text such as **Pull request ready**, **Checks running**, **Checks failed**, and **Checks passed**. A newer successful observation replaces stale failure, while active matching CI attention restores the failure state.
+
+The deterministic dashboard integration suite replays these outcomes across all four card renderings, including keyboard-only QA details, collapsed follow-up specifications, Escape focus restoration, unrelated-event isolation, and unchanged snapshot replay. It mocks runtime boundaries and does not invoke Docker, provider CLIs, Git hosting, or a live database.
+
 ## Compatibility and troubleshooting
 
 `ciStatus` is optional and nullable. No schema migration or new setting is required; the projection uses existing task, event, sprint-run, and attention tables. Malformed payload JSON is ignored safely. If a badge remains after CI settles, verify that a newer settled gate event exists and that CI repair attention is no longer `open` or `claimed`.
