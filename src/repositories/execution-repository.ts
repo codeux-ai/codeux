@@ -340,6 +340,7 @@ export class ExecutionRepository {
 
   listExecutionInvocations(params: {
     projectId: string;
+    sprintId?: string;
     sprintRunId?: string;
     taskRunId?: string;
     limit?: number;

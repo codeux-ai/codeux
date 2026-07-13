@@ -65,14 +65,28 @@ The stable immediate response is:
     "status": "started",
     "message": "Sprint planning started in the background. You will be notified when it completes or fails.",
     "projectId": "project-123",
-    "sprintId": "sprint-123"
+    "sprintId": "sprint-123",
+    "planningGuidance": {
+      "status": "in_progress",
+      "asynchronous": true,
+      "isTerminal": false,
+      "invocationId": "planning-request-id",
+      "estimatedDurationMs": 180000,
+      "estimatedCompletionAt": "2026-07-13T10:03:00.000Z",
+      "nextCheckAt": "2026-07-13T10:03:00.000Z",
+      "recheckIntervalMs": 60000,
+      "sampleSize": 2,
+      "isFallbackEstimate": false
+    }
   }
 }
 ```
 
-The stable `result` fields are `status`, `message`, `projectId`, and `sprintId`. This response acknowledges that background planning started; it does not mark planning complete, promise that tasks already exist, or indicate that optional auto-start has completed. Task persistence, planning self-reflection, and optional sprint execution remain owned by the background workflow.
+The existing `result` fields `status`, `message`, `projectId`, and `sprintId` remain stable; `planningGuidance` is additive and uses recent completed planning durations or the shared three-minute fallback. This response acknowledges that background planning started; it does not mark planning complete, promise that tasks already exist, or indicate that optional auto-start has completed. Task persistence, planning self-reflection, and optional sprint execution remain owned by the background workflow.
 
-For MCP calls made from dashboard chat, planning success queues a due-now, non-recurring `agent_wakeup` for the originating thread. The wakeup asks the chat agent to recap the generated task count and whether execution actually started. Planning failure queues a same-thread wakeup with the failure reason and asks for a concise failure recap. Standalone MCP clients receive the acknowledgement without a chat wakeup and should poll `manage_sprints` and `manage_tasks`, or inspect relevant `manage_telemetry` state, for completion.
+Repeating `plan` for the same project and sprint while the request remains unsettled returns `status: "in_progress"` with a one-minute recheck time and does not start another provider request. Sprint `get` preserves the sprint record and adds current guidance from the active request or latest durable planning invocation. Running reads advance the next check by one minute; succeeded, failed, cancelled, and paused terminal reads set `nextCheckAt` to `null` and surface available failure details.
+
+For MCP calls made from dashboard chat, planning success queues a due-now, non-recurring `agent_wakeup` for the originating thread. The wakeup asks the chat agent to recap the generated task count and whether execution actually started. Planning failure queues a same-thread wakeup with the failure reason and asks for a concise failure recap. Standalone MCP clients receive the acknowledgement without a chat wakeup and should poll sprint `get`, tasks, or relevant telemetry for completion. Polling does not queue scheduler entries.
 
 This detached behavior applies only to the direct MCP `plan` action. `import_issues` with `planAfterImport` and non-MCP planning callers retain their awaited behavior.
 
