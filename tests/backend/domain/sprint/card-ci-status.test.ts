@@ -44,8 +44,20 @@ describe("card CI status", () => {
     expect(resolveSprintCardCiStatus({ taskStatuses: ["pending"] })).toBe("pending");
   });
 
-  it("maps main-merge failed and pending checks without retaining settled history", () => {
-    expect(resolveMainMergeCardCiStatus(gateEvent({ state: "failed_checks", hasFailedChecks: true }))).toBe("failed");
+  it("keeps actual main-merge check failures failed", () => {
+    expect(resolveMainMergeCardCiStatus(gateEvent({ state: "failed_checks", hasFailedChecks: false }))).toBe("failed");
+    expect(resolveMainMergeCardCiStatus(gateEvent({ state: "ready_for_merge", hasFailedChecks: true }))).toBe("failed");
+    expect(resolveMainMergeCardCiStatus(gateEvent({ state: "review_blocked", hasFailedChecks: true }))).toBe("failed");
+  });
+
+  it("does not present review-only main-merge blockers as failed CI", () => {
+    const reviewBlocked = gateEvent({ state: "review_blocked", hasFailedChecks: false });
+
+    expect(resolveMainMergeCardCiStatus(reviewBlocked)).toBeNull();
+    expect(resolveMainMergeCardCiStatus(reviewBlocked, true)).toBe("failed");
+  });
+
+  it("maps main-merge pending checks without retaining settled history", () => {
     expect(resolveMainMergeCardCiStatus(gateEvent({ state: "pending_checks", hasPendingChecks: true }))).toBe("running");
     expect(resolveMainMergeCardCiStatus(gateEvent({ state: "missing_pr" }))).toBe("pending");
     expect(resolveMainMergeCardCiStatus(gateEvent({ state: "merged" }))).toBeNull();
