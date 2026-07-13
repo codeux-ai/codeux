@@ -72,6 +72,8 @@ A failing threshold fails CI.
 - **In-memory repositories** for orchestrator integration tests rather than spinning up Postgres.
 - **Supertest** for HTTP route tests against the Express app.
 
+Automatic base-agent update regressions are covered by `tests/backend/integration/agent-base-update-invocation.test.ts`. Keep that harness on the real `AgentBaseUpdateService` → `StructuredAgentRequestService` → `StructuredProviderResponseService` → `AgentPresetSyncService` path, with only the provider execution boundary replaced by deterministic output. The suite must continue to verify the `planning` / `agent_base_update` invocation contract, same-session parse retries at the configured cap, and that parse or provider failures leave both instruction markdown and the stored bundled-revision baseline untouched.
+
 ## Writing new tests
 
 A behavioural change *must* include or update tests. PRs without test coverage for non-trivial logic will be requested-changes in review.
