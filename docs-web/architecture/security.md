@@ -77,9 +77,10 @@ The only protection layer is the **destructive-action approval handshake**:
 
 ### Storage
 
-- API keys stored in the settings DB (SQLite by default) at rest.
-- The DB file lives in `~/.code-ux/database.sqlite` with the user's default umask.
-- No encryption-at-rest by Code UX itself. Use OS-level disk encryption.
+- Credential values are stored as encrypted broker envelopes. Encryption key material remains outside the SQLite data, using the configured OS-protected, mounted-file, Vault, or KMS custody backend.
+- Ordinary settings store credential IDs and non-secret binding metadata only. System, project, sprint, effective, MCP, and snapshot serialization never returns broker plaintext.
+- Credential create, rotate, and replace controls are write-only. Secret inputs clear after a successful mutation and cannot be recovered through settings reads.
+- Supported legacy settings and environment values migrate one way at startup into broker credentials. If secure custody or the required scope is unavailable, migration scrubs the plaintext and fails closed rather than retaining a settings fallback or reusing a stale reference.
 
 ### In transit
 
@@ -87,15 +88,9 @@ The only protection layer is the **destructive-action approval handshake**:
 - API keys are passed to provider CLIs via env vars or per-call arguments — never via command-line flags visible to other processes (`/proc/.../cmdline`).
 - HTTP requests to Jules / GitHub APIs use TLS.
 
-### `${ENV_VAR}` references
+### External credential hints
 
-Settings fields that accept secrets (e.g. `apiKey`) accept `${ENV_VAR}` references that are resolved at start time:
-
-```jsonc
-{ "apiKey": "${MY_PROVIDER_KEY}" }
-```
-
-This avoids storing literal secrets in the DB.
+`GET /api/settings/import-sources` and dashboard detection surfaces expose availability metadata only. They never return, render, pre-fill, or copy detected values into settings. Environment and legacy JSON credentials are migration inputs, not runtime settings references or fallbacks.
 
 ## Worker isolation
 
@@ -138,7 +133,7 @@ Run on `127.0.0.1`. No further hardening needed.
 
 ### CI / scripted
 
-Avoid storing API keys in the settings DB if the runner is ephemeral; use `JULES_API_KEY` env var injection from your secrets manager.
+Provision credentials through the broker and mount the configured secure key backend for ephemeral runners. Legacy environment inputs are consumed only by startup migration and are not runtime settings fallbacks.
 
 ## Known limitations
 

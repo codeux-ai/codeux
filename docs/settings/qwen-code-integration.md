@@ -45,7 +45,7 @@ The Qwen runner launches with `--auth-type openai` and sets `OPENAI_BASE_URL` to
 - protocol: `openai`, `anthropic`, or `gemini`
 - environment key
 - base URL
-- API key
+- broker credential binding
 - model id registered in Qwen Code `modelProviders`
 
 Placeholder models like `custom/model` or `local-model` resolve to `qwenModelId`.
@@ -58,11 +58,12 @@ Qwen Code custom provider failures use the shared CLI provider error classifier.
 
 When Custom endpoint is selected for a fresh Qwen instance, the settings form pre-fills an Ollama-compatible local endpoint:
 
-- API key: `your_api_key`
 - Base URL: `http://127.0.0.1:11434/v1`
 - Environment key: `OLLAMA_API_KEY`
 - Model id: `glm-4.7-flash`
 - Protocol: `openai`
+
+If that endpoint requires a secret, create or select it through the write-only credential manager. The provider settings store only the credential reference.
 
 ## Docker Runtime
 
@@ -100,7 +101,7 @@ Code UX detects Qwen credentials from:
 - `QWEN_API_KEY`
 - local files under `~/.qwen`
 
-Detected keys and local auth availability are surfaced in the Integrations settings page so they can be imported into named provider instances.
+At startup, supported legacy key values are migrated one way into broker credentials and replaced by credential references. `GET /api/settings/import-sources` and the Integrations page expose availability metadata only; they never return, pre-fill, or copy a detected value into settings. If secure storage or the required scope is unavailable, Code UX scrubs the rejected plaintext and fails closed instead of retaining it or falling back to an older credential reference.
 
 ## Dashboard Settings
 
@@ -108,6 +109,6 @@ The v2 Integrations page exposes Qwen-specific setup panels:
 
 - Local auth path and Docker copy toggle
 - Alibaba Cloud Coding Plan region and endpoint preview
-- Custom provider protocol, env key, base URL, and masked generated `settings.json` preview
+- Custom provider protocol, env key, base URL, credential-reference selector, and non-secret generated `settings.json` preview
 
-Provider routing remains instance-based: multiple Qwen instances can coexist, each with its own auth mode, API key, mount path, model, weight, and route overrides.
+Provider routing remains instance-based: multiple Qwen instances can coexist, each with its own auth mode, credential reference, mount path, model, weight, and route overrides.

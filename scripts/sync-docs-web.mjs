@@ -111,6 +111,22 @@ const pinnedOrder = new Map([
   ["architecture-security", 600],
 ]);
 
+const staleCredentialDocClaims = [
+  { label: "literal API keys accepted by settings", pattern: /^\s*-\s+A literal key\.\s*$/mi },
+  { label: "environment references accepted by settings", pattern: /^\s*-\s+An `\$\{ENV_VAR\}` reference resolved at start time\.\s*$/mi },
+  { label: "environment references serialized as provider settings", pattern: /"apiKey": "string or \$\{ENV_VAR\}"/i },
+  { label: "keys stored in the settings database", pattern: /Keys are stored in the settings DB/i },
+  { label: "API keys stored in the settings database", pattern: /API keys stored in the settings DB/i },
+  { label: "detected values copied into settings", pattern: /one-click button to copy the value into the corresponding settings field/i },
+  { label: "detected values filled into settings", pattern: /one-click button to fill the corresponding settings field/i },
+  { label: "detected values imported into provider settings", pattern: /imported into named provider instances/i },
+  { label: "placeholder API keys pre-filled in settings", pattern: /API key: `your_api_key`/i },
+  { label: "environment hints described as dashboard imports", pattern: /External hint env keys used for dashboard import/i },
+  { label: "saved settings or import hints used for availability", pattern: /saved settings\/import hints/i },
+  { label: "stored provider keys mapped at runtime", pattern: /maps the stored provider key to/i },
+  { label: "environment-key import hints", pattern: /environment-key import hint/i },
+];
+
 function parseArgs(argv) {
   const result = {
     marketingSrc: process.env.CODEUX_MARKETING_SRC || defaultMarketingSrc,
@@ -164,6 +180,40 @@ function collectMarkdownFiles(dir = "") {
     }
   }
   return files;
+}
+
+function collectDocumentationFiles(absoluteDir) {
+  const files = [];
+  for (const entry of fs.readdirSync(absoluteDir, { withFileTypes: true })) {
+    const filePath = path.join(absoluteDir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...collectDocumentationFiles(filePath));
+    } else if (entry.isFile() && /\.mdx?$/i.test(entry.name)) {
+      files.push(filePath);
+    }
+  }
+  return files;
+}
+
+function assertNoStaleCredentialClaims() {
+  const documentationFiles = [
+    ...collectDocumentationFiles(path.join(root, "docs")),
+    ...collectDocumentationFiles(docsRoot),
+  ];
+  const violations = [];
+
+  for (const filePath of documentationFiles) {
+    const contents = fs.readFileSync(filePath, "utf8");
+    for (const claim of staleCredentialDocClaims) {
+      if (claim.pattern.test(contents)) {
+        violations.push(`${toPosix(path.relative(root, filePath))}: ${claim.label}`);
+      }
+    }
+  }
+
+  if (violations.length > 0) {
+    throw new Error(`Stale credential documentation claims found:\n${violations.map((violation) => `- ${violation}`).join("\n")}`);
+  }
 }
 
 function slugFromSourcePath(sourcePath) {
@@ -470,6 +520,8 @@ export const Route = createFileRoute('/docs/')({
   },
 })
 `, { dryRun: options.dryRun, changed });
+
+  assertNoStaleCredentialClaims();
 
   if (changed.length > 0) {
     console.log(`${options.dryRun ? "Would update" : "Updated"} ${changed.length} marketing docs file(s):`);

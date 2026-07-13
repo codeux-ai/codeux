@@ -37,7 +37,7 @@ openai/gpt-5
 github-copilot/gpt-5
 ```
 
-Code UX builds an inline OpenCode config in `OPENCODE_CONFIG_CONTENT`, writes it to a per-run `opencode.json`, points OpenCode at it with `OPENCODE_CONFIG`, and maps the stored provider key to `OPENCODE_API_KEY`. The configured `openCodeEnvKey` is still used as an import hint when the saved key is empty.
+Code UX builds an inline OpenCode config in `OPENCODE_CONFIG_CONTENT`, writes it to a per-run `opencode.json`, points OpenCode at it with `OPENCODE_CONFIG`, and maps the broker-resolved provider credential to `OPENCODE_API_KEY` for that invocation. The configured `openCodeEnvKey` identifies the runtime environment key; it does not resolve or import a value into settings.
 The generated config sets `permission` to `"allow"` for headless Code UX runs so OpenCode file edits and shell actions do not wait for an interactive approval prompt.
 
 ### Custom Provider
@@ -72,11 +72,12 @@ OpenCode provider failures use the shared CLI provider error classifier. OpenRou
 
 When Custom endpoint is selected for a fresh OpenCode instance, the settings form pre-fills an Ollama-compatible local endpoint:
 
-- API key: `your_api_key`
 - Provider id: `ollama`
 - Model id: `glm-4.7-flash`
 - Base URL: `http://127.0.0.1:11434/v1`
 - Environment key: `OLLAMA_API_KEY`
+
+If the endpoint requires a secret, create or select it through the write-only credential manager. Ordinary provider settings serialize only its credential reference.
 
 ## MCP Tools
 
@@ -124,7 +125,7 @@ The v2 Integrations page exposes OpenCode-specific setup panels:
 
 - local auth copy from `~/.local/share/opencode`
 - built-in provider key setup for standard OpenCode providers
-- custom OpenAI-compatible endpoint setup with provider id, model id, package, base URL, and environment-key import hint
+- custom OpenAI-compatible endpoint setup with provider id, model id, package, base URL, runtime environment-key name, and broker credential binding
 - masked generated config preview
 
-Provider routing remains instance-based: multiple OpenCode instances can coexist, each with its own auth mode, API key, mount path, custom endpoint, model, weight, and route overrides. Custom endpoint instances appear on the AI Models page with their generated `provider/model` selector, such as `ollama/glm-4.7-flash`, instead of the placeholder `custom/model`.
+Provider routing remains instance-based: multiple OpenCode instances can coexist, each with its own auth mode, credential reference, mount path, custom endpoint, model, weight, and route overrides. Custom endpoint instances appear on the AI Models page with their generated `provider/model` selector, such as `ollama/glm-4.7-flash`, instead of the placeholder `custom/model`.
