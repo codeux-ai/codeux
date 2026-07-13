@@ -241,6 +241,7 @@ export class CodeUxServer {
   private readonly automationAuditService: AutomationAuditExportService;
   private readonly headlessReadinessService: HeadlessOperationalReadinessService;
   private readonly automationSloService: AutomationSloService;
+  private settingsCredentialMigrationPromise: Promise<void> | null = null;
   private readonly signalHandler: () => void;
   private runtimeProcessLockRelease: RuntimeProcessLockRelease | null = null;
 
@@ -1411,6 +1412,7 @@ export class CodeUxServer {
   }
 
   private async runInternal(): Promise<void> {
+    await this.migrateSettingsCredentials();
     await this.headlessReadinessService.assertStartupReady();
     await bootSettings({
       runtimeContext: this.runtimeContext,
@@ -1467,7 +1469,6 @@ export class CodeUxServer {
         schedulerService: this.schedulerService,
         nodeFlowService: this.nodeFlowService,
         credentialBroker: this.credentialBroker,
-        settingsCredentialMigrationService: this.settingsCredentialMigrationService,
         settingsCredentialResolver: this.settingsCredentialResolver,
         headlessAuthService: this.headlessAuthService,
         automationAuditService: this.automationAuditService,
@@ -1567,5 +1568,21 @@ export class CodeUxServer {
     this.startWalCheckpointLoop();
     this.virtualWorkerService.start();
     this.scheduleBackgroundStartupTasks();
+  }
+
+  private migrateSettingsCredentials(): Promise<void> {
+    if (!this.settingsCredentialMigrationPromise) {
+      this.settingsCredentialMigrationPromise = (async () => {
+        const migration = await this.settingsCredentialMigrationService.migrate();
+        this.runtimeContext.dashboardSettings = this.settingsRepository.getDefaultDashboardSettings();
+        this.logger.info("Settings credential migration completed", {
+          migrated: migration.migrated,
+          scrubbed: migration.scrubbed,
+          recordsChanged: migration.recordsChanged,
+          secureStorageAvailable: migration.secureStorageAvailable,
+        });
+      })();
+    }
+    return this.settingsCredentialMigrationPromise;
   }
 }
