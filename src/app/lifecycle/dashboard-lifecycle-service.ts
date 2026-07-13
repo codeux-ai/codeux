@@ -525,6 +525,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     speechModelManager: deps.speechModelManager,
     nodeFlowService: deps.nodeFlowService,
     credentialBroker: deps.credentialBroker,
+    settingsCredentialResolver: deps.settingsCredentialResolver,
     headlessAuthService: deps.headlessAuthService,
     automationAuditService: deps.automationAuditService,
     headlessReadinessService: deps.headlessReadinessService,

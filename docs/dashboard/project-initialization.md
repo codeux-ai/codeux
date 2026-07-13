@@ -18,6 +18,7 @@ Project Initialization runs a repository-specific setup pass through the `Projec
 - New local init does not require a Git URL slug; it only needs a project name and optional local directory path.
 - New remote init still requires a Git URL slug and auto-fills it from the project name until the user edits it.
 - New remote init clones into the selected clone directory, or `~/.code-ux/projects` when the field is blank, and stores the project base directory as the single checkout root `~/.code-ux/projects/<repo-name>`.
+- New remote init never reads the redacted legacy Git token fields from system settings. When a GitHub or GitLab credential reference is configured, the broker authorizes it through its current management project (the new target project does not exist yet) and resolves it only around the remote create, clone, and initial push operation. Rotation is visible to the next creation attempt, while malformed, missing, revoked, unavailable, insufficiently capable, or management-scope-denied references fail before remote egress. Environment variables and `gh`/`glab` local authentication remain supported only when no reference is configured.
 - Existing projects expose a `Setup Project` action from the project card agent button.
 
 Imported-project setup lets the operator choose which generated artifacts to create. The dashboard keeps Docs disabled by default; selecting it embeds discovered repository documentation into Knowledge docs. Backend and MCP setup requests can also explicitly enable docs embedding:

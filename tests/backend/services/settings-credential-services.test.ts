@@ -75,6 +75,39 @@ afterEach(async () => {
 });
 
 describe("settings credential migration and resolution", () => {
+  it("resolves pre-project operations through current management scope and observes rotation", async () => {
+    const f = await fixture();
+    const credential = await f.broker.create(f.first.id, {
+      name: "GitHub project creation",
+      kind: "settings:integrations.githubToken",
+      value: "first-value",
+      scope: "global",
+      allowedProjectIds: [f.first.id, f.second.id],
+      capabilities: ["read"],
+    });
+    const resolver = new SettingsCredentialResolver(f.broker);
+    const reference = { credentialId: credential.id, capability: "read" as const };
+
+    await expect(resolver.withManagementCredential(reference, {
+      consumer: "git.github.project-create",
+    }, (secret) => secret.toString("utf8"))).resolves.toBe("first-value");
+
+    await f.broker.rotate(f.first.id, credential.id, "rotated-value");
+    await expect(resolver.withManagementCredential(reference, {
+      consumer: "git.github.project-create",
+    }, (secret) => secret.toString("utf8"))).resolves.toBe("rotated-value");
+
+    f.broker.restrict(f.first.id, credential.id, [f.first.id, f.second.id], []);
+    await expect(resolver.withManagementCredential(reference, {
+      consumer: "git.github.project-create",
+    }, () => undefined)).rejects.toThrow("Required capability is not approved");
+    await expect(resolver.withManagementCredential({ credentialId: "missing", capability: "read" }, {
+      consumer: "git.github.project-create",
+    }, () => undefined)).rejects.toThrow("Credential is missing");
+    f.settingsRepository.close();
+    f.appStorage.close();
+  });
+
   it("does not initialize secure storage when fresh settings contain no credentials", async () => {
     const f = await fixture();
     const health = vi.spyOn(f.broker, "health");

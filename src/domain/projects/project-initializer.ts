@@ -3,7 +3,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { createGitHubRepo, createGitLabRepo } from "../../infrastructure/git/remote-repo-creator.js";
 import { validateSafeRepoName, validateSafeClonePath, validateNonEmptyDir } from "../../utils/path-validator.js";
-import type { CreateProjectInput, ProjectSummary } from "../../contracts/project-management-types.js";
+import type { CreateProjectInput, GitProvider, ProjectSummary } from "../../contracts/project-management-types.js";
 import { getHomeCodeUxPath } from "../../shared/config/code-ux-paths.js";
 import {
   CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
@@ -88,8 +88,10 @@ export async function initializeProject(
   input: CreateProjectInput,
   deps: {
     createProject: (i: CreateProjectInput) => ProjectSummary | Promise<ProjectSummary>;
-    getGithubToken: () => string;
-    getGitlabToken?: () => string;
+    withRemoteGitCredential: <T>(
+      provider: Extract<GitProvider, "github" | "gitlab">,
+      consumer: (hostToken?: string) => T | Promise<T>,
+    ) => Promise<T>;
   }
 ): Promise<ProjectSummary> {
   const mode = input.initMode ?? "existing";
@@ -119,23 +121,22 @@ export async function initializeProject(
     validateSafeClonePath(cloneParentDir, allowedRoot);
     const targetDir = path.resolve(cloneParentDir, input.sourceRef);
     validateNonEmptyDir(targetDir);
-    let result;
-    if (input.remoteProvider === "github") {
-      result = await createGitHubRepo({
-        repoName: input.sourceRef,
-        isPrivate: input.isPrivate ?? true,
-        cloneParentDir,
-        hostToken: deps.getGithubToken(),
-      });
-    } else {
-      result = await createGitLabRepo({
-        repoName: input.sourceRef,
-        isPrivate: input.isPrivate ?? true,
-        cloneParentDir,
-        hostToken: deps.getGitlabToken?.() ?? "",
-        defaultBranch: input.defaultBranch,
-      });
-    }
+    const result = await deps.withRemoteGitCredential(input.remoteProvider, async (hostToken) => (
+      input.remoteProvider === "github"
+        ? await createGitHubRepo({
+            repoName: input.sourceRef,
+            isPrivate: input.isPrivate ?? true,
+            cloneParentDir,
+            hostToken,
+          })
+        : await createGitLabRepo({
+            repoName: input.sourceRef,
+            isPrivate: input.isPrivate ?? true,
+            cloneParentDir,
+            hostToken,
+            defaultBranch: input.defaultBranch,
+          })
+    ));
     return deps.createProject(withNewProjectDefaults({
       ...input,
       sourceType: "git",

@@ -5,6 +5,7 @@ const validateSafeClonePath = vi.fn((dir: string) => dir);
 const validateNonEmptyDir = vi.fn((dir: string) => dir);
 const runCommandStrict = vi.fn(async () => ({ stdout: "", stderr: "", code: 0 }));
 const buildGitHttpAuthEnvWithFallbacks = vi.fn(async () => ({ GIT_TOKEN: "x" }));
+const resolveGitHostTokenWithFallbacks = vi.fn(async (_provider: string, token?: string | null) => token?.trim() || null);
 const mkdirSync = vi.fn();
 const openSync = vi.fn(() => 17);
 const writeFileSync = vi.fn();
@@ -30,6 +31,7 @@ vi.mock("../../../../src/services/cli-process-runner.js", () => ({
 
 vi.mock("../../../../src/services/git-http-auth.js", () => ({
   buildGitHttpAuthEnvWithFallbacks: (...a: unknown[]) => buildGitHttpAuthEnvWithFallbacks(...a),
+  resolveGitHostTokenWithFallbacks: (...a: unknown[]) => resolveGitHostTokenWithFallbacks(...(a as [string, string?])),
 }));
 
 vi.mock("fs", () => ({
@@ -62,6 +64,7 @@ beforeEach(() => {
   validateNonEmptyDir.mockImplementation((dir: string) => dir);
   openSync.mockImplementation(() => 17);
   buildGitHttpAuthEnvWithFallbacks.mockResolvedValue({ GIT_TOKEN: "x" });
+  resolveGitHostTokenWithFallbacks.mockImplementation(async (_provider: string, token?: string | null) => token?.trim() || null);
 });
 
 describe("createGitHubRepo", () => {
@@ -117,6 +120,35 @@ describe("createGitHubRepo", () => {
     ).rejects.toThrow(/GitHub token is required/);
   });
 
+  it("preserves environment and local CLI authentication when no broker token is provided", async () => {
+    resolveGitHostTokenWithFallbacks.mockResolvedValueOnce("ambient-github-token");
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
+      expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer ambient-github-token");
+      return new Response(JSON.stringify({ clone_url: "https://github.com/me/r.git" }), { status: 201 });
+    }));
+
+    await expect(createGitHubRepo({ repoName: "r", isPrivate: false, cloneParentDir: "/tmp/p" }))
+      .resolves.toMatchObject({ remoteUrl: "https://github.com/me/r.git" });
+  });
+
+  it("redacts exact resolved credentials from remote operation errors", async () => {
+    const secret = "short-unpatterned-secret";
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ message: `upstream echoed ${secret}` }),
+      { status: 401 },
+    )));
+
+    const error = await createGitHubRepo({
+      repoName: "r",
+      isPrivate: false,
+      cloneParentDir: "/tmp/p",
+      hostToken: secret,
+    }).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("[REDACTED]");
+    expect((error as Error).message).not.toContain(secret);
+  });
+
   it("surfaces the GitHub API message on non-ok responses", async () => {
     vi.stubGlobal(
       "fetch",
@@ -124,7 +156,7 @@ describe("createGitHubRepo", () => {
     );
 
     await expect(
-      createGitHubRepo({ repoName: "r", isPrivate: false, cloneParentDir: "/tmp/p", hostToken: "t" }),
+      createGitHubRepo({ repoName: "r", isPrivate: false, cloneParentDir: "/tmp/p", hostToken: "test-host-token-long" }),
     ).rejects.toThrow(/name already exists/);
   });
 
@@ -135,7 +167,7 @@ describe("createGitHubRepo", () => {
     );
 
     await expect(
-      createGitHubRepo({ repoName: "r", isPrivate: false, cloneParentDir: "/tmp/p", hostToken: "t" }),
+      createGitHubRepo({ repoName: "r", isPrivate: false, cloneParentDir: "/tmp/p", hostToken: "test-host-token-long" }),
     ).rejects.toThrow(/upstream down/);
   });
 
@@ -146,7 +178,7 @@ describe("createGitHubRepo", () => {
     );
 
     await expect(
-      createGitHubRepo({ repoName: "r", isPrivate: false, cloneParentDir: "/tmp/p", hostToken: "t" }),
+      createGitHubRepo({ repoName: "r", isPrivate: false, cloneParentDir: "/tmp/p", hostToken: "test-host-token-long" }),
     ).rejects.toThrow(/did not include clone_url/);
   });
 
@@ -156,7 +188,7 @@ describe("createGitHubRepo", () => {
     });
 
     await expect(
-      createGitHubRepo({ repoName: "../evil", isPrivate: false, cloneParentDir: "/tmp/p", hostToken: "t" }),
+      createGitHubRepo({ repoName: "../evil", isPrivate: false, cloneParentDir: "/tmp/p", hostToken: "test-host-token-long" }),
     ).rejects.toThrow(/Failed to create GitHub repository: bad repo name/);
   });
 
@@ -236,7 +268,7 @@ describe("createGitLabRepo", () => {
     );
 
     await expect(
-      createGitLabRepo({ repoName: "proj", isPrivate: false, cloneParentDir: "/tmp/p", hostToken: "t" }),
+      createGitLabRepo({ repoName: "proj", isPrivate: false, cloneParentDir: "/tmp/p", hostToken: "test-host-token-long" }),
     ).rejects.toThrow(/limit reached/);
   });
 
@@ -247,7 +279,7 @@ describe("createGitLabRepo", () => {
     );
 
     await expect(
-      createGitLabRepo({ repoName: "proj", isPrivate: false, cloneParentDir: "/tmp/p", hostToken: "t" }),
+      createGitLabRepo({ repoName: "proj", isPrivate: false, cloneParentDir: "/tmp/p", hostToken: "test-host-token-long" }),
     ).rejects.toThrow(/did not include http_url_to_repo/);
   });
 });

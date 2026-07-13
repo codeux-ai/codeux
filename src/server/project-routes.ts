@@ -16,19 +16,19 @@ export function registerProjectRoutes(router: Express, deps: DashboardDependenci
       const input = parseCreateProjectInput(req.body);
       const result = await initializeProject(input, {
         createProject: (i) => deps.createProject(i),
-        getGithubToken: () => {
-          try {
-            return deps.getSystemSettings().integrations.githubToken ?? "";
-          } catch {
-            return "";
+        withRemoteGitCredential: async (provider, consumer) => {
+          const integrations = deps.getSystemSettings().integrations;
+          const reference = provider === "github"
+            ? integrations.githubTokenCredentialRef
+            : integrations.gitlabTokenCredentialRef;
+          if (!reference) return await consumer();
+          if (!deps.settingsCredentialResolver) {
+            throw new Error("Git credential resolution is unavailable for remote project creation.");
           }
-        },
-        getGitlabToken: () => {
-          try {
-            return deps.getSystemSettings().integrations.gitlabToken ?? "";
-          } catch {
-            return "";
-          }
+          return await deps.settingsCredentialResolver.withManagementCredential(reference, {
+            consumer: `git.${provider}.project-create`,
+            workspaceId: "project-management",
+          }, async (secret) => await consumer(secret.toString("utf8")));
         },
       });
 

@@ -147,6 +147,7 @@ export function createDashboardDependencies(
     customDashboardValidationService: coreDeps.customDashboardValidationService,
     executionRepository: coreDeps.executionRepository,
     getDashboardSettings: () => resolveDashboardSettings(),
+    settingsCredentialResolver: coreDeps.settingsCredentialResolver,
     projectManagementRepository: coreDeps.projectManagementRepository,
     executionControlService,
     taskRerunService: taskRerunServiceRef,
