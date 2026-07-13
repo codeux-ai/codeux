@@ -14,7 +14,7 @@ The SDK exposes immutable input/config, correlation and invocation ids, cancella
 
 Validation fails closed on malformed schemas or identity, undeclared capabilities, excessive resources, symlinks, unpinned dependencies, lockfile drift, a modified trusted Docker recipe, prohibited APIs, vulnerability-audit failure, TypeScript or deterministic-test failure, fixture mismatch, output-schema failure, resource/network-policy failure, or secret-canary leakage. The exact recipe restores locked dependencies with lifecycle scripts disabled, then performs typecheck, build, and tests in a network-disabled stage. The vulnerability check is an injected governed hook; validation fails when it is not configured.
 
-A passed revision produces an immutable content-addressed envelope with source and build digests, immutable image id, dependency inventory, validation report, creator/invocation/correlation metadata, and declared capabilities. Publication registers only its typed definition and digest. Flow graphs never embed custom source.
+A passed revision produces an immutable content-addressed envelope with source and build digests, immutable image id, dependency inventory, validation report, creator/invocation/correlation metadata, and declared capabilities. Publication registers only its typed definition and digest. Flow graphs never embed custom source. Existing schema-v1 manifests keep their singular per-slot `requiredCapability`; registration normalizes it into the definition's explicit `requiredCapabilities` list so review and runtime enforce the same policy without a schema-version break.
 
 ## Isolated execution
 

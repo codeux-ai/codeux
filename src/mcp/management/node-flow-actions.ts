@@ -41,29 +41,29 @@ export class NodeFlowActions {
       case "get_node_definition":
         return this.getNodeDefinition(payload);
       case "create_draft":
-        return this.createDraft(payload);
+        return await this.createDraft(payload);
       case "patch_draft":
-        return this.patchDraft(payload);
+        return await this.patchDraft(payload);
       case "validate_draft":
-        return this.validateDraft(payload);
+        return await this.validateDraft(payload);
       case "request_credential":
-        return this.requestCredential(payload);
+        return await this.requestCredential(payload);
       case "inspect_bindings":
-        return this.inspectBindings(payload);
+        return await this.inspectBindings(payload);
       case "dry_run":
-        return this.dryRun(payload);
+        return await this.dryRun(payload);
       case "publish":
-        return this.publishDraft(args, payload);
+        return await this.publishDraft(args, payload);
       case "compare_versions":
         return this.compareVersions(payload);
       case "rollback":
-        return this.rollback(args, payload);
+        return await this.rollback(args, payload);
       case "get":
-        return this.getFlow(payload);
+        return await this.getFlow(payload);
       case "create":
-        return this.createFlow(payload);
+        return await this.createFlow(payload);
       case "update":
-        return this.updateFlow(payload);
+        return await this.updateFlow(payload);
       case "delete":
         return this.deleteFlow(args, payload);
       case "validate":
@@ -104,24 +104,24 @@ export class NodeFlowActions {
     return { result: { definition } };
   }
 
-  private createDraft(payload: Record<string, unknown>): ManagementResponseEnvelope {
+  private async createDraft(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
     const graph = this.parseGraphWithWidgets(payload, true);
     if (!graph) throw managementValidationError("graph object is required", "graph");
     const validation = this.nodeFlowService.validate(graph);
     if (!validation.valid || !validation.graph) return { result: { status: "invalid", validationIssues: validation.errors } };
-    return { result: { draft: this.nodeFlowService.createDraft(parseRequiredString(payload, "projectId"), {
+    return { result: { draft: await this.nodeFlowService.createDraft(parseRequiredString(payload, "projectId"), {
       title: parseRequiredString(payload, "name"), description: parseOptionalText(payload, "description"), graph: validation.graph,
     }) } };
   }
 
-  private patchDraft(payload: Record<string, unknown>): ManagementResponseEnvelope {
+  private async patchDraft(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
     const projectId = parseRequiredString(payload, "projectId");
     const flowId = parseRequiredString(payload, "flowId");
     const draftRevision = requiredInteger(payload, "draftRevision");
     const patch = parseOptionalObject<Record<string, unknown>>(payload, "patch") ?? {};
     const graph = this.parseGraphWithWidgets(patch, false) ?? this.parseGraphWithWidgets(payload, false);
     const operations = Array.isArray(patch.operations) ? patch.operations : Array.isArray(payload.operations) ? payload.operations : undefined;
-    return { result: this.nodeFlowService.patchDraft(flowId, {
+    return { result: await this.nodeFlowService.patchDraft(flowId, {
       projectId, draftRevision, graph,
       operations: operations as import("../../contracts/node-flow-types.js").NodeFlowGraphPatchOperation[] | undefined,
       title: parseOptionalString(patch, "name") ?? parseOptionalString(payload, "name"),
@@ -129,38 +129,38 @@ export class NodeFlowActions {
     }) };
   }
 
-  private validateDraft(payload: Record<string, unknown>): ManagementResponseEnvelope {
-    return { result: { draft: this.nodeFlowService.validateDraft(parseRequiredString(payload, "projectId"), parseRequiredString(payload, "flowId")) } };
+  private async validateDraft(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
+    return { result: { draft: await this.nodeFlowService.validateDraft(parseRequiredString(payload, "projectId"), parseRequiredString(payload, "flowId")) } };
   }
 
-  private requestCredential(payload: Record<string, unknown>): ManagementResponseEnvelope {
-    return { result: { request: this.nodeFlowService.requestCredential(parseRequiredString(payload, "projectId"), parseRequiredString(payload, "flowId"), parseRequiredString(payload, "nodeId"), parseRequiredString(payload, "slot")) } };
+  private async requestCredential(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
+    return { result: { request: await this.nodeFlowService.requestCredential(parseRequiredString(payload, "projectId"), parseRequiredString(payload, "flowId"), parseRequiredString(payload, "nodeId"), parseRequiredString(payload, "slot")) } };
   }
 
-  private inspectBindings(payload: Record<string, unknown>): ManagementResponseEnvelope {
-    return { result: this.nodeFlowService.inspectBindings(parseRequiredString(payload, "projectId"), parseRequiredString(payload, "flowId")) };
+  private async inspectBindings(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
+    return { result: await this.nodeFlowService.inspectBindings(parseRequiredString(payload, "projectId"), parseRequiredString(payload, "flowId")) };
   }
 
-  private dryRun(payload: Record<string, unknown>): ManagementResponseEnvelope {
-    return { result: this.nodeFlowService.dryRun(parseRequiredString(payload, "projectId"), parseRequiredString(payload, "flowId"), parseOptionalObject<NodeFlowJsonObject>(payload, "input") ?? {}) };
+  private async dryRun(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
+    return { result: await this.nodeFlowService.dryRun(parseRequiredString(payload, "projectId"), parseRequiredString(payload, "flowId"), parseOptionalObject<NodeFlowJsonObject>(payload, "input") ?? {}) };
   }
 
-  private publishDraft(args: ManageCodeUxArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
+  private async publishDraft(args: ManageCodeUxArgs, payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
     const flowId = parseRequiredString(payload, "flowId");
     const draftRevision = requiredInteger(payload, "draftRevision");
     if (args.approval?.confirmed !== true) return { approvalRequired: true, approvalMessage: `Publish node flow ${flowId} draft revision ${draftRevision} after reviewing validation, credentials, capabilities, and side effects.` };
-    return { result: { draft: this.nodeFlowService.publishDraft(parseRequiredString(payload, "projectId"), flowId, draftRevision, parseOptionalString(payload, "publishedBy") ?? "project-manager-mcp") } };
+    return { result: { draft: await this.nodeFlowService.publishDraft(parseRequiredString(payload, "projectId"), flowId, draftRevision, parseOptionalString(payload, "publishedBy") ?? "project-manager-mcp") } };
   }
 
   private compareVersions(payload: Record<string, unknown>): ManagementResponseEnvelope {
     return { result: this.nodeFlowService.compareVersions(parseRequiredString(payload, "projectId"), parseRequiredString(payload, "flowId"), requiredInteger(payload, "fromVersion"), requiredInteger(payload, "toVersion")) };
   }
 
-  private rollback(args: ManageCodeUxArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
+  private async rollback(args: ManageCodeUxArgs, payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
     const flowId = parseRequiredString(payload, "flowId");
     const version = requiredInteger(payload, "version");
     if (args.approval?.confirmed !== true) return { approvalRequired: true, approvalMessage: `Create a new draft of node flow ${flowId} from version ${version}. The current draft remains in immutable history.` };
-    return { result: { draft: this.nodeFlowService.rollback(parseRequiredString(payload, "projectId"), flowId, version, requiredInteger(payload, "draftRevision")) } };
+    return { result: { draft: await this.nodeFlowService.rollback(parseRequiredString(payload, "projectId"), flowId, version, requiredInteger(payload, "draftRevision")) } };
   }
 
   private cancelRun(payload: Record<string, unknown>): ManagementResponseEnvelope {
@@ -203,20 +203,20 @@ export class NodeFlowActions {
     return { result: { flows } };
   }
 
-  private getFlow(payload: Record<string, unknown>): ManagementResponseEnvelope {
+  private async getFlow(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
     const flowId = parseRequiredString(payload, "flowId");
     const flow = this.requireFlow(flowId);
     this.assertProjectMatch(payload, flow);
     return {
       result: {
         flow: formatFlowForCaller(flow),
-        ...(getCurrentMcpAgentId() ? { draft: this.nodeFlowService.validateDraft(flow.projectId, flow.id) } : {}),
+        ...(getCurrentMcpAgentId() ? { draft: await this.nodeFlowService.validateDraft(flow.projectId, flow.id) } : {}),
         agentSkills: this.nodeFlowService.listAgentSkills(flow.id),
       },
     };
   }
 
-  private createFlow(payload: Record<string, unknown>): ManagementResponseEnvelope {
+  private async createFlow(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
     const projectId = parseRequiredString(payload, "projectId");
     const graph = this.parseGraphWithWidgets(payload, true);
     if (!graph) {
@@ -227,7 +227,7 @@ export class NodeFlowActions {
       throw validationToManagementError(validation.errors);
     }
 
-    const flow = this.nodeFlowService.create(projectId, {
+    const flow = await this.nodeFlowService.create(projectId, {
       title: parseRequiredString(payload, "name"),
       description: parseOptionalText(payload, "description"),
       graph: validation.graph,
@@ -235,7 +235,7 @@ export class NodeFlowActions {
     return { result: { flow: formatFlowForCaller(flow) } };
   }
 
-  private updateFlow(payload: Record<string, unknown>): ManagementResponseEnvelope {
+  private async updateFlow(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
     const flowId = parseRequiredString(payload, "flowId");
     const graph = this.parseGraphWithWidgets(payload, false);
     const validation = graph ? this.nodeFlowService.validate(graph) : null;
@@ -245,7 +245,7 @@ export class NodeFlowActions {
 
     const name = parseOptionalString(payload, "name");
     const description = parseOptionalText(payload, "description");
-    const flow = this.nodeFlowService.update(flowId, {
+    const flow = await this.nodeFlowService.update(flowId, {
       ...(name !== undefined ? { title: name } : {}),
       ...(description !== undefined ? { description } : {}),
       ...(validation?.graph ? { graph: validation.graph } : {}),

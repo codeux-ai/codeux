@@ -27,6 +27,7 @@ Run records are persisted as `NodeFlowRunRecord` and `NodeFlowNodeRunRecord`. Bo
 - widget fields have required id, label, type, and select option metadata
 - widget default values are JSON-safe and match the field type
 - malformed v1 and v2 node, edge, port, credential-binding, definition-reference, capability, policy, schema, and metadata members produce stable issues at their original paths
+- credential bindings reference only slots declared by the versioned definition, whose allowed kinds and required capabilities are explicit, non-empty, and bounded
 
 Invalid graphs throw a `ValidationError` with field-level details when persistence is attempted. The validation route returns the same structured issue list without writing data.
 
@@ -55,6 +56,8 @@ The registry-backed runtime supports:
 Versioned custom definitions can execute through the custom-node runtime after validation and registration. Definitions without a registered executable handler fail validation and cannot be published.
 
 Provider and HTTP nodes create linked child `execution_invocations` rows with `type = "node_flow_node"`. Prompt text and HTTP secrets are not written to invocation messages; persisted run inputs, outputs, node payloads, trigger payloads, and route responses are masked for secret-like keys.
+
+Before an executor receives a credential, the runtime resolves the node's current versioned definition, rejects undeclared, duplicate, or newly required-but-missing slots, and passes that slot's exact allowed kinds and required capabilities to the credential broker. The broker performs authorization and one secret read, rechecks authorization after decryption, and fails closed if the credential was revoked, restricted, replaced, became inaccessible, or its encrypted backend changed after review. Optional unbound slots remain valid and do not trigger a secret read.
 
 Failed nodes stop downstream descendants by default and persist skipped node runs. A node can set `data.continueOnError = true` to persist its own failure output while allowing downstream nodes to continue.
 
@@ -127,6 +130,8 @@ Validation resolves definitions and checks configuration, handles, policies, gra
 `/nodes` requires a selected project and loads that project's flow library from the backend. Draft writes carry `draftRevision`; a stale revision returns a conflict rather than replacing newer work. The former `codeux:nodes-canvas:v1` browser value is eligible for one project-specific import. Its legacy kinds and handles are translated to registered Graph v2 definitions before draft creation. Import failures remain retryable warnings and do not block the backend library; success records a marker and removes the graph value.
 
 Draft review combines structural validation, capability and side-effect policy findings, credential-slot status, and a non-executing dry run. The dashboard receives credential ids and status metadata only, never resolved secret values. Publication requires the current revision, a valid policy review, and all credential requirements bound. Runs resolve immutable pinned or latest-published snapshots.
+
+Credential review uses the credential broker's metadata-only compatibility contract for every bound slot. Results expose backend readiness, configured and active state, project access, kind compatibility, capability compatibility, and missing capabilities. Missing required bindings and every compatibility denial have stable policy-finding codes and block both draft publication and the legacy create/update publication path; an unbound optional slot does not. `POST /api/node-flow-drafts/:flowId/credential-requests` remains a compatibility-only, non-persistent request and explicitly reports that it did not change `NodeFlowNode.credentialBindings`, which is the sole binding authority.
 
 The run debugger reads persisted runs, node runs, numbered attempts, approvals, retry decisions, invocation links, timing, and cancellation state. Responses and persisted payloads are redacted before display. Scheduling delegates to the scheduler and retains pinned-versus-latest publication semantics.
 

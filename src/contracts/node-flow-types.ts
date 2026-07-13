@@ -1,3 +1,5 @@
+import type { AutomationCredentialCompatibilityIssue } from "./automation-credential-types.js";
+
 export type NodeWidgetFieldType =
   | "text"
   | "textarea"
@@ -244,6 +246,21 @@ export interface NodeFlowRequiredCredential {
   required: boolean;
   credentialId: string | null;
   status: "bound" | "missing" | "denied";
+  backendReady: boolean | null;
+  configured: boolean | null;
+  active: boolean | null;
+  projectAccess: boolean | null;
+  kindAllowed: boolean | null;
+  capabilitiesAllowed: boolean | null;
+  missingCapabilities: string[];
+  compatibilityIssues: AutomationCredentialCompatibilityIssue[];
+}
+
+export interface NodeFlowCredentialRequestResult extends NodeFlowRequiredCredential {
+  requestStatus: "already_bound" | "requested";
+  /** This compatibility endpoint never writes or replaces a graph credential binding. */
+  persistence: "none";
+  bindingChanged: false;
 }
 
 export interface NodeFlowDraftReview {

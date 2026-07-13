@@ -18,6 +18,7 @@ import { AutomationOutboxRepository } from "../../../src/repositories/automation
 import { ApprovalService } from "../../../src/services/node-flows/approval-service.js";
 import { MockSideEffectProvider, OutboxService, type SideEffectProvider } from "../../../src/services/node-flows/outbox-service.js";
 import { AutomationAuditExportService } from "../../../src/services/automation-audit-export-service.js";
+import { resolveNodeDefinition } from "../../../src/domain/node-flows/node-definition-registry.js";
 
 const tempDirs: string[] = [];
 
@@ -297,6 +298,99 @@ describe("NodeFlowRuntimeService", () => {
     expect(promptRun?.executionInvocationId).toMatch(/^xi_/);
     expect(promptRun?.output).toMatchObject({ text: "provider answer", nativeSessionId: "native-1" });
     expect(executionRepository.getExecutionInvocation(promptRun!.executionInvocationId!)?.type).toBe("node_flow_node");
+  });
+
+  it.each([
+    "Credential is not active.",
+    "Credential is outside the project scope.",
+    "Credential kind is not approved for this consumer.",
+    "Credential does not approve every required capability.",
+    "Credential encrypted state or key custody is unavailable.",
+  ])("fails a changed credential policy before invoking the provider executor: %s", async (denial) => {
+    const executeProvider = vi.fn();
+    const resolveCredentialId = vi.fn().mockRejectedValue(new Error(denial));
+    const { dir, projectRepository, nodeFlowRepository, runtime } = await createRuntime(
+      { executeProvider } as Partial<ProviderExecutionService>,
+      { resolveCredentialId },
+    );
+    const project = projectRepository.createProject({ name: "Credential Denial Project", sourceType: "local", sourceRef: dir });
+    const flow = nodeFlowRepository.createFlow(project.id, { title: "Credential denial", graph: {
+      nodes: [{
+        id: "prompt",
+        type: "provider_prompt",
+        title: "Prompt",
+        data: { provider: "mockup-cli", prompt: "Answer" },
+        credentialBindings: [{ slot: "provider", credentialId: "credential-1" }],
+      }],
+      edges: [],
+    } });
+
+    const result = await runtime.runFlow(project.id, flow.id, {});
+
+    expect(result.run.status).toBe("failed");
+    expect(result.run.errorMessage).toContain(denial);
+    expect(resolveCredentialId).toHaveBeenCalledTimes(1);
+    expect(executeProvider).not.toHaveBeenCalled();
+  });
+
+  it("re-evaluates definition capabilities after publication and before the secret read", async () => {
+    const executeProvider = vi.fn();
+    const resolveCredentialId = vi.fn().mockRejectedValue(new Error("Credential capability changed after review."));
+    const { dir, projectRepository, nodeFlowRepository, runtime } = await createRuntime(
+      { executeProvider } as Partial<ProviderExecutionService>,
+      { resolveCredentialId },
+    );
+    const project = projectRepository.createProject({ name: "Policy Change Project", sourceType: "local", sourceRef: dir });
+    const flow = nodeFlowRepository.createFlow(project.id, { title: "Policy change", graph: {
+      nodes: [{
+        id: "prompt",
+        type: "provider_prompt",
+        title: "Prompt",
+        data: { provider: "mockup-cli", prompt: "Answer" },
+        credentialBindings: [{ slot: "provider", credentialId: "credential-1" }],
+      }],
+      edges: [],
+    } });
+    const requirement = resolveNodeDefinition("provider_prompt", 1)!.credentials[0]!;
+    const originalCapabilities = requirement.requiredCapabilities;
+    requirement.requiredCapabilities = ["provider.execute"];
+    try {
+      const result = await runtime.runFlow(project.id, flow.id, {});
+      expect(result.run.status).toBe("failed");
+      expect(resolveCredentialId).toHaveBeenCalledWith(expect.objectContaining({
+        allowedKinds: ["provider"],
+        requiredCapabilities: ["provider.execute"],
+      }));
+      expect(executeProvider).not.toHaveBeenCalled();
+    } finally {
+      requirement.requiredCapabilities = originalCapabilities;
+    }
+  });
+
+  it("fails a newly required slot before resolving or invoking the provider", async () => {
+    const executeProvider = vi.fn();
+    const resolveCredentialId = vi.fn();
+    const { dir, projectRepository, nodeFlowRepository, runtime } = await createRuntime(
+      { executeProvider } as Partial<ProviderExecutionService>,
+      { resolveCredentialId },
+    );
+    const project = projectRepository.createProject({ name: "Required Runtime Slot Project", sourceType: "local", sourceRef: dir });
+    const flow = nodeFlowRepository.createFlow(project.id, { title: "Required at runtime", graph: {
+      nodes: [{ id: "prompt", type: "provider_prompt", title: "Prompt", data: { provider: "mockup-cli", prompt: "Answer" } }],
+      edges: [],
+    } });
+    const requirement = resolveNodeDefinition("provider_prompt", 1)!.credentials[0]!;
+    const originalRequired = requirement.required;
+    requirement.required = true;
+    try {
+      const result = await runtime.runFlow(project.id, flow.id, {});
+      expect(result.run.status).toBe("failed");
+      expect(result.run.errorMessage).toMatch(/requires credential slot provider/i);
+      expect(resolveCredentialId).not.toHaveBeenCalled();
+      expect(executeProvider).not.toHaveBeenCalled();
+    } finally {
+      requirement.required = originalRequired;
+    }
   });
 
   it("redacts a resolved credential echoed by provider output and retry errors from every runtime record", async () => {

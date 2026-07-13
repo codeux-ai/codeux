@@ -9,6 +9,8 @@ Code UX stores automation credentials through a broker rather than exposing secr
 - Resolution succeeds only when the credential kind is allowed and both the credential and binding approve every declared capability. Authorization is completed before the broker performs its single secret read.
 - Revoked, unavailable, missing, cross-project, or insufficiently capable credentials fail closed.
 
+Node-flow definition slots explicitly declare required/optional state, allowed kinds, and required capabilities. Draft review and every publication path use the broker's metadata-only compatibility assessment; runtime sends the same declaration to direct credential-id resolution immediately before execution. Graph `credentialBindings` are canonical. The legacy credential-request endpoint records no binding and identifies its result as non-persistent.
+
 The dashboard accepts secret values only on create, rotate, and replace requests. Responses contain configuration, scope, status, key-version, and validation metadata but never stored values. Access-event rows contain identifiers, binding keys, capabilities, outcomes, and denial reasons; they never contain secret material.
 
 Management inputs are validated at runtime rather than trusted from TypeScript types. Create requests must explicitly declare kind, scope, capabilities, and an allowlist (an empty array for project credentials). Names, kinds, binding keys, project ids, capabilities, and list counts are bounded; malformed arrays, unknown mutation fields, and control characters are rejected instead of being silently coerced. A stored value is limited to 64 KiB of UTF-8 data. Global allowlists must explicitly retain the management owner.

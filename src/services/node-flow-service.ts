@@ -12,6 +12,7 @@ import type {
   CreateNodeFlowInput,
   NodeFlowGraph,
   NodeFlowGraphPatchOperation,
+  NodeFlowCredentialRequestResult,
   NodeFlowJsonObject,
   NodeFlowListResponse,
   NodeFlowNodeRunListResponse,
@@ -70,10 +71,21 @@ export class NodeFlowService {
     return this.repository.getRun(runId)?.projectId ?? null;
   }
 
-  create(projectId: string, input: CreateNodeFlowInput): NodeFlowRecord {
+  async create(projectId: string, input: CreateNodeFlowInput): Promise<NodeFlowRecord> {
     const title = normalizeRequiredText(input.title, "Node flow title");
     const description = normalizeOptionalText(input.description);
     const { graph } = normalizeNodeFlowGraph(input.graph);
+    const review = await this.reviewDraft({
+      id: input.id?.trim() || "pending-node-flow",
+      projectId,
+      title,
+      description,
+      graph,
+      version: 1,
+      createdAt: "",
+      updatedAt: "",
+    });
+    if (!review.valid) throw new ValidationError("Node flow credential policy must pass review before publication.");
     return this.repository.createFlow(projectId, {
       id: input.id,
       title,
@@ -82,15 +94,15 @@ export class NodeFlowService {
     });
   }
 
-  createDraft(projectId: string, input: CreateNodeFlowInput): NodeFlowDraftReview {
+  async createDraft(projectId: string, input: CreateNodeFlowInput): Promise<NodeFlowDraftReview> {
     const title = normalizeRequiredText(input.title, "Node flow title");
     const description = normalizeOptionalText(input.description);
     const { graph } = normalizeNodeFlowGraph(input.graph);
     const flow = this.repository.createFlow(projectId, { id: input.id, title, description, graph }, { publish: false });
-    return this.reviewDraft(flow);
+    return await this.reviewDraft(flow);
   }
 
-  patchDraft(flowId: string, input: PatchNodeFlowDraftInput): { draft?: NodeFlowDraftReview; conflict?: NodeFlowConcurrencyConflict } {
+  async patchDraft(flowId: string, input: PatchNodeFlowDraftInput): Promise<{ draft?: NodeFlowDraftReview; conflict?: NodeFlowConcurrencyConflict }> {
     const current = this.requireOwnedFlow(flowId, input.projectId);
     if (current.version !== input.draftRevision) {
       return { conflict: {
@@ -107,22 +119,22 @@ export class NodeFlowService {
     const graph = input.graph ?? applyGraphPatch(current.graph, input.operations ?? []);
     const validation = validateNodeFlowGraph(graph);
     if (!validation.valid || !validation.graph) {
-      return { draft: this.reviewDraft({ ...current, graph }, validation) };
+      return { draft: await this.reviewDraft({ ...current, graph }, validation) };
     }
     const updated = this.repository.updateFlow(flowId, {
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.description !== undefined ? { description: input.description } : {}),
       graph: validation.graph,
     }, { publish: false });
-    return { draft: this.reviewDraft(updated, validation) };
+    return { draft: await this.reviewDraft(updated, validation) };
   }
 
-  validateDraft(projectId: string, flowId: string): NodeFlowDraftReview {
-    return this.reviewDraft(this.requireOwnedFlow(flowId, projectId));
+  async validateDraft(projectId: string, flowId: string): Promise<NodeFlowDraftReview> {
+    return await this.reviewDraft(this.requireOwnedFlow(flowId, projectId));
   }
 
-  inspectBindings(projectId: string, flowId: string): Pick<NodeFlowDraftReview, "requiredCredentials" | "requestedCapabilities" | "policyFindings"> {
-    const review = this.reviewDraft(this.requireOwnedFlow(flowId, projectId));
+  async inspectBindings(projectId: string, flowId: string): Promise<Pick<NodeFlowDraftReview, "requiredCredentials" | "requestedCapabilities" | "policyFindings">> {
+    const review = await this.reviewDraft(this.requireOwnedFlow(flowId, projectId));
     return {
       requiredCredentials: review.requiredCredentials,
       requestedCapabilities: review.requestedCapabilities,
@@ -130,11 +142,16 @@ export class NodeFlowService {
     };
   }
 
-  requestCredential(projectId: string, flowId: string, nodeId: string, slot: string): Record<string, unknown> {
-    const review = this.reviewDraft(this.requireOwnedFlow(flowId, projectId));
+  async requestCredential(projectId: string, flowId: string, nodeId: string, slot: string): Promise<NodeFlowCredentialRequestResult> {
+    const review = await this.reviewDraft(this.requireOwnedFlow(flowId, projectId));
     const requirement = review.requiredCredentials.find((item) => item.nodeId === nodeId && item.slot === slot);
     if (!requirement) throw new ValidationError(`Credential slot is not declared: ${nodeId}.${slot}`);
-    return { projectId, flowId, ...requirement, requestStatus: requirement.status === "bound" ? "already_bound" : "requested" };
+    return {
+      ...requirement,
+      requestStatus: requirement.status === "bound" ? "already_bound" : "requested",
+      persistence: "none",
+      bindingChanged: false,
+    };
   }
 
   async createCustomNode(projectId: string, input: { nodeId: string; name: string; description?: string; sourceRevision: string; createdBy: string }): Promise<CustomNodeRecord> {
@@ -163,10 +180,10 @@ export class NodeFlowService {
     return { nodeId, status: result.report.valid ? "passed" : "failed", validationIssues: result.report.issues, checks: result.report.checks, requestedCapabilities: current.manifest.capabilities, requiredCredentials: current.manifest.credentials };
   }
 
-  dryRun(projectId: string, flowId: string, input: Record<string, unknown> = {}): Record<string, unknown> {
+  async dryRun(projectId: string, flowId: string, input: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
     normalizeJsonObject(input, "input");
-    const review = this.reviewDraft(this.requireOwnedFlow(flowId, projectId));
-    const missingCredentials = review.requiredCredentials.filter((item) => item.status !== "bound");
+    const review = await this.reviewDraft(this.requireOwnedFlow(flowId, projectId));
+    const missingCredentials = review.requiredCredentials.filter((item) => item.status === "denied" || (item.required && item.status === "missing"));
     return {
       status: review.valid && missingCredentials.length === 0 ? "ready" : "blocked",
       draftRevision: review.draftRevision,
@@ -179,16 +196,16 @@ export class NodeFlowService {
     };
   }
 
-  publishDraft(projectId: string, flowId: string, draftRevision: number, publishedBy: string): NodeFlowDraftReview {
+  async publishDraft(projectId: string, flowId: string, draftRevision: number, publishedBy: string): Promise<NodeFlowDraftReview> {
     const flow = this.requireOwnedFlow(flowId, projectId);
     if (flow.version !== draftRevision) throw new ValidationError(`Draft revision conflict: expected ${draftRevision}, actual ${flow.version}.`);
-    const review = this.reviewDraft(flow);
+    const review = await this.reviewDraft(flow);
     if (!review.valid) throw new ValidationError("Only a valid draft can be published.");
-    if (review.requiredCredentials.some((item) => item.status !== "bound")) {
+    if (review.requiredCredentials.some((item) => item.status === "denied" || (item.required && item.status === "missing"))) {
       throw new ValidationError("All required credentials must be bound before publication.");
     }
     this.repository.publishVersion(flowId, draftRevision, undefined, normalizeRequiredText(publishedBy, "publishedBy"));
-    return this.reviewDraft(flow);
+    return await this.reviewDraft(flow);
   }
 
   compareVersions(projectId: string, flowId: string, fromVersion: number, toVersion: number): Record<string, unknown> {
@@ -206,12 +223,12 @@ export class NodeFlowService {
     };
   }
 
-  rollback(projectId: string, flowId: string, version: number, draftRevision: number): NodeFlowDraftReview {
+  async rollback(projectId: string, flowId: string, version: number, draftRevision: number): Promise<NodeFlowDraftReview> {
     const current = this.requireOwnedFlow(flowId, projectId);
     if (current.version !== draftRevision) throw new ValidationError(`Draft revision conflict: expected ${draftRevision}, actual ${current.version}.`);
     const target = this.repository.getVersion(flowId, version);
     if (!target) throw new EntityNotFoundError(`Node flow version not found: ${flowId}@${version}`);
-    return this.reviewDraft(this.repository.updateFlow(flowId, {
+    return await this.reviewDraft(this.repository.updateFlow(flowId, {
       title: target.title, description: target.description, graph: target.graph,
     }, { publish: false }));
   }
@@ -239,7 +256,9 @@ export class NodeFlowService {
     return result;
   }
 
-  update(flowId: string, input: UpdateNodeFlowInput): NodeFlowRecord {
+  async update(flowId: string, input: UpdateNodeFlowInput): Promise<NodeFlowRecord> {
+    const current = this.repository.getFlow(flowId);
+    if (!current) throw new EntityNotFoundError(`Node flow not found: ${flowId}`);
     const update: UpdateNodeFlowInput = {};
     if (input.title !== undefined) {
       update.title = normalizeRequiredText(input.title, "Node flow title");
@@ -250,6 +269,14 @@ export class NodeFlowService {
     if (input.graph !== undefined) {
       update.graph = normalizeNodeFlowGraph(input.graph).graph;
     }
+    const review = await this.reviewDraft({
+      ...current,
+      title: update.title ?? current.title,
+      description: update.description ?? current.description,
+      graph: update.graph ?? current.graph,
+      version: current.version + 1,
+    });
+    if (!review.valid) throw new ValidationError("Node flow credential policy must pass review before publication.");
     return this.repository.updateFlow(flowId, update);
   }
 
@@ -336,21 +363,67 @@ export class NodeFlowService {
     return run;
   }
 
-  private reviewDraft(flow: NodeFlowRecord, validation = validateNodeFlowGraph(flow.graph)): NodeFlowDraftReview {
-    const credentialMetadata = this.credentialBroker?.list(flow.projectId) ?? [];
-    const requiredCredentials: NodeFlowRequiredCredential[] = flow.graph.nodes.flatMap((node) => {
+  private async reviewDraft(flow: NodeFlowRecord, validation = validateNodeFlowGraph(flow.graph)): Promise<NodeFlowDraftReview> {
+    const credentialRequirements = flow.graph.nodes.flatMap((node) => {
       const definition = node.definition ? resolveNodeDefinition(node.definition.type, node.definition.version) : undefined;
-      return (definition?.credentials ?? []).filter((slot) => slot.required || node.credentialBindings?.some((binding) => binding.slot === slot.slot)).map((slot) => {
-        const credentialId = node.credentialBindings?.find((binding) => binding.slot === slot.slot)?.credentialId ?? null;
-        const credential = credentialMetadata.find((item) => item.id === credentialId);
-        const requiredCapabilities = ["read"];
-        const allowed = credential && credential.status === "active"
-          && slot.allowedKinds.includes(credential.kind)
-          && requiredCapabilities.every((capability) => credential.capabilities.includes(capability));
-        const status: NodeFlowRequiredCredential["status"] = credentialId ? (allowed ? "bound" : "denied") : "missing";
-        return { nodeId: node.id, slot: slot.slot, allowedKinds: [...slot.allowedKinds], requiredCapabilities, required: slot.required, credentialId, status };
-      });
+      return (definition?.credentials ?? []).map((slot) => ({ node, slot }));
     });
+    const requiredCredentials: NodeFlowRequiredCredential[] = await Promise.all(credentialRequirements.map(async ({ node, slot }) => {
+      const credentialId = node.credentialBindings?.find((binding) => binding.slot === slot.slot)?.credentialId ?? null;
+      const policy = {
+        nodeId: node.id,
+        slot: slot.slot,
+        allowedKinds: [...slot.allowedKinds],
+        requiredCapabilities: [...slot.requiredCapabilities],
+        required: slot.required,
+        credentialId,
+      };
+      if (!credentialId) {
+        return {
+          ...policy,
+          status: "missing" as const,
+          backendReady: null,
+          configured: null,
+          active: null,
+          projectAccess: null,
+          kindAllowed: null,
+          capabilitiesAllowed: null,
+          missingCapabilities: [...slot.requiredCapabilities],
+          compatibilityIssues: [],
+        };
+      }
+      if (!this.credentialBroker) {
+        return {
+          ...policy,
+          status: "denied" as const,
+          backendReady: false,
+          configured: null,
+          active: null,
+          projectAccess: null,
+          kindAllowed: null,
+          capabilitiesAllowed: null,
+          missingCapabilities: [...slot.requiredCapabilities],
+          compatibilityIssues: ["backend_unavailable" as const],
+        };
+      }
+      const assessment = await this.credentialBroker.assessCompatibility(credentialId, {
+        projectId: flow.projectId,
+        allowedKinds: slot.allowedKinds,
+        requiredCapabilities: slot.requiredCapabilities,
+      });
+      return {
+        ...policy,
+        status: assessment.compatible ? "bound" as const : "denied" as const,
+        backendReady: assessment.backendReady,
+        configured: assessment.configured,
+        active: assessment.active,
+        projectAccess: assessment.projectAccess,
+        kindAllowed: assessment.kindAllowed,
+        capabilitiesAllowed: assessment.capabilitiesAllowed,
+        missingCapabilities: [...assessment.missingCapabilities],
+        compatibilityIssues: [...assessment.issues],
+      };
+    }));
     const requestedCapabilities = [...new Set(flow.graph.nodes.flatMap((node) => node.capabilities ?? []))].sort();
     const policyFindings = reviewPolicy(flow.graph, requiredCredentials);
     return {
@@ -421,10 +494,33 @@ function reviewSideEffects(graph: NodeFlowGraph): NodeFlowDraftReview["sideEffec
 }
 
 function reviewPolicy(graph: NodeFlowGraph, credentials: NodeFlowDraftReview["requiredCredentials"]): NodeFlowDraftReview["policyFindings"] {
-  const findings: NodeFlowDraftReview["policyFindings"] = credentials.filter((item) => item.status === "denied" || (item.required && item.status === "missing")).map((item) => ({
-    severity: "error", code: item.status === "missing" ? "missing_credential" : "credential_permission_denied", nodeId: item.nodeId,
-    message: `${item.nodeId}.${item.slot} requires an approved credential binding.`,
-  }));
+  const compatibilityFinding = {
+    backend_unavailable: ["credential_backend_unavailable", "The credential encryption backend is unavailable."],
+    backend_insecure: ["credential_backend_insecure", "The credential encryption backend is not secure."],
+    not_configured: ["credential_not_configured", "The bound credential is not configured."],
+    not_active: ["credential_not_active", "The bound credential is not active."],
+    project_access_denied: ["credential_project_access_denied", "The bound credential is not accessible to this project."],
+    kind_not_allowed: ["credential_kind_not_allowed", "The bound credential kind is not allowed for this slot."],
+    capability_missing: ["credential_capability_missing", "The bound credential does not grant every required capability."],
+  } as const;
+  const findings: NodeFlowDraftReview["policyFindings"] = credentials.flatMap((item) => {
+    if (item.required && item.status === "missing") {
+      return [{
+        severity: "error" as const,
+        code: "missing_credential_binding",
+        nodeId: item.nodeId,
+        message: `${item.nodeId}.${item.slot} requires a stored credential binding.`,
+      }];
+    }
+    if (item.status !== "denied") return [];
+    const issues = item.compatibilityIssues.length > 0 ? item.compatibilityIssues : ["not_configured" as const];
+    return issues.map((compatibilityIssue) => ({
+      severity: "error" as const,
+      code: compatibilityFinding[compatibilityIssue][0],
+      nodeId: item.nodeId,
+      message: `${item.nodeId}.${item.slot}: ${compatibilityFinding[compatibilityIssue][1]}`,
+    }));
+  });
   for (const node of graph.nodes) {
     const definition = node.definition ? resolveNodeDefinition(node.definition.type, node.definition.version) : undefined;
     if ((node.sideEffect ?? definition?.sideEffect) === "external") findings.push({ severity: "warning", code: "external_side_effect", nodeId: node.id, message: "External side effects require publication review." });
