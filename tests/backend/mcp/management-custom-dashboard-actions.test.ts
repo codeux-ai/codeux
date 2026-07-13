@@ -186,6 +186,53 @@ describe("manage_custom_dashboards", () => {
     expect(JSON.stringify(created)).not.toContain("mcp-secret-ciphertext");
   });
 
+  it("rejects raw credential metadata from MCP mutations and keeps revisions and catalogs secret-free", async () => {
+    const { handler, projectId } = await createFixture();
+    const sentinel = "sentinel-mcp-dashboard-secret";
+    const rejectedCreate = parseResponse(await handler.handleManageCustomDashboards({
+      action: "create",
+      projectId,
+      title: "Unsafe dashboard",
+      manifest: manifest(),
+      fileBundle: { ...fileBundle(), metadata: { "x-api-key": sentinel } },
+    }));
+    expect(rejectedCreate.result.status).toBe("error");
+    expect(JSON.stringify(rejectedCreate)).not.toContain(sentinel);
+
+    const created = parseResponse(await handler.handleManageCustomDashboards({
+      action: "create",
+      projectId,
+      title: "Safe dashboard",
+      manifest: manifest(),
+      fileBundle: fileBundle(),
+    }));
+    const dashboardId = created.result.dashboard.id;
+
+    const rejectedUpdate = parseResponse(await handler.handleManageCustomDashboards({
+      action: "update",
+      dashboardId,
+      sourceNodeGraph: {
+        nodes: [{ id: "external", type: "external_api", title: "External", config: { "api-token": sentinel } }],
+        edges: [],
+      },
+    }));
+    expect(rejectedUpdate.result.status).toBe("error");
+    expect(JSON.stringify(rejectedUpdate)).not.toContain(sentinel);
+
+    const rejectedRevision = parseResponse(await handler.handleManageCustomDashboards({
+      action: "create_revision",
+      dashboardId,
+      runtimeMetadata: { headers: { Authorization: `Bearer ${sentinel}` } },
+    }));
+    expect(rejectedRevision.result.status).toBe("error");
+    expect(JSON.stringify(rejectedRevision)).not.toContain(sentinel);
+
+    const opened = parseResponse(await handler.handleManageCustomDashboards({ action: "get", dashboardId }));
+    const catalog = parseResponse(await handler.handleManageCustomDashboards({ action: "data_catalog", projectId }));
+    expect(opened.result.revisions).toEqual([]);
+    expect(JSON.stringify({ opened, catalog })).not.toContain(sentinel);
+  });
+
   it("validates revisions and returns validation status and logs through the validation service", async () => {
     const { handler, repository, validationService, projectId } = await createFixture();
     const dashboard = repository.createDraft(projectId, {

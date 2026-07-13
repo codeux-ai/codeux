@@ -174,8 +174,53 @@ describe("custom dashboard validation filesystem utilities", () => {
       fileBundle: { files: [{ path: "src/dashboard.tsx", content: 'const apiKey = "sk-dangerousliteral";' }] },
     }))).toThrow("raw secret literal");
     expect(() => buildCustomDashboardBuildManifest(revision({
+      fileBundle: { files: [{ path: "src/dashboard.tsx", content: 'const headers = { "x-api-key": "sentinel-static-header" };' }] },
+    }))).toThrow("raw secret literal");
+    expect(() => buildCustomDashboardBuildManifest(revision({
       runtimeMetadata: { authorization: "Bearer dangerous-token-value" },
     }))).toThrow("metadata contains a raw secret literal");
+  });
+
+  it.each([
+    ["file bundle metadata", { fileBundle: { ...revision().fileBundle, metadata: { "x-api-key": "sentinel-file-secret" } } }],
+    ["manifest metadata", { manifest: { ...revision().manifest, metadata: { apiKey: "sentinel-manifest-secret" } } }],
+    ["source configuration", {
+      sourceNodeGraph: {
+        nodes: [{ id: "external", type: "external_api", title: "External", config: { "api-token": "sentinel-source-secret" } }],
+        edges: [],
+      },
+    }],
+    ["route metadata", {
+      routes: [{ path: "/details", label: "Details", entryFile: "src/dashboard.tsx", metadata: { Authorization: "sentinel-route-secret" } }],
+    }],
+    ["styleguide metadata", { styleguide: { password: "sentinel-style-secret" } }],
+  ] as const)("rejects raw credentials in %s", (_label, overrides) => {
+    expect(() => buildCustomDashboardBuildManifest(revision(overrides as Partial<CustomDashboardRevisionRecord>)))
+      .toThrow("metadata contains a raw secret literal");
+  });
+
+  it("preserves declarative credential headers and ordinary non-secret configuration", () => {
+    const candidate = revision({
+      sourceNodeGraph: {
+        nodes: [{
+          id: "external",
+          type: "external_api",
+          title: "External",
+          config: { baseUrl: "https://api.example.test", allowedHosts: ["api.example.test"], timeoutMs: 5000 },
+          credentialSlots: [{
+            slot: "api_token",
+            label: "API token",
+            required: true,
+            allowedKinds: ["api-token"],
+            requiredCapability: "read",
+            metadata: { headerName: "x-api-key", scheme: "Bearer" },
+          }],
+        }],
+        edges: [],
+      },
+    });
+
+    expect(buildCustomDashboardBuildManifest(candidate).entryFile).toBe("src/dashboard.tsx");
   });
 
   it("requires TypeScript or TSX manifest and route entries", () => {

@@ -27,6 +27,10 @@ import type {
 import { AppDbStorage } from "./app-db-storage.js";
 import type { DatabaseAdapter } from "./db/database-adapter.js";
 import { EntityNotFoundError, requireRecord, toNumber, ValidationError } from "./repository-utils.js";
+import {
+  assertNoRawCustomDashboardSecrets,
+  containsRawCustomDashboardSourceSecret,
+} from "../services/custom-dashboard-validation-utils.js";
 
 interface CustomDashboardRow {
   id: string;
@@ -124,6 +128,20 @@ const RESERVED_ROUTE_PREFIXES = [
   "/settings",
   "/sprints",
 ];
+const CREDENTIAL_VALUE_FIELDS = new Set([
+  "authorization",
+  "apikey",
+  "apitoken",
+  "xapikey",
+  "accesstoken",
+  "authtoken",
+  "clientsecret",
+  "credentialvalue",
+  "password",
+  "secret",
+  "token",
+  "value",
+]);
 
 export class CustomDashboardRepository {
   private readonly db: DatabaseAdapter;
@@ -924,6 +942,9 @@ export class CustomDashboardRepository {
     if (typeof input.content !== "string") {
       throw new ValidationError(`Custom dashboard file content must be a string: ${path}`);
     }
+    if (containsRawCustomDashboardSourceSecret(input.content)) {
+      throw new ValidationError(`Custom dashboard source contains a raw secret literal: ${path}`);
+    }
     return {
       path,
       content: input.content,
@@ -1043,7 +1064,7 @@ export class CustomDashboardRepository {
       if (!binding || typeof binding !== "object" || Array.isArray(binding)) {
         throw new ValidationError("Custom dashboard credential bindings must be objects.");
       }
-      if (["value", "secret", "token", "password", "apiKey"].some((field) => field in binding)) {
+      if (Object.keys(binding).some((field) => this.isCredentialValueField(field))) {
         throw new ValidationError("Custom dashboard credential bindings cannot contain secret values.");
       }
       const slotId = this.normalizeIdentifier(binding?.slot, "credential binding slot");
@@ -1290,6 +1311,7 @@ export class CustomDashboardRepository {
     if (!input || typeof input !== "object" || typeof input.valid !== "boolean" || !Array.isArray(input.issues)) {
       throw new ValidationError("Custom dashboard validation report requires valid and issues fields.");
     }
+    this.assertNoRawSecrets(input);
     return {
       valid: input.valid,
       ...(input.summary?.trim() ? { summary: input.summary.trim() } : {}),
@@ -1338,7 +1360,20 @@ export class CustomDashboardRepository {
     if (!this.isJsonObject(input)) {
       throw new ValidationError("Custom dashboard JSON payloads must be JSON objects.");
     }
+    this.assertNoRawSecrets(input);
     return this.parseJsonObject(this.serializeJson(input));
+  }
+
+  private assertNoRawSecrets(input: unknown): void {
+    try {
+      assertNoRawCustomDashboardSecrets(input);
+    } catch (error) {
+      throw new ValidationError(error instanceof Error ? error.message : "Custom dashboard metadata contains a raw secret literal.");
+    }
+  }
+
+  private isCredentialValueField(field: string): boolean {
+    return CREDENTIAL_VALUE_FIELDS.has(field.toLowerCase().replace(/[^a-z0-9]/g, ""));
   }
 
   private serializeJson(value: unknown): string {
@@ -1387,6 +1422,11 @@ export class CustomDashboardRepository {
     const parsed = this.parseJson(value ?? "[]");
     if (!Array.isArray(parsed)) {
       throw new ValidationError("Persisted custom dashboard credential bindings are invalid.");
+    }
+    this.assertNoRawSecrets(parsed);
+    if (parsed.some((binding) => this.isJsonObject(binding)
+      && Object.keys(binding).some((field) => this.isCredentialValueField(field)))) {
+      throw new ValidationError("Persisted custom dashboard credential bindings contain secret values.");
     }
     return parsed as CustomDashboardCredentialBinding[];
   }

@@ -33,7 +33,7 @@ Generated dashboards should handle unavailable-source errors visibly, including 
 
 ### Credential slots and bindings
 
-Source nodes may declare up to 32 credential slots with a stable slot identifier, label, allowed credential kinds, and required capability. Draft bindings contain only a declared slot and a project-accessible credential ID. Code UX verifies project scope, active/configured status, kind, and capability, then records a stable `custom-dashboard:<dashboard-id>:<slot>` server binding. Responses expose non-secret credential metadata only, and revisions retain their binding snapshot when a draft is rebound.
+Source nodes may declare up to 32 credential slots with a stable slot identifier, label, allowed credential kinds, and required capability. Draft bindings contain only a declared slot and a project-accessible credential ID. Code UX verifies project scope, active/configured status, kind, and capability, then records a stable `custom-dashboard:<dashboard-id>:<slot>` server binding. Dashboard, revision, catalog, REST, MCP, and runtime payloads expose non-secret credential metadata only. Draft and revision writes reject raw credential-shaped fields, static authorization/API-key headers, bearer literals, and embedded source credentials before persistence, while declarative `headerName` and `scheme` values remain supported. Revisions retain their binding snapshot when a draft is rebound.
 
 The workspace renders only credential metadata. Bind writes `{ slot, credentialId }`; rotate and revoke use project-scoped credential broker routes. A rotated value is write-only, is cleared after the request, and never enters generated code, dashboard JSON, logs, iframe configuration, or share URLs. Revoke requires confirmation.
 

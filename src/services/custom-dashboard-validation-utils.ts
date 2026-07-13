@@ -19,7 +19,25 @@ export const CUSTOM_DASHBOARD_MAX_SOURCE_TOTAL_BYTES = 2 * 1024 * 1024;
 const SUPPORTED_SOURCE_EXTENSION = /\.(?:ts|tsx|css)$/i;
 const TYPESCRIPT_ENTRY_EXTENSION = /\.(?:ts|tsx)$/i;
 const RESERVED_CONFIGURATION_FILE = /(^|\/)(?:package(?:-lock)?\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|\.npmrc|vite\.config\.[^/]+|tsconfig(?:\.[^/]+)?\.json|postcss\.config\.[^/]+|tailwind\.config\.[^/]+)$/i;
-const RAW_SECRET_LITERAL = /(?:api[_-]?key|client[_-]?secret|access[_-]?token|auth[_-]?token|password|secret)\s*(?::|=)\s*["'`](?!\s*(?:"|'|`))[^"'`\r\n]{4,}["'`]|\bBearer\s+[A-Za-z0-9._~+/=-]{8,}|\bsk-[A-Za-z0-9_-]{8,}/i;
+const RAW_SECRET_LITERAL = /["']?(?:authorization|x[_-]?api[_-]?key|api[_-]?(?:key|token)|client[_-]?secret|access[_-]?token|auth[_-]?token|password|secret)["']?\s*(?::|=)\s*["'`](?!\s*(?:"|'|`))[^"'`\r\n]{4,}["'`]|\bBearer\s+[A-Za-z0-9._~+/=-]{8,}|\bsk-[A-Za-z0-9_-]{8,}/i;
+const RAW_SECRET_VALUE = /^\s*Bearer\s+\S{4,}\s*$/i;
+const RAW_SECRET_ASSIGNMENT = /\b(?:authorization|x[_-]?api[_-]?key|api[_-]?(?:key|token)|client[_-]?secret|access[_-]?token|auth[_-]?token|password|secret)\s*(?::|=)\s*(?:Bearer\s+)?[^\s&;,]{4,}/i;
+const RAW_SECRET_KEY = new Set([
+  "authorization",
+  "apikey",
+  "apitoken",
+  "xapikey",
+  "accesstoken",
+  "authtoken",
+  "xauthtoken",
+  "bearertoken",
+  "clientsecret",
+  "credentialsecret",
+  "credentialvalue",
+  "password",
+  "secret",
+  "token",
+]);
 
 export const CUSTOM_DASHBOARD_BUILD_DEPENDENCIES: Record<CustomDashboardBuildDependency, string> = Object.freeze({
   "@preact/preset-vite": "2.10.5",
@@ -184,8 +202,9 @@ export async function materializeCustomDashboardWorkspace(args: {
 export function buildCustomDashboardBuildManifest(
   revision: CustomDashboardRevisionRecord,
 ): CustomDashboardBuildManifest {
-  assertNoRawSecretJson({
+  assertNoRawCustomDashboardSecrets({
     manifestMetadata: revision.manifest.metadata ?? {},
+    fileBundleMetadata: revision.fileBundle.metadata ?? {},
     runtimeMetadata: revision.runtimeMetadata,
     styleguide: revision.styleguide,
     sourceNodeGraph: revision.sourceNodeGraph,
@@ -220,7 +239,7 @@ export function buildCustomDashboardBuildManifest(
     if (totalBytes > CUSTOM_DASHBOARD_MAX_SOURCE_TOTAL_BYTES) {
       throw new Error("Custom dashboard source bundle exceeds the maximum allowed size.");
     }
-    if (RAW_SECRET_LITERAL.test(file.content)) {
+    if (containsRawCustomDashboardSourceSecret(file.content)) {
       throw new Error(`Custom dashboard source contains a raw secret literal: ${filePath}`);
     }
     bundlePaths.set(filePath, file);
@@ -248,25 +267,41 @@ export function buildCustomDashboardBuildManifest(
   };
 }
 
-function assertNoRawSecretJson(value: unknown, pathSegments: string[] = []): void {
+export function assertNoRawCustomDashboardSecrets(value: unknown, pathSegments: string[] = []): void {
   if (typeof value === "string") {
     const field = pathSegments.at(-1) ?? "value";
-    const sensitiveField = /^(?:authorization|api[_-]?key|client[_-]?secret|access[_-]?token|auth[_-]?token|password|secret|credentialValue)$/i;
-    if ((sensitiveField.test(field) && value.trim().length > 0)
-      || /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}|\bsk-[A-Za-z0-9_-]{8,}/i.test(value)) {
+    if ((isRawSecretKey(field) && value.trim().length > 0)
+      || RAW_SECRET_VALUE.test(value)
+      || RAW_SECRET_ASSIGNMENT.test(value)
+      || /\bsk-[A-Za-z0-9_-]{8,}/i.test(value)) {
       throw new Error(`Custom dashboard metadata contains a raw secret literal at ${pathSegments.join(".") || "metadata"}.`);
     }
     return;
   }
   if (Array.isArray(value)) {
-    value.forEach((entry, index) => assertNoRawSecretJson(entry, [...pathSegments, String(index)]));
+    value.forEach((entry, index) => assertNoRawCustomDashboardSecrets(entry, [...pathSegments, String(index)]));
     return;
   }
   if (value && typeof value === "object") {
     for (const [key, entry] of Object.entries(value)) {
-      assertNoRawSecretJson(entry, [...pathSegments, key]);
+      if (isRawSecretKey(key) && hasRawSecretValue(entry)) {
+        throw new Error(`Custom dashboard metadata contains a raw secret literal at ${[...pathSegments, key].join(".")}.`);
+      }
+      assertNoRawCustomDashboardSecrets(entry, [...pathSegments, key]);
     }
   }
+}
+
+export function containsRawCustomDashboardSourceSecret(content: string): boolean {
+  return RAW_SECRET_LITERAL.test(content);
+}
+
+function isRawSecretKey(key: string): boolean {
+  return RAW_SECRET_KEY.has(key.toLowerCase().replace(/[^a-z0-9]/g, ""));
+}
+
+function hasRawSecretValue(value: unknown): boolean {
+  return value !== null && value !== undefined && !(typeof value === "string" && value.trim().length === 0);
 }
 
 function assertDeclaredTypeScriptEntry(entryFile: string, declaredPaths: string[], label: string): void {
