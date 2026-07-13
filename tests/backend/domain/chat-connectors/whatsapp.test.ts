@@ -231,6 +231,66 @@ describe("WhatsApp Cloud API profile", () => {
     expect((error as Error).message).not.toContain(SENDER_WA_ID);
   });
 
+  it.each([
+    {
+      label: "invalid authentication",
+      error: { message: `Invalid ${ACCESS_TOKEN} for ${SENDER_WA_ID}`, type: "OAuthException", code: 190 },
+      retryable: false,
+      expectedMessage: "Meta Graph API request failed (HTTP 200, code 190).",
+    },
+    {
+      label: "transient Graph failure",
+      error: { message: `Retry ${SENDER_WA_ID}`, type: "OAuthException", code: 2, is_transient: true },
+      retryable: true,
+      expectedMessage: "Meta Graph API request failed (HTTP 200, code 2).",
+    },
+  ])("preserves typed retryability for HTTP-200 $label envelopes", async ({ error: graphError, retryable, expectedMessage }) => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ error: graphError }), {
+      status: 200,
+      headers: { "x-meta-request-id": "request-1" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const error = await new ConfiguredChatProviderOutboundAdapter().send(officialContext()).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ChatProviderOutboundAdapterError);
+    expect(error).toMatchObject({ retryable, statusCode: 200 });
+    expect((error as Error).message).toBe(expectedMessage);
+    expect((error as Error).message).not.toContain(ACCESS_TOKEN);
+    expect((error as Error).message).not.toContain(SENDER_WA_ID);
+  });
+
+  it.each([
+    ["managed_bridge", { bridgeUrl: "https://managed.example.test/send" }],
+    ["webhook", { webhookUrl: "https://webhook.example.test/send" }],
+  ] as const)("keeps HTTP-200 Meta-shaped envelopes on the %s legacy parser", async (mode, setup) => {
+    const envelope = {
+      error: { message: "Legacy bridge metadata", code: 130429, is_transient: true },
+      messageId: `legacy-${mode}`,
+    };
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(envelope), { status: 200 })));
+
+    const result = await new ConfiguredChatProviderOutboundAdapter().send(contextForMode(mode, setup));
+
+    expect(result).toMatchObject({
+      externalMessageId: `legacy-${mode}`,
+      responseMetadata: envelope,
+    });
+  });
+
+  it.each([
+    ["managed_bridge", { bridgeUrl: "https://managed.example.test/send" }, 400, false],
+    ["webhook", { webhookUrl: "https://webhook.example.test/send" }, 503, true],
+  ] as const)("keeps %s legacy non-2xx error behavior", async (mode, setup, statusCode, retryable) => {
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response("legacy bridge failure", { status: statusCode })));
+
+    const error = await new ConfiguredChatProviderOutboundAdapter().send(contextForMode(mode, setup)).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ChatProviderOutboundAdapterError);
+    expect(error).toMatchObject({ retryable, statusCode });
+    expect((error as Error).message).toBe(`${mode} bridge returned HTTP ${statusCode}: legacy bridge failure`);
+  });
+
   it("classifies outbound timeouts as retryable without leaking authorization or recipient data", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(new Error("The operation timed out"));
     vi.stubGlobal("fetch", fetchMock);

@@ -126,6 +126,12 @@ export interface ChatConnectorOutboundErrorClassification {
   retryable: boolean;
 }
 
+export interface ChatConnectorOutboundResponseContext {
+  bridgeMode: ChatProviderBridgeMode;
+  statusCode: number;
+  headers: Readonly<Record<string, string>>;
+}
+
 export interface ChatConnectorVerificationResult {
   valid: boolean;
   issues: readonly string[];
@@ -150,12 +156,16 @@ export interface ChatConnectorProfile {
   };
   outbound: {
     buildRequest(context: ChatConnectorOutboundContext): ChatConnectorOutboundRequest;
-    parseResponse(responseBody: string): ChatConnectorOutboundResult;
+    parseResponse(
+      responseBody: string,
+      context?: ChatConnectorOutboundResponseContext,
+    ): ChatConnectorOutboundResult;
     isRetryableStatus(statusCode: number): boolean;
     classifyError?(
       statusCode: number,
       responseBody: string,
-    ): ChatConnectorOutboundErrorClassification;
+      context?: ChatConnectorOutboundResponseContext,
+    ): ChatConnectorOutboundErrorClassification | null;
   };
   verification: {
     strategy: "configuration" | "configuration_and_live";

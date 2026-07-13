@@ -109,17 +109,32 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
     }
 
     const responseText = await response.text().catch(() => "");
-    if (!response.ok) {
-      const classification = profile.outbound.classifyError?.(response.status, responseText);
+    const responseContext = {
+      bridgeMode: context.connection.bridgeMode,
+      statusCode: response.status,
+      headers: Object.fromEntries(response.headers.entries()),
+    } as const;
+    const classification = profile.outbound.classifyError?.(
+      response.status,
+      responseText,
+      responseContext,
+    );
+    if (classification) {
       throw new ChatProviderOutboundAdapterError(
-        classification?.message
-          ?? `${context.connection.bridgeMode} bridge returned HTTP ${response.status}${responseText ? `: ${responseText.slice(0, 500)}` : ""}`,
-        classification?.retryable ?? profile.outbound.isRetryableStatus(response.status),
+        classification.message,
+        classification.retryable,
+        response.status,
+      );
+    }
+    if (!response.ok) {
+      throw new ChatProviderOutboundAdapterError(
+        `${context.connection.bridgeMode} bridge returned HTTP ${response.status}${responseText ? `: ${responseText.slice(0, 500)}` : ""}`,
+        profile.outbound.isRetryableStatus(response.status),
         response.status,
       );
     }
 
-    return profile.outbound.parseResponse(responseText);
+    return profile.outbound.parseResponse(responseText, responseContext);
   }
 
   private async sendNative(

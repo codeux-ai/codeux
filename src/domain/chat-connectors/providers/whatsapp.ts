@@ -2,7 +2,9 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { ChatProviderBridgeMode } from "../../../contracts/chat-provider-types.js";
 import { redactText } from "../../../shared/security/redaction.js";
 import type {
+  ChatConnectorOutboundErrorClassification,
   ChatConnectorOutboundContext,
+  ChatConnectorOutboundResponseContext,
   ChatConnectorOutboundResult,
   ChatConnectorProfile,
   ChatConnectorVerificationResult,
@@ -375,7 +377,28 @@ function resolveInboundSenderWhatsAppId(context: ChatConnectorOutboundContext): 
   return recipient;
 }
 
-function parseWhatsAppOutboundResponse(responseBody: string): ChatConnectorOutboundResult {
+function classifyWhatsAppOutboundError(
+  statusCode: number,
+  responseBody: string,
+  context?: ChatConnectorOutboundResponseContext,
+): ChatConnectorOutboundErrorClassification | null {
+  if (context?.bridgeMode !== "official_api") {
+    return null;
+  }
+  const hasStructuredError = readRecord(parseJsonRecord(responseBody)?.error) !== null;
+  if (statusCode >= 200 && statusCode < 300 && !hasStructuredError) {
+    return null;
+  }
+  return classifyWhatsAppGraphError(statusCode, responseBody);
+}
+
+function parseWhatsAppOutboundResponse(
+  responseBody: string,
+  context?: ChatConnectorOutboundResponseContext,
+): ChatConnectorOutboundResult {
+  if (context?.bridgeMode !== "official_api") {
+    return parseLegacyOutboundResponse(responseBody);
+  }
   const payload = parseJsonRecord(responseBody);
   if (!payload) {
     return parseLegacyOutboundResponse(responseBody);
@@ -542,7 +565,7 @@ export const whatsappChatConnectorProfile: WhatsAppChatConnectorProfile = {
     },
     parseResponse: parseWhatsAppOutboundResponse,
     isRetryableStatus: isLegacyRetryableHttpStatus,
-    classifyError: classifyWhatsAppGraphError,
+    classifyError: classifyWhatsAppOutboundError,
   },
   verification: {
     strategy: "configuration_and_live",

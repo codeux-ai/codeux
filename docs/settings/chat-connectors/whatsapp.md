@@ -28,12 +28,12 @@ Official text and reply requests are sent only to:
 https://graph.facebook.com/{graphApiVersion}/{phoneNumberId}/messages
 ```
 
-Requests include `messaging_product: whatsapp`; replies also include `context.message_id`. The recipient is the original sender WhatsApp ID, never the business phone-number channel ID. Successful `messages[].id` values are retained as outbound `wamid` delivery IDs. Non-2xx Graph responses are classified through sanitized status, error-code, subcode, and transient metadata so structured Meta throttling errors can retry without echoing tokens or recipient data.
+Requests include `messaging_product: whatsapp`; replies also include `context.message_id`. The recipient is the original sender WhatsApp ID, never the business phone-number channel ID. Successful `messages[].id` values are retained as outbound `wamid` delivery IDs. Official responses are classified through sanitized status, error-code, subcode, and transient metadata before generic HTTP handling, including Graph error envelopes returned with HTTP 200. This preserves typed retryability without echoing tokens or recipient data.
 
 Connection verification is read-only. It performs a GET for the configured test or registered phone-number resource and checks that Meta returns the same ID. It never sends a WhatsApp message. Send-based testing remains reserved for the separately opted-in Meta test-number workflow.
 
 ## Legacy compatibility
 
-Managed setup still uses `pluginName`, optional `workspaceId`, and `bridgeApiKey`. Generic webhook setup still uses `webhookUrl`, optional `verifyTokenName`, `webhookSecret`, and optional `verifyToken`. Their URL fallback, credential lookup, payload, response parsing, and stored record meanings are unchanged.
+Managed setup still uses `pluginName`, optional `workspaceId`, and `bridgeApiKey`. Generic webhook setup still uses `webhookUrl`, optional `verifyTokenName`, `webhookSecret`, and optional `verifyToken`. Their URL fallback, credential lookup, payload, response parsing, raw non-2xx error detail, HTTP-status retry rules, and stored record meanings are unchanged. Meta-shaped envelopes are interpreted as Graph responses only in `official_api` mode.
 
 Official references: [WhatsApp Cloud API](https://developers.facebook.com/docs/whatsapp/cloud-api), [Meta Webhooks](https://developers.facebook.com/docs/graph-api/webhooks/getting-started), and [Meta's WhatsApp Business Platform Postman collection](https://www.postman.com/meta/whatsapp-business-platform/overview).
