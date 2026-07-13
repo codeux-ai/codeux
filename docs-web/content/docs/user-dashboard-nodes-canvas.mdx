@@ -26,7 +26,11 @@ Validated custom definitions can also execute after their immutable artifact and
 
 ## Credentials, review, and publication
 
-Credential slots display metadata-only status such as bound, missing, or denied and can submit a binding request. Secret values remain behind the credential broker and are not returned to the graph or browser.
+Credential slots display metadata-only status such as bound, missing, or denied. Opening a slot picker loads project-visible credential metadata and secure-backend health, then assesses every candidate against the versioned definition's allowed kinds and required capabilities. Only active, configured, project-authorized candidates with compatible kind/capabilities and ready secure custody are selectable; incompatible candidates remain non-selectable with a safe policy reason. The picker never resolves credential plaintext.
+
+Bind, replace, and remove actions persist directly from the inspector. Code UX changes only the selected slot's `{ slot, credentialId }` entry in the node's canonical `credentialBindings`, preserves sibling bindings and node data, and saves the complete graph with the loaded `draftRevision`. Removing a required binding is allowed as a draft edit, but the refreshed review immediately marks that requirement missing and blocks publication until it is satisfied.
+
+After a successful mutation, the page refetches the canonical flow, adopts its new revision, and refreshes governed review before reporting success. If another editor advanced the draft, the optimistic conflict path loads the latest flow and review, keeps the selected node/slot workflow available, and requires the operator to choose again; it never replays the stale binding over newer edits. Authorization or compatibility denial leaves the prior binding state intact or reports the saved binding as currently denied. Graphs, requests, component state, notices, browser storage, logs, and rendered review contain credential IDs and non-secret metadata only—never stored values.
 
 Agent attachments are also metadata-only. The selected project supplies the available preset names, and the selected flow supplies its current skill names and descriptions. Attach and detach refresh that governed backend state; project or flow transitions clear previous bindings and ignore obsolete requests. Agent instructions, custom source, credentials, and decrypted values are never rendered by the attachment controls.
 
