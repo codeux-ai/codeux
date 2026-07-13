@@ -161,6 +161,15 @@ interface ChatProviderSessionRow {
   updated_at: string;
 }
 
+interface PreparedChatProviderConnectionUpdate {
+  displayName: string;
+  bridgeMode: ChatProviderBridgeMode;
+  status: ChatProviderConnectionStatus;
+  enabled: boolean;
+  setup: ChatProviderSetupConfig;
+  transportChanged: boolean;
+}
+
 export class ChatProviderConcurrentModificationError extends Error {
   constructor(message: string) {
     super(message);
@@ -269,19 +278,7 @@ export class ChatProviderRepository {
       throw new ValidationError("Connector secrets must be written through ChatProviderSecretService.");
     }
     const existing = this.requireConnectionInternal(connectionId);
-    const providerKind = existing.providerKind;
-    const bridgeMode = input.bridgeMode
-      ? this.resolveBridgeMode(providerKind, input.bridgeMode)
-      : existing.bridgeMode;
-    const status = input.status ? this.requireConnectionStatus(input.status) : existing.status;
-    const setup = input.setup !== undefined
-      ? this.sanitizeSetup(providerKind, input.setup)
-      : existing.setup;
-    const setupChanged = this.stringifyJson(setup) !== this.stringifyJson(existing.setup);
-    const transportChanged = bridgeMode !== existing.bridgeMode
-      || setupChanged
-      || (input.enabled !== undefined && input.enabled !== existing.enabled)
-      || (input.status !== undefined && status !== existing.status);
+    const update = this.prepareConnectionUpdate(existing, input);
     const now = new Date().toISOString();
 
     this.db.prepare(`
@@ -298,18 +295,61 @@ export class ChatProviderRepository {
         updated_at = ?
       WHERE id = ?
     `).run(
-      input.displayName !== undefined ? this.requireNonEmpty(input.displayName, "displayName") : existing.displayName,
-      bridgeMode,
-      status,
-      input.enabled !== undefined ? (input.enabled ? 1 : 0) : (existing.enabled ? 1 : 0),
-      this.stringifyJson(setup),
-      transportChanged ? 1 : 0,
-      transportChanged ? 1 : 0,
-      transportChanged ? 1 : 0,
+      update.displayName,
+      update.bridgeMode,
+      update.status,
+      update.enabled ? 1 : 0,
+      this.stringifyJson(update.setup),
+      update.transportChanged ? 1 : 0,
+      update.transportChanged ? 1 : 0,
+      update.transportChanged ? 1 : 0,
       now,
       connectionId,
     );
     return this.requireConnection(connectionId);
+  }
+
+  updateConnectionWithEnvelope(
+    connectionId: string,
+    input: Omit<UpdateChatProviderConnectionInput, "secrets">,
+    expectedSecretVersion: number,
+    envelope: StoredSecretEnvelope | null,
+    secretKeys: string[],
+  ): ChatProviderConnectionRecord {
+    if (envelope && envelope.credentialId !== connectionId) {
+      throw new ValidationError("Connector secret envelope id does not match its connection metadata.");
+    }
+    const existing = this.requireConnectionInternal(connectionId);
+    const update = this.prepareConnectionUpdate(existing, input);
+    const expectedVersion = this.requireNonNegativeInteger(expectedSecretVersion, "expectedSecretVersion");
+    return this.db.transaction(() => {
+      const now = new Date().toISOString();
+      const result = this.db.prepare(`
+        UPDATE chat_provider_connections
+        SET display_name = ?, bridge_mode = ?, status = ?, enabled = ?, setup_json = ?,
+            verification_status = 'unverified', verification_details_json = NULL, verified_at = NULL,
+            secret_version = secret_version + 1, secret_json = NULL, updated_at = ?
+        WHERE id = ? AND secret_version = ?
+      `).run(
+        update.displayName,
+        update.bridgeMode,
+        update.status,
+        update.enabled ? 1 : 0,
+        this.stringifyJson(update.setup),
+        now,
+        connectionId,
+        expectedVersion,
+      );
+      if (result.changes !== 1) {
+        throw new ChatProviderConcurrentModificationError("Connector secrets changed concurrently; retry the operation.");
+      }
+      if (envelope) {
+        this.putEnvelope(envelope, secretKeys);
+      } else {
+        this.db.prepare("DELETE FROM chat_provider_connection_secrets WHERE provider_connection_id = ?").run(connectionId);
+      }
+      return this.requireConnection(connectionId);
+    });
   }
 
   getConnection(connectionId: string): ChatProviderConnectionRecord | null {
@@ -370,41 +410,11 @@ export class ChatProviderRepository {
     envelope: StoredSecretEnvelope,
     secretKeys: string[],
   ): ChatProviderConnectionRecord {
-    if (envelope.credentialId !== connectionId) {
-      throw new ValidationError("Connector secret envelope id does not match its connection metadata.");
-    }
-    return this.db.transaction(() => {
-      const now = new Date().toISOString();
-      const update = this.db.prepare(`
-        UPDATE chat_provider_connections
-        SET secret_version = secret_version + 1,
-            verification_status = 'unverified', verification_details_json = NULL, verified_at = NULL,
-            secret_json = NULL, updated_at = ?
-        WHERE id = ? AND secret_version = ?
-      `).run(now, connectionId, expectedVersion);
-      if (update.changes !== 1) {
-        throw new ChatProviderConcurrentModificationError("Connector secrets changed concurrently; retry the operation.");
-      }
-      this.putEnvelope(envelope, secretKeys);
-      return this.requireConnection(connectionId);
-    });
+    return this.updateConnectionWithEnvelope(connectionId, {}, expectedVersion, envelope, secretKeys);
   }
 
   clearConnectionSecrets(connectionId: string, expectedVersion: number): ChatProviderConnectionRecord {
-    return this.db.transaction(() => {
-      const update = this.db.prepare(`
-        UPDATE chat_provider_connections
-        SET secret_version = secret_version + 1,
-            verification_status = 'unverified', verification_details_json = NULL, verified_at = NULL,
-            secret_json = NULL, updated_at = ?
-        WHERE id = ? AND secret_version = ?
-      `).run(new Date().toISOString(), connectionId, expectedVersion);
-      if (update.changes !== 1) {
-        throw new ChatProviderConcurrentModificationError("Connector secrets changed concurrently; retry the operation.");
-      }
-      this.db.prepare("DELETE FROM chat_provider_connection_secrets WHERE provider_connection_id = ?").run(connectionId);
-      return this.requireConnection(connectionId);
-    });
+    return this.updateConnectionWithEnvelope(connectionId, {}, expectedVersion, null, []);
   }
 
   updateVerification(
@@ -1253,6 +1263,33 @@ export class ChatProviderRepository {
       }
     }
     return sanitized;
+  }
+
+  private prepareConnectionUpdate(
+    existing: ChatProviderConnectionInternalRecord,
+    input: Omit<UpdateChatProviderConnectionInput, "secrets">,
+  ): PreparedChatProviderConnectionUpdate {
+    const bridgeMode = input.bridgeMode
+      ? this.resolveBridgeMode(existing.providerKind, input.bridgeMode)
+      : existing.bridgeMode;
+    const status = input.status ? this.requireConnectionStatus(input.status) : existing.status;
+    const setup = input.setup !== undefined
+      ? this.sanitizeSetup(existing.providerKind, input.setup)
+      : existing.setup;
+    const enabled = input.enabled ?? existing.enabled;
+    return {
+      displayName: input.displayName !== undefined
+        ? this.requireNonEmpty(input.displayName, "displayName")
+        : existing.displayName,
+      bridgeMode,
+      status,
+      enabled,
+      setup,
+      transportChanged: bridgeMode !== existing.bridgeMode
+        || this.stringifyJson(setup) !== this.stringifyJson(existing.setup)
+        || enabled !== existing.enabled
+        || status !== existing.status,
+    };
   }
 
   private resolveBridgeMode(providerKind: ChatProviderKind, bridgeMode: string | undefined): ChatProviderBridgeMode {

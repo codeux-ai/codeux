@@ -61,10 +61,14 @@ export class ChatProviderSecretService {
     }
 
     const { secrets: _secrets, ...metadata } = input;
-    this.repository.updateConnection(connectionId, metadata);
-    if (envelope === undefined) return this.requireConnection(connectionId);
-    if (envelope === null) return this.repository.clearConnectionSecrets(connectionId, existing.secretVersion);
-    return this.repository.replaceSecretEnvelope(connectionId, existing.secretVersion, envelope, secretKeys);
+    if (envelope === undefined) return this.repository.updateConnection(connectionId, metadata);
+    return this.repository.updateConnectionWithEnvelope(
+      connectionId,
+      metadata,
+      existing.secretVersion,
+      envelope,
+      secretKeys,
+    );
   }
 
   async resolveConnection(connectionId: string): Promise<ChatProviderConnectionInternalRecord> {

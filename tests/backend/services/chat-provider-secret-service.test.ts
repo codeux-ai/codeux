@@ -64,6 +64,172 @@ describe("ChatProviderSecretService", () => {
     expect(repository.getEnvelope(connection.id)).toBeNull();
   });
 
+  it("creates and clears an envelope in the same CAS transaction as metadata", async () => {
+    const { repository } = await createRepository();
+    const service = new ChatProviderSecretService(repository, createKeyProvider());
+    const created = await service.createConnection({
+      providerKind: "telegram",
+      displayName: "Unconfigured connector",
+      bridgeMode: "webhook",
+    });
+    service.updateVerification(created.id, "verified", { endpoint: "ready" });
+
+    const configured = await service.updateConnection(created.id, {
+      displayName: "Configured connector",
+      setup: { webhookUrl: "https://example.test/telegram" },
+      secrets: { botToken: "configured-token" },
+    });
+    expect(configured).toMatchObject({
+      displayName: "Configured connector",
+      setup: { webhookUrl: "https://example.test/telegram" },
+      verificationStatus: "unverified",
+      secretVersion: 1,
+    });
+    expect(repository.getEnvelope(created.id)).not.toBeNull();
+
+    const cleared = await service.updateConnection(created.id, {
+      displayName: "Cleared connector",
+      secrets: null,
+    });
+    expect(cleared).toMatchObject({
+      displayName: "Cleared connector",
+      verificationStatus: "unverified",
+      secretVersion: 2,
+    });
+    expect(repository.getEnvelope(created.id)).toBeNull();
+  });
+
+  it("allows only one concurrent metadata and secret update to win the expected-version CAS", async () => {
+    const { repository } = await createRepository();
+    const service = new ChatProviderSecretService(repository, createKeyProvider());
+    const connection = await service.createConnection({
+      providerKind: "slack",
+      displayName: "CAS baseline",
+      secrets: { signingSecret: "baseline-secret" },
+    });
+
+    const results = await Promise.allSettled([
+      service.updateConnection(connection.id, {
+        displayName: "CAS winner A",
+        secrets: { signingSecret: "secret-a" },
+      }),
+      service.updateConnection(connection.id, {
+        displayName: "CAS winner B",
+        secrets: { signingSecret: "secret-b" },
+      }),
+    ]);
+
+    const fulfilled = results.filter((result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof service.updateConnection>>> => (
+      result.status === "fulfilled"
+    ));
+    const rejected = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0].reason).toMatchObject({ name: "ChatProviderConcurrentModificationError" });
+    expect(repository.getConnection(connection.id)).toMatchObject({
+      displayName: fulfilled[0].value.displayName,
+      secretVersion: 2,
+    });
+    const resolved = await service.resolveConnection(connection.id);
+    expect(resolved.secrets).toEqual({
+      signingSecret: fulfilled[0].value.displayName === "CAS winner A" ? "secret-a" : "secret-b",
+    });
+  });
+
+  it("rolls back metadata, verification, version, legacy plaintext, and envelope when envelope creation fails", async () => {
+    const { storage, repository } = await createRepository();
+    const service = new ChatProviderSecretService(repository, createKeyProvider());
+    const connection = await service.createConnection({
+      providerKind: "slack",
+      displayName: "Create rollback",
+      bridgeMode: "webhook",
+      setup: { eventsUrl: "https://example.test/original" },
+    });
+    service.updateVerification(connection.id, "verified", { endpoint: "original" });
+    storage.getDatabase().prepare("UPDATE chat_provider_connections SET secret_json = ? WHERE id = ?")
+      .run('{"signingSecret":"legacy-create"}', connection.id);
+    const before = readAtomicSnapshot(storage, connection.id);
+    storage.getDatabase().exec(`
+      CREATE TRIGGER fail_chat_provider_secret_create
+      BEFORE INSERT ON chat_provider_connection_secrets
+      BEGIN
+        SELECT RAISE(ABORT, 'injected envelope creation failure');
+      END
+    `);
+
+    await expect(service.updateConnection(connection.id, {
+      displayName: "Must roll back",
+      status: "disabled",
+      setup: { eventsUrl: "https://example.test/changed" },
+      secrets: { signingSecret: "new-create-secret" },
+    })).rejects.toThrow("injected envelope creation failure");
+
+    expect(readAtomicSnapshot(storage, connection.id)).toEqual(before);
+  });
+
+  it("rolls back metadata and the existing envelope when envelope replacement fails", async () => {
+    const { storage, repository } = await createRepository();
+    const service = new ChatProviderSecretService(repository, createKeyProvider());
+    const connection = await service.createConnection({
+      providerKind: "discord",
+      displayName: "Replace rollback",
+      bridgeMode: "webhook",
+      setup: { gatewayUrl: "https://example.test/original" },
+      secrets: { botToken: "original-token" },
+    });
+    service.updateVerification(connection.id, "verified", { endpoint: "original" });
+    storage.getDatabase().prepare("UPDATE chat_provider_connections SET secret_json = ? WHERE id = ?")
+      .run('{"botToken":"legacy-replace"}', connection.id);
+    const before = readAtomicSnapshot(storage, connection.id);
+    storage.getDatabase().exec(`
+      CREATE TRIGGER fail_chat_provider_secret_replace
+      BEFORE INSERT ON chat_provider_connection_secrets
+      BEGIN
+        SELECT RAISE(ABORT, 'injected envelope replacement failure');
+      END
+    `);
+
+    await expect(service.updateConnection(connection.id, {
+      displayName: "Must roll back",
+      enabled: false,
+      setup: { gatewayUrl: "https://example.test/changed" },
+      secrets: { botToken: "replacement-token" },
+    })).rejects.toThrow("injected envelope replacement failure");
+
+    expect(readAtomicSnapshot(storage, connection.id)).toEqual(before);
+    expect((await service.resolveConnection(connection.id)).secrets).toEqual({ botToken: "original-token" });
+  });
+
+  it("rolls back metadata and the existing envelope when envelope clearing fails", async () => {
+    const { storage, repository } = await createRepository();
+    const service = new ChatProviderSecretService(repository, createKeyProvider());
+    const connection = await service.createConnection({
+      providerKind: "telegram",
+      displayName: "Clear rollback",
+      bridgeMode: "webhook",
+      secrets: { botToken: "original-token" },
+    });
+    service.updateVerification(connection.id, "verified", { endpoint: "original" });
+    storage.getDatabase().prepare("UPDATE chat_provider_connections SET secret_json = ? WHERE id = ?")
+      .run('{"botToken":"legacy-clear"}', connection.id);
+    const before = readAtomicSnapshot(storage, connection.id);
+    storage.getDatabase().exec(`
+      CREATE TRIGGER fail_chat_provider_secret_clear
+      BEFORE DELETE ON chat_provider_connection_secrets
+      BEGIN
+        SELECT RAISE(ABORT, 'injected envelope clear failure');
+      END
+    `);
+
+    await expect(service.updateConnection(connection.id, {
+      displayName: "Must roll back",
+      secrets: null,
+    })).rejects.toThrow("injected envelope clear failure");
+
+    expect(readAtomicSnapshot(storage, connection.id)).toEqual(before);
+    expect((await service.resolveConnection(connection.id)).secrets).toEqual({ botToken: "original-token" });
+  });
+
   it("commits each legacy seal atomically, resumes after a partial failure, and is idempotent", async () => {
     const { storage, repository } = await createRepository();
     const first = repository.createConnection({ providerKind: "discord", displayName: "Legacy one" });
@@ -128,4 +294,21 @@ function readLegacy(storage: AppDbStorage, connectionId: string): string | null 
   const row = storage.getDatabase().prepare("SELECT secret_json FROM chat_provider_connections WHERE id = ?")
     .get(connectionId) as { secret_json: string | null };
   return row.secret_json;
+}
+
+function readAtomicSnapshot(storage: AppDbStorage, connectionId: string): Record<string, unknown> {
+  const connection = storage.getDatabase().prepare(`
+    SELECT display_name, bridge_mode, status, enabled, setup_json, secret_json,
+           verification_status, verification_details_json, verified_at, secret_version, updated_at
+    FROM chat_provider_connections
+    WHERE id = ?
+  `).get(connectionId) as Record<string, unknown>;
+  const envelope = storage.getDatabase().prepare(`
+    SELECT hex(ciphertext) AS ciphertext, hex(nonce) AS nonce, hex(auth_tag) AS auth_tag,
+           hex(wrapped_data_key) AS wrapped_data_key, hex(wrap_nonce) AS wrap_nonce,
+           hex(wrap_auth_tag) AS wrap_auth_tag, key_id, key_version, secret_keys_json, updated_at
+    FROM chat_provider_connection_secrets
+    WHERE provider_connection_id = ?
+  `).get(connectionId) as Record<string, unknown> | undefined;
+  return { connection, envelope: envelope ?? null };
 }

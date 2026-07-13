@@ -69,7 +69,7 @@ Bindings allow many projects to point at the same external channel and one proje
 
 - Connection create/update/list/get/delete.
 - Redacted public reads and unredacted internal reads.
-- Atomic encrypted-envelope create, rotation, clearing, and resumable post-key-readiness sealing of legacy plaintext.
+- Atomic encrypted-envelope create, rotation, and clearing in the same secret-version CAS transaction as connection metadata, plus resumable post-key-readiness sealing of legacy plaintext.
 - Verification reset after authentication, transport, enabled/status, or setup changes while display-name-only edits preserve the last result.
 - Channel binding create/update/list/get/delete.
 - Atomic inbound duplicate insertion by `(providerConnectionId, externalMessageId)` and atomic expiring replay-receipt insertion.
