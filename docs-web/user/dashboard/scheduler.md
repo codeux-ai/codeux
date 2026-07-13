@@ -48,6 +48,12 @@ Agent wakeups created through `scheduler_code_ux` can use one timing mode at a t
 - `afterSprintId`, with optional `offsetMinutes`, to wake after a sprint completes successfully
 - `afterTaskId`, with optional `offsetMinutes`, to wake after a task reaches a terminal project status
 
+When the call comes from a dashboard chat turn, an omitted, null, or blank `threadId` defaults to the
+originating thread and that resolved target is stored with the scheduler entry. A non-empty `threadId`
+explicitly overrides the default. Standalone MCP calls have no originating thread, so omitted or empty
+targets remain threadless. Both contextual and explicit targets must belong to the selected project when
+the wakeup is delivered.
+
 Completion-anchored wakeups are one-time entries. A sprint anchor resolves only when its source
 sprint reaches effective successful `completed` status; failed, cancelled, and otherwise non-completed
 source sprints do not trigger it. The scheduler uses the latest successful sprint run finish time when
