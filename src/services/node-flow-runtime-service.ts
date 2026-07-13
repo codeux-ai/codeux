@@ -1047,7 +1047,9 @@ export class NodeFlowRuntimeService {
     const binding=node.credentialBindings?.find((candidate)=>candidate.slot===slot);
     if (!binding) return undefined;
     if (!this.deps.credentialBroker) throw new ValidationError("Credential broker is not configured for node flow runtime.");
-    const resolved=await this.deps.credentialBroker.resolveCredentialId({projectId:context.projectId,credentialId:binding.credentialId,bindingKey:`${context.flowId}:${node.id}:${slot}`,capability:"read",workspaceId:context.runId});
+    const requirement=node.definition?resolveNodeDefinition(node.definition.type,node.definition.version)?.credentials.find((candidate)=>candidate.slot===slot):undefined;
+    if (!requirement) throw new ValidationError(`Node ${node.id} does not declare credential slot ${slot}.`);
+    const resolved=await this.deps.credentialBroker.resolveCredentialId({projectId:context.projectId,credentialId:binding.credentialId,bindingKey:`${context.flowId}:${node.id}:${slot}`,requiredCapabilities:["read"],allowedKinds:requirement.allowedKinds,workspaceId:context.runId});
     if (resolved.value) context.resolvedCredentialValues.push(resolved.value);
     return resolved.value;
   }

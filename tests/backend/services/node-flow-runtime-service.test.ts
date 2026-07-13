@@ -292,7 +292,7 @@ describe("NodeFlowRuntimeService", () => {
       trackPromptInInvocation: false,
       trackAssistantInInvocation: false,
     }));
-    expect(resolveCredentialId).toHaveBeenCalledWith(expect.objectContaining({projectId:project.id,credentialId:"credential-1",bindingKey:`${flow.id}:prompt:provider`,capability:"read"}));
+    expect(resolveCredentialId).toHaveBeenCalledWith(expect.objectContaining({projectId:project.id,credentialId:"credential-1",bindingKey:`${flow.id}:prompt:provider`,requiredCapabilities:["read"],allowedKinds:["provider"]}));
     const promptRun = result.nodeRuns.find((nodeRun) => nodeRun.nodeId === "prompt");
     expect(promptRun?.executionInvocationId).toMatch(/^xi_/);
     expect(promptRun?.output).toMatchObject({ text: "provider answer", nativeSessionId: "native-1" });

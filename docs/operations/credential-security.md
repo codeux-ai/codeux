@@ -6,12 +6,16 @@ Code UX stores automation credentials through a broker rather than exposing secr
 
 - Project credentials can be managed only through their owning project.
 - Global credentials are opt-in and require an explicit project allowlist containing the configuring project. The configuring project remains the credential's management owner after promotion; other allowlisted projects may bind and resolve it but cannot rotate, replace, revoke, promote, or restrict it.
-- Resolution succeeds only when both the credential and binding approve the requested capability.
+- Resolution succeeds only when the credential kind is allowed and both the credential and binding approve every declared capability. Authorization is completed before the broker performs its single secret read.
 - Revoked, unavailable, missing, cross-project, or insufficiently capable credentials fail closed.
 
 The dashboard accepts secret values only on create, rotate, and replace requests. Responses contain configuration, scope, status, key-version, and validation metadata but never stored values. Access-event rows contain identifiers, binding keys, capabilities, outcomes, and denial reasons; they never contain secret material.
 
-Management inputs are validated at runtime rather than trusted from TypeScript types. Names, kinds, binding keys, project ids, capabilities, and list counts are bounded; malformed arrays and control characters are rejected instead of being silently coerced. A stored value is limited to 64 KiB of UTF-8 data. Global allowlists must explicitly retain the management owner.
+Management inputs are validated at runtime rather than trusted from TypeScript types. Create requests must explicitly declare kind, scope, capabilities, and an allowlist (an empty array for project credentials). Names, kinds, binding keys, project ids, capabilities, and list counts are bounded; malformed arrays, unknown mutation fields, and control characters are rejected instead of being silently coerced. A stored value is limited to 64 KiB of UTF-8 data. Global allowlists must explicitly retain the management owner.
+
+Every lifecycle mutation carries `expectedVersion`. Successful name updates, validation tests, rotations/replacements, promotions, restrictions, and first-time revocations increment the version. A repeated revoke against an already-revoked credential at its current version is an idempotent no-op; stale requests return a conflict. Metadata updates may change only the bounded display name, so kind and management ownership remain immutable.
+
+Restriction is monotonic: it may remove allowlisted projects or capabilities but cannot add either. Project-to-global promotion is the explicit scope expansion and requires the managing project, a current version, `confirmScopeExpansion: true`, an allowlist containing the managing project, and project IDs that already exist.
 
 ## Runtime redaction boundary
 
@@ -33,12 +37,14 @@ Electron serializes first-use root-key creation, persists only the OS-protected 
 
 Back up root keys independently from `app.db`. Losing a required key version makes its ciphertext unrecoverable by design. Restoring only SQLite is insufficient.
 
-Credential creation commits metadata and its first envelope in one SQLite transaction. Rotation/replacement and promotion likewise commit the new envelope, metadata, version, and rotation record atomically. Compare-and-swap guards allow only one overlapping value change to commit; losing callers must retry instead of overwriting a newer secret. Root-key providers must retain old key IDs and versions until envelopes are rewrapped. Revocation wins against in-flight resolutions and preserves audit metadata.
+Credential creation commits metadata and its first envelope in one SQLite transaction. Rotation/replacement and promotion likewise commit the new envelope, metadata, version, and rotation record atomically. Compare-and-swap guards apply to every lifecycle mutation so losing callers must refresh metadata and retry instead of overwriting newer state. Root-key providers must retain old key IDs and versions until envelopes are rewrapped. Revocation wins against in-flight resolutions and preserves audit metadata.
+
+Lifecycle successes and denials emit correlation-aware automation audit records containing credential IDs and policy metadata only. Validation updates report `valid`, `invalid`, or `unavailable` without including tested values or low-level cryptographic errors.
 
 Existing global credentials created before management ownership was stored are migrated with their first valid allowlisted project as the management owner. Operators should verify that owner before expanding a legacy global credential's allowlist.
 
 ## API surface
 
-Project-scoped routes live under `/api/projects/:projectId/credentials`. Supported operations are create, bind, test, rotate, replace, revoke, promote, and restrict. List and health endpoints return metadata only. Existing dashboard authentication and middleware apply before these routes.
+Project-scoped routes live under `/api/projects/:projectId/credentials`. Supported operations are create, bounded-name update (`PATCH /:credentialId`), bind, metadata-only compatibility assessment, test, rotate, replace, revoke, promote, and restrict. Compatibility evaluates key-backend readiness, configuration, active status, project access, allowed kinds, and all required capabilities without resolving plaintext. List, compatibility, health, and mutation responses return metadata or policy results only. Existing dashboard authentication and remote credential-management guards apply before these routes.
 
-Runtime validation failures return `400`, project/management denials return `403`, and compare-and-swap conflicts return `409` so callers can retry without treating policy failures as server crashes.
+Runtime validation failures return `400`, project/management denials return `403`, compare-and-swap conflicts return `409`, invalid encrypted state returns `422`, and unavailable key custody returns an actionable `503` response.

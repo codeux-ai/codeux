@@ -25,7 +25,7 @@ export function syncRoute(handler: (req: Request, res: Response) => void): Reque
     } catch (error) {
       if (!res.headersSent) {
         const httpError = toHttpRouteError(error);
-        if (httpError.status >= 500) {
+        if (httpError.status === 500) {
           res.status(httpError.status).json({ error: "Internal Server Error" });
           next(error);
         } else {
@@ -45,7 +45,7 @@ export function asyncRoute(handler: (req: Request, res: Response) => Promise<voi
     } catch (error) {
       if (!res.headersSent) {
         const httpError = toHttpRouteError(error);
-        if (httpError.status >= 500) {
+        if (httpError.status === 500) {
           res.status(httpError.status).json({ error: "Internal Server Error" });
           next(error);
         } else {
