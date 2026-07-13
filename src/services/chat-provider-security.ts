@@ -124,7 +124,7 @@ export class ChatProviderIngressSecurity {
     nowMs: number;
     authentication: ChatConnectorHmacAuthentication;
   }): void {
-    const normalizedSignature = normalizeSignature(input.signature);
+    const normalizedSignature = normalizeSignature(input.signature, input.authentication.signaturePrefix);
     if (!normalizedSignature) {
       throw new ChatProviderIngressSecurityError("invalid_signature", "Invalid chat provider ingress signature.", 401);
     }
@@ -203,8 +203,11 @@ function firstHeader(headers: Record<string, string | string[] | undefined>, nam
   return undefined;
 }
 
-function normalizeSignature(value: string): string | null {
+function normalizeSignature(value: string, requiredPrefix?: string): string | null {
   const trimmed = value.trim();
+  if (requiredPrefix && !trimmed.toLowerCase().startsWith(requiredPrefix.toLowerCase())) {
+    return null;
+  }
   const match = trimmed.match(/^(?:sha256=|v0=)?([a-f0-9]{64})$/i);
   return match?.[1]?.toLowerCase() || null;
 }
