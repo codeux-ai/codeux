@@ -222,6 +222,7 @@ export const LiveSessionPage: FunctionComponent = () => {
     const sprintEvents = scopedRuntime.events;
     const sprintRuns = scopedRuntime.sprintRuns;
     const sprintInvocations = scopedRuntime.invocations;
+    const sprintAttentionItems = scopedRuntime.attentionItems;
 
     const visibleTasksWithLiveActivities = useMemo(() => (
         deriveProjectedLiveSessionTasks(tasksWithLiveActivities, sprintDispatches, sprintEvents)
@@ -279,13 +280,14 @@ export const LiveSessionPage: FunctionComponent = () => {
             dispatches: sprintDispatches,
             events: sprintEvents,
             invocations: sprintInvocations,
+            attentionItems: sprintAttentionItems,
             taskTimingMap,
             rerunningIds,
             forceCompletePendingIds,
             forceCompleteErrorByTaskId,
             optimisticallyCompletedTaskIds,
         })
-    ), [filteredTasks, forceCompleteErrorByTaskId, forceCompletePendingIds, optimisticallyCompletedTaskIds, rerunningIds, sprintDispatches, sprintEvents, sprintInvocations, taskTimingMap]);
+    ), [filteredTasks, forceCompleteErrorByTaskId, forceCompletePendingIds, optimisticallyCompletedTaskIds, rerunningIds, sprintAttentionItems, sprintDispatches, sprintEvents, sprintInvocations, taskTimingMap]);
 
     const transportBannerViewModel = useMemo(
         () => deriveLiveTransportBannerViewModel({ transportState, isRecovering, error, snapshotUpdatedAt }),
@@ -465,7 +467,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                             </div>
                         </div>
                     ) : (
-                        taskCardItems.map(({ key, task, phase, taskTiming, events, invocations, isRerunning, isForceCompleting, forceCompleteError, dispatchInfo }) => (
+                        taskCardItems.map(({ key, task, phase, taskTiming, events, invocations, ciPresentation, isRerunning, isForceCompleting, forceCompleteError, dispatchInfo }) => (
                             <LiveTaskCard
                                 key={key}
                                 task={task}
@@ -474,6 +476,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                                 taskTiming={taskTiming}
                                 events={events}
                                 invocations={invocations}
+                                ciPresentation={ciPresentation}
                                 onRerun={handleRerun}
                                 onEdit={handleEditTask}
                                 onForceComplete={handleForceCompleteTask}

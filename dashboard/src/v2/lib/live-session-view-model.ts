@@ -2,6 +2,7 @@ import type { TransportState } from "../../lib/realtime/dashboard-realtime-clien
 import type { ExecutionSnapshotSurfaceState } from "../../hooks/ExecutionTimelineContext.js";
 import type {
   DashboardStats,
+  ExecutionAttentionItemSummary,
   ExecutionDashboardSnapshot,
   ExecutionInvocationRecord,
   ExecutionRuntimeEventSummary,
@@ -19,8 +20,14 @@ import type { LiveTaskTimingSummary } from "./live-stats.js";
 import {
   findActiveQuotaWait,
   findLatestTerminalTaskSignal,
+  isActiveCiAttentionItem,
+  isCiGateRuntimeEvent,
 } from "./live-task-runtime.js";
 import { deriveLiveDurationDisplay } from "./live-duration-display.js";
+import {
+  deriveTaskCiStatusPresentation,
+  type CiStatusPresentation,
+} from "./ci-status-presentation.js";
 
 export type LiveSessionTaskFilter = "All" | "Running" | "Completed" | "Failed" | "Pending";
 
@@ -39,6 +46,7 @@ export interface ScopedLiveSessionRuntime {
   events: ExecutionRuntimeEventSummary[];
   sprintRuns: ExecutionSprintRunSummary[];
   invocations: ExecutionInvocationRecord[];
+  attentionItems: ExecutionAttentionItemSummary[];
 }
 
 export interface FilteredLiveSessionTasks {
@@ -54,6 +62,7 @@ export interface LiveSessionTaskCardItem {
   taskTiming: LiveTaskTimingSummary | null;
   events: ExecutionRuntimeEventSummary[];
   invocations: ExecutionInvocationRecord[];
+  ciPresentation: CiStatusPresentation | null;
   isRerunning: boolean;
   isForceCompleting: boolean;
   forceCompleteError: string | null;
@@ -70,6 +79,7 @@ export interface LiveSessionTaskCardStateInput {
   dispatches: ExecutionTaskDispatchSummary[];
   events: ExecutionRuntimeEventSummary[];
   invocations: ExecutionInvocationRecord[];
+  attentionItems?: ExecutionAttentionItemSummary[];
   taskTimingMap: Map<string, LiveTaskTimingSummary>;
   rerunningIds: Set<string>;
   forceCompletePendingIds: Set<string>;
@@ -176,6 +186,7 @@ export function deriveScopedLiveSessionRuntime(
       events: [],
       sprintRuns: [],
       invocations: [],
+      attentionItems: [],
     };
   }
 
@@ -186,6 +197,7 @@ export function deriveScopedLiveSessionRuntime(
       events: execution.recentEvents,
       sprintRuns: execution.sprintRuns,
       invocations,
+      attentionItems: execution.attentionItems,
     };
   }
 
@@ -194,6 +206,7 @@ export function deriveScopedLiveSessionRuntime(
     events: execution.recentEvents.filter((event) => event.sprintId === sprintScopeId),
     sprintRuns: execution.sprintRuns.filter((run) => run.sprintId === sprintScopeId),
     invocations: invocations.filter((invocation) => invocation.sprintId === sprintScopeId),
+    attentionItems: execution.attentionItems.filter((item) => item.sprintId === sprintScopeId),
   };
 }
 
@@ -208,6 +221,8 @@ interface LiveSessionTaskRuntimeBucket {
   eventsByTaskKey: ExecutionRuntimeEventSummary[];
   events: ExecutionRuntimeEventSummary[];
   currentDispatchEvents: ExecutionRuntimeEventSummary[];
+  ciEvents: ExecutionRuntimeEventSummary[];
+  ciAttentionItems: ExecutionAttentionItemSummary[];
   invocations: ExecutionInvocationRecord[];
   invocationIds: Set<string>;
 }
@@ -228,6 +243,8 @@ function createLiveSessionTaskRuntimeBucket(task: Subtask): LiveSessionTaskRunti
     eventsByTaskKey: [],
     events: [],
     currentDispatchEvents: [],
+    ciEvents: [],
+    ciAttentionItems: [],
     invocations: [],
     invocationIds: new Set(),
   };
@@ -287,6 +304,7 @@ function buildLiveSessionTaskRuntimeIndex(args: {
   dispatches: ExecutionTaskDispatchSummary[];
   events: ExecutionRuntimeEventSummary[];
   invocations: ExecutionInvocationRecord[];
+  attentionItems?: ExecutionAttentionItemSummary[];
 }): LiveSessionTaskRuntimeIndex {
   const byTaskRuntimeId = new Map<string, LiveSessionTaskRuntimeBucket>();
   const buckets: LiveSessionTaskRuntimeBucket[] = args.tasks.map(createLiveSessionTaskRuntimeBucket);
@@ -298,9 +316,8 @@ function buildLiveSessionTaskRuntimeIndex(args: {
     byTaskRuntimeId.set(bucket.taskRuntimeId, bucket);
     if (bucket.recordId) {
       addUniqueIndexEntry(bucketsByRecordId, bucket.recordId, bucket);
-    } else {
-      addUniqueIndexEntry(bucketsByTaskKey, bucket.task.id, bucket);
     }
+    addUniqueIndexEntry(bucketsByTaskKey, bucket.task.id, bucket);
 
     addUniqueIndexEntry(invocationBucketsByIdentity, bucket.taskRuntimeId, bucket);
     addUniqueIndexEntry(invocationBucketsByIdentity, bucket.task.id, bucket);
@@ -327,19 +344,53 @@ function buildLiveSessionTaskRuntimeIndex(args: {
   }
 
   for (const event of args.events) {
+    const matchingEventBuckets = new Set<LiveSessionTaskRuntimeBucket>();
     for (const bucket of getScopedBuckets(bucketsByLatestTaskRunId.get(event.taskRunId ?? ""), event)) {
       bucket.eventsByTaskRunId.push(event);
       bucket.currentDispatchEvents.push(event);
+      matchingEventBuckets.add(bucket);
     }
     for (const bucket of getScopedBuckets(bucketsByLatestDispatchId.get(event.dispatchId ?? ""), event)) {
       bucket.eventsByDispatchId.push(event);
       bucket.currentDispatchEvents.push(event);
+      matchingEventBuckets.add(bucket);
     }
     for (const bucket of getScopedBuckets(bucketsByRecordId.get(event.taskId ?? ""), event)) {
       bucket.eventsByRecordId.push(event);
+      matchingEventBuckets.add(bucket);
     }
     for (const bucket of getScopedBuckets(bucketsByTaskKey.get(event.taskKey ?? ""), event)) {
       bucket.eventsByTaskKey.push(event);
+      matchingEventBuckets.add(bucket);
+    }
+    if (isCiGateRuntimeEvent(event)) {
+      for (const bucket of matchingEventBuckets) {
+        bucket.ciEvents.push(event);
+      }
+    }
+  }
+
+  for (const attentionItem of args.attentionItems ?? []) {
+    if (!isActiveCiAttentionItem(attentionItem)) {
+      continue;
+    }
+    const payloadTaskId = normalizeString(
+      typeof attentionItem.payload?.taskId === "string"
+        ? attentionItem.payload.taskId
+        : typeof attentionItem.payload?.taskKey === "string"
+          ? attentionItem.payload.taskKey
+          : null,
+    );
+    const matchingBuckets = new Set([
+      ...(bucketsByRecordId.get(attentionItem.taskId ?? "") ?? []),
+      ...(bucketsByTaskKey.get(attentionItem.taskId ?? "") ?? []),
+      ...(bucketsByRecordId.get(payloadTaskId ?? "") ?? []),
+      ...(bucketsByTaskKey.get(payloadTaskId ?? "") ?? []),
+    ]);
+    for (const bucket of matchingBuckets) {
+      if (!bucket.task.sprint_id || attentionItem.sprintId === bucket.task.sprint_id) {
+        bucket.ciAttentionItems.push(attentionItem);
+      }
     }
   }
 
@@ -381,6 +432,7 @@ function buildLiveSessionTaskRuntimeIndex(args: {
         || (bucket.latestDispatch?.id && event.dispatchId === bucket.latestDispatch.id)
       )))
       : [];
+    bucket.ciEvents = sortRuntimeEvents(bucket.ciEvents);
   }
 
   return { byTaskRuntimeId };
@@ -541,6 +593,7 @@ export function deriveLiveSessionTaskCardItems(input: LiveSessionTaskCardStateIn
     dispatches: input.dispatches,
     events: input.events,
     invocations: input.invocations,
+    attentionItems: input.attentionItems,
   });
 
   return input.filteredTasks.map((task) => {
@@ -566,6 +619,14 @@ export function deriveLiveSessionTaskCardItems(input: LiveSessionTaskCardStateIn
       : latestDispatch && ["FAILED", "BLOCKED", "QUOTA"].includes(taskPhase)
         ? latestDispatch.errorMessage
         : null;
+    const ciEvents = bucket?.ciEvents ?? EMPTY_RUNTIME_EVENTS;
+    const ciAttentionItems = bucket?.ciAttentionItems ?? [];
+    const ciPresentation = deriveTaskCiStatusPresentation({
+      task: optimisticTask,
+      events: ciEvents,
+      attentionItems: ciAttentionItems,
+      sprintRunId: latestDispatch?.sprintRunId ?? null,
+    });
 
     return {
       key: taskRuntimeId,
@@ -574,6 +635,7 @@ export function deriveLiveSessionTaskCardItems(input: LiveSessionTaskCardStateIn
       taskTiming: input.taskTimingMap.get(taskRuntimeId) || input.taskTimingMap.get(task.id) || null,
       events: taskEvents,
       invocations: taskInvocations,
+      ciPresentation,
       isRerunning: input.rerunningIds.has(taskRuntimeId),
       isForceCompleting: input.forceCompletePendingIds.has(taskRuntimeId),
       forceCompleteError: input.forceCompleteErrorByTaskId.get(taskRuntimeId) || null,
