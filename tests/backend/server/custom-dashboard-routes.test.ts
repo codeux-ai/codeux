@@ -227,6 +227,23 @@ describe("custom dashboard routes", () => {
     });
     expect(unsupported.status).toBe(404);
     expect(unsupported.body.error.code).toBe("source_not_declared");
+
+    const brokerCalls = credentialBroker.withResolvedCredentialId.mock.calls.length;
+    const egressCalls = egressPolicyService.request.mock.calls.length;
+    const malformedSlot = await request(app).post("/api/custom-dashboard-runtime/source").send({
+      requestId: "request-malformed-slot",
+      projectId,
+      dashboardId: dashboard.id,
+      revisionId: revision.id,
+      access: { kind: "published" },
+      sourceId: "incidents",
+      route: "/incidents",
+      credentialSlot: " ",
+    });
+    expect(malformedSlot.status).toBe(400);
+    expect(malformedSlot.body.error.code).toBe("invalid_request");
+    expect(credentialBroker.withResolvedCredentialId).toHaveBeenCalledTimes(brokerCalls);
+    expect(egressPolicyService.request).toHaveBeenCalledTimes(egressCalls);
   });
 
   it("isolates validation sessions and redacts credential and egress failures", async () => {
