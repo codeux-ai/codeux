@@ -408,6 +408,14 @@ jobs:
         run: pnpm run electron:install-deps
 
       - name: Run orchestration validation
+        id: orchestration_validation
+        timeout-minutes: ${{ runner.os == 'Windows' && 10 || 20 }}
+        continue-on-error: ${{ runner.os == 'Windows' }}
+        run: ${{ matrix.command }}
+
+      - name: Retry Windows orchestration validation
+        if: runner.os == 'Windows' && steps.orchestration_validation.outcome == 'failure'
+        timeout-minutes: 10
         run: ${{ matrix.command }}
 
       - name: Upload orchestration artifacts

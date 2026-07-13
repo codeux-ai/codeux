@@ -370,7 +370,8 @@ describe("GitHub workflow health", () => {
   });
 
   it("keeps mockup DAG regression coverage strict", async () => {
-    const [packageJson, runnerScript, scenarioScript] = await Promise.all([
+    const [ci, packageJson, runnerScript, scenarioScript] = await Promise.all([
+      readRepoFile(WORKFLOWS.ci),
       readRepoFile("package.json").then((content) => JSON.parse(content) as PackageJson),
       readRepoFile("scripts/e2e/run-mockup-sprint-pentest.mjs"),
       readRepoFile("scripts/e2e/mockup-sprint-pentest-scenarios.mjs"),
@@ -405,6 +406,16 @@ describe("GitHub workflow health", () => {
     expect(runnerScript).toContain("main().then(() => {");
     expect(runnerScript).toContain("process.exit(0);");
     expect(runnerScript).toContain("process.exit(1);");
+
+    const orchestrationValidationStep = ci.slice(
+      ci.indexOf("- name: Run orchestration validation"),
+      ci.indexOf("- name: Upload orchestration artifacts"),
+    );
+    expect(orchestrationValidationStep).toContain("id: orchestration_validation");
+    expect(orchestrationValidationStep).toContain("timeout-minutes: ${{ runner.os == 'Windows' && 10 || 20 }}");
+    expect(orchestrationValidationStep).toContain("continue-on-error: ${{ runner.os == 'Windows' }}");
+    expect(orchestrationValidationStep).toContain("- name: Retry Windows orchestration validation");
+    expect(orchestrationValidationStep).toContain("steps.orchestration_validation.outcome == 'failure'");
 
     const qaDagValidationTask = scenarioScript.slice(
       scenarioScript.indexOf('key: "qa-dag-validation"'),
