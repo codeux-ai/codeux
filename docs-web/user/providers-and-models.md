@@ -86,7 +86,7 @@ qwen3-max, qwen3-max-2026-01-23,
 qwen-plus, qwen-max
 ```
 
-Qwen custom-endpoint instances define their model id in Settings -> Providers. Code UX adds that configured model to the AI Models selector and writes it into Qwen Code `modelProviders` at runtime. The Custom endpoint preset is Ollama-compatible by default: API key `your_api_key`, model `glm-4.7-flash`, environment key `OLLAMA_API_KEY`, and base URL `http://127.0.0.1:11434/v1`. In Docker mode, Code UX rewrites loopback URLs to `host.docker.internal` inside the container; Linux Docker Engine runs with loopback endpoints use Docker's `host-gateway` mapping.
+Qwen custom-endpoint instances define their model id in Settings -> Providers. Code UX adds that configured model to the AI Models selector and writes it into Qwen Code `modelProviders` at runtime. The Custom endpoint preset is Ollama-compatible by default: model `glm-4.7-flash`, environment key `OLLAMA_API_KEY`, and base URL `http://127.0.0.1:11434/v1`. Endpoints that require a secret use a broker credential binding; settings serialize only its reference. In Docker mode, Code UX rewrites loopback URLs to `host.docker.internal` inside the container; Linux Docker Engine runs with loopback endpoints use Docker's `host-gateway` mapping.
 
 ### OpenCode
 ```
@@ -96,7 +96,7 @@ github-copilot/gpt-5,
 openrouter/anthropic/claude-sonnet-4.5
 ```
 
-OpenCode provider-key and custom-endpoint instances generate a per-run OpenCode config. Code UX writes that generated config to a temporary `opencode.json`, sets `OPENCODE_CONFIG`, and maps the saved key to `OPENCODE_API_KEY`. The Custom endpoint preset is Ollama-compatible by default: API key `your_api_key`, provider/model `ollama/glm-4.7-flash`, environment key `OLLAMA_API_KEY`, and base URL `http://127.0.0.1:11434/v1`. In Docker mode, Code UX rewrites loopback URLs to `host.docker.internal` inside the container; Linux Docker Engine runs with loopback endpoints use Docker's `host-gateway` mapping.
+OpenCode provider-key and custom-endpoint instances generate a per-run OpenCode config. Code UX writes that generated config to a temporary `opencode.json`, sets `OPENCODE_CONFIG`, and maps the broker-resolved credential to `OPENCODE_API_KEY` for that invocation. The Custom endpoint preset is Ollama-compatible by default: provider/model `ollama/glm-4.7-flash`, environment key `OLLAMA_API_KEY`, and base URL `http://127.0.0.1:11434/v1`. Endpoints that require a secret use a broker credential binding; settings serialize only its reference. In Docker mode, Code UX rewrites loopback URLs to `host.docker.internal` inside the container; Linux Docker Engine runs with loopback endpoints use Docker's `host-gateway` mapping.
 
 ### Antigravity
 ```
@@ -205,21 +205,16 @@ Toggle **Mount auth** per provider to mount the auth path (e.g. `~/.gemini`) rea
 
 ## API keys
 
-For providers that accept an API key (most do, in addition to or instead of CLI auth), the **API key** field accepts:
-
-- A literal key.
-- An `${ENV_VAR}` reference resolved at start time.
-
-Keys are stored in the settings DB and never logged.
+For providers that accept an API key, create, rotate, or replace the value through the write-only credential manager, then bind the resulting credential metadata to the provider instance. Ordinary system, project, sprint, effective, MCP, and snapshot settings serialize the credential reference only; they do not store or return literal keys or environment-variable references. Runtime resolution fails closed when the credential is missing, revoked, unauthorized, or unavailable.
 
 ## Detection hints
 
-The Settings → AI providers panel displays a **Detected** column. Code UX inspects:
+The Settings → AI providers panel can display availability metadata detected from:
 
 - Env variables: `JULES_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, etc.
 - CLI auth directories.
 
-When a value is detected, you get a one-click button to fill the corresponding settings field.
+`GET /api/settings/import-sources` exposes those availability flags only. Supported legacy values migrate one way into broker credentials at startup; the UI cannot reveal, pre-fill, or copy them into settings. If secure storage or the required scope is unavailable, migration scrubs the rejected plaintext and fails closed.
 
 ## Picking the right provider
 

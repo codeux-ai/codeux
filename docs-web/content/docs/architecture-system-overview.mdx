@@ -46,7 +46,7 @@ Authenticated headless automation is composed from a fail-closed principal/role 
 The primary CLI/management entrypoint is `src/index.ts`, which loads configuration and starts `CodeUxServer.run()`. `CodeUxServer` wires all backend services. The dashboard/API serves on a configured port (default 4444), while the worker host and Electron shell operate as separate entrypoints. Lifecycle:
 
 1. **Boot settings** — load and migrate the settings DB.
-2. **Refresh API key** — pull from CLI / env / settings.
+2. **Migrate legacy credentials** — move supported startup inputs into broker custody and retain reference-only settings.
 3. **Prune connections** — clean stale MCP connections from the prior run.
 4. **Cleanup sprint previews** — remove stale Docker preview containers.
 5. **Docker asset pruning** — remove orphaned worker images / containers.

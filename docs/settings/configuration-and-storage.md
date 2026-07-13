@@ -4,11 +4,13 @@ This guide explains runtime config sources, precedence, and persistence.
 
 ## Startup Config Sources
 
-`src/config/app-config.ts` resolves API key in this order:
+For legacy bootstrap compatibility, `src/config/app-config.ts` recognizes a Jules API key in this order:
 
 1. CLI `--api-key`
 2. `JULES_API_KEY` or `JULES_KEY`
-3. `.code-ux/settings.json` key fields
+3. legacy `.code-ux/settings.json` key fields
+
+These credential sources feed startup migration; they do not populate ordinary scoped settings or act as runtime fallbacks after a broker reference is established.
 
 Additional startup config:
 - `JULES_API_BASE_URL` (default: `https://jules.googleapis.com/v1alpha`)
@@ -21,7 +23,7 @@ Additional startup config:
 - `CODE_UX_ALLOW_MULTIPLE_RUNTIMES=1` (diagnostic only; bypasses the project-manager PID lock that normally prevents duplicate local runtimes from driving the same Docker/session state)
 - MCP Streamable HTTP config uses the existing `--mcp-https*` flags / `MCP_HTTPS_*` env names for compatibility. When enabled and no explicit auth token is supplied, startup creates or reuses `~/.code-ux/security.json` with `mcpHttpAuthToken`.
 
-External hint env keys used for dashboard import:
+Legacy credential inputs accepted only by one-way startup migration:
 - `JULES_API_KEY` / `JULES_KEY`
 - `GEMINI_API_KEY`
 - `OPENAI_API_KEY` (Codex CLI)
@@ -193,7 +195,7 @@ System-level integrations are injected into effective dashboard settings at reso
   - each entry is a named provider instance with `{ provider, name, apiKeyCredentialRef, mountAuth, authPath, authType, providerConfigMode, providerConfigPath }`; the compatibility `apiKey` field is always redacted in serialized settings
   - default instance ids intentionally match the base provider ids (`jules`, `gemini`, `codex`, `claude-code`) for compatibility with older settings payloads
   - additional instances can coexist under the same CLI type
-  - for CLI providers, `mountAuth`, `authPath`, and `authType` are instance-specific Docker auth-copy/login settings. The `authType` property can be set to `"apiKey"` (uses API key text override), `"localAuth"` (mounts a custom local directory like `~/.gemini`), or `"dashboardAuth"` (launches an interactive terminal inside the container and saves tokens directly to a dedicated `~/.code-ux/credentials/<provider-name>` folder on the host). `providerConfigMode` is independent of auth mode and controls only Docker config-file materialization:
+  - for CLI providers, `mountAuth`, `authPath`, and `authType` are instance-specific Docker auth-copy/login settings. The `authType` property can be set to `"apiKey"` (resolves the bound broker credential for the invocation), `"localAuth"` (mounts a custom local directory like `~/.gemini`), or `"dashboardAuth"` (launches an interactive terminal inside the container and saves tokens directly to a dedicated `~/.code-ux/credentials/<provider-name>` folder on the host). `providerConfigMode` is independent of auth mode and controls only Docker config-file materialization:
     - `"none"` copies no provider config file and stores `providerConfigPath` as an empty string.
     - `"copyHost"` copies the provider's standard host config file path and stores that standard path.
     - `"file"` copies the user-selected file from `providerConfigPath`; an empty path is normalized back to `"copyHost"`.
@@ -287,7 +289,7 @@ Dashboard behavior:
   - Gemini alias entries `pro`, `flash`, and `flash-lite` are labeled as recent aliases in selects so it is clear they track the latest model target.
   - Code UX performs startup availability checks for Gemini, Codex, and Claude Code, looking for API-key hints and stable local auth artifacts to prepare future onboarding decisions.
   - Enabling local auth on a named provider instance in Integrations also marks that instance active in the dashboard so mount-based Docker setups show the expected connected state even without an API key.
-  - Note: `available` means an API key is present from saved settings/import hints or that specific provider instance has `mountAuth = true`. Local host auth files alone do not mark a CLI provider or provider instance active unless the matching named instance has local auth enabled. `enabled` means user-approved routing participation. CLI providers are opt-in on fresh installs and disabled by default.
+  - Note: `available` means the provider instance has a usable broker credential reference or that specific provider instance has `mountAuth = true`. External hint endpoints report metadata only and do not make a route usable. Local host auth files alone do not mark a CLI provider or provider instance active unless the matching named instance has local auth enabled. `enabled` means user-approved routing participation. CLI providers are opt-in on fresh installs and disabled by default.
   - `invocationRouting` map
   - route ids:
     - `task_coding`

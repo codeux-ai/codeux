@@ -910,14 +910,11 @@ Behavior:
 - MCP server and dashboard still start.
 - Startup does not emit warning logs solely because the Jules API key is missing.
 - API-backed tools return setup guidance until key is configured.
-- Guidance points to:
-  - `.env` (`JULES_API_KEY`)
-  - `.code-ux/settings.json` (`julesApiKey`)
-  - Dashboard settings (`http://localhost:4444` by default)
+- Guidance points to the dashboard credential manager (`http://localhost:4444` by default). Legacy `.env` and `.code-ux/settings.json` values are accepted only as one-way startup migration inputs.
 
 Runtime update:
-- Saving a key in dashboard settings updates runtime API usage without restart.
-- Leaving the dashboard key empty is supported; system-wide environment keys are used when present.
+- Creating or rotating a broker credential and binding its reference updates runtime API usage without restart.
+- Leaving a provider unbound is supported; runtime resolution does not fall back to environment or legacy settings values.
 
 ## Session Tracking and Live Feed
 

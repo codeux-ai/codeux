@@ -20,7 +20,7 @@ Loaded by `loadAppConfig` (`src/config/app-config.ts`) given `process.argv` and 
 
 | Field | Source order |
 | --- | --- |
-| `apiKey` | `--api-key` CLI → `JULES_API_KEY` env → `JULES_KEY` env → `settings.json` (julesApiKey / JULES_API_KEY / julesKey / JULES_KEY) → unset |
+| `apiKey` | Legacy bootstrap input: `--api-key` CLI → `JULES_API_KEY` env → `JULES_KEY` env → legacy `settings.json` key → unset. Supported values are handed to one-way credential migration, not serialized into the scoped settings tree. |
 | `dashboardPort` | `DASHBOARD_PORT` env → `config.json` (dashboardPort / DASHBOARD_PORT / dashboard.port / dashboard.dashboardPort) → `4444` |
 | `mcpHttp.enabled` | `--no-mcp-https` CLI → `MCP_HTTPS_ENABLED` env → `true` (enabled by default) |
 | `mcpHttp.port` | `--mcp-https-port` CLI → `MCP_HTTPS_PORT` env → `config.json` (mcpHttpPort / MCP_HTTPS_PORT / mcpHttp.port) → `dashboardPort + 1` |
@@ -33,7 +33,7 @@ Loaded by `loadAppConfig` (`src/config/app-config.ts`) given `process.argv` and 
 
 ### Config search path
 
-For `settings.json` and `config.json`, paths are tried in priority order:
+For `config.json` and the legacy `settings.json` migration input, paths are tried in priority order:
 
 1. The `repoPath` of the active project (when a project context is established).
 2. Current working directory: `./.code-ux/`.
@@ -42,7 +42,7 @@ For `settings.json` and `config.json`, paths are tried in priority order:
 
 > Legacy: `.jules-subagents/` is also probed at each location for backwards compatibility. New installs should use `.code-ux/`.
 
-The first file found at each path *wins for its specific key*. There is **no merging across paths** — finding `julesApiKey` in `~/.code-ux/settings.json` ends the search for that key, even if other paths exist.
+The first file found at each path *wins for its specific key*. There is **no merging across paths**. A credential found in legacy `settings.json` is migration input only; it is not an ordinary setting or a runtime fallback.
 
 ### `.env` loading
 
@@ -79,7 +79,7 @@ System settings act as the base (with built-in defaults folded into them). A fie
 - `DEFAULT_AGENT_SELF_REFLECTION` — default-off planning and QA self-reflection loop contracts with senior engineering criteria.
 - `DEFAULT_SPRINT_BRANCH_SCHEME`.
 
-System settings on a fresh install are the merge of these defaults plus any external hints applied by the user during onboarding.
+System settings on a fresh install merge these defaults with non-secret configuration. External hints never populate settings; supported legacy values pass only through the one-way startup migration into broker credentials.
 
 ### Live reload
 
@@ -112,9 +112,9 @@ These endpoints return an `EffectiveSettingsResponse` which includes both the me
 - `~/.local/share/opencode/`, `~/.config/opencode/` — OpenCode CLI.
 - `GITHUB_TOKEN`, `GH_TOKEN`, `gh auth status` — GitHub.
 
-Hints are exposed through `GET /api/settings/import-sources`. The Settings → AI providers panel shows a **Detected** badge when a hint is available and a one-click button to copy the value into the corresponding settings field.
+`GET /api/settings/import-sources` and the Settings UI expose source, credential, and provider availability metadata only. They never return, render, pre-fill, or copy raw values into ordinary settings fields.
 
-Hints are *never* applied automatically — this is a deliberate design choice to avoid surprising users with credentials that may be wrong or out of date.
+Supported legacy values are migrated automatically and one way at startup: Code UX writes the value to the credential broker, serializes only its credential reference in settings, and scrubs the legacy field. Credential create, rotate, and replace inputs are write-only. If secure custody or the required project scope is unavailable, migration removes the rejected plaintext and fails closed rather than keeping a settings fallback or reusing a stale reference.
 
 ## Validation
 

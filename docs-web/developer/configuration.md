@@ -81,7 +81,7 @@ Files inside the directory:
 
 | File | Contents |
 | --- | --- |
-| `settings.json` | Provider keys, override settings (read-only / informational; primary settings live in the SQLite DB `settings.db`). |
+| `settings.json` | Legacy credential migration inputs and non-secret override settings (read-only / informational; primary settings live in the SQLite DB `settings.db`). |
 | `config.json` | Dashboard port and other runtime config. |
 | `agents/<id>.md` | Agent preset markdown sources. |
 | `sprints/sprint-<n>/` | Sprint markdown directory. |

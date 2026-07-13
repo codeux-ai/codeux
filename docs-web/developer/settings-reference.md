@@ -51,7 +51,7 @@ Settings are evaluated in cascade: **System → Project → Sprint** (with built
       "model": "string",
       "weight": 0..100,
       "thinkingMode": "SMALL"|"MEDIUM"|"HIGH",
-      "apiKey": "string or ${ENV_VAR}",
+      "apiKeyCredentialRef": { "credentialId": "string", "capability": "read" } | null,
       "mountAuth": false,
       "authPath": "string",
       "authType": "apiKey" | "localAuth" | "dashboardAuth",
@@ -71,6 +71,8 @@ Settings are evaluated in cascade: **System → Project → Sprint** (with built
 ```
 
 `<routingId>` ∈ `task_coding | planning | dashboard_reply | clarification_reply | qa_review | ci_fix | merge_conflict`.
+
+Provider credentials are created, rotated, and replaced through write-only broker controls. The legacy `apiKey` compatibility field is always redacted in ordinary settings serialization; literal values and environment-variable references are not settings values.
 
 ### Default providers
 
