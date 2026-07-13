@@ -24,7 +24,6 @@ import type {
   UpdateProjectInput,
   UpdateSprintInput,
   UpdateTaskInput,
-  SprintReviewSummary,
 } from "../contracts/project-management-types.js";
 import { AppDbStorage } from "./app-db-storage.js";
 import { slugify } from "../shared/slug.js";
@@ -42,6 +41,9 @@ import { validateTaskDependencies } from "./project-management/task-dependency-g
 import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 import { TaskSelfReflectionRatingRepository } from "./task-self-reflection-rating-repository.js";
 import { calculateSprintProgress } from "../domain/sprint/sprint-progress.js";
+import { resolveTaskCardCiStatus } from "../domain/sprint/card-ci-status.js";
+import { loadCardCiStatusEvidence } from "./project-management/card-ci-status-query.js";
+import { loadLatestTaskReviewSummaryMap } from "./project-management/qa-review-summary-query.js";
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
 const GENERATED_SPRINT_NAME_PREFIX = "Untitled sprint";
@@ -123,11 +125,6 @@ interface TaskRow {
 interface DependencyRow {
   task_id: string;
   depends_on_task_id: string;
-}
-
-interface TaskReviewSummaryRow {
-  task_id: string;
-  latest_task_review_json: string | null;
 }
 
 interface LinkedIssueRow {
@@ -1184,8 +1181,12 @@ export class ProjectManagementRepository {
     }
 
     const taskIds = rows.map((row) => row.id);
-    const reviewMap = this.getLatestTaskReviewSummaryMap(taskIds);
+    const reviewMap = loadLatestTaskReviewSummaryMap(this.storage, taskIds);
     const selfReflectionRatingMap = this.taskSelfReflectionRatingRepository.getLatestByTaskIds(taskIds);
+    const ciEvidence = loadCardCiStatusEvidence(this.storage, {
+      taskIds,
+      sprintIds: rows.map((row) => row.sprint_id),
+    });
 
     return rows.map((row) => ({
       id: row.id,
@@ -1207,56 +1208,18 @@ export class ProjectManagementRepository {
       latestReview: reviewMap.get(row.id),
       selfReflectionRating: selfReflectionRatingMap.get(row.id),
       mergeIndicator: row.merge_indicator,
+      ciStatus: resolveTaskCardCiStatus({
+        status: row.status,
+        isMerged: toBoolean(row.is_merged),
+        mergeIndicator: row.merge_indicator,
+        latestGateEvent: ciEvidence.latestTaskGateByTaskId.get(row.id),
+        hasActiveFailure: ciEvidence.failedTaskIds.has(row.id),
+      }),
       sourceType: row.source_type,
       sourcePath: row.source_path,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
-  }
-
-  private getLatestTaskReviewSummaryMap(taskIds: string[]): Map<string, SprintReviewSummary> {
-    const rows = this.storage.executeChunkedInQuery<TaskReviewSummaryRow>({
-      sqlPrefix: `
-        SELECT
-          q.task_id,
-          json_object(
-            'status', q.status,
-            'outcome', q.outcome,
-            'summary', q.summary_markdown,
-            'findings', COALESCE(json_extract(q.payload_json, '$.findings'), json_array()),
-            'reviewer', q.agent_name,
-            'finishedAt', q.finished_at
-          ) AS latest_task_review_json
-        FROM qa_review_runs q
-        WHERE q.task_id`,
-      sqlSuffix: `
-          AND q.trigger_type IN ('task_completion', 'completed_task_without_pr')
-          AND q.rowid = (
-            SELECT q2.rowid
-            FROM qa_review_runs q2
-            WHERE q2.task_id = q.task_id
-              AND q2.trigger_type IN ('task_completion', 'completed_task_without_pr')
-            ORDER BY q2.started_at DESC, q2.rowid DESC
-            LIMIT 1
-          )
-      `,
-      items: taskIds,
-    });
-
-    const map = new Map<string, SprintReviewSummary>();
-    for (const row of rows) {
-      if (!row.latest_task_review_json) {
-        continue;
-      }
-      try {
-        const parsed = JSON.parse(row.latest_task_review_json) as SprintReviewSummary;
-        parsed.findings = Array.isArray(parsed.findings) ? parsed.findings : [];
-        map.set(row.task_id, parsed);
-      } catch {
-        // Ignore malformed persisted QA payloads.
-      }
-    }
-    return map;
   }
 
   private hydrateProjects(rows: ProjectRow[]): ProjectSummary[] {
@@ -1372,6 +1335,7 @@ export class ProjectManagementRepository {
       rollbackSafetyReason: row.rollback_safety_reason,
       tasksCount,
       completion,
+      ciStatus: summaryAggregation.ciStatus,
       linkedIssues,
       latestReview: summaryAggregation.latestReview,
       createdAt: row.created_at,
@@ -1930,6 +1894,7 @@ function emptySprintSummaryAggregation(): SprintSummaryAggregation {
     completedTasks: 0,
     progressTasks: [],
     latestRunStatus: null,
+    ciStatus: null,
   };
 }
 

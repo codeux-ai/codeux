@@ -23,6 +23,7 @@ It is for contributors and integrators who need to reason about *how* Code UX ma
 | 13 | [Security model](./security.md) | Authentication, authorisation, secrets, network surface |
 | 14 | [Worker clarification contract](./worker-clarification-contract.md) | Durable human-owned worker questions, idempotent replies, and continuation boundary |
 | 15 | [Custom nodes](./custom-nodes.md) | Generated TypeScript packages, validation/publication gates, and hardened container execution |
+| 16 | [Card CI status projection](./card-ci-status-projection.md) | Compact persisted CI state shared by Task, Sprint, and Live card consumers |
 
 ## Runtime Notes
 
