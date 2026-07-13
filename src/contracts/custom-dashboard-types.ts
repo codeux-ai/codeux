@@ -52,6 +52,22 @@ export interface CustomDashboardDataSourceNodeGraph {
   metadata?: CustomDashboardJsonObject;
 }
 
+export type CustomDashboardCredentialPhase = "build" | "runtime";
+
+export interface CustomDashboardCredentialSlotDeclaration {
+  slotId: string;
+  label: string;
+  phase: CustomDashboardCredentialPhase;
+  required: boolean;
+  allowedKinds: string[];
+  requiredCapabilities: string[];
+}
+
+export interface CustomDashboardCredentialBinding {
+  slotId: string;
+  credentialId: string;
+}
+
 export interface CustomDashboardManifest {
   schemaVersion: number;
   title: string;
@@ -59,6 +75,7 @@ export interface CustomDashboardManifest {
   filePaths: string[];
   description?: string;
   dataSources?: CustomDashboardDataSourceNodeGraph;
+  credentialSlots?: CustomDashboardCredentialSlotDeclaration[];
   metadata?: CustomDashboardJsonObject;
 }
 
@@ -86,6 +103,8 @@ export interface CustomDashboardRecord {
   sourceNodeGraph: CustomDashboardDataSourceNodeGraph;
   styleguide: CustomDashboardJsonObject;
   runtimeMetadata: CustomDashboardJsonObject;
+  credentialBindings?: CustomDashboardCredentialBinding[];
+  credentialBindingRevision?: number;
   publishedRevisionId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -103,6 +122,7 @@ export interface CustomDashboardRevisionRecord {
   validationStatus: CustomDashboardValidationStatus | null;
   validationReport: CustomDashboardValidationReport | null;
   runtimeMetadata: CustomDashboardJsonObject;
+  credentialBindings?: CustomDashboardCredentialBinding[];
   validatedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -149,6 +169,11 @@ export interface CreateCustomDashboardRevisionInput {
   sourceNodeGraph?: CustomDashboardDataSourceNodeGraph;
   styleguide?: CustomDashboardJsonObject;
   runtimeMetadata?: CustomDashboardJsonObject;
+}
+
+export interface UpdateCustomDashboardCredentialBindingsInput {
+  expectedBindingRevision: number;
+  bindings: CustomDashboardCredentialBinding[];
 }
 
 export interface CreateCustomDashboardValidationSessionInput {

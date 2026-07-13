@@ -490,6 +490,8 @@ export function ensureCustomDashboardTables(db: DatabaseAdapter): void {
       source_node_graph_json TEXT NOT NULL,
       styleguide_json TEXT NOT NULL DEFAULT '{}',
       runtime_metadata_json TEXT NOT NULL DEFAULT '{}',
+      credential_bindings_json TEXT NOT NULL DEFAULT '[]',
+      credential_binding_revision INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
@@ -508,6 +510,7 @@ export function ensureCustomDashboardTables(db: DatabaseAdapter): void {
       validation_status TEXT,
       validation_report_json TEXT,
       runtime_metadata_json TEXT NOT NULL DEFAULT '{}',
+      credential_bindings_json TEXT NOT NULL DEFAULT '[]',
       validated_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
@@ -548,6 +551,10 @@ export function ensureCustomDashboardTables(db: DatabaseAdapter): void {
       FOREIGN KEY (revision_id) REFERENCES custom_dashboard_revisions(id) ON DELETE CASCADE
     )
   `);
+
+  ensureColumn(db, "custom_dashboards", "credential_bindings_json", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "custom_dashboards", "credential_binding_revision", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn(db, "custom_dashboard_revisions", "credential_bindings_json", "TEXT NOT NULL DEFAULT '[]'");
 
   ensureIndex(db, "idx_custom_dashboards_project_status", "custom_dashboards", "project_id, status, updated_at DESC");
   ensureIndex(db, "idx_custom_dashboard_revisions_dashboard_revision", "custom_dashboard_revisions", "dashboard_id, revision_number DESC");
