@@ -268,6 +268,40 @@ export class CredentialBroker {
     return this.deny(request, request.credentialId, "Credential changed repeatedly while access was being authorized.");
   }
 
+  /**
+   * Resolves a credential through its current management project. This is the
+   * authorized scope for operations, such as creating a project, that run
+   * before a target project exists and therefore cannot use target scope.
+   */
+  async withResolvedManagementCredentialId<T>(
+    request: Omit<CredentialResolutionRequest, "projectId"> & { credentialId: string },
+    consumer: (plaintext: Buffer) => T | Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 0; attempt < MAX_RESOLUTION_RETRIES; attempt += 1) {
+      const credential = this.repository.get(request.credentialId);
+      const managementProjectId = credential?.managementProjectId?.trim() || "";
+      const scopedRequest = { ...request, projectId: managementProjectId };
+      this.authorizeManagementResolution(scopedRequest, credential);
+      const plaintext = await this.readSecretOrDeny(scopedRequest, credential!);
+      const current = this.repository.get(request.credentialId);
+      if (current && sameCredentialSnapshot(credential!, current)) {
+        this.recordGrantedAccess(scopedRequest, current);
+        try {
+          return await consumer(plaintext);
+        } finally {
+          plaintext.fill(0);
+        }
+      }
+      plaintext.fill(0);
+      this.authorizeManagementResolution(scopedRequest, current);
+    }
+    const credential = this.repository.get(request.credentialId);
+    return this.deny({
+      ...request,
+      projectId: credential?.managementProjectId?.trim() || "credential-management",
+    }, request.credentialId, "Credential changed repeatedly while access was being authorized.");
+  }
+
   private async replaceValue(projectIdValue: string, credentialIdValue: string, valueValue: string, rotation: boolean): Promise<AutomationCredentialMetadata> {
     const projectId = boundedString(projectIdValue, "projectId", MAX_IDENTIFIER_LENGTH);
     const credentialId = boundedString(credentialIdValue, "credentialId", MAX_IDENTIFIER_LENGTH);
@@ -337,6 +371,23 @@ export class CredentialBroker {
     if (!this.canAccess(credential, request.projectId)) return this.deny(request, credential.id, "Credential is outside the project scope.");
     if (credential.status !== "active") return this.deny(request, credential.id, "Credential is not active.");
     if (!credential.capabilities.includes(request.capability)) return this.deny(request, credential.id, "Required capability is not approved.");
+  }
+
+  private authorizeManagementResolution(
+    request: CredentialResolutionRequest & { credentialId: string },
+    credential: AutomationCredentialMetadata | null,
+  ): void {
+    if (!credential) return this.deny(request, request.credentialId, "Credential is missing.");
+    if (!request.projectId || credential.managementProjectId !== request.projectId) {
+      return this.deny(request, credential.id, "Credential management scope is unavailable.");
+    }
+    if (!this.canAccess(credential, request.projectId)) {
+      return this.deny(request, credential.id, "Credential is outside its management project scope.");
+    }
+    if (credential.status !== "active") return this.deny(request, credential.id, "Credential is not active.");
+    if (!credential.capabilities.includes(request.capability)) {
+      return this.deny(request, credential.id, "Required capability is not approved.");
+    }
   }
 
   private async readSecretOrDeny(request: CredentialResolutionRequest, credential: AutomationCredentialMetadata): Promise<Buffer> {

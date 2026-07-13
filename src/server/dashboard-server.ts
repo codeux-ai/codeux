@@ -142,6 +142,7 @@ import type { CustomDashboardValidationService } from "../services/custom-dashbo
 import type { CustomDashboardRuntimeService } from "../services/custom-dashboard-runtime-service.js";
 import type { SkillService } from "../services/skill-service.js";
 import type { CredentialBroker } from "../services/credentials/credential-broker.js";
+import type { SettingsCredentialResolver } from "../services/credentials/settings-credential-resolver.js";
 import type { ApprovalService } from "../services/node-flows/approval-service.js";
 import type { AutomationWebhookTriggerRepository } from "../repositories/automation-webhook-trigger-repository.js";
 import type { HeadlessAuthService } from "../services/headless-auth-service.js";
@@ -200,6 +201,7 @@ export interface DashboardServerOptions {
   customDashboardRuntimeService?: CustomDashboardRuntimeService;
   skillService?: SkillService;
   credentialBroker?: CredentialBroker;
+  settingsCredentialResolver?: SettingsCredentialResolver;
   headlessAuthService?: HeadlessAuthService;
   automationAuditService?: AutomationAuditExportService;
   headlessReadinessService?: HeadlessOperationalReadinessService;

@@ -164,6 +164,14 @@ const resolveProviderToken = async (provider: GitProvider): Promise<string | nul
   return resolved;
 };
 
+/** Resolve explicit or environment/CLI Git-host authentication for one operation. */
+export async function resolveGitHostTokenWithFallbacks(
+  provider: Extract<GitProvider, "github" | "gitlab">,
+  explicitToken?: string | null,
+): Promise<string | null> {
+  return normalizeToken(explicitToken) ?? await resolveProviderToken(provider);
+}
+
 export function clearGitHostTokenCache(): void {
   tokenResolutionCache.clear();
 }

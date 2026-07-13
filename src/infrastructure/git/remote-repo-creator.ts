@@ -9,7 +9,8 @@ import {
   validateNonEmptyDir,
 } from "../../utils/path-validator.js";
 import type { ValidatedPath } from "../../utils/path-validator.js";
-import { buildGitHttpAuthEnvWithFallbacks } from "../../services/git-http-auth.js";
+import { buildGitHttpAuthEnvWithFallbacks, resolveGitHostTokenWithFallbacks } from "../../services/git-http-auth.js";
+import { redactText } from "../../shared/security/redaction.js";
 import { ensureCodeUxGitignoreEntry } from "./code-ux-gitignore.js";
 
 export interface RemoteRepoResult {
@@ -29,6 +30,12 @@ const parseApiError = (fallback: string, text: string): string => {
     return text.trim() || fallback;
   }
 };
+
+function remoteOperationErrorMessage(error: unknown, hostToken?: string | null): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const exactRedacted = hostToken ? raw.split(hostToken).join("[REDACTED]") : raw;
+  return redactText(exactRedacted);
+}
 
 const cloneRepository = async (remoteUrl: string, cloneParentDir: string, repoName: string, hostToken?: string): Promise<void> => {
   const safeRepoName = validateSafeRepoName(repoName);
@@ -114,6 +121,7 @@ export async function createGitHubRepo(opts: {
   cloneParentDir: string;
   hostToken?: string;
 }): Promise<RemoteRepoResult> {
+  let hostToken: string | null = null;
   try {
     const safeRepoName = validateSafeRepoName(opts.repoName);
     // Operate on the sanitized, resolved parent directory returned by the
@@ -126,14 +134,15 @@ export async function createGitHubRepo(opts: {
     // codeql[js/path-injection]
     fs.mkdirSync(safeParentDir, { recursive: true });
 
-    if (!opts.hostToken?.trim()) {
+    hostToken = await resolveGitHostTokenWithFallbacks("github", opts.hostToken);
+    if (!hostToken) {
       throw new Error("GitHub token is required to create a remote repository.");
     }
 
     const response = await fetch("https://api.github.com/user/repos", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${opts.hostToken}`,
+        Authorization: `Bearer ${hostToken}`,
         Accept: "application/vnd.github+json",
         "Content-Type": "application/json",
         "X-GitHub-Api-Version": "2022-11-28",
@@ -154,13 +163,14 @@ export async function createGitHubRepo(opts: {
       throw new Error("GitHub API response did not include clone_url.");
     }
 
-    await cloneRepository(remoteUrl, safeParentDir, safeRepoName, opts.hostToken);
+    await cloneRepository(remoteUrl, safeParentDir, safeRepoName, hostToken);
     const localPath = safeTargetDir;
-    await seedEmptyRemoteRepository(remoteUrl, localPath, safeRepoName, "main", opts.hostToken);
+    await seedEmptyRemoteRepository(remoteUrl, localPath, safeRepoName, "main", hostToken);
     return { localPath, remoteUrl };
-  } catch (error: any) {
-    const message = error.stderr?.toString() || error.message;
-    throw new Error(`Failed to create GitHub repository: ${message}`);
+  } catch (error: unknown) {
+    throw new Error(`Failed to create GitHub repository: ${remoteOperationErrorMessage(error, hostToken)}`);
+  } finally {
+    hostToken = null;
   }
 }
 
@@ -175,6 +185,7 @@ export async function createGitLabRepo(opts: {
   hostToken?: string;
   defaultBranch?: string;
 }): Promise<RemoteRepoResult> {
+  let hostToken: string | null = null;
   try {
     const safeRepoName = validateSafeRepoName(opts.repoName);
     // Operate on the sanitized, resolved parent directory returned by the
@@ -187,14 +198,15 @@ export async function createGitLabRepo(opts: {
     // codeql[js/path-injection]
     fs.mkdirSync(safeParentDir, { recursive: true });
 
-    if (!opts.hostToken?.trim()) {
+    hostToken = await resolveGitHostTokenWithFallbacks("gitlab", opts.hostToken);
+    if (!hostToken) {
       throw new Error("GitLab token is required to create a remote repository.");
     }
 
     const response = await fetch("https://gitlab.com/api/v4/projects", {
       method: "POST",
       headers: {
-        "PRIVATE-TOKEN": opts.hostToken,
+        "PRIVATE-TOKEN": hostToken,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -219,18 +231,19 @@ export async function createGitLabRepo(opts: {
     }
     const localPath = safeTargetDir;
 
-    await cloneRepository(remoteUrl, safeParentDir, safeRepoName, opts.hostToken);
+    await cloneRepository(remoteUrl, safeParentDir, safeRepoName, hostToken);
     await seedEmptyRemoteRepository(
       remoteUrl,
       localPath,
       safeRepoName,
       opts.defaultBranch?.trim() || "main",
-      opts.hostToken,
+      hostToken,
     );
 
     return { localPath, remoteUrl };
-  } catch (error: any) {
-    const message = error.stderr?.toString() || error.message;
-    throw new Error(`Failed to create GitLab repository: ${message}`);
+  } catch (error: unknown) {
+    throw new Error(`Failed to create GitLab repository: ${remoteOperationErrorMessage(error, hostToken)}`);
+  } finally {
+    hostToken = null;
   }
 }

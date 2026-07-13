@@ -80,6 +80,7 @@ export function createMcpDependencies(
     customDashboardValidationService: coreDeps.customDashboardValidationService,
     executionRepository: coreDeps.executionRepository,
     getDashboardSettings: () => getDashboardSettings(),
+    settingsCredentialResolver: coreDeps.settingsCredentialResolver,
     projectManagementRepository: coreDeps.projectManagementRepository,
     executionControlService: dashboardDeps.executionControlService,
     taskRerunService: dashboardDeps.taskRerunService,

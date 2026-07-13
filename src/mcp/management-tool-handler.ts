@@ -60,6 +60,7 @@ import type { Logger } from "../shared/logging/logger.js";
 import type { CreateProjectInput, ProjectSummary } from "../contracts/project-management-types.js";
 import { initializeProject } from "../domain/projects/project-initializer.js";
 import { prepareGitProjectCreateInput } from "../services/project-git-clone-service.js";
+import type { SettingsCredentialResolver } from "../services/credentials/settings-credential-resolver.js";
 
 import { PreviewActions } from "./management/preview-actions.js";
 import { CustomDashboardActions } from "./management/custom-dashboard-actions.js";
@@ -85,6 +86,7 @@ export interface ManagementToolHandlerDeps {
   customDashboardValidationService: CustomDashboardValidationService;
   executionRepository: ExecutionRepository;
   getDashboardSettings: () => DashboardSettings;
+  settingsCredentialResolver?: SettingsCredentialResolver;
   projectManagementRepository: ProjectManagementRepository;
   executionControlService: ExecutionControlService;
   taskRerunService: LateBoundOrValue<TaskRerunService>;
@@ -223,8 +225,20 @@ export class ManagementToolHandler {
           gitlabToken: this.resolveGitlabToken(),
         }),
       ),
-      getGithubToken: () => this.resolveGithubToken() ?? "",
-      getGitlabToken: () => this.resolveGitlabToken() ?? "",
+      withRemoteGitCredential: async (provider, consumer) => {
+        const git = this.deps.getDashboardSettings().git;
+        const reference = provider === "github"
+          ? git.githubTokenCredentialRef
+          : git.gitlabTokenCredentialRef;
+        if (!reference) return await consumer();
+        if (!this.deps.settingsCredentialResolver) {
+          throw new Error("Git credential resolution is unavailable for remote project creation.");
+        }
+        return await this.deps.settingsCredentialResolver.withManagementCredential(reference, {
+          consumer: `git.${provider}.project-create`,
+          workspaceId: "project-management",
+        }, async (secret) => await consumer(secret.toString("utf8")));
+      },
     });
   }
 

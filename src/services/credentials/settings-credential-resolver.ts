@@ -54,6 +54,23 @@ export class SettingsCredentialResolver {
     }, consumer);
   }
 
+  /** Resolve through the credential's broker-authorized management project. */
+  async withManagementCredential<T>(
+    referenceValue: unknown,
+    context: Omit<SettingsCredentialRuntimeContext, "projectId">,
+    consumer: (secret: Buffer) => T | Promise<T>,
+  ): Promise<T> {
+    const reference = validateReference(referenceValue);
+    const consumerName = context.consumer.trim();
+    if (!consumerName) throw new MalformedSettingsCredentialReferenceError();
+    return this.broker.withResolvedManagementCredentialId({
+      credentialId: reference.credentialId,
+      capability: reference.capability,
+      bindingKey: `settings:${consumerName}`,
+      workspaceId: context.workspaceId?.trim() || "project-management",
+    }, consumer);
+  }
+
   /**
    * Resolves several references for one execution boundary while keeping every
    * broker-owned buffer alive only for the duration of the final callback.
