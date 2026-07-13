@@ -32,7 +32,7 @@ Generated dashboards should handle unavailable-source errors visibly. External A
 
 ## Agent and API Notes
 
-Project Manager agents use the `manage_custom_dashboards` MCP tool to create drafts, list credential slots, bind or unbind credential IDs, create revisions, validate revisions, inspect logs, publish passed revisions, archive dashboards, and read the data catalog. Credential mutations require the normal stateful human-approval handshake and an optimistic `expectedBindingRevision`.
+Project Manager agents use the `manage_custom_dashboards` MCP tool to create drafts, list credential slots, bind or unbind credential IDs, create revisions, validate revisions, inspect logs, publish passed revisions, archive dashboards, and read the data catalog. Credential mutations require the normal stateful human-approval handshake and an optimistic `expectedBindingRevision`; unsupported or secret-bearing fields are rejected before approval state is created.
 
 The same workflow is available through the dashboard REST API:
 

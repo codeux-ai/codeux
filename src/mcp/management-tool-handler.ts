@@ -62,7 +62,10 @@ import { initializeProject } from "../domain/projects/project-initializer.js";
 import { prepareGitProjectCreateInput } from "../services/project-git-clone-service.js";
 
 import { PreviewActions } from "./management/preview-actions.js";
-import { CustomDashboardActions } from "./management/custom-dashboard-actions.js";
+import {
+  CustomDashboardActions,
+  normalizeCustomDashboardCredentialMutationArgs,
+} from "./management/custom-dashboard-actions.js";
 import { handleTelemetryActions } from "./management/telemetry-actions.js";
 import { handleProjectAction } from "./management/project-actions.js";
 import { SprintActions } from "./management/sprint-actions.js";
@@ -546,8 +549,15 @@ export class ManagementToolHandler {
 
   async handleManageCustomDashboards(args: ManageCustomDashboardsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
-      const managementArgs = { domain: "custom_dashboards", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval };
-      const dispatch = (approval = args.approval) => this.customDashboardActions.handleCustomDashboardAction({ ...managementArgs, approval });
+      const normalizedArgs = normalizeCustomDashboardCredentialMutationArgs(args);
+      const managementArgs = {
+        domain: "custom_dashboards",
+        action: normalizedArgs.action,
+        payload: normalizedArgs as unknown as Record<string, unknown>,
+        approval: normalizedArgs.approval,
+      };
+      const dispatch = (approval = normalizedArgs.approval) =>
+        this.customDashboardActions.handleCustomDashboardAction({ ...managementArgs, approval });
       const approvalGate = await this.requireStatefulApproval(managementArgs, () => dispatch({ confirmed: false }));
       const envelope = approvalGate ?? this.recordStatefulApprovalRequirement(managementArgs, await dispatch());
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };

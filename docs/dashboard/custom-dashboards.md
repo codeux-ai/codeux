@@ -102,7 +102,7 @@ The dedicated MCP tool is `manage_custom_dashboards` and is available to the pro
 - `data_catalog`
 - `list_credential_slots`, `bind_credential`, `unbind_credential`
 
-Credential actions use `projectId`, `dashboardId`, `slotId`, `credentialId`, and `expectedBindingRevision`; an optional `revisionId` reviews an immutable snapshot. Bind and unbind require the normal stateful human-approval handshake. They reject secret, header, environment, and other undeclared fields. Other important fields include `sessionId`, `validationSessionId`, `title`, `description`, `manifest`, `fileBundle`, `sourceNodeGraph`, `styleguide`, `runtimeMetadata`, `tail`, and `approval`.
+Credential actions use `projectId`, `dashboardId`, `slotId`, `credentialId`, and `expectedBindingRevision`; an optional `revisionId` reviews an immutable snapshot. Bind and unbind require the normal stateful human-approval handshake. Before creating any approval fingerprint, Code UX rejects secret, header, environment, malformed approval, and other undeclared fields, then rebuilds the approval payload from only the allowed metadata. Other important fields include `sessionId`, `validationSessionId`, `title`, `description`, `manifest`, `fileBundle`, `sourceNodeGraph`, `styleguide`, `runtimeMetadata`, `tail`, and `approval`.
 
 The dashboard chat JSON-action bridge also understands the legacy `custom_dashboards` management domain, but agents should prefer the dedicated MCP tool when it is available.
 

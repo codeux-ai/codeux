@@ -6,6 +6,7 @@ import type {
 } from "../../contracts/custom-dashboard-types.js";
 import type {
   ManageCodeUxArgs,
+  ManageCustomDashboardsArgs,
   ManagementResponseEnvelope,
 } from "../../contracts/internal-management-types.js";
 import type { CustomDashboardRepository } from "../../repositories/custom-dashboard-repository.js";
@@ -24,6 +25,84 @@ import {
   parseRequiredObject,
   parseRequiredString,
 } from "./payload-parsers.js";
+
+const BIND_CREDENTIAL_ARGUMENT_KEYS = new Set([
+  "action",
+  "projectId",
+  "dashboardId",
+  "slotId",
+  "credentialId",
+  "expectedBindingRevision",
+  "approval",
+]);
+const UNBIND_CREDENTIAL_ARGUMENT_KEYS = new Set([
+  "action",
+  "projectId",
+  "dashboardId",
+  "slotId",
+  "expectedBindingRevision",
+  "approval",
+]);
+
+export function normalizeCustomDashboardCredentialMutationArgs(
+  args: ManageCustomDashboardsArgs,
+): ManageCustomDashboardsArgs {
+  if (args.action !== "bind_credential" && args.action !== "unbind_credential") return args;
+
+  const payload = args as unknown as Record<string, unknown>;
+  const allowedKeys = args.action === "bind_credential"
+    ? BIND_CREDENTIAL_ARGUMENT_KEYS
+    : UNBIND_CREDENTIAL_ARGUMENT_KEYS;
+  if (Object.keys(payload).some((key) => !allowedKeys.has(key))) {
+    throw managementValidationError(
+      `${args.action} contains unsupported or secret-bearing fields`,
+      "payload",
+    );
+  }
+
+  const expectedBindingRevision = payload.expectedBindingRevision;
+  if (typeof expectedBindingRevision !== "number"
+    || !Number.isSafeInteger(expectedBindingRevision)
+    || expectedBindingRevision < 1) {
+    throw managementValidationError(
+      "expectedBindingRevision must be a positive safe integer",
+      "expectedBindingRevision",
+    );
+  }
+
+  const approval = normalizeCredentialMutationApproval(payload.approval, args.action);
+  const normalized: ManageCustomDashboardsArgs = {
+    action: args.action,
+    projectId: parseRequiredString(payload, "projectId"),
+    dashboardId: parseRequiredString(payload, "dashboardId"),
+    slotId: parseRequiredString(payload, "slotId"),
+    expectedBindingRevision,
+    ...(approval ? { approval } : {}),
+  };
+  if (args.action === "bind_credential") {
+    normalized.credentialId = parseRequiredString(payload, "credentialId");
+  }
+  return normalized;
+}
+
+function normalizeCredentialMutationApproval(
+  value: unknown,
+  action: "bind_credential" | "unbind_credential",
+): ManageCustomDashboardsArgs["approval"] {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw managementValidationError(`${action} approval must be an object`, "approval");
+  }
+  const approval = value as Record<string, unknown>;
+  if (Object.keys(approval).some((key) => key !== "confirmed")
+    || typeof approval.confirmed !== "boolean") {
+    throw managementValidationError(
+      `${action} approval accepts only a boolean confirmed field`,
+      "approval",
+    );
+  }
+  return { confirmed: approval.confirmed };
+}
 
 export class CustomDashboardActions {
   constructor(
@@ -282,12 +361,11 @@ export class CustomDashboardActions {
 }
 
 function bindingMutationInput(payload: Record<string, unknown>, unbind: boolean): Record<string, unknown> {
-  const envelopeKeys = new Set(["action", "approval", "projectId", "dashboardId"]);
-  const input = Object.fromEntries(Object.entries(payload).filter(([key]) => !envelopeKeys.has(key)));
-  if (unbind && "credentialId" in input) {
-    throw managementValidationError("unbind_credential does not accept credentialId or secret-bearing fields", "credentialId");
-  }
-  return input;
+  return {
+    slotId: payload.slotId,
+    expectedBindingRevision: payload.expectedBindingRevision,
+    ...(unbind ? {} : { credentialId: payload.credentialId }),
+  };
 }
 
 function parseDashboardDraftPayload(

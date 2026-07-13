@@ -127,6 +127,12 @@ function parseResponse(response: { content: Array<{ text: string }> }): Record<s
   return JSON.parse(response.content[0]?.text ?? "{}") as Record<string, any>;
 }
 
+function pendingApprovalFingerprints(handler: ManagementToolHandler): string[] {
+  return [...(handler as unknown as {
+    pendingDestructiveApprovals: Map<string, number>;
+  }).pendingDestructiveApprovals.keys()];
+}
+
 afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
@@ -427,13 +433,68 @@ describe("manage_custom_dashboards", () => {
       expectedBindingRevision: 1,
       value: canary,
     };
-    await handler.handleManageCustomDashboards(unsafe as any);
-    const denied = parseResponse(await handler.handleManageCustomDashboards({
+    const deniedInitial = parseResponse(await handler.handleManageCustomDashboards(unsafe as any));
+    expect(deniedInitial.result).toMatchObject({ status: "error", errorType: "validation", field: "payload" });
+    expect(JSON.stringify(deniedInitial)).not.toContain(canary);
+    expect(pendingApprovalFingerprints(handler)).toEqual([]);
+
+    const deniedConfirmed = parseResponse(await handler.handleManageCustomDashboards({
       ...unsafe,
       approval: { confirmed: true },
     } as any));
-    expect(denied.result.status).toBe("error");
-    expect(JSON.stringify(denied)).not.toContain(canary);
+    expect(deniedConfirmed.result.status).toBe("error");
+    expect(JSON.stringify(deniedConfirmed)).not.toContain(canary);
+    expect(pendingApprovalFingerprints(handler)).toEqual([]);
+
+    const deniedApprovalPayload = parseResponse(await handler.handleManageCustomDashboards({
+      action: "bind_credential",
+      projectId,
+      dashboardId: dashboard.id,
+      slotId: "metrics_api",
+      credentialId: credential.id,
+      expectedBindingRevision: 1,
+      approval: { confirmed: false, value: canary },
+    } as any));
+    expect(deniedApprovalPayload.result).toMatchObject({
+      status: "error",
+      errorType: "validation",
+      field: "approval",
+    });
+    expect(JSON.stringify(deniedApprovalPayload)).not.toContain(canary);
+    expect(pendingApprovalFingerprints(handler)).toEqual([]);
+
+    const cleanBind = {
+      action: "bind_credential" as const,
+      projectId,
+      dashboardId: dashboard.id,
+      slotId: "metrics_api",
+      credentialId: credential.id,
+      expectedBindingRevision: 1,
+      approval: { confirmed: true },
+    };
+    const cleanPreflight = parseResponse(await handler.handleManageCustomDashboards(cleanBind));
+    expect(cleanPreflight.approvalRequired).toBe(true);
+    const fingerprints = pendingApprovalFingerprints(handler);
+    expect(fingerprints).toHaveLength(1);
+    expect(fingerprints[0]).not.toContain(canary);
+    expect(fingerprints[0]).not.toContain('"value"');
+
+    const bound = parseResponse(await handler.handleManageCustomDashboards(cleanBind));
+    expect(bound.result.bindings.valid).toBe(true);
+    expect(pendingApprovalFingerprints(handler)).toEqual([]);
+
+    const unsafeUnbind = {
+      action: "unbind_credential" as const,
+      projectId,
+      dashboardId: dashboard.id,
+      slotId: "metrics_api",
+      expectedBindingRevision: 2,
+      headers: { authorization: canary },
+    };
+    const deniedUnbind = parseResponse(await handler.handleManageCustomDashboards(unsafeUnbind as any));
+    expect(deniedUnbind.result).toMatchObject({ status: "error", errorType: "validation", field: "payload" });
+    expect(JSON.stringify(deniedUnbind)).not.toContain(canary);
+    expect(pendingApprovalFingerprints(handler)).toEqual([]);
 
     const crossProject = parseResponse(await handler.handleManageCustomDashboards({
       action: "list_credential_slots",

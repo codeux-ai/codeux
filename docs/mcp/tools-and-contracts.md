@@ -252,7 +252,7 @@ The restricted tool intentionally does not expose due-entry execution, arbitrary
 - `archive` clears any active publication and marks the dashboard archived. It follows the normal destructive-action approval fingerprint flow.
 - `data_catalog` returns project dashboard summaries and declared source nodes for agents building or inspecting generated dashboards.
 - `list_credential_slots` returns a bounded metadata-only review of declared slots, current bindings, backend health, and compatible credential candidates for the owning project. An optional `revisionId` reviews an immutable revision.
-- `bind_credential` binds or replaces one declared slot by credential ID with `expectedBindingRevision`; `unbind_credential` removes one slot binding with the same optimistic guard. Both mutations require the stateful human-confirmation handshake.
+- `bind_credential` binds or replaces one declared slot by credential ID with `expectedBindingRevision`; `unbind_credential` removes one slot binding with the same optimistic guard. Both mutations require the stateful human-confirmation handshake. Their arguments are strictly validated and reduced to the allowed metadata fields before an approval fingerprint is built, so secret-bearing or unsupported fields cannot enter pending approval state.
 
 Payload fields:
 
