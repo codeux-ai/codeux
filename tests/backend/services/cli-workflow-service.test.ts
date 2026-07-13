@@ -141,6 +141,10 @@ describe("CliWorkflowService unpushed commit detection", () => {
         storedInvocation = { ...input, id: "xi-preparation" };
         return storedInvocation;
       }),
+      updateExecutionInvocation: vi.fn().mockImplementation((_id: string, input: Record<string, unknown>) => {
+        Object.assign(storedInvocation!, input);
+        return storedInvocation;
+      }),
       appendExecutionInvocationMessage: vi.fn().mockImplementation(() => {
         callOrder.push("persist_message");
       }),
@@ -191,7 +195,14 @@ describe("CliWorkflowService unpushed commit detection", () => {
     vi.mocked(executeProviderStage).mockResolvedValue(buildProviderStageResult(
       "No repository changes were required.\nCODE_UX_TASK_OUTCOME: completed",
     ));
-    vi.mocked(executeGitFinalizeStage).mockResolvedValue({ hasChanges: false, committedChanges: false });
+    vi.mocked(executeGitFinalizeStage).mockImplementation(async () => {
+      expect(storedInvocation).toMatchObject({ status: "running" });
+      return { hasChanges: true, committedChanges: true, pushedBranch: "worker-1" };
+    });
+    vi.mocked(executePrFinalizeStage).mockImplementation(async () => {
+      expect(storedInvocation).toMatchObject({ status: "running" });
+      return { prUrl: "https://example.test/pull/1" };
+    });
     vi.mocked(executeCleanupStage).mockResolvedValue({ cleanedUp: false });
 
     const workflow = (service as any).runTaskWorkflow({
@@ -254,6 +265,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
       expect.objectContaining({ executionInvocationId: "xi-preparation" }),
       "mock prompt",
     );
+    expect(storedInvocation).toMatchObject({ status: "completed" });
   });
 
   it("runs task workflow pipeline and handles error", async () => {

@@ -492,6 +492,7 @@ export class CliWorkflowService {
             category,
             errorMessage: blocker,
           }, `cli:workflow:blocked:agent:${args.sessionId}`);
+          this.finalizeExecutionInvocation(ctx.executionInvocationId, "failed", finishedAt, blocker);
           return;
         }
         this.appendExecutionEvent(args, "cli_git_no_changes", {
@@ -511,6 +512,7 @@ export class CliWorkflowService {
           provider: args.provider,
           outcome: "no_changes",
         }, "cli:workflow:completed:no-changes");
+        this.finalizeExecutionInvocation(ctx.executionInvocationId, "completed", finishedAt);
         return;
       }
 
@@ -552,6 +554,7 @@ export class CliWorkflowService {
         outcome: "pushed",
         prUrl: prUrl || null,
       }, `cli:workflow:completed:${prUrl || "none"}`);
+      this.finalizeExecutionInvocation(ctx.executionInvocationId, "completed", finishedAt);
 
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -713,6 +716,12 @@ export class CliWorkflowService {
           message,
         });
       }
+      this.finalizeExecutionInvocation(
+        ctx.executionInvocationId,
+        abortController.signal.aborted ? "cancelled" : "failed",
+        finishedAt,
+        message,
+      );
     } finally {
       try {
         const cleanupResult = preserveWorkspaceForShutdown
@@ -893,6 +902,26 @@ export class CliWorkflowService {
         errorMessage: input.errorMessage ?? null,
       });
     }
+  }
+
+  private finalizeExecutionInvocation(
+    invocationId: string | undefined,
+    status: "completed" | "failed" | "cancelled",
+    finishedAt: string,
+    errorMessage?: string,
+  ): void {
+    if (!invocationId || !this.deps.executionRepository) {
+      return;
+    }
+    const invocation = this.deps.executionRepository.getExecutionInvocation(invocationId);
+    if (!invocation || (invocation.status !== "running" && invocation.status !== "paused")) {
+      return;
+    }
+    this.deps.executionRepository.updateExecutionInvocation(invocationId, {
+      status,
+      finishedAt,
+      ...(status === "completed" ? { errorMessage: null } : { errorMessage: errorMessage ?? null }),
+    });
   }
 
   private isSprintRunCancelled(sprintRunId?: string | null): boolean {

@@ -171,6 +171,106 @@ describe("ProviderExecutionService", () => {
       expect.objectContaining({ purpose: "test-purpose", sessionId: "session-1" }),
       undefined,
       30_000,
+      "exec-inv-1",
+    );
+  });
+
+  it("reuses a supplied execution invocation and links exactly one claimed provider usage", async () => {
+    providerRunner.runProvider.mockResolvedValue(mockResult);
+
+    await service.executeProvider({
+      ...defaultArgs,
+      invocationId: "exec-inv-1",
+      finalizeExecutionInvocation: false,
+    });
+
+    expect(executionRepository.createExecutionInvocation).not.toHaveBeenCalled();
+    expect(executionRepository.createProviderInvocationUsage).toHaveBeenCalledOnce();
+    expect(executionRepository.createProviderInvocationUsage).toHaveBeenCalledWith(
+      expect.not.objectContaining({ startedAt: expect.anything() }),
+    );
+    const linkageUpdates = executionRepository.updateExecutionInvocation.mock.calls.filter(([, update]) => (
+      (update as { providerInvocationId?: string }).providerInvocationId === "prov-inv-1"
+    ));
+    expect(linkageUpdates).toHaveLength(1);
+    expect(executionRepository.updateExecutionInvocation).not.toHaveBeenCalledWith(
+      "exec-inv-1",
+      expect.objectContaining({ status: "completed" }),
+    );
+    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith("exec-inv-1", {
+      role: "user",
+      contentMarkdown: "test prompt",
+    });
+  });
+
+  it("starts provider timestamps and duration after the concurrency wait", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-13T12:00:00.000Z"));
+    const waitForSlotAndClaim = vi.fn().mockImplementation(async (_provider, _limit, input) => {
+      expect(input).not.toHaveProperty("startedAt");
+      vi.setSystemTime(new Date("2026-07-13T12:00:10.000Z"));
+      return { id: "prov-inv-delayed" };
+    });
+    providerRunner.runProvider.mockImplementation(async () => {
+      vi.setSystemTime(new Date("2026-07-13T12:00:10.750Z"));
+      return mockResult;
+    });
+    service = new ProviderExecutionService({
+      providerRunner,
+      executionRepository,
+      logger: logger as any,
+      getGithubToken: vi.fn(),
+      providerConcurrencyService: { waitForSlotAndClaim } as any,
+    });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      invocationId: "exec-inv-1",
+      finalizeExecutionInvocation: false,
+    });
+
+    expect(waitForSlotAndClaim).toHaveBeenCalledWith(
+      "claude-code",
+      expect.any(Number),
+      expect.not.objectContaining({ startedAt: expect.anything() }),
+      undefined,
+      undefined,
+      "exec-inv-1",
+    );
+    expect(executionRepository.updateProviderInvocationUsage).toHaveBeenCalledWith(
+      "prov-inv-delayed",
+      expect.objectContaining({
+        status: "completed",
+        durationMs: 750,
+      }),
+    );
+  });
+
+  it("does not start or update provider work when a supplied execution is cancelled before claim completion", async () => {
+    const waitForSlotAndClaim = vi.fn().mockImplementation(async () => {
+      executionInvocationState.status = "cancelled";
+      return { id: "prov-inv-cancelled" };
+    });
+    service = new ProviderExecutionService({
+      providerRunner,
+      executionRepository,
+      logger: logger as any,
+      getGithubToken: vi.fn(),
+      providerConcurrencyService: { waitForSlotAndClaim } as any,
+    });
+
+    await expect(service.executeProvider({
+      ...defaultArgs,
+      invocationId: "exec-inv-1",
+      finalizeExecutionInvocation: false,
+    })).rejects.toThrow("provider execution will not continue");
+
+    expect(executionRepository.createExecutionInvocation).not.toHaveBeenCalled();
+    expect(providerRunner.runProvider).not.toHaveBeenCalled();
+    expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalled();
+    expect(executionRepository.updateExecutionInvocation).not.toHaveBeenCalledWith(
+      "exec-inv-1",
+      expect.objectContaining({ providerInvocationId: "prov-inv-cancelled" }),
     );
   });
 
@@ -607,9 +707,9 @@ describe("ProviderExecutionService", () => {
   });
 
   it("does not rewrite provider usage after external recovery closes it", async () => {
-    executionRepository.getProviderInvocationUsage.mockReturnValue({ id: "prov-inv-1", status: "failed" } as any);
-    executionRepository.getExecutionInvocation.mockReturnValue({ id: "exec-inv-1", status: "failed" } as any);
     providerRunner.runProvider.mockImplementation(async (opts: any) => {
+      executionInvocationState.status = "failed";
+      executionRepository.getProviderInvocationUsage.mockReturnValue({ id: "prov-inv-1", status: "failed" } as any);
       opts.onTelemetry({
         transcriptText: "late telemetry",
         inputTokens: 1,
