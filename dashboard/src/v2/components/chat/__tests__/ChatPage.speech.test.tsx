@@ -16,7 +16,12 @@ const speechButtonMock = vi.hoisted(() => ({
 }));
 
 const synthesisMock = vi.hoisted(() => ({
-  synthesizeSpeech: vi.fn<() => Promise<Blob>>(),
+  synthesizeSpeech: vi.fn<(
+    text: string,
+    projectId?: string | null,
+    voice?: string | null,
+    signal?: AbortSignal,
+  ) => Promise<Blob>>(),
 }));
 
 const mocks = vi.hoisted(() => {
@@ -329,7 +334,12 @@ describe("ChatPage speech input", () => {
     );
 
     await waitFor(() => expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledTimes(1));
-    expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledWith("Fresh agent reply", "p1");
+    expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledWith(
+      "Fresh agent reply",
+      "p1",
+      undefined,
+      expect.any(AbortSignal),
+    );
   });
 
   it("replays the staged agent message only after its explicit replay control is clicked", async () => {
@@ -354,7 +364,12 @@ describe("ChatPage speech input", () => {
     expect(synthesisMock.synthesizeSpeech).not.toHaveBeenCalled();
     fireEvent.click(replay);
 
-    await waitFor(() => expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledWith("Replay this reply", "p1"));
+    await waitFor(() => expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledWith(
+      "Replay this reply",
+      "p1",
+      undefined,
+      expect.any(AbortSignal),
+    ));
   });
 
   it("reports a 3D voice synthesis failure instead of silently discarding it", async () => {
@@ -381,6 +396,33 @@ describe("ChatPage speech input", () => {
     expect(await screen.findByRole("status")).toHaveTextContent(
       "Voice error: Configured voice is unavailable.",
     );
+  });
+
+  it("reports thread replay failures through the existing composer status without hiding the transcript", async () => {
+    synthesisMock.synthesizeSpeech.mockRejectedValueOnce(new Error("Speech provider timed out."));
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "threads",
+      messages: [{
+        id: "thread-replay-error",
+        threadId: "thread1",
+        direction: "connection_to_dashboard",
+        authorType: "connection",
+        authorConnectionId: "connection-1",
+        bodyMarkdown: "The transcript remains visible.",
+        deliveryStatus: "delivered",
+        createdAt: "2026-03-10T12:00:00.000Z",
+        metadata: null,
+      }],
+    };
+
+    renderChatPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Replay message from Assistant" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Voice playback failed: Speech provider timed out. The transcript is still available.",
+    );
+    expect(screen.getByText("The transcript remains visible.")).toBeInTheDocument();
   });
 
   it("auto-plays the first reply after sending in a brand-new empty 3D thread", async () => {
@@ -439,7 +481,12 @@ describe("ChatPage speech input", () => {
     );
 
     await waitFor(() => expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledTimes(1));
-    expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledWith("First answer", "p1");
+    expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledWith(
+      "First answer",
+      "p1",
+      undefined,
+      expect.any(AbortSignal),
+    );
   });
 
   it("keeps loaded thread and invocation transcripts silent until replay is requested", async () => {
@@ -496,5 +543,12 @@ describe("ChatPage speech input", () => {
 
     expect(await screen.findByRole("button", { name: "Replay message from Assistant" })).toBeInTheDocument();
     expect(synthesisMock.synthesizeSpeech).not.toHaveBeenCalled();
+
+    synthesisMock.synthesizeSpeech.mockRejectedValueOnce(new Error("Invocation replay failed."));
+    fireEvent.click(screen.getByRole("button", { name: "Replay message from Assistant" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Voice playback failed: Invocation replay failed. The transcript is still available.",
+    );
+    expect(screen.getByText("Loaded invocation reply")).toBeInTheDocument();
   });
 });
