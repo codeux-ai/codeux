@@ -128,6 +128,8 @@ Docker-backed planning uses a read-only snapshot workspace instead of a mutable 
 
 Provider CLI workspace preparation is centralized through `InvocationWorkspacePreparer`. Its shared provider-invocation option builder constructs snapshot checkout, git policy, and fresh/continue lifecycle values for Docker provider calls, while its continuation resolver locates preserved workspaces and their current branches. Fresh Docker invocations in `REMOTE` git mode use explicit remote refs only: planning, project setup, dashboard/chat replies, worker inbox replies, node-flow provider prompts, QA review snapshots, task coding, QA follow-up, CI autofix, and merge-conflict repair all materialize from `origin/<branch>` refs rather than local branches or the host repo's current checkout. Dashboard/chat replies resolve dashboard settings with the project scope before building this policy, so local Git projects keep `LOCAL` snapshot behavior and do not require `origin/<defaultBranch>`. Continuation/restart flows may reuse a preserved workspace for provider-session continuity; if a preserved workspace is missing and a new workspace must be materialized, the same remote-only branch policy applies.
 
+When a LOCAL branch advances while an isolated worker is running, patch materialization applies the worker diff on top of that current descendant tip so concurrent task merges are retained.
+
 ## Session lifecycle
 
 Within a dispatch, the session poll loop runs:
