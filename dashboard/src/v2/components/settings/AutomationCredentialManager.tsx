@@ -164,6 +164,7 @@ export const AutomationCredentialManager: FunctionComponent<AutomationCredential
   const [restrictionCapabilities, setRestrictionCapabilities] = useState<Record<string, string[]>>({});
   const [restrictionProjects, setRestrictionProjects] = useState<Record<string, string[]>>({});
   const [promotionProjects, setPromotionProjects] = useState<Record<string, string[]>>({});
+  const [confirmDialogKey, setConfirmDialogKey] = useState(0);
   const secretContainerRef = useRef<HTMLDivElement>(null);
   const confirm = useConfirmDialog();
 
@@ -229,6 +230,13 @@ export const AutomationCredentialManager: FunctionComponent<AutomationCredential
     setFeedback((current) => ({ ...current, [credentialId]: next }));
   };
 
+  const requestConfirmation = (options: Parameters<typeof confirm.requestConfirm>[0]): Promise<boolean> => {
+    // A lifecycle mutation can finish before the shared dialog's exit animation unmounts.
+    // Remount for every request so a following action cannot inherit closing or typed state.
+    setConfirmDialogKey((current) => current + 1);
+    return confirm.requestConfirm(options);
+  };
+
   const runMutation = async (
     credential: AutomationCredentialMetadata,
     action: string,
@@ -274,7 +282,7 @@ export const AutomationCredentialManager: FunctionComponent<AutomationCredential
         return;
       }
       if (scope === "global") {
-        const confirmed = await confirm.requestConfirm({
+        const confirmed = await requestConfirmation({
           title: "Create a globally accessible credential?",
           body: "Every selected project will be able to use this credential. The selected project remains the only management owner.",
           confirmLabel: "Create global credential",
@@ -317,7 +325,7 @@ export const AutomationCredentialManager: FunctionComponent<AutomationCredential
       target?.focus({ preventScroll: true });
     };
     try {
-      if (await confirm.requestConfirm(options)) await operation();
+      if (await requestConfirmation(options)) await operation();
     } finally {
       window.setTimeout(restoreFocus, 0);
       // ConfirmDialog completes its exit animation after the promise resolves.
@@ -488,7 +496,7 @@ export const AutomationCredentialManager: FunctionComponent<AutomationCredential
         </ul>
       </section>
 
-      <ConfirmDialog isOpen={confirm.isOpen} options={confirm.options} onConfirm={confirm.handleConfirm} onCancel={confirm.handleCancel} />
+      <ConfirmDialog key={confirmDialogKey} isOpen={confirm.isOpen} options={confirm.options} onConfirm={confirm.handleConfirm} onCancel={confirm.handleCancel} />
     </div>
   );
 };

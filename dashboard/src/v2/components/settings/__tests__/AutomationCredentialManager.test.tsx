@@ -223,11 +223,25 @@ describe("AutomationCredentialManager", () => {
     }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
-    await user.click(within(item).getByRole("button", { name: "Revoke" }));
+    const revokeTrigger = within(item).getByRole("button", { name: "Revoke" });
+    revokeTrigger.focus();
+    await user.click(revokeTrigger);
     expect(revokeAutomationCredential).not.toHaveBeenCalled();
-    await user.type(screen.getByLabelText("Type REVOKE to confirm"), "REVOKE");
-    await user.click(screen.getByRole("button", { name: "Revoke credential" }));
+    const revokeDialog = await screen.findByRole("dialog", { name: "Revoke Deployment token?" });
+    const confirmationInput = within(revokeDialog).getByLabelText("Type REVOKE to confirm");
+    const guardedRevokeButton = within(revokeDialog).getByRole("button", { name: "Type REVOKE to enable Revoke credential" });
+    expect((guardedRevokeButton as HTMLButtonElement).disabled).toBe(true);
+
+    await user.type(confirmationInput, "REVOK");
+    expect((guardedRevokeButton as HTMLButtonElement).disabled).toBe(true);
+    expect(revokeAutomationCredential).not.toHaveBeenCalled();
+    await user.type(confirmationInput, "E");
+    await user.click(within(revokeDialog).getByRole("button", { name: "Revoke credential" }));
     await waitFor(() => expect(revokeAutomationCredential).toHaveBeenCalledWith("project-1", "credential-1", { expectedVersion: 3 }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.queryByLabelText("Type REVOKE to confirm")).toBeNull();
+    expect(await screen.findByText("Credential revoked.")).toBeTruthy();
+    await waitFor(() => expect(item.contains(document.activeElement)).toBe(true));
   });
 
   it("prevents management from an allowlisted non-owner project", async () => {
