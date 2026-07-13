@@ -1000,6 +1000,12 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "sprints", "original_prompt", "TEXT");
   ensureColumn(db, "sprints", "base_commit_sha", "TEXT");
   ensureColumn(db, "sprints", "is_generated_name", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "sprints", "kind", "TEXT NOT NULL DEFAULT 'standard'");
+  ensureColumn(db, "sprints", "rollback_source_sprint_id", "TEXT");
+  ensureColumn(db, "sprints", "rollback_mode", "TEXT");
+  ensureColumn(db, "sprints", "rollback_instructions", "TEXT");
+  ensureColumn(db, "sprints", "rollback_safety_reason", "TEXT");
+  ensureIndex(db, "idx_sprints_rollback_source", "sprints", "project_id, rollback_source_sprint_id, created_at DESC");
   ensureColumn(db, "tasks", "executor_type", "TEXT NOT NULL DEFAULT 'auto'");
   ensureColumn(db, "sprint_preview_sessions", "port_mappings_json", "TEXT");
   ensureColumn(db, "sprint_preview_sessions", "environment_overrides_json", "TEXT");

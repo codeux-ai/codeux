@@ -205,6 +205,7 @@ export class CodeUxServer {
   private quicksprintService: import("../services/quicksprint-service.js").QuicksprintService;
   private projectSetupService: import("../services/project-setup-service.js").ProjectSetupService;
   private schedulerService: import("../services/scheduler-service.js").SchedulerService;
+  private sprintRollbackService: import("../services/sprint-rollback-service.js").SprintRollbackService;
   private nodeFlowService: import("../services/node-flow-service.js").NodeFlowService;
   private chatThreadRuntimeService: import("../services/chat-thread-runtime-service.js").ChatThreadRuntimeService;
   private chatProviderIngressService: ChatProviderIngressService;
@@ -312,6 +313,7 @@ export class CodeUxServer {
     this.quicksprintService = deps.quicksprintService;
     this.projectSetupService = deps.projectSetupService;
     this.schedulerService = deps.schedulerService;
+    this.sprintRollbackService = deps.sprintRollbackService;
     this.nodeFlowService = deps.nodeFlowService;
     this.chatThreadRuntimeService = deps.chatThreadRuntimeService;
     this.chatProviderIngressService = deps.chatProviderIngressService;
@@ -698,6 +700,7 @@ export class CodeUxServer {
       getAppConfig: () => this.appConfig,
       getEffectiveJulesApiKey: () => this.getEffectiveJulesApiKey(),
       getEffectiveGithubToken: () => this.getEffectiveGithubToken(),
+      getEffectiveGitlabToken: () => this.getEffectiveGitlabToken(),
       getDashboardPort: () => this.getDashboardPort(),
       isJulesApiConfigured: () => this.isJulesApiConfigured(),
       getMissingJulesApiKeyInstruction: () => this.getMissingJulesApiKeyInstruction(),
@@ -1467,6 +1470,7 @@ export class CodeUxServer {
         quicksprintService: this.quicksprintService,
         projectSetupService: this.projectSetupService,
         schedulerService: this.schedulerService,
+        sprintRollbackService: this.sprintRollbackService,
         nodeFlowService: this.nodeFlowService,
         credentialBroker: this.credentialBroker,
         settingsCredentialResolver: this.settingsCredentialResolver,

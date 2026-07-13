@@ -17,6 +17,7 @@ import {
   MoreVertical,
   Pause,
   Play,
+  RotateCcw,
   Square,
 } from "lucide-preact";
 import { useState, useRef, useEffect } from "preact/hooks";
@@ -116,6 +117,8 @@ export interface SprintLedgerRowProps {
   onExport: () => void;
   onOverrides: () => void;
   onMarkCompleted: () => void;
+  onMarkQaPassed?: () => void;
+  onRollback?: () => void;
   onDelete: () => void;
 }
 
@@ -141,6 +144,8 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   onExport,
   onOverrides,
   onMarkCompleted,
+  onMarkQaPassed,
+  onRollback,
   onDelete,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -173,6 +178,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   const pinActionId = `sprint-showcase:${sprint.id}`;
   const deleteActionId = `sprint-delete:${sprint.id}`;
   const markCompletedActionId = `sprint-mark-completed:${sprint.id}`;
+  const markQaPassedActionId = `sprint-mark-qa-passed:${sprint.id}`;
   const isCompleted = sprint.status === "completed";
   const statusPresentation = getSprintStatusPresentation({
     state: sprint.status,
@@ -196,11 +202,14 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   const isPinPending = pendingActionIds.has(pinActionId);
   const isDeletePending = pendingActionIds.has(deleteActionId);
   const isMarkCompletedPending = pendingActionIds.has(markCompletedActionId);
+  const isMarkQaPassedPending = pendingActionIds.has(markQaPassedActionId);
   // The menu icon only needs to show a loader if deleting/pinning. toggle and pause are shown in their own controls.
-  const isRowPending = isPinPending || isDeletePending || isMarkCompletedPending;
+  const isRowPending = isPinPending || isDeletePending || isMarkCompletedPending || isMarkQaPassedPending;
 
   const rowTone = attentionIndicatorState
     ? "border-status-red/55 bg-status-red/[0.055] shadow-[0_14px_36px_rgba(227,0,15,0.14)]"
+    : sprint.kind === "rollback"
+    ? "border-orange-500/30 bg-orange-500/[0.07] shadow-[0_14px_36px_rgba(249,115,22,0.1)]"
     : isSelected
     ? "border-signal-500/35 bg-signal-500/[0.08] shadow-[0_18px_44px_rgba(0,224,160,0.12)]"
     : isEven
@@ -208,6 +217,8 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       : "border-black/[0.06] bg-slate-50/80 dark:border-white/[0.07] dark:bg-white/[0.03]";
   const desktopCellTone = attentionIndicatorState
     ? "lg:border-status-red/45 lg:bg-status-red/[0.045] dark:lg:border-status-red/45 dark:lg:bg-status-red/[0.06]"
+    : sprint.kind === "rollback"
+    ? "lg:border-orange-500/25 lg:bg-orange-500/[0.065] dark:lg:border-orange-400/20 dark:lg:bg-orange-500/[0.08]"
     : isSelected
     ? "lg:border-signal-500/25 lg:bg-signal-500/[0.08]"
     : isEven
@@ -352,7 +363,14 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       </TableCell>
       <TableCell className={`min-w-0 max-w-full lg:w-[220px] lg:min-w-[220px] ${desktopCellTone}`} mobileLabel="Sprint">
         <div className="flex flex-wrap items-center gap-2">
-          <div className={`font-display text-base font-semibold leading-tight break-words ${isCompleted ? "text-slate-700 dark:text-slate-300" : "text-[var(--text-primary)]"}`}>{sprint.name}</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className={`font-display text-base font-semibold leading-tight break-words ${isCompleted ? "text-slate-700 dark:text-slate-300" : "text-[var(--text-primary)]"}`}>{sprint.name}</div>
+            {sprint.kind === "rollback" && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-orange-500/25 bg-orange-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.13em] text-orange-700 dark:text-orange-300">
+                <RotateCcw className="h-2.5 w-2.5" /> Rollback
+              </span>
+            )}
+          </div>
           {attentionIndicatorState && (
             <SprintAttentionIndicator state={attentionIndicatorState} compact />
           )}
@@ -577,12 +595,15 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
                   isCompleted={isCompleted}
                   showcaseBusy={isPinPending}
                   markCompletedDisabled={isMarkCompletedPending || isDeletePending || isAnyBulkPending}
+                  markQaPassedDisabled={isMarkQaPassedPending || sprint.latestReview?.status === "running" || isDeletePending || isAnyBulkPending}
                   deleteBusy={isDeletePending}
                   onEdit={onEdit}
                   onExport={onExport}
                   onToggleShowcase={() => onToggleShowcase(sprint)}
                   onOverrides={onOverrides}
                   onMarkCompleted={onMarkCompleted}
+                  onMarkQaPassed={onMarkQaPassed}
+                  onRollback={onRollback}
                   onDelete={onDelete}
                   onClose={() => setMenuOpen(false)}
                   markCompletedIcon="square"

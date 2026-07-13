@@ -50,6 +50,11 @@ CREATE TABLE IF NOT EXISTS sprints (
         end_date TEXT,
         feature_branch TEXT,
         base_commit_sha TEXT,
+        kind TEXT NOT NULL DEFAULT 'standard',
+        rollback_source_sprint_id TEXT,
+        rollback_mode TEXT,
+        rollback_instructions TEXT,
+        rollback_safety_reason TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE

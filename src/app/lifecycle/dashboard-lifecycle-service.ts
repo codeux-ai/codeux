@@ -57,6 +57,7 @@ import type { ChatProviderOutboundService } from "../../services/chat-provider-o
 import type { QuicksprintService } from "../../services/quicksprint-service.js";
 import type { ProjectSetupService } from "../../services/project-setup-service.js";
 import type { SchedulerService } from "../../services/scheduler-service.js";
+import type { SprintRollbackService } from "../../services/sprint-rollback-service.js";
 import type { ChatProviderIngressService } from "../../services/chat-provider-ingress-service.js";
 import type { SpeechTranscriptionService } from "../../services/speech-transcription-service.js";
 import type { SpeechSynthesisService } from "../../services/speech-synthesis-service.js";
@@ -94,6 +95,7 @@ import {
   invalidateOnboardingRuntimeReadinessCache,
 } from "../../services/onboarding-readiness-service.js";
 import type { SprintImportedTaskInput } from "../../contracts/project-management-types.js";
+import { SprintManualActionService } from "../../services/sprint-manual-action-service.js";
 import type { McpConnectionInfo } from "../../contracts/mcp-connection-types.js";
 import type {
   LocalMcpCliConfigService,
@@ -140,6 +142,7 @@ export interface BootDashboardDeps {
   quicksprintService: QuicksprintService;
   projectSetupService: ProjectSetupService;
   schedulerService: SchedulerService;
+  sprintRollbackService: SprintRollbackService;
   sprintIssueService: SprintIssueService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
   chatProviderIngressService: ChatProviderIngressService;
@@ -506,6 +509,14 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     projectManagementRepository: deps.projectManagementRepository,
     logger: deps.logger.child({ component: "instruction-file-service" }),
   });
+  const sprintManualActionService = new SprintManualActionService({
+    projectManagementRepository: deps.projectManagementRepository,
+    executionRepository: deps.executionRepository,
+    executionControlService: deps.executionControlService,
+    qaReviewRepository: deps.qaReviewRepository,
+    projectAttentionRepository: deps.projectAttentionRepository,
+    logger: deps.logger.child({ component: "sprint-manual-action-service" }),
+  });
 
   const getDefaultOnboardingRuntimeReadiness = deps.getOnboardingRuntimeReadiness
     ?? (async () => getOnboardingRuntimeReadiness(
@@ -761,7 +772,11 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     getSprint: (sprintId) => deps.projectManagementRepository.getSprint(sprintId),
     createSprint: (projectId, input) => deps.projectManagementRepository.createSprint(projectId, input),
     updateSprint: (sprintId, input) => deps.projectManagementRepository.updateSprint(sprintId, input),
+    markSprintCompleted: (sprintId) => sprintManualActionService.markCompleted(sprintId),
+    markSprintQaPassed: (sprintId) => sprintManualActionService.markQaPassed(sprintId),
     deleteSprint: (sprintId) => deps.projectManagementRepository.deleteSprint(sprintId),
+    assessSprintRollback: (projectId, sprintId) => deps.sprintRollbackService.assess(projectId, sprintId),
+    createSprintRollback: (projectId, sprintId, input) => deps.sprintRollbackService.create(projectId, sprintId, input),
     importSprintFromMarkdown: (projectId, input) => deps.sprintMarkdownService.importSprint(projectId, input),
     exportSprintToMarkdown: (projectId, sprintId) => deps.sprintMarkdownService.exportSprint(projectId, sprintId),
     listTasks: (projectId, sprintId) => deps.projectManagementRepository.listTasks(projectId, sprintId),

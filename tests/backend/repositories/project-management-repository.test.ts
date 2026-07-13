@@ -117,6 +117,38 @@ describe("ProjectManagementRepository", () => {
     expect(isGeneratedSprintName(customPlaceholder.name)).toBe(true);
   });
 
+  it("persists rollback sprint relationships and retains their source sprint", async () => {
+    const { repository } = await createRepository();
+    const project = repository.createProject({
+      name: "Rollback Metadata Project",
+      sourceType: "local",
+      sourceRef: "/workspace/rollback-metadata",
+    });
+    const source = repository.createSprint(project.id, {
+      name: "Source Sprint",
+      status: "completed",
+      featureBranch: "feature/source",
+    });
+    const rollback = repository.createSprint(project.id, {
+      name: "Rollback Sprint 1",
+      kind: "rollback",
+      rollbackSourceSprintId: source.id,
+      rollbackMode: "agent_assisted",
+      rollbackInstructions: "Remove only feature XY.",
+      rollbackSafetyReason: "Later work exists.",
+      featureBranch: "rollback/1-test",
+    });
+
+    expect(repository.getSprint(rollback.id)).toMatchObject({
+      kind: "rollback",
+      rollbackSourceSprintId: source.id,
+      rollbackMode: "agent_assisted",
+      rollbackInstructions: "Remove only feature XY.",
+      rollbackSafetyReason: "Later work exists.",
+    });
+    expect(() => repository.deleteSprint(source.id)).toThrow("retained as the source");
+  });
+
   it("updates a project and sprint gracefully with empty or partial inputs", async () => {
     const { repository } = await createRepository();
     const project = repository.createProject({

@@ -78,6 +78,8 @@ import type {
 import type {
   CreateProjectInput,
   CreateSprintInput,
+  CreateSprintRollbackInput,
+  CreateSprintRollbackResult,
   CreateTaskInput,
   IssuePromptContext,
   IssuePromptContextInput,
@@ -101,6 +103,7 @@ import type {
   SprintCollectionResponse,
   SprintMarkdownImportTask,
   SprintRecord,
+  SprintRollbackAssessment,
   SprintReviewSummary,
   SprintStatus,
   TaskExecutorType,
@@ -523,6 +526,11 @@ export type {
   NodeDefinitionManifest,
 };
 
-export type { SprintReviewSummary };
+export type {
+  CreateSprintRollbackInput,
+  CreateSprintRollbackResult,
+  SprintReviewSummary,
+  SprintRollbackAssessment,
+};
 
 export type { ProjectInvocationsQuery, ProjectInvocationsQueryResult };

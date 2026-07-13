@@ -46,6 +46,8 @@ const refreshMock = vi.fn(async () => undefined);
 const refreshExecutionMock = vi.fn(async () => undefined);
 const createSprintMock = vi.fn();
 const updateSprintMock = vi.fn();
+const markSprintCompletedMock = vi.fn();
+const markSprintQaPassedMock = vi.fn();
 const addImportedTasksToSprintMock = vi.fn();
 const executeQuicksprintMock = vi.fn();
 const createSchedulerEntryMock = vi.fn();
@@ -124,6 +126,8 @@ vi.mock("../../../dashboard/src/v2/lib/api/sprint-composer-client.js", () => ({
 vi.mock("../../../dashboard/src/v2/lib/project-api.js", () => ({
   createSprint: (...args: unknown[]) => createSprintMock(...args),
   updateSprint: (...args: unknown[]) => updateSprintMock(...args),
+  markSprintCompleted: (...args: unknown[]) => markSprintCompletedMock(...args),
+  markSprintQaPassed: (...args: unknown[]) => markSprintQaPassedMock(...args),
   addImportedTasksToSprint: (...args: unknown[]) => addImportedTasksToSprintMock(...args),
   planSprint: vi.fn(),
   improveSprintPrompt: vi.fn(),
@@ -653,5 +657,38 @@ describe("useSprintsPageData sprint-number reservations", () => {
     await waitFor(() => {
       expect(screen.getByTestId("next-id")).toHaveTextContent("SPR-02");
     });
+  });
+});
+
+describe("useSprintsPageActions manual sprint state", () => {
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("uses the manual completion endpoint instead of patching sprint status directly", async () => {
+    markSprintCompletedMock.mockResolvedValueOnce({ ...baseSprint, status: "completed" });
+    const actions = renderActions();
+
+    await actions.handleMarkCompleted(baseSprint.id);
+
+    expect(markSprintCompletedMock).toHaveBeenCalledWith(baseSprint.id);
+    expect(updateSprintMock).not.toHaveBeenCalledWith(baseSprint.id, { status: "completed" });
+    expect(refreshMock).toHaveBeenCalled();
+    expect(refreshExecutionMock).toHaveBeenCalled();
+  });
+
+  it("persists a manual sprint QA pass and refreshes sprint review state", async () => {
+    markSprintQaPassedMock.mockResolvedValueOnce({
+      ...baseSprint,
+      latestReview: { status: "completed", outcome: "pass" },
+    });
+    const actions = renderActions();
+
+    await actions.handleMarkQaPassed(baseSprint.id);
+
+    expect(markSprintQaPassedMock).toHaveBeenCalledWith(baseSprint.id);
+    expect(refreshMock).toHaveBeenCalled();
+    expect(refreshExecutionMock).toHaveBeenCalled();
   });
 });

@@ -24,6 +24,7 @@ export interface BranchPreparationResult extends BranchAvailability {
 export interface BranchPreflightOptions extends GitHttpAuthOptions {
   authEnv?: NodeJS.ProcessEnv;
   networkTimeoutMs?: number;
+  localOnly?: boolean;
 }
 
 const DEFAULT_GIT_NETWORK_TIMEOUT_MS = 30_000;
@@ -64,7 +65,7 @@ const withResolvedAuthEnv = async (
   };
 };
 
-const shouldResolveAuthEnv = (options?: BranchPreflightOptions): boolean => Boolean(options);
+const shouldResolveAuthEnv = (options?: BranchPreflightOptions): boolean => Boolean(options && !options.localOnly);
 
 const isGitRepository = async (repoPath: string): Promise<boolean> => {
   try {
@@ -138,17 +139,24 @@ const remoteTrackingRefExists = async (repoPath: string, branch: string): Promis
   }
 };
 
-const createLocalBranch = async (repoPath: string, branch: string, defaultBranch: string): Promise<boolean> => {
+const createLocalBranch = async (
+  repoPath: string,
+  branch: string,
+  defaultBranch: string,
+  localOnly = false,
+): Promise<boolean> => {
   try {
-    if (await remoteTrackingRefExists(repoPath, branch)) {
+    if (!localOnly && await remoteTrackingRefExists(repoPath, branch)) {
       const result = await commandRunner.run("git", ["branch", "--track", branch, `origin/${branch}`], { cwd: repoPath });
       return result.ok;
     }
 
-    const hasRemoteDefaultBranch = await commandRunner.run("git", ["show-ref", "--verify", `refs/remotes/origin/${defaultBranch}`], { cwd: repoPath });
-    if (hasRemoteDefaultBranch.ok) {
-      const result = await commandRunner.run("git", ["branch", branch, `origin/${defaultBranch}`], { cwd: repoPath });
-      return result.ok;
+    if (!localOnly) {
+      const hasRemoteDefaultBranch = await commandRunner.run("git", ["show-ref", "--verify", `refs/remotes/origin/${defaultBranch}`], { cwd: repoPath });
+      if (hasRemoteDefaultBranch.ok) {
+        const result = await commandRunner.run("git", ["branch", branch, `origin/${defaultBranch}`], { cwd: repoPath });
+        return result.ok;
+      }
     }
 
     const hasLocalDefaultBranch = await commandRunner.run("git", ["show-ref", "--verify", `refs/heads/${defaultBranch}`], { cwd: repoPath });
@@ -229,13 +237,15 @@ export const runBranchPreflightStep = async (
   const remoteUrl = shouldResolveAuthEnv(options) && !options?.authEnv
     ? await getRemoteOriginUrl(repoPath)
     : null;
-  const resolvedOptions = shouldResolveAuthEnv(options)
-    ? await withResolvedAuthEnv(remoteUrl, options)
-    : undefined;
+  const resolvedOptions = options?.localOnly
+    ? options
+    : shouldResolveAuthEnv(options)
+      ? await withResolvedAuthEnv(remoteUrl, options)
+      : undefined;
 
   return {
     existsLocal: await hasLocalBranch(repoPath, branch),
-    existsRemote: await hasRemoteBranch(repoPath, branch, resolvedOptions),
+    existsRemote: options?.localOnly ? false : await hasRemoteBranch(repoPath, branch, resolvedOptions),
   };
 };
 
@@ -252,16 +262,20 @@ export const resolveUniqueSprintBranchName = async (
   const remoteUrl = shouldResolveAuthEnv(options) && !options?.authEnv
     ? await getRemoteOriginUrl(repoPath)
     : null;
-  const resolvedOptions = shouldResolveAuthEnv(options)
-    ? await withResolvedAuthEnv(remoteUrl, options)
-    : undefined;
+  const resolvedOptions = options?.localOnly
+    ? options
+    : shouldResolveAuthEnv(options)
+      ? await withResolvedAuthEnv(remoteUrl, options)
+      : undefined;
 
-  await fetchOrigin(repoPath, resolvedOptions);
+  if (!options?.localOnly) {
+    await fetchOrigin(repoPath, resolvedOptions);
+  }
 
   for (let index = 0; index < 1_000; index += 1) {
     const branch = index === 0 ? candidate : `${candidate}-${index}`;
     const existsLocal = await hasLocalBranch(repoPath, branch);
-    const existsRemote = await hasRemoteBranch(repoPath, branch, resolvedOptions);
+    const existsRemote = options?.localOnly ? false : await hasRemoteBranch(repoPath, branch, resolvedOptions);
     if (!existsLocal && !existsRemote) {
       return branch;
     }
@@ -279,12 +293,16 @@ export const prepareBranchForOrchestration = async (
   const remoteUrl = shouldResolveAuthEnv(options) && !options?.authEnv
     ? await getRemoteOriginUrl(repoPath)
     : null;
-  const resolvedOptions = shouldResolveAuthEnv(options)
-    ? await withResolvedAuthEnv(remoteUrl, options)
-    : undefined;
-  await fetchOrigin(repoPath, resolvedOptions);
+  const resolvedOptions = options?.localOnly
+    ? options
+    : shouldResolveAuthEnv(options)
+      ? await withResolvedAuthEnv(remoteUrl, options)
+      : undefined;
+  if (!options?.localOnly) {
+    await fetchOrigin(repoPath, resolvedOptions);
+  }
   const initial = await runBranchPreflightStep(repoPath, branch, resolvedOptions);
-  const remoteOrigin = Boolean(remoteUrl) || await hasRemoteOrigin(repoPath);
+  const remoteOrigin = options?.localOnly ? false : Boolean(remoteUrl) || await hasRemoteOrigin(repoPath);
 
   let createdLocal = false;
   let checkedOutLocal = false;
@@ -293,9 +311,11 @@ export const prepareBranchForOrchestration = async (
 
   if (initial.existsLocal) {
     checkedOutLocal = true;
-    await fastForwardLocalBranchFromOrigin(repoPath, branch);
+    if (!options?.localOnly) {
+      await fastForwardLocalBranchFromOrigin(repoPath, branch);
+    }
   } else {
-    createdLocal = await createLocalBranch(repoPath, branch, defaultBranch);
+    createdLocal = await createLocalBranch(repoPath, branch, defaultBranch, options?.localOnly);
     checkedOutLocal = createdLocal;
   }
 

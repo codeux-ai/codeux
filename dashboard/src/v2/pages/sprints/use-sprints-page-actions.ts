@@ -20,6 +20,8 @@ import {
   improveSprintPrompt,
   planSprint,
   updateSprint,
+  markSprintCompleted,
+  markSprintQaPassed,
   cancelPlanningRequest,
   addImportedTasksToSprint,
 } from "../../lib/project-api.js";
@@ -186,7 +188,21 @@ export function useSprintsPageActions({
         `sprint-mark-completed:${sprintId}`,
         sprintId,
         async () => {
-          await updateSprint(sprintId, { status: "completed" });
+          await markSprintCompleted(sprintId);
+        },
+        { optimisticStatus: "completed" },
+      );
+    },
+    [actionRunner],
+  );
+
+  const handleMarkQaPassed = useCallback(
+    async (sprintId: string) => {
+      await actionRunner.runAction(
+        `sprint-mark-qa-passed:${sprintId}`,
+        sprintId,
+        async () => {
+          await markSprintQaPassed(sprintId);
         },
       );
     },
@@ -833,6 +849,7 @@ export function useSprintsPageActions({
     handleSprintToggle,
     handleSprintPauseResume,
     handleMarkCompleted,
+    handleMarkQaPassed,
     handleSubmitSprint,
     handleImprovePrompt,
     handleCancelPlanningRequest,

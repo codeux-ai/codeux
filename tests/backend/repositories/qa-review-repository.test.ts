@@ -31,6 +31,42 @@ afterEach(async () => {
 });
 
 describe("QaReviewRepository", () => {
+  it("records a manual sprint pass as the latest QA cycle and closes running review rows", async () => {
+    const { repository, projectRepository } = await createRepository();
+    const project = projectRepository.createProject({
+      name: "QA Project",
+      sourceType: "local",
+      sourceRef: path.join(os.tmpdir(), "qa-manual-pass"),
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      goal: "Ship",
+    });
+    const running = repository.createRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      triggerType: "sprint_completion",
+      runIndex: 2,
+    });
+
+    const manualPass = repository.recordManualSprintPass({
+      projectId: project.id,
+      sprintId: sprint.id,
+    });
+
+    expect(repository.getRun(running.id)).toMatchObject({ status: "cancelled" });
+    expect(manualPass).toMatchObject({
+      status: "completed",
+      outcome: "pass",
+      runIndex: 3,
+      agentName: "Manual QA",
+      payload: expect.objectContaining({ manual: true, source: "dashboard" }),
+    });
+    expect(repository.listLatestSprintCycleRuns(sprint.id)).toEqual([
+      expect.objectContaining({ id: manualPass.id }),
+    ]);
+  });
+
   it("tracks task review runs and sprint review presence", async () => {
     const { repository, projectRepository } = await createRepository();
     const project = projectRepository.createProject({

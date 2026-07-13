@@ -162,6 +162,66 @@ export class QaReviewRepository {
     return this.requireRun(runId);
   }
 
+  recordManualSprintPass(input: {
+    projectId: string;
+    sprintId: string;
+    sprintRunId?: string | null;
+    summaryMarkdown?: string;
+    reviewerName?: string;
+  }): QaReviewRunRecord {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+
+    this.db.transaction(() => {
+      const latestIndexRow = this.db.prepare(`
+        SELECT COALESCE(MAX(run_index), 0) AS run_index
+        FROM qa_review_runs
+        WHERE sprint_id = ? AND trigger_type = 'sprint_completion'
+      `).get(input.sprintId) as { run_index?: number | string } | undefined;
+      const runIndex = Number(latestIndexRow?.run_index || 0) + 1;
+
+      this.db.prepare(`
+        UPDATE qa_review_runs
+        SET status = 'cancelled',
+            summary_markdown = COALESCE(summary_markdown, 'Superseded by a manual QA pass.'),
+            finished_at = ?,
+            updated_at = ?
+        WHERE sprint_id = ?
+          AND trigger_type = 'sprint_completion'
+          AND status = 'running'
+      `).run(now, now, input.sprintId);
+
+      this.db.prepare(`
+        INSERT INTO qa_review_runs (
+          id, project_id, sprint_id, sprint_run_id, task_id, task_run_id, trigger_type, status, outcome, run_index,
+          agent_preset_id, agent_name, target_task_key, target_session_id, target_provider, summary_markdown,
+          fix_instructions, payload_json, started_at, finished_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, NULL, NULL, 'sprint_completion', 'completed', 'pass', ?,
+          NULL, ?, NULL, NULL, NULL, ?, NULL, ?, ?, ?, ?, ?)
+      `).run(
+        id,
+        input.projectId,
+        input.sprintId,
+        input.sprintRunId ?? null,
+        runIndex,
+        input.reviewerName?.trim() || "Manual QA",
+        input.summaryMarkdown?.trim() || "QA marked as passed from the dashboard.",
+        JSON.stringify({
+          manual: true,
+          source: "dashboard",
+          findings: [],
+          sprintRunId: input.sprintRunId ?? null,
+        }),
+        now,
+        now,
+        now,
+        now,
+      );
+    });
+
+    return this.requireRun(id);
+  }
+
   countTaskRuns(taskId: string): number {
     const row = this.db.prepare(`
       SELECT COUNT(DISTINCT run_index) AS count

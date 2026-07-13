@@ -231,6 +231,14 @@ describe("AppDbSchema", () => {
       expect(getIndexCount("idx_guardrail_ledger_task_purpose")).toBe(1);
       expect(getIndexCount("idx_memory_claims_project_fingerprint_active")).toBe(1);
       expect(getIndexCount("idx_node_flows_project_updated")).toBe(1);
+      expect(getColumnNames("sprints")).toEqual(expect.arrayContaining([
+        "kind",
+        "rollback_source_sprint_id",
+        "rollback_mode",
+        "rollback_instructions",
+        "rollback_safety_reason",
+      ]));
+      expect(getIndexCount("idx_sprints_rollback_source")).toBe(1);
     } finally {
       storage.close();
     }

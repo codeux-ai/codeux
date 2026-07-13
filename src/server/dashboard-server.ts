@@ -84,6 +84,8 @@ import type {
 import type {
   CreateProjectInput,
   CreateSprintInput,
+  CreateSprintRollbackInput,
+  CreateSprintRollbackResult,
   CreateTaskInput,
   ImprovePromptInput,
   PlanSprintOptions,
@@ -98,6 +100,7 @@ import type {
   SprintMarkdownImportInput,
   SprintImportedTaskInput,
   SprintRecord,
+  SprintRollbackAssessment,
   TaskRecord,
   UpdateProjectInput,
   UpdateSprintInput,
@@ -272,7 +275,11 @@ export interface DashboardServerOptions {
   getSprint: (sprintId: string) => SprintRecord | null;
   createSprint: (projectId: string, input: CreateSprintInput) => SprintRecord;
   updateSprint: (sprintId: string, input: UpdateSprintInput) => SprintRecord;
+  markSprintCompleted?: (sprintId: string) => Promise<SprintRecord>;
+  markSprintQaPassed?: (sprintId: string) => Promise<SprintRecord> | SprintRecord;
   deleteSprint: (sprintId: string) => void;
+  assessSprintRollback: (projectId: string, sprintId: string) => Promise<SprintRollbackAssessment>;
+  createSprintRollback: (projectId: string, sprintId: string, input: CreateSprintRollbackInput) => Promise<CreateSprintRollbackResult>;
   importSprintFromMarkdown: (projectId: string, input: SprintMarkdownImportInput) => SprintRecord;
   exportSprintToMarkdown: (projectId: string, sprintId: string) => SprintMarkdownExportBundle;
   listTasks: (projectId: string, sprintId?: string) => TaskRecord[];

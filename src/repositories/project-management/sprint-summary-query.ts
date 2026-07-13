@@ -46,6 +46,11 @@ export const sprintSummaryQuery = {
         s.end_date,
         s.feature_branch,
         s.base_commit_sha,
+        s.kind,
+        s.rollback_source_sprint_id,
+        s.rollback_mode,
+        s.rollback_instructions,
+        s.rollback_safety_reason,
         s.created_at,
         s.updated_at
   `,

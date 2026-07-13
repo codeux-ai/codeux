@@ -637,12 +637,14 @@ export class SprintOrchestrator {
         && !args.feature_branch?.trim()
         && !executionContext.sprint.featureBranch?.trim();
       if (shouldAllocateFreshBranchName) {
-        const allocatedBranch = await this.withGitCredentials({
-          projectId: executionContext.project.id,
-          repoPath,
-          settings: dashboardSettings,
-          purpose: "branch-discovery",
-        }, (auth) => resolveUniqueSprintBranchName(repoPath, defaultFeatureBranch, auth));
+        const allocatedBranch = githubMode === "LOCAL"
+          ? await resolveUniqueSprintBranchName(repoPath, defaultFeatureBranch, { localOnly: true })
+          : await this.withGitCredentials({
+            projectId: executionContext.project.id,
+            repoPath,
+            settings: dashboardSettings,
+            purpose: "branch-discovery",
+          }, (auth) => resolveUniqueSprintBranchName(repoPath, defaultFeatureBranch, auth));
         if (allocatedBranch !== defaultFeatureBranch) {
           this.deps.logger.info("Allocated unique sprint feature branch because the generated branch already exists.", {
             projectId: executionContext.project.id,
@@ -657,20 +659,24 @@ export class SprintOrchestrator {
       }
 
       const branchPreparation = args.action === "orchestrate"
-        ? await this.withGitCredentials({
-          projectId: executionContext.project.id,
-          repoPath,
-          settings: dashboardSettings,
-          purpose: "branch-prepare",
-        }, (auth) => prepareBranchForOrchestration(repoPath, defaultFeatureBranch, defaultBranch, auth))
+        ? githubMode === "LOCAL"
+          ? await prepareBranchForOrchestration(repoPath, defaultFeatureBranch, defaultBranch, { localOnly: true })
+          : await this.withGitCredentials({
+            projectId: executionContext.project.id,
+            repoPath,
+            settings: dashboardSettings,
+            purpose: "branch-prepare",
+          }, (auth) => prepareBranchForOrchestration(repoPath, defaultFeatureBranch, defaultBranch, auth))
         : null;
       const branchAvailability = branchPreparation
-        ?? await this.withGitCredentials({
-          projectId: executionContext.project.id,
-          repoPath,
-          settings: dashboardSettings,
-          purpose: "branch-preflight",
-        }, (auth) => runBranchPreflightStep(repoPath, defaultFeatureBranch, auth));
+        ?? (githubMode === "LOCAL"
+          ? await runBranchPreflightStep(repoPath, defaultFeatureBranch, { localOnly: true })
+          : await this.withGitCredentials({
+            projectId: executionContext.project.id,
+            repoPath,
+            settings: dashboardSettings,
+            purpose: "branch-preflight",
+          }, (auth) => runBranchPreflightStep(repoPath, defaultFeatureBranch, auth)));
 
       // Record the fork point the first time the branch is created. This is the stable
       // checkpoint the file browser diffs against, and it must be captured now — once the

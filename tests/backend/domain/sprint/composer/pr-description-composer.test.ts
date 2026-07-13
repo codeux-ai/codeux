@@ -431,6 +431,20 @@ describe("composeTaskPrTitle", () => {
 });
 
 describe("composeSprintPrTitle", () => {
+  it("labels rollback PRs as corrective work", () => {
+    const input: SprintPrComposerInput = {
+      ...baseSprintInput,
+      sprintKind: "rollback",
+      rollbackSourceSprintId: "source-sprint-1",
+      sprintName: "Rollback Sprint 1",
+      featureBranch: "rollback/1-abcd1234",
+    };
+    expect(composeSprintPrTitle(input)).toBe("Rollback Sprint 1 — merge rollback/1-abcd1234 into main");
+    expect(composeSprintPrBody(input)).toContain("## Sprint Rollback:");
+    expect(composeSprintPrBody(input)).toContain("Source sprint: `source-sprint-1`");
+    expect(composeSprintPrBody(input)).not.toContain("Sprint Completion");
+  });
+
   it("includes the sprint number and name when both are present", () => {
     const title = composeSprintPrTitle({
       sprintNumber: 3,
