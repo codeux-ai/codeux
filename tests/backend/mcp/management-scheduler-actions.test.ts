@@ -501,6 +501,77 @@ describe("AgentSchedulerActions", () => {
     });
   });
 
+  it.each([
+    ["omitted", undefined],
+    ["empty", ""],
+    ["null", null],
+  ])("defaults an %s wakeup thread target to the current MCP thread", async (_label, threadId) => {
+    vi.mocked(schedulerService.createEntry).mockReturnValue(makeEntry());
+    const handler = createHandler();
+
+    await runWithMcpAgentContext("agent-1", "context-thread", () => handler.handleScheduler({
+      action: "schedule_wakeup",
+      projectId: "p1",
+      scheduledFor: "2026-06-09T12:05:00.000Z",
+      bodyMarkdown: "Continue in the originating dashboard thread.",
+      ...(threadId === undefined ? {} : { threadId }),
+    }));
+
+    expect(schedulerService.createEntry).toHaveBeenCalledWith("p1", {
+      targetType: "agent_wakeup",
+      scheduledFor: "2026-06-09T12:05:00.000Z",
+      agentWakeupTarget: {
+        bodyMarkdown: "Continue in the originating dashboard thread.",
+        threadId: "context-thread",
+        origin: "agent_scheduler",
+        source: "agent_scheduler",
+        createdByAgentId: "agent-1",
+      },
+    });
+  });
+
+  it("preserves an explicit non-empty thread target over the current MCP thread", async () => {
+    vi.mocked(schedulerService.createEntry).mockReturnValue(makeEntry());
+    const handler = createHandler();
+
+    await runWithMcpAgentContext("agent-1", "context-thread", () => handler.handleScheduler({
+      action: "schedule_wakeup",
+      projectId: "p1",
+      scheduledFor: "2026-06-09T12:05:00.000Z",
+      bodyMarkdown: "Continue in the selected thread.",
+      threadId: "explicit-thread",
+    }));
+
+    expect(schedulerService.createEntry).toHaveBeenCalledWith("p1", expect.objectContaining({
+      agentWakeupTarget: expect.objectContaining({
+        threadId: "explicit-thread",
+      }),
+    }));
+  });
+
+  it("keeps standalone authenticated MCP wakeups threadless", async () => {
+    vi.mocked(schedulerService.createEntry).mockReturnValue(makeEntry());
+    const handler = createHandler();
+
+    await runWithMcpAgentContext("agent-1", () => handler.handleScheduler({
+      action: "schedule_wakeup",
+      projectId: "p1",
+      scheduledFor: "2026-06-09T12:05:00.000Z",
+      bodyMarkdown: "Create a standalone follow-up.",
+    }));
+
+    expect(schedulerService.createEntry).toHaveBeenCalledWith("p1", {
+      targetType: "agent_wakeup",
+      scheduledFor: "2026-06-09T12:05:00.000Z",
+      agentWakeupTarget: {
+        bodyMarkdown: "Create a standalone follow-up.",
+        origin: "agent_scheduler",
+        source: "agent_scheduler",
+        createdByAgentId: "agent-1",
+      },
+    });
+  });
+
   it("schedules wakeups anchored to sprint and task completion", () => {
     vi.mocked(schedulerService.createEntry).mockReturnValue(makeEntry({ scheduledFor: fixedNow.toISOString(), nextRunAt: null }));
 
