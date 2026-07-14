@@ -91,16 +91,21 @@ export class ChatProviderIngressService {
       };
     }
 
+    const body = requireRecord(input.payload, "payload");
     const profile = getChatConnectorProfileForMode(connection.providerKind, connection.bridgeMode);
-    const ignoreResult = profile.ingress.ignore?.(
-      requireRecord(input.payload, "payload"),
-      connection.bridgeMode,
-    );
-    if (ignoreResult?.ignored) {
+    const ignoreResult = connection.bridgeMode === "official_api"
+      ? profile.ingress.ignore?.(body, connection.bridgeMode)
+      : null;
+    const ignored = typeof ignoreResult === "string"
+      ? ignoreResult
+      : ignoreResult && typeof ignoreResult === "object" && ignoreResult.ignored
+        ? ignoreResult.reason ?? "provider_profile"
+        : null;
+    if (ignored || (connection.bridgeMode === "official_api" && profile.ingress.classify?.(body) === "ignored")) {
       this.log("info", "Ignored chat provider ingress update", {
         providerConnectionId: connection.id,
         providerKind: connection.providerKind,
-        reason: ignoreResult.reason ?? "provider_profile",
+        reason: ignored ?? "provider_profile",
       });
       return {
         status: "ignored",
@@ -110,7 +115,7 @@ export class ChatProviderIngressService {
       };
     }
 
-    const normalized = normalizeInboundPayload(connection, input.payload);
+    const normalized = normalizeInboundPayload(connection, body);
     const existing = this.deps.chatProviderRepository.findInboundDelivery(connection.id, normalized.externalMessageId);
     if (existing) {
       this.log("info", "Duplicate chat provider ingress ignored", {

@@ -105,7 +105,7 @@ export const telegramChatConnectorProfile: ChatConnectorProfile = {
     },
     handshake: { type: "none" },
     acknowledgement: { statusCode: 200, headers: { "content-type": "application/json" }, body: null },
-    ignore: (body, mode) => {
+    ignore: (body, mode = "webhook") => {
       if (mode !== "official_api") {
         return { ignored: false };
       }
@@ -115,7 +115,7 @@ export const telegramChatConnectorProfile: ChatConnectorProfile = {
         ? { ignored: true, reason: "bot_originated_update" }
         : { ignored: false };
     },
-    normalize: (body, mode) => normalizeTelegramUpdate(body, mode),
+    normalize: (body, mode = "webhook") => normalizeTelegramUpdate(body, mode),
   },
   identity: {
     resolve: (normalized, body) => {

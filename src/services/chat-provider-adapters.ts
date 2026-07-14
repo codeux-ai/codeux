@@ -35,6 +35,10 @@ export interface ChatProviderOutboundAdapterContext {
 export interface ChatProviderOutboundAdapterResult {
   externalMessageId?: string | null;
   responseMetadata?: Record<string, unknown>;
+  failure?: {
+    message: string;
+    retryable: boolean;
+  };
 }
 
 export interface ChatProviderOutboundAdapter {
@@ -64,6 +68,8 @@ export function createDefaultChatProviderOutboundAdapter(): ChatProviderOutbound
 }
 
 export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutboundAdapter {
+  private readonly rateLimitReadyAt = new Map<string, number>();
+
   async send(context: ChatProviderOutboundAdapterContext): Promise<ChatProviderOutboundAdapterResult> {
     let profile: ChatConnectorProfile;
     try {
@@ -95,6 +101,8 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
       headers.authorization = `Bearer ${bearer}`;
     }
 
+    await this.waitForRateLimit(request);
+
     let response: Response;
     try {
       response = await fetch(normalizedUrl, {
@@ -104,43 +112,90 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
         signal: AbortSignal.timeout(request.timeoutMs),
       });
     } catch (error) {
+      const isTelegramOfficialApi = context.connection.providerKind === "telegram"
+        && context.connection.bridgeMode === "official_api";
       throw new ChatProviderOutboundAdapterError(
-        context.connection.bridgeMode === "official_api"
+        isTelegramOfficialApi
           ? "Telegram Bot API send did not return a response; delivery status is unknown."
           : `Failed to reach ${context.connection.bridgeMode} bridge: ${error instanceof Error ? error.message : String(error)}`,
-        context.connection.bridgeMode !== "official_api",
+        !isTelegramOfficialApi,
       );
     }
 
     const responseText = await response.text().catch(() => "");
+    const responseContext = {
+      bridgeMode: context.connection.bridgeMode,
+      mode: context.connection.bridgeMode,
+      statusCode: response.status,
+      headers: Object.fromEntries(response.headers.entries()),
+    } as const;
+    const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
+    const classification = profile.outbound.classifyError?.(
+      response.status,
+      responseText,
+      responseContext,
+    );
+    if (classification) {
+      throw new ChatProviderOutboundAdapterError(
+        classification.message,
+        classification.retryable,
+        response.status,
+        retryAfterMs,
+      );
+    }
+
     let parsed: ChatProviderOutboundAdapterResult;
     try {
-      parsed = profile.outbound.parseResponse(responseText, {
-        mode: context.connection.bridgeMode,
-        statusCode: response.status,
-      });
+      parsed = profile.outbound.parseResponse(responseText, responseContext);
     } catch (error) {
       if (error instanceof ChatConnectorOutboundResponseError) {
         throw new ChatProviderOutboundAdapterError(
           error.message,
           error.retryable,
           error.statusCode ?? response.status,
-          error.retryAfterMs,
+          error.retryAfterMs ?? retryAfterMs,
         );
       }
       throw error;
     }
+    if (parsed.failure) {
+      throw new ChatProviderOutboundAdapterError(
+        parsed.failure.message,
+        parsed.failure.retryable || profile.outbound.isRetryableStatus(response.status),
+        response.status,
+        retryAfterMs,
+      );
+    }
     if (!response.ok) {
       throw new ChatProviderOutboundAdapterError(
-        context.connection.bridgeMode === "official_api"
+        context.connection.providerKind === "telegram" && context.connection.bridgeMode === "official_api"
           ? `Telegram Bot API returned HTTP ${response.status}.`
           : `${context.connection.bridgeMode} bridge returned HTTP ${response.status}${responseText ? `: ${responseText.slice(0, 500)}` : ""}`,
         profile.outbound.isRetryableStatus(response.status, context.connection.bridgeMode),
         response.status,
+        retryAfterMs,
       );
     }
 
     return parsed;
+  }
+
+  private async waitForRateLimit(request: ChatConnectorHttpOutboundRequest): Promise<void> {
+    if (!request.rateLimit || request.rateLimit.minimumIntervalMs <= 0) {
+      return;
+    }
+    const now = Date.now();
+    const readyAt = Math.max(now, this.rateLimitReadyAt.get(request.rateLimit.key) ?? now);
+    this.rateLimitReadyAt.set(request.rateLimit.key, readyAt + request.rateLimit.minimumIntervalMs);
+    if (this.rateLimitReadyAt.size > 2_000) {
+      const oldest = this.rateLimitReadyAt.keys().next().value as string | undefined;
+      if (oldest) {
+        this.rateLimitReadyAt.delete(oldest);
+      }
+    }
+    if (readyAt > now) {
+      await new Promise<void>((resolve) => setTimeout(resolve, readyAt - now));
+    }
   }
 
   private async sendNative(
@@ -173,8 +228,10 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
     }
 
     return profile.outbound.parseResponse(result.stdout, {
+      bridgeMode: context.connection.bridgeMode,
       mode: context.connection.bridgeMode,
       statusCode: 200,
+      headers: {},
     });
   }
 }
@@ -208,6 +265,14 @@ function getFirstSecret(secrets: Record<string, unknown> | null, keys: readonly 
     }
   }
   return "";
+}
+
+function parseRetryAfterMs(value: string | null): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const seconds = Number(value.trim());
+  return Number.isFinite(seconds) && seconds >= 0 ? Math.ceil(seconds * 1_000) : undefined;
 }
 
 function runNativeCommand(
