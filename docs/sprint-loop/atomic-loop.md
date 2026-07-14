@@ -47,7 +47,10 @@ flowchart TD
   C --> D{planningPreflight}
   D -->|enabled| E[planning-preflight-step]
   D -->|disabled| F
-  E --> F{action == plan}
+  E --> X{planned tasks exist?}
+  X -->|no, orchestrate| Y[start planning with auto-start + return]
+  X -->|no, status| Z[return planning blocker]
+  X -->|yes| F{action == plan}
   F -->|yes| G[create subtasks dir + planning template output]
   F -->|no| H[run orchestration cycle]
   H --> I{loadSubtasks}
@@ -82,15 +85,20 @@ Automatically created PRs must provide sufficient human context:
 ### 1. Branch preflight (optional)
 - Step module: `branch-preflight-step.ts`
 - Applies to: `plan` and `orchestrate`
-- Validates that the sprint feature branch exists locally and on the remote origin (`LOCAL` vs `REMOTE` git behavior applies). During orchestration, it will create and check out the missing feature branch from the default branch, and push it to the remote.
-- Records the base commit SHA when a branch is freshly created.
+- Validates that the sprint feature branch exists locally and on the remote origin (`LOCAL` vs `REMOTE` git behavior applies). During orchestration, it creates a missing feature branch from the default branch and publishes it when a remote is required.
+- Immediately before the first task dispatch, an unstarted sprint refreshes its feature branch to the latest scoped default-branch commit when Git can perform a true fast-forward. Any feature-only commit preserves the existing branch instead; no merge, rebase, reset, or history rewrite is attempted. Once any sprint task has execution history, automatic default-branch refresh is permanently skipped for that sprint.
+- Records the default-aligned base commit SHA when a branch is freshly created or safely refreshed.
+- Idle sprints expose **Update Branch** in the Sprints action menu. This performs the same safe fast-forward on demand and refuses the update after task work has started or when the feature branch has diverged.
 - On failure: returns templated blocker instructions.
 
 ### 2. Planning preflight (optional)
 - Step module: `planning-preflight-step.ts`
 - Applies to: `status` and `orchestrate`
 - Verifies that the sprint subtask directory exists and contains at least one `.md` file.
-- On failure: returns templated planning blocker.
+- Starting an unplanned sprint launches planning automatically after branch preflight finishes. Planning is de-duplicated per project and sprint, saves the generated tasks, and requests orchestration again through the normal start path.
+- A repeated start while that automatic planning request is still running reports the existing request instead of submitting another provider invocation.
+- `status` remains read-only: an unplanned status request returns the templated planning blocker and never launches planning.
+- Planning self-reflection retains its existing gate. If reflection does not pass, valid tasks remain saved but orchestration does not start automatically.
 
 ### 3. Plan action
 If `action=plan`:

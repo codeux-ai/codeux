@@ -54,6 +54,8 @@ Sprints can be **showcase-pinned** to surface them on the Overview page; toggle 
 
 Each sprint row and showcase card has separate **Tasks** and **Live** actions. These are in-app router links carrying both `projectId` and `sprintId`, so opening a sprint switches the dashboard to that sprint's project before loading the task board or live view without reloading the dashboard shell.
 
+Idle sprint action menus also include **Update Branch**. Use it to fast-forward an unchanged sprint feature branch to the latest configured default-branch commit before work begins. Code UX refuses the update after any task has started or when the feature branch has diverged; it never merges, rebases, resets, or overwrites sprint work as part of this action.
+
 Selection is project-scoped even when requests overlap. If you choose a different project or sprint before an earlier selection finishes, the newer choice stays active and the earlier response cannot attach its sprint to the newly active project.
 
 ## How sprint progress is calculated

@@ -43,7 +43,7 @@ const createEntry = (overrides: Partial<SchedulerEntryRecord> = {}): SchedulerEn
 });
 
 describe("SchedulerService", () => {
-  it("starts planned due sprint entries directly and advances recurrence", async () => {
+  it("routes planned due sprint entries through the normal start path and advances recurrence", async () => {
     const entry = createEntry();
     const schedulerRepository = {
       listDueEntries: vi.fn(() => [entry]),
@@ -54,9 +54,6 @@ describe("SchedulerService", () => {
     const executionControlService = {
       orchestrateSprint: vi.fn().mockResolvedValue({ ok: true }),
     };
-    const planningAgentService = {
-      planSprint: vi.fn(),
-    };
     const projectManagementRepository = {
       listTasks: vi.fn(() => [{ id: "task-1" }]),
     };
@@ -66,17 +63,14 @@ describe("SchedulerService", () => {
       quicksprintService: {} as any,
       chatThreadRuntimeService: {} as any,
       executionControlService: executionControlService as any,
-      planningAgentService: planningAgentService as any,
       logger: createLogger() as any,
     });
 
     await service.runDueEntries(new Date("2026-05-18T09:00:01.000Z"));
 
-    expect(projectManagementRepository.listTasks).toHaveBeenCalledOnce();
-    expect(projectManagementRepository.listTasks).toHaveBeenCalledWith("project-1", "sprint-1");
+    expect(projectManagementRepository.listTasks).not.toHaveBeenCalled();
     expect(executionControlService.orchestrateSprint).toHaveBeenCalledOnce();
     expect(executionControlService.orchestrateSprint).toHaveBeenCalledWith("project-1", "sprint-1");
-    expect(planningAgentService.planSprint).not.toHaveBeenCalled();
     expect(schedulerRepository.markRunSucceeded).toHaveBeenCalledWith(
       "entry-1",
       "2026-05-18T09:00:00.000Z",
@@ -84,7 +78,7 @@ describe("SchedulerService", () => {
     );
   });
 
-  it("plans and auto-starts unplanned due sprint entries without orchestrating twice", async () => {
+  it("routes unplanned due sprint entries through the normal start path", async () => {
     const entry = createEntry();
     const schedulerRepository = {
       listDueEntries: vi.fn(() => [entry]),
@@ -92,8 +86,7 @@ describe("SchedulerService", () => {
       markRunSucceeded: vi.fn(),
       markRunFailed: vi.fn(),
     };
-    const executionControlService = { orchestrateSprint: vi.fn() };
-    const planningAgentService = { planSprint: vi.fn().mockResolvedValue({ ok: true, started: true }) };
+    const executionControlService = { orchestrateSprint: vi.fn().mockResolvedValue({ ok: true }) };
     const projectManagementRepository = { listTasks: vi.fn(() => []) };
     const service = new SchedulerService({
       schedulerRepository: schedulerRepository as any,
@@ -101,17 +94,15 @@ describe("SchedulerService", () => {
       quicksprintService: {} as any,
       chatThreadRuntimeService: {} as any,
       executionControlService: executionControlService as any,
-      planningAgentService: planningAgentService as any,
       logger: createLogger() as any,
     });
 
     await service.runDueEntries(new Date("2026-05-18T09:00:01.000Z"));
     await flush();
 
-    expect(projectManagementRepository.listTasks).toHaveBeenCalledWith("project-1", "sprint-1");
-    expect(planningAgentService.planSprint).toHaveBeenCalledOnce();
-    expect(planningAgentService.planSprint).toHaveBeenCalledWith("project-1", "sprint-1", { autoStart: true });
-    expect(executionControlService.orchestrateSprint).not.toHaveBeenCalled();
+    expect(projectManagementRepository.listTasks).not.toHaveBeenCalled();
+    expect(executionControlService.orchestrateSprint).toHaveBeenCalledOnce();
+    expect(executionControlService.orchestrateSprint).toHaveBeenCalledWith("project-1", "sprint-1");
   });
 
   it("posts due chat messages through the chat runtime", async () => {
@@ -136,7 +127,6 @@ describe("SchedulerService", () => {
       quicksprintService: {} as any,
       chatThreadRuntimeService: chatThreadRuntimeService as any,
       executionControlService: {} as any,
-      planningAgentService: { planSprint: vi.fn() } as any,
       logger: createLogger() as any,
     });
 
@@ -586,7 +576,6 @@ describe("SchedulerService", () => {
       quicksprintService: (extra.quicksprintService ?? {}) as any,
       chatThreadRuntimeService: (extra.chatThreadRuntimeService ?? {}) as any,
       executionControlService: (extra.executionControlService ?? {}) as any,
-      planningAgentService: (extra.planningAgentService ?? { planSprint: vi.fn() }) as any,
       taskRerunService: extra.taskRerunService as any,
       nodeFlowRuntimeService: extra.nodeFlowRuntimeService as any,
       nodeFlowRepository: extra.nodeFlowRepository as any,
@@ -929,30 +918,6 @@ describe("SchedulerService", () => {
     await flush();
 
     expect(repo.markRunFailed).toHaveBeenCalledWith("entry-1", "boom");
-  });
-
-  it("marks the run as failed when planning rejects", async () => {
-    const entry = createEntry({ sprintTarget: { sprintId: "sprint-1" } });
-    const repo = {
-      listDueEntries: vi.fn(() => [entry]),
-      getEntry: vi.fn(() => entry),
-      markRunSucceeded: vi.fn(),
-      markRunFailed: vi.fn(),
-    };
-    const executionControlService = { orchestrateSprint: vi.fn() };
-    const planningAgentService = { planSprint: vi.fn().mockRejectedValue(new Error("planning failed")) };
-    const service = buildService(repo, {
-      projectManagementRepository: { listTasks: vi.fn(() => []) },
-      executionControlService,
-      planningAgentService,
-    });
-
-    await service.runDueEntries(new Date("2026-05-18T09:00:01.000Z"));
-    await flush();
-
-    expect(planningAgentService.planSprint).toHaveBeenCalledOnce();
-    expect(repo.markRunFailed).toHaveBeenCalledWith("entry-1", "planning failed");
-    expect(executionControlService.orchestrateSprint).not.toHaveBeenCalled();
   });
 
   it("throws (and records failure) when a scheduled target is missing", async () => {
@@ -1318,7 +1283,6 @@ describe("SchedulerService", () => {
         quicksprintService: {} as any,
         chatThreadRuntimeService: {} as any,
         executionControlService: {} as any,
-        planningAgentService: { planSprint: vi.fn() } as any,
         logger: logger as any,
         tickIntervalMs: 1000,
       });

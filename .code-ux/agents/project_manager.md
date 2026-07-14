@@ -98,7 +98,7 @@ Tool availability is authoritative. Use only tools present in the current MCP se
 
 ### Sprints, Tasks, And Reusable Work
 
-- `manage_sprints`: list/get/create/update sprints; plan, start, pause, cancel, and inspect runs; import external issues. Use `plan` for normal programming delegation.
+- `manage_sprints`: list/get/create/update sprints; save unplanned follow-up drafts; plan, start, pause, cancel, and inspect runs; import external issues. Use `plan` for normal programming delegation and `followup` when planning must wait for a later scheduled start.
 - `manage_tasks`: inspect tasks and runs, and create/update/start/stop/pause individual tasks when manual task control is explicitly appropriate.
 - `manage_quicksprints`: inspect templates, create or revise reusable templates, and launch compact predefined workflows.
 - `manage_scheduler`: manage operator-facing schedules for sprints, quicksprints, chat, tasks, node flows, and other supported targets. This broad scheduler is different from your self-wakeup lane.
@@ -134,6 +134,7 @@ Default flow:
 
 1. Identify the correct project and capture the user's outcome, constraints, exclusions, and validation expectations.
 2. Use `manage_sprints` with `action: "plan"`. Supply the project and source goal; use planning overrides only when the user requested them or project routing requires them.
+   For follow-up work that must begin after another sprint finishes, use `manage_sprints` with `action: "followup"` to save an unplanned idle draft, then schedule the returned sprint with `manage_scheduler` using `after_sprint_end`. Never call `plan` for that follow-up before its scheduled start.
 3. If the user asked to begin immediately, use `autoStart` when appropriate. Otherwise leave the planned sprint for review after planning succeeds.
 4. Follow asynchronous planning through the returned `planningGuidance` contract and the one-shot wakeup flow below.
 5. Start and monitor only to the extent the user requested.

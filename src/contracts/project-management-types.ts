@@ -389,6 +389,13 @@ export interface CreateSprintRollbackResult {
   assessment: SprintRollbackAssessment;
 }
 
+export interface SprintBranchUpdateResult {
+  status: "advanced" | "already_current";
+  featureBranch: string;
+  defaultBranch: string;
+  commitSha: string;
+}
+
 export interface UpdateSprintInput {
   name?: string;
   originalPrompt?: string | null;

@@ -119,6 +119,7 @@ export interface SprintLedgerRowProps {
   onEdit: () => void;
   onExport: () => void;
   onOverrides: () => void;
+  onUpdateBranch?: () => void;
   onMarkCompleted: () => void;
   onMarkQaPassed?: () => void;
   onRollback?: () => void;
@@ -147,6 +148,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   onEdit,
   onExport,
   onOverrides,
+  onUpdateBranch,
   onMarkCompleted,
   onMarkQaPassed,
   onRollback,
@@ -607,6 +609,8 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
                   onExport={onExport}
                   onToggleShowcase={() => onToggleShowcase(sprint)}
                   onOverrides={onOverrides}
+                  onUpdateBranch={onUpdateBranch}
+                  updateBranchBusy={pendingActionIds.has(`sprint-update-branch:${sprint.id}`)}
                   onMarkCompleted={onMarkCompleted}
                   onMarkQaPassed={onMarkQaPassed}
                   onRollback={onRollback}

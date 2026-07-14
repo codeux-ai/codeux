@@ -59,7 +59,7 @@ export interface ManageProjectsArgs extends Partial<CreateProjectInput> {
 }
 
 export interface ManageSprintsArgs {
-  action: "list" | "get" | "create" | "update" | "delete" | "start" | "pause" | "cancel" | "force_cancel" | "inspect_run" | "import_issues" | "plan";
+  action: "list" | "get" | "create" | "followup" | "update" | "delete" | "start" | "pause" | "cancel" | "force_cancel" | "inspect_run" | "import_issues" | "plan";
   projectId?: string;
   sprintId?: string;
   sprintRunId?: string;

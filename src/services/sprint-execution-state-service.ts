@@ -91,6 +91,13 @@ export class SprintExecutionStateService {
     });
   }
 
+  hasTaskExecutionHistory(projectId: string, sprintId: string): boolean {
+    const taskIds = this.projectManagementRepository
+      .listTasks(projectId, sprintId)
+      .map((task) => task.id);
+    return this.executionRepository.listLatestTaskRuns(taskIds).size > 0;
+  }
+
   hasPlannedTasks(projectId: string, sprintId: string): boolean {
     return this.projectManagementRepository.listTasks(projectId, sprintId).length > 0;
   }

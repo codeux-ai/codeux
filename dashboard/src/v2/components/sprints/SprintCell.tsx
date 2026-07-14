@@ -74,6 +74,7 @@ interface SprintCellProps {
   showcaseBusy?: boolean;
   markCompletedBusy?: boolean;
   markQaPassedBusy?: boolean;
+  updateBranchBusy?: boolean;
   isPaused?: boolean;
   pauseResumeBusy?: boolean;
   humanIntervention?: ExecutionHumanInterventionSummary | null;
@@ -85,6 +86,7 @@ interface SprintCellProps {
   onDelete?: () => void;
   onExport?: () => void;
   onOverrides?: () => void;
+  onUpdateBranch?: () => void;
   onToggleShowcase?: () => void;
   onMarkCompleted?: () => void;
   onMarkQaPassed?: () => void;
@@ -112,6 +114,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   showcaseBusy = false,
   markCompletedBusy = false,
   markQaPassedBusy = false,
+  updateBranchBusy = false,
   isPaused = false,
   pauseResumeBusy = false,
   humanIntervention = null,
@@ -123,6 +126,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   onDelete,
   onExport,
   onOverrides,
+  onUpdateBranch,
   onToggleShowcase,
   onMarkCompleted,
   onMarkQaPassed,
@@ -466,6 +470,8 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
                 onExport={onExport}
                 onToggleShowcase={onToggleShowcase}
                 onOverrides={onOverrides}
+                onUpdateBranch={onUpdateBranch}
+                updateBranchBusy={updateBranchBusy}
                 onMarkCompleted={onMarkCompleted}
                 onMarkQaPassed={onMarkQaPassed}
                 onRollback={onRollback}

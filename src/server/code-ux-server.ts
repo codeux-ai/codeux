@@ -87,6 +87,7 @@ import type { ProjectWorkerAssignmentService } from "../domain/workers/project-w
 import { SprintPreviewRepository } from "../repositories/sprint-preview-repository.js";
 import { SprintPreviewService } from "../services/sprint-preview-service.js";
 import { SprintFileBrowserService } from "../services/sprint-file-browser-service.js";
+import { SprintBranchService } from "../services/sprint-branch-service.js";
 import { resolveEffectiveDashboardSettings } from "../services/settings-resolution-service.js";
 import { ActiveDispatchRegistry } from "../services/active-dispatch-registry.js";
 import { ShutdownContainerService } from "../services/shutdown-container-service.js";
@@ -182,6 +183,7 @@ export class CodeUxServer {
   private sprintPreviewRepository: SprintPreviewRepository;
   private sprintPreviewService: SprintPreviewService;
   private sprintFileBrowserService: SprintFileBrowserService;
+  private sprintBranchService: SprintBranchService;
   private customDashboardRepository: import("../repositories/custom-dashboard-repository.js").CustomDashboardRepository;
   private customDashboardValidationService: import("../services/custom-dashboard-validation-service.js").CustomDashboardValidationService;
   private agentPresetSyncService: AgentPresetSyncService;
@@ -278,6 +280,12 @@ export class CodeUxServer {
     this.sprintPreviewRepository = deps.sprintPreviewRepository;
     this.sprintPreviewService = deps.sprintPreviewService;
     this.sprintFileBrowserService = deps.sprintFileBrowserService;
+    this.sprintBranchService = new SprintBranchService({
+      projectManagementRepository: this.projectManagementRepository,
+      executionRepository: this.executionRepository,
+      settingsRepository: this.settingsRepository,
+      logger: this.logger.child({ component: "sprint-branch-service" }),
+    });
     this.customDashboardRepository = deps.customDashboardRepository;
     this.customDashboardValidationService = deps.customDashboardValidationService;
     this.sprintMarkdownService = deps.sprintMarkdownService;
@@ -1501,6 +1509,7 @@ export class CodeUxServer {
         readFileBrowserFile: (sessionId, filePath) => this.sprintFileBrowserService.readFile(sessionId, filePath),
         getFileBrowserChanges: (sessionId) => this.sprintFileBrowserService.getChangeSet(sessionId),
         getFileBrowserDiff: (sessionId, filePath) => this.sprintFileBrowserService.getDiff(sessionId, filePath),
+        updateSprintBranch: (projectId, sprintId) => this.sprintBranchService.updateFromDefault(projectId, sprintId),
         syncGitSettingsFromDashboard: () => syncGitSettingsFromDashboard(this.runtimeContext),
         refreshJulesApiKey: () => this.refreshJulesApiKey(),
         setLogger: (logger) => { this.logger = logger; },

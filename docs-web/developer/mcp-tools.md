@@ -48,7 +48,7 @@ action-specific fields, and an optional `approval` object for destructive action
 | `request_clarification` | orchestration | Raise an idempotent, project-owned Markdown question from an eligible coding agent. |
 | `reply_to_clarification` | orchestration | Answer a pending clarification as the eligible project-manager agent or an unscoped project-manager client. |
 | `manage_projects` | orchestration | List, get, create, update, select, set up, and delete projects. |
-| `manage_sprints` | orchestration | Plan, start, pause, cancel, inspect, import issues into, and edit sprints. |
+| `manage_sprints` | orchestration | Save unplanned follow-up drafts; plan, start, pause, cancel, inspect, import issues into, and edit sprints. |
 | `manage_tasks` | orchestration | Create, edit, start, stop, pause, and inspect tasks. |
 | `manage_quicksprints` | orchestration | Manage quicksprint templates and execute them. |
 | `manage_scheduler` | orchestration | Create and run scheduled sprints, quicksprints, messages, and node flows. |
@@ -121,7 +121,7 @@ Clarification states are `pending`, `replied`, `expired`, and `cancelled`. Repea
 | Tool | `action` values |
 | --- | --- |
 | `manage_projects` | `list`, `get`, `create`, `update`, `select`, `setup`, `delete` |
-| `manage_sprints` | `list`, `get`, `create`, `update`, `delete`, `start`, `pause`, `cancel`, `force_cancel`, `inspect_run`, `import_issues`, `plan` |
+| `manage_sprints` | `list`, `get`, `create`, `followup`, `update`, `delete`, `start`, `pause`, `cancel`, `force_cancel`, `inspect_run`, `import_issues`, `plan` |
 | `manage_tasks` | `list`, `get`, `create`, `update`, `delete`, `start`, `stop`, `force_stop`, `pause`, `inspect_run` |
 | `manage_quicksprints` | `list_templates`, `get_template`, `create_template`, `update_template`, `delete_template`, `execute`, `start` |
 | `manage_scheduler` | `list`, `create`, `update`, `delete`, `run_due`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `schedule_node_flow` |
@@ -139,6 +139,10 @@ Clarification states are `pending`, `replied`, `expired`, and `cancelled`. Repea
 For `manage_projects` setup, clients may send setup options either as `setup.options` or as top-level `options`. `options.docs: true` is opt-in and embeds discovered repository documentation into the Knowledge docs library.
 
 For the full per-action payloads and return shapes, see [Management actions](./management-actions.md).
+
+### Scheduled follow-up sprint drafts
+
+`manage_sprints` with `action: "followup"` saves a new idle sprint without calling the Planning agent, creating tasks, starting orchestration, or creating a schedule. For work that must begin after another sprint, create the draft first and then pass its returned id to `manage_scheduler` `schedule_sprint` with `scheduleMode: "after_sprint_end"` and the source sprint id. Never call `plan` before that schedule: starting the still-unplanned draft automatically plans it with auto-start after the source sprint completes.
 
 ### Background sprint planning
 

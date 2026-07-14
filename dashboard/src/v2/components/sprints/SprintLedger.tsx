@@ -69,6 +69,7 @@ export interface SprintLedgerProps {
   onEditSprint: (sprint: Sprint) => void;
   onExportSprint: (sprint: Sprint) => void;
   onOverridesSprint: (sprint: Sprint) => void;
+  onUpdateBranchSprint?: (sprint: Sprint) => void;
   onMarkCompletedSprint: (sprintId: string) => void;
   onMarkQaPassedSprint?: (sprintId: string) => void;
   onRollbackSprint?: (sprint: Sprint) => void;
@@ -96,6 +97,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
   onEditSprint,
   onExportSprint,
   onOverridesSprint,
+  onUpdateBranchSprint,
   onMarkCompletedSprint,
   onMarkQaPassedSprint,
   onRollbackSprint,
@@ -701,6 +703,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                   onEdit={() => onEditSprint(sprint)}
                   onExport={() => onExportSprint(sprint)}
                   onOverrides={() => onOverridesSprint(sprint)}
+                  onUpdateBranch={sprint.status === "idle" && onUpdateBranchSprint ? () => onUpdateBranchSprint(sprint) : undefined}
                   onMarkCompleted={() => onMarkCompletedSprint(sprint.id)}
                   onMarkQaPassed={onMarkQaPassedSprint ? () => onMarkQaPassedSprint(sprint.id) : undefined}
                   onRollback={onRollbackSprint ? () => onRollbackSprint(sprint) : undefined}

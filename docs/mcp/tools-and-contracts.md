@@ -803,13 +803,28 @@ The first call returns `approvalRequired: true`. To execute the deprecation afte
 }
 ```
 
-For sprint create/update calls:
+For sprint create/followup/update calls:
 - `name` is the canonical repository field.
 - `title` is accepted as a public MCP alias for `name`.
 - `goal` is the canonical repository field.
 - `goalMarkdown` is accepted as a public MCP alias for `goal`.
 - `linkedIssues` can include imported issue body and conversation markdown. Sprint create merges that context into the goal under `## Linked Issues`; sprint update does the same when a replacement goal is provided. Prompt-only issue body and conversation content are not stored in linked issue repository rows.
 - Missing or blank `projectId`, `sprintId`, `sprintRunId`, `name`, and `title` values are rejected before repository calls so MCP clients receive a validation error instead of a low-level `.trim()` failure.
+
+### `manage_sprints followup`
+
+Use `manage_sprints` with `action: "followup"` when a later sprint should be captured now but must not be planned until its scheduled start. The action accepts the same draft fields and public aliases as sprint creation, requires `projectId`, creates a sprint with `status: "idle"`, and returns the saved sprint record synchronously.
+
+```json
+{
+  "action": "followup",
+  "projectId": "project-123",
+  "title": "Post-migration follow-up",
+  "goalMarkdown": "Apply the findings from the migration sprint."
+}
+```
+
+`followup` does not call the Planning agent, create tasks, start orchestration, or create a scheduler entry. To run it after another sprint, pass the returned sprint id to `manage_scheduler` with `action: "schedule_sprint"`, `scheduleMode: "after_sprint_end"`, and the source sprint id. Never call `manage_sprints plan` for that follow-up first: when the scheduled entry starts the still-unplanned sprint, Code UX plans it with auto-start at that time, after the source sprint has completed.
 
 ### `manage_sprints plan`
 
