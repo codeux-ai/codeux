@@ -5,6 +5,7 @@ import { h, Fragment, type ComponentChildren } from "preact";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render as testingRender, screen, cleanup } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
+import { renderWithI18n } from "../render-with-i18n.js";
 import { LiveSessionPage } from "../../../dashboard/src/v2/LiveSessionPage.js";
 import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
 import { useDashboardRuntimeData } from "../../../dashboard/src/hooks/use-dashboard-runtime-data.js";
@@ -222,7 +223,7 @@ describe("LiveSessionPage Status Regression", () => {
       status: { subtasks: [], timestamp: new Date().toISOString(), project_id: "proj-1", sprint_id: null },
     }));
 
-    render(<LiveSessionPage />);
+    renderWithI18n(<LiveSessionPage />);
 
     expect(screen.getByLabelText("Live Session")).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("status", { name: "Loading live session telemetry" })).toHaveTextContent("Loading live session telemetry.");
@@ -235,7 +236,7 @@ describe("LiveSessionPage Status Regression", () => {
       isRecovering: true,
     }));
 
-    render(<LiveSessionPage />);
+    renderWithI18n(<LiveSessionPage />);
 
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent("Connection Error");
@@ -246,7 +247,7 @@ describe("LiveSessionPage Status Regression", () => {
   it("announces the empty live-session state after loading completes", () => {
     vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData());
 
-    render(<LiveSessionPage />);
+    renderWithI18n(<LiveSessionPage />);
 
     expect(screen.getByLabelText("Live Session")).not.toHaveAttribute("aria-busy");
     expect(screen.getByRole("status", { name: /Waiting for Sprint Start/i })).toHaveTextContent("Launch a sprint to activate live task telemetry");
@@ -272,7 +273,7 @@ describe("LiveSessionPage Status Regression", () => {
       },
     }));
 
-    render(<LiveSessionPage />);
+    renderWithI18n(<LiveSessionPage />);
 
     expect(screen.getByText("Recovered implementation task")).toBeInTheDocument();
     expect(screen.getAllByRole("status").some((status) => status.textContent?.includes("DAG view selected."))).toBe(true);
@@ -284,7 +285,7 @@ describe("LiveSessionPage Status Regression", () => {
       execution: liveExecution({ recentEvents: [gateEvent()] }),
     }));
 
-    const { rerender } = render(<LiveSessionPage />);
+    const { rerender } = renderWithI18n(<LiveSessionPage />);
     expect(screen.getByRole("button", { name: /CI status: CI running/i })).toBeInTheDocument();
 
     vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
@@ -324,7 +325,7 @@ describe("LiveSessionPage Status Regression", () => {
       execution,
     }));
 
-    const { rerender } = render(<LiveSessionPage />);
+    const { rerender } = renderWithI18n(<LiveSessionPage />);
     expect(screen.getByRole("button", { name: /CI status: CI failed/i })).toBeInTheDocument();
 
     vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
@@ -374,7 +375,7 @@ describe("LiveSessionPage Status Regression", () => {
       execution: liveExecution({ recentEvents: [gateEvent({ eventType: "run_started", payload: null })] }),
     }));
 
-    render(<LiveSessionPage />);
+    renderWithI18n(<LiveSessionPage />);
 
     expect(screen.getByRole("button", { name: "Edit task T-100" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Force complete task T-100" })).toBeInTheDocument();
@@ -427,7 +428,7 @@ describe("LiveSessionPage Status Regression", () => {
       tasksWithLiveActivities: [],
     });
 
-    render(<LiveSessionPage />);
+    renderWithI18n(<LiveSessionPage />);
 
     // Assert manual copy - using getAllByText as copy may appear in both hero subtitle and status panel
     expect(screen.getAllByText("Paused").length).toBeGreaterThan(0);
@@ -474,7 +475,7 @@ describe("LiveSessionPage Status Regression", () => {
       tasksWithLiveActivities: [],
     });
 
-    render(<LiveSessionPage />);
+    renderWithI18n(<LiveSessionPage />);
 
     // Assert system stop copy
     expect(screen.getAllByText("Stopped").length).toBeGreaterThan(0);
@@ -520,7 +521,7 @@ describe("LiveSessionPage Status Regression", () => {
       tasksWithLiveActivities: [],
     });
 
-    render(<LiveSessionPage />);
+    renderWithI18n(<LiveSessionPage />);
 
     // Check for "Needs you" badge - should only be one in the header
     const badges = screen.getAllByText("Needs you");

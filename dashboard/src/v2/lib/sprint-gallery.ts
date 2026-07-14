@@ -10,14 +10,14 @@ export const MAX_SHOWCASE_SPRINTS = 20;
  * most recent MAX_SHOWCASE_SPRINTS entries so the gallery can't grow
  * without bound and overlap the content below it.
  */
-export function filterShowcaseSprints(sprints: Sprint[]): Sprint[] {
+export function filterShowcaseSprints(sprints: ReadonlyArray<Sprint>): Sprint[] {
   return sprints.filter((s) => s.showcasePinned).slice(0, MAX_SHOWCASE_SPRINTS);
 }
 
 /**
  * Common sorting for sprints to ensure deterministic gallery order.
  */
-export function sortSprintsByRecency(sprints: Sprint[]): Sprint[] {
+export function sortSprintsByRecency(sprints: ReadonlyArray<Sprint>): Sprint[] {
   return [...sprints].sort((left, right) => {
     const createdAtDelta = (right.createdAt || "").localeCompare(left.createdAt || "");
     if (createdAtDelta !== 0) {

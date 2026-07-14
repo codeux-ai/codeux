@@ -1,5 +1,5 @@
 import type { FunctionComponent, JSX } from "preact";
-import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
+import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import {
   CalendarDays,
   BellRing,
@@ -24,6 +24,15 @@ import { PageHeader } from "./components/layout/PageHeader.js";
 import { AvantgardeSelect } from "./components/ui/AvantgardeSelect.js";
 import { Button } from "./components/ui/Button.js";
 import { useProjectData } from "./context/project-data.js";
+import {
+  translateDashboardMessage,
+  translateDashboardPlural,
+  type DashboardLocale,
+  type DashboardMessageVariables,
+  type DashboardTextMessageKey,
+} from "./i18n/locales.js";
+import { schedulerMessages } from "./i18n/messages/scheduler.js";
+import { useDashboardI18n } from "./i18n/context.js";
 import { subscribeToDashboardRealtime } from "../lib/realtime/dashboard-realtime-client.js";
 import { fetchSprints } from "./lib/project-api.js";
 import { fetchNodeFlows } from "./lib/node-flow-api.js";
@@ -32,6 +41,7 @@ import {
   createSchedulerEntry,
   deleteSchedulerEntry,
   fetchProjectSchedule,
+  formatSchedulerDateValueInTimeZone,
   updateSchedulerEntry,
 } from "./lib/scheduler-api.js";
 import type {
@@ -61,7 +71,6 @@ const SCHEDULER_COMPACT_FIELD_CLASS = `${SCHEDULER_FIELD_CLASS} min-h-[40px]`;
 
 const TARGET_OPTIONS: Array<{
   value: ScheduleTargetType;
-  label: string;
   icon: typeof Zap;
   tone: string;
   activeClassName: string;
@@ -69,7 +78,6 @@ const TARGET_OPTIONS: Array<{
 }> = [
   {
     value: "sprint",
-    label: "Sprint",
     icon: Zap,
     tone: "text-ember-500",
     activeClassName: "border-ember-500/35 bg-ember-500/10 shadow-[0_12px_34px_rgba(255,184,0,0.13)]",
@@ -77,7 +85,6 @@ const TARGET_OPTIONS: Array<{
   },
   {
     value: "quicksprint",
-    label: "Quicksprint",
     icon: RefreshCw,
     tone: "text-sky-500",
     activeClassName: "border-sky-500/35 bg-sky-500/10 shadow-[0_12px_34px_rgba(14,165,233,0.13)]",
@@ -85,7 +92,6 @@ const TARGET_OPTIONS: Array<{
   },
   {
     value: "chat",
-    label: "Chat message",
     icon: MessageCircle,
     tone: "text-violet-500",
     activeClassName: "border-violet-500/35 bg-violet-500/10 shadow-[0_12px_34px_rgba(139,92,246,0.13)]",
@@ -93,7 +99,6 @@ const TARGET_OPTIONS: Array<{
   },
   {
     value: "memory_remediation",
-    label: "Memory",
     icon: Brain,
     tone: "text-signal-500",
     activeClassName: "border-signal-500/35 bg-signal-500/10 shadow-[0_12px_34px_rgba(0,224,160,0.13)]",
@@ -101,7 +106,6 @@ const TARGET_OPTIONS: Array<{
   },
   {
     value: "node_flow",
-    label: "Node flow",
     icon: Workflow,
     tone: "text-rose-500",
     activeClassName: "border-rose-500/35 bg-rose-500/10 shadow-[0_12px_34px_rgba(244,63,94,0.13)]",
@@ -109,7 +113,6 @@ const TARGET_OPTIONS: Array<{
   },
   {
     value: "agent_wakeup",
-    label: "Agent wakeup",
     icon: BellRing,
     tone: "text-fuchsia-500",
     activeClassName: "border-fuchsia-500/35 bg-fuchsia-500/10 shadow-[0_12px_34px_rgba(217,70,239,0.13)]",
@@ -117,7 +120,6 @@ const TARGET_OPTIONS: Array<{
   },
   {
     value: "task",
-    label: "Task",
     icon: ListTodo,
     tone: "text-cyan-500",
     activeClassName: "border-cyan-500/35 bg-cyan-500/10 shadow-[0_12px_34px_rgba(6,182,212,0.13)]",
@@ -153,17 +155,57 @@ const startOfWeek = (date: Date): Date => {
   return addDays(next, -offset);
 };
 
-const formatDayLabel = (date: Date): string => (
-  date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
+type SchedulerTextKey = DashboardTextMessageKey<typeof schedulerMessages>;
+
+const schedulerText = (
+  locale: DashboardLocale,
+  key: SchedulerTextKey,
+  variables?: DashboardMessageVariables,
+): string => translateDashboardMessage(schedulerMessages, locale, key, variables);
+
+export const formatSchedulerDayLabel = (date: Date, locale: DashboardLocale): string => (
+  formatSchedulerDateValueInTimeZone(date, locale, { weekday: "short", month: "short", day: "numeric" })
 );
 
-const formatTimeLabel = (iso: string): string => (
-  new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+export const formatSchedulerTimeLabel = (
+  value: string | Date,
+  locale: DashboardLocale,
+  timeZone?: string,
+): string => formatSchedulerDateValueInTimeZone(
+  typeof value === "string" ? new Date(value) : value,
+  locale,
+  { hour: "2-digit", minute: "2-digit" },
+  timeZone,
 );
 
-const targetLabel = (targetType: ScheduleTargetType): string => {
-  const option = targetOptionByType.get(targetType);
-  return option?.label || "Schedule";
+const formatSchedulerDateTime = (
+  value: string | Date,
+  locale: DashboardLocale,
+  timeZone?: string,
+): string => formatSchedulerDateValueInTimeZone(
+  typeof value === "string" ? new Date(value) : value,
+  locale,
+  {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  },
+  timeZone,
+);
+
+const targetLabel = (targetType: ScheduleTargetType, locale: DashboardLocale): string => {
+  const key = {
+    sprint: "targetSprint",
+    quicksprint: "targetQuicksprint",
+    chat: "targetChat",
+    memory_remediation: "targetMemory",
+    node_flow: "targetNodeFlow",
+    agent_wakeup: "targetAgentWakeup",
+    task: "targetTask",
+  } as const;
+  return schedulerText(locale, key[targetType] ?? "targetFallback");
 };
 
 function isOperatorTargetType(targetType: ScheduleTargetType): targetType is OperatorScheduleTargetType {
@@ -174,49 +216,101 @@ const isOperatorEditableTarget = (targetType: ScheduleTargetType): targetType is
   isOperatorTargetType(targetType)
 );
 
-const unsupportedEditReason = (targetType: ScheduleTargetType): string => (
-  `${targetLabel(targetType)} schedules are created by the secured MCP scheduler tool and cannot be edited in the dashboard form. Pause, resume, or delete remains available.`
+const unsupportedEditReason = (targetType: ScheduleTargetType, locale: DashboardLocale): string => (
+  schedulerText(locale, "unsupportedEdit", { target: targetLabel(targetType, locale) })
 );
 
-const scheduleStatusLabel = (status: SchedulerEntryRecord["status"] | SchedulerOccurrence["status"] | undefined): string => (
-  status ? status.replaceAll("_", " ") : "scheduled"
+const scheduleStatusLabel = (
+  status: SchedulerEntryRecord["status"] | SchedulerOccurrence["status"] | undefined,
+  locale: DashboardLocale,
+): string => {
+  const key = {
+    scheduled: "statusScheduled",
+    paused: "statusPaused",
+    completed: "statusCompleted",
+    failed: "statusFailed",
+    cancelled: "statusCancelled",
+  } as const;
+  return schedulerText(locale, key[status ?? "scheduled"]);
+};
+
+export const formatSchedulerSprintStatus = (
+  status: SprintRecord["status"],
+  locale: DashboardLocale,
+): string => {
+  const key = {
+    running: "sprintStatusRunning",
+    paused: "sprintStatusPaused",
+    completed: "sprintStatusCompleted",
+    failed: "sprintStatusFailed",
+    cancelled: "sprintStatusCancelled",
+    idle: "sprintStatusIdle",
+  } as const;
+  return schedulerText(locale, key[status]);
+};
+
+const schedulerViewLabel = (view: SchedulerView, locale: DashboardLocale): string => (
+  schedulerText(locale, view === "calendar" ? "calendar" : "dayView")
 );
 
-const schedulerViewLabel = (view: SchedulerView): string => view === "calendar" ? "Calendar" : "24 Hours";
-
-const recurrenceFrequencyLabel = (frequency: ScheduleRecurrenceRule["frequency"], interval: number): string => {
+const recurrenceFrequencyLabel = (
+  frequency: ScheduleRecurrenceRule["frequency"],
+  interval: number,
+  locale: DashboardLocale,
+): string => {
   if (frequency === "minutely") {
-    return interval === 1 ? "minute" : `${interval} minutes`;
+    return schedulerText(locale, interval === 1 ? "frequencyMinute" : "frequencyMinutes", { count: interval });
   }
   if (interval === 1) {
-    return frequency;
+    const key = {
+      hourly: "frequencyHourly",
+      daily: "frequencyDaily",
+      weekly: "frequencyWeekly",
+      monthly: "frequencyMonthly",
+      none: "recurrenceOneTime",
+    } as const;
+    return schedulerText(locale, key[frequency]);
   }
-  return `${interval} ${frequency}`;
+  const key = {
+    hourly: "frequencyHours",
+    daily: "frequencyDays",
+    weekly: "frequencyWeeks",
+    monthly: "frequencyMonths",
+    none: "recurrenceOneTime",
+  } as const;
+  return schedulerText(locale, key[frequency], { count: interval });
 };
 
-const recurrenceSummary = (recurrence: ScheduleRecurrenceRule): string => {
+export const summarizeSchedulerRecurrence = (
+  recurrence: ScheduleRecurrenceRule,
+  locale: DashboardLocale,
+  timeZone?: string,
+): string => {
   if (recurrence.frequency === "none") {
-    return "One time";
+    return schedulerText(locale, "recurrenceOneTime");
   }
-  const every = recurrenceFrequencyLabel(recurrence.frequency, recurrence.interval);
+  const every = recurrenceFrequencyLabel(recurrence.frequency, recurrence.interval, locale);
   if (recurrence.endMode === "after_count" && recurrence.count) {
-    return `Every ${every}, ${recurrence.count} runs`;
+    return schedulerText(locale, "recurrenceEveryRuns", { frequency: every, count: recurrence.count });
   }
   if (recurrence.endMode === "on_date" && recurrence.until) {
-    return `Every ${every} until ${new Date(recurrence.until).toLocaleString()}`;
+    return schedulerText(locale, "recurrenceEveryUntil", {
+      frequency: every,
+      until: formatSchedulerDateTime(recurrence.until, locale, timeZone),
+    });
   }
-  return `Every ${every}`;
+  return schedulerText(locale, "recurrenceEvery", { frequency: every });
 };
 
-const scheduleAnchorOffsetLabel = (offsetMinutes?: number): string => {
+const scheduleAnchorOffsetLabel = (offsetMinutes: number | undefined, locale: DashboardLocale): string => {
   const offset = Math.max(0, Math.floor(Number(offsetMinutes ?? 0)));
   if (offset === 0) {
     return "";
   }
   if (offset === 1) {
-    return " + 1 minute";
+    return schedulerText(locale, "offsetOneMinute");
   }
-  return ` + ${offset} minutes`;
+  return schedulerText(locale, "offsetManyMinutes", { count: offset });
 };
 
 const sprintDisplayName = (sprints: SprintRecord[], sprintId: string): string => (
@@ -247,26 +341,33 @@ const isNodeFlowJsonObject = (value: unknown): value is NodeFlowJsonObject => (
   && Object.values(value as Record<string, unknown>).every(isNodeFlowJsonValue)
 );
 
-const parseNodeFlowInputJson = (rawInput: string): { input?: NodeFlowJsonObject; error?: string } => {
+const parseNodeFlowInputJson = (rawInput: string, locale: DashboardLocale): { input?: NodeFlowJsonObject; error?: string } => {
   if (!rawInput.trim()) {
     return {};
   }
   try {
     const parsed: unknown = JSON.parse(rawInput);
     if (!isNodeFlowJsonObject(parsed)) {
-      return { error: "Node flow input must be a JSON object." };
+      return { error: schedulerText(locale, "validationNodeFlowObject") };
     }
     return { input: parsed };
   } catch {
-    return { error: "Node flow input must be valid JSON." };
+    return { error: schedulerText(locale, "validationNodeFlowJson") };
   }
 };
 
-const scheduleTimingSummary = (entry: SchedulerEntryRecord, sprints: SprintRecord[]): string => {
+const scheduleTimingSummary = (entry: SchedulerEntryRecord, sprints: SprintRecord[], locale: DashboardLocale): string => {
   if (entry.scheduleAnchor?.mode === "after_sprint_end") {
-    return `After ${sprintDisplayName(sprints, entry.scheduleAnchor.sourceSprintId)} ends${scheduleAnchorOffsetLabel(entry.scheduleAnchor.offsetMinutes)}`;
+    return schedulerText(locale, "anchorAfterSprint", {
+      sprint: sprintDisplayName(sprints, entry.scheduleAnchor.sourceSprintId),
+      offset: scheduleAnchorOffsetLabel(entry.scheduleAnchor.offsetMinutes, locale),
+    });
   }
-  return `Next run: ${entry.nextRunAt ? new Date(entry.nextRunAt).toLocaleString() : "none"}`;
+  return schedulerText(locale, "nextRunAt", {
+    date: entry.nextRunAt
+      ? `${formatSchedulerDateTime(entry.nextRunAt, locale, entry.timezone)} (${entry.timezone})`
+      : schedulerText(locale, "none"),
+  });
 };
 
 const scheduleTargetSummary = (
@@ -274,30 +375,45 @@ const scheduleTargetSummary = (
   sprints: SprintRecord[],
   templates: QuicksprintTemplateRecord[],
   nodeFlows: NodeFlowRecord[],
+  locale: DashboardLocale,
 ): string => {
   if (entry.targetType === "sprint") {
-    return entry.sprintTarget ? `Sprint: ${sprintDisplayName(sprints, entry.sprintTarget.sprintId)}` : "Sprint";
+    return entry.sprintTarget
+      ? schedulerText(locale, "sprintSummary", { name: sprintDisplayName(sprints, entry.sprintTarget.sprintId) })
+      : schedulerText(locale, "targetSprint");
   }
   if (entry.targetType === "quicksprint") {
     const templateId = entry.quicksprintTarget?.templateId;
-    const templateName = templateId ? templates.find((template) => template.id === templateId)?.name || templateId : "template";
-    return `Quicksprint: ${templateName}`;
+    const templateName = templateId
+      ? templates.find((template) => template.id === templateId)?.name || templateId
+      : schedulerText(locale, "templateFallback");
+    return schedulerText(locale, "quicksprintSummary", { name: templateName });
   }
   if (entry.targetType === "chat") {
-    return entry.chatTarget?.threadId ? `Chat thread: ${entry.chatTarget.threadId}` : "Project chat message";
+    return entry.chatTarget?.threadId
+      ? schedulerText(locale, "chatThreadSummary", { threadId: entry.chatTarget.threadId })
+      : schedulerText(locale, "projectChatMessage");
   }
   if (entry.targetType === "memory_remediation") {
-    return `Memory remediation: ${entry.memoryRemediationTarget?.mode === "ai" ? "AI review" : "deterministic cleanup"}`;
+    return schedulerText(locale, "remediationSummary", {
+      mode: schedulerText(locale, entry.memoryRemediationTarget?.mode === "ai" ? "aiReview" : "deterministicCleanup"),
+    });
   }
   if (entry.targetType === "node_flow") {
     const flowId = entry.nodeFlowTarget?.flowId;
-    return flowId ? `Node flow: ${nodeFlowDisplayName(nodeFlows, flowId)}` : "Node flow";
+    return flowId
+      ? schedulerText(locale, "nodeFlowSummary", { name: nodeFlowDisplayName(nodeFlows, flowId) })
+      : schedulerText(locale, "targetNodeFlow");
   }
   if (entry.targetType === "agent_wakeup") {
-    return entry.agentWakeupTarget?.threadId ? `Agent wakeup: ${entry.agentWakeupTarget.threadId}` : "Agent wakeup message";
+    return entry.agentWakeupTarget?.threadId
+      ? schedulerText(locale, "agentWakeupSummary", { threadId: entry.agentWakeupTarget.threadId })
+      : schedulerText(locale, "agentWakeupMessage");
   }
   const provider = entry.taskTarget?.provider ? ` · ${entry.taskTarget.provider}` : "";
-  return entry.taskTarget?.taskId ? `Task rerun: ${entry.taskTarget.taskId}${provider}` : "Task rerun";
+  return entry.taskTarget?.taskId
+    ? schedulerText(locale, "taskRerunSummary", { taskId: entry.taskTarget.taskId, provider })
+    : schedulerText(locale, "taskRerun");
 };
 
 const ProjectPlaceholder: FunctionComponent = () => (
@@ -305,15 +421,27 @@ const ProjectPlaceholder: FunctionComponent = () => (
     <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-signal-500/20 bg-signal-500/[0.08] text-signal-500 shadow-[0_0_15px_rgba(0,224,160,0.08)]">
       <CalendarDays className="h-5 w-5" />
     </div>
-    <h1 className="mt-5 font-display text-2xl md:text-3xl font-black tracking-tight text-slate-900 dark:text-white">Select a project to schedule work.</h1>
-    <p className="mt-3 max-w-xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">
-      Scheduler entries are project-scoped so sprints, quicksprints, node flows, and chat messages run against the right workspace.
-    </p>
+    <LocalizedProjectPlaceholderCopy />
   </div>
 );
 
+const LocalizedProjectPlaceholderCopy: FunctionComponent = () => {
+  const { translate } = useDashboardI18n();
+  return (
+    <>
+    <h1 className="mt-5 font-display text-2xl md:text-3xl font-black tracking-tight text-slate-900 dark:text-white">{translate(schedulerMessages, "selectProjectTitle")}</h1>
+    <p className="mt-3 max-w-xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+      {translate(schedulerMessages, "selectProjectDescription")}
+    </p>
+    </>
+  );
+};
+
 export const SchedulerPage: FunctionComponent = () => {
   const { selectedProject } = useProjectData();
+  const { locale, translate, translatePlural, formatNumber, formatTime } = useDashboardI18n();
+  const refreshSequence = useRef(0);
+  const submitInFlight = useRef(false);
   const [view, setView] = useState<SchedulerView>("calendar");
   const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
   const [schedule, setSchedule] = useState<SchedulerCollectionResponse | null>(null);
@@ -347,6 +475,7 @@ export const SchedulerPage: FunctionComponent = () => {
     };
   }, []);
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackState>({ tone: "idle", message: null });
 
   const [editingEntry, setEditingEntry] = useState<SchedulerEntryRecord | null>(null);
@@ -373,6 +502,7 @@ export const SchedulerPage: FunctionComponent = () => {
   const [endMode, setEndMode] = useState<ScheduleRecurrenceRule["endMode"]>("never");
   const [count, setCount] = useState(6);
   const [until, setUntil] = useState(() => toDateInputValue(addDays(new Date(), 30)));
+  const selectedTimezone = editingEntry?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
   const range = useMemo(() => {
     const from = startOfWeek(selectedDate);
@@ -385,6 +515,7 @@ export const SchedulerPage: FunctionComponent = () => {
     if (!selectedProject) {
       return;
     }
+    const requestId = ++refreshSequence.current;
     setLoading(true);
     try {
       const [nextSchedule, sprintResponse, quicksprintTemplates, nodeFlowResponse] = await Promise.all([
@@ -393,6 +524,9 @@ export const SchedulerPage: FunctionComponent = () => {
         fetchQuicksprintTemplates(selectedProject.id),
         fetchNodeFlows(selectedProject.id, signal),
       ]);
+      if (signal?.aborted || requestId !== refreshSequence.current) {
+        return;
+      }
       setSchedule(nextSchedule);
       setSprints(sprintResponse.sprints);
       setTemplates(quicksprintTemplates);
@@ -406,15 +540,15 @@ export const SchedulerPage: FunctionComponent = () => {
           : nodeFlowResponse.flows[0]?.id || ""
       ));
     } catch (error) {
-      if (!signal?.aborted) {
-        setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Failed to load scheduler." });
+      if (!signal?.aborted && requestId === refreshSequence.current) {
+        setFeedback({ tone: "error", message: error instanceof Error ? error.message : translate(schedulerMessages, "failedLoad") });
       }
     } finally {
-      if (!signal?.aborted) {
+      if (!signal?.aborted && requestId === refreshSequence.current) {
         setLoading(false);
       }
     }
-  }, [range.from, range.to, selectedProject]);
+  }, [range.from, range.to, selectedProject, translate]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -483,9 +617,19 @@ export const SchedulerPage: FunctionComponent = () => {
     };
   }, [schedule?.entries, schedule?.occurrences]);
 
-  const scheduleRangeStatus = loading && schedule
-    ? `Updating schedule. Showing cached ${schedulerStats.visibleCount} visible occurrences from ${formatDayLabel(range.from)} to ${formatDayLabel(range.to)}.`
-    : `${schedulerStats.visibleCount} visible occurrences · ${formatDayLabel(range.from)} to ${formatDayLabel(range.to)}`;
+  const scheduleRangeStatus = loading && !schedule
+    ? translate(schedulerMessages, "loadingSchedule")
+    : loading
+      ? translate(schedulerMessages, "updatingSchedule", {
+        count: formatNumber(schedulerStats.visibleCount),
+        from: formatSchedulerDayLabel(range.from, locale),
+        to: formatSchedulerDayLabel(range.to, locale),
+      })
+      : translate(schedulerMessages, "visibleScheduleRange", {
+        count: formatNumber(schedulerStats.visibleCount),
+        from: formatSchedulerDayLabel(range.from, locale),
+        to: formatSchedulerDayLabel(range.to, locale),
+      });
 
   const focusSchedulerView = (nextView: SchedulerView) => {
     setView(nextView);
@@ -515,7 +659,7 @@ export const SchedulerPage: FunctionComponent = () => {
 
   const startEdit = (entry: SchedulerEntryRecord) => {
     if (!isOperatorEditableTarget(entry.targetType)) {
-      setFeedback({ tone: "error", message: unsupportedEditReason(entry.targetType) });
+      setFeedback({ tone: "error", message: unsupportedEditReason(entry.targetType, locale) });
       return;
     }
     setEditingEntry(entry);
@@ -561,7 +705,7 @@ export const SchedulerPage: FunctionComponent = () => {
     }
   };
 
-  const cancelEdit = () => {
+  const cancelEdit = (clearFeedback = true) => {
     setEditingEntry(null);
     setEntryTitle("");
     setTargetType("sprint");
@@ -584,7 +728,9 @@ export const SchedulerPage: FunctionComponent = () => {
     setEndMode("never");
     setCount(6);
     setUntil(toDateInputValue(addDays(new Date(), 30)));
-    setFeedback({ tone: "idle", message: null });
+    if (clearFeedback) {
+      setFeedback({ tone: "idle", message: null });
+    }
   };
 
   const editOccurrence = (occurrence: SchedulerOccurrence) => {
@@ -592,26 +738,56 @@ export const SchedulerPage: FunctionComponent = () => {
     if (entry) {
       startEdit(entry);
     } else {
-      setFeedback({ tone: "error", message: "Parent schedule entry not found." });
+      setFeedback({ tone: "error", message: translate(schedulerMessages, "parentEntryNotFound") });
     }
   };
 
   const submitSchedule = async () => {
-    if (!selectedProject) {
+    if (!selectedProject || submitInFlight.current) {
       return;
     }
     setFeedback({ tone: "idle", message: null });
     if (!isOperatorEditableTarget(targetType)) {
-      setFeedback({ tone: "error", message: unsupportedEditReason(targetType) });
+      setFeedback({ tone: "error", message: unsupportedEditReason(targetType, locale) });
       return;
     }
+
+    const scheduledDate = isAnchoredTiming ? null : new Date(scheduledFor);
+    if (scheduledDate && !Number.isFinite(scheduledDate.getTime())) {
+      setFeedback({ tone: "error", message: translate(schedulerMessages, "validationDateTime") });
+      return;
+    }
+
+    let recurrenceUntil: Date | null = null;
+    if (repeatEnabled && !isAnchoredTiming) {
+      if (!Number.isInteger(interval) || interval < 1) {
+        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationInterval") });
+        return;
+      }
+      if (endMode === "after_count" && (!Number.isInteger(count) || count < 1)) {
+        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationCount") });
+        return;
+      }
+      if (endMode === "on_date") {
+        recurrenceUntil = new Date(until);
+        if (!Number.isFinite(recurrenceUntil.getTime())) {
+          setFeedback({ tone: "error", message: translate(schedulerMessages, "validationEndDate") });
+          return;
+        }
+        if (scheduledDate && recurrenceUntil.getTime() <= scheduledDate.getTime()) {
+          setFeedback({ tone: "error", message: translate(schedulerMessages, "validationEndAfterStart") });
+          return;
+        }
+      }
+    }
+
     const recurrence: Partial<ScheduleRecurrenceRule> = repeatEnabled && !isAnchoredTiming
       ? {
         frequency,
         interval,
         endMode,
         count: endMode === "after_count" ? count : null,
-        until: endMode === "on_date" ? new Date(until).toISOString() : null,
+        until: recurrenceUntil?.toISOString() ?? null,
       }
       : { frequency: "none", interval: 1, endMode: "never" };
 
@@ -637,32 +813,36 @@ export const SchedulerPage: FunctionComponent = () => {
 
     if (targetType === "sprint") {
       if (!selectedSprintId) {
-        setFeedback({ tone: "error", message: "Choose a sprint that is not completed." });
+        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationChooseSprint") });
         return;
       }
       const sprint = sprints.find((item) => item.id === selectedSprintId);
       if (!sprint || (sprint.status === "completed" && (!editingEntry || editingEntry.sprintTarget?.sprintId !== selectedSprintId))) {
-        setFeedback({ tone: "error", message: "Choose a sprint that is not completed." });
+        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationChooseSprint") });
         return;
       }
     } else if (targetType === "quicksprint") {
       if (!selectedTemplateId) {
-        setFeedback({ tone: "error", message: "Choose a quicksprint template." });
+        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationChooseTemplate") });
+        return;
+      }
+      if (!Number.isInteger(taskCount) || taskCount < 1 || taskCount > 50) {
+        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationTaskCount") });
         return;
       }
     } else if (targetType === "chat") {
       if (!chatMessage.trim()) {
-        setFeedback({ tone: "error", message: "Write the chat message to schedule." });
+        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationChatMessage") });
         return;
       }
     } else if (targetType === "node_flow") {
       if (!selectedNodeFlowId) {
-        setFeedback({ tone: "error", message: "Choose a node flow." });
+        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationChooseNodeFlow") });
         return;
       }
     }
 
-    const parsedNodeFlowInput = targetType === "node_flow" ? parseNodeFlowInputJson(nodeFlowInputJson) : {};
+    const parsedNodeFlowInput = targetType === "node_flow" ? parseNodeFlowInputJson(nodeFlowInputJson, locale) : {};
     if (parsedNodeFlowInput.error) {
       setFeedback({ tone: "error", message: parsedNodeFlowInput.error });
       return;
@@ -671,16 +851,16 @@ export const SchedulerPage: FunctionComponent = () => {
     let scheduleAnchor: ScheduleAnchor | undefined;
     if (isAnchoredTiming) {
       if (!anchorSourceSprintId) {
-        setFeedback({ tone: "error", message: "Choose the sprint this schedule should wait for." });
+        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationChooseAnchorSprint") });
         return;
       }
       const offsetMinutes = Math.floor(Number(anchorOffsetMinutes || 0));
       if (!Number.isFinite(offsetMinutes) || offsetMinutes < 0) {
-        setFeedback({ tone: "error", message: "Offset minutes must be zero or greater." });
+        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationOffset") });
         return;
       }
       if (targetType === "sprint" && selectedSprintId === anchorSourceSprintId) {
-        setFeedback({ tone: "error", message: "A sprint cannot be scheduled after its own completion." });
+        setFeedback({ tone: "error", message: translate(schedulerMessages, "validationOwnSprint") });
         return;
       }
       scheduleAnchor = {
@@ -693,13 +873,13 @@ export const SchedulerPage: FunctionComponent = () => {
     const input: SchedulerFormInput = {
       title: finalTitle,
       targetType,
-      timezone: editingEntry ? editingEntry.timezone : (Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"),
+      timezone: selectedTimezone,
       recurrence,
     };
     if (scheduleAnchor) {
       input.scheduleAnchor = scheduleAnchor;
     } else {
-      input.scheduledFor = new Date(scheduledFor).toISOString();
+      input.scheduledFor = scheduledDate!.toISOString();
       if (editingEntry?.scheduleAnchor) {
         input.scheduleAnchor = null;
       }
@@ -729,24 +909,29 @@ export const SchedulerPage: FunctionComponent = () => {
       };
     }
 
+    submitInFlight.current = true;
+    setSubmitting(true);
     try {
       if (editingEntry) {
         await updateSchedulerEntry(editingEntry.id, input);
-        setFeedback({ tone: "success", message: "Schedule entry updated." });
-        cancelEdit();
+        cancelEdit(false);
+        setFeedback({ tone: "success", message: translate(schedulerMessages, "scheduleUpdated") });
       } else {
         const createInput: CreateSchedulerEntryInput = {
           ...input,
           scheduleAnchor: input.scheduleAnchor ?? undefined,
         };
         await createSchedulerEntry(selectedProject.id, createInput);
-        setFeedback({ tone: "success", message: "Schedule entry created." });
+        setFeedback({ tone: "success", message: translate(schedulerMessages, "scheduleCreated") });
         setChatMessage("");
         setEntryTitle("");
       }
       await refresh();
     } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Failed to save schedule entry." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : translate(schedulerMessages, "failedSave") });
+    } finally {
+      submitInFlight.current = false;
+      setSubmitting(false);
     }
   };
 
@@ -755,35 +940,38 @@ export const SchedulerPage: FunctionComponent = () => {
       await updateSchedulerEntry(entryId, { status: paused ? "scheduled" : "paused" });
       await refresh();
     } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Failed to update schedule entry." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : translate(schedulerMessages, "failedUpdate") });
     }
   };
 
   const removeEntry = async (entryId: string) => {
+    if (!window.confirm(translate(schedulerMessages, "deleteConfirmation"))) {
+      return;
+    }
     try {
       await deleteSchedulerEntry(entryId);
       await refresh();
     } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Failed to delete schedule entry." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : translate(schedulerMessages, "failedDelete") });
     }
   };
 
   if (!selectedProject) {
     return (
-      <PageContainer aria-label="Scheduler" padding="standard" className="gap-8">
+      <PageContainer aria-label={translate(schedulerMessages, "pageLabel")} padding="standard" className="gap-8">
         <ProjectPlaceholder />
       </PageContainer>
     );
   }
 
   return (
-    <PageContainer aria-label="Scheduler" padding="standard" className="gap-8" data-testid="scheduler-page-root">
+    <PageContainer aria-label={translate(schedulerMessages, "pageLabel")} padding="standard" className="gap-8" data-testid="scheduler-page-root">
       <PageHeader
         data-testid="scheduler-primary-header"
         icon={CalendarDays}
-        eyebrow="Runtime Scheduler"
-        title="Schedule Events"
-        subtitle="Calendar control for future sprint starts, quicksprint launches, node-flow runs, and timed messages into the project chat agent."
+        eyebrow={translate(schedulerMessages, "eyebrow")}
+        title={translate(schedulerMessages, "title")}
+        subtitle={translate(schedulerMessages, "subtitle")}
         actions={
         <div className="flex max-w-full flex-wrap items-center gap-2 shrink-0">
           <Button
@@ -791,26 +979,26 @@ export const SchedulerPage: FunctionComponent = () => {
             size="md"
             onClick={() => setSelectedDate(addDays(selectedDate, -7))}
           >
-            Previous
+            {translate(schedulerMessages, "previous")}
           </Button>
           <Button
             variant="primary"
             size="md"
             onClick={() => setSelectedDate(startOfDay(new Date()))}
           >
-            Today
+            {translate(schedulerMessages, "today")}
           </Button>
           <Button
             variant="secondary"
             size="md"
             onClick={() => setSelectedDate(addDays(selectedDate, 7))}
           >
-            Next
+            {translate(schedulerMessages, "next")}
           </Button>
           <div
             className="ml-0 flex rounded-full border border-[color:var(--color-border-muted)] bg-white/72 p-1 dark:border-white/[0.06] dark:bg-white/[0.03] backdrop-blur-md lg:ml-2"
             role="tablist"
-            aria-label="Scheduler views"
+            aria-label={translate(schedulerMessages, "schedulerViews")}
             onKeyDown={handleSchedulerViewKeyDown}
           >
             {(["calendar", "day"] as SchedulerView[]).map((item) => (
@@ -827,7 +1015,7 @@ export const SchedulerPage: FunctionComponent = () => {
                   view === item ? "bg-signal-500 text-white dark:text-void-900 shadow-[0_2px_8px_rgba(0,224,160,0.2)]" : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
                 }`}
               >
-                {schedulerViewLabel(item)}
+                {schedulerViewLabel(item, locale)}
               </button>
             ))}
           </div>
@@ -837,13 +1025,13 @@ export const SchedulerPage: FunctionComponent = () => {
 
       <section className="grid gap-3 md:grid-cols-3">
         {[
-          { id: "active", label: "Active entries", value: schedulerStats.activeCount, detail: "ready to fire", icon: Play, tone: "text-signal-500" },
-          { id: "repeating", label: "Repeating", value: schedulerStats.repeatingCount, detail: "recurrence rules", icon: Repeat, tone: "text-signal-500" },
+          { id: "active", label: translate(schedulerMessages, "activeEntries"), value: formatNumber(schedulerStats.activeCount), detail: translate(schedulerMessages, "readyToFire"), icon: Play, tone: "text-signal-500" },
+          { id: "repeating", label: translate(schedulerMessages, "repeating"), value: formatNumber(schedulerStats.repeatingCount), detail: translate(schedulerMessages, "recurrenceRules"), icon: Repeat, tone: "text-signal-500" },
           {
             id: "next-run",
-            label: "Next run",
-            value: schedulerStats.nextOccurrence ? formatTimeLabel(schedulerStats.nextOccurrence.startsAt) : "None",
-            detail: schedulerStats.nextOccurrence ? schedulerStats.nextOccurrence.title : "no upcoming work",
+            label: translate(schedulerMessages, "nextRun"),
+            value: schedulerStats.nextOccurrence ? formatSchedulerTimeLabel(schedulerStats.nextOccurrence.startsAt, locale) : translate(schedulerMessages, "none"),
+            detail: schedulerStats.nextOccurrence ? schedulerStats.nextOccurrence.title : translate(schedulerMessages, "noUpcomingWork"),
             icon: Clock3,
             tone: "text-ember-500",
           },
@@ -869,10 +1057,10 @@ export const SchedulerPage: FunctionComponent = () => {
           <div className="mb-5 flex items-center justify-between gap-3">
             <div>
               <h3 className="font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                {editingEntry ? "Edit entry" : "Add entry"}
+                {translate(schedulerMessages, editingEntry ? "editEntry" : "addEntry")}
               </h3>
               <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-                {editingEntry ? "Modify the title, work, time, and recurrence." : "Choose the work, time, and recurrence."}
+                {translate(schedulerMessages, editingEntry ? "editEntryDescription" : "addEntryDescription")}
               </p>
             </div>
             <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${editingEntry ? "bg-signal-500/12 text-signal-500" : "bg-ember-500/12 text-ember-500"}`}>
@@ -880,9 +1068,9 @@ export const SchedulerPage: FunctionComponent = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2" role="group" aria-label="Schedule target type">
+          <div className="grid grid-cols-2 gap-2" role="group" aria-label={translate(schedulerMessages, "scheduleTargetType")}>
             <span className="sr-only" aria-live="polite" aria-atomic="true">
-              Selected schedule target: {targetLabel(targetType)}.
+              {translate(schedulerMessages, "selectedScheduleTarget", { target: targetLabel(targetType, locale) })}
             </span>
             {FORM_TARGET_OPTIONS.map((option) => (
               <button
@@ -897,32 +1085,32 @@ export const SchedulerPage: FunctionComponent = () => {
                 }`}
               >
                 <option.icon className={`mb-2 h-4 w-4 ${option.tone}`} />
-                <span className="block text-[10px] font-bold uppercase tracking-[0.1em] text-slate-600 dark:text-slate-300">{option.label}</span>
+                <span className="block text-[10px] font-bold uppercase tracking-[0.1em] text-slate-600 dark:text-slate-300">{targetLabel(option.value, locale)}</span>
               </button>
             ))}
           </div>
 
           <div className="mt-5 space-y-4">
             <label className="block">
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Title</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(schedulerMessages, "titleField")}</span>
               <input
                 type="text"
                 value={entryTitle}
                 onInput={(event) => setEntryTitle(event.currentTarget.value)}
                 className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
-                placeholder="Optional description/title"
+                placeholder={translate(schedulerMessages, "optionalTitle")}
               />
             </label>
 
             {targetType === "sprint" && (
               <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Sprint</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(schedulerMessages, "targetSprint")}</span>
                 <AvantgardeSelect
                   value={selectedSprintId}
                   onChange={setSelectedSprintId}
                   searchable={true}
                   options={[
-                    { value: "", label: "Choose sprint" },
+                    { value: "", label: translate(schedulerMessages, "chooseSprint") },
                     ...incompleteSprints.map((sprint) => ({ value: sprint.id, label: sprint.name })),
                     ...(editingEntry && editingEntry.sprintTarget && !incompleteSprints.some(s => s.id === editingEntry.sprintTarget?.sprintId)
                       ? [{ value: editingEntry.sprintTarget.sprintId, label: sprints.find(s => s.id === editingEntry.sprintTarget?.sprintId)?.name || editingEntry.sprintTarget.sprintId }]
@@ -937,20 +1125,20 @@ export const SchedulerPage: FunctionComponent = () => {
             {targetType === "quicksprint" && (
               <div className="grid gap-3">
                 <label className="block">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Quicksprint</span>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(schedulerMessages, "targetQuicksprint")}</span>
                   <AvantgardeSelect
                     value={selectedTemplateId}
                     onChange={setSelectedTemplateId}
                     searchable={true}
                     options={[
-                      { value: "", label: "Choose template" },
+                      { value: "", label: translate(schedulerMessages, "chooseTemplate") },
                       ...templates.map((template) => ({ value: template.id, label: template.name }))
                     ]}
                     className="mt-2"
                   />
                 </label>
                 <label className="block">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Task count</span>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(schedulerMessages, "taskCount")}</span>
                   <input
                     type="number"
                     min={1}
@@ -965,69 +1153,72 @@ export const SchedulerPage: FunctionComponent = () => {
 
             {targetType === "chat" && (
               <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Message to /chat</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(schedulerMessages, "chatMessageLabel")}</span>
                 <textarea
                   value={chatMessage}
                   onInput={(event) => setChatMessage(event.currentTarget.value)}
                   rows={5}
                   className={`mt-2 w-full resize-none py-3 font-medium ${SCHEDULER_FIELD_CLASS}`}
-                  placeholder="Ask the chat agent to check status, prepare a summary, or start a timed coordination step."
+                  placeholder={translate(schedulerMessages, "chatMessagePlaceholder")}
                 />
               </label>
             )}
 
             {targetType === "memory_remediation" && (
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Long-term remediation mode</span>
+              <div className="block">
+                <label htmlFor="scheduler-remediation-mode" className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                  {translate(schedulerMessages, "remediationMode")}
+                </label>
                 <select
+                  id="scheduler-remediation-mode"
                   value={memoryRemediationMode}
-                  onChange={(event) => setMemoryRemediationMode(event.currentTarget.value === "ai" ? "ai" : "deterministic")}
+                  onInput={(event) => setMemoryRemediationMode(event.currentTarget.value === "ai" ? "ai" : "deterministic")}
                   className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
                 >
-                  <option value="deterministic">Deterministic cleanup</option>
-                  <option value="ai">AI-routed review</option>
+                  <option value="deterministic">{translate(schedulerMessages, "deterministicCleanup")}</option>
+                  <option value="ai">{translate(schedulerMessages, "aiRoutedReview")}</option>
                 </select>
                 <p className="mt-2 text-xs leading-relaxed text-slate-400">
-                  Runs project-scoped long-term memory cleanup for CI-failure memories and exact duplicates. AI mode reviews candidates through the Remediation route.
+                  {translate(schedulerMessages, "remediationRecommendation")}
                 </p>
-              </label>
+              </div>
             )}
 
             {targetType === "node_flow" && (
               <div className="grid gap-3">
                 <label className="block">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Node flow</span>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(schedulerMessages, "targetNodeFlow")}</span>
                   <AvantgardeSelect
                     value={selectedNodeFlowId}
                     onChange={setSelectedNodeFlowId}
                     searchable={true}
                     options={[
-                      { value: "", label: nodeFlows.length > 0 ? "Choose node flow" : "No saved node flows" },
+                      { value: "", label: translate(schedulerMessages, nodeFlows.length > 0 ? "chooseNodeFlow" : "noSavedNodeFlows") },
                       ...nodeFlows.map((flow) => ({ value: flow.id, label: flow.title })),
                     ]}
                     className="mt-2"
                   />
                 </label>
                 <label className="block">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">JSON input</span>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(schedulerMessages, "jsonInput")}</span>
                   <textarea
                     value={nodeFlowInputJson}
                     onInput={(event) => setNodeFlowInputJson(event.currentTarget.value)}
                     rows={5}
                     spellcheck={false}
                     className={`mt-2 w-full resize-y py-3 font-mono text-xs ${SCHEDULER_FIELD_CLASS}`}
-                    placeholder='Optional, for example: {"branch":"dev"}'
+                    placeholder={translate(schedulerMessages, "jsonInputPlaceholder")}
                   />
                   <p className="mt-2 text-xs leading-relaxed text-slate-400">
-                    Leave blank to run with no input. When provided, the input must be a JSON object.
+                    {translate(schedulerMessages, "jsonInputHelp")}
                   </p>
                 </label>
               </div>
             )}
 
             <div className="rounded-2xl border border-black/[0.06] bg-black/[0.015] p-4 dark:border-white/[0.06] dark:bg-white/[0.02]">
-              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Timing</div>
-              <div className="mt-3 grid gap-2" role="radiogroup" aria-label="Schedule timing">
+              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(schedulerMessages, "timing")}</div>
+              <div className="mt-3 grid gap-2" role="radiogroup" aria-label={translate(schedulerMessages, "scheduleTiming")}>
                 <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-black/[0.06] bg-white/60 px-3 py-2.5 text-xs font-bold text-slate-700 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-200">
                   <input
                     type="radio"
@@ -1037,7 +1228,7 @@ export const SchedulerPage: FunctionComponent = () => {
                     onChange={() => setScheduleTimingMode("absolute")}
                     className="h-4 w-4 accent-signal-500"
                   />
-                  Absolute date/time
+                  {translate(schedulerMessages, "absoluteDateTime")}
                 </label>
                 {canUseAnchoredTiming && (
                   <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-black/[0.06] bg-white/60 px-3 py-2.5 text-xs font-bold text-slate-700 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-200">
@@ -1049,7 +1240,7 @@ export const SchedulerPage: FunctionComponent = () => {
                       onChange={() => setScheduleTimingMode("after_sprint_end")}
                       className="h-4 w-4 accent-signal-500"
                     />
-                    After another sprint ends
+                    {translate(schedulerMessages, "afterSprintEnds")}
                   </label>
                 )}
               </div>
@@ -1057,20 +1248,26 @@ export const SchedulerPage: FunctionComponent = () => {
               {isAnchoredTiming ? (
                 <div className="mt-4 grid gap-3">
                   <label className="block">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Wait for sprint</span>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(schedulerMessages, "waitForSprint")}</span>
                     <AvantgardeSelect
                       value={anchorSourceSprintId}
                       onChange={setAnchorSourceSprintId}
                       searchable={true}
                       options={[
-                        { value: "", label: "Choose source sprint" },
-                        ...sprints.map((sprint) => ({ value: sprint.id, label: `${sprint.name} (${sprint.status})` })),
+                        { value: "", label: translate(schedulerMessages, "chooseSourceSprint") },
+                        ...sprints.map((sprint) => ({
+                          value: sprint.id,
+                          label: translate(schedulerMessages, "sprintWithStatus", {
+                            name: sprint.name,
+                            status: formatSchedulerSprintStatus(sprint.status, locale),
+                          }),
+                        })),
                       ]}
                       className="mt-2"
                     />
                   </label>
                   <label className="block">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Offset minutes</span>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(schedulerMessages, "offsetMinutes")}</span>
                     <input
                       type="number"
                       min={0}
@@ -1080,23 +1277,29 @@ export const SchedulerPage: FunctionComponent = () => {
                     />
                   </label>
                   <p className="text-xs leading-relaxed text-slate-400">
-                    Anchored schedules run once after the source sprint reaches a terminal state. Recurrence is disabled, and a sprint cannot wait for its own completion.
+                    {translate(schedulerMessages, "anchoredHelp")}
                   </p>
                 </div>
               ) : (
-                <label className="mt-4 block">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Date and time</span>
+                <div className="mt-4 block">
+                  <label htmlFor="scheduler-scheduled-for" className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                    {translate(schedulerMessages, "dateAndTime")}
+                  </label>
                   <input
+                    id="scheduler-scheduled-for"
                     type="datetime-local"
                     value={scheduledFor}
                     onInput={(event) => setScheduledFor(event.currentTarget.value)}
                     className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
                   />
+                  <p className="mt-2 text-xs font-medium text-slate-400">
+                    {translate(schedulerMessages, "timezone", { timezone: selectedTimezone })}
+                  </p>
                   <div className="mt-2 grid grid-cols-3 gap-2">
                     {[
-                      { label: "In 1h", date: () => { const date = new Date(); date.setHours(date.getHours() + 1, 0, 0, 0); return date; } },
-                      { label: "Tomorrow 9", date: () => { const date = addDays(new Date(), 1); date.setHours(9, 0, 0, 0); return date; } },
-                      { label: "Monday 9", date: () => { const date = startOfWeek(addDays(new Date(), 7)); date.setHours(9, 0, 0, 0); return date; } },
+                      { label: translate(schedulerMessages, "inOneHour"), date: () => { const date = new Date(); date.setHours(date.getHours() + 1, 0, 0, 0); return date; } },
+                      { label: translate(schedulerMessages, "tomorrowAtNine"), date: () => { const date = addDays(new Date(), 1); date.setHours(9, 0, 0, 0); return date; } },
+                      { label: translate(schedulerMessages, "mondayAtNine"), date: () => { const date = startOfWeek(addDays(new Date(), 7)); date.setHours(9, 0, 0, 0); return date; } },
                     ].map((preset) => (
                       <button
                         key={preset.label}
@@ -1108,7 +1311,7 @@ export const SchedulerPage: FunctionComponent = () => {
                       </button>
                     ))}
                   </div>
-                </label>
+                </div>
               )}
             </div>
 
@@ -1116,7 +1319,7 @@ export const SchedulerPage: FunctionComponent = () => {
               <label className="flex items-center justify-between gap-3">
                 <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">
                   <Repeat className="h-4 w-4 text-signal-500" />
-                  Repeat
+                  {translate(schedulerMessages, "repeat")}
                 </span>
                 <input
                   type="checkbox"
@@ -1129,7 +1332,7 @@ export const SchedulerPage: FunctionComponent = () => {
 
               {isAnchoredTiming && (
                 <p className="mt-3 text-xs leading-relaxed text-slate-400">
-                  After-sprint-end schedules are one-time entries.
+                  {translate(schedulerMessages, "anchoredOneTime")}
                 </p>
               )}
 
@@ -1147,11 +1350,11 @@ export const SchedulerPage: FunctionComponent = () => {
                       value={frequency}
                       onChange={(value) => setFrequency(value as ScheduleRecurrenceRule["frequency"])}
                       options={[
-                        { value: "minutely", label: "Minutes" },
-                        { value: "hourly", label: "Hours" },
-                        { value: "daily", label: "Days" },
-                        { value: "weekly", label: "Weeks" },
-                        { value: "monthly", label: "Months" },
+                        { value: "minutely", label: translate(schedulerMessages, "minutes") },
+                        { value: "hourly", label: translate(schedulerMessages, "hours") },
+                        { value: "daily", label: translate(schedulerMessages, "days") },
+                        { value: "weekly", label: translate(schedulerMessages, "weeks") },
+                        { value: "monthly", label: translate(schedulerMessages, "months") },
                       ]}
                     />
                   </div>
@@ -1160,9 +1363,9 @@ export const SchedulerPage: FunctionComponent = () => {
                     value={endMode}
                     onChange={(value) => setEndMode(value as ScheduleRecurrenceRule["endMode"])}
                     options={[
-                      { value: "never", label: "Endless" },
-                      { value: "after_count", label: "Specific iterations" },
-                      { value: "on_date", label: "End date/time" },
+                      { value: "never", label: translate(schedulerMessages, "endless") },
+                      { value: "after_count", label: translate(schedulerMessages, "specificIterations") },
+                      { value: "on_date", label: translate(schedulerMessages, "endDateTime") },
                     ]}
                   />
 
@@ -1193,25 +1396,26 @@ export const SchedulerPage: FunctionComponent = () => {
                 <Button
                   variant="secondary"
                   size="lg"
-                  onClick={cancelEdit}
+                  onClick={() => cancelEdit()}
                   className="flex-1 text-[10px] uppercase tracking-[0.16em]"
                 >
-                  Cancel
+                  {translate(schedulerMessages, "cancel")}
                 </Button>
               )}
               <Button
                 variant="signal"
                 size="lg"
                 onClick={() => void submitSchedule()}
+                disabled={submitting}
                 className={editingEntry ? "flex-1 text-[10px] uppercase tracking-[0.16em]" : "w-full text-[10px] uppercase tracking-[0.16em]"}
                 icon={editingEntry ? Check : Send}
               >
-                {editingEntry ? "Save" : "Schedule"}
+                {translate(schedulerMessages, editingEntry ? "save" : "schedule")}
               </Button>
             </div>
 
             {feedback.message && (
-              <div className={`rounded-[var(--radius-ui)] border px-4 py-3 text-xs font-semibold backdrop-blur-md transition-all duration-150 ${
+              <div role={feedback.tone === "error" ? "alert" : "status"} aria-live={feedback.tone === "error" ? "assertive" : "polite"} aria-atomic="true" className={`rounded-[var(--radius-ui)] border px-4 py-3 text-xs font-semibold backdrop-blur-md transition-all duration-150 ${
                 feedback.tone === "error"
                   ? "border-status-red/20 bg-status-red/[0.06] text-status-red"
                   : "border-signal-500/20 bg-signal-500/[0.06] text-signal-600 dark:text-signal-400"
@@ -1234,7 +1438,7 @@ export const SchedulerPage: FunctionComponent = () => {
             <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
                 <h3 className="font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                  {view === "calendar" ? "Calendar view" : "24 hour view"}
+                  {translate(schedulerMessages, view === "calendar" ? "calendarView" : "dayViewTitle")}
                 </h3>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400" role="status" aria-live="polite" aria-atomic="true">
                   {scheduleRangeStatus}
@@ -1243,11 +1447,14 @@ export const SchedulerPage: FunctionComponent = () => {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => void refresh()}
+                onClick={() => {
+                  setFeedback({ tone: "idle", message: null });
+                  void refresh();
+                }}
                 icon={RefreshCw}
                 className="uppercase tracking-[0.14em]"
               >
-                Refresh
+                {translate(schedulerMessages, "refresh")}
               </Button>
             </div>
 
@@ -1261,10 +1468,10 @@ export const SchedulerPage: FunctionComponent = () => {
                       disabled={selectedDayIndex === 0}
                       className="px-3 py-1.5 text-xs font-bold text-slate-600 rounded-[var(--radius-ui)] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] hover:text-slate-900 hover:bg-[var(--surface-glass-hover)] disabled:opacity-50 disabled:cursor-not-allowed dark:text-slate-300 dark:hover:text-white"
                     >
-                      Previous
+                      {translate(schedulerMessages, "previous")}
                     </button>
                     <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
-                      {formatDayLabel(weekDays[selectedDayIndex])}
+                      {formatSchedulerDayLabel(weekDays[selectedDayIndex], locale)}
                     </span>
                     <button
                       type="button"
@@ -1272,7 +1479,7 @@ export const SchedulerPage: FunctionComponent = () => {
                       disabled={selectedDayIndex === 6}
                       className="px-3 py-1.5 text-xs font-bold text-slate-600 rounded-[var(--radius-ui)] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] hover:text-slate-900 hover:bg-[var(--surface-glass-hover)] disabled:opacity-50 disabled:cursor-not-allowed dark:text-slate-300 dark:hover:text-white"
                     >
-                      Next
+                      {translate(schedulerMessages, "next")}
                     </button>
                   </div>
                 )}
@@ -1300,7 +1507,9 @@ export const SchedulerPage: FunctionComponent = () => {
                       type="button"
                       onClick={() => setSelectedDate(day)}
                       aria-pressed={selected}
-                      aria-label={`${formatDayLabel(day)}, ${dayItems.length} ${dayItems.length === 1 ? "occurrence" : "occurrences"}`}
+                      aria-label={translatePlural(schedulerMessages, "dayOccurrenceCount", dayItems.length, {
+                        day: formatSchedulerDayLabel(day, locale),
+                      })}
                       className={`min-h-[13rem] rounded-2xl border p-3.5 text-left transition-all duration-150 ${
                         selected
                           ? "border-signal-500/35 bg-signal-500/[0.08] shadow-[0_4px_16px_rgba(0,224,160,0.08)]"
@@ -1308,21 +1517,23 @@ export const SchedulerPage: FunctionComponent = () => {
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="whitespace-nowrap text-xs font-black uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">{formatDayLabel(day)}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${isToday ? "bg-signal-500 text-white dark:text-void-900 shadow-[0_2px_8px_rgba(0,224,160,0.2)]" : "bg-white/80 text-slate-500 dark:bg-white/[0.06] dark:text-slate-400"}`}>{dayItems.length}</span>
+                        <span className="whitespace-nowrap text-xs font-black uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">{formatSchedulerDayLabel(day, locale)}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${isToday ? "bg-signal-500 text-white dark:text-void-900 shadow-[0_2px_8px_rgba(0,224,160,0.2)]" : "bg-white/80 text-slate-500 dark:bg-white/[0.06] dark:text-slate-400"}`}>{formatNumber(dayItems.length)}</span>
                       </div>
                       <div className="mt-3 space-y-2">
                         {dayItems.slice(0, 5).map((occurrence) => {
                           const option = targetOptionByType.get(occurrence.targetType);
                           const canEditOccurrence = isOperatorEditableTarget(occurrence.targetType);
-                          const editReason = canEditOccurrence ? "Edit schedule entry from occurrence" : unsupportedEditReason(occurrence.targetType);
+                          const editReason = canEditOccurrence
+                            ? translate(schedulerMessages, "editScheduleEntryFromOccurrence")
+                            : unsupportedEditReason(occurrence.targetType, locale);
                           return (
                             <div key={occurrence.id} className="rounded-xl border border-black/[0.04] bg-white/80 p-2 text-xs shadow-sm dark:border-white/[0.05] dark:bg-white/[0.04]">
                               <div className="flex items-center justify-between gap-2">
-                                <span className="font-bold text-slate-800 dark:text-white">{formatTimeLabel(occurrence.startsAt)}</span>
+                                <span className="font-bold text-slate-800 dark:text-white">{formatSchedulerTimeLabel(occurrence.startsAt, locale)}</span>
                                 <div className="flex items-center gap-1">
-                                  <span className={`rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] ${option?.chipClassName || "bg-slate-500/10 text-slate-500"}`}>{targetLabel(occurrence.targetType)}</span>
-                                  <span className="rounded-full bg-black/[0.04] px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-slate-500 dark:bg-white/[0.06] dark:text-slate-400">{scheduleStatusLabel(occurrence.status)}</span>
+                                  <span className={`rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] ${option?.chipClassName || "bg-slate-500/10 text-slate-500"}`}>{targetLabel(occurrence.targetType, locale)}</span>
+                                  <span className="rounded-full bg-black/[0.04] px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-slate-500 dark:bg-white/[0.06] dark:text-slate-400">{scheduleStatusLabel(occurrence.status, locale)}</span>
                                   <button
                                     type="button"
                                     onClick={(e) => {
@@ -1351,7 +1562,7 @@ export const SchedulerPage: FunctionComponent = () => {
                           );
                         })}
                         {dayItems.length > 5 && (
-                          <div className="text-[10px] font-bold text-slate-400">+{dayItems.length - 5} more</div>
+                          <div className="text-[10px] font-bold text-slate-400">{translate(schedulerMessages, "moreOccurrences", { count: formatNumber(dayItems.length - 5) })}</div>
                         )}
                       </div>
                     </button>
@@ -1365,7 +1576,9 @@ export const SchedulerPage: FunctionComponent = () => {
                   const hourItems = dayOccurrences.filter((occurrence) => new Date(occurrence.startsAt).getHours() === hour);
                   return (
                     <div key={hour} className="grid min-h-[64px] grid-cols-[4.5rem_minmax(0,1fr)] gap-3 rounded-xl border border-black/[0.04] bg-black/[0.01] p-2 dark:border-white/[0.04] dark:bg-white/[0.01]">
-                      <div className="pt-2 text-right text-[11px] font-mono font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">{pad(hour)}:00</div>
+                      <div className="pt-2 text-right text-[11px] font-mono font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
+                        {formatTime(new Date(2000, 0, 1, hour), { hour: "numeric", minute: "2-digit" })}
+                      </div>
                       <div className="space-y-2 border-l border-black/[0.05] pl-3 dark:border-white/[0.05]">
                         {hourItems.length === 0 && (
                           <div className="h-full min-h-[42px] rounded-xl border border-dashed border-black/[0.04] bg-white/[0.1] dark:border-white/[0.04] dark:bg-white/[0.01]" />
@@ -1373,20 +1586,22 @@ export const SchedulerPage: FunctionComponent = () => {
                         {hourItems.map((occurrence) => {
                           const option = targetOptionByType.get(occurrence.targetType);
                           const canEditOccurrence = isOperatorEditableTarget(occurrence.targetType);
-                          const editReason = canEditOccurrence ? "Edit schedule entry from occurrence" : unsupportedEditReason(occurrence.targetType);
+                          const editReason = canEditOccurrence
+                            ? translate(schedulerMessages, "editScheduleEntryFromOccurrence")
+                            : unsupportedEditReason(occurrence.targetType, locale);
                           return (
                             <div key={occurrence.id} className="rounded-xl border border-black/[0.04] bg-white/80 p-3 shadow-sm dark:border-white/[0.05] dark:bg-white/[0.04]">
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <span className="inline-flex items-center gap-2 text-xs font-black text-slate-900 dark:text-white">
                                   <Clock3 className={`h-3.5 w-3.5 ${option?.tone || "text-signal-500"}`} />
-                                  {formatTimeLabel(occurrence.startsAt)}
+                                  {formatSchedulerTimeLabel(occurrence.startsAt, locale)}
                                 </span>
                                 <div className="flex items-center gap-2">
                                   <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] ${option?.chipClassName || "bg-slate-500/10 text-slate-500"}`}>
-                                    {targetLabel(occurrence.targetType)}
+                                    {targetLabel(occurrence.targetType, locale)}
                                   </span>
                                   <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-slate-500 dark:bg-white/[0.06] dark:text-slate-400">
-                                    {scheduleStatusLabel(occurrence.status)}
+                                    {scheduleStatusLabel(occurrence.status, locale)}
                                   </span>
                                   <button
                                     type="button"
@@ -1425,8 +1640,8 @@ export const SchedulerPage: FunctionComponent = () => {
           <section className="rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-4 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] md:p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <h3 className="font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">Scheduled entries</h3>
-                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Pause, resume, or remove future automation.</p>
+                <h3 className="font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">{translate(schedulerMessages, "scheduledEntries")}</h3>
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{translate(schedulerMessages, "scheduledEntriesDescription")}</p>
               </div>
               <Check className="h-5 w-5 text-signal-500" />
             </div>
@@ -1434,36 +1649,40 @@ export const SchedulerPage: FunctionComponent = () => {
             <div className="space-y-3">
               {(schedule?.entries || []).length === 0 && (
                 <div className="rounded-2xl border border-dashed border-black/[0.10] p-6 text-sm font-semibold text-slate-500 dark:border-white/[0.10] dark:text-slate-400">
-                  No scheduled entries yet. Add a sprint, quicksprint, node flow, chat message, or memory remediation schedule.
+                  {translate(schedulerMessages, "emptyEntries")}
                 </div>
               )}
 
               {(schedule?.entries || []).map((entry) => {
                 const option = targetOptionByType.get(entry.targetType);
                 const canEditEntry = isOperatorEditableTarget(entry.targetType);
-                const editReason = canEditEntry ? "Edit schedule entry" : unsupportedEditReason(entry.targetType);
+                const editReason = canEditEntry
+                  ? translate(schedulerMessages, "editScheduleEntry")
+                  : unsupportedEditReason(entry.targetType, locale);
                 return (
                   <div key={entry.id} data-testid={`scheduler-entry-${entry.id}`} className="grid gap-3 rounded-2xl border border-black/[0.05] bg-white/60 p-4 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] dark:border-white/[0.05] dark:bg-white/[0.03] md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] ${option?.chipClassName || "bg-slate-500/10 text-slate-500"}`}>
-                          {targetLabel(entry.targetType)}
+                          {targetLabel(entry.targetType, locale)}
                         </span>
                         <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-slate-500 dark:bg-white/[0.06] dark:text-slate-400">
-                          {scheduleStatusLabel(entry.status)}
+                          {scheduleStatusLabel(entry.status, locale)}
                         </span>
                         {entry.runCount > 0 && (
                           <span className="rounded-full border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-signal-600 dark:text-signal-400">
-                            Fired ({entry.runCount})
+                            {translate(schedulerMessages, "firedCount", { count: formatNumber(entry.runCount) })}
                           </span>
                         )}
-                        <span className="text-[11px] font-bold text-slate-400">{recurrenceSummary(entry.recurrence)}</span>
+                        <span className="text-[11px] font-bold text-slate-400">{summarizeSchedulerRecurrence(entry.recurrence, locale, entry.timezone)}</span>
                       </div>
                       <h4 className="mt-2 truncate text-sm font-semibold text-slate-900 dark:text-white">{entry.title}</h4>
                       <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-                        {scheduleTargetSummary(entry, sprints, templates, nodeFlows)} · {" "}
-                        {scheduleTimingSummary(entry, sprints)}
-                        {entry.lastRunAt && ` · Last fired: ${new Date(entry.lastRunAt).toLocaleString()}`}
+                        {scheduleTargetSummary(entry, sprints, templates, nodeFlows, locale)} · {" "}
+                        {scheduleTimingSummary(entry, sprints, locale)}
+                        {entry.lastRunAt && ` · ${translate(schedulerMessages, "lastFiredAt", {
+                          date: `${formatSchedulerDateTime(entry.lastRunAt, locale, entry.timezone)} (${entry.timezone})`,
+                        })}`}
                       </p>
                       {entry.lastError && (
                         <p className="mt-2 text-xs font-bold text-status-red">{entry.lastError}</p>
@@ -1489,7 +1708,7 @@ export const SchedulerPage: FunctionComponent = () => {
                         onClick={() => void toggleEntryStatus(entry.id, entry.status === "paused")}
                         disabled={entry.status === "completed" || entry.status === "cancelled"}
                         className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-600 transition-all duration-150 hover:bg-white hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
-                        aria-label={entry.status === "paused" ? "Resume schedule entry" : "Pause schedule entry"}
+                        aria-label={translate(schedulerMessages, entry.status === "paused" ? "resumeScheduleEntry" : "pauseScheduleEntry")}
                       >
                         {entry.status === "paused" ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
                       </button>
@@ -1497,7 +1716,7 @@ export const SchedulerPage: FunctionComponent = () => {
                         type="button"
                         onClick={() => void removeEntry(entry.id)}
                         className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-status-red/20 bg-status-red/[0.06] text-status-red transition-all duration-150 hover:bg-status-red/[0.12]"
-                        aria-label="Delete schedule entry"
+                        aria-label={translate(schedulerMessages, "deleteScheduleEntry")}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>

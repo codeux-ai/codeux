@@ -28,6 +28,9 @@ import {
 import { IssueImportEmptyState } from "./importer/IssueImportEmptyState.js";
 import { IssueImportIssueCard } from "./importer/IssueImportIssueCard.js";
 import { IssueImportSummaryRail } from "./importer/IssueImportSummaryRail.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import { sprintsMessages } from "../../i18n/messages/sprints.js";
+import { translateDashboardMessage, type DashboardLocale } from "../../i18n/locales.js";
 import {
   IssueImportDateInput,
   IssueImportField,
@@ -61,28 +64,8 @@ type JiraStatusSelection =
   | { mode: "category"; value: JiraStatusFilter };
 type JiraStatusLoadState = "idle" | "loading" | "loaded" | "fallback";
 
-const STATUS_OPTIONS: Array<{ value: JiraStatusFilter; label: string }> = [
-  { value: "open", label: "Open" },
-  { value: "in_progress", label: "In Work" },
-  { value: "done", label: "Done" },
-  { value: "all", label: "All statuses" },
-];
+const STATUS_VALUES: ReadonlyArray<JiraStatusFilter> = ["open", "in_progress", "done", "all"];
 
-const SORT_FIELD_OPTIONS: Array<{ value: JiraSortField; label: string }> = [
-  { value: "updated", label: "Updated" },
-  { value: "created", label: "Created" },
-  { value: "priority", label: "Priority" },
-  { value: "status", label: "Status" },
-  { value: "assignee", label: "Assignee" },
-  { value: "reporter", label: "Reporter" },
-];
-
-const SORT_DIRECTION_OPTIONS: Array<{ value: JiraSortDirection; label: string }> = [
-  { value: "desc", label: "Newest first" },
-  { value: "asc", label: "Oldest first" },
-];
-
-const JIRA_PROVIDER = getIssueImportProviderMetadata("jira");
 const DEFAULT_CATEGORY_STATUS_SELECTION: JiraStatusSelection = { mode: "category", value: "open" };
 const ALL_STATUS_SELECTION: JiraStatusSelection = { mode: "all" };
 
@@ -92,6 +75,26 @@ export const SprintJiraImportModal = ({
   onImport,
   onImportSpecialTasks,
 }: SprintJiraImportModalProps) => {
+  const { formatNumber, locale, translate, translatePlural } = useDashboardI18n();
+  const jiraProvider = getIssueImportProviderMetadata("jira", undefined, locale);
+  const statusOptions = useMemo(() => [
+    { value: "open", label: translate(sprintsMessages, "open") },
+    { value: "in_progress", label: translate(sprintsMessages, "inWork") },
+    { value: "done", label: translate(sprintsMessages, "done") },
+    { value: "all", label: translate(sprintsMessages, "allStatuses") },
+  ] satisfies Array<{ value: JiraStatusFilter; label: string }>, [translate]);
+  const sortFieldOptions = useMemo(() => [
+    { value: "updated", label: translate(sprintsMessages, "updated") },
+    { value: "created", label: translate(sprintsMessages, "created") },
+    { value: "priority", label: translate(sprintsMessages, "priority") },
+    { value: "status", label: translate(sprintsMessages, "status") },
+    { value: "assignee", label: translate(sprintsMessages, "assignee") },
+    { value: "reporter", label: translate(sprintsMessages, "reporter") },
+  ] satisfies Array<{ value: JiraSortField; label: string }>, [translate]);
+  const sortDirectionOptions = useMemo(() => [
+    { value: "desc", label: translate(sprintsMessages, "newestFirst") },
+    { value: "asc", label: translate(sprintsMessages, "oldestFirst") },
+  ] satisfies Array<{ value: JiraSortDirection; label: string }>, [translate]);
   const [projectKey, setProjectKey] = useState("");
   const [issueKey, setIssueKey] = useState("");
   const [search, setSearch] = useState("");
@@ -158,14 +161,15 @@ export const SprintJiraImportModal = ({
     selectedIssues.length,
     selectedLinkedIssueCount,
     selectedSpecialTaskCount,
+    locale,
   );
   const visibleSelectedCount = results.filter((issue) => selectedKeys.has(issue.key)).length;
-  const emptyStateCopy = getIssueImportEmptyStateCopy("jira", hasSearched);
+  const emptyStateCopy = getIssueImportEmptyStateCopy("jira", hasSearched, locale);
   const normalizedProjectKey = useMemo(() => projectKey.trim().toUpperCase(), [projectKey]);
   const jiraStatusNames = useMemo(() => getUniqueJiraStatusNames(jiraStatuses), [jiraStatuses]);
   const useCategoryStatusFallback = statusLoadState === "fallback";
   const statusSelectionValue = getStatusSelectionFilterValue(statusSelection);
-  const statusSelectionLabel = getStatusSelectionLabel(statusSelection);
+  const statusSelectionLabel = getStatusSelectionLabel(statusSelection, statusOptions, translate(sprintsMessages, "allStatuses"));
   const defaultStatusSelectionValue = useCategoryStatusFallback
     ? getStatusSelectionFilterValue(DEFAULT_CATEGORY_STATUS_SELECTION)
     : getStatusSelectionFilterValue(ALL_STATUS_SELECTION);
@@ -173,32 +177,32 @@ export const SprintJiraImportModal = ({
     filters: [
       {
         id: "hideInWork",
-        label: "Visibility",
+        label: translate(sprintsMessages, "visibility"),
         value: hideInWork,
         defaultValue: false,
-        valueLabel: hideInWork ? "Hide in Work" : null,
+        valueLabel: hideInWork ? translate(sprintsMessages, "hideInWork") : null,
         priority: 1,
       },
       {
         id: "status",
-        label: "Status",
+        label: translate(sprintsMessages, "status"),
         value: statusSelectionValue,
         defaultValue: defaultStatusSelectionValue,
         valueLabel: statusSelectionLabel,
-        defaultLabel: useCategoryStatusFallback ? "Open" : "All statuses",
+        defaultLabel: useCategoryStatusFallback ? translate(sprintsMessages, "open") : translate(sprintsMessages, "allStatuses"),
         alwaysShow: true,
         priority: 0,
       },
-      { id: "project", label: "Project", value: projectKey, priority: 2 },
-      { id: "issue", label: "Issue", value: issueKey, priority: 3 },
-      { id: "search", label: "Text", value: search, priority: 4 },
-      { id: "assignee", label: "Assignee", value: assigneeText, priority: 5 },
-      { id: "reporter", label: "Reporter", value: reporterText, priority: 6 },
-      { id: "type", label: "Type", value: issueType, priority: 7 },
-      { id: "priority", label: "Priority", value: priority, priority: 8 },
-      { id: "labels", label: "Labels", value: labels, priority: 9 },
-      { id: "updatedAfter", label: "Updated after", value: updatedAfter, priority: 10 },
-      { id: "updatedBefore", label: "Updated before", value: updatedBefore, priority: 11 },
+      { id: "project", label: translate(sprintsMessages, "project"), value: projectKey, priority: 2 },
+      { id: "issue", label: translate(sprintsMessages, "issue"), value: issueKey, priority: 3 },
+      { id: "search", label: translate(sprintsMessages, "text"), value: search, priority: 4 },
+      { id: "assignee", label: translate(sprintsMessages, "assignee"), value: assigneeText, priority: 5 },
+      { id: "reporter", label: translate(sprintsMessages, "reporter"), value: reporterText, priority: 6 },
+      { id: "type", label: translate(sprintsMessages, "type"), value: issueType, priority: 7 },
+      { id: "priority", label: translate(sprintsMessages, "priority"), value: priority, priority: 8 },
+      { id: "labels", label: translate(sprintsMessages, "labels"), value: labels, priority: 9 },
+      { id: "updatedAfter", label: translate(sprintsMessages, "updatedAfter"), value: updatedAfter, priority: 10 },
+      { id: "updatedBefore", label: translate(sprintsMessages, "updatedBefore"), value: updatedBefore, priority: 11 },
       { id: "jql", label: "JQL", value: jql, priority: 12 },
     ],
     selectedCount: selectedIssues.length,
@@ -206,10 +210,10 @@ export const SprintJiraImportModal = ({
     totalCount: results.length,
     sortField,
     sortDirection,
-    sortFieldOptions: SORT_FIELD_OPTIONS,
-    sortDirectionOptions: SORT_DIRECTION_OPTIONS,
-  });
-  const guidedSearchSummary = getGuidedSearchSummary(statusSelection, compactState.sortLabel, sortField, sortDirection);
+    sortFieldOptions,
+    sortDirectionOptions,
+  }, locale);
+  const guidedSearchSummary = getGuidedSearchSummary(statusSelection, compactState.sortLabel, sortField, sortDirection, locale, statusOptions);
 
   const updateStatusSelection = (selection: JiraStatusSelection): void => {
     statusSelectionRef.current = selection;
@@ -272,8 +276,8 @@ export const SprintJiraImportModal = ({
       if (err instanceof DOMException && err.name === "AbortError") {
         return;
       }
-      const copy = getIssueImportErrorCopy(err, "Jira search failed. Check the filters and try again.");
-      setError(`Jira search error: ${copy.message}`);
+      const copy = getIssueImportErrorCopy(err, translate(sprintsMessages, "jiraSearchFailed"), locale);
+      setError(copy.message);
       setFetchedResults([]);
       setResults([]);
     } finally {
@@ -305,8 +309,8 @@ export const SprintJiraImportModal = ({
         if (cancelled) {
           return;
         }
-        const copy = getIssueImportErrorCopy(err, "Failed to load Jira defaults.");
-        setError(`Jira configuration error: ${copy.message}`);
+        const copy = getIssueImportErrorCopy(err, translate(sprintsMessages, "jiraDefaultsFailed"), locale);
+        setError(copy.message);
         setHasSearched(true);
       }
     };
@@ -342,7 +346,7 @@ export const SprintJiraImportModal = ({
     };
 
     if (!projectKeyForStatuses) {
-      const fallbackReason = "Enter a Jira project key to load workflow statuses. Category filters are available as a fallback.";
+      const fallbackReason = translate(sprintsMessages, "jiraProjectKeyFallback");
       setStatusLoadState("fallback");
       setStatusFallbackReason(fallbackReason);
       updateStatusSelection(DEFAULT_CATEGORY_STATUS_SELECTION);
@@ -364,7 +368,7 @@ export const SprintJiraImportModal = ({
         }
         const statusNames = getUniqueJiraStatusNames(statuses);
         if (statusNames.length === 0) {
-          const fallbackReason = "No Jira workflow statuses were returned for this project. Category filters are available as a fallback.";
+          const fallbackReason = translate(sprintsMessages, "jiraNoStatusesFallback");
           setJiraStatuses([]);
           setStatusLoadState("fallback");
           setStatusFallbackReason(fallbackReason);
@@ -390,10 +394,10 @@ export const SprintJiraImportModal = ({
         if (controller.signal.aborted) {
           return;
         }
-        const copy = getIssueImportErrorCopy(err, "Could not load Jira statuses.");
+        const copy = getIssueImportErrorCopy(err, translate(sprintsMessages, "jiraStatusesFailed"), locale);
         setJiraStatuses([]);
         setStatusLoadState("fallback");
-        setStatusFallbackReason(`${copy.message} Category filters are available as a fallback.`);
+        setStatusFallbackReason(copy.message);
         updateStatusSelection(DEFAULT_CATEGORY_STATUS_SELECTION);
         finishInitialSearch(DEFAULT_CATEGORY_STATUS_SELECTION);
       } finally {
@@ -562,8 +566,8 @@ export const SprintJiraImportModal = ({
 
       onClose();
     } catch (err) {
-      const copy = getIssueImportErrorCopy(err, "Jira import failed. Try again after checking the selected issues.");
-      setError(`Jira import error: ${copy.message}`);
+      const copy = getIssueImportErrorCopy(err, translate(sprintsMessages, "jiraImportFailed"), locale);
+      setError(copy.message);
     } finally {
       setImporting(false);
     }
@@ -571,22 +575,22 @@ export const SprintJiraImportModal = ({
 
   return (
     <IssueImportShell
-      provider={JIRA_PROVIDER}
-      title="Import Backlog Scope"
-      description="Search Jira with exact keys, guided filters, and bulk selection, then import linked issues or special task payloads."
+      provider={jiraProvider}
+      title={translate(sprintsMessages, "importBacklogScope")}
+      description={translate(sprintsMessages, "jiraImportDescription")}
       onClose={onClose}
-      closeLabel="Close Jira import"
+      closeLabel={translate(sprintsMessages, "closeJiraImport")}
       summaryRail={(
         <IssueImportSummaryRail
-          provider={JIRA_PROVIDER}
-          title="Select Jira Scope."
-          description="Search Jira with exact keys, guided filters, and bulk selection, then import linked issues or special task payloads."
+          provider={jiraProvider}
+          title={translate(sprintsMessages, "selectJiraScope")}
+          description={translate(sprintsMessages, "jiraImportDescription")}
           items={[
-            { label: "Project", value: projectKey || "all projects" },
-            { label: "Sort", value: compactState.sortLabel },
-            { label: "Visible", value: `${results.length} results` },
-            { label: "Linked", value: String(selectedLinkedIssueCount), active: selectedLinkedIssueCount > 0 },
-            { label: "Special", value: String(selectedSpecialTaskCount), active: selectedSpecialTaskCount > 0 },
+            { label: translate(sprintsMessages, "project"), value: projectKey || translate(sprintsMessages, "allProjects") },
+            { label: translate(sprintsMessages, "sort"), value: compactState.sortLabel },
+            { label: translate(sprintsMessages, "visible"), value: translate(sprintsMessages, "results", { count: formatNumber(results.length) }) },
+            { label: translate(sprintsMessages, "linked"), value: formatNumber(selectedLinkedIssueCount), active: selectedLinkedIssueCount > 0 },
+            { label: translate(sprintsMessages, "special"), value: formatNumber(selectedSpecialTaskCount), active: selectedSpecialTaskCount > 0 },
           ]}
           status={guidedSearchSummary}
         />
@@ -594,7 +598,7 @@ export const SprintJiraImportModal = ({
       filters={(
         <div className="grid gap-5">
           <IssueImportFilterSection
-            title="Guided Jira Search"
+            title={translate(sprintsMessages, "guidedJiraSearch")}
             description={guidedSearchSummary}
             action={(
               <button
@@ -602,17 +606,17 @@ export const SprintJiraImportModal = ({
                 onClick={() => void runSearch()}
                 disabled={loading}
                 className="inline-flex h-11 min-w-36 items-center justify-center gap-2 rounded-[1rem] bg-[#0052CC] px-5 text-xs font-black uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-px hover:bg-[#0047b3] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#4C9AFF] dark:text-slate-950 dark:hover:bg-[#3b85e0]"
-                aria-label="Search"
+                aria-label={translate(sprintsMessages, "search")}
               >
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                Search
+                {translate(sprintsMessages, "search")}
               </button>
             )}
           >
             <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-              <IssueImportField label="Project key" hint="Leave blank to search all Jira projects.">
+              <IssueImportField label={translate(sprintsMessages, "projectKey")} hint={translate(sprintsMessages, "projectKeyHint")}>
                 <IssueImportTextInput
-                  provider={JIRA_PROVIDER}
+                  provider={jiraProvider}
                   value={projectKey}
                   onInput={(event) => setProjectKey((event.target as HTMLInputElement).value.toUpperCase())}
                   onKeyDown={(event) => {
@@ -622,13 +626,13 @@ export const SprintJiraImportModal = ({
                   }}
                   placeholder="OPS"
                   className="font-semibold uppercase tracking-[0.08em]"
-                  aria-label="Jira project key"
+                  aria-label={translate(sprintsMessages, "jiraProjectKey")}
                 />
               </IssueImportField>
 
-              <IssueImportField label="Exact issue key" hint="Use a full issue key like OPS-42.">
+              <IssueImportField label={translate(sprintsMessages, "exactIssueKey")} hint={translate(sprintsMessages, "exactIssueKeyHint")}>
                 <IssueImportTextInput
-                  provider={JIRA_PROVIDER}
+                  provider={jiraProvider}
                   value={issueKey}
                   onInput={(event) => setIssueKey((event.target as HTMLInputElement).value.toUpperCase())}
                   onKeyDown={(event) => {
@@ -638,13 +642,13 @@ export const SprintJiraImportModal = ({
                   }}
                   placeholder="OPS-42"
                   className="font-semibold uppercase tracking-[0.08em]"
-                  aria-label="Jira exact issue key"
+                  aria-label={translate(sprintsMessages, "jiraExactIssueKey")}
                 />
               </IssueImportField>
 
-              <IssueImportField label="Search text" hint="Search summaries, descriptions, and issue keys.">
+              <IssueImportField label={translate(sprintsMessages, "searchText")} hint={translate(sprintsMessages, "jiraSearchTextHint")}>
                 <IssueImportTextInput
-                  provider={JIRA_PROVIDER}
+                  provider={jiraProvider}
                   value={search}
                   onInput={(event) => setSearch((event.target as HTMLInputElement).value)}
                   onKeyDown={(event) => {
@@ -652,24 +656,24 @@ export const SprintJiraImportModal = ({
                       void runSearch();
                     }
                   }}
-                  placeholder="Search title, description, or key"
-                  aria-label="Jira search text"
+                  placeholder={translate(sprintsMessages, "jiraSearchPlaceholder")}
+                  aria-label={translate(sprintsMessages, "jiraSearchText")}
                 />
               </IssueImportField>
 
               <IssueImportField
-                label="Status"
+                label={translate(sprintsMessages, "status")}
                 hint={
                   useCategoryStatusFallback
-                    ? statusFallbackReason ?? "Category filters are available because Jira workflow statuses were not loaded."
+                    ? statusFallbackReason ?? translate(sprintsMessages, "categoryFallbackAvailable")
                     : statusLoadState === "loading"
-                      ? "Loading workflow labels for this Jira project."
-                      : "Uses the active Jira project's workflow labels."
+                      ? translate(sprintsMessages, "loadingWorkflowLabels")
+                      : translate(sprintsMessages, "usesWorkflowLabels")
                 }
               >
                 <IssueImportSelect
-                  provider={JIRA_PROVIDER}
-                  aria-label="Jira status"
+                  provider={jiraProvider}
+                  aria-label={translate(sprintsMessages, "jiraStatus")}
                   value={getStatusSelectValue(statusSelection, jiraStatusNames, useCategoryStatusFallback)}
                   onInput={(event) => {
                     updateStatusSelection(parseStatusSelectValue(
@@ -687,17 +691,17 @@ export const SprintJiraImportModal = ({
                   }}
                 >
                   {useCategoryStatusFallback ? (
-                    STATUS_OPTIONS.map((option) => (
+                    statusOptions.map((option) => (
                       <option key={option.value} value={`category:${option.value}`}>
                         {option.label}
                       </option>
                     ))
                   ) : (
                     <>
-                      <option value="all">All statuses</option>
+                      <option value="all">{translate(sprintsMessages, "allStatuses")}</option>
                       {statusLoadState === "loading" && jiraStatusNames.length === 0 && (
                         <option value="loading" disabled>
-                          Loading Jira statuses...
+                          {translate(sprintsMessages, "loadingJiraStatuses")}
                         </option>
                       )}
                       {jiraStatusNames.map((statusName) => (
@@ -710,14 +714,14 @@ export const SprintJiraImportModal = ({
                 </IssueImportSelect>
               </IssueImportField>
 
-              <IssueImportField label="Sort field">
+              <IssueImportField label={translate(sprintsMessages, "sortField")}>
                 <IssueImportSelect
-                  provider={JIRA_PROVIDER}
-                  aria-label="Sort field"
+                  provider={jiraProvider}
+                  aria-label={translate(sprintsMessages, "sortField")}
                   value={sortField}
                   onChange={(event) => setSortField((event.target as HTMLSelectElement).value as JiraSortField)}
                 >
-                  {SORT_FIELD_OPTIONS.map((option) => (
+                  {sortFieldOptions.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
@@ -725,14 +729,14 @@ export const SprintJiraImportModal = ({
                 </IssueImportSelect>
               </IssueImportField>
 
-              <IssueImportField label="Sort direction">
+              <IssueImportField label={translate(sprintsMessages, "sortDirection")}>
                 <IssueImportSelect
-                  provider={JIRA_PROVIDER}
-                  aria-label="Sort direction"
+                  provider={jiraProvider}
+                  aria-label={translate(sprintsMessages, "sortDirection")}
                   value={sortDirection}
                   onChange={(event) => setSortDirection((event.target as HTMLSelectElement).value as JiraSortDirection)}
                 >
-                  {SORT_DIRECTION_OPTIONS.map((option) => (
+                  {sortDirectionOptions.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
@@ -740,9 +744,9 @@ export const SprintJiraImportModal = ({
                 </IssueImportSelect>
               </IssueImportField>
 
-              <IssueImportField label="Limit" hint="Bounded to the Jira search endpoint limit.">
+              <IssueImportField label={translate(sprintsMessages, "limit")} hint={translate(sprintsMessages, "jiraLimitHint")}>
                 <IssueImportNumberInput
-                  provider={JIRA_PROVIDER}
+                  provider={jiraProvider}
                   min={1}
                   max={100}
                   value={limit}
@@ -750,13 +754,13 @@ export const SprintJiraImportModal = ({
                     const nextValue = Number((event.target as HTMLInputElement).value);
                     setLimit(Number.isFinite(nextValue) ? Math.max(1, Math.min(100, Math.trunc(nextValue))) : 40);
                   }}
-                  aria-label="Jira result limit"
+                  aria-label={translate(sprintsMessages, "jiraResultLimit")}
                 />
               </IssueImportField>
 
               <IssueImportField
-                label="Visibility"
-                hint="Client-side only. Jira search still uses the selected status filter."
+                label={translate(sprintsMessages, "visibility")}
+                hint={translate(sprintsMessages, "visibilityHint")}
               >
                 <label className="inline-flex min-h-11 items-center gap-3 rounded-[1rem] border border-black/[0.06] bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition-colors hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:text-white">
                   <input
@@ -765,7 +769,7 @@ export const SprintJiraImportModal = ({
                     onChange={(event) => handleHideInWorkChange((event.target as HTMLInputElement).checked)}
                     className="h-4 w-4 rounded border-slate-300 text-[#0052CC] focus:ring-[#0052CC] dark:border-white/[0.18] dark:bg-transparent"
                   />
-                  Hide in Work
+                  {translate(sprintsMessages, "hideInWork")}
                 </label>
               </IssueImportField>
             </div>
@@ -776,15 +780,15 @@ export const SprintJiraImportModal = ({
         <div className="grid gap-4">
           <div className="grid gap-4 xl:grid-cols-2">
             <IssueImportFilterSection
-              title="People"
-              description="Narrow by Jira assignee or reporter text when the default open backlog is too broad."
+              title={translate(sprintsMessages, "people")}
+              description={translate(sprintsMessages, "jiraPeopleDescription")}
               compact
             >
               <div className="grid gap-4 md:grid-cols-2">
-                <IssueImportField label="Jira assignee" hint="Supports names, emails, account IDs, me, currentUser(), unassigned, and empty.">
+                <IssueImportField label={translate(sprintsMessages, "jiraAssignee")} hint={translate(sprintsMessages, "jiraAssigneeHint")}>
                   <IssueImportTextInput
-                    provider={JIRA_PROVIDER}
-                    aria-label="Jira assignee"
+                    provider={jiraProvider}
+                    aria-label={translate(sprintsMessages, "jiraAssignee")}
                     value={assigneeText}
                     onInput={(event) => setAssigneeText((event.target as HTMLInputElement).value)}
                     onKeyDown={(event) => {
@@ -796,10 +800,10 @@ export const SprintJiraImportModal = ({
                   />
                 </IssueImportField>
 
-                <IssueImportField label="Jira reporter" hint="Supports names, emails, account IDs, me, and currentUser().">
+                <IssueImportField label={translate(sprintsMessages, "jiraReporter")} hint={translate(sprintsMessages, "jiraReporterHint")}>
                   <IssueImportTextInput
-                    provider={JIRA_PROVIDER}
-                    aria-label="Jira reporter"
+                    provider={jiraProvider}
+                    aria-label={translate(sprintsMessages, "jiraReporter")}
                     value={reporterText}
                     onInput={(event) => setReporterText((event.target as HTMLInputElement).value)}
                     onKeyDown={(event) => {
@@ -814,14 +818,14 @@ export const SprintJiraImportModal = ({
             </IssueImportFilterSection>
 
             <IssueImportFilterSection
-              title="Classification"
-              description="Filter Jira taxonomy fields without changing the import mode."
+              title={translate(sprintsMessages, "classification")}
+              description={translate(sprintsMessages, "classificationDescription")}
               compact
             >
               <div className="grid gap-4 md:grid-cols-2">
-                <IssueImportField label="Issue type">
+                <IssueImportField label={translate(sprintsMessages, "issueType")}>
                   <IssueImportTextInput
-                    provider={JIRA_PROVIDER}
+                    provider={jiraProvider}
                     value={issueType}
                     onInput={(event) => setIssueType((event.target as HTMLInputElement).value)}
                     onKeyDown={(event) => {
@@ -830,13 +834,13 @@ export const SprintJiraImportModal = ({
                       }
                     }}
                     placeholder="Bug, Story, Epic"
-                    aria-label="Jira issue type"
+                    aria-label={translate(sprintsMessages, "jiraIssueType")}
                   />
                 </IssueImportField>
 
-                <IssueImportField label="Priority">
+                <IssueImportField label={translate(sprintsMessages, "priority")}>
                   <IssueImportTextInput
-                    provider={JIRA_PROVIDER}
+                    provider={jiraProvider}
                     value={priority}
                     onInput={(event) => setPriority((event.target as HTMLInputElement).value)}
                     onKeyDown={(event) => {
@@ -845,19 +849,19 @@ export const SprintJiraImportModal = ({
                       }
                     }}
                     placeholder="High, Critical, Medium"
-                    aria-label="Jira priority"
+                    aria-label={translate(sprintsMessages, "jiraPriority")}
                   />
                 </IssueImportField>
 
                 <IssueImportMultiSelectField
-                  label="Labels"
-                  hint="Labels narrow search only. They do not switch issues into special-task mode."
+                  label={translate(sprintsMessages, "labels")}
+                  hint={translate(sprintsMessages, "jiraLabelsHint")}
                   className="md:col-span-2"
                 >
                   <MultiSelect
                     value={labels}
                     onChange={setLabels}
-                    placeholder="Optional Jira labels, press Enter to add"
+                    placeholder={translate(sprintsMessages, "jiraLabelsPlaceholder")}
                   />
                 </IssueImportMultiSelectField>
               </div>
@@ -865,38 +869,38 @@ export const SprintJiraImportModal = ({
           </div>
 
           <IssueImportFilterSection
-            title="Updated Window"
-            description="Use Jira updated dates when recent-first sorting still returns too much history."
+            title={translate(sprintsMessages, "updatedWindow")}
+            description={translate(sprintsMessages, "jiraUpdatedWindowDescription")}
             compact
           >
             <div className="grid gap-4 md:grid-cols-2">
-              <IssueImportField label="Updated after">
+              <IssueImportField label={translate(sprintsMessages, "updatedAfter")}>
                 <IssueImportDateInput
-                  provider={JIRA_PROVIDER}
+                  provider={jiraProvider}
                   value={updatedAfter}
                   onInput={(event) => setUpdatedAfter((event.target as HTMLInputElement).value)}
-                  aria-label="Updated after"
+                  aria-label={translate(sprintsMessages, "updatedAfter")}
                 />
               </IssueImportField>
 
-              <IssueImportField label="Updated before">
+              <IssueImportField label={translate(sprintsMessages, "updatedBefore")}>
                 <IssueImportDateInput
-                  provider={JIRA_PROVIDER}
+                  provider={jiraProvider}
                   value={updatedBefore}
                   onInput={(event) => setUpdatedBefore((event.target as HTMLInputElement).value)}
-                  aria-label="Updated before"
+                  aria-label={translate(sprintsMessages, "updatedBefore")}
                 />
               </IssueImportField>
             </div>
           </IssueImportFilterSection>
 
           <IssueImportFilterSection
-            title="Advanced JQL Override"
-            description="When present, JQL replaces the guided filters in the Jira search request."
+            title={translate(sprintsMessages, "advancedJqlOverride")}
+            description={translate(sprintsMessages, "advancedJqlDescription")}
             compact
           >
             <IssueImportTextarea
-              provider={JIRA_PROVIDER}
+              provider={jiraProvider}
               value={jql}
               onInput={(event) => setJql((event.target as HTMLTextAreaElement).value)}
               onKeyDown={(event) => {
@@ -906,13 +910,13 @@ export const SprintJiraImportModal = ({
               }}
               rows={4}
               placeholder="project = OPS AND labels in (security)"
-              aria-label="Jira JQL override"
+              aria-label={translate(sprintsMessages, "jiraJqlOverride")}
             />
           </IssueImportFilterSection>
         </div>
       )}
       advancedFiltersExpanded={advancedFiltersExpanded}
-      advancedFiltersLabel="Advanced Jira filters"
+      advancedFiltersLabel={translate(sprintsMessages, "advancedJiraFilters")}
       advancedFiltersId="jira-import-advanced-filters"
       activeFilterCountLabel={compactState.activeFilterCountLabel}
       onAdvancedFiltersToggle={() => setAdvancedFiltersExpanded((expanded) => !expanded)}
@@ -920,21 +924,18 @@ export const SprintJiraImportModal = ({
         <div className="flex flex-col gap-3 rounded-[1.1rem] border border-black/[0.06] bg-white/70 p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-              <span className="font-black text-slate-700 dark:text-slate-200">{results.length}</span>{" "}
-              visible {results.length === 1 ? "result" : "results"}.
-              {" "}
-              <span className="font-black text-slate-700 dark:text-slate-200">{selectedLinkedIssueCount}</span>{" "}
-              linked,
-              {" "}
-              <span className="font-black text-slate-700 dark:text-slate-200">{selectedSpecialTaskCount}</span>{" "}
-              special.
+              {translatePlural(sprintsMessages, "jiraResultSummaryPlural", results.length, {
+                visible: formatNumber(results.length),
+                linked: formatNumber(selectedLinkedIssueCount),
+                special: formatNumber(selectedSpecialTaskCount),
+              })}
             </div>
             <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
-              Sort: {compactState.sortLabel}
+              {translate(sprintsMessages, "sortValue", { value: compactState.sortLabel })}
             </div>
           </div>
           {compactState.chips.length > 0 && (
-            <div className="flex flex-wrap gap-1.5" aria-label="Active Jira filters">
+            <div className="flex flex-wrap gap-1.5" aria-label={translate(sprintsMessages, "activeJiraFilters")}>
               {compactState.chips.map((chip) => (
                 <span
                   key={chip.id}
@@ -959,7 +960,7 @@ export const SprintJiraImportModal = ({
                   <span className="font-bold text-slate-600 dark:text-slate-200">
                     {selectedCountLabel}
                   </span>{" "}
-                  {visibleSelectedCount} of {results.length} visible results selected.
+                  {translate(sprintsMessages, "selectionOfVisibleResults", { selected: formatNumber(visibleSelectedCount), visible: formatNumber(results.length) })}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
@@ -967,18 +968,18 @@ export const SprintJiraImportModal = ({
                     onClick={selectAllVisible}
                     disabled={results.length === 0 || loading}
                     className="rounded-[1rem] border border-black/[0.06] px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:text-white"
-                    aria-label="Select all visible results"
+                    aria-label={translate(sprintsMessages, "selectAllVisibleResults")}
                   >
-                    Select all visible
+                    {translate(sprintsMessages, "selectAllVisible")}
                   </button>
                   <button
                     type="button"
                     onClick={clearSelection}
                     disabled={selectedIssues.length === 0}
                     className="rounded-[1rem] border border-black/[0.06] px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:text-white"
-                    aria-label="Clear selection"
+                    aria-label={translate(sprintsMessages, "clearSelection")}
                   >
-                    Clear all
+                    {translate(sprintsMessages, "clearAll")}
                   </button>
                 </div>
               </div>
@@ -994,21 +995,21 @@ export const SprintJiraImportModal = ({
                     disabled={selectedIssues.length === 0}
                     onChange={(event) => setConversationForAllSelected((event.target as HTMLInputElement).checked)}
                     className="h-3.5 w-3.5 rounded border-slate-300 text-[#0052CC] focus:ring-[#0052CC] dark:border-white/[0.18] dark:bg-transparent"
-                    aria-label="Append conversation to all selected Jira issues"
+                    aria-label={translate(sprintsMessages, "appendConversationAllSelectedJira")}
                   />
                   <MessageSquare className="h-3.5 w-3.5" strokeWidth={2.1} />
-                  Append conversation to all selected
+                  {translate(sprintsMessages, "appendConversationAllSelectedText")}
                 </label>
                 {onImportSpecialTasks && (
                   <div
                     className="flex flex-wrap items-center gap-1 rounded-[1rem] border border-black/[0.06] bg-white p-1 dark:border-white/[0.08] dark:bg-white/[0.05]"
                     role="group"
-                    aria-label="Jira import mode for selected issues"
+                    aria-label={translate(sprintsMessages, "jiraImportMode")}
                   >
                     {([
-                      ["linked", "Linked"],
-                      ["security", "Security task"],
-                      ["quality", "Quality task"],
+                      ["linked", translate(sprintsMessages, "linked")],
+                      ["security", translate(sprintsMessages, "securityTask")],
+                      ["quality", translate(sprintsMessages, "qualityTask")],
                     ] as Array<[ImportedTaskMode, string]>).map(([mode, label]) => {
                       const selectedMode = selectedIssues.length > 0
                         && selectedIssues.every((issue) => getIssueImportMode(issue) === mode);
@@ -1037,16 +1038,16 @@ export const SprintJiraImportModal = ({
                     onClick={onClose}
                     className="rounded-[1rem] border border-black/[0.06] px-5 py-3 text-sm font-bold text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0052CC]/20 dark:border-white/[0.08] dark:text-slate-300 dark:hover:text-white"
                   >
-                    Cancel
+                    {translate(sprintsMessages, "cancel")}
                   </button>
                   <button
                     type="button"
                     onClick={() => { void handleImport(); }}
                     disabled={selectedIssues.length === 0 || importing}
                     className="rounded-[1rem] bg-[#0052CC] px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(0,82,204,0.2)] transition-all hover:-translate-y-px hover:bg-[#0047b3] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#4C9AFF] dark:text-slate-900 dark:hover:bg-[#3b85e0]"
-                    aria-label={selectedIssues.length === 0 ? "Import issues disabled until Jira issues are selected" : "Import issues"}
+                    aria-label={translate(sprintsMessages, selectedIssues.length === 0 ? "importIssuesDisabled" : "importIssues")}
                   >
-                    {importing ? "Importing..." : "Import Issues"}
+                    {translate(sprintsMessages, importing ? "importing" : "importIssues")}
                   </button>
                 </div>
               </div>
@@ -1054,7 +1055,7 @@ export const SprintJiraImportModal = ({
       )}
     >
       {error && (
-        <IssueImportErrorPanel error={getIssueImportErrorCopy(error)} />
+        <IssueImportErrorPanel error={getIssueImportErrorCopy(error, undefined, locale)} />
       )}
 
       {loading ? (
@@ -1068,10 +1069,10 @@ export const SprintJiraImportModal = ({
               type="button"
               onClick={() => void runSearch()}
               className="inline-flex h-10 items-center justify-center gap-2 rounded-[1rem] bg-[#0052CC] px-4 text-xs font-black uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-px hover:bg-[#0047b3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0052CC]/30 dark:bg-[#4C9AFF] dark:text-slate-950"
-              aria-label="Search Jira issues again"
+              aria-label={translate(sprintsMessages, "searchJiraAgain")}
             >
               <Search className="h-4 w-4" aria-hidden="true" />
-              Search Again
+              {translate(sprintsMessages, "searchAgainTitle")}
             </button>
           )}
         />
@@ -1083,7 +1084,7 @@ export const SprintJiraImportModal = ({
             return (
               <IssueImportIssueCard
                 key={issue.key}
-                provider={JIRA_PROVIDER}
+                provider={jiraProvider}
                 issueKey={issue.key}
                 title={issue.title}
                 url={issue.url}
@@ -1103,11 +1104,13 @@ export const SprintJiraImportModal = ({
                   issueCommentCount: issue.issueCommentCount,
                   createdAt: issue.createdAt,
                   updatedAt: issue.updatedAt,
-                })}
-                labels={truncateIssueImportLabels(issue.labels ?? [], 6)}
-                assignees={truncateIssueImportAssignees(issue.assignees ?? [], 4)}
-                selectionLabel={selected ? "Selected" : "Click to select"}
-                modeLabel={importMode === "linked" ? "Linked issue" : `${importMode} task`}
+                }, locale)}
+                labels={truncateIssueImportLabels(issue.labels ?? [], 6, locale)}
+                assignees={truncateIssueImportAssignees(issue.assignees ?? [], 4, locale)}
+                selectionLabel={translate(sprintsMessages, selected ? "selected" : "clickToSelect")}
+                modeLabel={importMode === "linked"
+                  ? translate(sprintsMessages, "linkedIssue")
+                  : translate(sprintsMessages, "taskMode", { mode: translate(sprintsMessages, importMode === "security" ? "security" : importMode === "quality" ? "quality" : importMode === "merge_conflict" ? "mergeConflict" : "failedCi") })}
                 icon={<JiraIcon className="h-4 w-4" />}
                 metadataLimit={5}
                 onToggle={() => toggleIssue(issue)}
@@ -1158,14 +1161,18 @@ function getStatusSelectionFilterValue(selection: JiraStatusSelection): string {
   return "all";
 }
 
-function getStatusSelectionLabel(selection: JiraStatusSelection): string {
+function getStatusSelectionLabel(
+  selection: JiraStatusSelection,
+  statusOptions: ReadonlyArray<{ value: JiraStatusFilter; label: string }>,
+  allStatusesLabel: string,
+): string {
   if (selection.mode === "category") {
-    return getOptionLabel(STATUS_OPTIONS, selection.value);
+    return getOptionLabel(statusOptions, selection.value);
   }
   if (selection.mode === "status") {
     return selection.name;
   }
-  return "All statuses";
+  return allStatusesLabel;
 }
 
 function getStatusSelectValue(
@@ -1215,7 +1222,7 @@ function decodeStatusSelectName(value: string): string {
 }
 
 function isJiraStatusFilter(value: string): value is JiraStatusFilter {
-  return STATUS_OPTIONS.some((option) => option.value === value);
+  return STATUS_VALUES.some((option) => option === value);
 }
 
 function getJiraStatusSearchInput(selection: JiraStatusSelection): {
@@ -1236,17 +1243,22 @@ function getGuidedSearchSummary(
   sortLabel: string,
   sortField: JiraSortField,
   sortDirection: JiraSortDirection,
+  locale: DashboardLocale,
+  statusOptions: ReadonlyArray<{ value: JiraStatusFilter; label: string }>,
 ): string {
   if (selection.mode === "category" && selection.value === "open" && sortField === "updated" && sortDirection === "desc") {
-    return "Default: open Jira issues, recently updated first.";
+    return translateDashboardMessage(sprintsMessages, locale, "guidedDefault");
   }
   if (selection.mode === "status") {
-    return `Showing Jira status "${selection.name}" sorted by ${sortLabel.toLowerCase()}.`;
+    return translateDashboardMessage(sprintsMessages, locale, "guidedStatus", { status: selection.name, sort: sortLabel.toLocaleLowerCase(locale) });
   }
   if (selection.mode === "all") {
-    return `Showing all Jira statuses sorted by ${sortLabel.toLowerCase()}.`;
+    return translateDashboardMessage(sprintsMessages, locale, "guidedAll", { sort: sortLabel.toLocaleLowerCase(locale) });
   }
-  return `Showing ${getOptionLabel(STATUS_OPTIONS, selection.value).toLowerCase()} Jira issues sorted by ${sortLabel.toLowerCase()}.`;
+  return translateDashboardMessage(sprintsMessages, locale, "guidedCategory", {
+    status: getOptionLabel(statusOptions, selection.value).toLocaleLowerCase(locale),
+    sort: sortLabel.toLocaleLowerCase(locale),
+  });
 }
 
 function getOptionLabel<TValue extends string>(
