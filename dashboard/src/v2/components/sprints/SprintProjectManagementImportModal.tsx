@@ -18,7 +18,6 @@ import {
   getIssueImportEmptyStateCopy,
   getIssueImportErrorCopy,
   getIssueImportProviderMetadata,
-  getSelectedIssueCountLabel,
   truncateIssueImportAssignees,
   truncateIssueImportLabels,
   type IssueImportProvider,
@@ -39,6 +38,8 @@ import {
   IssueImportLoadingSkeletonList,
   IssueImportShell,
 } from "./importer/IssueImportShell.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import { sprintsMessages } from "../../i18n/messages/sprints.js";
 
 export type ProjectManagementImportProvider = Extract<IssueImportProvider, "notion" | "asana" | "linear">;
 
@@ -136,13 +137,6 @@ const PROVIDER_CONFIGS: Record<ProjectManagementImportProvider, ProviderConfig> 
   },
 };
 
-const STATUS_OPTIONS: Array<{ value: ProjectManagementFilters["status"]; label: string }> = [
-  { value: "open", label: "Open" },
-  { value: "in_progress", label: "In Progress" },
-  { value: "done", label: "Done" },
-  { value: "all", label: "All" },
-];
-
 const DEFAULT_FILTERS: ProjectManagementFilters = {
   search: "",
   databaseId: "",
@@ -164,8 +158,20 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
   onClose,
   onImport,
 }) => {
-  const config = PROVIDER_CONFIGS[provider];
-  const providerMetadata = getIssueImportProviderMetadata(provider);
+  const { formatNumber, locale, translate } = useDashboardI18n();
+  const config = useMemo<ProviderConfig>(() => {
+    const base = PROVIDER_CONFIGS[provider];
+    if (provider === "notion") return { ...base, title: translate(sprintsMessages, "importNotionTitle"), description: translate(sprintsMessages, "importNotionDescription"), searchPlaceholder: translate(sprintsMessages, "notionSearchPlaceholder"), resultNounSingular: translate(sprintsMessages, "nounItems"), resultNounPlural: translate(sprintsMessages, "nounItems") };
+    if (provider === "asana") return { ...base, title: translate(sprintsMessages, "importAsanaTitle"), description: translate(sprintsMessages, "importAsanaDescription"), searchPlaceholder: translate(sprintsMessages, "asanaSearchPlaceholder"), resultNounSingular: translate(sprintsMessages, "taskSingular"), resultNounPlural: translate(sprintsMessages, "taskPlural") };
+    return { ...base, title: translate(sprintsMessages, "importLinearTitle"), description: translate(sprintsMessages, "importLinearDescription"), searchPlaceholder: translate(sprintsMessages, "linearSearchPlaceholder"), resultNounSingular: translate(sprintsMessages, "issueSingular"), resultNounPlural: translate(sprintsMessages, "issuePlural") };
+  }, [provider, translate]);
+  const statusOptions = useMemo(() => [
+    { value: "open", label: translate(sprintsMessages, "open") },
+    { value: "in_progress", label: translate(sprintsMessages, "inProgress") },
+    { value: "done", label: translate(sprintsMessages, "done") },
+    { value: "all", label: translate(sprintsMessages, "all") },
+  ] satisfies Array<{ value: ProjectManagementFilters["status"]; label: string }>, [translate]);
+  const providerMetadata = getIssueImportProviderMetadata(provider, undefined, locale);
   const [filters, setFilters] = useState<ProjectManagementFilters>({
     ...DEFAULT_FILTERS,
     status: config.defaultStatus,
@@ -192,7 +198,7 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
   const allVisibleSelected = results.length > 0 && selectedResults.length === results.length;
   const allSelectedConversationEnabled = anySelected
     && selectedResults.every((result) => !conversationDisabledKeys.has(resultKey(result)));
-  const emptyCopy = getIssueImportEmptyStateCopy(provider, hasSearched);
+  const emptyCopy = getIssueImportEmptyStateCopy(provider, hasSearched, locale);
 
   const runSearch = useCallback(async (query: ProjectManagementFilters): Promise<void> => {
     abortRef.current?.abort();
@@ -223,7 +229,7 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
       if (err instanceof DOMException && err.name === "AbortError") {
         return;
       }
-      const copy = getIssueImportErrorCopy(err, `${providerMetadata.label} search failed. Check Settings -> Integrations and try again.`);
+      const copy = getIssueImportErrorCopy(err, translate(sprintsMessages, "pmSearchFailed", { provider: providerMetadata.label }), locale);
       setError(copy.message);
       setResults([]);
       pruneSelectionToResults([]);
@@ -233,7 +239,7 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
       }
       setLoading(false);
     }
-  }, [config, projectId, provider, providerMetadata.label]);
+  }, [config, locale, projectId, provider, providerMetadata.label, translate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -252,7 +258,7 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
         if (cancelled) {
           return;
         }
-        const copy = getIssueImportErrorCopy(err, `Failed to load ${providerMetadata.label} defaults from Settings -> Integrations.`);
+        const copy = getIssueImportErrorCopy(err, translate(sprintsMessages, "defaultsLoadFailed", { provider: providerMetadata.label }), locale);
         setError(copy.message);
         setHasSearched(true);
       }
@@ -262,7 +268,7 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
       cancelled = true;
       abortRef.current?.abort();
     };
-  }, [config, projectId, provider, providerMetadata.label, runSearch]);
+  }, [config, locale, projectId, provider, providerMetadata.label, runSearch, translate]);
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent): void => {
@@ -355,37 +361,36 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
       await onImport(contexts);
       onClose();
     } catch (err) {
-      const copy = getIssueImportErrorCopy(err, `${providerMetadata.label} import failed. Try again after checking the selected items.`);
+      const copy = getIssueImportErrorCopy(err, translate(sprintsMessages, "pmImportFailed", { provider: providerMetadata.label }), locale);
       setError(copy.message);
     } finally {
       setImporting(false);
     }
-  }, [conversationDisabledKeys, onClose, onImport, projectId, providerMetadata.label, selectedResults]);
+  }, [conversationDisabledKeys, locale, onClose, onImport, projectId, providerMetadata.label, selectedResults, translate]);
 
   const compactState = buildIssueImportCompactState({
     filters: [
-      { id: "provider", label: "Provider", value: providerMetadata.label, alwaysShow: true, priority: 0 },
-      { id: "database", label: "Database", value: filters.databaseId, defaultValue: initialFilters.databaseId, alwaysShow: config.supportsDatabase, priority: 1 },
-      { id: "workspace", label: "Workspace", value: filters.workspaceId, defaultValue: initialFilters.workspaceId, alwaysShow: config.supportsWorkspace, priority: 2 },
-      { id: "project", label: "Project", value: filters.providerProjectId, defaultValue: initialFilters.providerProjectId, alwaysShow: config.supportsProject, priority: 3 },
-      { id: "teamKey", label: "Team", value: filters.teamKey || filters.teamId, defaultValue: initialFilters.teamKey || initialFilters.teamId, alwaysShow: config.supportsTeam, priority: 4 },
-      { id: "search", label: "Search", value: filters.search, priority: 5 },
-      { id: "state", label: "State", value: filters.state, defaultValue: initialFilters.state, alwaysShow: config.supportsState, priority: 6 },
-      { id: "status", label: "Status", value: filters.status, defaultValue: config.defaultStatus, valueLabel: getStatusLabel(filters.status), alwaysShow: config.supportsStatus, priority: 7 },
-      { id: "labels", label: "Labels", value: filters.labels, priority: 8 },
-      { id: "assignee", label: "Assignee", value: filters.assignee, priority: 9 },
-      { id: "externalIds", label: "External IDs", value: filters.externalIds, priority: 10 },
-      { id: "limit", label: "Limit", value: filters.limit, defaultValue: initialFilters.limit, defaultLabel: `${initialFilters.limit} results`, alwaysShow: true, priority: 11 },
+      { id: "provider", label: translate(sprintsMessages, "provider"), value: providerMetadata.label, alwaysShow: true, priority: 0 },
+      { id: "database", label: translate(sprintsMessages, "database"), value: filters.databaseId, defaultValue: initialFilters.databaseId, alwaysShow: config.supportsDatabase, priority: 1 },
+      { id: "workspace", label: translate(sprintsMessages, "workspace"), value: filters.workspaceId, defaultValue: initialFilters.workspaceId, alwaysShow: config.supportsWorkspace, priority: 2 },
+      { id: "project", label: translate(sprintsMessages, "project"), value: filters.providerProjectId, defaultValue: initialFilters.providerProjectId, alwaysShow: config.supportsProject, priority: 3 },
+      { id: "teamKey", label: translate(sprintsMessages, "team"), value: filters.teamKey || filters.teamId, defaultValue: initialFilters.teamKey || initialFilters.teamId, alwaysShow: config.supportsTeam, priority: 4 },
+      { id: "search", label: translate(sprintsMessages, "search"), value: filters.search, priority: 5 },
+      { id: "state", label: translate(sprintsMessages, "state"), value: filters.state, defaultValue: initialFilters.state, alwaysShow: config.supportsState, priority: 6 },
+      { id: "status", label: translate(sprintsMessages, "status"), value: filters.status, defaultValue: config.defaultStatus, valueLabel: getStatusLabel(filters.status, statusOptions), alwaysShow: config.supportsStatus, priority: 7 },
+      { id: "labels", label: translate(sprintsMessages, "labels"), value: filters.labels, priority: 8 },
+      { id: "assignee", label: translate(sprintsMessages, "assignee"), value: filters.assignee, priority: 9 },
+      { id: "externalIds", label: translate(sprintsMessages, "externalIds"), value: filters.externalIds, priority: 10 },
+      { id: "limit", label: translate(sprintsMessages, "limit"), value: filters.limit, defaultValue: initialFilters.limit, defaultLabel: translate(sprintsMessages, "results", { count: formatNumber(initialFilters.limit) }), alwaysShow: true, priority: 11 },
     ],
     selectedCount: selectedResults.length,
     visibleCount: results.length,
     totalCount: results.length,
     resultNounSingular: config.resultNounSingular,
     resultNounPlural: config.resultNounPlural,
-  });
+  }, locale);
 
-  const selectVisibleLabel = allVisibleSelected ? "Deselect all visible results" : "Select all visible results";
-  const selectedCountLabel = getSelectedIssueCountLabel(selectedResults.length).replace(/issues/g, config.resultNounPlural).replace(/issue/g, config.resultNounSingular);
+  const selectVisibleLabel = translate(sprintsMessages, allVisibleSelected ? "deselectAllVisibleResults" : "selectAllVisibleResults");
 
   return (
     <IssueImportShell
@@ -393,19 +398,19 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
       title={config.title}
       description={config.description}
       onClose={onClose}
-      closeLabel={`Close ${providerMetadata.label} import`}
+      closeLabel={translate(sprintsMessages, "closeProviderImport", { provider: providerMetadata.label })}
       activeFilterCountLabel={compactState.activeFilterCountLabel}
       summaryRail={(
         <IssueImportSummaryRail
           provider={providerMetadata}
-          title={`${providerMetadata.label} linked scope`}
-          description="Select external work items, control conversation context, and import through the shared linked issue path."
+          title={translate(sprintsMessages, "providerLinkedScope", { provider: providerMetadata.label })}
+          description={translate(sprintsMessages, "providerLinkedScopeDescription")}
           items={[
-            { label: "Provider", value: providerMetadata.label },
-            { label: "Search", value: filters.search || "All readable items" },
-            { label: "Visible", value: String(results.length) },
-            { label: "Selected", value: String(selectedResults.length), active: selectedResults.length > 0 },
-            { label: "Limit", value: String(filters.limit) },
+            { label: translate(sprintsMessages, "provider"), value: providerMetadata.label },
+            { label: translate(sprintsMessages, "search"), value: filters.search || translate(sprintsMessages, "allReadableItems") },
+            { label: translate(sprintsMessages, "visible"), value: formatNumber(results.length) },
+            { label: translate(sprintsMessages, "selected"), value: formatNumber(selectedResults.length), active: selectedResults.length > 0 },
+            { label: translate(sprintsMessages, "limit"), value: formatNumber(filters.limit) },
           ]}
           status={compactState.selectedCountLabel}
         />
@@ -413,8 +418,8 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
       filters={(
         <div className="grid gap-4">
           <IssueImportFilterSection
-            title={`${providerMetadata.label} search`}
-            description="Default search uses saved project-effective integration settings and a bounded result limit."
+            title={translate(sprintsMessages, "providerSearch", { provider: providerMetadata.label })}
+            description={translate(sprintsMessages, "providerDefaultSearchDescription")}
             compact
             action={(
               <button
@@ -422,15 +427,15 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
                 onClick={() => { void runSearch(filters); }}
                 disabled={loading}
                 className={`inline-flex min-h-11 min-w-32 items-center justify-center gap-2 rounded-[1rem] px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] transition-all hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${providerMetadata.accent.selectedIconClassName}`}
-                aria-label={loading ? `Search ${providerMetadata.label} is loading` : `Search ${providerMetadata.label}`}
+                aria-label={translate(sprintsMessages, loading ? "searchProviderLoading" : "searchProvider", { provider: providerMetadata.label })}
               >
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Search className="h-4 w-4" aria-hidden="true" />}
-                Search
+                {translate(sprintsMessages, "search")}
               </button>
             )}
           >
             <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(16rem,1.5fr)_repeat(2,minmax(9rem,0.75fr))]">
-              <IssueImportField label="Search text">
+              <IssueImportField label={translate(sprintsMessages, "searchText")}>
                 <div className="relative min-w-0">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
                   <IssueImportTextInput
@@ -444,27 +449,27 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
                     }}
                     placeholder={config.searchPlaceholder}
                     className="pl-10"
-                    aria-label={`${providerMetadata.label} search text`}
+                    aria-label={translate(sprintsMessages, "providerSearchText", { provider: providerMetadata.label })}
                   />
                 </div>
               </IssueImportField>
 
               {config.supportsStatus && (
-                <IssueImportField label="Status">
+                <IssueImportField label={translate(sprintsMessages, "status")}>
                   <IssueImportSelect
                     provider={providerMetadata}
-                    aria-label={`${providerMetadata.label} status`}
+                    aria-label={translate(sprintsMessages, "providerStatus", { provider: providerMetadata.label })}
                     value={filters.status}
                     onChange={(event) => updateFilters((current) => ({ ...current, status: (event.target as HTMLSelectElement).value as ProjectManagementFilters["status"] }))}
                   >
-                    {STATUS_OPTIONS.map((option) => (
+                    {statusOptions.map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                   </IssueImportSelect>
                 </IssueImportField>
               )}
 
-              <IssueImportField label="Limit" hint="Bounded to the shared issue search endpoint limit.">
+              <IssueImportField label={translate(sprintsMessages, "limit")} hint={translate(sprintsMessages, "resultLimitHint")}>
                 <IssueImportNumberInput
                   provider={providerMetadata}
                   min={1}
@@ -474,7 +479,7 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
                     ...current,
                     limit: normalizeLimit((event.target as HTMLInputElement).value, current.limit),
                   }))}
-                  aria-label={`${providerMetadata.label} result limit`}
+                  aria-label={translate(sprintsMessages, "resultLimitAria", { provider: providerMetadata.label })}
                 />
               </IssueImportField>
             </div>
@@ -484,74 +489,74 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
       advancedFilters={(
         <div className="grid gap-4">
           <IssueImportFilterSection
-            title="Provider scope"
-            description="Use saved defaults or override the exact workspace, project, database, or team target for this search."
+            title={translate(sprintsMessages, "providerScope")}
+            description={translate(sprintsMessages, "providerScopeDescription")}
             compact
           >
             <div className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-4">
               {config.supportsDatabase && (
-                <IssueImportField label="Database ID" hint="Optional. Narrows Notion search to one database parent.">
+                <IssueImportField label={translate(sprintsMessages, "databaseId")} hint={translate(sprintsMessages, "databaseIdHint")}>
                   <IssueImportTextInput
                     provider={providerMetadata}
                     value={filters.databaseId}
                     onInput={(event) => updateFilters((current) => ({ ...current, databaseId: (event.target as HTMLInputElement).value }))}
                     placeholder="database-id"
-                    aria-label="Notion database ID"
+                    aria-label={translate(sprintsMessages, "providerDatabaseId", { provider: providerMetadata.label })}
                   />
                 </IssueImportField>
               )}
               {config.supportsWorkspace && (
-                <IssueImportField label="Workspace ID" hint="Required for Asana workspace search unless project ID is supplied.">
+                <IssueImportField label={translate(sprintsMessages, "workspaceId")} hint={translate(sprintsMessages, "workspaceIdAsanaHint")}>
                   <IssueImportTextInput
                     provider={providerMetadata}
                     value={filters.workspaceId}
                     onInput={(event) => updateFilters((current) => ({ ...current, workspaceId: (event.target as HTMLInputElement).value }))}
                     placeholder="workspace-gid"
-                    aria-label="Asana workspace ID"
+                    aria-label={translate(sprintsMessages, "providerWorkspaceId", { provider: providerMetadata.label })}
                   />
                 </IssueImportField>
               )}
               {config.supportsProject && (
-                <IssueImportField label="Project ID">
+                <IssueImportField label={translate(sprintsMessages, "projectId")}>
                   <IssueImportTextInput
                     provider={providerMetadata}
                     value={filters.providerProjectId}
                     onInput={(event) => updateFilters((current) => ({ ...current, providerProjectId: (event.target as HTMLInputElement).value }))}
                     placeholder={provider === "asana" ? "project-gid" : "linear-project-id"}
-                    aria-label={`${providerMetadata.label} project ID`}
+                    aria-label={translate(sprintsMessages, "providerProjectId", { provider: providerMetadata.label })}
                   />
                 </IssueImportField>
               )}
               {config.supportsTeam && (
                 <>
-                  <IssueImportField label="Team ID">
+                  <IssueImportField label={translate(sprintsMessages, "teamId")}>
                     <IssueImportTextInput
                       provider={providerMetadata}
                       value={filters.teamId}
                       onInput={(event) => updateFilters((current) => ({ ...current, teamId: (event.target as HTMLInputElement).value }))}
                       placeholder="team-id"
-                      aria-label="Linear team ID"
+                      aria-label={translate(sprintsMessages, "providerTeamId", { provider: providerMetadata.label })}
                     />
                   </IssueImportField>
-                  <IssueImportField label="Team key">
+                  <IssueImportField label={translate(sprintsMessages, "teamKey")}>
                     <IssueImportTextInput
                       provider={providerMetadata}
                       value={filters.teamKey}
                       onInput={(event) => updateFilters((current) => ({ ...current, teamKey: (event.target as HTMLInputElement).value.toUpperCase() }))}
                       placeholder="LIN"
-                      aria-label="Linear team key"
+                      aria-label={translate(sprintsMessages, "providerTeamKey", { provider: providerMetadata.label })}
                     />
                   </IssueImportField>
                 </>
               )}
               {config.supportsState && (
-                <IssueImportField label="Workflow state" hint="Optional Linear state name, such as Triage or In Progress.">
+                <IssueImportField label={translate(sprintsMessages, "workflowState")} hint={translate(sprintsMessages, "workflowStateHint")}>
                   <IssueImportTextInput
                     provider={providerMetadata}
                     value={filters.state}
                     onInput={(event) => updateFilters((current) => ({ ...current, state: (event.target as HTMLInputElement).value }))}
                     placeholder="In Progress"
-                    aria-label="Linear workflow state"
+                    aria-label={translate(sprintsMessages, "providerWorkflowState", { provider: providerMetadata.label })}
                   />
                 </IssueImportField>
               )}
@@ -560,13 +565,13 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
 
           {(config.supportsLabels || config.supportsAssignee) && (
             <IssueImportFilterSection
-              title="People and labels"
-              description="Narrow Asana and Linear results by supported provider metadata."
+              title={translate(sprintsMessages, "peopleAndLabels")}
+              description={translate(sprintsMessages, "peopleAndLabelsDescription")}
               compact
             >
               <div className="grid min-w-0 gap-3 md:grid-cols-2">
                 {config.supportsLabels && (
-                  <IssueImportMultiSelectField label="Labels">
+                  <IssueImportMultiSelectField label={translate(sprintsMessages, "labels")}>
                     <MultiSelect
                       value={filters.labels}
                       onChange={(labels) => updateFilters((current) => ({ ...current, labels }))}
@@ -575,13 +580,13 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
                   </IssueImportMultiSelectField>
                 )}
                 {config.supportsAssignee && (
-                  <IssueImportField label="Assignee">
+                  <IssueImportField label={translate(sprintsMessages, "assignee")}>
                     <IssueImportTextInput
                       provider={providerMetadata}
                       value={filters.assignee}
                       onInput={(event) => updateFilters((current) => ({ ...current, assignee: (event.target as HTMLInputElement).value }))}
-                      placeholder={provider === "linear" ? "Name, display name, or email" : "Asana assignee GID"}
-                      aria-label={`${providerMetadata.label} assignee`}
+                      placeholder={translate(sprintsMessages, provider === "linear" ? "linearAssigneePlaceholder" : "asanaAssigneePlaceholder")}
+                      aria-label={translate(sprintsMessages, "providerAssignee", { provider: providerMetadata.label })}
                     />
                   </IssueImportField>
                 )}
@@ -590,40 +595,36 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
           )}
 
           <IssueImportFilterSection
-            title="Explicit external IDs"
-            description="Use exact Notion object IDs, Asana task GIDs, or Linear issue IDs/identifiers when search text is too broad."
+            title={translate(sprintsMessages, "explicitExternalIds")}
+            description={translate(sprintsMessages, "explicitExternalIdsDescription")}
             compact
           >
-            <IssueImportMultiSelectField label="External IDs">
+            <IssueImportMultiSelectField label={translate(sprintsMessages, "externalIds")}>
               <MultiSelect
                 value={filters.externalIds}
                 onChange={(externalIds) => updateFilters((current) => ({ ...current, externalIds }))}
-                placeholder={provider === "linear" ? "LIN-42, issue-id" : "External object ID"}
+                placeholder={provider === "linear" ? "LIN-42, issue-id" : translate(sprintsMessages, "externalObjectId")}
               />
             </IssueImportMultiSelectField>
           </IssueImportFilterSection>
         </div>
       )}
       advancedFiltersExpanded={advancedFiltersExpanded}
-      advancedFiltersLabel={`Advanced ${providerMetadata.label} filters`}
+      advancedFiltersLabel={translate(sprintsMessages, "advancedFilters", { provider: providerMetadata.label })}
       advancedFiltersId={`${provider}-import-advanced-filters`}
       onAdvancedFiltersToggle={() => setAdvancedFiltersExpanded((current) => !current)}
       resultStatus={(
         <div className="flex flex-col gap-3 rounded-[1.1rem] border border-black/[0.06] bg-white/70 p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-              <span className="font-black text-slate-700 dark:text-slate-200">{results.length}</span>{" "}
-              visible {config.resultNounPlural}.
-              {" "}
-              <span className="font-black text-slate-700 dark:text-slate-200">{selectedResults.length}</span>{" "}
-              selected.
+              {translate(sprintsMessages, "visibleSelectedSummary", { visible: formatNumber(results.length), selected: formatNumber(selectedResults.length), noun: config.resultNounPlural })}
             </div>
             <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
               {compactState.activeFilterCountLabel}
             </div>
           </div>
           {compactState.chips.length > 0 && (
-            <div className="flex flex-wrap gap-1.5" aria-label={`Active ${providerMetadata.label} filters`}>
+            <div className="flex flex-wrap gap-1.5" aria-label={translate(sprintsMessages, "activeProviderFilters", { provider: providerMetadata.label })}>
               {compactState.chips.map((chip) => (
                 <span
                   key={chip.id}
@@ -645,8 +646,8 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
         <div className="flex flex-col gap-4 rounded-[1.4rem] border border-black/[0.06] bg-black/[0.015] p-4 dark:border-white/[0.06] dark:bg-white/[0.02]">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="text-xs font-semibold text-slate-400" aria-live="polite">
-              <span className="font-bold text-slate-600 dark:text-slate-200">{selectedCountLabel}</span>{" "}
-              {selectedResults.length} of {results.length} visible {config.resultNounPlural} selected.
+              <span className="font-bold text-slate-600 dark:text-slate-200">{compactState.selectedCountLabel}</span>{" "}
+              {translate(sprintsMessages, "selectedVisibleSummary", { selected: formatNumber(selectedResults.length), visible: formatNumber(results.length), noun: config.resultNounPlural })}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -656,16 +657,16 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
                 className="rounded-[1rem] border border-black/[0.06] px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:text-white"
                 aria-label={selectVisibleLabel}
               >
-                {allVisibleSelected ? "Deselect visible" : "Select all visible"}
+                {translate(sprintsMessages, allVisibleSelected ? "deselectVisibleShort" : "selectAllVisible")}
               </button>
               <button
                 type="button"
                 onClick={clearSelection}
                 disabled={!anySelected}
                 className="rounded-[1rem] border border-black/[0.06] px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:text-white"
-                aria-label={anySelected ? "Clear selection" : "Clear selection is disabled because no items are selected"}
+                aria-label={translate(sprintsMessages, anySelected ? "clearSelection" : "clearSelectionDisabled")}
               >
-                Clear selection
+                {translate(sprintsMessages, "clearSelection")}
               </button>
             </div>
           </div>
@@ -678,10 +679,10 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
                 disabled={!anySelected}
                 onChange={(event) => setConversationForSelection((event.target as HTMLInputElement).checked)}
                 className="h-3.5 w-3.5 rounded border-slate-300 text-signal-500 focus:ring-signal-500 dark:border-white/[0.18] dark:bg-transparent"
-                aria-label={`Append conversation to all selected ${providerMetadata.label} items`}
+                aria-label={translate(sprintsMessages, "appendConversationAllSelectedItems", { provider: providerMetadata.label })}
               />
               <MessageSquare className="h-3.5 w-3.5" strokeWidth={2.1} aria-hidden="true" />
-              Append conversation to selected
+              {translate(sprintsMessages, "appendConversationSelected")}
             </label>
 
             <div className="flex items-center justify-end gap-3">
@@ -690,23 +691,23 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
                 onClick={onClose}
                 className={`rounded-[1rem] border border-black/[0.06] px-5 py-3 text-sm font-bold text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 ${providerMetadata.accent.focusRingClassName} dark:border-white/[0.08] dark:text-slate-300 dark:hover:text-white`}
               >
-                Cancel
+                {translate(sprintsMessages, "cancel")}
               </button>
               <button
                 type="button"
                 onClick={() => { void handleImport(); }}
                 disabled={!anySelected || importing}
                 className={`rounded-[1rem] px-5 py-3 text-sm font-semibold shadow-[0_12px_28px_rgba(15,23,42,0.12)] transition-all hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${providerMetadata.accent.selectedIconClassName}`}
-                aria-label={!anySelected ? `Import ${providerMetadata.label} items disabled until items are selected` : `Import ${providerMetadata.label} items`}
+                aria-label={translate(sprintsMessages, anySelected ? "importProviderItems" : "importDisabled", { provider: providerMetadata.label })}
               >
-                {importing ? "Importing..." : "Import Selected"}
+                {translate(sprintsMessages, importing ? "importing" : "importSelectedButton")}
               </button>
             </div>
           </div>
         </div>
       )}
     >
-      {error && <IssueImportErrorPanel error={getIssueImportErrorCopy(error)} />}
+      {error && <IssueImportErrorPanel error={getIssueImportErrorCopy(error, undefined, locale)} />}
 
       {loading ? (
         <IssueImportLoadingSkeletonList count={6} />
@@ -721,7 +722,7 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
               className={`inline-flex min-h-10 items-center gap-2 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.14em] transition-all hover:-translate-y-px ${providerMetadata.accent.selectedIconClassName}`}
             >
               <Search className="h-3.5 w-3.5" aria-hidden="true" />
-              Search again
+              {translate(sprintsMessages, "searchAgain")}
             </button>
           )}
         />
@@ -759,11 +760,11 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
                   issueCommentCount: result.issueCommentCount,
                   createdAt: result.createdAt,
                   updatedAt: result.updatedAt,
-                })}
-                labels={truncateIssueImportLabels(result.labels ?? [], 6)}
-                assignees={truncateIssueImportAssignees(result.assignees ?? [], 4)}
-                selectionLabel={selected ? "Selected" : "Click to select"}
-                modeLabel="Linked scope"
+                }, locale)}
+                labels={truncateIssueImportLabels(result.labels ?? [], 6, locale)}
+                assignees={truncateIssueImportAssignees(result.assignees ?? [], 4, locale)}
+                selectionLabel={translate(sprintsMessages, selected ? "selected" : "clickToSelect")}
+                modeLabel={translate(sprintsMessages, "linkedScope")}
                 icon={<ProviderResultIcon provider={provider} />}
                 metadataLimit={selected ? 7 : 5}
                 onToggle={() => toggleResult(result)}
@@ -822,8 +823,11 @@ function normalizeLimit(value: string, fallback: number): number {
   return Number.isFinite(parsed) ? Math.max(1, Math.min(100, Math.trunc(parsed))) : fallback;
 }
 
-function getStatusLabel(value: ProjectManagementFilters["status"]): string {
-  return STATUS_OPTIONS.find((option) => option.value === value)?.label ?? value;
+function getStatusLabel(
+  value: ProjectManagementFilters["status"],
+  options: ReadonlyArray<{ value: ProjectManagementFilters["status"]; label: string }>,
+): string {
+  return options.find((option) => option.value === value)?.label ?? value;
 }
 
 function resultKey(result: RemoteIssueSummary): string {

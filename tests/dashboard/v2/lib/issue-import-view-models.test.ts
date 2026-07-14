@@ -303,5 +303,9 @@ describe("issue import view models", () => {
       title: "Issue import failed",
       message: "The issue search could not be completed. Check the filters and try again.",
     });
+    expect(getIssueImportErrorCopy("Teilimport-Warnung für OPS-17", undefined, "de")).toEqual({
+      title: "Issue-Import fehlgeschlagen",
+      message: "Teilimport-Warnung für OPS-17",
+    });
   });
 });

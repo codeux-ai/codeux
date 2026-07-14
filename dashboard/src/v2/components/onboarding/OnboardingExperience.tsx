@@ -51,7 +51,8 @@ import { JiraIcon } from "../icons/JiraIcon.js";
 import { OnboardingInstallationStep } from "./OnboardingInstallationStep.js";
 import { OnboardingAppearanceStep } from "./OnboardingAppearanceStep.js";
 import { fetchRuntimeAssetsStatus, prepareProviderTool } from "../../lib/runtime-assets-api.js";
-import { isDeprecatedProvider, providerLifecycle } from "../../lib/provider-lifecycle.js";
+import { isDeprecatedProvider } from "../../lib/provider-lifecycle.js";
+import { useOnboardingMessages } from "../../i18n/messages/onboarding.js";
 
 type IntroPhase = "intro" | "transitioning" | "onboarding";
 import type {
@@ -163,17 +164,6 @@ const providerLabels: Record<ProviderId, string> = {
 const PROVIDER_TYPES = onboardingProviderTypes;
 const EASY_PROVIDER_TYPES: ProviderId[] = ["antigravity", "codex", "claude-code", "qwen-code", "opencode"];
 
-const providerDescriptions: Record<ProviderId, string> = {
-  jules: "Google Jules API service for agent session and workspace orchestration.",
-  gemini: "Gemini CLI with local OAuth auth-copy or API-key based execution.",
-  codex: "Codex CLI for OpenAI-powered local container execution.",
-  "claude-code": "Claude Code CLI with local auth-copy or provider API key.",
-  "qwen-code": "Qwen Code CLI with OAuth, Alibaba Coding Plan, or custom model provider config.",
-  opencode: "OpenCode CLI with local auth, provider keys, or OpenAI-compatible endpoints.",
-  antigravity: "Antigravity CLI (agy) for Google-powered local container execution.",
-  "mockup-cli": "Internal test-only mock provider.",
-};
-
 const getProviderWatermark = (providerId: ProviderId): string => (
   providerId === "jules" ? "JLS"
     : providerId === "gemini" ? "GMN"
@@ -220,6 +210,7 @@ const EasyProviderAuthCard: FunctionComponent<{
   onAuthModeChange: (authMode: "dashboardAuth" | "localAuth") => void;
   onUpdate: (updates: Partial<SystemSettings["integrations"]["providers"][ProviderConfigId]>) => void;
 }> = ({ providerConfigId, provider, authMode, selected, readinessStatus, toolStatus, onSelect, onAuthModeChange, onUpdate }) => {
+  const { t } = useOnboardingMessages();
   const [showLoginModal, setShowLoginModal] = useState(false);
   const providerLabel = providerLabels[provider.provider];
   const deprecated = isDeprecatedProvider(provider.provider);
@@ -246,7 +237,7 @@ const EasyProviderAuthCard: FunctionComponent<{
           <div className="min-w-0">
             <div className="text-base font-black text-slate-900 dark:text-white">{providerLabel}</div>
             <div className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
-              {readinessStatus?.detectedFiles.length ? "Credentials detected on this machine." : "Ready for dashboard login."}
+              {readinessStatus?.detectedFiles.length ? t("credentialsDetected") : t("readyForDashboardLogin")}
             </div>
           </div>
         </div>
@@ -254,19 +245,19 @@ const EasyProviderAuthCard: FunctionComponent<{
           type="button"
           role="radio"
           aria-checked={selected}
-          aria-label={`${selected ? "Selected" : "Select"} ${providerLabel}`}
+          aria-label={selected ? t("selectedProvider", { provider: providerLabel }) : t("selectProviderLogin", { provider: providerLabel })}
           onClick={onSelect}
           className={`rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${selected ? "border border-signal-500/20 bg-signal-500/10 text-signal-700 dark:text-signal-200" : "border border-black/[0.06] bg-white/60 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300"}`}
         >
-          {selected ? "Selected" : "Select"}
+          {selected ? t("providerSelected") : t("select")}
         </button>
       </div>
 
       <div className="relative z-10 mt-4 space-y-3">
         {deprecated ? (
           <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-xs font-semibold leading-relaxed text-amber-800 dark:text-amber-200">
-            <div className="font-black uppercase tracking-[0.14em]">Deprecated</div>
-            <div className="mt-1">{providerLifecycle[provider.provider].message}</div>
+            <div className="font-black uppercase tracking-[0.14em]">{t("deprecated")}</div>
+            <div className="mt-1">{t("geminiDeprecated")}</div>
           </div>
         ) : null}
         {toolStatus ? (
@@ -274,14 +265,14 @@ const EasyProviderAuthCard: FunctionComponent<{
             {toolStatus.stepText}
           </div>
         ) : null}
-        <Row label="Authentication mode">
+        <Row label={t("authenticationMode")}>
           <SelectInput
             value={authMode}
             onChange={applyAuthMode}
-            aria-label={`${providerLabel} authentication mode`}
+            aria-label={t("providerAuthenticationMode", { provider: providerLabel })}
             options={[
-              { value: "dashboardAuth", label: "Dashboard Login" },
-              { value: "localAuth", label: "Local Copy" },
+              { value: "dashboardAuth", label: t("dashboardLogin") },
+              { value: "localAuth", label: t("localCopy") },
             ]}
           />
         </Row>
@@ -289,17 +280,17 @@ const EasyProviderAuthCard: FunctionComponent<{
           <button
             type="button"
             onClick={openLogin}
-            aria-label={`Connect and log in to ${providerLabel}`}
+            aria-label={t("connectLoginProvider", { provider: providerLabel })}
             aria-haspopup="dialog"
             aria-expanded={showLoginModal}
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-signal-500 px-4 py-3 text-sm font-black text-white shadow-lg transition-colors hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white active:scale-[0.98] dark:text-void-950 dark:focus-visible:ring-offset-void-900"
           >
             <Terminal className="h-4 w-4" />
-            Connect and Login
+            {t("connectLogin")}
           </button>
         ) : (
           <div className="rounded-2xl border border-black/[0.06] bg-white/60 px-4 py-3 text-sm font-semibold text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
-            Local Copy will use this provider's default CLI login.
+            {t("localCopyBody")}
           </div>
         )}
       </div>
@@ -380,6 +371,7 @@ const normalizeOnboardingReadiness = (nextReadiness: OnboardingRuntimeReadiness)
 };
 
 export const OnboardingExperience: FunctionComponent = () => {
+  const { t, tp } = useOnboardingMessages();
   const navigate = useNavigate();
   const backdropRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLElement>(null);
@@ -416,6 +408,11 @@ export const OnboardingExperience: FunctionComponent = () => {
   const reducedMotion = useReducedMotion();
   const gsapTokens = useGsapInteractionTokens();
   const interactionTokens = useInteractionTokens();
+  const localizedProviderDescriptions: Record<ProviderId, string> = {
+    jules: t("providerDescriptionJules"), gemini: t("providerDescriptionGemini"), codex: t("providerDescriptionCodex"),
+    "claude-code": t("providerDescriptionClaude"), "qwen-code": t("providerDescriptionQwen"), opencode: t("providerDescriptionOpenCode"),
+    antigravity: t("providerDescriptionAntigravity"), "mockup-cli": t("providerDescriptionMock"),
+  };
   const validationRef = useRef<HTMLDivElement>(null);
   const openRef = useRef(open);
   const mountedRef = useRef(true);
@@ -562,7 +559,7 @@ export const OnboardingExperience: FunctionComponent = () => {
   const handleAutoInstall = (): void => {
     const recommendedOption = readiness.installers.options.find((option) => option.mode === readiness.installers.recommendedMode);
     if (!recommendedOption?.available) {
-      setInstallError("No recommended dependency installer is available for this platform. Use the manual links and recheck readiness after setup.");
+      setInstallError(t("noRecommendedInstaller"));
       return;
     }
     void runDependencyInstall(recommendedOption.mode);
@@ -885,22 +882,22 @@ export const OnboardingExperience: FunctionComponent = () => {
       if (jiraHasAnyValue && !jiraSettings.host.trim()) {
         return {
           valid: false,
-          message: "Enter a Jira site URL, or clear the Jira fields to configure it later.",
-          focusSelector: '[aria-label="Jira site URL"]',
+          message: t("jiraUrlValidation"),
+          focusSelector: `[aria-label="${t("jiraSiteUrl")}"]`,
         };
       }
       if (jiraHasAnyValue && !jiraSettings.apiToken.trim()) {
         return {
           valid: false,
-          message: "Enter a Jira API token, or clear the Jira fields to configure it later.",
-          focusSelector: '[aria-label="Jira API token"]',
+          message: t("jiraTokenValidation"),
+          focusSelector: `[aria-label="${t("jiraApiToken")}"]`,
         };
       }
     } else if (active.id === "defaults" && enabledProviderInstances.length === 0) {
       return {
         valid: false,
-        message: "Enable at least one provider instance before choosing defaults.",
-        focusSelector: '[aria-label="Go to Providers"]',
+        message: t("providersValidation"),
+        focusSelector: `[aria-label="${t("goToStep", { step: t("stepProviders") })}"]`,
       };
     }
     return { valid: true };
@@ -1045,7 +1042,7 @@ export const OnboardingExperience: FunctionComponent = () => {
       icon: <ProviderBrandIcon id={provider.provider} />,
     }));
   const stepProgressValue = Math.round(((activeStep + 1) / steps.length) * 100);
-  const stepProgressLabel = `Step ${activeStep + 1} of ${steps.length}: ${active.label}`;
+  const stepProgressLabel = t("stepProgress", { current: activeStep + 1, total: steps.length, step: active.label });
   const draftAppearance = settings?.defaults.appearance;
   const onboardingBackgroundDark = (() => {
     if (draftAppearance?.theme === "DARK") {
@@ -1062,12 +1059,12 @@ export const OnboardingExperience: FunctionComponent = () => {
   const onboardingBackgroundMode = draftAppearance?.backgroundMode ?? "ANIMATED";
   const onboardingStaticBackgroundColor = draftAppearance?.staticBackgroundColor ?? "#0d0f12";
   const saveStatusText = saving
-    ? "Saving onboarding settings"
+    ? t("savingSettings")
     : error
-      ? "Onboarding save failed. Review the error and retry."
+      ? t("saveFailedAnnouncement")
       : checkingReadiness
-        ? "Checking runtime readiness"
-        : "Draft changes are ready to save when onboarding is finished.";
+        ? t("checkingReadiness")
+        : t("draftReadyAnnouncement");
   const motionStyle = {
     "--onboarding-enter-exit-duration": interactionTokens.enterExit.duration,
     "--onboarding-enter-exit-ease": interactionTokens.enterExit.ease,
@@ -1125,9 +1122,9 @@ export const OnboardingExperience: FunctionComponent = () => {
             <div data-sidebar-copy className="flex h-12 w-12 items-center justify-center rounded-2xl border border-black/[0.07] bg-white/70 shadow-[0_0_35px_rgba(0,153,112,0.12)] dark:border-white/10 dark:bg-white/10 dark:shadow-[0_0_35px_rgba(0,224,160,0.12)]">
               <Compass className="h-5 w-5 text-signal-700 dark:text-signal-300" />
             </div>
-            <div data-sidebar-copy className="mt-8 text-[10px] font-bold uppercase tracking-[0.24em] text-signal-700 dark:text-signal-300">Code UX Setup</div>
+            <div data-sidebar-copy className="mt-8 text-[10px] font-bold uppercase tracking-[0.24em] text-signal-700 dark:text-signal-300">{t("codeUxSetup")}</div>
             <h2 data-sidebar-copy id="onboarding-title" className="mt-3 font-display text-4xl font-semibold leading-[0.95] tracking-tight text-slate-950 dark:text-white">
-              Make the runtime ready.
+              {t("makeRuntimeReady")}
             </h2>
             <div className="mt-8 space-y-2">
               {steps.map((step, stepIndex) => {
@@ -1163,7 +1160,7 @@ export const OnboardingExperience: FunctionComponent = () => {
             <div aria-hidden className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-signal-500/30 to-transparent" />
             <div>
               <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                Step {activeStep + 1} of {steps.length}
+                {t("stepCount", { current: activeStep + 1, total: steps.length })}
               </div>
               <h3 ref={stepHeadingRef} tabIndex={-1} className="mt-1 font-display text-xl font-semibold tracking-tight text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 dark:text-white">{active.label}</h3>
               <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-white/[0.08]" role="progressbar" aria-label={stepProgressLabel} aria-valuemin={1} aria-valuemax={steps.length} aria-valuenow={activeStep + 1}>
@@ -1181,7 +1178,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                 closeOnboarding();
               }}
               className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 dark:hover:bg-white/[0.06] dark:hover:text-white"
-              aria-label="Close onboarding"
+              aria-label={t("closeOnboarding")}
             >
               <X className="h-5 w-5" />
             </button>
@@ -1193,7 +1190,7 @@ export const OnboardingExperience: FunctionComponent = () => {
               <div className="mb-4 rounded-2xl border border-status-red/20 bg-status-red/10 px-4 py-3 text-sm font-semibold text-status-red" role="alert">
                 <div>{error}</div>
                 <button type="button" onClick={() => void applyAndClose()} className="mt-3 rounded-xl border border-status-red/30 px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em]">
-                  Retry save
+                  {t("retrySave")}
                 </button>
               </div>
             ) : null}
@@ -1216,17 +1213,17 @@ export const OnboardingExperience: FunctionComponent = () => {
                   <div className="relative z-10 max-w-3xl">
                     <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-signal-700 dark:text-signal-200">
                       <Compass className="h-3.5 w-3.5" strokeWidth={2.4} />
-                      Choose your setup path
+                      {t("chooseSetupPath")}
                     </div>
                     <h4 className="mt-4 font-display text-2xl font-semibold leading-none tracking-tight text-slate-950 dark:text-white">
-                      Start with the right amount of control.
+                      {t("setupControlTitle")}
                     </h4>
                     <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-300">
-                      Easy keeps setup to one provider login and GitHub defaults. Standard and Expert keep the detailed runtime, provider, automation, and appearance controls.
+                      {t("setupControlBody")}
                     </p>
                   </div>
                 </div>
-                <div className="grid gap-3 md:grid-cols-3" role="radiogroup" aria-label="Onboarding setup mode">
+                <div className="grid gap-3 md:grid-cols-3" role="radiogroup" aria-label={t("setupModeLabel")}>
                   {dashboardExperienceModeOptions.map((option) => {
                     const selected = experienceMode === option.value;
                     return (
@@ -1247,13 +1244,13 @@ export const OnboardingExperience: FunctionComponent = () => {
                       >
                         <div aria-hidden className={`absolute left-0 top-5 bottom-5 w-1 rounded-r-full transition-opacity ${selected ? "bg-signal-500 opacity-100" : "bg-slate-300 opacity-0 group-hover:opacity-100 dark:bg-slate-600"}`} />
                         <div className="flex items-center justify-between gap-3">
-                          <div className="text-base font-black text-slate-900 dark:text-white">{option.label}</div>
+                          <div className="text-base font-black text-slate-900 dark:text-white">{t(option.value === "EASY" ? "modeEasy" : option.value === "STANDARD" ? "modeStandard" : "modeExpert")}</div>
                           {selected ? <Check className="h-5 w-5 text-signal-600 dark:text-signal-300" /> : <ChevronRight className="h-5 w-5 text-slate-300 dark:text-slate-600" />}
                         </div>
-                        <div className="mt-3 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{option.description}</div>
+                        <div className="mt-3 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{t(option.value === "EASY" ? "modeEasyDescription" : option.value === "STANDARD" ? "modeStandardDescription" : "modeExpertDescription")}</div>
                         {option.value === "EASY" ? (
                           <div className="mt-4 rounded-2xl border border-signal-500/15 bg-signal-500/[0.07] px-3 py-2 text-xs font-semibold leading-relaxed text-signal-800 dark:text-signal-200">
-                            Short flow: installation, introduction, provider, GitHub, then Chat.
+                            {t("easyFlowSummary")}
                           </div>
                         ) : null}
                       </button>
@@ -1286,17 +1283,17 @@ export const OnboardingExperience: FunctionComponent = () => {
                   <div className="relative z-10 max-w-3xl">
                     <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-signal-700 dark:text-signal-200">
                       <Sparkles className="h-3.5 w-3.5" strokeWidth={2.4} />
-                      Agentic runtime
+                      {t("agenticRuntime")}
                     </div>
-                    <h4 className="mt-4 font-display text-2xl font-semibold leading-none tracking-tight text-slate-950 dark:text-white">Welcome to Code UX.</h4>
+                    <h4 className="mt-4 font-display text-2xl font-semibold leading-none tracking-tight text-slate-950 dark:text-white">{t("welcomeCodeUx")}</h4>
                     <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-300">
-                      Code UX is an advanced containerized agentic workspace for turning projects into guided sprints, executable tasks, live previews, and measurable delivery. It coordinates provider CLIs inside isolated Docker runtimes, keeps credentials inside the intended tools, and gives you one polished control surface for agents, memory, knowledge base, browser sessions, and automation.
+                      {t("introductionBody")}
                     </p>
                     <div className="mt-5 flex flex-wrap gap-2">
                       {[
-                        [Github, "GitHub", CODEUX_REPO_URL],
-                        [Star, "Star on GitHub", CODEUX_REPO_URL],
-                        [BookOpen, "Documentation", `${CODEUX_REPO_URL}#readme`],
+                        [Github, t("github"), CODEUX_REPO_URL],
+                        [Star, t("starOnGithub"), CODEUX_REPO_URL],
+                        [BookOpen, t("documentation"), `${CODEUX_REPO_URL}#readme`],
                       ].map(([Icon, label, href]) => {
                         const BadgeIcon = Icon as typeof Github;
                         return (
@@ -1317,10 +1314,10 @@ export const OnboardingExperience: FunctionComponent = () => {
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   {[
-                    ["Container-first execution", "Provider CLIs run inside isolated Docker containers with a mounted workspace snapshot.", ShieldCheck],
-                    ["Credential boundary", "Local credentials are copied only into the intended CLI runtime and are not used as raw application secrets.", ShieldCheck],
-                    ["TOS-compliant workflow", "Authentication stays with each provider's supported CLI flow, so Code UX orchestrates tools instead of impersonating providers.", ShieldCheck],
-                    ["Knowledge Base", "Maintain a persistent technical knowledge base that agents use for deep architectural context.", Library],
+                    [t("containerFirstTitle"), t("containerFirstBody"), ShieldCheck],
+                    [t("credentialBoundaryTitle"), t("credentialBoundaryBody"), ShieldCheck],
+                    [t("tosWorkflowTitle"), t("tosWorkflowBody"), ShieldCheck],
+                    [t("knowledgeBaseTitle"), t("knowledgeBaseBody"), Library],
                   ].map(([title, description, Icon]) => {
                     const CardIcon = Icon as typeof ShieldCheck;
                     return (
@@ -1338,7 +1335,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="flex items-center gap-2">
                         <ShieldCheck className="h-4 w-4 text-signal-600 dark:text-signal-300" strokeWidth={2.4} />
-                        <div className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-700 dark:text-slate-200">License</div>
+                        <div className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-700 dark:text-slate-200">{t("license")}</div>
                       </div>
                       <a
                         href={getSafeUrl(`${CODEUX_REPO_URL}/blob/main/LICENSE`)}
@@ -1346,11 +1343,11 @@ export const OnboardingExperience: FunctionComponent = () => {
                         rel="noopener noreferrer"
                         className="text-[10px] font-black uppercase tracking-[0.14em] text-signal-600 hover:text-signal-700 dark:text-signal-300 dark:hover:text-signal-200"
                       >
-                        View on GitHub
+                        {t("viewOnGithub")}
                       </a>
                     </div>
                     <p className="mt-2 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
-                      Code UX is open source under the MIT License. By continuing you acknowledge the terms below.
+                      {t("licenseExplanation")}
                     </p>
                     <div className="dashboard-scrollbar mt-4 max-h-52 overflow-y-auto overscroll-contain rounded-[1.25rem] border border-black/[0.06] bg-black/[0.03] p-4 dark:border-white/[0.06] dark:bg-white/[0.04]">
                       <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">{LICENSE_TEXT}</pre>
@@ -1366,9 +1363,9 @@ export const OnboardingExperience: FunctionComponent = () => {
                   <div className="flex items-start gap-3">
                     <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
                     <div>
-                      <div className="text-base font-black text-slate-900 dark:text-white">Choose every provider you want available</div>
+                      <div className="text-base font-black text-slate-900 dark:text-white">{t("chooseProvidersTitle")}</div>
                       <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                        You can use local auth-copy, API keys, or both. The next step lets you add multiple named instances for each provider.
+                        {t("chooseProvidersBody")}
                       </div>
                     </div>
                   </div>
@@ -1384,7 +1381,7 @@ export const OnboardingExperience: FunctionComponent = () => {
 	                        key={providerId}
 	                        type="button"
 	                        aria-pressed={selected}
-	                        aria-label={`${selected ? "Deselect" : "Select"} ${providerLabels[providerId]} provider`}
+	                        aria-label={t(selected ? "deselectProvider" : "selectProvider", { provider: providerLabels[providerId] })}
 	                        onClick={() => toggleProvider(providerId)}
 	                        className={`group relative overflow-hidden rounded-3xl border p-4 text-left shadow-[0_14px_34px_rgba(15,23,42,0.04)] transition-[border-color,background-color,transform,box-shadow] hover:-translate-y-1 ${selected ? "border-signal-500/30 bg-signal-500/10 shadow-[0_18px_46px_rgba(0,224,160,0.08)]" : "border-black/[0.06] bg-white/75 hover:border-black/[0.12] dark:border-white/[0.06] dark:bg-white/[0.04]"}`}
 	                        style={{ transitionDuration: "var(--onboarding-selection-duration)", transitionTimingFunction: "var(--onboarding-selection-ease)" }}
@@ -1395,21 +1392,21 @@ export const OnboardingExperience: FunctionComponent = () => {
                             <ProviderBrandIcon id={providerId} />
                             <div>
                               <div className="font-black text-slate-900 dark:text-white">{providerLabels[providerId]}</div>
-                              <div className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{instanceCount || 1} instance{(instanceCount || 1) === 1 ? "" : "s"}</div>
+                              <div className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{tp("instanceCount", instanceCount || 1)}</div>
                             </div>
                           </div>
                           <span className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${isDeprecatedProvider(providerId) ? "bg-amber-500/10 text-amber-700 dark:text-amber-300" : provider?.available ? "bg-signal-500/10 text-signal-700 dark:text-signal-300" : selected ? "bg-ember-500/10 text-ember-600 dark:text-ember-400" : "bg-slate-500/10 text-slate-500"}`}>
-                            {isDeprecatedProvider(providerId) ? "Deprecated" : providerId === "jules" ? "API key" : provider?.available ? "Detected" : selected ? "Configure" : "Optional"}
+                            {isDeprecatedProvider(providerId) ? t("deprecated") : providerId === "jules" ? t("apiKey") : provider?.available ? t("detected") : selected ? t("configure") : t("optional")}
                           </span>
                         </div>
-                        <div className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{provider?.description || providerDescriptions[providerId]}</div>
+                        <div className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{provider?.description || localizedProviderDescriptions[providerId]}</div>
                         {isDeprecatedProvider(providerId) ? (
-                          <div className="mt-2 text-xs font-semibold text-amber-700 dark:text-amber-300">{providerLifecycle[providerId].message}</div>
+                          <div className="mt-2 text-xs font-semibold text-amber-700 dark:text-amber-300">{t("geminiDeprecated")}</div>
                         ) : null}
                         {selected && toolStatusByProvider[providerId] ? (
                           <div className="mt-2 text-xs font-semibold text-slate-500 dark:text-slate-300">{toolStatusByProvider[providerId]?.stepText}</div>
                         ) : null}
-                        <div className="mt-3 font-mono text-[11px] text-slate-400">{provider?.authPath || (providerId === "jules" ? "API key only" : "Auth path configurable")}</div>
+                        <div className="mt-3 font-mono text-[11px] text-slate-400">{provider?.authPath || (providerId === "jules" ? t("apiKeyOnly") : t("authPathConfigurable"))}</div>
                       </button>
                     );
                   })}
@@ -1424,15 +1421,15 @@ export const OnboardingExperience: FunctionComponent = () => {
                     <div className="flex items-start gap-3">
                       <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
                       <div>
-                        <div className="text-base font-black text-slate-900 dark:text-white">Choose one provider login</div>
+                        <div className="text-base font-black text-slate-900 dark:text-white">{t("chooseProviderLogin")}</div>
                         <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                          Easy setup keeps routing to one provider. Pick a provider below, use Dashboard Login by default, and add more provider instances later in Settings.
+                          {t("chooseProviderLoginBody")}
                         </div>
                       </div>
                     </div>
                   </div>
                   {settings ? (
-                    <div className="grid gap-4 lg:grid-cols-2" role="radiogroup" aria-label="Primary provider">
+                    <div className="grid gap-4 lg:grid-cols-2" role="radiogroup" aria-label={t("primaryProvider")}>
                       {EASY_PROVIDER_TYPES.map((providerId) => {
                         const existingEntry = getSystemProvidersByType(settings, providerId)[0];
                         const providerConfigId = existingEntry?.[0] ?? providerId;
@@ -1467,7 +1464,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                     </div>
                   ) : (
                     <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/75 p-6 text-sm text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      Loading provider settings.
+                      {t("loadingProviderSettings")}
                     </div>
                   )}
                 </div>
@@ -1475,7 +1472,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                 <div className="space-y-4">
                 {selectedProviderTypes.length === 0 ? (
                   <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/75 p-6 text-sm text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04]">
-                    No providers selected. You can add provider credentials later in Settings.
+                    {t("noProvidersSelected")}
                   </div>
                 ) : selectedProviderTypes.map((providerId) => {
                   const providerEntries = getSystemProvidersByType(settings, providerId);
@@ -1491,26 +1488,26 @@ export const OnboardingExperience: FunctionComponent = () => {
                           <div className="min-w-0">
                             <div className="text-base font-black text-slate-900 dark:text-white">{providerLabels[providerId]}</div>
                             <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                              {readinessStatus?.detectedFiles.length ? `Detected: ${readinessStatus.detectedFiles.join(", ")}` : providerDescriptions[providerId]}
+                              {readinessStatus?.detectedFiles.length ? t("detectedFiles", { files: readinessStatus.detectedFiles.join(", ") }) : localizedProviderDescriptions[providerId]}
                             </div>
                           </div>
                         </div>
 	                        <button
 	                          type="button"
-	                          aria-label={`Add ${providerLabels[providerId]} provider instance`}
+	                          aria-label={t("addProviderInstance", { provider: providerLabels[providerId] })}
 	                          onClick={() => addProviderInstance(providerId)}
 	                          className="inline-flex items-center gap-2 rounded-2xl border border-signal-500/20 bg-signal-500/10 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-signal-700 hover:bg-signal-500/15 dark:text-signal-200"
 	                          style={{ transitionDuration: "var(--onboarding-control-duration)", transitionTimingFunction: "var(--onboarding-control-ease)" }}
 	                        >
                           <Plus className="h-3.5 w-3.5" />
-                          Add instance
+                          {t("addInstance")}
                         </button>
                       </div>
 
                       <div className="relative z-10 mt-4 space-y-3">
                         {providerEntries.length === 0 ? (
                           <div className="rounded-2xl border border-ember-500/20 bg-ember-500/10 p-4 text-sm text-ember-700 dark:text-ember-300">
-                            Add an instance to configure {providerLabels[providerId]} credentials.
+                            {t("addInstanceCredentials", { provider: providerLabels[providerId] })}
                           </div>
                         ) : providerEntries.map(([providerConfigId, integrationProvider], index) => {
                           const projectProvider = settings?.defaults.aiProvider.providers[providerConfigId];
@@ -1547,9 +1544,9 @@ export const OnboardingExperience: FunctionComponent = () => {
                     <div className="flex items-start gap-3">
                       <Github className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
                       <div>
-                        <div className="text-base font-black text-slate-900 dark:text-white">GitHub workflow</div>
+                        <div className="text-base font-black text-slate-900 dark:text-white">{t("gitHubWorkflow")}</div>
                         <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                          Choose whether this setup should use GitHub PR workflow defaults. Tokens and deeper Git settings remain available later in Settings.
+                          {t("easyGitBody")}
                         </div>
                       </div>
                     </div>
@@ -1566,9 +1563,9 @@ export const OnboardingExperience: FunctionComponent = () => {
                         })}
                       />
                       <span>
-                        <span className="block text-sm font-bold text-slate-900 dark:text-white">Use GitHub for this workspace</span>
+                        <span className="block text-sm font-bold text-slate-900 dark:text-white">{t("useGithubWorkspace")}</span>
                         <span className="mt-1 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                          Keep remote branches, pull requests, and CI-aware workflow enabled by default.
+                          {t("useGithubBody")}
                         </span>
                       </span>
                     </label>
@@ -1584,9 +1581,9 @@ export const OnboardingExperience: FunctionComponent = () => {
                         })}
                       />
                       <span>
-                        <span className="block text-sm font-bold text-slate-900 dark:text-white">Let Code UX create and manage GitHub PR workflow defaults</span>
+                        <span className="block text-sm font-bold text-slate-900 dark:text-white">{t("manageGithubDefaults")}</span>
                         <span className="mt-1 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                          Create PRs and use conservative PR management defaults instead of configuring merge policies now.
+                          {t("manageGithubDefaultsBody")}
                         </span>
                       </span>
                     </label>
@@ -1598,17 +1595,17 @@ export const OnboardingExperience: FunctionComponent = () => {
                   <div className="flex items-start gap-3">
                     <GitBranch className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
                     <div className="min-w-0 flex-1">
-                      <div className="text-base font-black text-slate-900 dark:text-white">Git mode</div>
+                      <div className="text-base font-black text-slate-900 dark:text-white">{t("gitMode")}</div>
                       <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                        Remote mode keeps pull requests and CI automation available. Local mode stays repo-local for offline or self-managed workflows.
+                        {t("gitModeBody")}
                       </div>
                       <div className="mt-4">
                         <PillChoiceGroup
                           value={gitMode}
                           onChange={(value) => updateCliWorkflow({ gitMode: value as ProjectSettings["cliWorkflow"]["gitMode"] })}
                           options={[
-                            { value: "remote", label: "Remote", hint: "PRs, CI, and remote branch sync stay enabled." },
-                            { value: "local", label: "Local", hint: "Disable remote PR orchestration and stay repo-local." },
+                            { value: "remote", label: t("remote"), hint: t("remoteHint") },
+                            { value: "local", label: t("local"), hint: t("localHint") },
                           ]}
                         />
                       </div>
@@ -1619,30 +1616,30 @@ export const OnboardingExperience: FunctionComponent = () => {
                   <div data-onboarding-card className="flex items-start gap-3 rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
                     <Info className="mt-0.5 h-5 w-5 shrink-0 text-amber-500 dark:text-amber-300" />
                     <div className="text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                      Local mode does not support automatic CI or pull requests. Remote mode is recommended for full feature access.
+                      {t("localModeWarning")}
                     </div>
                   </div>
                 ) : null}
                 {gitMode !== "local" ? (
                   <>
                     <div data-onboarding-card>
-                      <SectionCard title="GitHub" watermark="GIT" icon={<Github strokeWidth={2.4} />}>
-                        <Row label="GitHub token" description="System token used for GitHub repository, pull request, and CI integration.">
+                      <SectionCard title={t("github")} watermark="GIT" icon={<Github strokeWidth={2.4} />}>
+                        <Row label={t("githubToken")} description={t("githubTokenBody")}>
 	                          <TextInput
-	                            aria-label="GitHub token"
+	                            aria-label={t("githubToken")}
 	                            value={settings.integrations.githubToken || ""}
                             onChange={(value) => updateSettings((current) => ({ ...current, integrations: { ...current.integrations, githubToken: value } }))}
                             mono
                           />
                         </Row>
-                        <Row label="Mount GitHub auth" description="Copy the host `gh` credential directory into Docker.">
-	                          <Toggle aria-label="Mount GitHub auth"                             value={settings.defaults.cliWorkflow.containerMountGithubAuth}
+                        <Row label={t("mountGithubAuth")} description={t("mountGithubAuthBody")}>
+	                          <Toggle aria-label={t("mountGithubAuth")}                             value={settings.defaults.cliWorkflow.containerMountGithubAuth}
                             onChange={() => updateCliWorkflow({ containerMountGithubAuth: !settings.defaults.cliWorkflow.containerMountGithubAuth })}
                           />
                         </Row>
-                        <Row label="GitHub auth path" description="Host path copied into the Docker runtime for GitHub CLI auth." last>
+                        <Row label={t("githubAuthPath")} description={t("githubAuthPathBody")} last>
 	                          <TextInput
-	                            aria-label="GitHub auth path"
+	                            aria-label={t("githubAuthPath")}
 	                            value={settings.defaults.cliWorkflow.containerGithubAuthPath}
                             onChange={(value) => updateCliWorkflow({ containerGithubAuthPath: value })}
                             disabled={!settings.defaults.cliWorkflow.containerMountGithubAuth}
@@ -1652,10 +1649,10 @@ export const OnboardingExperience: FunctionComponent = () => {
                       </SectionCard>
                     </div>
                     <div data-onboarding-card>
-                      <SectionCard title="GitLab" watermark="GLB" icon={<GitBranch strokeWidth={2.4} />}>
-                        <Row label="GitLab token" description="System token used for GitLab repository, merge request, and CI integration." last>
+                      <SectionCard title={t("gitlab")} watermark="GLB" icon={<GitBranch strokeWidth={2.4} />}>
+                        <Row label={t("gitlabToken")} description={t("gitlabTokenBody")} last>
 	                          <TextInput
-	                            aria-label="GitLab token"
+	                            aria-label={t("gitlabToken")}
 	                            value={settings.integrations.gitlabToken || ""}
                             onChange={(value) => updateSettings((current) => ({ ...current, integrations: { ...current.integrations, gitlabToken: value } }))}
                             mono
@@ -1666,25 +1663,25 @@ export const OnboardingExperience: FunctionComponent = () => {
                   </>
                 ) : null}
                 <div data-onboarding-card>
-                  <SectionCard title="Git identity" watermark="ID" icon={<GitBranch strokeWidth={2.4} />}>
-                    <Row label="Copy local git config" description="Use the host `.gitconfig` in Docker instead of the configured Code UX git identity." last={settings.defaults.cliWorkflow.containerMountGitConfig}>
-	                      <Toggle aria-label="Copy local git config"                         value={settings.defaults.cliWorkflow.containerMountGitConfig}
+                  <SectionCard title={t("gitIdentity")} watermark="ID" icon={<GitBranch strokeWidth={2.4} />}>
+                    <Row label={t("copyGitConfig")} description={t("copyGitConfigBody")} last={settings.defaults.cliWorkflow.containerMountGitConfig}>
+	                      <Toggle aria-label={t("copyGitConfig")}                         value={settings.defaults.cliWorkflow.containerMountGitConfig}
                         onChange={() => updateCliWorkflow({ containerMountGitConfig: !settings.defaults.cliWorkflow.containerMountGitConfig })}
                       />
                     </Row>
                     {!settings.defaults.cliWorkflow.containerMountGitConfig ? (
                       <>
-                        <Row label="Git user name" description="Git author name configured inside provider containers.">
+                        <Row label={t("gitUserName")} description={t("gitUserNameBody")}>
 	                          <TextInput
-	                            aria-label="Git user name"
+	                            aria-label={t("gitUserName")}
 	                            value={settings.defaults.cliWorkflow.containerGitUserName}
                             onChange={(value) => updateCliWorkflow({ containerGitUserName: value })}
                             placeholder="Code UX"
                           />
                         </Row>
-                        <Row label="Git email" description="Git author email configured inside provider containers." last>
+                        <Row label={t("gitEmail")} description={t("gitEmailBody")} last>
 	                          <TextInput
-	                            aria-label="Git email"
+	                            aria-label={t("gitEmail")}
 	                            value={settings.defaults.cliWorkflow.containerGitUserEmail}
                             onChange={(value) => updateCliWorkflow({ containerGitUserEmail: value })}
                             placeholder="agents@codeux.ai"
@@ -1707,32 +1704,32 @@ export const OnboardingExperience: FunctionComponent = () => {
                       <JiraIcon className="h-5 w-5" />
                     </span>
                     <div>
-                      <div className="text-base font-black text-slate-900 dark:text-white">Connect Jira (optional)</div>
+                      <div className="text-base font-black text-slate-900 dark:text-white">{t("connectJira")}</div>
                       <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                        Link an issue tracker to import work as tasks and auto-close issues after a sprint. You can skip this and configure it later in Settings.
+                        {t("jiraBody")}
                       </div>
                     </div>
                   </div>
                 </div>
                 <div data-onboarding-card>
-                  <SectionCard title="Jira Configuration" watermark="JRA" icon={<ClipboardList strokeWidth={2.4} />}>
-                    <Row label="Jira site URL" description="Base URL for Jira Cloud or Data Center, for example `https://company.atlassian.net`.">
-                      <TextInput aria-label="Jira site URL" value={jiraSettings.host} onChange={(value) => updateJira({ host: value })} mono />
+                  <SectionCard title={t("jiraConfiguration")} watermark="JRA" icon={<ClipboardList strokeWidth={2.4} />}>
+                    <Row label={t("jiraSiteUrl")} description={t("jiraSiteUrlBody")}>
+                      <TextInput aria-label={t("jiraSiteUrl")} value={jiraSettings.host} onChange={(value) => updateJira({ host: value })} mono />
                     </Row>
-                    <Row label="Account email" description="Email used with Jira Cloud API tokens. Leave empty for bearer-token Jira deployments.">
-                      <TextInput aria-label="Jira account email" value={jiraSettings.email} onChange={(value) => updateJira({ email: value })} mono />
+                    <Row label={t("accountEmail")} description={t("jiraAccountEmailBody")}>
+                      <TextInput aria-label={t("jiraAccountEmail")} value={jiraSettings.email} onChange={(value) => updateJira({ email: value })} mono />
                     </Row>
-                    <Row label="API token" description="Jira API token used for issue search, issue context loading, and transitions.">
-                      <TextInput aria-label="Jira API token" value={jiraSettings.apiToken} onChange={(value) => updateJira({ apiToken: value })} mono />
+                    <Row label={t("apiToken")} description={t("jiraApiTokenBody")}>
+                      <TextInput aria-label={t("jiraApiToken")} value={jiraSettings.apiToken} onChange={(value) => updateJira({ apiToken: value })} mono />
                     </Row>
-                    <Row label="Default project" description="Project key used to prefill the Jira import JQL.">
-                      <TextInput aria-label="Jira default project" value={jiraSettings.defaultProject} onChange={(value) => updateJira({ defaultProject: value.toUpperCase() })} mono />
+                    <Row label={t("defaultProject")} description={t("defaultProjectBody")}>
+                      <TextInput aria-label={t("jiraDefaultProject")} value={jiraSettings.defaultProject} onChange={(value) => updateJira({ defaultProject: value.toUpperCase() })} mono />
                     </Row>
-                    <Row label="Close transition" description="Transition name used when auto-closing linked Jira issues after sprint completion.">
-                      <TextInput aria-label="Jira close transition" value={jiraSettings.closeTransitionName} onChange={(value) => updateJira({ closeTransitionName: value })} />
+                    <Row label={t("closeTransition")} description={t("closeTransitionBody")}>
+                      <TextInput aria-label={t("jiraCloseTransition")} value={jiraSettings.closeTransitionName} onChange={(value) => updateJira({ closeTransitionName: value })} />
                     </Row>
-                    <Row label="Auto-close Jira issues" description="Move linked Jira issues through the configured transition after the sprint completes." last>
-	                      <Toggle aria-label="Auto-close Jira issues" value={jiraSettings.autoCloseLinkedIssues} onChange={() => updateJira({ autoCloseLinkedIssues: !jiraSettings.autoCloseLinkedIssues })} />
+                    <Row label={t("autoCloseJira")} description={t("autoCloseJiraBody")} last>
+	                      <Toggle aria-label={t("autoCloseJira")} value={jiraSettings.autoCloseLinkedIssues} onChange={() => updateJira({ autoCloseLinkedIssues: !jiraSettings.autoCloseLinkedIssues })} />
                     </Row>
                   </SectionCard>
                 </div>
@@ -1741,29 +1738,29 @@ export const OnboardingExperience: FunctionComponent = () => {
 
             {active.id === "automation" && settings ? (
               <div className="grid gap-4 md:grid-cols-2">
-                <Choice title="Automation level" value={settings.defaults.automationLevel} options={[
-                  ["ALWAYS_ASK", "Manual"],
-                  ["SEMI_AUTO", "Semi-auto"],
-                  ["FULL", "Full auto"],
+                <Choice title={t("automationLevel")} value={settings.defaults.automationLevel} options={[
+                  ["ALWAYS_ASK", t("manual")],
+                  ["SEMI_AUTO", t("semiAuto")],
+                  ["FULL", t("fullAuto")],
                 ]} onChange={(value) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, automationLevel: value as SystemSettings["defaults"]["automationLevel"] } }))} />
-                <Choice title="Feature PR automerge" value={settings.defaults.ciIntelligence.featurePrAutoMergeMode} options={[
-                  ["OFF", "Off"],
-                  ["CREATE_PR", "Create PR"],
-                  ["WHEN_GREEN", "When green"],
-                  ["ALWAYS", "Always"],
+                <Choice title={t("featurePrAutomerge")} value={settings.defaults.ciIntelligence.featurePrAutoMergeMode} options={[
+                  ["OFF", t("off")],
+                  ["CREATE_PR", t("createPr")],
+                  ["WHEN_GREEN", t("whenGreen")],
+                  ["ALWAYS", t("always")],
                 ]} onChange={(value) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, featurePrAutoMergeMode: value as SystemSettings["defaults"]["ciIntelligence"]["featurePrAutoMergeMode"] } } }))} />
-                <Choice title="Main PR automerge" value={settings.defaults.ciIntelligence.mainBranchAutoMergeMode} options={[
-                  ["OFF", "Off"],
-                  ["CREATE_PR", "Create PR"],
-                  ["WHEN_GREEN", "When green"],
-                  ["ALWAYS", "Always"],
+                <Choice title={t("mainPrAutomerge")} value={settings.defaults.ciIntelligence.mainBranchAutoMergeMode} options={[
+                  ["OFF", t("off")],
+                  ["CREATE_PR", t("createPr")],
+                  ["WHEN_GREEN", t("whenGreen")],
+                  ["ALWAYS", t("always")],
                 ]} onChange={(value) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, mainBranchAutoMergeMode: value as SystemSettings["defaults"]["ciIntelligence"]["mainBranchAutoMergeMode"] } } }))} />
-                <ToggleRow title="Auto-approve plans" description="Let planning continue without manual approval when the generated plan is available." checked={settings.defaults.automationInterventions.autoApprovePlan} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, automationInterventions: { ...current.defaults.automationInterventions, autoApprovePlan: checked } } }))} />
-                <ToggleRow title="Memory system" description="Capture sprint and agent learnings for later retrieval." checked={settings.defaults.memory.enabled} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, memory: { ...current.defaults.memory, enabled: checked } } }))} />
-                <ToggleRow title="Resolve main merge conflicts" description="Let a virtual worker attempt conflicts on the main branch merge gate before escalating." checked={settings.defaults.ciIntelligence.resolveMainMergeConflicts} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, resolveMainMergeConflicts: checked } } }))} />
-                <ToggleRow title="Fix main merge CI failures" description="Let a virtual worker fix failing CI on the main branch merge gate before escalating." checked={settings.defaults.ciIntelligence.resolveMainMergeFailedChecks} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, resolveMainMergeFailedChecks: checked } } }))} />
-                <ToggleRow title="Resolve feature merge conflicts" description="Let a virtual worker resolve feature PR conflicts against the sprint branch when safe." checked={settings.defaults.ciIntelligence.resolveMergeConflicts} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, resolveMergeConflicts: checked } } }))} />
-                <ToggleRow title="Enable QA agent" description="Run quality-assurance reviews after task and sprint completion events." checked={settings.defaults.agents.qualityAssurance.enabled} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, agents: { ...current.defaults.agents, qualityAssurance: { ...current.defaults.agents.qualityAssurance, enabled: checked } } } }))} />
+                <ToggleRow title={t("autoApprovePlans")} description={t("autoApprovePlansBody")} checked={settings.defaults.automationInterventions.autoApprovePlan} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, automationInterventions: { ...current.defaults.automationInterventions, autoApprovePlan: checked } } }))} />
+                <ToggleRow title={t("memorySystem")} description={t("memorySystemBody")} checked={settings.defaults.memory.enabled} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, memory: { ...current.defaults.memory, enabled: checked } } }))} />
+                <ToggleRow title={t("resolveMainConflicts")} description={t("resolveMainConflictsBody")} checked={settings.defaults.ciIntelligence.resolveMainMergeConflicts} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, resolveMainMergeConflicts: checked } } }))} />
+                <ToggleRow title={t("fixMainCi")} description={t("fixMainCiBody")} checked={settings.defaults.ciIntelligence.resolveMainMergeFailedChecks} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, resolveMainMergeFailedChecks: checked } } }))} />
+                <ToggleRow title={t("resolveFeatureConflicts")} description={t("resolveFeatureConflictsBody")} checked={settings.defaults.ciIntelligence.resolveMergeConflicts} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, resolveMergeConflicts: checked } } }))} />
+                <ToggleRow title={t("enableQaAgent")} description={t("enableQaAgentBody")} checked={settings.defaults.agents.qualityAssurance.enabled} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, agents: { ...current.defaults.agents, qualityAssurance: { ...current.defaults.agents.qualityAssurance, enabled: checked } } } }))} />
               </div>
             ) : null}
 
@@ -1777,22 +1774,22 @@ export const OnboardingExperience: FunctionComponent = () => {
                   <div className="flex items-start gap-3">
                     <Layers className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
                     <div>
-                      <div className="text-base font-black text-slate-900 dark:text-white">Pick your default providers</div>
+                      <div className="text-base font-black text-slate-900 dark:text-white">{t("pickDefaultProviders")}</div>
                       <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                        Choose which configured instance answers by default, and which one virtual workers run inside containers. You can fine-tune per-route routing later on the AI Models page.
+                        {t("pickDefaultProvidersBody")}
                       </div>
                     </div>
                   </div>
                 </div>
                 {enabledProviderInstances.length === 0 ? (
                   <div data-onboarding-card className="rounded-3xl border border-ember-500/20 bg-ember-500/10 p-6 text-sm text-ember-700 dark:text-ember-300">
-                    No enabled providers yet. Go back to the Select Providers and Providers steps to enable at least one instance.
+                    {t("noEnabledProviders")}
                   </div>
                 ) : (
                   <>
                     <div data-onboarding-card>
-                      <SectionCard title="Default routing" watermark="DEF" icon={<Layers strokeWidth={2.4} />}>
-                        <Row label="Default AI provider" description="The instance used when a route has no explicit override.">
+                      <SectionCard title={t("defaultRouting")} watermark="DEF" icon={<Layers strokeWidth={2.4} />}>
+                        <Row label={t("defaultAiProvider")} description={t("defaultAiProviderBody")}>
                           <SelectInput
                             value={settings.defaults.aiProvider.provider || ""}
                             onChange={(value) => updateSettings((current) => ({
@@ -1803,10 +1800,10 @@ export const OnboardingExperience: FunctionComponent = () => {
                               },
                             }))}
                             options={providerInstanceOptions}
-                            aria-label="Default AI provider"
+                            aria-label={t("defaultAiProvider")}
                           />
                         </Row>
-                        <Row label="Virtual worker provider" description="The CLI instance dispatched inside Docker containers to execute tasks." last>
+                        <Row label={t("virtualWorkerProvider")} description={t("virtualWorkerProviderBody")} last>
                           <SelectInput
                             value={settings.defaults.workers.virtualWorkerProvider || ""}
                             onChange={(value) => updateSettings((current) => ({
@@ -1817,7 +1814,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                               },
                             }))}
                             options={workerInstanceOptions.length > 0 ? workerInstanceOptions : providerInstanceOptions}
-                            aria-label="Virtual worker provider"
+                            aria-label={t("virtualWorkerProvider")}
                           />
                         </Row>
                       </SectionCard>
@@ -1837,13 +1834,13 @@ export const OnboardingExperience: FunctionComponent = () => {
                             </div>
                             <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
                               {isDefault ? (
-                                <span className="rounded-full border border-signal-500/25 bg-signal-500/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-700 dark:text-signal-200">Default</span>
+                                <span className="rounded-full border border-signal-500/25 bg-signal-500/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-700 dark:text-signal-200">{t("defaultBadge")}</span>
                               ) : null}
                               {isWorker ? (
-                                <span className="rounded-full border border-sky-500/25 bg-sky-500/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-sky-700 dark:text-sky-300">Worker</span>
+                                <span className="rounded-full border border-sky-500/25 bg-sky-500/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-sky-700 dark:text-sky-300">{t("workerBadge")}</span>
                               ) : null}
                               {!isDefault && !isWorker ? (
-                                <span className="rounded-full border border-black/[0.08] bg-black/[0.03] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.04]">Available</span>
+                                <span className="rounded-full border border-black/[0.08] bg-black/[0.03] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.04]">{t("availableBadge")}</span>
                               ) : null}
                             </div>
                           </div>
@@ -1864,17 +1861,17 @@ export const OnboardingExperience: FunctionComponent = () => {
               className="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-bold text-slate-500 transition-colors hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-white/[0.06]"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back
+              {t("back")}
             </button>
             <div id="onboarding-status" role="status" aria-live="polite" className="hidden min-w-0 flex-1 truncate text-center text-xs font-semibold text-slate-500 dark:text-slate-400 sm:block">
               {saveStatusText}
             </div>
-            <div className="flex items-center gap-2" aria-label="Onboarding step shortcuts">
+            <div className="flex items-center gap-2" aria-label={t("stepShortcuts")}>
               {steps.map((dot, idx) => (
 	                <button
 	                  key={`dot-${idx}`}
 	                  type="button"
-	                  aria-label={`Go to ${dot.label}`}
+	                  aria-label={t("goToStep", { step: dot.label })}
 	                  onClick={() => setActiveStep(idx)}
 	                  className={`h-2 rounded-full transition-all motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${activeStep === idx ? "w-8 bg-signal-500" : "w-2 bg-slate-300 dark:bg-slate-700"}`}
 	                  style={{ transitionDuration: "var(--onboarding-selection-duration)", transitionTimingFunction: "var(--onboarding-selection-ease)" }}
@@ -1890,7 +1887,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                 className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.18)] transition-colors hover:bg-slate-700 disabled:opacity-60 dark:bg-white dark:text-void-900"
               >
 	                {saving ? <RefreshCw className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <Check className="h-4 w-4" />}
-                {saving ? "Saving" : "Finish"}
+                {saving ? t("saving") : t("finish")}
               </button>
             ) : (
               <button
@@ -1900,7 +1897,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                 aria-describedby="onboarding-status"
                 className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.18)] transition-colors hover:bg-slate-700 disabled:opacity-60 dark:bg-white dark:text-void-900"
               >
-                Next
+                {t("next")}
                 <ArrowRight className="h-4 w-4" />
               </button>
             )}

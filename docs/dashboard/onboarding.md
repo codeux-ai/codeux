@@ -10,6 +10,12 @@ The browser-local key `codeux:onboarding-complete:v1` is still written for compa
 
 The onboarding shell uses the same dashboard background and modal motion system as the Import and Add Project overlays. It follows the selected Light, Dark, or System theme instead of forcing dark mode, and it can switch between the animated background and the draft static color while onboarding remains open. Appearance choices publish the same unsaved appearance preview used by Settings, so the step is previewed in place before final save. The shell is viewport-bounded, with the step body owning its own scrollbar for long provider configuration forms. The sidebar stays compact and prioritizes the step menu; it does not show provider-count or cluster-summary cards. Step entry, shortcut movement, progress feedback, selected provider/default choices, validation reveal, action feedback, and guided-tour highlight movement use the shared `enterExit`, `selectionMovement`, `inlineValidation`, `controlFeedback`, and `asyncFeedback` interaction contracts. Reduced-motion users receive static state changes, progress labels, visible outlines, and focus/selection states instead of animation-dependent cues.
 
+## Language Behavior
+
+The complete onboarding experience and post-onboarding dashboard tour are available in English and German. The active dashboard locale controls step names, instructions, actions, validation messages, progress and completion announcements, readiness framing, provider descriptions, and accessible control names. Switching locale does not change the setup-mode, provider, authentication, Git, Jira, automation, routing, or appearance values stored by onboarding.
+
+Operational values remain verbatim in every locale: provider and dependency names, detected credential paths, command snippets and output, model identifiers, and readiness or installer diagnostics returned by the runtime are not translated. This keeps troubleshooting material byte-compatible with API responses while the surrounding dashboard explanation follows the selected locale.
+
 ## Component Structure
 
 The onboarding UI is orchestrated by `OnboardingExperience.tsx`, which delegates rendering logic to individual step components under `dashboard/src/v2/components/onboarding/`:

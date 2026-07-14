@@ -1,7 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
-import { render, screen, within, cleanup } from "@testing-library/preact";
+import { render as testingRender, screen, within, cleanup } from "@testing-library/preact";
+import type { ComponentChild } from "preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -13,8 +14,14 @@ import type {
   OnboardingDependencyInstallerResult,
   OnboardingRuntimeReadiness,
 } from "../../../dashboard/src/types.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+import type { DashboardLocale } from "../../../dashboard/src/v2/i18n/locales.js";
 
 expect.extend(matchers);
+
+const render = (ui: ComponentChild, locale: DashboardLocale = "en") => testingRender(
+  <DashboardI18nProvider initialLocale={locale}>{ui}</DashboardI18nProvider>,
+);
 
 const osInfo = {
   osLabel: "Linux",
@@ -121,6 +128,26 @@ afterEach(() => {
 });
 
 describe("OnboardingInstallationStep", () => {
+  it("localizes German readiness framing while preserving API diagnostics", () => {
+    render(
+      <OnboardingInstallationStep
+        clusterReady={false}
+        readiness={readiness()}
+        osInfo={osInfo}
+        installError="RAW INSTALL ERROR"
+        onAutoInstall={vi.fn()}
+      />,
+      "de",
+    );
+
+    expect(screen.getByText("Cluster not ready")).toBeInTheDocument();
+    expect(screen.getByText("Docker is required.")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Docker CLI: fehlt" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Abhängigkeiten automatisch installieren" })).toBeEnabled();
+    expect(screen.getByText("Installation nicht abgeschlossen")).toBeInTheDocument();
+    expect(screen.getByText("RAW INSTALL ERROR")).toBeInTheDocument();
+  });
+
   it("renders missing dependencies, manual links, and the primary auto install action", () => {
     render(<OnboardingInstallationStep clusterReady={false} readiness={readiness()} osInfo={osInfo} onAutoInstall={vi.fn()} />);
 

@@ -12,6 +12,8 @@ The runtime is isolated under `dashboard/src/v2/i18n/`:
 - `context.tsx` provides locale state, synchronous switching, translated messages, cross-tab synchronization, and `<html lang>` updates.
 - `messages/` contains feature-owned catalogs so lazy route bundles do not become part of an eager monolithic catalog.
 
+Onboarding owns `messages/onboarding.ts`. Its catalog covers the full first-run flow, readiness and installation framing, provider setup, validation and save announcements, plus the responsive guided tour. Locale-explicit helpers localize reducer defaults and other pure presentation data without coupling settings drafts or persistence helpers to Preact context.
+
 The provider restores storage and updates `document.documentElement.lang` before the application root renders. Missing, invalid, unavailable, or throwing storage safely resolves to English. Storage events from another tab update locale state immediately; clearing the key resets the dashboard to English.
 
 ## Adding a feature catalog
@@ -31,10 +33,13 @@ const messages = defineDashboardMessages({
 const { translate, translatePlural, formatNumber } = useDashboardI18n();
 ```
 
-English and German must declare exactly the same top-level keys. Interpolation treats replacement values as literal text, plural messages require an `other` form, and locale-aware formatting delegates to the browser's native `Intl` implementation.
+English and German must declare exactly the same top-level keys. Interpolation treats replacement values as literal text, and plural messages require an `other` form. Plural selection receives the raw count, while the reserved `{count}` token is number-formatted for the active locale. Other locale-aware formatting also delegates to the browser's native `Intl` implementation.
 
 Keep each catalog with its owning feature and import it only where the feature is loaded. Translate dashboard-authored interface copy only. Never translate provider output, API responses, stored instructions, project data, runtime diagnostics, or user-authored content.
 
 Chat uses the feature-owned `messages/chat.ts` catalog for its thread and invocation chrome, composers, quick actions, rich widgets, cinematic cues, speech controls, feedback, humor, and accessibility announcements. Pure Chat helpers accept an explicit locale, and mounted components bind to the provider locale. Time, relative-time, count, percentage, duration, token, and retry displays use native `Intl` formatting.
 
 The boundary is intentionally strict: message bodies, prompts and quick-action request payloads, reasoning, tool names/arguments/output, invocation logs, scheduled instructions, provider errors, provider-authored runtime status values, entity names, and speech transcripts remain unchanged. Known dashboard-owned invocation status enums are localized in visible and accessible card text while unknown statuses retain their raw values; transcript headers localize structural role labels and preserve configured agent names. German tests assert both the translated frame and the verbatim payload.
+Browser Preview is the first route-wide catalog. Its components use the active locale for copy, pluralized session/environment counts, and pending port summaries, while URLs, paths, commands, environment data, logs, names, ports, container identifiers, and server diagnostics remain literal runtime values.
+
+For onboarding specifically, provider and dependency names, detected paths, model IDs, command snippets and installation output, and API-returned readiness diagnostics stay verbatim. The locale changes only dashboard-owned framing and accessible names; submitted provider IDs, enums, credentials, and settings drafts are unchanged.

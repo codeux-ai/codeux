@@ -8,6 +8,7 @@ import type { Sprint } from "../../../types.js";
 import { ORGANIC_CELL_SHADOW_CLASS } from "../../ui/organic-cell-styles.js";
 import { SprintCell } from "../SprintCell.js";
 import type { CiStatusPresentation } from "../../../lib/ci-status-presentation.js";
+import { renderWithI18n } from "../../../../../../tests/dashboard/render-with-i18n.js";
 
 expect.extend(matchers);
 
@@ -79,7 +80,7 @@ describe("SprintCell visuals", () => {
   });
 
   it("uses the shared organic project-cell background shadow", () => {
-    const { container } = render(
+    const { container } = renderWithI18n(
       <SprintCell
         sprint={sprint}
         isEven={false}
@@ -95,7 +96,7 @@ describe("SprintCell visuals", () => {
   });
 
   it("keeps hover-revealed card actions keyboard reachable and reduced-motion visible", () => {
-    const { container } = render(
+    const { container } = renderWithI18n(
       <SprintCell
         sprint={sprint}
         isEven={false}
@@ -118,7 +119,7 @@ describe("SprintCell visuals", () => {
 
   it("shows target-specific busy state for the primary sprint action", () => {
     const onPrimaryAction = vi.fn();
-    render(
+    renderWithI18n(
       <SprintCell
         sprint={sprint}
         isEven={false}
@@ -137,7 +138,7 @@ describe("SprintCell visuals", () => {
   });
 
   it("renders a reduced-motion-safe failed execution indicator and full red attention border", () => {
-    const { container } = render(
+    const { container } = renderWithI18n(
       <SprintCell
         sprint={{ ...sprint, status: "failed" }}
         isEven={false}
@@ -165,7 +166,7 @@ describe("SprintCell visuals", () => {
   });
 
   it("does not render attention for a healthy completed sprint", () => {
-    const { container } = render(
+    const { container } = renderWithI18n(
       <SprintCell
         sprint={{ ...sprint, status: "completed", completion: 100 }}
         isEven={false}
@@ -178,7 +179,7 @@ describe("SprintCell visuals", () => {
   });
 
   it("renders rollback sprints with a dedicated orange treatment", () => {
-    const { container } = render(
+    const { container } = renderWithI18n(
       <SprintCell
         sprint={{
           ...sprint,
@@ -199,7 +200,7 @@ describe("SprintCell visuals", () => {
   });
 
   it("shows CI failure steps and requested-change QA details without replacing lifecycle status", () => {
-    const { container } = render(
+    const { container } = renderWithI18n(
       <SprintCell
         sprint={{
           ...sprint,

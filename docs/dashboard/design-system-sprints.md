@@ -21,6 +21,8 @@ This document outlines the design system for the Sprints page and related planni
 
 ### Sprint Ledger (Table/List)
 
+*   **Localization boundary:** Ledger headings, filters, sort descriptions, selection feedback, bulk actions, pending reasons, status labels, mobile cell labels, and live announcements come from the Sprints message catalog. Names, goals, issue data, Git metadata, review results, and runtime content must never be translated. Counts, dates, times, percentages, and affected-sprint lists use the dashboard `Intl` formatters while sorting continues to use the underlying values.
+
 *   **Responsive Ledger Pattern:** Uses the shared `Table` contract with `mobileLabel` mapping for narrow screens. Rows stack gracefully, ensuring that sprint name, status, completion, dates, selection, pin state, and row controls remain discoverable without horizontal scrolling. Row controls and bulk action bars use flexible, touch-friendly layouts that wrap cleanly to prevent text clipping. Fixed-position inline menus (like row actions) use viewport-clamping to remain usable near screen edges.
 *   **Rows & Headers:** Refined row heights, consistent padding, and clear separators. Column headers must align perfectly with their corresponding data.
 *   **Metadata Hierarchy:** Prioritize sprint names and status. Secondary metadata (dates, task counts) should be styled as supporting information (e.g., smaller text, muted colors).
