@@ -10,6 +10,8 @@ import { ProjectManagementRepository } from "../../../src/repositories/project-m
 import type { ManagementResponseEnvelope } from "../../../src/contracts/internal-management-types.js";
 import { createChatProviderSecretFixture } from "../helpers/chat-provider-secret-fixture.js";
 import type { ChatProviderSecretService } from "../../../src/services/chat-provider-secret-service.js";
+import { ChatProviderVerificationService } from "../../../src/services/chat-provider-verification-service.js";
+import { CHAT_CONNECTOR_REGISTRY, createChatConnectorRegistry } from "../../../src/domain/chat-connectors/registry.js";
 
 const tempDirs: string[] = [];
 const openStorages: AppDbStorage[] = [];
@@ -21,6 +23,7 @@ async function createHarness(): Promise<{
   conversationRepository: ConnectionChatRepository;
   actions: ChatProviderActions;
   secretService: ChatProviderSecretService;
+  verificationService: ChatProviderVerificationService;
 }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-mcp-chat-providers-"));
   tempDirs.push(dir);
@@ -28,13 +31,18 @@ async function createHarness(): Promise<{
   openStorages.push(storage);
   const providerRepository = new ChatProviderRepository(storage);
   const secretService = createChatProviderSecretFixture(providerRepository);
+  const verificationService = new ChatProviderVerificationService({
+    chatProviderRepository: providerRepository,
+    chatProviderSecretService: secretService,
+  });
   return {
     storage,
     projectRepository: new ProjectManagementRepository(storage),
     providerRepository,
     conversationRepository: new ConnectionChatRepository(storage),
-    actions: new ChatProviderActions(providerRepository, secretService),
+    actions: new ChatProviderActions(providerRepository, secretService, { chatProviderVerificationService: verificationService }),
     secretService,
+    verificationService,
   };
 }
 
@@ -75,7 +83,7 @@ describe("ChatProviderActions", () => {
       defaultBridgeMode: "managed_bridge",
       setupGuidance: {
         providerKind: "slack",
-        ingressUrlTemplate: "https://codeux.example.test/api/chat-providers/{providerConnectionId}/channels/{externalChannelId}/ingress",
+        ingressUrlTemplate: "https://codeux.example.test/api/chat-providers/ingress/{providerConnectionId}",
       },
     });
     expect(JSON.stringify(definitions[0])).toContain("signingSecret");
@@ -110,7 +118,7 @@ describe("ChatProviderActions", () => {
       status: "active",
       setup: { webhookUrl: "https://example.test/telegram" },
       ingressUrls: {
-        connectionIngressUrl: expect.stringContaining(`/api/chat-providers/${connection.id as string}/ingress`),
+        connectionIngressUrl: expect.stringContaining(`/api/chat-providers/ingress/${connection.id as string}`),
       },
     });
     expect(JSON.stringify(createdResult)).not.toContain("telegram-secret-value");
@@ -135,15 +143,23 @@ describe("ChatProviderActions", () => {
     }));
     expect((getResult.connection as Record<string, unknown>).id).toBe(connection.id);
 
+    const updatePayload = {
+      providerConnectionId: connection.id,
+      displayName: "Telegram bridge renamed",
+      enabled: false,
+      setup: { webhookUrl: "https://example.test/telegram-v2" },
+    };
+    const updatePreflight = await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: updatePayload,
+    });
+    expect(updatePreflight.approvalRequired).toBe(true);
     const updateResult = expectResult(await actions.handleChatProviderAction({
       domain: "chat_providers",
       action: "update_connection",
-      payload: {
-        providerConnectionId: connection.id,
-        displayName: "Telegram bridge renamed",
-        enabled: false,
-        setup: { webhookUrl: "https://example.test/telegram-v2" },
-      },
+      payload: updatePayload,
+      approval: { confirmed: true },
     }));
     expect(updateResult.connection).toMatchObject({
       id: connection.id,
@@ -215,6 +231,17 @@ describe("ChatProviderActions", () => {
     expect(approved.connection).toMatchObject({ id: connection.id });
     expect(JSON.stringify(approved)).not.toContain("new-secret");
     expect((await secretService.resolveConnection(connection.id)).secrets).toEqual({ signingSecret: "new-secret" });
+
+    const reused = await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: {
+        providerConnectionId: connection.id,
+        secrets: { signingSecret: "new-secret" },
+      },
+      approval: { confirmed: true },
+    });
+    expect(reused.approvalRequired).toBe(true);
   });
 
   it("requires approval before deleting connections and channel bindings", async () => {
@@ -317,7 +344,7 @@ describe("ChatProviderActions", () => {
       projectId: projectA.id,
       suppressRichWidgets: true,
       ingressUrls: {
-        channelIngressUrl: expect.stringContaining("/channels/shared-channel/ingress"),
+        channelIngressUrl: expect.stringContaining(`/api/chat-providers/ingress/${connection.id}`),
       },
     });
     expect(bindingB).toMatchObject({
@@ -420,6 +447,7 @@ describe("ChatProviderActions", () => {
         status: "pending",
       }),
     ]);
+    expect(JSON.stringify(result.deliveries)).not.toContain("bodyMarkdown");
 
     providerRepository.updateDeliveryState(pending.id, {
       status: "delivered",
@@ -442,5 +470,209 @@ describe("ChatProviderActions", () => {
         status: "delivered",
       }),
     ]);
+  });
+
+  it("verifies a configured connection and returns redacted health diagnostics", async () => {
+    const { actions, secretService } = await createHarness();
+    const connection = await secretService.createConnection({
+      providerKind: "discord",
+      displayName: "Discord verification",
+      bridgeMode: "webhook",
+      secrets: { botToken: "discord-secret-token" },
+    });
+
+    const verified = expectResult(await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "verify_connection",
+      payload: { providerConnectionId: connection.id },
+    }));
+    expect(verified.verification).toMatchObject({
+      status: "verified",
+      capabilities: ["setup", "authentication", "outbound"],
+      providerErrorCode: null,
+      retryable: false,
+    });
+
+    const health = expectResult(await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "get_health",
+      payload: {},
+    }));
+    expect(health.health).toMatchObject({ configuredCount: 1, verifiedCount: 1, errorCount: 0 });
+    expect(JSON.stringify({ verified, health })).not.toContain("discord-secret-token");
+  });
+
+  it("reports verification timeouts without serializing credentials", async () => {
+    const { providerRepository, secretService } = await createHarness();
+    const discord = CHAT_CONNECTOR_REGISTRY.get("discord");
+    const registry = createChatConnectorRegistry(CHAT_CONNECTOR_REGISTRY.profiles.map((profile) => profile.kind === "discord"
+      ? {
+        ...discord,
+        verification: {
+          ...discord.verification,
+          strategy: "configuration_and_live" as const,
+          verifyLive: () => new Promise(() => undefined),
+        },
+        liveTest: { available: true, modes: ["webhook"] as const },
+      }
+      : profile));
+    const verificationService = new ChatProviderVerificationService({
+      chatProviderRepository: providerRepository,
+      chatProviderSecretService: secretService,
+      connectorRegistry: registry,
+      timeoutMs: 25,
+    });
+    const actions = new ChatProviderActions(providerRepository, secretService, {
+      chatProviderVerificationService: verificationService,
+      connectorRegistry: registry,
+    });
+    const connection = await secretService.createConnection({
+      providerKind: "discord",
+      displayName: "Timeout verification",
+      secrets: { botToken: "timeout-secret-token" },
+    });
+
+    const verificationPromise = actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "verify_connection",
+      payload: { providerConnectionId: connection.id },
+    });
+    await vi.advanceTimersByTimeAsync(30);
+    const result = expectResult(await verificationPromise);
+    expect(result.verification).toMatchObject({
+      status: "failed",
+      providerErrorCode: "verification_timeout",
+      retryable: true,
+    });
+    expect(JSON.stringify(result)).not.toContain("timeout-secret-token");
+  });
+
+  it("returns provider failure codes while removing sensitive diagnostics", async () => {
+    const { providerRepository, secretService } = await createHarness();
+    const discord = CHAT_CONNECTOR_REGISTRY.get("discord");
+    const registry = createChatConnectorRegistry(CHAT_CONNECTOR_REGISTRY.profiles.map((profile) => profile.kind === "discord"
+      ? {
+        ...discord,
+        verification: {
+          ...discord.verification,
+          strategy: "configuration_and_live" as const,
+          verifyLive: async () => ({
+            valid: false,
+            issues: ["Provider rejected the configured bot identity."],
+            providerErrorCode: "invalid_bot_identity",
+            retryable: false,
+            diagnostics: {
+              capability: "authentication",
+              authorization: "Bearer provider-secret-token",
+              signedUrl: "https://provider.example.test/check?signature=provider-secret-token",
+            },
+          }),
+        },
+        liveTest: { available: true, modes: ["webhook"] as const },
+      }
+      : profile));
+    const verificationService = new ChatProviderVerificationService({
+      chatProviderRepository: providerRepository,
+      chatProviderSecretService: secretService,
+      connectorRegistry: registry,
+    });
+    const actions = new ChatProviderActions(providerRepository, secretService, {
+      chatProviderVerificationService: verificationService,
+      connectorRegistry: registry,
+    });
+    const connection = await secretService.createConnection({
+      providerKind: "discord",
+      displayName: "Provider failure",
+      bridgeMode: "webhook",
+      secrets: { botToken: "provider-secret-token" },
+    });
+
+    const result = expectResult(await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "verify_connection",
+      payload: { providerConnectionId: connection.id },
+    }));
+
+    expect(result.verification).toMatchObject({
+      status: "failed",
+      providerErrorCode: "invalid_bot_identity",
+      retryable: false,
+      diagnostics: { capability: "authentication" },
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain("provider-secret-token");
+    expect(serialized).not.toContain("authorization");
+    expect(serialized).not.toContain("signedUrl");
+  });
+
+  it("enforces persisted project ownership and one-use delivery retry approval", async () => {
+    const { projectRepository, providerRepository, conversationRepository, secretService, verificationService } = await createHarness();
+    const allowed = projectRepository.createProject({ name: "Allowed", sourceType: "local", sourceRef: "/tmp/allowed" });
+    const denied = projectRepository.createProject({ name: "Denied", sourceType: "local", sourceRef: "/tmp/denied" });
+    const connection = providerRepository.createConnection({ providerKind: "discord", displayName: "Scoped" });
+    const deniedBinding = providerRepository.createChannelBinding({
+      providerConnectionId: connection.id,
+      externalChannelId: "denied-channel",
+      externalChannelName: "Denied",
+      projectId: denied.id,
+    });
+    const message = conversationRepository.postDashboardMessage(denied.id, {
+      title: "Scoped delivery",
+      bodyMarkdown: "must stay private",
+    });
+    const delivery = providerRepository.upsertOutboundDelivery({
+      providerConnectionId: connection.id,
+      channelBindingId: deniedBinding.id,
+      externalChannelId: "denied-channel",
+      conversationThreadId: message.threadId,
+      conversationMessageId: message.id,
+      payload: { bodyMarkdown: "must stay private" },
+    });
+    const retryDelivery = vi.fn(async () => providerRepository.updateDeliveryState(delivery.id, { status: "pending" }));
+    const scopedActions = new ChatProviderActions(providerRepository, secretService, {
+      chatProviderVerificationService: verificationService,
+      chatProviderOutboundService: { retryDelivery } as any,
+      authorizeProject: (projectId) => projectId === allowed.id,
+    });
+
+    await expect(scopedActions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_channel_binding",
+      payload: { channelBindingId: deniedBinding.id, externalChannelName: "Unauthorized" },
+    })).rejects.toThrow(/not authorized/i);
+
+    const hidden = expectResult(await scopedActions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "list_deliveries",
+      payload: { projectId: allowed.id },
+    }));
+    expect(hidden.deliveries).toEqual([]);
+
+    const unrestrictedActions = new ChatProviderActions(providerRepository, secretService, {
+      chatProviderVerificationService: verificationService,
+      chatProviderOutboundService: { retryDelivery } as any,
+    });
+    const preflight = await unrestrictedActions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "retry_delivery",
+      payload: { deliveryId: delivery.id },
+    });
+    expect(preflight.approvalRequired).toBe(true);
+    const retried = expectResult(await unrestrictedActions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "retry_delivery",
+      payload: { deliveryId: delivery.id },
+      approval: { confirmed: true },
+    }));
+    expect(retried.delivery).not.toHaveProperty("payload");
+    expect(retryDelivery).toHaveBeenCalledTimes(1);
+    const reused = await unrestrictedActions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "retry_delivery",
+      payload: { deliveryId: delivery.id },
+      approval: { confirmed: true },
+    });
+    expect(reused.approvalRequired).toBe(true);
+    expect(retryDelivery).toHaveBeenCalledTimes(1);
   });
 });

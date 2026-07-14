@@ -109,7 +109,18 @@ function isCredentialManagementRequest(req: Request): boolean {
   const pathname = req.path.toLowerCase();
   return pathname.startsWith("/api/credentials")
     || pathname.startsWith("/credentials")
-    || /\/credentials(?:\/|$)/.test(pathname);
+    || /\/credentials(?:\/|$)/.test(pathname)
+    || isChatProviderCredentialManagementRequest(req.method, pathname);
+}
+
+function isChatProviderCredentialManagementRequest(method: string, pathname: string): boolean {
+  if (!pathname.includes("/chat-providers/")) return false;
+  const normalizedMethod = method.toUpperCase();
+  if (/\/connections\/[^/]+\/verify$/.test(pathname)) return normalizedMethod === "POST";
+  if (/\/connections(?:\/[^/]+)?$/.test(pathname)) {
+    return normalizedMethod === "POST" || normalizedMethod === "PATCH";
+  }
+  return false;
 }
 
 export function requiredRoleForDashboardRequest(req: Request): CodeUxRole {

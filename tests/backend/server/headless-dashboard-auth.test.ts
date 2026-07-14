@@ -33,6 +33,8 @@ describe("headless dashboard API authentication", () => {
     } as DashboardServerOptions, createLogger({ level: "error" }));
     application.get("/api/projects/:projectId/node-flows", (req, res) => res.json({ projectId: req.params.projectId }));
     application.get("/api/projects/:projectId/credentials", (_req, res) => res.json({ secret: "must-not-run" }));
+    application.post("/api/chat-providers/connections", (_req, res) => res.json({ created: true }));
+    application.post("/api/chat-providers/connections/:connectionId/verify", (_req, res) => res.json({ verified: true }));
     return application;
   }
 
@@ -44,6 +46,43 @@ describe("headless dashboard API authentication", () => {
       .set("Host", "localhost").set("X-Forwarded-Proto", "https").set("Authorization", `Bearer ${token}`).expect(403, /not authorized/);
     await request(app()).get("/api/projects/project-one/credentials")
       .set("Host", "localhost").set("X-Forwarded-Proto", "https").set("Authorization", `Bearer ${token}`).expect(403, /credential_admin/);
+    await request(app()).post("/api/chat-providers/connections")
+      .set("Host", "localhost").set("X-Forwarded-Proto", "https").set("Authorization", `Bearer ${token}`).expect(403, /credential_admin/);
+    await request(app()).post("/api/chat-providers/connections/connection-1/verify")
+      .set("Host", "localhost").set("X-Forwarded-Proto", "https").set("Authorization", `Bearer ${token}`).expect(403, /credential_admin/);
+  });
+
+  it("requires remote credential management in addition to credential_admin for provider mutations", async () => {
+    const adminToken = "chat-provider-admin-token";
+    const createApp = (remoteCredentialManagement: boolean) => {
+      const application = express();
+      applyDashboardPreRouteMiddleware(application, {
+        headlessAuthService: new HeadlessAuthService({
+          mode: "service_token",
+          serviceIdentities: [{
+            id: "chat-admin",
+            displayName: "Chat administrator",
+            tokenSha256: createHash("sha256").update(adminToken).digest("hex"),
+            roles: ["credential_admin"],
+            projectIds: ["*"],
+            enabled: true,
+          }],
+          allowInsecureHttp: false,
+          remoteCredentialManagement,
+        }),
+      } as DashboardServerOptions, createLogger({ level: "error" }));
+      application.post("/api/chat-providers/connections", (_req, res) => res.json({ created: true }));
+      return application;
+    };
+    const authorized = (application: express.Express) => request(application)
+      .post("/api/chat-providers/connections")
+      .set("Host", "localhost")
+      .set("X-Forwarded-Proto", "https")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ providerKind: "slack" });
+
+    await authorized(createApp(false)).expect(403, /Remote credential management is disabled/);
+    await authorized(createApp(true)).expect(200, { created: true });
   });
 
   it("accepts an authorized TLS request and returns a correlation id", async () => {
@@ -96,6 +135,8 @@ describe("headless dashboard API authentication", () => {
       headlessAuthService: authService,
     } as DashboardServerOptions, createLogger({ level: "error" }));
     application.post("/api/webhooks/node-flows/path-token", (_req, res) => res.json({ accepted: true }));
+    application.post("/api/chat-providers/ingress/connection-1", (_req, res) => res.json({ accepted: true }));
+    application.post("/api/chat-providers/connections/connection-1/ingress", (_req, res) => res.json({ accepted: true }));
 
     await request(application).post("/api/webhooks/node-flows/path-token")
       .set("Host", "localhost")
@@ -113,6 +154,14 @@ describe("headless dashboard API authentication", () => {
       .set("X-Codeux-Webhook-Secret", "webhook-secret")
       .send({ event: "test" })
       .expect(403, /Cross-site/);
+    await request(application).post("/api/chat-providers/ingress/connection-1")
+      .set("Host", "localhost")
+      .send({ event: "provider-authenticated-separately" })
+      .expect(200, { accepted: true });
+    await request(application).post("/api/chat-providers/connections/connection-1/ingress")
+      .set("Host", "localhost")
+      .send({ event: "legacy-provider-route" })
+      .expect(200, { accepted: true });
   });
 
   it("keeps health live while key-backed readiness fails closed", async () => {

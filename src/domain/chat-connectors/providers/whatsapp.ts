@@ -571,6 +571,9 @@ export const whatsappChatConnectorProfile: WhatsAppChatConnectorProfile = {
     strategy: "configuration_and_live",
     capabilities: ["setup", "authentication", "handshake", "outbound"],
     verifyConfiguration: verifyWhatsAppConfiguration,
+    verifyLive: (mode, setup, secrets) => mode === "official_api"
+      ? verifyWhatsAppOfficialConnection(setup, secrets)
+      : Promise.resolve(verifyWhatsAppConfiguration(mode, setup, secrets)),
   },
   officialApi: {
     webhook: {

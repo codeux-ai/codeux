@@ -57,6 +57,8 @@ export interface DashboardDependencies {
   chatThreadRuntimeService: ChatThreadRuntimeService;
   chatProviderRepository: CoreDependencies["chatProviderRepository"];
   chatProviderSecretService: CoreDependencies["chatProviderSecretService"];
+  chatProviderVerificationService: CoreDependencies["chatProviderVerificationService"];
+  chatConnectorRegistry: CoreDependencies["chatConnectorRegistry"];
   chatProviderIngressService: ChatProviderIngressService;
   chatProviderOutboundService: ChatProviderOutboundService;
   chatProviderSessionRuntimeService: ChatProviderSessionRuntimeService;
@@ -96,6 +98,8 @@ export function createDashboardDependencies(
     connectionChatRepository,
     chatProviderRepository,
     chatProviderSecretService,
+    chatProviderVerificationService,
+    chatConnectorRegistry,
     projectWorkerAssignmentRepository,
     projectAttentionService,
     agentPresetSyncService,
@@ -214,11 +218,13 @@ export function createDashboardDependencies(
   const chatProviderOutboundService = new ChatProviderOutboundService({
     chatProviderRepository,
     chatProviderSecretService,
+    connectorRegistry: chatConnectorRegistry,
     logger: logger.child({ component: "chat-provider-outbound-service" }),
   });
   const chatProviderSessionRuntimeService = new ChatProviderSessionRuntimeService({
     chatProviderRepository,
     chatProviderSecretService,
+    connectorRegistry: chatConnectorRegistry,
     logger: logger.child({ component: "chat-provider-session-runtime-service" }),
   });
 
@@ -250,6 +256,7 @@ export function createDashboardDependencies(
   const chatProviderIngressService = new ChatProviderIngressService({
     chatProviderRepository,
     chatProviderSecretService,
+    connectorRegistry: chatConnectorRegistry,
     chatThreadRuntimeService,
     logger: logger.child({ component: "chat-provider-ingress-service" }),
   });
@@ -641,6 +648,8 @@ export function createDashboardDependencies(
     automationSloService: coreDeps.automationSloService,
     chatProviderRepository,
     chatProviderSecretService,
+    chatProviderVerificationService,
+    chatConnectorRegistry,
     chatThreadRuntimeService,
     chatProviderIngressService,
     chatProviderOutboundService,

@@ -1174,14 +1174,15 @@ For preview calls:
 - `remove_session` requires approval confirmation.
 
 For external chat provider calls:
-- `manage_chat_providers` supports `list_provider_definitions`, `list_connections`, `get_connection`, `create_connection`, `update_connection`, `delete_connection`, `list_channel_bindings`, `create_channel_binding`, `update_channel_binding`, `delete_channel_binding`, and `list_outbound_deliveries`.
-- Supported provider kinds are `whatsapp`, `imessage`, `telegram`, `slack`, `microsoft-teams`, and `discord`, delivered through the implemented `managed_bridge`, `webhook`, or `native_bridge` bridge contracts. The tool does not claim direct official API integration with those providers.
+- `manage_chat_providers` supports `list_provider_definitions`, `list_connections`, `get_connection`, `create_connection`, `update_connection`, `delete_connection`, `list_channel_bindings`, `create_channel_binding`, `update_channel_binding`, `delete_channel_binding`, `verify_connection`, `get_health`, `list_deliveries`, `retry_delivery`, `cancel_delivery`, and compatibility action `list_outbound_deliveries`.
+- Supported provider kinds are `whatsapp`, `imessage`, `telegram`, `slack`, `microsoft-teams`, and `discord`. Each typed profile advertises only the `managed_bridge`, `webhook`, `native_bridge`, or `official_api` modes it implements.
 - Connection responses return redacted credential metadata and generated ingress URL guidance; raw `secrets` are not exposed in success responses, validation errors, or approval envelopes.
 - `delete_connection` and `delete_channel_binding` require approval confirmation.
-- `update_connection` requires a one-use approval handshake before replacing a non-empty `secrets` payload. The preflight response is bound to a redacted payload plus secret hash and does not echo secret values.
+- `update_connection` requires a one-use approval handshake before replacing secrets or changing executable/endpoint setup. `retry_delivery` also requires one-use approval. Preflight state is bound to the exact redacted payload and expires after 15 minutes.
 - Channel bindings attach an external channel to a project with optional routing hints, inbound/outbound flags, and `suppressRichWidgets`. Multiple projects may share one external channel; runtime ingress uses selectors and records `disambiguation_needed` instead of guessing when no selector chooses exactly one project.
-- `list_outbound_deliveries` is read-only delivery-state inspection. It can filter by provider connection, channel binding, external channel, delivery status, and limit. Delivery statuses include `pending`, `sending`, `delivered`, `retryable_failure`, `processed`, `failed`, `duplicate`, and `cancelled`.
-- The management surface only configures providers, bindings, setup definitions, ingress URL guidance, and outbound delivery inspection. Authenticated ingress and outbound sending remain runtime services outside this management contract.
+- `list_deliveries` inspects both directions; `list_outbound_deliveries` retains its outbound-only behavior. Results omit payload and lease fields and can filter by provider connection, binding, external channel, direction, status, and limit.
+- `verify_connection` returns sanitized status, timestamp, capabilities, provider error code, retry state, diagnostics, and setup guidance. `get_health` reads persisted counts/outcomes only and never calls provider networks.
+- Project scope is derived from each persisted binding/delivery rather than caller-supplied project IDs. Generated ingress URLs use `/api/chat-providers/ingress/:providerConnectionId`.
 
 Create a webhook-backed connection:
 

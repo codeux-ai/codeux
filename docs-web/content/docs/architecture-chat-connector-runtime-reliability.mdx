@@ -16,6 +16,14 @@ Every outbound attempt claims a SQLite lease. Retry workers are single-flight in
 
 Retryable failures use capped exponential backoff with bounded jitter, while provider `Retry-After` metadata replaces the calculated next-attempt delay. Profile-declared ambiguous transport outcomes are terminal because the provider may already have accepted the send. Manual cancellation writes terminal state before aborting the adapter.
 
+Manual retry is an approved delivery-control operation. MCP approval is one-use and bound to the exact redacted payload; public results omit the stored provider payload.
+
+## Verification and health
+
+The verification service resolves credentials ephemerally, runs profile validation, and performs a bounded live check only for modes that advertise it. Persisted outcomes contain sanitized status, timestamp, capabilities, provider error code, retryability, diagnostics, and setup guidance—never credentials, authorization headers, signed URLs, payload text, or response bodies.
+
+Connector health aggregates persisted counts and last outcomes without network calls. It remains separate from `/health` and `/ready`, so optional connector failures do not make the runtime unready.
+
 ## Resumable sessions and lifecycle
 
 The session runtime consumes each profile's required/session-scope declarations. Managed drivers are optional, so unavailable or disabled connectors never block dashboard readiness. Durable sessions resume after restart with bounded reconnect attempts and one timer/controller per session.

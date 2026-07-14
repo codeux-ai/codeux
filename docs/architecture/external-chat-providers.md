@@ -15,12 +15,12 @@ Supported providers:
 - `microsoft-teams`
 - `discord`
 
-The bridge-mode type includes `managed_bridge`, `webhook`, `native_bridge`, and the additive `official_api` value. A profile advertises only modes it implements; the baseline profiles preserve the existing schemas below and do not yet advertise `official_api`:
+The bridge-mode type includes `managed_bridge`, `webhook`, `native_bridge`, and `official_api`. A profile advertises only modes it implements:
 
-- WhatsApp: managed bridge or webhook.
+- WhatsApp: managed bridge, webhook, or official API.
 - iMessage: managed bridge or macOS native bridge command.
-- Telegram: managed bridge or bot webhook.
-- Slack: managed bridge or Events webhook.
+- Telegram: managed bridge, bot webhook, or official API.
+- Slack: managed bridge, Events webhook, or official API.
 - Microsoft Teams: managed bridge or bot webhook.
 - Discord: bot/webhook gateway.
 
@@ -32,21 +32,25 @@ See [Chat Connector Profiles](../settings/chat-connectors/index.md) for provider
 
 ## MCP management
 
-The `manage_chat_providers` MCP tool exposes provider configuration management and outbound delivery inspection.
+The `manage_chat_providers` MCP tool exposes provider configuration, verification, local health summaries, and durable delivery control.
 
 Supported actions:
 
 - Provider setup definitions: `list_provider_definitions`.
 - Provider connections: `list_connections`, `get_connection`, `create_connection`, `update_connection`, `delete_connection`.
 - Channel bindings: `list_channel_bindings`, `create_channel_binding`, `update_channel_binding`, `delete_channel_binding`.
-- Delivery inspection: `list_outbound_deliveries` for outbound records, optionally filtered by delivery status including `retryable_failure`.
+- Verification and health: `verify_connection` and `get_health`.
+- Delivery inspection and control: `list_deliveries`, compatibility action `list_outbound_deliveries`, `retry_delivery`, and `cancel_delivery`.
 
 Connection and binding responses include stable IDs plus generated ingress URL guidance under `ingressUrls`. Connection responses expose `credentials` with redacted configured-state metadata only; raw `secrets` are never returned.
 
 Approval rules:
 
 - `delete_connection` and `delete_channel_binding` require the standard destructive-action approval handshake.
-- `update_connection` requires a one-use approval handshake before replacing a non-empty `secrets` payload. The approval response is bound to the redacted action payload and does not echo secret values.
+- `update_connection` requires a one-use approval handshake before replacing secrets or changing executable/endpoint setup. The approval is bound to an exact redacted payload hash and does not echo sensitive values.
+- `retry_delivery` requires the same one-use, exact-payload approval because a provider may receive the message again.
+
+MCP ingress guidance always uses the implemented canonical route `/api/chat-providers/ingress/:providerConnectionId`. Project authorization for bindings and deliveries is resolved from the persisted binding; a caller-supplied project filter cannot grant access to a delivery owned by another project.
 
 ## Storage
 
@@ -70,7 +74,7 @@ Bindings allow many projects to point at the same external channel and one proje
 - Connection create/update/list/get/delete.
 - Redacted public reads and unredacted internal reads.
 - Atomic encrypted-envelope create, rotation, and clearing in the same secret-version CAS transaction as connection metadata, plus resumable post-key-readiness sealing of legacy plaintext.
-- Verification reset after authentication, transport, enabled/status, or setup changes while display-name-only edits preserve the last result.
+- Verification reset after authentication, bridge-mode, or setup changes while display-name, enabled, and lifecycle-status edits preserve the last validated configuration.
 - Channel binding create/update/list/get/delete.
 - Atomic inbound duplicate insertion by `(providerConnectionId, externalMessageId)` and atomic expiring replay-receipt insertion.
 - Compare-and-set provider session updates and expiry cleanup.
@@ -108,7 +112,7 @@ Outbound delivery lifecycle:
 - `retryable_failure`: a retryable bridge failure occurred and `next_attempt_at` records the durable schedule (the redacted payload mirrors it for display).
 - `failed`: delivery is terminal, such as disabled outbound routing, missing bridge configuration, non-retryable HTTP response, or exhausted attempts.
 
-Retryable HTTP/network/native bridge failures use exponential backoff. Retry workers acquire bounded delivery leases before network or native command execution; competing workers cannot claim the same row, and expired leases are recoverable after a crash. The dashboard lifecycle starts the outbound retry loop, and status APIs/MCP reads expose delivery status, attempt count, last error, linked conversation message id, and redacted payload state. Secrets are redacted from logs, payloads, stored errors, dashboard responses, and MCP responses.
+Retryable HTTP/network/native bridge failures use exponential backoff. Retry workers acquire bounded delivery leases before network or native command execution; competing workers cannot claim the same row, and expired leases are recoverable after a crash. The dashboard lifecycle starts the outbound retry loop. Public REST/MCP reads expose status, attempt count, retry time, redacted error, and linked IDs, but omit stored payload and lease fields entirely.
 
 ## Dashboard API
 
@@ -122,6 +126,9 @@ Dashboard settings use `src/server/chat-provider-routes.ts` to manage chat provi
 | `POST /api/chat-providers/connections` | Creates a provider connection after validating provider kind, bridge mode, setup fields, display name, booleans, and secret shape. |
 | `PATCH /api/chat-providers/connections/:connectionId` | Updates connection metadata, setup, status, enabled state, bridge mode, or secrets without echoing raw secret values. |
 | `DELETE /api/chat-providers/connections/:connectionId` | Deletes a provider connection and cascades bindings and delivery rows. |
+| `POST /api/chat-providers/connections/:connectionId/verify` | Runs profile configuration validation and any supported live verification, then persists a sanitized outcome. |
+| `GET /api/chat-providers/health` | Returns configured, active, verified, and error counts plus sanitized last outcomes without provider network calls. |
+| `GET /api/chat-providers/diagnostics` | Compatibility alias for the local connector health summary. |
 | `GET /api/chat-providers/channel-bindings` | Lists channel bindings, including same external channel bindings across multiple projects. |
 | `GET /api/chat-providers/connections/:connectionId/channel-bindings` | Lists bindings for one provider connection. |
 | `POST /api/chat-providers/channel-bindings` | Creates a project/channel binding after validating channel id, project id, optional agent preset id, routing hints, metadata, and booleans. |
@@ -129,7 +136,14 @@ Dashboard settings use `src/server/chat-provider-routes.ts` to manage chat provi
 | `DELETE /api/chat-providers/channel-bindings/:bindingId` | Deletes a channel binding. |
 | `GET /api/chat-providers/connections/:connectionId/delivery-status` | Lists recent outbound delivery records for one provider connection. |
 | `GET /api/chat-providers/channel-bindings/:bindingId/delivery-status` | Lists recent outbound delivery records for one channel binding. |
+| `GET /api/chat-providers/deliveries` | Lists sanitized inbound and outbound delivery metadata with direction/status filters. |
+| `GET /api/chat-providers/deliveries/:deliveryId` | Reads one sanitized delivery after persisted project ownership authorization. |
+| `POST /api/chat-providers/deliveries/:deliveryId/retry` | Manually retries an outbound delivery after explicit approval. |
+| `POST /api/chat-providers/deliveries/:deliveryId/cancel` | Cancels a pending or in-flight outbound delivery. |
+| `GET /api/chat-providers/ingress/:providerConnectionId` | Handles provider subscription handshakes without dashboard bearer authentication. |
 | `POST /api/chat-providers/ingress/:providerConnectionId` | Accepts authenticated inbound bridge messages, normalizes provider payloads, deduplicates external message IDs, and posts routed text to dashboard chat threads. |
+
+Remote connection creation/update and verification require `credential_admin`, TLS, and `CODE_UX_REMOTE_CREDENTIAL_MANAGEMENT=true`. This covers encrypted secret changes plus executable-command and provider-endpoint setup. Binding and delivery routes instead authorize the project stored on the binding. Connector verification failures remain optional integration state: health/readiness probes never call providers, and a failed optional connector does not fail `/ready`.
 
 ## Dashboard Settings UI
 

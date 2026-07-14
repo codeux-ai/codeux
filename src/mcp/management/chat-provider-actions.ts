@@ -5,6 +5,8 @@ import type {
   ChatProviderConnectionRecord,
   ChatProviderConnectionStatus,
   ChatProviderDeliveryStatus,
+  ChatProviderDeliveryDirection,
+  ChatProviderMessageDeliveryRecord,
   ChatProviderKind,
   ChatProviderRoutingHints,
   ChatProviderSecretConfig,
@@ -14,6 +16,10 @@ import type {
 import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
 import type { ChatProviderRepository } from "../../repositories/chat-provider-repository.js";
 import type { ChatProviderSecretService } from "../../services/chat-provider-secret-service.js";
+import type { ChatProviderVerificationService } from "../../services/chat-provider-verification-service.js";
+import type { ChatProviderOutboundService } from "../../services/chat-provider-outbound-service.js";
+import { CHAT_CONNECTOR_REGISTRY, type ChatConnectorRegistry } from "../../domain/chat-connectors/registry.js";
+import { redactText } from "../../shared/security/redaction.js";
 import {
   buildMcpApprovalFingerprint,
   managementValidationError,
@@ -31,8 +37,8 @@ const CHAT_PROVIDER_DOMAIN = "chat_providers";
 const DEFAULT_INGRESS_BASE_URL = "http://localhost:4444";
 const SECRET_APPROVAL_TTL_MS = 15 * 60 * 1000;
 const SECRET_APPROVAL_MESSAGE = [
-  "Chat provider secret replacement queued and waiting for human confirmation.",
-  "Ask the user to confirm this exact secret replacement before calling the tool again.",
+  "Chat provider credential or transport replacement queued and waiting for human confirmation.",
+  "Ask the user to confirm this exact secret, executable, or provider-endpoint change before calling the tool again.",
   "DO NOT call this chat provider endpoint again with approval.confirmed: true unless the user explicitly confirms.",
   "This approval is one-use, bound to this exact action and redacted payload, and expires in 15 minutes.",
 ].join(" ");
@@ -58,6 +64,15 @@ const DELIVERY_STATUSES: readonly ChatProviderDeliveryStatus[] = [
   "duplicate",
   "cancelled",
 ];
+const DELIVERY_DIRECTIONS: readonly ChatProviderDeliveryDirection[] = ["inbound", "outbound"];
+
+export interface ChatProviderActionsOptions {
+  chatProviderVerificationService?: ChatProviderVerificationService;
+  chatProviderOutboundService?: ChatProviderOutboundService;
+  connectorRegistry?: ChatConnectorRegistry;
+  authorizeProject?: (projectId: string) => boolean;
+  allowCredentialMutation?: () => boolean;
+}
 
 interface IngressUrls {
   connectionIngressUrl: string;
@@ -104,6 +119,12 @@ function redactSecretPayload(payload: Record<string, unknown>): Record<string, u
     redacted.secrets = {
       configuredKeys: Object.keys(payload.secrets).sort(),
       payloadHash: createHash("sha256").update(stableStringify(payload.secrets)).digest("hex"),
+    };
+  }
+  if (isPlainObject(payload.setup)) {
+    redacted.setup = {
+      configuredKeys: Object.keys(payload.setup).sort(),
+      payloadHash: createHash("sha256").update(stableStringify(payload.setup)).digest("hex"),
     };
   }
   return redacted;
@@ -161,12 +182,12 @@ function normalizeBaseUrl(payload: Record<string, unknown>): string {
 
 function buildIngressUrls(baseUrl: string, providerConnectionId: string, externalChannelId?: string | null): IngressUrls {
   const encodedConnectionId = encodeURIComponent(providerConnectionId);
-  const connectionIngressUrl = `${baseUrl}/api/chat-providers/${encodedConnectionId}/ingress`;
-  const channelIngressUrlTemplate = `${baseUrl}/api/chat-providers/${encodedConnectionId}/channels/{externalChannelId}/ingress`;
+  const connectionIngressUrl = `${baseUrl}/api/chat-providers/ingress/${encodedConnectionId}`;
+  const channelIngressUrlTemplate = `${baseUrl}/api/chat-providers/ingress/${encodedConnectionId}`;
   return {
     connectionIngressUrl,
     channelIngressUrlTemplate,
-    ...(externalChannelId ? { channelIngressUrl: `${baseUrl}/api/chat-providers/${encodedConnectionId}/channels/${encodeURIComponent(externalChannelId)}/ingress` } : {}),
+    ...(externalChannelId ? { channelIngressUrl: connectionIngressUrl } : {}),
   };
 }
 
@@ -197,11 +218,15 @@ function success(action: string, data: Record<string, unknown>): ManagementRespo
 
 export class ChatProviderActions {
   private readonly pendingSecretApprovals = new Map<string, number>();
+  private readonly registry: ChatConnectorRegistry;
 
   constructor(
     private readonly chatProviderRepository: ChatProviderRepository,
     private readonly chatProviderSecretService?: ChatProviderSecretService,
-  ) {}
+    private readonly options: ChatProviderActionsOptions = {},
+  ) {
+    this.registry = options.connectorRegistry ?? CHAT_CONNECTOR_REGISTRY;
+  }
 
   async handleChatProviderAction(args: ManageCodeUxArgs): Promise<ManagementResponseEnvelope> {
     const payload = args.payload || {};
@@ -227,8 +252,18 @@ export class ChatProviderActions {
         return this.updateChannelBinding(args.action, payload);
       case "delete_channel_binding":
         return this.deleteChannelBinding(args, payload);
+      case "verify_connection":
+        return this.verifyConnection(args.action, payload);
+      case "get_health":
+        return this.getHealth(args.action);
+      case "list_deliveries":
+        return this.listDeliveries(args.action, payload);
       case "list_outbound_deliveries":
         return this.listOutboundDeliveries(args.action, payload);
+      case "retry_delivery":
+        return this.retryDelivery(args, payload);
+      case "cancel_delivery":
+        return this.cancelDelivery(args.action, payload);
       default:
         throw new Error(`Unknown chat provider action: ${args.action}`);
     }
@@ -268,6 +303,54 @@ export class ChatProviderActions {
     };
   }
 
+  private requireOneUseApproval(
+    args: ManageCodeUxArgs,
+    payload: Record<string, unknown>,
+    message: string,
+  ): ManagementResponseEnvelope | null {
+    const now = Date.now();
+    this.cleanupSecretApprovals(now);
+    const fingerprint = buildMcpApprovalFingerprint({
+      domain: CHAT_PROVIDER_DOMAIN,
+      action: args.action,
+      payload: redactSecretPayload(payload),
+    });
+    const pendingCreatedAt = this.pendingSecretApprovals.get(fingerprint);
+    if (args.approval?.confirmed === true && pendingCreatedAt !== undefined && now - pendingCreatedAt <= SECRET_APPROVAL_TTL_MS) {
+      this.pendingSecretApprovals.delete(fingerprint);
+      return null;
+    }
+    this.pendingSecretApprovals.set(fingerprint, now);
+    return { approvalRequired: true, approvalMessage: message };
+  }
+
+  private requireCredentialMutationAccess(): void {
+    if (this.options.allowCredentialMutation?.() === false) {
+      throw new Error("Chat provider credential administration is disabled for this MCP client.");
+    }
+  }
+
+  private authorizeProject(projectId: string): void {
+    if (this.options.authorizeProject?.(projectId) === false) {
+      throw new Error("The authenticated MCP principal is not authorized for this project.");
+    }
+  }
+
+  private isProjectAuthorized(projectId: string): boolean {
+    return this.options.authorizeProject?.(projectId) !== false;
+  }
+
+  private authorizeDelivery(delivery: ChatProviderMessageDeliveryRecord): void {
+    const binding = delivery.channelBindingId
+      ? this.chatProviderRepository.getChannelBinding(delivery.channelBindingId)
+      : null;
+    if (!binding) {
+      if (this.options.authorizeProject) throw new Error("Delivery project ownership could not be resolved.");
+      return;
+    }
+    this.authorizeProject(binding.projectId);
+  }
+
   private listProviderDefinitions(action: string, payload: Record<string, unknown>): ManagementResponseEnvelope {
     const providerKind = parseOptionalProviderKind(payload);
     const baseUrl = normalizeBaseUrl(payload);
@@ -279,7 +362,7 @@ export class ChatProviderActions {
           providerKind: schema.kind,
           defaultBridgeMode: schema.defaultBridgeMode,
           supportedBridgeModes: schema.bridgeModes.map((bridge) => bridge.mode),
-          ingressUrlTemplate: `${baseUrl}/api/chat-providers/{providerConnectionId}/channels/{externalChannelId}/ingress`,
+          ingressUrlTemplate: `${baseUrl}/api/chat-providers/ingress/{providerConnectionId}`,
         },
       }));
     return success(action, { providerDefinitions: definitions });
@@ -306,11 +389,28 @@ export class ChatProviderActions {
   private async createConnection(action: string, payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
     const setup = parseOptionalObject<ChatProviderSetupConfig>(payload, "setup");
     const secrets = parseOptionalNullableObject<ChatProviderSecretConfig>(payload, "secrets");
+    const status = parseOptionalEnumStrict(payload, "status", CONNECTION_STATUSES);
+    const providerKind = parseRequiredProviderKind(payload);
+    const bridgeMode = parseOptionalEnumStrict(payload, "bridgeMode", BRIDGE_MODES)
+      ?? this.registry.get(providerKind).setupSchema.defaultBridgeMode;
+    if (secrets !== undefined || setupContainsSensitiveTransport(providerKind, bridgeMode, setup, this.registry)) {
+      this.requireCredentialMutationAccess();
+    }
+    let configurationVerified = false;
+    if (status === "active") {
+      const profile = this.registry.getForMode(providerKind, bridgeMode);
+      const verification = profile.verification.verifyConfiguration(bridgeMode, setup ?? {}, secrets ?? null);
+      if (!verification.valid) throw new Error(verification.issues.join(" "));
+      if (profile.liveTest.available && profile.liveTest.modes.includes(bridgeMode)) {
+        throw new Error("Run verify_connection before activating a connection that requires live verification.");
+      }
+      configurationVerified = true;
+    }
     const input = {
-      providerKind: parseRequiredProviderKind(payload),
+      providerKind,
       displayName: parseRequiredString(payload, "displayName"),
-      bridgeMode: parseOptionalEnumStrict(payload, "bridgeMode", BRIDGE_MODES),
-      status: parseOptionalEnumStrict(payload, "status", CONNECTION_STATUSES),
+      bridgeMode,
+      status,
       enabled: parseOptionalBoolean(payload, "enabled"),
       ...(setup !== undefined ? { setup } : {}),
       ...(secrets !== undefined ? { secrets } : {}),
@@ -318,22 +418,49 @@ export class ChatProviderActions {
     const connection = this.chatProviderSecretService
       ? await this.chatProviderSecretService.createConnection(input)
       : this.chatProviderRepository.createConnection(input);
-    return success(action, { connection: withConnectionIngress(connection, normalizeBaseUrl(payload)) });
+    const verifiedConnection = configurationVerified
+      ? this.chatProviderRepository.updateVerification(connection.id, "verified", {
+        capabilities: [...this.registry.get(providerKind).verification.capabilities],
+        providerErrorCode: null,
+        retryable: false,
+        issues: [],
+      })
+      : connection;
+    return success(action, { connection: withConnectionIngress(verifiedConnection, normalizeBaseUrl(payload)) });
   }
 
   private async updateConnection(args: ManageCodeUxArgs, payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
-    const approval = this.requireSecretReplacementApproval(args, payload);
+    const connectionId = parseConnectionId(payload);
+    const existing = this.chatProviderRepository.getConnection(connectionId);
+    if (!existing) throw new Error(`Chat provider connection not found: ${connectionId}`);
+    const setup = parseOptionalObject<ChatProviderSetupConfig>(payload, "setup");
+    const secrets = parseOptionalNullableObject<ChatProviderSecretConfig>(payload, "secrets");
+    const transportChanged = payload.bridgeMode !== undefined || setup !== undefined || secrets !== undefined;
+    const requestedBridgeMode = parseOptionalEnumStrict(payload, "bridgeMode", BRIDGE_MODES);
+    const sensitiveTransportChanged = secrets !== undefined
+      || setupContainsSensitiveTransport(existing.providerKind, requestedBridgeMode ?? existing.bridgeMode, setup, this.registry)
+      || (requestedBridgeMode !== undefined && (
+        bridgeUsesSensitiveTransport(existing.providerKind, existing.bridgeMode, this.registry)
+        || bridgeUsesSensitiveTransport(existing.providerKind, requestedBridgeMode, this.registry)
+      ));
+    if (sensitiveTransportChanged) this.requireCredentialMutationAccess();
+    const approval = hasNonEmptySecretPayload(secrets) || sensitiveTransportChanged
+      ? this.requireOneUseApproval(args, payload, SECRET_APPROVAL_MESSAGE)
+      : this.requireSecretReplacementApproval(args, payload);
     if (approval) {
       return approval;
     }
-
-    const setup = parseOptionalObject<ChatProviderSetupConfig>(payload, "setup");
-    const secrets = parseOptionalNullableObject<ChatProviderSecretConfig>(payload, "secrets");
-    const connectionId = parseConnectionId(payload);
+    const requestedStatus = parseOptionalEnumStrict(payload, "status", CONNECTION_STATUSES);
+    if (requestedStatus === "active") {
+      await this.options.chatProviderVerificationService?.validateActivation(connectionId);
+      if (!this.options.chatProviderVerificationService || transportChanged) {
+        throw new Error("Verify the chat provider connection before activating it.");
+      }
+    }
     const input = {
       displayName: parseOptionalString(payload, "displayName"),
-      bridgeMode: parseOptionalEnumStrict(payload, "bridgeMode", BRIDGE_MODES),
-      status: parseOptionalEnumStrict(payload, "status", CONNECTION_STATUSES),
+      bridgeMode: requestedBridgeMode,
+      status: requestedStatus ?? (transportChanged && existing.status === "active" ? "draft" : undefined),
       enabled: parseOptionalBoolean(payload, "enabled"),
       ...(setup !== undefined ? { setup } : {}),
       ...(secrets !== undefined ? { secrets } : {}),
@@ -346,12 +473,15 @@ export class ChatProviderActions {
 
   private deleteConnection(args: ManageCodeUxArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
     const connectionId = parseConnectionId(payload);
-    if (args.approval?.confirmed !== true) {
-      return {
-        approvalRequired: true,
-        approvalMessage: `Deleting chat provider connection ${connectionId} also removes its channel bindings and delivery records. Confirm before retrying with approval.confirmed set to true.`,
-      };
+    for (const binding of this.chatProviderRepository.listChannelBindings({ providerConnectionId: connectionId })) {
+      this.authorizeProject(binding.projectId);
     }
+    const approval = this.requireOneUseApproval(
+      args,
+      payload,
+      `Deleting chat provider connection ${connectionId} also removes its channel bindings and delivery records. Confirm before retrying with approval.confirmed set to true.`,
+    );
+    if (approval) return approval;
     return success(args.action, {
       providerConnectionId: connectionId,
       deleted: this.chatProviderRepository.deleteConnection(connectionId),
@@ -366,7 +496,8 @@ export class ChatProviderActions {
       projectId: parseOptionalString(payload, "projectId"),
       externalChannelId: parseOptionalString(payload, "externalChannelId"),
       enabledOnly: parseOptionalBoolean(payload, "enabledOnly"),
-    }).filter((binding) => !projectIds || projectIds.includes(binding.projectId))
+    }).filter((binding) => this.isProjectAuthorized(binding.projectId))
+      .filter((binding) => !projectIds || projectIds.includes(binding.projectId))
       .map((binding) => withBindingIngress(binding, baseUrl));
     return success(action, { channelBindings: bindings });
   }
@@ -374,11 +505,13 @@ export class ChatProviderActions {
   private createChannelBinding(action: string, payload: Record<string, unknown>): ManagementResponseEnvelope {
     const externalChannelMetadata = parseOptionalNullableObject<ExternalChannelMetadata>(payload, "externalChannelMetadata");
     const routingHints = parseOptionalNullableObject<ChatProviderRoutingHints>(payload, "routingHints");
+    const projectId = parseRequiredString(payload, "projectId");
+    this.authorizeProject(projectId);
     const binding = this.chatProviderRepository.createChannelBinding({
       providerConnectionId: parseConnectionId(payload),
       externalChannelId: parseRequiredString(payload, "externalChannelId"),
       externalChannelName: parseRequiredString(payload, "externalChannelName"),
-      projectId: parseRequiredString(payload, "projectId"),
+      projectId,
       agentPresetId: parseOptionalNullableString(payload, "agentPresetId"),
       enabled: parseOptionalBoolean(payload, "enabled"),
       inboundEnabled: parseOptionalBoolean(payload, "inboundEnabled"),
@@ -393,9 +526,15 @@ export class ChatProviderActions {
   private updateChannelBinding(action: string, payload: Record<string, unknown>): ManagementResponseEnvelope {
     const externalChannelMetadata = parseOptionalNullableObject<ExternalChannelMetadata>(payload, "externalChannelMetadata");
     const routingHints = parseOptionalNullableObject<ChatProviderRoutingHints>(payload, "routingHints");
-    const binding = this.chatProviderRepository.updateChannelBinding(parseChannelBindingId(payload), {
+    const bindingId = parseChannelBindingId(payload);
+    const existing = this.chatProviderRepository.getChannelBinding(bindingId);
+    if (!existing) throw new Error(`Chat provider channel binding not found: ${bindingId}`);
+    this.authorizeProject(existing.projectId);
+    const projectId = parseOptionalString(payload, "projectId");
+    if (projectId) this.authorizeProject(projectId);
+    const binding = this.chatProviderRepository.updateChannelBinding(bindingId, {
       externalChannelName: parseOptionalString(payload, "externalChannelName"),
-      projectId: parseOptionalString(payload, "projectId"),
+      projectId,
       agentPresetId: parseOptionalNullableString(payload, "agentPresetId"),
       enabled: parseOptionalBoolean(payload, "enabled"),
       inboundEnabled: parseOptionalBoolean(payload, "inboundEnabled"),
@@ -409,12 +548,15 @@ export class ChatProviderActions {
 
   private deleteChannelBinding(args: ManageCodeUxArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
     const channelBindingId = parseChannelBindingId(payload);
-    if (args.approval?.confirmed !== true) {
-      return {
-        approvalRequired: true,
-        approvalMessage: `Deleting chat provider channel binding ${channelBindingId} stops routing for that external channel/project pair. Confirm before retrying with approval.confirmed set to true.`,
-      };
-    }
+    const existing = this.chatProviderRepository.getChannelBinding(channelBindingId);
+    if (!existing) throw new Error(`Chat provider channel binding not found: ${channelBindingId}`);
+    this.authorizeProject(existing.projectId);
+    const approval = this.requireOneUseApproval(
+      args,
+      payload,
+      `Deleting chat provider channel binding ${channelBindingId} stops routing for that external channel/project pair. Confirm before retrying with approval.confirmed set to true.`,
+    );
+    if (approval) return approval;
     return success(args.action, {
       channelBindingId,
       deleted: this.chatProviderRepository.deleteChannelBinding(channelBindingId),
@@ -434,6 +576,107 @@ export class ChatProviderActions {
       ...(deliveryStatus ? { status: deliveryStatus } : {}),
       limit,
     });
-    return success(action, { deliveries });
+    const authorized = deliveries.filter((delivery) => {
+      try {
+        this.authorizeDelivery(delivery);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    return success(action, { deliveries: authorized.map(sanitizeDelivery) });
   }
+
+  private async verifyConnection(action: string, payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
+    this.requireCredentialMutationAccess();
+    if (!this.options.chatProviderVerificationService) throw new Error("Chat provider verification is unavailable.");
+    const verification = await this.options.chatProviderVerificationService.verifyConnection(parseConnectionId(payload));
+    return success(action, { verification });
+  }
+
+  private getHealth(action: string): ManagementResponseEnvelope {
+    if (!this.options.chatProviderVerificationService) throw new Error("Chat provider health diagnostics are unavailable.");
+    return success(action, { health: this.options.chatProviderVerificationService.getHealth() });
+  }
+
+  private listDeliveries(action: string, payload: Record<string, unknown>): ManagementResponseEnvelope {
+    const providerConnectionId = parseOptionalString(payload, "providerConnectionId") ?? parseOptionalString(payload, "connectionId");
+    const channelBindingId = parseOptionalString(payload, "channelBindingId") ?? parseOptionalString(payload, "bindingId");
+    const externalChannelId = parseOptionalString(payload, "externalChannelId");
+    const status = parseOptionalEnumStrict(payload, "deliveryStatus", DELIVERY_STATUSES);
+    const direction = parseOptionalEnumStrict(payload, "direction", DELIVERY_DIRECTIONS);
+    const limit = parseOptionalIntegerStrict(payload, "limit", { min: 1, max: 500 }) ?? 100;
+    const deliveries = this.chatProviderRepository.listDeliveries({
+      ...(providerConnectionId ? { providerConnectionId } : {}),
+      ...(channelBindingId ? { channelBindingId } : {}),
+      ...(externalChannelId ? { externalChannelId } : {}),
+      ...(status ? { status } : {}),
+      ...(direction ? { direction } : {}),
+      limit,
+    }).filter((delivery) => {
+      try {
+        this.authorizeDelivery(delivery);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    return success(action, { deliveries: deliveries.map(sanitizeDelivery) });
+  }
+
+  private async retryDelivery(args: ManageCodeUxArgs, payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
+    if (!this.options.chatProviderOutboundService) throw new Error("Chat provider delivery control is unavailable.");
+    const deliveryId = parseRequiredString(payload, "deliveryId");
+    const delivery = this.chatProviderRepository.getDelivery(deliveryId);
+    if (!delivery) throw new Error(`Chat provider delivery not found: ${deliveryId}`);
+    this.authorizeDelivery(delivery);
+    const approval = this.requireOneUseApproval(
+      args,
+      payload,
+      `Retrying chat provider delivery ${deliveryId} can send a provider message again. Confirm this exact delivery retry before calling with approval.confirmed true.`,
+    );
+    if (approval) return approval;
+    return success(args.action, { delivery: sanitizeDelivery(await this.options.chatProviderOutboundService.retryDelivery(deliveryId)) });
+  }
+
+  private async cancelDelivery(action: string, payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
+    if (!this.options.chatProviderOutboundService) throw new Error("Chat provider delivery control is unavailable.");
+    const deliveryId = parseRequiredString(payload, "deliveryId");
+    const delivery = this.chatProviderRepository.getDelivery(deliveryId);
+    if (!delivery) throw new Error(`Chat provider delivery not found: ${deliveryId}`);
+    this.authorizeDelivery(delivery);
+    return success(action, { delivery: sanitizeDelivery(await this.options.chatProviderOutboundService.cancelDelivery(deliveryId)) });
+  }
+}
+
+function setupContainsSensitiveTransport(
+  providerKind: ChatProviderKind,
+  bridgeMode: ChatProviderBridgeMode | undefined,
+  setup: ChatProviderSetupConfig | undefined,
+  registry: ChatConnectorRegistry,
+): boolean {
+  if (!setup) return false;
+  const profile = registry.get(providerKind);
+  const resolvedMode = bridgeMode ?? profile.setupSchema.defaultBridgeMode;
+  const schema = profile.setupSchema.bridgeModes.find((candidate) => candidate.mode === resolvedMode);
+  return schema?.setupFields.some((field) => (field.type === "command" || field.type === "url") && field.key in setup) === true;
+}
+
+function bridgeUsesSensitiveTransport(
+  providerKind: ChatProviderKind,
+  bridgeMode: ChatProviderBridgeMode,
+  registry: ChatConnectorRegistry,
+): boolean {
+  const schema = registry.get(providerKind).setupSchema.bridgeModes.find((candidate) => candidate.mode === bridgeMode);
+  return schema?.setupFields.some((field) => field.type === "command" || field.type === "url") === true;
+}
+
+function sanitizeDelivery(delivery: ChatProviderMessageDeliveryRecord): Record<string, unknown> {
+  const { payload: _payload, leaseOwner: _leaseOwner, leaseExpiresAt: _leaseExpiresAt, ...safe } = delivery;
+  return {
+    ...safe,
+    lastError: safe.lastError
+      ? redactText(safe.lastError).replace(/https?:\/\/[^\s)\]}]+/gi, "[REDACTED_URL]").slice(0, 500)
+      : null,
+  };
 }

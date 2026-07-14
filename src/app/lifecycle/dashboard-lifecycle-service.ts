@@ -105,6 +105,8 @@ import type {
 import type { ProjectInitializationStateService } from "../../services/project-initialization-state-service.js";
 import type { CredentialBroker } from "../../services/credentials/credential-broker.js";
 import type { ChatProviderSecretService } from "../../services/chat-provider-secret-service.js";
+import type { ChatProviderVerificationService } from "../../services/chat-provider-verification-service.js";
+import type { ChatConnectorRegistry } from "../../domain/chat-connectors/registry.js";
 
 const updateCheckerService = new UpdateCheckerService();
 
@@ -124,6 +126,8 @@ export interface BootDashboardDeps {
   connectionChatRepository: ConnectionChatRepository;
   chatProviderRepository: ChatProviderRepository;
   chatProviderSecretService?: ChatProviderSecretService;
+  chatProviderVerificationService?: ChatProviderVerificationService;
+  chatConnectorRegistry?: ChatConnectorRegistry;
   projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   projectAttentionRepository: ProjectAttentionRepository;
@@ -529,6 +533,9 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     agentPresetRepository: deps.agentPresetRepository,
     chatProviderRepository: deps.chatProviderRepository,
     chatProviderSecretService: deps.chatProviderSecretService,
+    chatProviderVerificationService: deps.chatProviderVerificationService,
+    chatProviderOutboundService: deps.chatProviderOutboundService,
+    chatConnectorRegistry: deps.chatConnectorRegistry,
     chatProviderIngressService: deps.chatProviderIngressService,
     speechTranscriptionService: deps.speechTranscriptionService,
     speechSynthesisService: deps.speechSynthesisService,

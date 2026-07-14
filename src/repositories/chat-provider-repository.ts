@@ -804,6 +804,14 @@ export class ChatProviderRepository {
       clauses.push("d.direction = ?");
       params.push(this.requireDeliveryDirection(options.direction));
     }
+    if (options.externalChannelId) {
+      clauses.push("d.external_channel_id = ?");
+      params.push(this.requireNonEmpty(options.externalChannelId, "externalChannelId"));
+    }
+    if (options.status) {
+      clauses.push("d.status = ?");
+      params.push(this.requireDeliveryStatus(options.status));
+    }
     const boundedLimit = Math.max(1, Math.min(Math.trunc(options.limit ?? 100), 500));
     const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
     const rows = this.db.prepare(`
@@ -1326,9 +1334,7 @@ export class ChatProviderRepository {
       enabled,
       setup,
       transportChanged: bridgeMode !== existing.bridgeMode
-        || this.stringifyJson(setup) !== this.stringifyJson(existing.setup)
-        || enabled !== existing.enabled
-        || status !== existing.status,
+        || this.stringifyJson(setup) !== this.stringifyJson(existing.setup),
     };
   }
 

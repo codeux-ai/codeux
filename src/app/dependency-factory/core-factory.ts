@@ -81,6 +81,8 @@ import { AutomationAuditExportService } from "../../services/automation-audit-ex
 import { HeadlessOperationalReadinessService } from "../../services/headless-operational-readiness-service.js";
 import { AutomationSloService } from "../../services/automation-slo-service.js";
 import { ChatProviderSecretService } from "../../services/chat-provider-secret-service.js";
+import { ChatProviderVerificationService } from "../../services/chat-provider-verification-service.js";
+import { CHAT_CONNECTOR_REGISTRY, type ChatConnectorRegistry } from "../../domain/chat-connectors/registry.js";
 
 export interface CoreDependencies {
   providerRunner: IProviderRunner;
@@ -100,6 +102,8 @@ export interface CoreDependencies {
   connectionChatRepository: ConnectionChatRepository;
   chatProviderRepository: ChatProviderRepository;
   chatProviderSecretService: ChatProviderSecretService;
+  chatProviderVerificationService: ChatProviderVerificationService;
+  chatConnectorRegistry: ChatConnectorRegistry;
   workerEndpointRepository: WorkerEndpointRepository;
   projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   qaReviewRepository: QaReviewRepository;
@@ -259,6 +263,13 @@ export function createCoreDependencies(
   );
   const chatProviderRepository = new ChatProviderRepository(appDbStorage);
   const chatProviderSecretService = new ChatProviderSecretService(chatProviderRepository, credentialKeyProvider);
+  const chatConnectorRegistry = CHAT_CONNECTOR_REGISTRY;
+  const chatProviderVerificationService = new ChatProviderVerificationService({
+    chatProviderRepository,
+    chatProviderSecretService,
+    connectorRegistry: chatConnectorRegistry,
+    logger: logger.child({ component: "chat-provider-verification-service" }),
+  });
   void chatProviderSecretService.migrateLegacySecrets().then((result) => {
     if (result.status !== "ready") {
       logger.warn("Connector secret migration is awaiting secure key readiness", {
@@ -418,6 +429,8 @@ export function createCoreDependencies(
     connectionChatRepository,
     chatProviderRepository,
     chatProviderSecretService,
+    chatProviderVerificationService,
+    chatConnectorRegistry,
     workerEndpointRepository,
     projectWorkerAssignmentRepository,
     qaReviewRepository,
