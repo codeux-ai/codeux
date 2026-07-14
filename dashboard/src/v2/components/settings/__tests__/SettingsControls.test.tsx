@@ -32,6 +32,7 @@ import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../lib/settings";
 import { dashboardSettingsToProjectSettings } from "../../../lib/settings-view-models";
 import type { ProjectSettings, SystemSettings, TechstackCatalogEntrySettings } from "../../../../types";
 import { SettingsSmartFindSearch } from "../../../SettingsPage";
+import { DashboardI18nProvider } from "../../../i18n";
 
 const defaultInnerHeight = window.innerHeight;
 const interactionStyle = { transitionDuration: "200ms", transitionTimingFunction: "ease" };
@@ -1331,7 +1332,7 @@ describe("SettingsControls Accessibility", () => {
 
   it("SettingsContentPanels can suppress the active panel strip for a shared command/status bar", () => {
     render(
-      <SettingsContentPanels
+      <DashboardI18nProvider storage={null}><SettingsContentPanels
         showActivePanelStatus={false}
         state={{
           activeCategory: "general",
@@ -1342,7 +1343,7 @@ describe("SettingsControls Accessibility", () => {
           loading: false,
           resettingProject: false,
         } as any}
-      />
+      /></DashboardI18nProvider>
     );
 
     expect(screen.queryByText("Active panel")).not.toBeInTheDocument();
@@ -1352,7 +1353,7 @@ describe("SettingsControls Accessibility", () => {
   it("SettingsContentPanels routes the Techstacks category to the catalog panel", () => {
     const projectSettings = createProjectSettings();
     render(
-      <SettingsContentPanels
+      <DashboardI18nProvider storage={null}><SettingsContentPanels
         state={{
           activeCategory: "techstacks",
           activeScope: "system",
@@ -1365,7 +1366,7 @@ describe("SettingsControls Accessibility", () => {
           systemSettings: createSystemSettings(projectSettings),
           updateSystem: () => {},
         } as any}
-      />
+      /></DashboardI18nProvider>
     );
 
     expect(screen.getByText("Techstacks Catalog")).toBeInTheDocument();
@@ -1375,14 +1376,14 @@ describe("SettingsControls Accessibility", () => {
   it("SettingsTechstacksPanel protects the built-in Code UX Stack from removal", () => {
     const projectSettings = createProjectSettings();
     render(
-      <SettingsTechstacksPanel
+      <DashboardI18nProvider storage={null}><SettingsTechstacksPanel
         state={{
           activeScope: "system",
           activeSaving: false,
           systemSettings: createSystemSettings(projectSettings),
           updateSystem: () => {},
         } as any}
-      />
+      /></DashboardI18nProvider>
     );
 
     expect(screen.getByText("Built-in stack protected")).toBeInTheDocument();
@@ -1417,7 +1418,7 @@ describe("SettingsControls Accessibility", () => {
       );
     };
 
-    render(<Harness />);
+    render(<DashboardI18nProvider storage={null}><Harness /></DashboardI18nProvider>);
 
     await user.click(screen.getByRole("radio", { name: /Unassigned/ }));
 
@@ -1451,10 +1452,49 @@ describe("SettingsControls Accessibility", () => {
       );
     };
 
-    render(<Harness />);
+    render(<DashboardI18nProvider storage={null}><Harness /></DashboardI18nProvider>);
 
     await user.click(screen.getByRole("radio", { name: /Custom Web/ }));
     await user.click(screen.getByRole("radio", { name: /Web app/ }));
+
+    expect(latestProjectSettings.techstack).toEqual({
+      selectedTechstackId: "custom-web",
+      applicationKind: "web",
+    });
+  });
+
+  it("SettingsTechstacksPanel localizes German controls without translating saved values", async () => {
+    const user = userEvent.setup();
+    let latestProjectSettings = createProjectSettings({
+      selectedTechstackId: null,
+      applicationKind: null,
+    });
+    const systemSettings = createSystemSettings(latestProjectSettings);
+    const Harness = () => {
+      const [projectSettings, setProjectSettings] = useState(latestProjectSettings);
+      latestProjectSettings = projectSettings;
+      return (
+        <SettingsTechstacksPanel
+          state={{
+            activeScope: "project",
+            activeSaving: false,
+            projectSources: { "techstack.selectedTechstackId": "project" },
+            selectedProject: { id: "project-1", name: "Test project" },
+            projectSettings,
+            systemSettings,
+            updateEditableSettings: (recipe: (current: ProjectSettings) => ProjectSettings) => setProjectSettings(recipe),
+            getFieldReset: () => undefined,
+          } as any}
+        />
+      );
+    };
+
+    render(<DashboardI18nProvider initialLocale="de" storage={null}><Harness /></DashboardI18nProvider>);
+    expect(screen.getByText("Projekt-Technologie-Stack")).toBeInTheDocument();
+    expect(screen.getByText("Projektüberschreibung")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Custom Web/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: /Custom Web/ }));
+    await user.click(screen.getByRole("radio", { name: /Web-App/ }));
 
     expect(latestProjectSettings.techstack).toEqual({
       selectedTechstackId: "custom-web",
