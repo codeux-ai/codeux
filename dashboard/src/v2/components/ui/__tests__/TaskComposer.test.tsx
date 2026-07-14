@@ -4,7 +4,6 @@ import { cleanup, render, screen, waitFor, fireEvent } from "@testing-library/pr
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { TaskComposer } from "../TaskComposer.js";
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { DashboardI18nProvider } from "../../../i18n/context.js";
 
 expect.extend(matchers);
 
@@ -158,36 +157,5 @@ describe("TaskComposer", () => {
       expect(screen.getByText("Submit failed")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Retry/i })).toBeInTheDocument();
     });
-  });
-
-  test("supports German create validation and preserves persisted task content", async () => {
-    const onSubmit = vi.fn();
-    render(
-      <DashboardI18nProvider initialLocale="de" storage={null}>
-        <TaskComposer
-          sprints={dummySprints as any}
-          availableTasks={dummyTasks as any}
-          agentPresets={agentPresets as any}
-          onClose={() => {}}
-          onSubmit={onSubmit}
-        />
-      </DashboardI18nProvider>,
-    );
-
-    expect(screen.getByRole("heading", { name: "Aufgabe erstellen" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Worker-Agent" })).toHaveTextContent("Integrierter Worker-Agent");
-    const form = screen.getByRole("button", { name: "Aufgabe erstellen" }).closest("form");
-    fireEvent.submit(form!);
-    expect(await screen.findByText("Ein Aufgabentitel ist erforderlich.")).toBeInTheDocument();
-
-    const title = "Keep API_TASK_42 unchanged";
-    const description = "Provider output remains verbatim.";
-    const prompt = "## Prompt\nDo not translate `task_key`.";
-    fireEvent.input(screen.getByLabelText(/Aufgabentitel/), { target: { value: title } });
-    fireEvent.input(screen.getByLabelText(/Beschreibung/), { target: { value: description } });
-    fireEvent.input(screen.getByLabelText(/Markdown-Prompt/), { target: { value: prompt } });
-    fireEvent.click(screen.getByRole("button", { name: "Aufgabe erstellen" }));
-
-    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ title, description, promptMarkdown: prompt })));
   });
 });

@@ -5,9 +5,6 @@ import { FilterStrip } from "../ui/FilterStrip.js";
 import { ListWindowSelector } from "../ui/ListWindowSelector.js";
 import { TaskBoardSprintSelector } from "./TaskBoardSprintSelector.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
-import { useOptionalDashboardI18n } from "../../i18n/context.js";
-import { taskMessages } from "../../i18n/messages/tasks.js";
-import { getTaskPriorityLabel, getTaskStatusLabel } from "../../lib/tasks-constants.js";
 
 export type TaskBoardStatusFilter = "all" | TaskStatus;
 export type TaskBoardPriorityFilter = "all" | TaskPriority;
@@ -26,22 +23,22 @@ export interface TaskBoardFiltersProps {
   onListWindowChange: (value: ListWindowOption) => void;
 }
 
-function getStatusFilterLabel(filter: TaskBoardStatusFilter, locale: "en" | "de"): string {
+function getStatusFilterLabel(filter: TaskBoardStatusFilter): string {
   switch (filter) {
-    case "in_progress": return getTaskStatusLabel(filter, locale);
-    case "pending": return getTaskStatusLabel(filter, locale);
-    case "completed": return getTaskStatusLabel(filter, locale);
+    case "in_progress": return "Running";
+    case "pending": return "Queued";
+    case "completed": return "Done";
     case "all":
     default: return "All";
   }
 }
 
-function getPriorityFilterLabel(filter: TaskBoardPriorityFilter, locale: "en" | "de"): string {
+function getPriorityFilterLabel(filter: TaskBoardPriorityFilter): string {
   switch (filter) {
-    case "critical": return getTaskPriorityLabel(filter, locale);
-    case "high": return getTaskPriorityLabel(filter, locale);
-    case "medium": return getTaskPriorityLabel(filter, locale);
-    case "low": return getTaskPriorityLabel(filter, locale);
+    case "critical": return "Critical";
+    case "high": return "High";
+    case "medium": return "Medium";
+    case "low": return "Low";
     case "all":
     default: return "Any Priority";
   }
@@ -61,13 +58,7 @@ export const TaskBoardFilters: FunctionComponent<TaskBoardFiltersProps> = ({
   onListWindowChange,
 }) => {
   const interactionTokens = useInteractionTokens();
-  const { locale, translate, formatNumber } = useOptionalDashboardI18n();
-  const statusLabel = statusFilter === "all" ? translate(taskMessages, "all") : getStatusFilterLabel(statusFilter, locale);
-  const priorityLabel = priorityFilter === "all" ? translate(taskMessages, "anyPriority") : getPriorityFilterLabel(priorityFilter, locale);
-  const windowLabel = typeof listWindow === "string"
-    ? translate(taskMessages, "allTasksWindow")
-    : translate(taskMessages, "tasksPerLaneWindow", { count: formatNumber(listWindow) });
-  const filterAnnouncement = translate(taskMessages, "filterAnnouncement", { status: statusLabel, priority: priorityLabel, window: windowLabel });
+  const filterAnnouncement = `Task filters changed. Status ${getStatusFilterLabel(statusFilter)}. Priority ${getPriorityFilterLabel(priorityFilter)}. Showing ${listWindow === "All" ? "all tasks" : `${listWindow} tasks per lane`}.`;
 
   return (
     <div
@@ -98,25 +89,25 @@ export const TaskBoardFilters: FunctionComponent<TaskBoardFiltersProps> = ({
       </div>
 
       <FilterStrip
-        ariaLabel={translate(taskMessages, "taskStatusFilter")}
+        ariaLabel="Task status filter"
         options={[
-          { value: "all", label: translate(taskMessages, "all"), ariaLabel: translate(taskMessages, "showAllStatuses") },
-          { value: "in_progress", label: translate(taskMessages, "running"), ariaLabel: translate(taskMessages, "showRunningTasks") },
-          { value: "pending", label: translate(taskMessages, "queued"), ariaLabel: translate(taskMessages, "showQueuedTasks") },
-          { value: "completed", label: translate(taskMessages, "done"), ariaLabel: translate(taskMessages, "showCompletedTasks") },
+          { value: "all", label: "All", ariaLabel: "Show all task statuses" },
+          { value: "in_progress", label: "Running", ariaLabel: "Show running tasks" },
+          { value: "pending", label: "Queued", ariaLabel: "Show queued tasks" },
+          { value: "completed", label: "Done", ariaLabel: "Show completed tasks" },
         ]}
         active={statusFilter}
         onChange={onStatusFilterChange}
       />
 
       <FilterStrip
-        ariaLabel={translate(taskMessages, "taskPriorityFilter")}
+        ariaLabel="Task priority filter"
         options={[
-          { value: "all", label: translate(taskMessages, "anyPriority"), ariaLabel: translate(taskMessages, "showAnyPriority") },
-          { value: "critical", label: translate(taskMessages, "critical"), ariaLabel: translate(taskMessages, "showCriticalTasks") },
-          { value: "high", label: translate(taskMessages, "high"), ariaLabel: translate(taskMessages, "showHighTasks") },
-          { value: "medium", label: translate(taskMessages, "medium"), ariaLabel: translate(taskMessages, "showMediumTasks") },
-          { value: "low", label: translate(taskMessages, "low"), ariaLabel: translate(taskMessages, "showLowTasks") },
+          { value: "all", label: "Any Priority", ariaLabel: "Show any task priority" },
+          { value: "critical", label: "Critical", ariaLabel: "Show critical priority tasks" },
+          { value: "high", label: "High", ariaLabel: "Show high priority tasks" },
+          { value: "medium", label: "Medium", ariaLabel: "Show medium priority tasks" },
+          { value: "low", label: "Low", ariaLabel: "Show low priority tasks" },
         ]}
         active={priorityFilter}
         onChange={onPriorityFilterChange}
@@ -126,9 +117,9 @@ export const TaskBoardFilters: FunctionComponent<TaskBoardFiltersProps> = ({
         <ListWindowSelector
           value={listWindow}
           onChange={onListWindowChange}
-          label={translate(taskMessages, "show")}
-          ariaLabel={translate(taskMessages, "selectCardsPerLane")}
-          itemLabel={translate(taskMessages, "taskCards")}
+          label="Show"
+          ariaLabel="Select number of task cards per lane"
+          itemLabel="task cards"
         />
       </div>
     </div>

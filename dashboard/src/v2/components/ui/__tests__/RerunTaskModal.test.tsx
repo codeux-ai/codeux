@@ -4,7 +4,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/pr
 import { afterEach, describe, expect, test, vi } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { RerunTaskModal } from "../RerunTaskModal.js";
-import { DashboardI18nProvider } from "../../../i18n/context.js";
 
 expect.extend(matchers);
 
@@ -136,7 +135,7 @@ describe("RerunTaskModal", () => {
     fireEvent.click(screen.getByRole("button", { name: /Retry/i }));
 
     await waitFor(() => {
-      expect(screen.getAllByRole("status").some((element) => /Task rerun started/i.test(element.textContent ?? ""))).toBe(true);
+      expect(screen.getByRole("status")).toHaveTextContent(/Task rerun started/i);
     });
     expect(onConfirm).toHaveBeenCalledTimes(2);
   });
@@ -160,32 +159,5 @@ describe("RerunTaskModal", () => {
       expect(screen.getByRole("checkbox", { name: /Undo the Git merge/i })).toBeDisabled();
       expect(screen.getByRole("checkbox", { name: /Clear worktree/i })).toBeDisabled();
     });
-  });
-
-  test("supports German rerun modes while preserving task and provider names", async () => {
-    const onConfirm = vi.fn().mockResolvedValue(undefined);
-    render(
-      <DashboardI18nProvider initialLocale="de" storage={null}>
-        <RerunTaskModal
-          task={task as any}
-          allTasks={[task, downstreamTask] as any}
-          currentProvider="provider-instance-alpha"
-          onClose={() => {}}
-          onConfirm={onConfirm}
-        />
-      </DashboardI18nProvider>,
-    );
-
-    expect(screen.getByRole("dialog", { name: "Aufgabe erneut ausführen" })).toHaveTextContent("Implement task flow");
-    expect(screen.getByText(/provider-instance-alpha/)).toBeInTheDocument();
-    const reset = screen.getByRole("checkbox", { name: /Nachgelagerte Aufgaben zurücksetzen/i });
-    const undo = screen.getByRole("checkbox", { name: /Git-Merge rückgängig machen/i });
-    const clear = screen.getByRole("checkbox", { name: /Worktree leeren/i });
-    fireEvent.click(reset);
-    fireEvent.click(clear);
-    expect(undo).toBeChecked();
-    fireEvent.click(screen.getByRole("button", { name: "Aufgabe erneut ausführen" }));
-
-    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ resetDependents: true, clearWorktree: true, undoMerge: true })));
   });
 });

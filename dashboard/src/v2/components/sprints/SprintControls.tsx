@@ -12,6 +12,25 @@ export interface SprintControlsProps {
   isPauseResumePending: boolean;
   onStartStop: () => void;
   onPauseResume: () => void;
+  labels?: SprintControlsLabels;
+}
+
+export interface SprintControlsLabels {
+  pause: string;
+  resume: string;
+  start: string;
+  stop: string;
+  pending: (action: string) => string;
+  pendingLabel: (action: string, sprintName: string) => string;
+  actionLabel: (action: string, sprintName: string) => string;
+  waitForAction: string;
+  waitForActionTitle: string;
+  pauseUnavailable: string;
+  mustRunToPause: string;
+  resumeExecution: string;
+  pauseExecution: string;
+  stopExecution: string;
+  startExecution: string;
 }
 
 export const SprintControls: FunctionComponent<SprintControlsProps> = ({
@@ -22,18 +41,39 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
   onStartStop,
   onPauseResume,
   sprintName,
+  labels,
 }) => {
   const { translate } = useDashboardI18n();
   const resolvedSprintName = sprintName ?? translate(sprintsMessages, "sprint").toLocaleLowerCase();
-  const getActionLabel = (action: string, pending: boolean): string => (
-    sprintName
-      ? translate(sprintsMessages, pending ? "sprintActionPending" : "sprintAction", { action, name: sprintName })
-      : translate(sprintsMessages, pending ? "sprintActionGenericPending" : "sprintActionGeneric", { action })
-  );
+  const resolvedLabels: SprintControlsLabels = labels ?? {
+    pause: translate(sprintsMessages, "pause"),
+    resume: translate(sprintsMessages, "resume"),
+    start: translate(sprintsMessages, "start"),
+    stop: translate(sprintsMessages, "stop"),
+    pending: (action) => translate(sprintsMessages, "primaryPending", { action }),
+    pendingLabel: (action, name) => translate(
+      sprintsMessages,
+      sprintName ? "sprintActionPending" : "sprintActionGenericPending",
+      sprintName ? { action, name } : { action },
+    ),
+    actionLabel: (action, name) => translate(
+      sprintsMessages,
+      sprintName ? "sprintAction" : "sprintActionGeneric",
+      sprintName ? { action, name } : { action },
+    ),
+    waitForAction: translate(sprintsMessages, "waitCurrentAction"),
+    waitForActionTitle: translate(sprintsMessages, "waitCurrentActionNoPeriod"),
+    pauseUnavailable: translate(sprintsMessages, "pauseAfterStart"),
+    mustRunToPause: translate(sprintsMessages, "sprintMustRunToPause"),
+    resumeExecution: translate(sprintsMessages, "resumeExecution"),
+    pauseExecution: translate(sprintsMessages, "pauseExecution"),
+    stopExecution: translate(sprintsMessages, "stopExecution"),
+    startExecution: translate(sprintsMessages, "startExecution"),
+  };
   const interactionTokens = useInteractionTokens();
   const canPauseResume = isActive || isPaused;
-  const pauseResumeLabel = translate(sprintsMessages, isPaused ? "resume" : "pause");
-  const startStopLabel = translate(sprintsMessages, isActive ? "stop" : "start");
+  const pauseResumeLabel = isPaused ? resolvedLabels.resume : resolvedLabels.pause;
+  const startStopLabel = isActive ? resolvedLabels.stop : resolvedLabels.start;
   const isAnyPending = isPauseResumePending || isStartStopPending;
   const controlFeedbackStyle = {
     transitionDuration: interactionTokens.controlFeedback.duration,
@@ -44,14 +84,14 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
     transitionTimingFunction: interactionTokens.asyncFeedback.ease,
   };
   const busyLabel = isPauseResumePending
-      ? translate(sprintsMessages, "primaryPending", { action: pauseResumeLabel })
+    ? resolvedLabels.pending(pauseResumeLabel)
     : isStartStopPending
-      ? translate(sprintsMessages, "primaryPending", { action: startStopLabel })
+      ? resolvedLabels.pending(startStopLabel)
       : null;
   const disabledReason = isAnyPending
-    ? translate(sprintsMessages, "waitCurrentAction")
+    ? resolvedLabels.waitForAction
     : !canPauseResume
-      ? translate(sprintsMessages, "pauseAfterStart")
+      ? resolvedLabels.pauseUnavailable
       : null;
   const reasonId = `sprint-controls-${resolvedSprintName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-reason`;
   const handlePauseResume = () => {
@@ -74,22 +114,22 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
         onClick={handlePauseResume}
         aria-label={
           isPauseResumePending
-            ? getActionLabel(pauseResumeLabel, true)
+            ? resolvedLabels.pendingLabel(pauseResumeLabel, resolvedSprintName)
             : isPaused
-              ? getActionLabel(translate(sprintsMessages, "resume"), false)
-              : getActionLabel(translate(sprintsMessages, "pause"), false)
+              ? resolvedLabels.actionLabel(resolvedLabels.resume, resolvedSprintName)
+              : resolvedLabels.actionLabel(resolvedLabels.pause, resolvedSprintName)
         }
         aria-busy={isPauseResumePending ? "true" : undefined}
         aria-describedby={disabledReason ? reasonId : undefined}
         disabled={!canPauseResume || isAnyPending}
         title={
           isPauseResumePending || isStartStopPending
-            ? translate(sprintsMessages, "waitCurrentActionNoPeriod")
+            ? resolvedLabels.waitForActionTitle
             : !canPauseResume
-              ? translate(sprintsMessages, "sprintMustRunToPause")
+              ? resolvedLabels.mustRunToPause
               : isPaused
-                ? translate(sprintsMessages, "resumeExecution")
-                : translate(sprintsMessages, "pauseExecution")
+                ? resolvedLabels.resumeExecution
+                : resolvedLabels.pauseExecution
         }
         className={`inline-flex min-h-8 min-w-[6.75rem] flex-1 flex-nowrap items-center justify-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-bold leading-tight no-underline decoration-transparent transition-colors hover:no-underline focus:no-underline focus-visible:ring-2 focus-visible:ring-signal-500/30 sm:flex-none ${
           isPaused
@@ -115,20 +155,20 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
         onClick={handleStartStop}
         aria-label={
           isStartStopPending
-            ? getActionLabel(startStopLabel, true)
+            ? resolvedLabels.pendingLabel(startStopLabel, resolvedSprintName)
             : isActive
-              ? getActionLabel(translate(sprintsMessages, "stop"), false)
-              : getActionLabel(translate(sprintsMessages, "start"), false)
+              ? resolvedLabels.actionLabel(resolvedLabels.stop, resolvedSprintName)
+              : resolvedLabels.actionLabel(resolvedLabels.start, resolvedSprintName)
         }
         aria-busy={isStartStopPending ? "true" : undefined}
         aria-describedby={disabledReason ? reasonId : undefined}
         disabled={isAnyPending}
         title={
           isStartStopPending || isPauseResumePending
-            ? translate(sprintsMessages, "waitCurrentActionNoPeriod")
+            ? resolvedLabels.waitForActionTitle
             : isActive
-              ? translate(sprintsMessages, "stopExecution")
-              : translate(sprintsMessages, "startExecution")
+              ? resolvedLabels.stopExecution
+              : resolvedLabels.startExecution
         }
         className={`inline-flex min-h-8 min-w-[6.75rem] flex-1 flex-nowrap items-center justify-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-bold leading-tight no-underline decoration-transparent transition-colors hover:no-underline focus:no-underline focus-visible:ring-2 focus-visible:ring-signal-500/30 sm:flex-none ${
           isActive
@@ -154,7 +194,7 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
         aria-live="polite"
         className={busyLabel ? "basis-full text-left text-[11px] font-bold leading-4 text-signal-600 dark:text-signal-300" : "sr-only"}
       >
-        {busyLabel ? `${busyLabel}. ${translate(sprintsMessages, "waitCurrentAction")}` : disabledReason ?? ""}
+        {busyLabel ? `${busyLabel}. ${resolvedLabels.waitForAction}` : disabledReason ?? ""}
       </span>
     </>
   );

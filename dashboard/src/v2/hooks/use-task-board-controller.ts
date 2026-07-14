@@ -20,14 +20,13 @@ import {
   buildTaskBoardViewModel,
   type TaskBoardViewModel,
 } from "../lib/tasks/task-board-view-model.js";
-import { getTaskStatusLabel } from "../lib/tasks-constants.js";
+import { STATUS_CFG } from "../lib/tasks-constants.js";
 import type { TaskDraft } from "../lib/task-composer-state.js";
 import type { AgentPreset, Sprint, Task, TaskStatus } from "../types.js";
 import { useProjectEffectiveSettings } from "./use-project-effective-settings.js";
 import { useProjectTasks } from "./use-project-tasks.js";
 import { useReducedMotion } from "./use-reduced-motion.js";
 import { useRouteProjectSelection } from "./use-route-project-selection.js";
-import { useOptionalDashboardI18n } from "../i18n/context.js";
 
 export interface TaskBoardController {
   projects: ReturnType<typeof useProjectData>["projects"];
@@ -121,7 +120,6 @@ function useStableArrayValue<T>(value: T[]): T[] {
 }
 
 export function useTaskBoardController(): TaskBoardController {
-  const { locale, formatNumber } = useOptionalDashboardI18n();
   const { projects, selectedProject, selectProject, createProject } = useProjectData();
   const navigate = useNavigate();
   const locationSearch = useRouterState({ select: (state) => state.location.searchStr });
@@ -236,7 +234,6 @@ export function useTaskBoardController(): TaskBoardController {
   const [dropTargetContext, setDropTargetContext] = useState<TaskBoardDropTargetContext | null>(null);
   const [optimisticTasks, setOptimisticTasks] = useState<Task[]>([]);
   const [resolvedTaskId, setResolvedTaskId] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
   const composerRef = useRef<HTMLDivElement>(null);
   const reducedMotion = useReducedMotion();
 
@@ -292,7 +289,6 @@ export function useTaskBoardController(): TaskBoardController {
       subtasks,
       taskPullRequestsEnabled,
       previousTaskViewModels: previousTaskViewModelsRef.current,
-      locale,
     });
   }, [
     tasks,
@@ -307,7 +303,6 @@ export function useTaskBoardController(): TaskBoardController {
     recentEvents,
     subtasks,
     taskPullRequestsEnabled,
-    locale,
   ]);
 
   useEffect(() => {
@@ -336,9 +331,9 @@ export function useTaskBoardController(): TaskBoardController {
 
   const boardCountSummary = useMemo(() => (
     displayBoardViewModel.boardState.columns
-      .map(({ status: columnStatus, count }) => `${getTaskStatusLabel(columnStatus, locale)}: ${formatNumber(count)}`)
+      .map(({ status: columnStatus, count }) => `${STATUS_CFG[columnStatus].label}: ${count}`)
       .join(", ")
-  ), [displayBoardViewModel.boardState.columns, formatNumber, locale]);
+  ), [displayBoardViewModel.boardState.columns]);
   const [boardCountAnnouncement, setBoardCountAnnouncement] = useState("");
   const previousBoardCountSummaryRef = useRef("");
 
@@ -398,7 +393,6 @@ export function useTaskBoardController(): TaskBoardController {
 
   const handleTaskSubmit = useCallback(async (draft: TaskDraft) => {
     if (!selectedProject) return;
-    setActionError(null);
 
     const isEditing = !!editingTask;
     const optId = `opt-${Date.now()}`;
@@ -471,11 +465,8 @@ export function useTaskBoardController(): TaskBoardController {
       });
 
       try {
-        setActionError(null);
         await updateTask(draggedTask.recordId, { status: targetStatus });
         await refreshTasks();
-      } catch (cause) {
-        setActionError(cause instanceof Error ? cause.message : String(cause));
       } finally {
         setOptimisticTasks((prev) => prev.filter((task) => task.recordId !== updatedTask.recordId));
       }
@@ -485,14 +476,9 @@ export function useTaskBoardController(): TaskBoardController {
   }, [draggedTaskId, reducedMotion, refreshTasks, tasks]);
 
   const handleDeleteTask = useCallback(async (task: Task) => {
-    setActionError(null);
-    try {
-      await deleteTask(task.recordId);
-      await Promise.all([refreshTasks(), refreshSprints()]);
-      setEditingTask((prev) => prev?.recordId === task.recordId ? null : prev);
-    } catch (cause) {
-      setActionError(cause instanceof Error ? cause.message : String(cause));
-    }
+    await deleteTask(task.recordId);
+    await Promise.all([refreshTasks(), refreshSprints()]);
+    setEditingTask((prev) => prev?.recordId === task.recordId ? null : prev);
   }, [refreshSprints, refreshTasks]);
 
   const handleEditClick = useCallback((nextTask: Task) => {
@@ -547,7 +533,7 @@ export function useTaskBoardController(): TaskBoardController {
     isTaskScopeReady,
     tasks,
     loading,
-    error: actionError ?? error,
+    error,
     statusFilter,
     setStatusFilter,
     priorityFilter,

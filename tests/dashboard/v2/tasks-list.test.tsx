@@ -1,10 +1,10 @@
 import * as useReducedMotionModule from "../../../dashboard/src/v2/hooks/use-reduced-motion.js";
 /** @vitest-environment happy-dom */
-import { h, Fragment } from "preact";
+import { h, Fragment, type ComponentChildren } from "preact";
 /** @jsx h */
 /** @jsxFrag Fragment */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, cleanup, fireEvent, act } from "@testing-library/preact";
+import { render as testingRender, screen, cleanup, fireEvent, act } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { renderWithI18n } from "../render-with-i18n.js";
 expect.extend(matchers);
@@ -14,6 +14,19 @@ import { TaskBoardSprintSelector } from "../../../dashboard/src/v2/components/ta
 import { ProjectDataProvider } from "../../../dashboard/src/v2/context/project-data.js";
 import gsap from "gsap";
 import * as dashboardApi from "../../../dashboard/src/lib/api/dashboard-api.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
+import type { DashboardLocale } from "../../../dashboard/src/v2/i18n/locales.js";
+
+const render = (ui: ComponentChildren, locale: DashboardLocale = "en") => {
+    const wrap = (children: ComponentChildren) => (
+        <DashboardI18nProvider initialLocale={locale} storage={null}>{children}</DashboardI18nProvider>
+    );
+    const result = testingRender(wrap(ui));
+    return {
+        ...result,
+        rerender: (nextUi: ComponentChildren) => result.rerender(wrap(nextUi)),
+    };
+};
 
 vi.spyOn(useReducedMotionModule, 'useReducedMotion').mockReturnValue(false);
 
@@ -328,6 +341,86 @@ const baseProps: any = {
         expect(progress.firstElementChild).toHaveStyle({ width: "7.5%" });
     });
 
+    it("localizes German filters, task state, actions, counts, and live regions", () => {
+        render(<ProjectDataProvider initialData={null as any}><TasksList pageData={pageData} /></ProjectDataProvider>, "de");
+
+        expect(screen.getByRole("heading", { name: "Aktive Datenströme" })).toBeInTheDocument();
+        expect(screen.getByRole("tab", { name: "Alle Aufgaben" })).toHaveAttribute("aria-selected", "true");
+        expect(screen.getByText("in Bearbeitung")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /Aufgabe task-1 Stoppen: Test Task/i })).toBeInTheDocument();
+        expect(screen.getByRole("region", { name: /Aktiver Datenstrom Sprint One. Laufend. Zu 7,5\s?% abgeschlossen./i })).toBeInTheDocument();
+        expect(screen.getByText("1 Aufgabe")).toBeInTheDocument();
+    });
+
+    it("keeps runtime task durations for terminal, review, and active states in English and German", () => {
+        const statusTasks = [
+            {
+                ...mockTask,
+                id: "completed-task",
+                recordId: "completed-task-record",
+                title: "Completed Task",
+                status: "completed",
+                time: "2m 14s",
+            },
+            {
+                ...mockTask,
+                id: "review-task",
+                recordId: "review-task-record",
+                title: "Review Task",
+                status: "coding_completed",
+                time: "3m 27s",
+            },
+            {
+                ...mockTask,
+                id: "active-task",
+                recordId: "active-task-record",
+                title: "Active Task",
+                status: "in_progress",
+                time: "4m 39s",
+            },
+        ];
+        const statusPageData = {
+            ...pageData,
+            tasks: statusTasks,
+            execution: {
+                ...pageData.execution,
+                taskDispatches: [{ id: "active-dispatch", taskId: "active-task-record", status: "running" }],
+            },
+        };
+
+        const englishView = render(
+            <ProjectDataProvider initialData={null as any}><TasksList pageData={statusPageData} /></ProjectDataProvider>,
+        );
+        expect(screen.getByText("2m 14s")).toBeInTheDocument();
+        expect(screen.getByText("3m 27s")).toBeInTheDocument();
+        expect(screen.getByText("4m 39s")).toBeInTheDocument();
+        expect(screen.getByText("Task completed-task status is now completed")).toBeInTheDocument();
+        expect(screen.getByText("Task review-task status is now coding completed")).toBeInTheDocument();
+        expect(screen.getByText("Task active-task status is now in progress")).toBeInTheDocument();
+        englishView.unmount();
+
+        render(
+            <ProjectDataProvider initialData={null as any}><TasksList pageData={statusPageData} /></ProjectDataProvider>,
+            "de",
+        );
+        expect(screen.getByText("2m 14s")).toBeInTheDocument();
+        expect(screen.getByText("3m 27s")).toBeInTheDocument();
+        expect(screen.getByText("4m 39s")).toBeInTheDocument();
+        expect(screen.getByText("Status der Aufgabe completed-task ist jetzt abgeschlossen")).toBeInTheDocument();
+        expect(screen.getByText("Status der Aufgabe review-task ist jetzt Code abgeschlossen")).toBeInTheDocument();
+        expect(screen.getByText("Status der Aufgabe active-task ist jetzt in Bearbeitung")).toBeInTheDocument();
+    });
+
+    it("announces German loading and empty filtered states", async () => {
+        const loadingView = render(<ProjectDataProvider initialData={null as any}><TasksList pageData={{ ...pageData, tasks: [], isLoading: true }} /></ProjectDataProvider>, "de");
+        expect(screen.getByRole("status", { name: "Aufgaben in aktiven Datenströmen werden geladen" })).toHaveAttribute("aria-busy", "true");
+        loadingView.unmount();
+
+        render(<ProjectDataProvider initialData={null as any}><TasksList pageData={pageData} /></ProjectDataProvider>, "de");
+        await act(async () => fireEvent.click(screen.getByRole("tab", { name: "Abgeschlossen" })));
+        expect(screen.getByRole("status", { name: "Keine aktiven Datenströme" })).toHaveTextContent("In aktiven Sprints entsprechen derzeit keine Aufgaben dem ausgewählten Filter.");
+    });
+
     it("keeps the running sprint selector dot visible without raw pulse animation classes", () => {
         const sprint = {
             id: "sprint-running",
@@ -340,7 +433,7 @@ const baseProps: any = {
             goal: "Exercise reduced-motion sprint scope status",
             status: "running",
             showcasePinned: false,
-            startDate: "2026-07-05",
+            startDate: null,
             endDate: null,
             featureBranch: null,
             baseCommitSha: null,
@@ -366,7 +459,7 @@ const baseProps: any = {
         const runningDot = container.querySelector('[data-sprint-status-dot="running"]');
         expect(runningDot).toBeVisible();
         expect(screen.getByRole("option", { name: /SPR-7: Runtime Scope/i })).toBeInTheDocument();
-        expect(screen.getByText("Jul 5")).toBeInTheDocument();
+        expect(screen.getByText("2026-07-05")).toBeInTheDocument();
         expect(screen.getByText(/10 tasks, 5% complete/)).toBeInTheDocument();
 
         const tokens = (runningDot?.getAttribute("class") ?? "").split(/\s+/).filter(Boolean);

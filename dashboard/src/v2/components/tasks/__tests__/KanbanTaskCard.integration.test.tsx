@@ -2,15 +2,14 @@
 /// <reference types="@testing-library/jest-dom" />
 import { readFileSync } from "node:fs";
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, cleanup, fireEvent, waitFor, within, screen } from "@testing-library/preact";
+import { render, cleanup, fireEvent, waitFor, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import userEvent from "@testing-library/user-event";
 import gsap from "gsap";
 import { KanbanTaskCard } from "../KanbanTaskCard.js";
-import { buildTaskCardViewModel, type TaskCardViewModel } from "../../../lib/tasks/task-card-view-model.js";
+import type { TaskCardViewModel } from "../../../lib/tasks/task-card-view-model.js";
 import type { CiStatusPresentation } from "../../../lib/ci-status-presentation.js";
 import type { TaskSelfReflectionRating } from "../../../../../../src/contracts/task-self-reflection-types.js";
-import { DashboardI18nProvider } from "../../../i18n/context.js";
 
 expect.extend(matchers);
 
@@ -815,39 +814,6 @@ describe("KanbanTaskCard Integration", () => {
     expect(actionsContainer).toHaveClass('kanban-card__actions');
     expect(actionsContainer).not.toHaveClass('absolute');
     expect(actionsContainer).toHaveAttribute("aria-label", "Actions for task TASK-123");
-  });
-
-  it("renders German card actions and delete confirmation without translating task content", async () => {
-    const task = {
-      ...mockViewModel.task,
-      id: "TASK_KEY_DE_1",
-      title: "Keep persisted English title",
-      status: "in_progress" as const,
-      priority: "critical" as const,
-      promptMarkdown: "## Keep this prompt verbatim",
-      sprintId: "sprint-de",
-      dependsOnTaskIds: [],
-    };
-    const viewModel = buildTaskCardViewModel(task, new Map(), undefined, { locale: "de" });
-    const onDelete = vi.fn();
-    render(
-      <DashboardI18nProvider initialLocale="de" storage={null}>
-        <KanbanTaskCard viewModel={viewModel} onEdit={vi.fn()} onDelete={onDelete} />
-      </DashboardI18nProvider>,
-    );
-
-    expect(screen.getByText("Keep persisted English title")).toBeInTheDocument();
-    expect(screen.getByText("In Bearbeitung")).toBeInTheDocument();
-    const deleteButton = screen.getByRole("button", { name: /Aufgabe TASK_KEY_DE_1 löschen/i });
-    expect(deleteButton).toHaveTextContent("Löschen");
-    fireEvent.click(deleteButton);
-
-    await waitFor(() => expect(mockRequestConfirm).toHaveBeenCalledWith(expect.objectContaining({
-      title: "Aufgabe löschen",
-      confirmLabel: "Aufgabe löschen",
-      body: expect.stringContaining("Keep persisted English title"),
-    })));
-    expect(onDelete).toHaveBeenCalledWith(task);
   });
 
 });

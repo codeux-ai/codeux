@@ -3,7 +3,6 @@ import { describe, it, expect, afterEach } from "vitest";
 import { render, cleanup } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { TaskExecutionMeta } from "../TaskExecutionMeta.js";
-import { DashboardI18nProvider } from "../../../i18n/context.js";
 
 expect.extend(matchers);
 
@@ -57,22 +56,6 @@ describe("TaskExecutionMeta", () => {
     expect(getByText("Not started")).toBeTruthy();
     expect(getByText("Auto")).toHaveClass("sr-only");
     expect(getByText("Standard")).toBeTruthy();
-  });
-
-  it("localizes known German task-time states but preserves arbitrary runtime values", () => {
-    const { rerender } = render(
-      <DashboardI18nProvider initialLocale="de" storage={null}>
-        <TaskExecutionMeta time="Review" executorType="docker_cli" />
-      </DashboardI18nProvider>,
-    );
-
-    expect(document.body).toHaveTextContent("Prüfung");
-    rerender(
-      <DashboardI18nProvider initialLocale="de" storage={null}>
-        <TaskExecutionMeta time="Runtime checkpoint: Review" executorType="docker_cli" />
-      </DashboardI18nProvider>,
-    );
-    expect(document.body).toHaveTextContent("Runtime checkpoint: Review");
   });
 
   it("applies custom className", () => {

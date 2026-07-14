@@ -2,7 +2,6 @@ import { createContext, type ComponentChildren, type FunctionComponent } from "p
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState } from "preact/hooks";
 import { createDashboardFormatters, type DashboardFormatters } from "./formatters.js";
 import {
-  DEFAULT_DASHBOARD_LOCALE,
   resolveDashboardLocale,
   translateDashboardMessage,
   translateDashboardPlural,
@@ -51,27 +50,6 @@ export interface DashboardI18nProviderProps {
 }
 
 const DashboardI18nContext = createContext<DashboardI18nContextValue | null>(null);
-
-const defaultDashboardFormatters = createDashboardFormatters(DEFAULT_DASHBOARD_LOCALE);
-const defaultDashboardI18n: DashboardI18nContextValue = {
-  locale: DEFAULT_DASHBOARD_LOCALE,
-  setLocale: () => {},
-  translate: (bundle, key, variables) => translateDashboardMessage(
-    bundle,
-    DEFAULT_DASHBOARD_LOCALE,
-    key,
-    variables,
-  ),
-  translatePlural: (bundle, key, count, variables, options) => translateDashboardPlural(
-    bundle,
-    DEFAULT_DASHBOARD_LOCALE,
-    key,
-    count,
-    variables,
-    options,
-  ),
-  ...defaultDashboardFormatters,
-};
 
 export const syncDashboardDocumentLocale = (locale: DashboardLocale): void => {
   if (typeof document !== "undefined") {
@@ -154,11 +132,3 @@ export const useDashboardI18n = (): DashboardI18nContextValue => {
   }
   return context;
 };
-
-/**
- * Returns the active dashboard locale when mounted in the application and an
- * English compatibility value for independently rendered feature surfaces.
- */
-export const useOptionalDashboardI18n = (): DashboardI18nContextValue => (
-  useContext(DashboardI18nContext) ?? defaultDashboardI18n
-);

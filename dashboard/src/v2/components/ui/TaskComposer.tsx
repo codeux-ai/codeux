@@ -13,9 +13,6 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import { AvantgardeSelect } from "./AvantgardeSelect.js";
 import { AgentSelectAvatarIcon } from "../agents/AgentSelectAvatarIcon.js";
-import { useOptionalDashboardI18n } from "../../i18n/context.js";
-import { taskMessages } from "../../i18n/messages/tasks.js";
-import { getTaskPriorityLabel, getTaskStatusLabel } from "../../lib/tasks-constants.js";
 
 interface TaskComposerProps {
   sprints: Sprint[];
@@ -29,6 +26,12 @@ interface TaskComposerProps {
 
 const PRIORITY_OPTIONS: TaskPriority[] = ["critical", "high", "medium", "low"];
 const STATUS_OPTIONS: TaskStatus[] = ["pending", "in_progress", "completed"];
+const EXECUTOR_OPTIONS: Array<{ value: TaskExecutorType; label: string; description: string }> = [
+  { value: "auto", label: "Auto", description: "Use the default Code UX routing." },
+  { value: "docker_cli", label: "CLI", description: "Run through the isolated Docker workspace." },
+  { value: "jules", label: "Jules", description: "Force remote Jules execution." },
+];
+
 const pillButtonClass = "transition-[background-color,border-color,color,box-shadow,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900";
 
 export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
@@ -43,13 +46,8 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
   const cardRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const fieldsRef = useRef<HTMLFormElement>(null);
-  const { locale, translate } = useOptionalDashboardI18n();
-  const state = useTaskComposerState(sprints, availableTasks, initialTask, initialSprintId, locale);
-  const executorOptions: Array<{ value: TaskExecutorType; label: string; description: string }> = [
-    { value: "auto", label: "Auto", description: translate(taskMessages, "executorAutoDescription") },
-    { value: "docker_cli", label: "CLI", description: translate(taskMessages, "executorCliDescription") },
-    { value: "jules", label: "Jules", description: translate(taskMessages, "executorJulesDescription") },
-  ];
+
+  const state = useTaskComposerState(sprints, availableTasks, initialTask, initialSprintId);
   const reducedMotion = useReducedMotion();
   const { feedback, setPending, setSuccess, setError, clearFeedback, clearError } = useActionFeedback();
   const sprintTaskCount = availableTasks.filter((task) => task.sprintId === state.sprintId && task.recordId !== initialTask?.recordId).length;
@@ -111,18 +109,18 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
     state.setIsSubmitting(true);
     state.setSubmitError(null);
     clearFeedback();
-    setPending(translate(taskMessages, "submittingTask"));
+    setPending("Submitting task...");
 
     try {
       await onSubmit(state.getPayload());
       state.setIsSubmitting(false);
-      setSuccess(translate(taskMessages, "submittedTask"));
+      setSuccess("Task submitted successfully.");
       onClose();
     } catch (err) {
       state.setIsSubmitting(false);
       const msg = err instanceof Error ? err.message : String(err);
       state.setSubmitError(msg);
-      setError(msg, { retryAction: () => fieldsRef.current?.requestSubmit(), retryLabel: translate(taskMessages, "retry"), autoDismiss: false });
+      setError(msg, { retryAction: () => fieldsRef.current?.requestSubmit(), retryLabel: "Retry", autoDismiss: false });
     }
   };
 
@@ -137,19 +135,19 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
             <div className="flex min-w-0 flex-wrap items-center gap-3">
               <div className="inline-flex shrink-0 items-center gap-2 rounded-full border border-signal-500/15 bg-signal-500/[0.07] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-600 dark:text-signal-300">
                 <Target className="h-3.5 w-3.5" strokeWidth={2.3} />
-                {translate(taskMessages, state.isEditing ? "editTaskPill" : "taskComposer")}
+                {state.isEditing ? "Edit Task" : "Task Composer"}
               </div>
               <h2 className="min-w-0 break-words font-display text-xl font-semibold leading-tight tracking-tight text-slate-900 dark:text-white sm:text-2xl">
-                {translate(taskMessages, state.isEditing ? "refineTask" : "createTask")}
+                {state.isEditing ? "Refine task" : "Create task"}
               </h2>
             </div>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-              {translate(taskMessages, "composerBody")}
+              Edit task content, dependencies, execution settings, and the worker agent from one full-height surface.
             </p>
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            <Tooltip content={!state.isValid ? translate(taskMessages, "fixValidation") : null} position="bottom" className="bg-red-600">
+            <Tooltip content={!state.isValid ? "Please fix the validation errors before submitting." : null} position="bottom" className="bg-red-600">
               <Button
                 type="submit"
                 variant="primary"
@@ -159,14 +157,14 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                 isLoading={state.isSubmitting}
                 className="!rounded-[1.05rem]"
               >
-                {translate(taskMessages, state.isEditing ? "saveTask" : "createTaskButton")}
+                {state.isEditing ? "Save Task" : "Create Task"}
               </Button>
             </Tooltip>
             <button
               type="button"
               onClick={onClose}
               className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/78 text-slate-400 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 active:scale-95 dark:border-white/[0.06] dark:bg-white/[0.03] dark:hover:text-white"
-              aria-label={translate(taskMessages, "closeTaskComposer")}
+              aria-label="Close task composer"
               disabled={state.isSubmitting}
             >
               <X className="h-4 w-4" />
@@ -177,16 +175,15 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
         <div className="grid min-h-0 flex-1 overflow-hidden xl:grid-cols-[minmax(0,1fr)_22rem]">
           <main className="min-h-0 overflow-y-auto px-5 py-6 sm:px-6 lg:px-8">
             <div data-composer-stagger className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_13rem]">
-              <FieldWrapper label={translate(taskMessages, "sprint")} required error={state.sprintIdError} forceTouch={state.touchedFields.sprintId || state.hasAttemptedSubmit}>
+              <FieldWrapper label="Sprint" required error={state.sprintIdError} forceTouch={state.touchedFields.sprintId || state.hasAttemptedSubmit}>
                 <select
-                  aria-label={`${translate(taskMessages, "sprint")} (${translate(taskMessages, "required")})`}
                   value={state.sprintId}
                   onInput={(event) => state.setSprintId((event.target as HTMLSelectElement).value)}
                   onBlur={() => state.setFieldTouched("sprintId")}
                   className="w-full min-w-0 rounded-xl border border-black/[0.07] bg-white/55 px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none transition-[border-color,box-shadow,background-color] placeholder:text-slate-300 focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300"
                   required
                 >
-                  <option value="" disabled>{translate(taskMessages, "selectSprint")}</option>
+                  <option value="" disabled>Select sprint</option>
                   {sprints.map((sprint) => (
                     <option key={sprint.id} value={sprint.id}>{sprint.name}</option>
                   ))}
@@ -194,7 +191,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
               </FieldWrapper>
 
               <fieldset className="rounded-[1.2rem] border border-black/[0.06] bg-black/[0.025] p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                <legend className="px-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{translate(taskMessages, "status")}</legend>
+                <legend className="px-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Status</legend>
                 {(state.hasAttemptedSubmit || state.touchedFields.status) && state.statusError && (
                   <div className="mt-2 rounded bg-status-red/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.2em] text-status-red">{state.statusError}</div>
                 )}
@@ -210,7 +207,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                           : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
                       }`}
                     >
-                      {getTaskStatusLabel(option, locale)}
+                      {option.replace("_", " ")}
                     </button>
                   ))}
                 </div>
@@ -218,15 +215,14 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
             </div>
 
             <div data-composer-stagger className="mt-5">
-              <FieldWrapper label={translate(taskMessages, "taskTitle")} required error={state.titleError} forceTouch={state.touchedFields.title || state.hasAttemptedSubmit}>
+              <FieldWrapper label="Task Title" required error={state.titleError} forceTouch={state.touchedFields.title || state.hasAttemptedSubmit}>
                 <input
-                  aria-label={`${translate(taskMessages, "taskTitle")} (${translate(taskMessages, "required")})`}
                   ref={titleInputRef}
                   type="text"
                   value={state.title}
                   onInput={(event) => state.setTitle((event.target as HTMLInputElement).value)}
                   onBlur={() => state.setFieldTouched("title")}
-                  placeholder={translate(taskMessages, "taskTitlePlaceholder")}
+                  placeholder="Fix navigation layout shift"
                   className="w-full min-w-0 border-0 border-b-2 border-black/[0.08] bg-transparent pb-3 font-display text-2xl font-semibold leading-tight tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-300 focus:border-signal-500 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-4xl"
                   required
                   autoFocus
@@ -235,25 +231,23 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
             </div>
 
             <div data-composer-stagger className="mt-6 grid gap-5 2xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-              <FieldWrapper label={translate(taskMessages, "description")} required error={state.descriptionError} forceTouch={state.touchedFields.description || state.hasAttemptedSubmit}>
+              <FieldWrapper label="Description" required error={state.descriptionError} forceTouch={state.touchedFields.description || state.hasAttemptedSubmit}>
                 <textarea
-                  aria-label={`${translate(taskMessages, "description")} (${translate(taskMessages, "required")})`}
                   value={state.description}
                   onInput={(event) => state.setDescription((event.target as HTMLTextAreaElement).value)}
                   onBlur={() => state.setFieldTouched("description")}
-                  placeholder={translate(taskMessages, "descriptionPlaceholder")}
+                  placeholder="Summarize the intent and outcome."
                   className="min-h-[220px] w-full min-w-0 resize-y rounded-[1.35rem] border border-black/[0.07] bg-white/45 px-4 py-4 text-sm leading-relaxed text-slate-700 outline-none transition-[border-color,box-shadow,background-color] placeholder:text-slate-300 focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.08] dark:bg-white/[0.025] dark:text-slate-300 dark:placeholder:text-slate-600 sm:px-5"
                   required
                 />
               </FieldWrapper>
 
-              <FieldWrapper label={translate(taskMessages, "markdownPrompt")} required error={state.promptMarkdownError} forceTouch={state.touchedFields.promptMarkdown || state.hasAttemptedSubmit}>
+              <FieldWrapper label="Markdown Prompt" required error={state.promptMarkdownError} forceTouch={state.touchedFields.promptMarkdown || state.hasAttemptedSubmit}>
                 <textarea
-                  aria-label={`${translate(taskMessages, "markdownPrompt")} (${translate(taskMessages, "required")})`}
                   value={state.promptMarkdown}
                   onInput={(event) => state.setPromptMarkdown((event.target as HTMLTextAreaElement).value)}
                   onBlur={() => state.setFieldTouched("promptMarkdown")}
-                  placeholder={translate(taskMessages, "markdownPromptPlaceholder")}
+                  placeholder="Detailed markdown instructions for the worker agent."
                   className="min-h-[320px] w-full min-w-0 resize-y rounded-[1.35rem] border border-black/[0.07] bg-white/45 px-4 py-4 font-mono text-sm leading-relaxed text-slate-700 outline-none transition-[border-color,box-shadow,background-color] placeholder:text-slate-300 focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.08] dark:bg-white/[0.025] dark:text-slate-300 dark:placeholder:text-slate-600 sm:px-5"
                   required
                 />
@@ -264,15 +258,15 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-2">
                   <ListChecks className="h-3.5 w-3.5 shrink-0 text-slate-500" strokeWidth={2.3} />
-                  <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{translate(taskMessages, "dependencies")}</label>
+                  <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Dependencies</label>
                   {state.dependencyOptions.length === 0 && sprintTaskCount > 0 && (
-                    <span className="rounded bg-status-amber/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.2em] text-status-amber">{translate(taskMessages, "cyclePrevented")}</span>
+                    <span className="rounded bg-status-amber/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.2em] text-status-amber">Cycle Prevented</span>
                   )}
                 </div>
                 {sprintTaskCount > 5 && (
                   <input
                     type="search"
-                    placeholder={translate(taskMessages, "filterTasks")}
+                    placeholder="Filter tasks..."
                     value={state.dependencySearchQuery}
                     onInput={(event) => state.setDependencySearchQuery((event.target as HTMLInputElement).value)}
                     className="w-full min-w-0 rounded-xl border border-black/[0.08] bg-black/[0.03] px-3 py-1.5 text-xs outline-none transition-[border-color,box-shadow] focus:border-signal-500 focus-visible:ring-1 focus-visible:ring-signal-500/50 dark:border-white/[0.08] dark:bg-white/[0.03] sm:w-56"
@@ -281,7 +275,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
               </div>
               {state.dependencyOptions.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-4 text-xs text-slate-400 dark:border-white/[0.08]">
-                  {translate(taskMessages, "noExistingTasks")}
+                  No existing tasks in this sprint yet.
                 </div>
               ) : (
                 <div className="grid max-h-64 grid-cols-1 gap-2 overflow-y-auto pr-1 lg:grid-cols-2">
@@ -303,7 +297,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                           <div className="mb-1 flex min-w-0 flex-wrap items-center gap-2">
                             <span className="min-w-0 break-all font-mono text-[10px] uppercase tracking-[0.14em] text-slate-400">{task.id}</span>
                             <span className={`break-words rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${task.priority === "critical" ? "bg-status-red/10 text-status-red" : task.priority === "high" ? "bg-status-amber/10 text-status-amber" : "bg-slate-500/10 text-slate-500"}`}>
-                              {getTaskPriorityLabel(task.priority, locale)}
+                              {task.priority}
                             </span>
                           </div>
                           <div className="break-words text-sm font-semibold leading-tight">{task.title}</div>
@@ -321,22 +315,22 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
             <div data-composer-stagger>
               <div className="mb-3 flex items-center gap-2">
                 <Settings2 className="h-3.5 w-3.5 text-slate-500" strokeWidth={2.3} />
-                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{translate(taskMessages, "executionSettings")}</div>
+                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Execution Settings</div>
               </div>
               <div className="rounded-[1.4rem] border border-black/[0.06] bg-white/50 p-4 dark:border-white/[0.06] dark:bg-white/[0.025]">
-                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{translate(taskMessages, "workerAgent")}</div>
+                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Worker Agent</div>
                 <div className="mt-3">
                   <AvantgardeSelect
                     variant="card"
-                    aria-label={translate(taskMessages, "workerAgent")}
+                    aria-label="Worker Agent"
                     disabled={state.isSubmitting}
                     value={state.agentPresetId || ""}
                     onChange={(value) => state.setAgentPresetId(value || null)}
                     options={[
-                      { value: "", label: translate(taskMessages, "builtInWorker"), icon: () => <AgentSelectAvatarIcon seed="built-in:worker" /> },
+                      { value: "", label: "Built-in Worker agent", icon: () => <AgentSelectAvatarIcon seed="built-in:worker" /> },
                       ...agentSelectOptions,
                     ]}
-                    placeholder={translate(taskMessages, "builtInWorker")}
+                    placeholder="Built-in Worker agent"
                   />
                 </div>
               </div>
@@ -344,7 +338,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
 
             <div data-composer-stagger>
               <div className="mb-3 flex items-center gap-2">
-                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{translate(taskMessages, "priority")}</div>
+                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Priority</div>
                 {(state.hasAttemptedSubmit || state.touchedFields.priority) && state.priorityError && (
                   <div className="rounded bg-status-red/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.2em] text-status-red">{state.priorityError}</div>
                 )}
@@ -361,7 +355,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                         : "border-black/[0.06] bg-black/[0.025] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"
                     }`}
                   >
-                    {getTaskPriorityLabel(option, locale)}
+                    {option}
                   </button>
                 ))}
               </div>
@@ -370,13 +364,13 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
             <div data-composer-stagger>
               <div className="mb-3 flex items-center gap-2">
                 <Bot className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.3} />
-                <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{translate(taskMessages, "executor")}</label>
+                <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Executor</label>
                 {(state.hasAttemptedSubmit || state.touchedFields.executorType) && state.executorTypeError && (
                   <div className="rounded bg-status-red/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.2em] text-status-red">{state.executorTypeError}</div>
                 )}
               </div>
               <div className="grid gap-3" onBlur={() => state.setFieldTouched("executorType")}>
-                {executorOptions.map((option) => {
+                {EXECUTOR_OPTIONS.map((option) => {
                   const isActive = state.executorType === option.value;
                   return (
                     <button
@@ -410,7 +404,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                 disabled={state.isSubmitting}
                 className="rounded-[1.2rem] border border-black/[0.06] bg-white/66 px-5 py-3 text-sm font-semibold text-slate-500 transition-[background-color,color,transform,opacity] hover:text-slate-900 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-300 dark:hover:text-white"
               >
-                {translate(taskMessages, "cancel")}
+                Cancel
               </button>
             </div>
           </aside>

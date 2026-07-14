@@ -47,12 +47,6 @@ describe("self-reflection rating helpers", () => {
     expect(formatSelfReflectionRatingLabel("bad" as unknown)).toBeNull();
   });
 
-  it("formats German rating values without changing rating thresholds", () => {
-    expect(formatSelfReflectionRatingLabel(4.5, "de")).toBe("4,5/5");
-    expect(formatSelfReflectionRatingAriaLabel(4.5, "de")).toBe("Selbstreflexionsbewertung 4,5 von 5");
-    expect(getSelfReflectionStarStates(4.5)).toEqual(["filled", "filled", "filled", "filled", "half"]);
-  });
-
   it("sorts section ratings by normalized label and then visible label", () => {
     const sorted = sortSelfReflectionSectionRatings([
       { label: "Scope", normalizedLabel: "scope", rating: 3, note: null },

@@ -14,8 +14,6 @@ import {
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
 import { Modal } from "./Modal.js";
-import { useOptionalDashboardI18n } from "../../i18n/context.js";
-import { taskMessages } from "../../i18n/messages/tasks.js";
 
 interface RerunTaskModalProps {
     task: Subtask;
@@ -35,7 +33,6 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
     onClose,
     onConfirm,
 }) => {
-    const { translate, translatePlural, formatNumber } = useOptionalDashboardI18n();
     const [providerConfigId, setProviderConfigId] = useState("");
     const [clearWorktree, setClearWorktree] = useState(false);
     const [resetDependents, setResetDependents] = useState(false);
@@ -64,7 +61,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
     }, []);
 
     const providerOptions = useMemo(() => {
-        const base = [{ value: "", label: translate(taskMessages, "autoCurrentSetting") }];
+        const base = [{ value: "", label: "Auto (use current setting)" }];
         if (!systemSettings) {
             return base;
         }
@@ -78,7 +75,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
             }));
 
         return [...base, ...available];
-    }, [systemSettings, translate]);
+    }, [systemSettings]);
 
     const [model, setModel] = useState("");
     const selectedProvider = useMemo(() => (
@@ -155,7 +152,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
     const handleSubmit = async () => {
         if (isSubmitting) return;
         setIsSubmitting(true);
-        setPending(translate(taskMessages, "preparingRerun"));
+        setPending("Preparing task rerun...");
         try {
             await onConfirm({
                 provider: selectedProvider?.provider,
@@ -166,12 +163,12 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                 undoMerge: taskAlreadyMerged && undoMerge,
             });
             setIsSubmitting(false);
-            setSuccess(translate(taskMessages, "rerunStarted"), { autoDismiss: false });
+            setSuccess("Task rerun started.", { autoDismiss: false });
             window.setTimeout(() => onClose(), 700);
         } catch (err) {
             setIsSubmitting(false);
             const message = err instanceof Error ? err.message : String(err);
-            setError(message || translate(taskMessages, "rerunFailed"), { retryAction: handleSubmit, retryLabel: translate(taskMessages, "retry"), autoDismiss: false });
+            setError(message || "Failed to rerun task.", { retryAction: handleSubmit, retryLabel: "Retry", autoDismiss: false });
         }
     };
 
@@ -201,7 +198,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                         </div>
                         <div>
                             <h2 id="rerun-modal-title" className="text-base font-bold text-slate-900 dark:text-white">
-                                {translate(taskMessages, "rerunTask")}
+                                Rerun Task
                             </h2>
                             <p className="text-[11px] text-slate-400 font-mono">#{task.id}</p>
                         </div>
@@ -209,7 +206,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                     <button
                         type="button"
                         onClick={handleClose}
-                        aria-label={translate(taskMessages, "closeDialog")}
+                        aria-label="Close dialog"
                         disabled={isSubmitting}
                         className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/[0.04] text-slate-400 hover:text-slate-700 dark:bg-white/[0.04] dark:text-slate-500 dark:hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-status-amber"
                     >
@@ -230,7 +227,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                     />
 
                     <p className="text-[13px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                        {translate(taskMessages, "rerunResetDescription", { title: task.title })}
+                        This will reset <span className="font-semibold text-slate-700 dark:text-slate-200">{task.title}</span> and start a fresh execution.
                     </p>
 
                     {taskAlreadyMerged && (
@@ -239,10 +236,10 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                                 <AlertTriangle className="mt-0.5 h-4 w-4 text-status-red shrink-0" strokeWidth={2} />
                                 <div className="space-y-1">
                                     <p className="text-[12px] font-semibold text-status-red">
-                                        {translate(taskMessages, "mergedWarningTitle")}
+                                        This task already merged code.
                                     </p>
                                     <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
-                                        {translate(taskMessages, "mergedWarningBody")}
+                                        Undo the merged changes before rerunning or the new run will build on code that already landed.
                                     </p>
                                 </div>
                             </div>
@@ -253,27 +250,27 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                     <div className="space-y-2">
                         <div className="flex items-center justify-between gap-3">
                             <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                                {translate(taskMessages, "provider")}
+                                Provider
                             </span>
                             {!settingsLoaded && (
                                 <span role="status" aria-live="polite" className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-status-amber">
                                     <Loader2 aria-hidden="true" className="h-3 w-3 motion-safe:animate-spin motion-reduce:animate-none" />
-                                    {translate(taskMessages, "loadingProviders")}
+                                    Loading providers
                                 </span>
                             )}
                         </div>
                         <AvantgardeSelect
-                            aria-label={translate(taskMessages, "provider")}
+                            aria-label="Provider"
                             disabled={isSubmitting || !settingsLoaded}
                             value={providerConfigId}
                             onChange={setProviderConfigId}
                             options={providerOptions}
-                            placeholder={translate(taskMessages, "autoCurrentSetting")}
+                            placeholder="Auto (use current setting)"
                             searchable
                         />
                         {currentProvider && (
                             <p className="text-[10px] text-slate-400">
-                                {translate(taskMessages, "currentProvider", { provider: currentProvider })}
+                                Current provider: <span className="font-mono font-bold">{currentProvider}</span>
                             </p>
                         )}
                     </div>
@@ -282,24 +279,24 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                         <div className="space-y-2">
                             <div className="flex items-center justify-between gap-3">
                                 <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                                    {translate(taskMessages, "modelOverride")}
+                                    Model Override
                                 </span>
                                 {modelOptions.length === 0 && (
                                     <span role="status" aria-live="polite" className="text-[10px] font-semibold text-slate-400">
-                                        {translate(taskMessages, "loadingModels")}
+                                        Loading models
                                     </span>
                                 )}
                             </div>
                             <AvantgardeSelect
-                                aria-label={translate(taskMessages, "modelOverride")}
+                                aria-label="Model Override"
                                 disabled={isSubmitting || modelOptions.length === 0}
                                 value={model}
                                 onChange={setModel}
                                 options={[
-                                    { value: "", label: translate(taskMessages, "defaultModel") },
+                                    { value: "", label: "Default Model" },
                                     ...modelOptions.map((opt) => ({ value: opt.value, label: opt.label })),
                                 ]}
-                                placeholder={translate(taskMessages, "defaultModel")}
+                                placeholder="Default Model"
                             />
                         </div>
                     )}
@@ -317,20 +314,20 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                                 <div className="flex items-center gap-1.5">
                                     <GitBranch className="w-3 h-3 text-slate-400 group-hover:text-status-amber transition-colors" strokeWidth={2} />
                                     <span className="text-[12px] font-semibold text-slate-700 dark:text-slate-200">
-                                        {translate(taskMessages, "resetDownstream")}
+                                        Reset downstream tasks
                                     </span>
                                 </div>
                                 <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                                    {translatePlural(taskMessages, "resetDependentTasks", downstreamTasks.length, { count: formatNumber(downstreamTasks.length) })}
+                                    Clear {downstreamTasks.length} dependent task{downstreamTasks.length === 1 ? "" : "s"} so the rerun starts from a clean dependency chain.
                                 </p>
                                 {downstreamPromptTasks.length > 0 && (
                                     <p className="text-[11px] text-status-amber mt-1 leading-snug">
-                                        {translatePlural(taskMessages, "downstreamStarted", downstreamPromptTasks.length, { count: formatNumber(downstreamPromptTasks.length) })}
+                                        {downstreamPromptTasks.length} downstream task{downstreamPromptTasks.length === 1 ? "" : "s"} already started or finished and should usually be reset as well.
                                     </p>
                                 )}
                                 {mergedTaskCount > 1 && resetDependents && (
                                     <p className="text-[11px] text-status-red mt-1 leading-snug">
-                                        {translate(taskMessages, "mergedDownstreamWarning")}
+                                        Some selected downstream work already merged. Undo those landed changes before rerunning the chain.
                                     </p>
                                 )}
                             </div>
@@ -351,11 +348,11 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                                 <div className="flex items-center gap-1.5">
                                     <RotateCcw className="w-3 h-3 text-slate-400 group-hover:text-status-amber transition-colors" strokeWidth={2} />
                                     <span className="text-[12px] font-semibold text-slate-700 dark:text-slate-200">
-                                        {translate(taskMessages, "undoGitMerge")}
+                                        Undo the Git merge
                                     </span>
                                 </div>
                                 <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                                    {translate(taskMessages, "undoGitMergeBody")}
+                                    Programmatically revert the merge commit for this task in the feature branch.
                                 </p>
                             </div>
                         </label>
@@ -374,11 +371,11 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                             <div className="flex items-center gap-1.5">
                                 <Trash2 className="w-3 h-3 text-slate-400 group-hover:text-status-amber transition-colors" strokeWidth={2} />
                                 <span className="text-[12px] font-semibold text-slate-700 dark:text-slate-200">
-                                    {translate(taskMessages, "clearWorktree")}
+                                    Clear worktree
                                 </span>
                             </div>
                             <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                                {translate(taskMessages, "clearWorktreeBody")}
+                                Remove the existing worktree directory before rerunning. Use this for a completely fresh start.
                             </p>
                         </div>
                     </label>
@@ -392,7 +389,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                         disabled={isSubmitting}
                         className="px-4 py-2 rounded-xl text-[12px] font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-status-amber focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800 disabled:opacity-50"
                     >
-                        {translate(taskMessages, "cancel")}
+                        Cancel
                     </button>
                     <button
                         type="button"
@@ -401,7 +398,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                         className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-bold bg-status-amber text-white shadow-[0_4px_16px_rgba(245,158,11,0.25)] hover:shadow-[0_6px_24px_rgba(245,158,11,0.35)] hover:-translate-y-px transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-status-amber focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800 disabled:opacity-50"
                     >
                         <RotateCcw className="w-3.5 h-3.5" strokeWidth={2} />
-                        {translate(taskMessages, isSubmitting ? "rerunning" : "rerunTask")}
+                        {isSubmitting ? "Rerunning..." : "Rerun Task"}
                     </button>
                 </div>
             </div>

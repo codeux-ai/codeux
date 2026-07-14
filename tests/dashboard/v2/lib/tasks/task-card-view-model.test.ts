@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { getTaskLane } from "../../../../../dashboard/src/v2/lib/task-board-state.js";
 import {
   formatTimeAgo,
-  formatTaskDuration,
   getExecutorLabel,
   buildTaskCardViewModel,
 } from "../../../../../dashboard/src/v2/lib/tasks/task-card-view-model.js";
@@ -10,9 +9,9 @@ import type { Task } from "../../../../../dashboard/src/v2/types.js";
 import type { TaskSelfReflectionRating } from "../../../../../src/contracts/task-self-reflection-types.js";
 
 describe("task-card-view-model", () => {
-  const NOW = new Date("2023-10-01T12:00:00Z").getTime();
-
   describe("formatTimeAgo", () => {
+    const NOW = new Date("2023-10-01T12:00:00Z").getTime();
+
     it("handles invalid dates", () => {
       expect(formatTimeAgo("invalid", NOW)).toBe("--");
     });
@@ -35,13 +34,6 @@ describe("task-card-view-model", () => {
     it("returns days ago", () => {
       const past = new Date(NOW - 3 * 24 * 60 * 60000).toISOString();
       expect(formatTimeAgo(past, NOW)).toBe("3d ago");
-    });
-  });
-
-  describe("German presentation", () => {
-    it("formats relative times and live durations for the active locale", () => {
-      expect(formatTimeAgo(new Date(NOW - 15 * 60_000).toISOString(), NOW, "de")).toBe("vor 15 Min.");
-      expect(formatTaskDuration(3725, "de")).toBe("1 Std. 2 Min. 5 Sek.");
     });
   });
 
@@ -115,16 +107,6 @@ describe("task-card-view-model", () => {
       createdAt: "2026-07-07T00:00:00.000Z",
       updatedAt: "2026-07-07T00:00:00.000Z",
       ...overrides,
-    });
-
-    it("formats large German dependency counts without changing dependency state", () => {
-      const dependencyIds = Array.from({ length: 1_234 }, (_, index) => `missing-${index}`);
-      const task = createMockTask({ dependsOnTaskIds: dependencyIds });
-      const viewModel = buildTaskCardViewModel(task, new Map(), undefined, { locale: "de" });
-
-      expect(viewModel.dependencyActionLabel).toBe("1.234 blockierende Abhängigkeiten");
-      expect(viewModel.dependencyIndicators).toHaveLength(1_234);
-      expect(viewModel.dependencyIndicators.every((dependency) => dependency.isBlocking)).toBe(true);
     });
 
     it("builds a basic view model with empty dependencies", () => {

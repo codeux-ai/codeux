@@ -7,7 +7,6 @@ import { render, screen, cleanup } from "@testing-library/preact";
 import { describe, it, expect, afterEach } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { TaskStatusBadge } from "../../../dashboard/src/v2/components/sprint/TaskStatusBadge";
-import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
 
 expect.extend(matchers);
 
@@ -44,14 +43,5 @@ describe("TaskStatusBadge", () => {
     expect(badge.className).toContain("truncate");
     const label = badge.querySelector("span");
     expect(label?.className).toContain("truncate");
-  });
-
-  it("uses German task status labels", () => {
-    render(
-      <DashboardI18nProvider initialLocale="de" storage={null}>
-        <TaskStatusBadge status="QA_REVIEW_FAILED" />
-      </DashboardI18nProvider>,
-    );
-    expect(screen.getByText("QA fehlgeschlagen")).toBeInTheDocument();
   });
 });

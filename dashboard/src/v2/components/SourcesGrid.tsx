@@ -7,6 +7,9 @@ import { SourceCell } from "./ui/SourceCell.js";
 import { SkeletonCard } from "./layout/SkeletonLoader.js";
 import { useProjectData } from "../context/project-data.js";
 import { useReducedMotion } from "../hooks/use-reduced-motion.js";
+import { EmptyState } from "./ui/EmptyState.js";
+import { useDashboardI18n } from "../i18n/index.js";
+import { overviewMessages } from "../i18n/messages/overview.js";
 
 const DEFAULT_VISIBLE_SOURCE_CELLS = 5;
 const COMPACT_VISIBLE_SOURCE_CELLS = 4;
@@ -54,6 +57,7 @@ export const SourcesGrid: FunctionComponent = () => {
     const [availableColumns, setAvailableColumns] = useState(DEFAULT_VISIBLE_SOURCE_CELLS);
     const { projects, loading: projectsLoading } = useProjectData();
     const prefersReducedMotion = useReducedMotion();
+    const { translate } = useDashboardI18n();
 
     useLayoutEffect(() => {
         if (containerRef.current) {
@@ -105,11 +109,11 @@ export const SourcesGrid: FunctionComponent = () => {
     }, [layoutPlan.visibleCount, projects]);
 
     return (
-        <div className="w-full relative z-10" tabIndex={0}>
+        <div className="w-full relative z-10" tabIndex={0} aria-busy={projectsLoading ? "true" : undefined}>
             <SectionHeader
-                watermark="DATA"
+                watermark={translate(overviewMessages, "dataWatermark")}
                 icon={<Activity className="w-5 h-5 text-signal-500" strokeWidth={2.5} />}
-                title="Projects & Sources"
+                title={translate(overviewMessages, "projectsAndSources")}
             />
 
             <div
@@ -123,11 +127,20 @@ export const SourcesGrid: FunctionComponent = () => {
                 data-source-columns={projectsLoading ? undefined : layoutPlan.columns}
             >
                 {projectsLoading ? (
-                    <>
+                    <div role="status" aria-live="polite" aria-busy="true" aria-label={translate(overviewMessages, "loadingSources")} className="contents">
+                        <span className="sr-only">{translate(overviewMessages, "loadingSourcesAnnouncement")}</span>
                         <div className="w-[18rem]"><SkeletonCard /></div>
                         <div className="w-[18rem]"><SkeletonCard /></div>
                         <div className="w-[18rem]"><SkeletonCard /></div>
-                    </>
+                    </div>
+                ) : recentSources.length === 0 ? (
+                    <div role="status" aria-live="polite" className="col-span-full">
+                        <EmptyState
+                            title={translate(overviewMessages, "noSources")}
+                            description={translate(overviewMessages, "noSourcesDescription")}
+                            icon={<Activity className="h-8 w-8" aria-hidden="true" />}
+                        />
+                    </div>
                 ) : (
                     recentSources.map((source, index) => (
                         <div

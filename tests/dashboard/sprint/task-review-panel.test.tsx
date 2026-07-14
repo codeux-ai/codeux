@@ -7,7 +7,6 @@ import { render, screen, cleanup } from "@testing-library/preact";
 import { describe, it, expect, afterEach } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { TaskReviewPanel } from "../../../dashboard/src/v2/components/sprint/TaskReviewPanel";
-import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
 
 expect.extend(matchers);
 
@@ -48,16 +47,5 @@ describe("TaskReviewPanel", () => {
     expect(panel.className).toContain("min-w-0");
     const reason = screen.getByTestId("qa-error-reason");
     expect(reason.className).toContain("break-words");
-  });
-
-  it("localizes German review chrome while preserving QA output", () => {
-    render(
-      <DashboardI18nProvider initialLocale="de" storage={null}>
-        <TaskReviewPanel task={{ status: "QA_REVIEW_FAILED", qa_review: { error_reason: "Parser output: token X" } }} />
-      </DashboardI18nProvider>,
-    );
-
-    expect(screen.getByRole("heading", { name: "QA-Prüfung fehlgeschlagen" })).toBeInTheDocument();
-    expect(screen.getByTestId("qa-error-reason")).toHaveTextContent("Parser output: token X");
   });
 });

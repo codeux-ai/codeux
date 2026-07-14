@@ -24,10 +24,6 @@ import { TaskBoardFilters } from "./components/tasks/TaskBoardFilters.js";
 import { TaskBoardColumns } from "./components/tasks/TaskBoardColumns.js";
 import { useInteractionTokens } from "./lib/motion/tokens.js";
 import { useTaskBoardController } from "./hooks/use-task-board-controller.js";
-import { useOptionalDashboardI18n } from "./i18n/context.js";
-import { taskMessages } from "./i18n/messages/tasks.js";
-import { getTaskPriorityLabel, getTaskStatusLabel } from "./lib/tasks-constants.js";
-import { formatTaskSprintDateRange } from "./lib/tasks/task-presentation.js";
 
 type TaskScopePlaceholderMode = "project" | "sprint";
 
@@ -36,13 +32,12 @@ const TaskScopePlaceholder: FunctionComponent<{
   hasProjects: boolean;
   onAddProject: () => void;
 }> = ({ mode, hasProjects, onAddProject }) => {
-  const { translate } = useOptionalDashboardI18n();
   const isProjectMode = mode === "project";
-  const title = translate(taskMessages, isProjectMode ? "taskNeedsProject" : "taskNeedsSprint");
-  const eyebrow = translate(taskMessages, isProjectMode ? "taskProjectStandby" : "taskSprintRequired");
+  const title = isProjectMode ? "Task work starts with a project." : "Create a sprint to unlock tasks.";
+  const eyebrow = isProjectMode ? "Task Board Standby" : "Sprint Scope Required";
   const body = isProjectMode
-    ? translate(taskMessages, "taskNeedsProjectBody")
-    : translate(taskMessages, "taskNeedsSprintBody");
+    ? "Connect a project before the task board starts tracking queued work, active implementation, QA review, and completed delivery."
+    : "Tasks are organized inside sprint scope. Create or select a sprint before adding implementation work to the board.";
 
   return (
     <section className="relative overflow-hidden rounded-[2.2rem] border border-black/[0.06] bg-white/72 p-8 shadow-[0_18px_48px_rgba(15,23,42,0.07)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62 dark:shadow-[0_18px_48px_rgba(0,0,0,0.28)] md:p-10">
@@ -77,7 +72,7 @@ const TaskScopePlaceholder: FunctionComponent<{
                 icon={Plus}
                 className="!inline-flex !min-h-[44px] !items-center !gap-2.5 !rounded-full !px-5 !py-2.5 !text-[10px] !font-bold !uppercase !tracking-[0.14em] !shadow-[0_10px_30px_rgba(0,224,160,0.22)] hover:!-translate-y-px focus-visible:!ring-2 focus-visible:!ring-signal-500/40"
               >
-                {translate(taskMessages, hasProjects ? "addProject" : "addFirstProject")}
+                {hasProjects ? "Add Project" : "Add First Project"}
               </Button>
             ) : (
               <Link
@@ -85,7 +80,7 @@ const TaskScopePlaceholder: FunctionComponent<{
                 className="inline-flex min-h-[44px] items-center gap-2.5 rounded-full bg-signal-500 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white dark:text-void-900 shadow-[0_10px_30px_rgba(0,224,160,0.22)] transition-all hover:-translate-y-px hover:bg-signal-400 focus-visible:ring-2 focus-visible:ring-signal-500/40"
               >
                 <Plus className="h-3.5 w-3.5" strokeWidth={2.3} />
-                {translate(taskMessages, "planSprint")}
+                Plan Sprint
               </Link>
             )}
             <Link
@@ -93,7 +88,7 @@ const TaskScopePlaceholder: FunctionComponent<{
               className="inline-flex min-h-[44px] items-center gap-2.5 rounded-full border border-black/[0.06] bg-white/75 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-all hover:-translate-y-px hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/40 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:text-white"
             >
               <FolderGit2 className="h-3.5 w-3.5 text-ember-500" strokeWidth={2.1} />
-              {translate(taskMessages, isProjectMode ? "manageProjects" : "openSprints")}
+              {isProjectMode ? "Manage Projects" : "Open Sprints"}
               <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.1} />
             </Link>
           </div>
@@ -103,9 +98,9 @@ const TaskScopePlaceholder: FunctionComponent<{
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_85%_65%_at_50%_0%,rgba(255,184,0,0.12),transparent_68%)]" />
           <div className="relative z-10 space-y-3">
             {[
-              { label: translate(taskMessages, "project"), value: translate(taskMessages, isProjectMode ? "required" : "ready"), tone: isProjectMode ? "text-ember-500" : "text-status-green" },
-              { label: translate(taskMessages, "sprint"), value: translate(taskMessages, isProjectMode ? "waiting" : "required"), tone: isProjectMode ? "text-signal-500" : "text-ember-500" },
-              { label: translate(taskMessages, "tasks"), value: translate(taskMessages, "locked"), tone: "text-slate-500 dark:text-slate-400" },
+              { label: "Project", value: isProjectMode ? "required" : "ready", tone: isProjectMode ? "text-ember-500" : "text-status-green" },
+              { label: "Sprint", value: isProjectMode ? "waiting" : "required", tone: isProjectMode ? "text-signal-500" : "text-ember-500" },
+              { label: "Tasks", value: "locked", tone: "text-slate-500 dark:text-slate-400" },
             ].map((item, index) => (
               <div
                 key={item.label}
@@ -130,10 +125,9 @@ const TaskScopePlaceholder: FunctionComponent<{
 };
 
 const SprintProgressCard: FunctionComponent<{
-  sprint: { id: string; name: string; startDate: string | null; endDate: string | null };
+  sprint: { id: string; name: string; date: string };
   tasks: Task[];
 }> = memo(({ sprint, tasks }) => {
-  const { locale, translate, formatNumber } = useOptionalDashboardI18n();
   const completed = tasks.filter((task) => task.status === "completed").length;
   const inProgress = tasks.filter((task) => task.status === "in_progress").length;
   const pending = tasks.filter((task) => task.status === "pending").length;
@@ -143,7 +137,7 @@ const SprintProgressCard: FunctionComponent<{
   return (
     <div className="relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
       <div aria-hidden className="absolute -right-4 -bottom-6 text-[6rem] font-black tracking-tighter text-black/[0.025] dark:text-white/[0.02] pointer-events-none select-none font-display leading-none">
-        {formatNumber(pct)}%
+        {pct}%
       </div>
 
       <div className="flex items-center gap-3 mb-5">
@@ -152,7 +146,7 @@ const SprintProgressCard: FunctionComponent<{
         </div>
         <div>
           <h3 className="text-base font-semibold font-display tracking-tight text-slate-900 dark:text-white">{sprint.name}</h3>
-          <p className="text-[10px] font-mono text-slate-400 uppercase tracking-[0.1em]">{formatTaskSprintDateRange(sprint.startDate, sprint.endDate, locale)}</p>
+          <p className="text-[10px] font-mono text-slate-400 uppercase tracking-[0.1em]">{sprint.date}</p>
         </div>
       </div>
 
@@ -162,7 +156,7 @@ const SprintProgressCard: FunctionComponent<{
         aria-valuenow={pct}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-label={translate(taskMessages, "sprintProgress", { percent: formatNumber(pct) })}
+        aria-label={`Sprint progress: ${pct}%`}
       >
         {completed > 0 && <div className="bg-status-green rounded-full transition-all duration-700" style={{ width: `${(completed / total) * 100}%` }} />}
         {inProgress > 0 && <div className="bg-signal-500 rounded-full transition-all duration-700" style={{ width: `${(inProgress / total) * 100}%` }} />}
@@ -171,12 +165,12 @@ const SprintProgressCard: FunctionComponent<{
 
       <div className="grid grid-cols-3 gap-2">
         {[
-          { label: translate(taskMessages, "completed"), value: completed, color: "text-status-green" },
-          { label: translate(taskMessages, "running"), value: inProgress, color: "text-signal-500" },
-          { label: translate(taskMessages, "queued"), value: pending, color: "text-slate-400" },
+          { label: "Completed", value: completed, color: "text-status-green" },
+          { label: "Running", value: inProgress, color: "text-signal-500" },
+          { label: "Queued", value: pending, color: "text-slate-400" },
         ].map(({ label, value, color }) => (
           <div key={label} className="flex flex-col items-center py-2.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.04]">
-            <span className={`text-lg font-semibold font-mono leading-none ${color}`}>{formatNumber(value)}</span>
+            <span className={`text-lg font-semibold font-mono leading-none ${color}`}>{value}</span>
             <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400 mt-1">{label}</span>
           </div>
         ))}
@@ -187,7 +181,7 @@ const SprintProgressCard: FunctionComponent<{
         className="flex items-center gap-1.5 mt-5 pt-4 border-t border-black/[0.05] dark:border-white/[0.04] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 hover:text-ember-500 transition-colors duration-200 group/link"
       >
         <ArrowUpRight className="w-3 h-3 group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 transition-transform duration-200" strokeWidth={2.5} />
-        {translate(taskMessages, "viewSprint")}
+        View Sprint
       </Link>
     </div>
   );
@@ -197,7 +191,6 @@ export const TasksPage: FunctionComponent = () => {
   const headerRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const interactionTokens = useInteractionTokens();
-  const { locale, translate, formatNumber } = useOptionalDashboardI18n();
   const controller = useTaskBoardController();
   const {
     projects,
@@ -330,32 +323,27 @@ export const TasksPage: FunctionComponent = () => {
     return () => ctx.revert();
   }, [clearResolvedTaskId, resolvedTaskId, tasks]);
 
-  const selectedSprintNumber = selectedSprintModel?.number;
-
   return (
     <PageContainer
-      aria-label={translate(taskMessages, "taskBoard")}
+      aria-label="Task Board"
       className={isTaskScopeReady ? "gap-16" : "gap-10"}
       padding={isTaskScopeReady ? "standard" : "sprintsEmpty"}
     >
       <PageHeader
         containerRef={headerRef}
         icon={ListChecks}
-        eyebrow={translate(taskMessages, "taskPipeline")}
-        title={translate(taskMessages, "taskBoard")}
+        eyebrow="Task Pipeline"
+        title="Task Board"
         subtitle={
           <>
             {selectedProject
               ? taskScopeSprintId
-                ? translate(taskMessages, "selectedProjectSprintSubtitle", { project: selectedProject.name, sprint: selectedSprintNumber == null ? "..." : formatNumber(selectedSprintNumber) })
-                : translate(taskMessages, "selectedProjectSubtitle", { project: selectedProject.name })
-              : translate(taskMessages, "noProjectSubtitle")}
+                ? `Task execution for ${selectedProject.name}, scoped to Sprint ${sprints.find((sprint) => sprint.id === taskScopeSprintId)?.number ?? "..."}.`
+                : `Task execution for ${selectedProject.name}. Showing all tasks across the project.`
+              : "Select a project to manage sprint tasks."}
             {selectedProject && (statusFilter !== "all" || priorityFilter !== "all") && (
               <span className="block text-sm text-signal-600 dark:text-signal-500 mt-1">
-                {translate(taskMessages, "filteredSubtitle", {
-                  status: statusFilter !== "all" ? getTaskStatusLabel(statusFilter, locale) : translate(taskMessages, "all"),
-                  priority: priorityFilter !== "all" ? getTaskPriorityLabel(priorityFilter, locale) : translate(taskMessages, "anyPriority"),
-                })}
+                Filtered to show {statusFilter !== "all" ? statusFilter.replace("_", " ") : "all"} status and {priorityFilter !== "all" ? priorityFilter : "any"} priority.
               </span>
             )}
           </>
@@ -368,18 +356,18 @@ export const TasksPage: FunctionComponent = () => {
                 <span className="w-1.5 h-1.5 rounded-full bg-signal-500 relative">
                   <span className="absolute inset-0 rounded-full animate-ping bg-signal-400 opacity-70" />
                 </span>
-                {formatNumber(stats.inProgress)} {translate(taskMessages, "running")}
+                {stats.inProgress} Running
               </div>
             )}
             {stats.critical > 0 && (
               <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-status-red/[0.06] border border-status-red/20 text-[10px] font-bold uppercase tracking-[0.14em] text-status-red">
                 <Flame className="w-3 h-3" strokeWidth={2.5} />
-                {formatNumber(stats.critical)} {translate(taskMessages, "critical")}
+                {stats.critical} Critical
               </div>
             )}
             <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
               <ListChecks className="w-3 h-3" strokeWidth={2} />
-              {formatNumber(stats.total)} {translate(taskMessages, "total")}
+              {stats.total} Total
             </div>
           </div>
 
@@ -390,7 +378,7 @@ export const TasksPage: FunctionComponent = () => {
             disabled={!selectedProject || sprints.length === 0}
             className="!flex !items-center !justify-center !w-full lg:!w-auto !gap-2.5 !px-6 !py-3.5 !font-bold !text-sm !rounded-2xl !transition-all !duration-300 !shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:!shadow-[0_8px_32px_rgba(0,224,160,0.45)] hover:!-translate-y-px !shrink-0"
           >
-            {translate(taskMessages, (showComposer || editingTask) ? "closeComposer" : "newTask")}
+            {(showComposer || editingTask) ? "Close Composer" : "New Task"}
           </Button>
           </div>
         }
@@ -417,13 +405,13 @@ export const TasksPage: FunctionComponent = () => {
           aria-labelledby="task-workspace-heading"
           className={`grid items-start gap-6 ${showComposer || editingTask ? "xl:grid-cols-[minmax(0,1fr)_minmax(28rem,42vw)]" : "grid-cols-1"}`}
         >
-          <h2 id="task-workspace-heading" className="sr-only">{translate(taskMessages, "taskWorkspace")}</h2>
+          <h2 id="task-workspace-heading" className="sr-only">Task workspace</h2>
 
           <section
             aria-labelledby="task-board-heading"
             className={`${showComposer || editingTask ? "order-2 xl:order-1" : ""} min-w-0 space-y-6`}
           >
-            <h3 id="task-board-heading" className="sr-only">{translate(taskMessages, "taskBoardRegion")}</h3>
+            <h3 id="task-board-heading" className="sr-only">Task board</h3>
             <TaskBoardFilters
               sprints={sprints}
               selectedSprintId={taskScopeSprintId}
@@ -453,7 +441,7 @@ export const TasksPage: FunctionComponent = () => {
             </div>
             {filterTransitionPending && (
               <div role="status" aria-live="polite" className="rounded-2xl border border-signal-500/15 bg-signal-500/[0.06] px-4 py-3 text-xs font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400">
-                {translate(taskMessages, "updatingFilters")}
+                Updating task board filters. Current cards remain visible until results settle.
               </div>
             )}
             <TaskBoardColumns
@@ -489,7 +477,7 @@ export const TasksPage: FunctionComponent = () => {
               className="order-1 min-w-0 scroll-mt-8 xl:sticky xl:top-6 xl:order-2"
             >
               <h3 id="task-editor-heading" className="sr-only">
-                {translate(taskMessages, editingTask ? "editTaskEditor" : "newTaskEditor")}
+                {editingTask ? "Edit task editor" : "New task editor"}
               </h3>
               <TaskComposer
                 key={editingTask?.recordId || "new"}

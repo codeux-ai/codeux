@@ -1,8 +1,5 @@
 import type { TaskStatus } from "../../types.js";
 import { getTaskLane } from "../task-board-state.js";
-import type { DashboardLocale } from "../../i18n/locales.js";
-import { translateTask } from "../../i18n/messages/tasks.js";
-import { getTaskStatusLabel } from "../tasks-constants.js";
 
 const DROP_TARGET_STATUS_BY_LANE: Record<TaskStatus, TaskStatus> = {
   pending: "pending",
@@ -26,10 +23,10 @@ export function resolveTaskDropStatus(
   return DROP_TARGET_STATUS_BY_LANE[normalizedTargetLane];
 }
 
-export function getTaskDragInstruction(isReducedMotion: boolean, locale: DashboardLocale = "en"): string {
+export function getTaskDragInstruction(isReducedMotion: boolean): string {
   return isReducedMotion
-    ? translateTask(locale, "dropDisabledReducedMotion")
-    : translateTask(locale, "dragPointerOnly");
+    ? "Drag disabled because reduced motion is enabled."
+    : "Pointer drag only. Keyboard reordering is not supported.";
 }
 
 export function getTaskDropFeedback(args: {
@@ -37,21 +34,19 @@ export function getTaskDropFeedback(args: {
   isDragging: boolean;
   targetLane: TaskStatus;
   currentStatus?: TaskStatus;
-  locale?: DashboardLocale;
 }): string {
-  const locale = args.locale ?? "en";
   if (args.isReducedMotion) {
-    return getTaskDragInstruction(true, locale);
+    return getTaskDragInstruction(true);
   }
 
   if (!args.isDragging || !args.currentStatus) {
-    return translateTask(locale, "dropInactive");
+    return "Drop target inactive.";
   }
 
   const targetStatus = resolveTaskDropStatus(args.currentStatus, args.targetLane);
   if (!targetStatus) {
-    return translateTask(locale, "dropCurrentLane");
+    return "Drop target is the current lane.";
   }
 
-  return translateTask(locale, "dropMove", { status: getTaskStatusLabel(targetStatus, locale).toLocaleLowerCase(locale) });
+  return `Drop will move task to ${targetStatus.replace(/_/g, " ")}.`;
 }

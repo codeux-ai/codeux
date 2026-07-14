@@ -4,14 +4,6 @@ The **Tasks** page (`/tasks`) is a Kanban-style task board for the active projec
 
 Use it when you want to review planned work, create or edit a task, check dependency blockers, or choose how a specific task should be executed.
 
-## Language and task content
-
-The Tasks page follows the dashboard language setting and is fully available in English and German. This includes board headings, filters, lanes, task actions, dependency and review labels, editor validation, confirmations, loading and empty states, and screen-reader announcements. Counts (including thousands separators), dates, elapsed durations, and rating values use the conventions of the selected language.
-
-Localization never rewrites task data or worker output. Task keys, titles, descriptions, Markdown prompts, project and sprint names, branch and pull-request details, provider and agent names, QA and review text, execution messages, and backend error details remain exactly as stored or received. Switching the dashboard language therefore changes only the surrounding interface, not the content sent to a worker or persisted through create, edit, rerun, dependency, and delete operations.
-
-Sprint schedules on this page are formatted in the selected language directly from their start and end dates. Sprints without valid dates show a localized open-schedule fallback. The task-time labels produced by the dashboard for completed, review, active, not-started, and optimistic states are also localized, while provider and API runtime values remain verbatim.
-
 ## Project and sprint scope
 
 The global project selector in the navbar owns the active project. Changing projects while you are on `/tasks` updates the router to the new project and resets any stale sprint filter that belonged to the previous project. A project-aware deep link is consumed once when it opens; it is not continuously enforced afterward. An older mounted Tasks tab therefore follows later project changes instead of switching the selector back, including when another dashboard tab changes the active project.

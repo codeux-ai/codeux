@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { buildTaskBoardSprintScopeState, buildTaskBoardViewModel, buildTaskFilterAnnouncement } from "../../../dashboard/src/v2/lib/tasks/task-board-view-model.js";
+import { buildTaskBoardSprintScopeState, buildTaskBoardViewModel } from "../../../dashboard/src/v2/lib/tasks/task-board-view-model.js";
 import type { Sprint, Task } from "../../../dashboard/src/v2/types.js";
 import type {
   ExecutionAttentionItemSummary,
@@ -730,50 +730,4 @@ test("buildTaskBoardSprintScopeState exposes selected, loading, and empty scope 
     selectedSprintLabel: null,
     loading: false,
   })).toMatchObject({ label: "No sprints", isEmpty: true });
-});
-
-test("buildTaskBoardViewModel refreshes localized presentation while preserving optimistic records", () => {
-  const optimisticTask = createMockTask("opt-unchanged", {
-    id: "OPT-...",
-    recordId: "opt-unchanged",
-    title: "Keep optimistic title",
-    isOptimistic: true,
-  });
-  const common = {
-    tasks: [],
-    optimisticTasks: [optimisticTask],
-    statusFilter: "all" as const,
-    priorityFilter: "all" as const,
-    listWindow: 50 as const,
-    taskScopeSprintId: null,
-    taskDispatches: [],
-    recentEvents: [],
-    subtasks: [],
-  };
-  const english = buildTaskBoardViewModel({ ...common, locale: "en" });
-  const german = buildTaskBoardViewModel({
-    ...common,
-    locale: "de",
-    previousTaskViewModels: english.taskViewModels,
-  });
-
-  expect(german.boardState.filteredTasks[0]).toBe(optimisticTask);
-  expect(german.taskViewModels.get("opt-unchanged")).not.toBe(english.taskViewModels.get("opt-unchanged"));
-  expect(german.taskViewModels.get("opt-unchanged")?.task.title).toBe("Keep optimistic title");
-  expect(german.taskViewModels.get("opt-unchanged")?.optimisticSavingLabel).toBe("Aufgabenänderungen werden gespeichert");
-});
-
-test("buildTaskFilterAnnouncement formats German counts without changing filter semantics", () => {
-  const announcement = buildTaskFilterAnnouncement({
-    totalCount: 1_234,
-    visibleCount: 1_234,
-    statusFilter: "all",
-    priorityFilter: "all",
-    scopeLabel: "Sprint Alpha",
-    locale: "de",
-  });
-
-  expect(announcement).toContain("1.234 Aufgaben");
-  expect(announcement).toContain("Sprint Alpha");
-  expect(announcement).toContain("alle Status");
 });
