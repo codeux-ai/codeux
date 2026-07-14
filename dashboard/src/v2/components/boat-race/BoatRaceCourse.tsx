@@ -6,6 +6,7 @@ import type { ShipDatum } from "../../hooks/useBoatRaceAnimation.js";
 import { getBoatRaceCheckpoints } from "../../lib/boat-race.js";
 
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useLiveI18n } from "../../i18n/messages/live.js";
 
 export const CheckpointBuoy: FunctionComponent<{ x: number; label: string; color: string; isDark: boolean }> = memo(({ x, color, label, isDark }) => {
     const isReducedMotion = useReducedMotion();
@@ -36,6 +37,7 @@ export const CheckpointBuoy: FunctionComponent<{ x: number; label: string; color
 
 export const FinishLine: FunctionComponent<{ x: number; isDark: boolean }> = memo(({ x, isDark }) => {
     const isReducedMotion = useReducedMotion();
+    const { locale, t } = useLiveI18n();
     return (
     <g>
         {/* Radial glow */}
@@ -77,7 +79,7 @@ export const FinishLine: FunctionComponent<{ x: number; isDark: boolean }> = mem
         {/* FINISH label */}
         <text x={x + 7} y={SVG_H - 16} textAnchor="middle" fill="#00E0A0" fontSize={7.5} fontFamily="monospace"
             fontWeight="bold" letterSpacing="0.3em" opacity={0.3}>
-            FINISH
+            {t("finish").toLocaleUpperCase(locale)}
         </text>
     </g>
     );
@@ -222,9 +224,9 @@ export const BoatRaceBackground = memo(({ isDark, ripples }: { isDark: boolean; 
     );
 });
 
-const buoys = getBoatRaceCheckpoints();
-
 export const BoatRaceCourseLayer = memo(({ isDark, activeShips }: { isDark: boolean; activeShips: ShipDatum[] }) => {
+    const { locale } = useLiveI18n();
+    const buoys = getBoatRaceCheckpoints(locale);
     return (
         <g>
             {buoys.map(b => (

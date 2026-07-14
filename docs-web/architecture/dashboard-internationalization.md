@@ -33,7 +33,7 @@ const messages = defineDashboardMessages({
 const { translate, translatePlural, formatNumber } = useDashboardI18n();
 ```
 
-English and German must declare exactly the same top-level keys. Interpolation treats replacement values as literal text, and plural messages require an `other` form. Plural selection receives the raw count, while the reserved `{count}` token is number-formatted for the active locale. Other locale-aware formatting also delegates to the browser's native `Intl` implementation.
+English and German must declare exactly the same top-level keys. Interpolation treats replacement values as literal text, and plural messages require an `other` form. Plural selection receives the raw numeric count, while the reserved `{count}` token is number-formatted for the active locale; callers may provide a separately formatted `{count}` display value, which is preserved. Other locale-aware formatting also delegates to the browser's native `Intl` implementation.
 
  Keep each catalog with its owning feature and import it only where the feature is loaded. Translate dashboard-authored interface copy only. Never translate provider output, API responses, stored instructions, project data, runtime diagnostics, or user-authored content.
 
@@ -89,3 +89,9 @@ The Settings shell owns `messages/settings-shell.ts`. Users choose **English** o
 `messages/shell.ts` owns global navigation, title-bar controls, search, notification chrome, status presentations, documentation-viewer controls, and reusable control defaults. Navigation copy is keyed by stable item ID, allowing the sidebar, dock, top navigation, search, and experience-mode filtering to display the same locale-aware labels without changing paths or feature flags. Explicit component copy remains authoritative; translated defaults are used only when callers omit it.
 
 Notifications translate only dashboard-authored chrome, fallback actions, relative times, severity labels, and field names. Server-authored titles, bodies, reasons, instructions, recommended actions, context values, and errors remain verbatim. Documentation routes translate their headings, search, pagination, menus, landmarks, and result counts, but fetched titles, descriptions, sections, source paths, and rendered Markdown remain English.
+
+## Live route boundary
+
+The lazy-loaded Live route owns `dashboard/src/v2/i18n/messages/live.ts`. Its catalog covers headers, filters, transport and reconnect notices, task controls, runtime and attention panels, timeline and DAG legends, boat-race labels, statistics, confirmations, empty states, and screen-reader summaries. Numbers, timestamps, durations, percentages, token totals, and plural counts use locale-aware formatters.
+
+Live localization is presentation-only. Known sprint-run, dispatch, and task-run status enums resolve through the Live catalog, while unrecognized technical status values remain raw. Sprint, task, and project names; execution event messages; provider or agent output; Git branches; pull request and CI details; attention descriptions; terminal diagnostics; intervention titles, reasons, and instructions; and API errors remain verbatim. Locale-bound action callbacks update confirmations and retry controls immediately after a language change. Switching locale does not alter realtime subscriptions, runtime projection, status precedence, event ordering, or action endpoints.

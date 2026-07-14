@@ -13,6 +13,7 @@ import {
 import { SPAWN_Y, HARBOUR_X, RACE_LEN, LANE_TOP, LANE_BOT } from "../components/boat-race/constants.js";
 import { stableRand, getStyle, type StatusStyle } from "../components/boat-race/utils.js";
 import { useReducedMotion } from "./use-reduced-motion.js";
+import type { DashboardLocale } from "../i18n/locales.js";
 
 export const CP = {
     HARBOUR:    0.00,
@@ -99,7 +100,8 @@ export interface AnimatedShipPosition {
 export const useBoatRaceAnimation = (
     tasks: Subtask[],
     dispatches: ExecutionTaskDispatchSummary[],
-    hasSprintContext: boolean
+    hasSprintContext: boolean,
+    locale: DashboardLocale = "en",
 ) => {
     const isReducedMotion = useReducedMotion();
 
@@ -115,7 +117,7 @@ export const useBoatRaceAnimation = (
         return active.map((task, i) => {
             const raceKey = getBoatRaceTaskKey(task);
             const progress = getProgressTarget(task);
-            const style = getStyle(task);
+            const style = getStyle(task, locale);
             const yJitter = (stableRand(raceKey, 20) - 0.5) * laneH * 0.2;
             return {
                 key: raceKey,
@@ -126,7 +128,7 @@ export const useBoatRaceAnimation = (
                 style
             } as ShipDatum;
         });
-    }, [dispatches, hasSprintContext, tasks]);
+    }, [dispatches, hasSprintContext, locale, tasks]);
 
     const harbourCount = useMemo(() => {
         if (!hasSprintContext || tasks.length === 0) return 0;

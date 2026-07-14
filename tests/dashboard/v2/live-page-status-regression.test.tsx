@@ -253,6 +253,42 @@ describe("LiveSessionPage Status Regression", () => {
     expect(screen.getByRole("status", { name: /Waiting for Sprint Start/i })).toHaveTextContent("Launch a sprint to activate live task telemetry");
   });
 
+  it("renders German idle and active Live presentation while preserving task content", () => {
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData());
+
+    const view = render(
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <LiveSessionPage />
+      </DashboardI18nProvider>,
+    );
+
+    expect(screen.getByLabelText("Live-Sitzung")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: /Warten auf den Sprint-Start/i })).toBeInTheDocument();
+
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      tasksWithLiveActivities: [liveTask({
+        title: "KEEP task title verbatim",
+        prompt: "KEEP provider-authored prompt verbatim",
+      })],
+      execution: liveExecution(),
+    }));
+    view.rerender(
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <LiveSessionPage />
+      </DashboardI18nProvider>,
+    );
+
+    expect(screen.getByText("Sprint-Pipeline")).toBeInTheDocument();
+    expect(screen.getByText("KEEP task title verbatim")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Aufgabe T-100 bearbeiten" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Aufgabe T-100 zwangsweise abschließen" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Aufgabe T-100 erneut ausführen" })).toBeInTheDocument();
+
+    const statsTab = screen.getByRole("tab", { name: "Statistik" });
+    fireEvent.keyDown(statsTab, { key: "ArrowRight" });
+    expect(screen.getByRole("tab", { name: "Rennen" })).toHaveAttribute("aria-selected", "true");
+  });
+
   it("keeps recovered live task data in the task pipeline", () => {
     vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
       tasksWithLiveActivities: [
@@ -285,8 +321,13 @@ describe("LiveSessionPage Status Regression", () => {
       execution: liveExecution({ recentEvents: [gateEvent()] }),
     }));
 
-    const { rerender } = renderWithI18n(<LiveSessionPage />);
-    expect(screen.getByRole("button", { name: /CI status: CI running/i })).toBeInTheDocument();
+    const renderGermanPage = () => (
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <LiveSessionPage />
+      </DashboardI18nProvider>
+    );
+    const { rerender } = render(renderGermanPage());
+    expect(screen.getByRole("button", { name: /CI-Status: CI läuft/i })).toBeInTheDocument();
 
     vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
       tasksWithLiveActivities: [liveTask({ status: "COMPLETED", is_merged: true, merge_indicator: "MERGED" })],
@@ -306,14 +347,19 @@ describe("LiveSessionPage Status Regression", () => {
         ],
       }),
     }));
-    rerender(<LiveSessionPage />);
+    rerender(renderGermanPage());
 
-    expect(screen.getByRole("button", { name: /CI status: CI passed/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /CI status: CI failed/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /CI-Status: CI bestanden/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /CI-Status: CI fehlgeschlagen/i })).not.toBeInTheDocument();
     expect(screen.queryByText("Merged")).not.toBeInTheDocument();
   });
 
   it("replays active CI attention through reconnects without inventing disconnect failures", () => {
+    const renderGermanPage = () => (
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <LiveSessionPage />
+      </DashboardI18nProvider>
+    );
     const execution = liveExecution({
       attentionItems: [ciAttention()],
       recentEvents: [gateEvent({ payload: { state: "ready_for_merge", prNumber: 100 } })],
@@ -325,8 +371,8 @@ describe("LiveSessionPage Status Regression", () => {
       execution,
     }));
 
-    const { rerender } = renderWithI18n(<LiveSessionPage />);
-    expect(screen.getByRole("button", { name: /CI status: CI failed/i })).toBeInTheDocument();
+    const { rerender } = render(renderGermanPage());
+    expect(screen.getByRole("button", { name: /CI-Status: CI fehlgeschlagen/i })).toBeInTheDocument();
 
     vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
       transportState: "reconnecting",
@@ -334,20 +380,20 @@ describe("LiveSessionPage Status Regression", () => {
       tasksWithLiveActivities: taskSnapshot,
       execution,
     }));
-    rerender(<LiveSessionPage />);
+    rerender(renderGermanPage());
 
-    expect(screen.getByRole("button", { name: /CI status: CI failed/i })).toBeInTheDocument();
-    expect(screen.getAllByText("Reconnecting").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /CI-Status: CI fehlgeschlagen/i })).toBeInTheDocument();
+    expect(screen.getAllByText("Verbindung wird wiederhergestellt").length).toBeGreaterThan(0);
 
     vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
       transportState: "disconnected",
       tasksWithLiveActivities: taskSnapshot,
       execution: liveExecution({ attentionItems: [], recentEvents: [] }),
     }));
-    rerender(<LiveSessionPage />);
+    rerender(renderGermanPage());
 
-    expect(screen.queryByRole("button", { name: /CI status: CI failed/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /CI status: CI running/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /CI-Status: CI fehlgeschlagen/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /CI-Status: CI läuft/i })).toBeInTheDocument();
   });
 
   it("preserves QA disclosures, runtime feed, prompt disclosure, and task controls", async () => {
@@ -479,12 +525,84 @@ describe("LiveSessionPage Status Regression", () => {
 
     // Assert system stop copy
     expect(screen.getAllByText("Stopped").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Sprint Stopped By System").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("The orchestrator stopped this sprint.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Worker pause").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("No executable work was available.").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Resolve the stop condition and restart when ready.").length).toBeGreaterThan(0);
 
     // Assert intervention badge is absent
     expect(screen.queryByText("Needs you")).not.toBeInTheDocument();
+  });
+
+  it("localizes German paused and system-stopped framing while preserving intervention content", () => {
+    const renderGermanPage = () => (
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <LiveSessionPage />
+      </DashboardI18nProvider>
+    );
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      execution: {
+        ...baseRuntimeData().execution,
+        sprintRuns: [createSprintRunFixture({
+          status: "paused",
+          humanIntervention: {
+            ...createManualPauseIntervention(),
+            title: "KEEP manual title verbatim",
+            reason: "KEEP manual reason verbatim",
+            instructions: "KEEP manual instructions verbatim",
+          },
+        })],
+      },
+    }));
+
+    const view = render(renderGermanPage());
+
+    expect(screen.getAllByText("Pausiert").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("KEEP manual title verbatim").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("KEEP manual reason verbatim").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("KEEP manual instructions verbatim").length).toBeGreaterThan(0);
+    expect(screen.getByText("Du wirst benötigt")).toBeInTheDocument();
+
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      execution: {
+        ...baseRuntimeData().execution,
+        sprintRuns: [createSprintRunFixture({
+          status: "paused",
+          humanIntervention: {
+            ...createSystemStopIntervention(),
+            title: "KEEP system title verbatim",
+            reason: "KEEP system reason verbatim",
+            instructions: "KEEP system instructions verbatim",
+          },
+        })],
+      },
+    }));
+    view.rerender(renderGermanPage());
+
+    expect(screen.getAllByText("Gestoppt").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("KEEP system title verbatim").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("KEEP system reason verbatim").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("KEEP system instructions verbatim").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Du wirst benötigt")).not.toBeInTheDocument();
+
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      execution: {
+        ...baseRuntimeData().execution,
+        sprintRuns: [createSprintRunFixture({
+          status: "paused",
+          humanIntervention: {
+            ...createSystemStopIntervention(),
+            title: "",
+            reason: "",
+            instructions: "",
+          },
+        })],
+      },
+    }));
+    view.rerender(renderGermanPage());
+
+    expect(screen.getByText("Sprint vom System gestoppt")).toBeInTheDocument();
+    expect(screen.getByText("Der Orchestrator hat diesen Sprint gestoppt.")).toBeInTheDocument();
+    expect(screen.getAllByText("Behebe die Stoppursache und starte erneut, sobald alles bereit ist.").length).toBeGreaterThan(0);
   });
 
   it("ensures duplicate intervention sections/badges are absent in the header", () => {

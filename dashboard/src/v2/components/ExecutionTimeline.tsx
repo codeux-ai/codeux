@@ -7,6 +7,7 @@ import { useExecutionTimeline } from "../../hooks/ExecutionTimelineContext.js";
 import type { ExecutionSprintRunSummary } from "../../types.js";
 import { WaveFluid } from "./ui/WaveFluid.js";
 import { BorderTrace } from "./ui/BorderTrace.js";
+import { useLiveI18n } from "../i18n/messages/live.js";
 
 interface ExecutionTimelineProps {
   activeSprintRuns?: ExecutionSprintRunSummary[];
@@ -19,6 +20,7 @@ export const ExecutionTimeline: FunctionComponent<ExecutionTimelineProps> = memo
   collapsible = false,
   defaultOpen = true,
 }) => {
+  const { t, formatNumber } = useLiveI18n();
   const { execution } = useExecutionTimeline();
   const [open, setOpen] = useState(defaultOpen);
   const contentId = useId();
@@ -33,7 +35,7 @@ export const ExecutionTimeline: FunctionComponent<ExecutionTimelineProps> = memo
   }, [execution, resolvedActiveSprintRuns.length]);
 
   return (
-    <div className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/70 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]" role="region" aria-label="Runtime Timeline">
+    <div className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/70 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]" role="region" aria-label={t("runtimeTimeline")}>
       <WaveFluid accentHex="#00E0A0" />
       <BorderTrace accentHex="#00E0A0" />
 
@@ -47,10 +49,10 @@ export const ExecutionTimeline: FunctionComponent<ExecutionTimelineProps> = memo
         >
           <div className="flex min-w-0 flex-wrap items-center gap-2.5">
             <Workflow className="h-4 w-4 text-signal-500" strokeWidth={1.5} aria-hidden="true" />
-            <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Runtime Timeline</span>
+            <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("runtimeTimeline")}</span>
             {resolvedActiveSprintRuns.length > 0 && (
               <span className="rounded-md bg-signal-500/10 px-2 py-0.5 text-[9px] font-mono font-bold text-signal-500">
-                {resolvedActiveSprintRuns.length} active
+                {t("activeCount", { count: formatNumber(resolvedActiveSprintRuns.length) })}
               </span>
             )}
           </div>
@@ -64,10 +66,10 @@ export const ExecutionTimeline: FunctionComponent<ExecutionTimelineProps> = memo
         <div className="relative z-10 flex items-center justify-between gap-4 p-5">
           <div className="flex min-w-0 flex-wrap items-center gap-2.5">
             <Workflow className="h-4 w-4 text-signal-500" strokeWidth={1.5} aria-hidden="true" />
-            <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Runtime Timeline</span>
+            <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("runtimeTimeline")}</span>
             {resolvedActiveSprintRuns.length > 0 && (
               <span className="rounded-md bg-signal-500/10 px-2 py-0.5 text-[9px] font-mono font-bold text-signal-500">
-                {resolvedActiveSprintRuns.length} active
+                {t("activeCount", { count: formatNumber(resolvedActiveSprintRuns.length) })}
               </span>
             )}
           </div>
@@ -79,8 +81,8 @@ export const ExecutionTimeline: FunctionComponent<ExecutionTimelineProps> = memo
           {timelineEvents.length === 0 ? (
             <div role="status" aria-live="polite" className="flex flex-col items-center justify-center rounded-xl border border-black/[0.04] bg-black/[0.015] py-10 dark:border-white/[0.05] dark:bg-white/[0.015]">
               <Workflow className="w-8 h-8 mb-3 opacity-40 text-signal-500" strokeWidth={1.5} aria-hidden="true" />
-              <p className="text-sm font-bold tracking-tight text-slate-600 dark:text-slate-400">No runtime events yet</p>
-              <p className="text-xs mt-1 font-mono opacity-80 text-slate-500">Listening for execution activity...</p>
+              <p className="text-sm font-bold tracking-tight text-slate-600 dark:text-slate-400">{t("noRuntimeEvents")}</p>
+              <p className="text-xs mt-1 font-mono opacity-80 text-slate-500">{t("listeningForActivity")}</p>
             </div>
           ) : (
             <div className="max-h-72 overflow-y-auto pr-1 dashboard-scrollbar">

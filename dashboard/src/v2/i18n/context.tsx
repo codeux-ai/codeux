@@ -156,6 +156,6 @@ export const useDashboardI18n = (): DashboardI18nContextValue => {
  * embedders. They use the English compatibility locale when no root provider
  * is present, while the mounted dashboard still reacts to provider updates.
  */
- export const useOptionalDashboardI18n = (): DashboardI18nContextValue => (
-   useContext(DashboardI18nContext) ?? FALLBACK_DASHBOARD_I18N
+export const useOptionalDashboardI18n = (): DashboardI18nContextValue => (
+  useContext(DashboardI18nContext) ?? FALLBACK_DASHBOARD_I18N
 );
