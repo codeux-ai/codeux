@@ -51,12 +51,18 @@ vi.mock("../../../dashboard/src/v2/lib/node-flow-api.js", () => ({
 vi.mock("../../../dashboard/src/v2/lib/quicksprint-api.js", () => ({
   fetchQuicksprintTemplates: vi.fn().mockResolvedValue([]),
 }));
-vi.mock("../../../dashboard/src/v2/lib/scheduler-api.js", () => ({
-  fetchProjectSchedule: vi.fn().mockResolvedValue({ entries: [], occurrences: [] }),
-  createSchedulerEntry: vi.fn().mockResolvedValue({ id: "entry-1" }),
-  updateSchedulerEntry: vi.fn().mockResolvedValue({ id: "entry-1" }),
-  deleteSchedulerEntry: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock("../../../dashboard/src/v2/lib/scheduler-api.js", async () => {
+  const actual = await vi.importActual<typeof import("../../../dashboard/src/v2/lib/scheduler-api.js")>(
+    "../../../dashboard/src/v2/lib/scheduler-api.js",
+  );
+  return {
+    ...actual,
+    fetchProjectSchedule: vi.fn().mockResolvedValue({ entries: [], occurrences: [] }),
+    createSchedulerEntry: vi.fn().mockResolvedValue({ id: "entry-1" }),
+    updateSchedulerEntry: vi.fn().mockResolvedValue({ id: "entry-1" }),
+    deleteSchedulerEntry: vi.fn().mockResolvedValue(undefined),
+  };
+});
 vi.mock("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js", () => ({
   subscribeToDashboardRealtime: vi.fn().mockReturnValue(vi.fn()),
 }));
@@ -890,7 +896,7 @@ describe("SchedulerPage", () => {
     expect(screen.getByText("Edit entry")).toBeInTheDocument();
     expect(screen.getByLabelText(/after another sprint ends/i)).toBeChecked();
     expect(screen.getByText("Target Sprint")).toBeInTheDocument();
-    expect(screen.getByText("Source Sprint (completed)")).toBeInTheDocument();
+    expect(screen.getByText("Source Sprint (Completed)")).toBeInTheDocument();
 
     const offsetInput = screen.getByLabelText(/offset minutes/i) as HTMLInputElement;
     expect(offsetInput.value).toBe("10");
@@ -1025,6 +1031,91 @@ describe("SchedulerPage", () => {
     expect(row).toHaveTextContent("Europe/Berlin");
     expect(row).toHaveTextContent(/14:00/);
     expect(row).toHaveTextContent("geplant");
+  });
+
+  it("localizes German sprint statuses before rendering anchored schedule choices", async () => {
+    const localizedSprints = [
+      { id: "sprint-running", name: "Laufender Sprint", status: "running" },
+      { id: "sprint-paused", name: "Pausierter Sprint", status: "paused" },
+      { id: "sprint-completed", name: "Abgeschlossener Sprint", status: "completed" },
+      { id: "sprint-failed", name: "Fehlgeschlagener Sprint", status: "failed" },
+      { id: "sprint-cancelled", name: "Abgebrochener Sprint", status: "cancelled" },
+      { id: "sprint-idle", name: "Entwurfs-Sprint", status: "idle" },
+    ];
+    vi.mocked(fetchSprints).mockResolvedValue({ sprints: localizedSprints } as any);
+    vi.mocked(fetchProjectSchedule).mockResolvedValue({ entries: [], occurrences: [] } as any);
+
+    renderSchedulerPage(mockProjectData, "de");
+
+    await screen.findByText("Laufzeit-Zeitplaner");
+    await screen.findByText("Laufender Sprint");
+    fireEvent.click(screen.getByLabelText(/nachdem ein anderer Sprint endet/i));
+    const sourceSprintLabel = await screen.findByText("Laufender Sprint (Läuft)");
+    fireEvent.click(sourceSprintLabel.closest("button")!);
+
+    expect(await screen.findByRole("option", { name: "Pausierter Sprint (Pausiert)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Abgeschlossener Sprint (Abgeschlossen)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Fehlgeschlagener Sprint (Fehlgeschlagen)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Abgebrochener Sprint (Abgebrochen)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Entwurfs-Sprint (Entwurf)" })).toBeInTheDocument();
+    expect(screen.queryByText(/\((running|paused|completed|failed|cancelled|idle)\)/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("option", { name: "Fehlgeschlagener Sprint (Fehlgeschlagen)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Planen" }));
+
+    await waitFor(() => expect(createSchedulerEntry).toHaveBeenCalledWith("proj-1", expect.objectContaining({
+      targetType: "sprint",
+      sprintTarget: { sprintId: "sprint-running" },
+      scheduleAnchor: {
+        mode: "after_sprint_end",
+        sourceSprintId: "sprint-failed",
+        offsetMinutes: 0,
+      },
+    })));
+    expect(localizedSprints.map((sprint) => [sprint.id, sprint.name, sprint.status])).toEqual([
+      ["sprint-running", "Laufender Sprint", "running"],
+      ["sprint-paused", "Pausierter Sprint", "paused"],
+      ["sprint-completed", "Abgeschlossener Sprint", "completed"],
+      ["sprint-failed", "Fehlgeschlagener Sprint", "failed"],
+      ["sprint-cancelled", "Abgebrochener Sprint", "cancelled"],
+      ["sprint-idle", "Entwurfs-Sprint", "idle"],
+    ]);
+  });
+
+  it("falls back to locale formatting when a persisted timezone ID is invalid", async () => {
+    vi.mocked(fetchSprints).mockResolvedValue({
+      sprints: [{ id: "sprint-1", name: "Zeitzonenprüfung", status: "running" }],
+    } as any);
+    vi.mocked(fetchProjectSchedule).mockResolvedValue({
+      entries: [{
+        id: "entry-invalid-timezone",
+        projectId: "proj-1",
+        title: "Ungültige Zeitzone bleibt sichtbar",
+        targetType: "sprint",
+        status: "scheduled",
+        scheduledFor: "2026-06-01T12:00:00.000Z",
+        timezone: "Mars/Olympus_Mons",
+        sprintTarget: { sprintId: "sprint-1" },
+        recurrence: {
+          frequency: "daily",
+          interval: 1,
+          endMode: "on_date",
+          until: "2026-06-03T12:00:00.000Z",
+        },
+        nextRunAt: "2026-06-01T12:00:00.000Z",
+        lastRunAt: "2026-05-31T12:00:00.000Z",
+        runCount: 1,
+        lastError: null,
+      }],
+      occurrences: [],
+    } as any);
+
+    renderSchedulerPage(mockProjectData, "de");
+
+    const row = await screen.findByTestId("scheduler-entry-entry-invalid-timezone");
+    expect(row).toHaveTextContent("Ungültige Zeitzone bleibt sichtbar");
+    expect(row).toHaveTextContent("Mars/Olympus_Mons");
+    expect(row).toHaveTextContent(/Alle täglich bis/);
+    expect(row).toHaveTextContent(/Zuletzt ausgeführt:/);
   });
 
   it("reports invalid German schedule dates and recurrence windows before submitting", async () => {

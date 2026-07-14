@@ -38,6 +38,15 @@ describe("Scheduler locale presentation", () => {
     expect(formatScheduleDateTime("not-an-iso-date", "de", "Europe/Berlin")).toBe("Keine geplante Zeit");
   });
 
+  it("falls back to active-locale formatting for an invalid persisted timezone", () => {
+    const iso = "2026-10-25T01:30:00.000Z";
+
+    expect(formatScheduleDateTime(iso, "de", "Mars/Olympus_Mons"))
+      .toBe(formatScheduleDateTime(iso, "de"));
+    expect(() => toAgentSchedulerSummaryEntry(agentEntry({ timezone: "Mars/Olympus_Mons" }), "de"))
+      .not.toThrow();
+  });
+
   it("localizes agent schedule chrome while keeping titles, IDs, and timezone IDs verbatim", () => {
     const summary = toAgentSchedulerSummaryEntry(agentEntry(), "de");
 

@@ -44,6 +44,24 @@ const activePresentationLocale = (): DashboardLocale => resolveDashboardLocale(
   typeof document === "undefined" ? undefined : document.documentElement.lang,
 );
 
+export const formatSchedulerDateValueInTimeZone = (
+  value: Date | number,
+  locale: DashboardLocale,
+  options: Omit<Intl.DateTimeFormatOptions, "timeZone">,
+  timeZone?: string,
+): string => {
+  const formatters = createDashboardFormatters(locale);
+  if (timeZone) {
+    try {
+      return formatters.formatDate(value, { ...options, timeZone });
+    } catch {
+      // Legacy rows may contain timezone identifiers unsupported by the host.
+      // Keep the identifier verbatim in the UI and format in the active locale.
+    }
+  }
+  return formatters.formatDate(value, options);
+};
+
 const scheduleAnchorOffsetLabel = (offsetMinutes: number | undefined, locale: DashboardLocale): string => {
   const offset = Math.max(0, Math.floor(Number(offsetMinutes ?? 0)));
   if (offset === 0) {
@@ -69,13 +87,12 @@ export const formatScheduleDateTime = (
   if (!Number.isFinite(date.getTime())) {
     return translateDashboardMessage(schedulerMessages, locale, "noScheduledTime");
   }
-  return createDashboardFormatters(locale).formatDate(date, {
+  return formatSchedulerDateValueInTimeZone(date, locale, {
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-    ...(timeZone ? { timeZone } : {}),
-  });
+  }, timeZone);
 };
 
 const statusLabel = (status: ScheduleStatus, locale: DashboardLocale): string => {

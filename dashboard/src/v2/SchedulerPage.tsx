@@ -24,7 +24,6 @@ import { PageHeader } from "./components/layout/PageHeader.js";
 import { AvantgardeSelect } from "./components/ui/AvantgardeSelect.js";
 import { Button } from "./components/ui/Button.js";
 import { useProjectData } from "./context/project-data.js";
-import { createDashboardFormatters } from "./i18n/formatters.js";
 import {
   translateDashboardMessage,
   translateDashboardPlural,
@@ -42,6 +41,7 @@ import {
   createSchedulerEntry,
   deleteSchedulerEntry,
   fetchProjectSchedule,
+  formatSchedulerDateValueInTimeZone,
   updateSchedulerEntry,
 } from "./lib/scheduler-api.js";
 import type {
@@ -164,32 +164,35 @@ const schedulerText = (
 ): string => translateDashboardMessage(schedulerMessages, locale, key, variables);
 
 export const formatSchedulerDayLabel = (date: Date, locale: DashboardLocale): string => (
-  createDashboardFormatters(locale).formatDate(date, { weekday: "short", month: "short", day: "numeric" })
+  formatSchedulerDateValueInTimeZone(date, locale, { weekday: "short", month: "short", day: "numeric" })
 );
 
 export const formatSchedulerTimeLabel = (
   value: string | Date,
   locale: DashboardLocale,
   timeZone?: string,
-): string => createDashboardFormatters(locale).formatTime(
+): string => formatSchedulerDateValueInTimeZone(
   typeof value === "string" ? new Date(value) : value,
-  { hour: "2-digit", minute: "2-digit", ...(timeZone ? { timeZone } : {}) },
+  locale,
+  { hour: "2-digit", minute: "2-digit" },
+  timeZone,
 );
 
 const formatSchedulerDateTime = (
   value: string | Date,
   locale: DashboardLocale,
   timeZone?: string,
-): string => createDashboardFormatters(locale).formatDate(
+): string => formatSchedulerDateValueInTimeZone(
   typeof value === "string" ? new Date(value) : value,
+  locale,
   {
     year: "numeric",
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-    ...(timeZone ? { timeZone } : {}),
   },
+  timeZone,
 );
 
 const targetLabel = (targetType: ScheduleTargetType, locale: DashboardLocale): string => {
@@ -229,6 +232,21 @@ const scheduleStatusLabel = (
     cancelled: "statusCancelled",
   } as const;
   return schedulerText(locale, key[status ?? "scheduled"]);
+};
+
+export const formatSchedulerSprintStatus = (
+  status: SprintRecord["status"],
+  locale: DashboardLocale,
+): string => {
+  const key = {
+    running: "sprintStatusRunning",
+    paused: "sprintStatusPaused",
+    completed: "sprintStatusCompleted",
+    failed: "sprintStatusFailed",
+    cancelled: "sprintStatusCancelled",
+    idle: "sprintStatusIdle",
+  } as const;
+  return schedulerText(locale, key[status]);
 };
 
 const schedulerViewLabel = (view: SchedulerView, locale: DashboardLocale): string => (
@@ -1241,7 +1259,7 @@ export const SchedulerPage: FunctionComponent = () => {
                           value: sprint.id,
                           label: translate(schedulerMessages, "sprintWithStatus", {
                             name: sprint.name,
-                            status: sprint.status,
+                            status: formatSchedulerSprintStatus(sprint.status, locale),
                           }),
                         })),
                       ]}
