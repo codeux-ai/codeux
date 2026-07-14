@@ -164,7 +164,7 @@ const StatsPageContent: FunctionComponent = () => {
       ? renderStatePanel({
           icon: Loader2,
           title: text("loadingTelemetry"),
-          description: text("gatheringTelemetry", { project: selectedProject.name, window: getWindowLabel(activeQuery.window, text("allTime")) }),
+          description: text("gatheringTelemetry", { project: selectedProject.name, window: windowLabel }),
           role: "status",
           iconClassName: "animate-spin motion-reduce:animate-none",
           badge: text("statsPanelRefreshing"),
@@ -173,7 +173,7 @@ const StatsPageContent: FunctionComponent = () => {
         ? renderStatePanel({
             icon: AlertTriangle,
             title: error,
-            description: text("selectedWindowRetained", { project: selectedProject.name, window: getWindowLabel(activeQuery.window, text("allTime")) }),
+            description: text("selectedWindowRetained", { project: selectedProject.name, window: windowLabel }),
             role: "alert",
             iconClassName: "text-[color:var(--stats-negative-text)]",
             badge: text("statsPanelUnavailable"),

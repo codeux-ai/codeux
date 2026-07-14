@@ -23,6 +23,8 @@ A selector at the top lets you pick the analysis window:
 
 All charts, ledgers, and metrics respect the selected timeframe. Custom date inputs retain UTC calendar-day values, while the visible range summary and confirmation use the dashboard language's date notation. Recent windows include the freshest available bucket: **Last 1 hour** includes the current 5-minute bucket, and **Last 24 hours** includes the current partial hour.
 
+Loading and recovery messages use that same localized window summary. For a custom range, the UTC date boundaries remain visible in the active dashboard language instead of exposing the internal query value.
+
 ## Analysis Modes
 
 Navigation across the top of the workspace controls the primary analysis lens: **Trend**, **Composition**, **Models**, **Providers**, **Ledgers**, and **System**.
