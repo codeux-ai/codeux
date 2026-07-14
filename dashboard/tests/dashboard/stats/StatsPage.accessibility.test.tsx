@@ -4,7 +4,7 @@
 /// <reference types="@testing-library/jest-dom" />
 import { h } from "preact";
 import { useState } from "preact/hooks";
-import { render, screen, cleanup, fireEvent } from "@testing-library/preact";
+import { render, screen, cleanup, fireEvent, within } from "@testing-library/preact";
 import { describe, it, expect, vi, afterEach, beforeAll } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import gsap from "gsap";
@@ -13,6 +13,7 @@ import { StatsPageHero } from "../../../src/v2/pages/stats/components/StatsPageH
 import { InteractiveUsageChart } from "../../../src/v2/pages/stats/components/InteractiveUsageChart.js";
 import { TelemetryLedgerTabs } from "../../../src/v2/pages/stats/components/TelemetryLedgerTabs.js";
 import { SystemFilterBar } from "../../../src/v2/pages/stats/components/system/SystemFilterBar.js";
+import { CostStudio } from "../../../src/v2/pages/stats/components/cost/CostStudio.js";
 import { isValidCustomRange } from "../../../src/v2/pages/stats/stats-utils.js";
 import { useUsageChartState } from "../../../src/v2/pages/stats/use-usage-chart-state.js";
 import type { SystemFilters } from "../../../src/v2/pages/stats/hooks/use-system-view-data.js";
@@ -286,6 +287,15 @@ function mockReducedMotion(matches: boolean): void {
 }
 
 beforeAll(() => {
+  class MockIntersectionObserver {
+    observe = vi.fn();
+    disconnect = vi.fn();
+    unobserve = vi.fn();
+  }
+  Object.defineProperty(globalThis, "IntersectionObserver", {
+    configurable: true,
+    value: MockIntersectionObserver,
+  });
   if (typeof window.SVGPathElement !== "undefined") {
     Object.defineProperty(window.SVGPathElement.prototype, "getTotalLength", {
       value: () => 100,
@@ -337,10 +347,20 @@ describe("StatsPage accessibility", () => {
     expect(modeGroup).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Trend" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Composition" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cost" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Models" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Providers" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ledgers" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "System" })).toBeInTheDocument();
+    expect(within(modeGroup).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Trend",
+      "Composition",
+      "Cost",
+      "Models",
+      "Providers",
+      "Ledgers",
+      "System",
+    ]);
     screen.getByRole("button", { name: "Trend" }).focus();
     expect(screen.getByRole("button", { name: "Trend" })).toHaveFocus();
 
@@ -538,5 +558,66 @@ describe("StatsPage accessibility", () => {
 
     const switches = screen.getAllByRole("switch");
     expect(switches.some((button) => button.getAttribute("aria-checked") === "true")).toBe(true);
+  });
+
+  it("keeps Cost charts, long ledgers, tabs, sorting, and announcements accessible at narrow widths", () => {
+    mockReducedMotion(true);
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 360 });
+    const costUsage = {
+      ...chartStats.usage,
+      costCoverage: {
+        configuredPricingInvocationCount: 12,
+        providerReportedCostInvocationCount: 0,
+        unpricedInvocationCount: 0,
+        providerReportedCostUsd: 0,
+      },
+    };
+    const longLabel = "A very long task label that must wrap without creating horizontal page overflow in a narrow cost ledger";
+    const costStats = {
+      ...chartStats,
+      usage: costUsage,
+      buckets: chartStats.buckets.map((bucket) => ({
+        ...bucket,
+        usage: { ...bucket.usage, costCoverage: costUsage.costCoverage },
+      })),
+      models: [],
+      purposes: [],
+      tasks: [{
+        id: "task-long",
+        label: longLabel,
+        secondaryLabel: "Long context that also needs safe wrapping",
+        status: "completed",
+        purpose: "task_coding",
+        provider: "provider-with-an-intentionally-long-identifier",
+        usage: costUsage,
+        lastActivityAt: "2026-07-01T12:00:00.000Z",
+      }],
+      sprints: [],
+      costAnalytics: { sprints: [] },
+    };
+
+    render(<CostStudio stats={costStats as any} />);
+
+    const studio = screen.getByRole("region", { name: "Cost analysis studio" });
+    expect(studio.className).toContain("min-w-0");
+    expect(screen.getByRole("table", { name: "Spend over time data" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Spend buckets")).toBeInTheDocument();
+    expect(screen.getByText(longLabel)).toBeInTheDocument();
+    expect(studio.querySelectorAll("[data-responsive-safe='true']").length).toBeGreaterThanOrEqual(2);
+
+    const tablist = screen.getByRole("tablist", { name: "Cost ledgers" });
+    const taskTab = screen.getByRole("tab", { name: /Tasks/ });
+    const sprintTab = screen.getByRole("tab", { name: /Sprints/ });
+    taskTab.focus();
+    fireEvent.keyDown(tablist, { key: "ArrowRight" });
+    expect(sprintTab).toHaveFocus();
+    fireEvent.keyDown(tablist, { key: "ArrowLeft" });
+    expect(taskTab).toHaveFocus();
+
+    fireEvent.click(screen.getByRole("button", { name: /Name, not sorted/i }));
+    expect(screen.getAllByRole("status").some((status) => /Sorted by Name ascending/.test(status.textContent || ""))).toBe(true);
+    for (const button of screen.getAllByRole("button")) {
+      expect(button).toHaveAccessibleName(/\S/);
+    }
   });
 });

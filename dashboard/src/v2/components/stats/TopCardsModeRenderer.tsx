@@ -25,6 +25,11 @@ import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
+import {
+  deriveCostAnalyticsViewModel,
+  formatAdaptiveCurrency,
+  type CostProvenance,
+} from "../../pages/stats/cost-insights.js";
 
 export interface TopCardsModeRendererProps {
   mode: StatsVisualMode;
@@ -116,6 +121,36 @@ function getDataQualityHint(usage: ProjectExecutionStatsSnapshot["usage"]): stri
   if (degraded === 0) return "Reported";
   if ((usage.unavailableInvocationCount || 0) > 0 || (usage.unsupportedInvocationCount || 0) > 0) return "Partial";
   return "Estimated mix";
+}
+
+function getCoveredInvocationCount(provenance: CostProvenance): number {
+  return provenance.configuredPricingInvocationCount
+    + provenance.providerReportedCostInvocationCount;
+}
+
+function formatPricingCoverage(provenance: CostProvenance): string {
+  if (provenance.state === "unavailable") return "No usage";
+  if (provenance.state === "unknown") return "Unknown";
+  if (provenance.invocationCount <= 0) return "No usage";
+  return `${((getCoveredInvocationCount(provenance) / provenance.invocationCount) * 100).toFixed(1)}%`;
+}
+
+function getPricingCoverageDetail(provenance: CostProvenance): string {
+  const calls = formatCount(provenance.invocationCount);
+  const covered = formatCount(getCoveredInvocationCount(provenance));
+  if (provenance.state === "unavailable") return "No provider calls were recorded in this window";
+  if (provenance.state === "unknown") return `Pricing provenance is unavailable for ${calls} calls`;
+  if (provenance.state === "unpriced") return `${calls} calls have usage telemetry but no usable price`;
+  if (provenance.state === "partial") return `${covered} of ${calls} calls priced; shown spend is a minimum`;
+  return `All ${calls} calls use configured or provider-reported pricing`;
+}
+
+function getPricingCoverageLabel(provenance: CostProvenance): string {
+  if (provenance.state === "complete") return "Fully priced";
+  if (provenance.state === "partial") return "Partial";
+  if (provenance.state === "unpriced") return "Unpriced";
+  if (provenance.state === "unknown") return "Unknown";
+  return "No usage";
 }
 
 export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> = ({
@@ -308,6 +343,70 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
           accentHex={STATS_COLORS.moss}
           sparkline={topPurpose ? extractPurposeInvocationSeries(stats, topPurpose.id) : []}
           signalLabel="Purpose"
+        />
+      </>
+    );
+  };
+
+  const renderCostMode = () => {
+    const cost = deriveCostAnalyticsViewModel(stats);
+    const provenance = cost.totalSpend.provenance;
+    const taskCount = cost.averageCostPerTask.entityCount;
+    const sprintCount = cost.averageCostPerSprint.entityCount;
+    const coverageDetail = getPricingCoverageDetail(provenance);
+    const coverageLabel = getPricingCoverageLabel(provenance);
+
+    return (
+      <>
+        <StatsMetricCard
+          label="Total Spend"
+          value={formatAdaptiveCurrency(cost.totalSpend)}
+          detail={coverageDetail}
+          secondaryDetail={`${formatCount(cost.calls)} provider calls · ${formatTokens(cost.tokens)} tokens`}
+          qualityHint={coverageLabel}
+          accentHex={STATS_COLORS.clay}
+          sparkline={metricSeries.totalCost}
+          signalLabel="Spend"
+        />
+        <StatsMetricCard
+          label="Average per Task"
+          value={formatAdaptiveCurrency(cost.averageCostPerTask)}
+          detail={taskCount > 0 ? `Across ${formatCount(taskCount)} ${taskCount === 1 ? "task" : "tasks"} with provider usage` : "No tasks with provider usage"}
+          secondaryDetail={coverageDetail}
+          qualityHint={coverageLabel}
+          accentHex={STATS_COLORS.signal}
+          sparkline={[]}
+          signalLabel="Tasks"
+        />
+        <StatsMetricCard
+          label="Average per Sprint"
+          value={formatAdaptiveCurrency(cost.averageCostPerSprint)}
+          detail={sprintCount > 0 ? `Across ${formatCount(sprintCount)} canonical ${sprintCount === 1 ? "sprint" : "sprints"} with provider usage` : "No canonical sprints with provider usage"}
+          secondaryDetail="Conceptual sprint reruns are combined before averaging"
+          qualityHint={coverageLabel}
+          accentHex={STATS_COLORS.moss}
+          sparkline={[]}
+          signalLabel="Sprints"
+        />
+        <StatsMetricCard
+          label="Blended Cost / 1M Tokens"
+          value={formatAdaptiveCurrency(cost.costPerMillionTokens)}
+          detail={cost.tokens > 0 ? `Across ${formatCount(cost.tokens)} tracked tokens` : "No tracked tokens for a blended rate"}
+          secondaryDetail={coverageDetail}
+          qualityHint={coverageLabel}
+          accentHex={STATS_COLORS.ember}
+          sparkline={metricSeries.totalCost}
+          signalLabel="Unit cost"
+        />
+        <StatsMetricCard
+          label="Pricing Coverage"
+          value={formatPricingCoverage(provenance)}
+          detail={coverageDetail}
+          secondaryDetail={`${formatCount(provenance.configuredPricingInvocationCount)} configured · ${formatCount(provenance.providerReportedCostInvocationCount)} provider reported`}
+          qualityHint={coverageLabel}
+          accentHex={STATS_COLORS.cyanMuted}
+          sparkline={[]}
+          signalLabel="Provenance"
         />
       </>
     );
@@ -563,6 +662,8 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
     cardsContent = renderTrendMode();
   } else if (mode === "composition") {
     cardsContent = renderCompositionMode();
+  } else if (mode === "cost") {
+    cardsContent = renderCostMode();
   } else if (mode === "models") {
     cardsContent = renderModelsMode();
   } else if (mode === "reliability") {

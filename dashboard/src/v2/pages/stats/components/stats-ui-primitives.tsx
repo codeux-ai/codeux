@@ -13,6 +13,7 @@ import {
   Brain,
   Code2,
   Clock3,
+  Coins,
   Cpu,
   Database,
   GitBranch,
@@ -49,7 +50,7 @@ import {
 import { useInteractionTokens } from "../../../lib/motion/tokens.js";
 
 import type { DonutSliceGeometry, ChartPoint } from "./stats-geometry.js";
-export type StatsVisualMode = "trend" | "composition" | "models" | "reliability" | "ledgers" | "system";
+export type StatsVisualMode = "trend" | "composition" | "cost" | "models" | "reliability" | "ledgers" | "system";
 export type ChartSeriesId = "tokens" | "active" | "invocations";
 export type LedgerSortKey = "last" | "tokens" | "active" | "input" | "output" | "name" | "p50" | "p95";
 
@@ -206,6 +207,7 @@ export const ViewToggle: FunctionComponent<{
   const modes: Array<{ id: StatsVisualMode; label: string; accessibleLabel: string; icon: LucideIcon }> = [
     { id: "trend", label: "Trend", accessibleLabel: "Trend", icon: BarChart3 },
     { id: "composition", label: "Composition", accessibleLabel: "Composition", icon: PieChart },
+    { id: "cost", label: "Cost", accessibleLabel: "Cost", icon: Coins },
     { id: "models", label: "Models", accessibleLabel: "Models", icon: Cpu },
     { id: "reliability", label: "Providers", accessibleLabel: "Providers", icon: ShieldCheck },
     { id: "ledgers", label: "Ledgers", accessibleLabel: "Ledgers", icon: Layers3 },
