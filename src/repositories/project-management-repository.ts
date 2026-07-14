@@ -604,6 +604,78 @@ export class ProjectManagementRepository {
     return this.inflateTasks(rows as unknown as TaskRow[]);
   }
 
+  listTaskOverviews(projectId: string): TaskRecord[] {
+    this.requireProject(projectId);
+    const rows = this.db.prepare(`
+      WITH latest_sprint_runs AS (
+        SELECT sprint_id, status
+        FROM (
+          SELECT
+            sprint_id,
+            status,
+            ROW_NUMBER() OVER (
+              PARTITION BY sprint_id
+              ORDER BY COALESCE(started_at, created_at) DESC, created_at DESC, rowid DESC
+            ) AS row_number
+          FROM sprint_runs
+          WHERE project_id = ?
+        )
+        WHERE row_number = 1
+      )
+      SELECT
+        tasks.id, tasks.project_id, tasks.sprint_id, tasks.task_key, tasks.title,
+        tasks.status, tasks.priority, tasks.executor_type, tasks.agent_preset_id,
+        tasks.model, tasks.sort_order, tasks.is_independent, tasks.is_merged,
+        tasks.merge_indicator, tasks.source_type, tasks.source_path,
+        tasks.created_at, tasks.updated_at
+      FROM tasks
+      INNER JOIN sprints ON sprints.id = tasks.sprint_id
+      LEFT JOIN latest_sprint_runs ON latest_sprint_runs.sprint_id = tasks.sprint_id
+      WHERE tasks.project_id = ?
+        AND (
+          latest_sprint_runs.status IN ('queued', 'running')
+          OR (latest_sprint_runs.status IS NULL AND sprints.status = 'running')
+        )
+      ORDER BY tasks.sort_order ASC, tasks.created_at ASC, tasks.task_key ASC
+    `).all(projectId, projectId) as unknown as Array<Omit<TaskRow, "prompt_markdown" | "description">>;
+
+    const dependencyRows = this.storage.executeChunkedInQuery<DependencyRow>({
+      sqlPrefix: "SELECT task_id, depends_on_task_id FROM task_dependencies WHERE task_id",
+      sqlSuffix: "ORDER BY depends_on_task_id ASC",
+      items: rows.map((row) => row.id),
+    });
+    const dependencyMap = new Map<string, string[]>();
+    for (const dependency of dependencyRows) {
+      const taskDependencies = dependencyMap.get(dependency.task_id) || [];
+      taskDependencies.push(dependency.depends_on_task_id);
+      dependencyMap.set(dependency.task_id, taskDependencies);
+    }
+
+    return rows.map((row) => ({
+      id: row.id,
+      projectId: row.project_id,
+      sprintId: row.sprint_id,
+      taskKey: row.task_key,
+      title: row.title,
+      promptMarkdown: "",
+      description: "",
+      status: row.status,
+      priority: row.priority,
+      executorType: row.executor_type || "auto",
+      agentPresetId: row.agent_preset_id || null,
+      model: row.model || null,
+      sortOrder: toNumber(row.sort_order),
+      dependsOnTaskIds: dependencyMap.get(row.id) || [],
+      isIndependent: toBoolean(row.is_independent),
+      isMerged: toBoolean(row.is_merged),
+      mergeIndicator: row.merge_indicator,
+      sourceType: row.source_type,
+      sourcePath: row.source_path,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  }
+
   listSprintLinkedIssues(projectId: string, sprintId: string): SprintLinkedIssueRecord[] {
     this.requireProject(projectId);
     const sprint = this.requireSprint(sprintId);

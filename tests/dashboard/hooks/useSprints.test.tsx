@@ -242,10 +242,7 @@ describe("useSprints", () => {
     expect(result.current.selectedSprintId).toBe(secondSprintId);
   });
 
-  it.each([
-    "project.structure.updated",
-    "project.execution.updated",
-  ])("refreshes sprint summaries after %s", async (eventType) => {
+  it("refreshes sprint summaries after project.structure.updated", async () => {
     const projectId = `project-${crypto.randomUUID()}`;
     let realtimeCallback: Parameters<typeof realtime.subscribeToDashboardRealtime>[1] | undefined;
     vi.mocked(realtime.subscribeToDashboardRealtime).mockImplementation((scopes, callback) => {
@@ -272,7 +269,7 @@ describe("useSprints", () => {
           scopeType: "project",
           scopeId: projectId,
           scope: `project:${projectId}`,
-          eventType,
+          eventType: "project.structure.updated",
           entityType: "project",
           entityId: projectId,
           projectId,

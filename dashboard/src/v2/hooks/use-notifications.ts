@@ -181,31 +181,49 @@ export const useNotifications = (projectId?: string | null): {
   const [notificationFeedHydrated, setNotificationFeedHydrated] = useState(false);
   const [agentSchedules, setAgentSchedules] = useState<AgentSchedulerSummaryEntry[]>([]);
   const [storedState, setStoredState] = useState<StoredNotificationState>(() => readStoredState());
-  const globalRefreshRef = useRef<Promise<void> | null>(null);
+  const readinessRefreshRef = useRef<Promise<void> | null>(null);
+  const notificationRefreshRef = useRef<Promise<void> | null>(null);
   const schedulerRefreshesRef = useRef<Map<string, Promise<void>>>(new Map());
   const currentProjectIdRef = useRef(projectId || null);
   currentProjectIdRef.current = projectId || null;
 
-  const refreshGlobal = useCallback(async (): Promise<void> => {
-    if (!globalRefreshRef.current) {
-      const request = Promise.all([
-        fetchOnboardingReadiness().then((nextReadiness) => {
+  const refreshReadiness = useCallback(async (force = false): Promise<void> => {
+    if (!readinessRefreshRef.current) {
+      const request = fetchOnboardingReadiness({ force })
+        .then((nextReadiness) => {
           setReadiness((current) => isDeepEqual(current, nextReadiness) ? current : nextReadiness);
-        }),
-        fetchDashboardNotifications().then((nextFeed) => {
-          setInterventionFeed((current) => isDeepEqual(current, nextFeed) ? current : nextFeed);
-        }).catch(() => undefined).finally(() => {
-          setNotificationFeedHydrated(true);
-        }),
-      ]).then(() => undefined).finally(() => {
-        if (globalRefreshRef.current === request) {
-          globalRefreshRef.current = null;
-        }
-      });
-      globalRefreshRef.current = request;
+        })
+        .finally(() => {
+          if (readinessRefreshRef.current === request) {
+            readinessRefreshRef.current = null;
+          }
+        });
+      readinessRefreshRef.current = request;
     }
-    await globalRefreshRef.current;
+    await readinessRefreshRef.current;
   }, []);
+
+  const refreshNotificationFeed = useCallback(async (): Promise<void> => {
+    if (!notificationRefreshRef.current) {
+      const request = fetchDashboardNotifications()
+        .then((nextFeed) => {
+          setInterventionFeed((current) => isDeepEqual(current, nextFeed) ? current : nextFeed);
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          setNotificationFeedHydrated(true);
+          if (notificationRefreshRef.current === request) {
+            notificationRefreshRef.current = null;
+          }
+        });
+      notificationRefreshRef.current = request;
+    }
+    await notificationRefreshRef.current;
+  }, []);
+
+  const refreshGlobal = useCallback(async (forceReadiness = false): Promise<void> => {
+    await Promise.all([refreshReadiness(forceReadiness), refreshNotificationFeed()]);
+  }, [refreshNotificationFeed, refreshReadiness]);
 
   const refreshScheduler = useCallback(async (): Promise<void> => {
     const requestedProjectId = projectId || null;
@@ -237,7 +255,7 @@ export const useNotifications = (projectId?: string | null): {
 
   useEffect(() => {
     void refresh().catch(() => undefined);
-    const handler = () => void refresh().catch(() => undefined);
+    const handler = () => void Promise.all([refreshGlobal(true), refreshScheduler()]).catch(() => undefined);
     window.addEventListener("codeux:settings-updated", handler);
     return () => window.removeEventListener("codeux:settings-updated", handler);
   }, [refresh]);
@@ -246,20 +264,17 @@ export const useNotifications = (projectId?: string | null): {
     const scopes = projectId ? ["overview", `project:${projectId}`] : ["overview"];
     return subscribeToDashboardRealtime(scopes, (message) => {
       if (message.type === "snapshot_required") {
-        void refresh().catch(() => undefined);
+        void Promise.all([refreshNotificationFeed(), refreshScheduler()]).catch(() => undefined);
         return;
       }
       if (message.type !== "event") return;
       if (message.event.eventType === "overview.telemetry.updated") {
-        void refreshGlobal().catch(() => undefined);
-      } else if (
-        message.event.eventType === "project.structure.updated"
-        || message.event.eventType === "project.execution.updated"
-      ) {
+        void refreshNotificationFeed().catch(() => undefined);
+      } else if (message.event.eventType === "project.structure.updated") {
         void refreshScheduler().catch(() => undefined);
       }
     });
-  }, [projectId, refresh, refreshGlobal, refreshScheduler]);
+  }, [projectId, refreshNotificationFeed, refreshScheduler]);
 
   const updateStoredState = useCallback((recipe: (current: StoredNotificationState) => StoredNotificationState): void => {
     setStoredState((current) => {

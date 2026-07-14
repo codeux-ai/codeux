@@ -24,7 +24,8 @@ export function registerRuntimeRoutes(app: Express, options: DashboardDependenci
   }));
 
   app.get("/api/notifications", syncRoute((req, res) => {
-    res.json(options.getDashboardNotifications());
+    const requestedLimit = Number.parseInt(parseTrimmedString(req.query.limit) || "", 10);
+    res.json(options.getDashboardNotifications(Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : undefined));
   }));
 
   app.get("/api/stats/header-throughput", syncRoute((req, res) => {
