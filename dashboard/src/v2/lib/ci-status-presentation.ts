@@ -4,6 +4,9 @@ import type {
   Subtask,
   SubtaskMergeIndicator,
 } from "../../../../src/contracts/app-types.js";
+import type { DashboardLocale } from "../i18n/locales.js";
+import { translateDashboardMessage } from "../i18n/locales.js";
+import { shellMessages } from "../i18n/messages/shell.js";
 
 export type CiWorkflowState = "pending" | "in_progress" | "successful" | "failed";
 export type CiWorkflowStepId = "pull_request" | "checks" | "merge";
@@ -84,6 +87,38 @@ const DEFAULT_STEP_STATUS_LABELS: Record<CiWorkflowStepId, Record<CiWorkflowStat
     failed: "Merge failed",
   },
 };
+
+const CI_MESSAGE_KEYS = {
+  "Pull request": "ciPullRequest", Checks: "ciChecks", Merge: "ciMerge",
+  "Waiting for pull request": "ciWaitingPullRequest", "Creating pull request": "ciCreatingPullRequest",
+  "Pull request ready": "ciPullRequestReady", "Pull request failed": "ciPullRequestFailed", "Pull request missing": "ciPullRequestMissing",
+  "Checks pending": "ciChecksPending", "Checks running": "ciChecksRunning", "Checks passed": "ciChecksPassed", "Checks failed": "ciChecksFailed",
+  "Merge pending": "ciMergePending", "Merge running": "ciMergeRunning", Merged: "ciMerged", "Merge failed": "ciMergeFailed",
+  "Waiting for checks": "ciWaitingChecks", "Blocked by checks": "ciBlockedChecks", "Merge conflict": "ciMergeConflict",
+  "Waiting for review": "ciWaitingReview", "Ready to merge": "ciReadyMerge", "No merge needed": "ciNoMergeNeeded",
+  "Merge not required": "ciMergeNotRequired", "Checking mergeability": "ciCheckingMergeability", "Waiting for QA": "ciWaitingQa",
+  "Merge blocked": "ciMergeBlocked", "CI failed": "ciFailedLabel", "CI running": "ciRunningLabel", "CI passed": "ciPassedLabel", "CI pending": "ciPendingLabel",
+} as const;
+
+function localizeCiCopy(value: string, locale: DashboardLocale): string {
+  const key = CI_MESSAGE_KEYS[value as keyof typeof CI_MESSAGE_KEYS];
+  return key ? translateDashboardMessage(shellMessages, locale, key) : value;
+}
+
+export function localizeCiStatusPresentation(presentation: CiStatusPresentation, locale: DashboardLocale): CiStatusPresentation {
+  const steps = presentation.steps.map((step) => ({
+    ...step,
+    label: localizeCiCopy(step.label, locale),
+    statusLabel: localizeCiCopy(step.statusLabel, locale),
+  })) as CiStatusPresentation["steps"];
+  const label = localizeCiCopy(presentation.label, locale);
+  return {
+    ...presentation,
+    label,
+    accessibleLabel: `${label}. ${steps.map((step) => `${step.label}: ${step.statusLabel}`).join(". ")}.`,
+    steps,
+  };
+}
 
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -376,7 +411,7 @@ function taskAttentionMatches(item: ExecutionAttentionItemSummary, task: CiTaskM
   return Boolean((task.record_id && item.taskId === task.record_id) || payloadTask === task.id || (task.record_id && payloadTask === task.record_id));
 }
 
-export function deriveTaskCiStatusPresentation(input: TaskCiStatusPresentationInput): CiStatusPresentation | null {
+export function deriveTaskCiStatusPresentation(input: TaskCiStatusPresentationInput, locale: DashboardLocale = "en"): CiStatusPresentation | null {
   const matchingEvents = (input.events ?? []).filter((event) => taskEventMatches(event, input.task, input.sprintRunId));
   const latestEvent = [...newestEventsByEntity(matchingEvents).values()].reduce<ExecutionRuntimeEventSummary | null>(
     (latest, event) => !latest || isNewerEvent(event, latest) ? event : latest,
@@ -385,10 +420,11 @@ export function deriveTaskCiStatusPresentation(input: TaskCiStatusPresentationIn
   let states = latestEvent ? normalizeGateEvent(latestEvent) : normalizeMergeIndicator(input.task);
   const attention = activeCiAttention(input.attentionItems ?? []).find((item) => taskAttentionMatches(item, input.task, input.sprintRunId));
   if (attention) states = withCiAttentionFailure(states, attention);
-  return buildPresentation("task", states ? [states] : []);
+  const presentation = buildPresentation("task", states ? [states] : []);
+  return presentation ? localizeCiStatusPresentation(presentation, locale) : null;
 }
 
-export function deriveSprintCiStatusPresentation(input: SprintCiStatusPresentationInput): CiStatusPresentation | null {
+export function deriveSprintCiStatusPresentation(input: SprintCiStatusPresentationInput, locale: DashboardLocale = "en"): CiStatusPresentation | null {
   const scopedEvents = (input.events ?? []).filter((event) => (
     event.sprintId === input.sprintId
     && (!input.sprintRunId || event.sprintRunId === input.sprintRunId)
@@ -432,7 +468,8 @@ export function deriveSprintCiStatusPresentation(input: SprintCiStatusPresentati
     entities.set(key, withCiAttentionFailure(entities.get(key) ?? null, attention));
   }
 
-  return buildPresentation("sprint", [...entities.values()]);
+  const presentation = buildPresentation("sprint", [...entities.values()]);
+  return presentation ? localizeCiStatusPresentation(presentation, locale) : null;
 }
 
 // Compact aliases keep the presentation helper ergonomic at call sites.

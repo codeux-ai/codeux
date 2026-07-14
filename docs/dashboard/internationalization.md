@@ -47,10 +47,14 @@ Interpolation replaces only named `{variable}` tokens through literal string sub
 
 ## Translation scope
 
-The initial application bundle translates only root-owned shell copy: the skip link, main landmark label, route loading announcement, and hidden footer. Route catalogs should be imported with their route when those features are localized.
+Global navigation, title-bar controls, search, notifications, documentation-viewer chrome, status presentations, and reusable control defaults use the `messages/shell.ts` catalog. Navigation labels are resolved from stable navigation item IDs for each surface, so the sidebar, dock, top navigation, search, tooltips, and experience-mode filters share translated labels without changing routes, feature flags, or persisted IDs.
+
+Reusable controls use the provider locale when mounted in the dashboard and retain an English compatibility fallback when rendered independently. Explicit caller-provided labels, placeholders, and helper text always take precedence over translated defaults. Locale changes update the mounted controls in place and do not reset their local interaction state.
 
 Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged.
 
+Notification panels translate their chrome, severity labels, relative times, and dashboard-generated recovery labels. Server-authored notification titles, summaries, reasons, instructions, context values, recommended actions, and error text are rendered verbatim. The documentation viewer similarly translates route headings, search, navigation, pagination, landmarks, and counts while keeping fetched document titles, descriptions, section names, source paths, and Markdown bodies in English.
+
 ## Verification
 
-Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization.
+Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching without control remounts, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization. Focused navigation, notification, title-bar, documentation-viewer, and shared-control tests cover the shell boundaries and English-content exceptions.

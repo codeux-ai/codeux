@@ -4,6 +4,8 @@ import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { Toast, type ToastProps } from "./Toast.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 type ToastMessage = Omit<ToastProps, "onDismiss" | "isDismissing">;
 
@@ -24,6 +26,7 @@ export const useToast = () => {
 };
 
 export const ToastProvider: FunctionComponent<{ children: ComponentChildren }> = ({ children }) => {
+  const { translate } = useOptionalDashboardI18n();
   const toastRefs = useRef<Map<string, HTMLElement>>(new Map());
   const prevPositions = useRef<Map<string, number>>(new Map());
   const reducedMotion = useReducedMotion();
@@ -89,7 +92,7 @@ export const ToastProvider: FunctionComponent<{ children: ComponentChildren }> =
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none" aria-label="Toast notifications" data-motion-contract="listReorder">
+      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none" aria-label={translate(shellMessages, "toastNotifications")} data-motion-contract="listReorder">
         {toasts.filter(t => t.type !== 'error').map((toast) => (
           <Toast
             key={toast.id}
@@ -103,7 +106,7 @@ export const ToastProvider: FunctionComponent<{ children: ComponentChildren }> =
           />
         ))}
       </div>
-      <div className="fixed bottom-4 left-4 z-[100] flex flex-col gap-2 pointer-events-none" aria-label="Error toast notifications" data-motion-contract="listReorder">
+      <div className="fixed bottom-4 left-4 z-[100] flex flex-col gap-2 pointer-events-none" aria-label={translate(shellMessages, "errorToastNotifications")} data-motion-contract="listReorder">
         {toasts.filter(t => t.type === 'error').map((toast) => (
           <Toast
             key={toast.id}

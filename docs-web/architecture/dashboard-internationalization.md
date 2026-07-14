@@ -34,3 +34,9 @@ const { translate, translatePlural, formatNumber } = useDashboardI18n();
 English and German must declare exactly the same top-level keys. Interpolation treats replacement values as literal text, plural messages require an `other` form, and locale-aware formatting delegates to the browser's native `Intl` implementation.
 
 Keep each catalog with its owning feature and import it only where the feature is loaded. Translate dashboard-authored interface copy only. Never translate provider output, API responses, stored instructions, project data, runtime diagnostics, or user-authored content.
+
+## Shell catalog and content boundaries
+
+`messages/shell.ts` owns global navigation, title-bar controls, search, notification chrome, status presentations, documentation-viewer controls, and reusable control defaults. Navigation copy is keyed by stable item ID, allowing the sidebar, dock, top navigation, search, and experience-mode filtering to display the same locale-aware labels without changing paths or feature flags. Explicit component copy remains authoritative; translated defaults are used only when callers omit it.
+
+Notifications translate only dashboard-authored chrome, fallback actions, relative times, severity labels, and field names. Server-authored titles, bodies, reasons, instructions, recommended actions, context values, and errors remain verbatim. Documentation routes translate their headings, search, pagination, menus, landmarks, and result counts, but fetched titles, descriptions, sections, source paths, and rendered Markdown remain English.

@@ -3,6 +3,8 @@ import { gsap } from "gsap";
 import { useGsapDurations, GSAP_INTERACTION_TOKENS, useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 /**
  * Generic tab filter strip. Pass a const array of option strings,
@@ -25,6 +27,7 @@ export function FilterStrip<T extends string>({
     ariaLabel?: string;
     ariaLabelledBy?: string;
 }) {
+    const { translate } = useOptionalDashboardI18n();
     const listRef = useRef<HTMLDivElement>(null);
 
     // Find active index
@@ -163,10 +166,10 @@ export function FilterStrip<T extends string>({
                         type="button"
                         style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
                         onClick={onClear}
-                        aria-label={`Clear filters${ariaLabel ? ` for ${ariaLabel}` : ''}`}
+                        aria-label={translate(shellMessages, ariaLabel ? "clearFiltersFor" : "clearFilters", ariaLabel ? { label: ariaLabel } : undefined)}
                         className="relative z-10 flex-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 text-xs font-semibold tracking-wide px-3 py-1.5 rounded-lg transition-all overflow-hidden animate-in fade-in zoom-in-95 touch-target ml-1 border-l border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-void-600/50"
                     >
-                        Clear All
+                        {translate(shellMessages, "clearAll")}
                     </button>
                 )}
             </div>

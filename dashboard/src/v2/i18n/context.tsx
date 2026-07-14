@@ -51,6 +51,18 @@ export interface DashboardI18nProviderProps {
 
 const DashboardI18nContext = createContext<DashboardI18nContextValue | null>(null);
 
+const createFallbackDashboardI18n = (): DashboardI18nContextValue => ({
+  locale: "en",
+  setLocale: () => undefined,
+  translate: (bundle, key, variables) => translateDashboardMessage(bundle, "en", key, variables),
+  translatePlural: (bundle, key, count, variables, options) => (
+    translateDashboardPlural(bundle, "en", key, count, variables, options)
+  ),
+  ...createDashboardFormatters("en"),
+});
+
+const FALLBACK_DASHBOARD_I18N = createFallbackDashboardI18n();
+
 export const syncDashboardDocumentLocale = (locale: DashboardLocale): void => {
   if (typeof document !== "undefined") {
     document.documentElement.lang = locale;
@@ -132,3 +144,12 @@ export const useDashboardI18n = (): DashboardI18nContextValue => {
   }
   return context;
 };
+
+/**
+ * Shared presentation primitives are also rendered in isolation by tests and
+ * embedders. They use the English compatibility locale when no root provider
+ * is present, while the mounted dashboard still reacts to provider updates.
+ */
+export const useOptionalDashboardI18n = (): DashboardI18nContextValue => (
+  useContext(DashboardI18nContext) ?? FALLBACK_DASHBOARD_I18N
+);

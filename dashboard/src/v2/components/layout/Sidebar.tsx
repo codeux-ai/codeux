@@ -13,6 +13,8 @@ import { RobotLogo } from "../brand/RobotLogo.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import type { DashboardExperienceMode } from "../../../types.js";
 import { getPrimaryNavigationItems, isRouteNavigationItem } from "../../lib/navigation-items.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 interface SidebarProps {
     isMobile?: boolean;
@@ -22,6 +24,7 @@ interface SidebarProps {
 }
 
 export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onClose, experienceMode }) => {
+    const { translate } = useOptionalDashboardI18n();
     const sidebarRef = useRef<HTMLElement>(null);
     const navRef = useRef<HTMLDivElement>(null);
     const [brandActive, setBrandActive] = useState(false);
@@ -48,7 +51,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
 
     const navigationItems = getPrimaryNavigationItems(experienceMode ?? effectiveSettings?.settings.appearance?.experienceMode, {
         browserVisible,
-        unavailableBrowserReason: "Enable sprint preview and the in-app browser for this project",
+        unavailableBrowserReason: translate(shellMessages, "browserUnavailable"),
     });
     const navItems = navigationItems.filter((item) => item.group === "workspace");
     const utilityItems = navigationItems.filter((item) => item.group === "utility");
@@ -163,7 +166,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
         )}
         <aside
             id="primary-navigation"
-            aria-label={isMobile ? "Mobile primary navigation" : "Primary navigation"}
+            aria-label={translate(shellMessages, isMobile ? "mobilePrimaryNavigation" : "primaryNavigation")}
             role={isMobile && isOpen ? "dialog" : undefined}
             aria-modal={isMobile && isOpen ? "true" : undefined}
             tabIndex={-1}
@@ -178,7 +181,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
             {/* Logo */}
             <a
                 href="/"
-                aria-label="Code UX home"
+                aria-label={translate(shellMessages, "codeUxHome")}
                 onMouseEnter={() => setBrandActive(true)}
                 onMouseLeave={() => setBrandActive(false)}
                 onFocus={() => setBrandActive(true)}
@@ -197,9 +200,9 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
             </a>
 
             {/* Navigation */}
-            <nav ref={navRef} aria-label={isMobile ? "Mobile workspace navigation" : "Workspace navigation"} className="flex-1 flex flex-col relative z-10 overflow-y-auto scrollbar-hide pb-4">
+            <nav ref={navRef} aria-label={translate(shellMessages, isMobile ? "mobileWorkspaceNavigation" : "workspaceNavigation")} className="flex-1 flex flex-col relative z-10 overflow-y-auto scrollbar-hide pb-4">
                 <h2 className={`px-8 text-[9px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-[0.16em] mb-3 transition-[width,height,opacity,margin] motion-reduce:transition-none overflow-hidden ${isMinimized && !isMobile ? 'w-0 h-0 opacity-0 m-0' : 'opacity-100'}`} style={selectionTransitionStyle}>
-                    Workspace
+                    {translate(shellMessages, "workspace")}
                 </h2>
 
                 {/* Sliding Active Indicator */}
@@ -248,7 +251,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                         onFocus={(event) => updateSidebarToggleTooltipPosition(event.currentTarget)}
                         className={`mt-2 relative flex items-center ${isMinimized ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-2 min-h-[40px] rounded-2xl transition-[background-color,border-color,box-shadow,color,opacity,transform] motion-reduce:transition-none group focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-2xl focus-visible:z-10 bg-transparent border-0 cursor-pointer`}
                         style={controlTransitionStyle}
-                        aria-label={isMinimized ? "Expand" : "Collapse sidebar"}
+                        aria-label={translate(shellMessages, isMinimized ? "expandSidebar" : "collapseSidebar")}
                         aria-describedby={isMinimized ? "nav-tooltip-sidebar-toggle" : undefined}
                         aria-expanded={!isMinimized}
                         aria-controls="primary-navigation"
@@ -261,13 +264,13 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                         )}
                         <div className={`relative z-10 overflow-hidden transition-[width,opacity] motion-reduce:transition-none text-left ${isMinimized ? 'w-0 opacity-0 pointer-events-none' : 'flex-1 opacity-100'}`} style={selectionTransitionStyle}>
                             <span className="font-medium text-sm tracking-wide text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors whitespace-nowrap" style={controlTransitionStyle}>
-                                Collapse
+                                {translate(shellMessages, "collapse")}
                             </span>
                         </div>
                         {isMinimized && (
                             <div id="nav-tooltip-sidebar-toggle" aria-hidden="true" className="fixed left-[104px] -translate-y-1/2 px-3 py-1.5 bg-white/95 dark:bg-void-800/95 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.08] text-slate-800 dark:text-slate-100 text-xs font-bold tracking-wide rounded-2xl opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 transition-[opacity,transform] motion-reduce:transition-none pointer-events-none shadow-2xl z-[100] flex w-max max-w-[18rem] items-center gap-2 whitespace-nowrap" style={{ ...controlTransitionStyle, top: `${sidebarToggleTooltipTop}px` }}>
                                 <span className="w-1.5 h-1.5 rounded-full bg-signal-500/80 shadow-[0_0_6px_rgba(0,224,160,0.6)] shrink-0"></span>
-                                Expand
+                                {translate(shellMessages, "expand")}
                             </div>
                         )}
                     </button>

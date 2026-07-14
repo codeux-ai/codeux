@@ -6,6 +6,8 @@ import type { ActionFeedbackStatus } from "../../hooks/use-action-feedback.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 interface ActionFeedbackRegionProps {
   status: ActionFeedbackStatus;
@@ -29,6 +31,7 @@ const statusConfig: Record<Exclude<ActionFeedbackStatus, "idle">, { icon: Functi
 };
 
 export function ActionFeedbackRegion({ status, message, onDismiss, className = "", autoDismissMs = 5000, autoDismiss, retryAction, retryLabel, retryPending = false, progress, clearError }: ActionFeedbackRegionProps) {
+  const { translate } = useOptionalDashboardI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
@@ -248,11 +251,11 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
   const isError = displayedStatus === "error";
   const isPending = displayedStatus === "pending";
   const isRetryPending = retryPending || localRetryPending;
-  const actionLabel = retryLabel || "Retry";
-  const dismissAriaLabel = "Dismiss";
-  const clearErrorAriaLabel = "Clear error";
+  const actionLabel = retryLabel || translate(shellMessages, "retry");
+  const dismissAriaLabel = translate(shellMessages, "dismiss");
+  const clearErrorAriaLabel = translate(shellMessages, "clearError");
   const statusLabel = isPending && progress !== undefined
-    ? `pending ${Math.round(progress)} percent complete`
+    ? translate(shellMessages, "pendingProgress", { percent: Math.round(progress) })
     : displayedStatus;
 
   return (
@@ -300,13 +303,13 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
               aria-live="polite"
               className="sr-only"
             >
-              {isRetryPending ? `${actionLabel} in progress.` : ""}
+              {isRetryPending ? translate(shellMessages, "retryInProgress", { label: actionLabel }) : ""}
             </span>
           </button>
         )}
         {displayedStatus === "error" && clearError ? (
           <div className="ml-auto flex min-h-7 items-center gap-2 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-3 py-1 text-xs font-medium">
-            Failed
+            {translate(shellMessages, "failed")}
             <button ref={clearBtnRef} type="button" className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current" aria-label={clearErrorAriaLabel} onClick={handleClearError}>×</button>
           </div>
         ) : onDismiss && (
@@ -330,7 +333,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
             className={`absolute bottom-0 left-0 h-1 opacity-20 ${config.progressColors}`}
           />
           <span className="sr-only">
-            {displayedStatus === "warning" ? "Warning feedback" : "Success feedback"} will dismiss automatically.
+            {translate(shellMessages, displayedStatus === "warning" ? "warningFeedbackDismiss" : "successFeedbackDismiss")}
           </span>
         </>
       )}
