@@ -2,11 +2,19 @@
 /** @vitest-environment happy-dom */
 /** @jsx h */
 /** @jsxFrag Fragment */
-import { h, Fragment } from "preact";
+import { h, Fragment, type ComponentChildren } from "preact";
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { render, waitFor, screen, fireEvent, cleanup, within } from "@testing-library/preact";
+import { render as testingLibraryRender, waitFor, screen, fireEvent, cleanup, within } from "@testing-library/preact";
 import { SettingsIntegrationsPanel } from "../../../dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.js";
 import { fetchLocalFiles } from "../../../dashboard/src/v2/lib/project-api.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+import type { DashboardLocale } from "../../../dashboard/src/v2/i18n/locales.js";
+
+const render = (children: ComponentChildren, locale: DashboardLocale = "en") => testingLibraryRender(children, {
+  wrapper: ({ children: wrappedChildren }) => (
+    <DashboardI18nProvider initialLocale={locale} storage={null}>{wrappedChildren}</DashboardI18nProvider>
+  ),
+});
 
 vi.mock("../../../dashboard/src/v2/lib/project-api.js", () => ({
   fetchLocalFiles: vi.fn(),

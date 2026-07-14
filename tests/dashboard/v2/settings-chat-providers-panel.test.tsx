@@ -2,7 +2,8 @@
 /** @jsx h */
 /** @jsxFrag Fragment */
 import { h, Fragment } from "preact";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { cleanup, fireEvent, render as testingLibraryRender, screen, waitFor, within } from "@testing-library/preact";
+import type { ComponentChildren } from "preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsIntegrationsPanel } from "../../../dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.js";
 import type {
@@ -14,6 +15,12 @@ import type {
   DashboardChatProviderConnectionRecord,
   DashboardChatProviderSetupDefinition,
 } from "../../../dashboard/src/v2/lib/chat-provider-api.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+import type { DashboardLocale } from "../../../dashboard/src/v2/i18n/locales.js";
+
+const render = (children: ComponentChildren, locale: DashboardLocale = "en") => testingLibraryRender(
+  <DashboardI18nProvider initialLocale={locale} storage={null}>{children}</DashboardI18nProvider>,
+);
 
 vi.mock("gsap", () => {
   const applyStyles = (target: unknown, props: Record<string, unknown>) => {
@@ -255,5 +262,17 @@ describe("SettingsIntegrationsPanel chat connectors", () => {
       routingHints: { projectSelectorPrefix: "/project", projectSelector: "engineering" },
       suppressRichWidgets: true,
     }));
+  });
+
+  it("renders German connector success and keeps provider failures verbatim", async () => {
+    const state = createState("slack");
+    (state.chatProviders as typeof state.chatProviders & { error: string | null }).error = "Provider gateway unavailable: ECONNREFUSED";
+    render(<SettingsIntegrationsPanel state={state as any} />, "de");
+
+    await waitFor(() => expect(screen.getByText("Slack Konnektor")).not.toBeNull());
+    expect(screen.getByText("Chat-Konnektor-Einstellungen nicht verfügbar")).not.toBeNull();
+    expect(screen.getByText("Provider gateway unavailable: ECONNREFUSED")).not.toBeNull();
+    expect(screen.getByText("Antwortzustellung")).not.toBeNull();
+    expect(screen.getByText("Bearer [redacted] failed")).not.toBeNull();
   });
 });

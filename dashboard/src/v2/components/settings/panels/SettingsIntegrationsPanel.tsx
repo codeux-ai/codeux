@@ -47,9 +47,11 @@ import type {
   DashboardChatProviderConnectionRecord,
   DashboardChatProviderSetupDefinition,
 } from "../../../lib/chat-provider-api.js";
-import { isDeprecatedProvider, providerLifecycle } from "../../../lib/provider-lifecycle.js";
+import { getProviderLifecycleMessage, isDeprecatedProvider } from "../../../lib/provider-lifecycle.js";
 import { LocalFilePickerField } from "../LocalFilePickerField.js";
 import { AutomationCredentialManager } from "../AutomationCredentialManager.js";
+import { useDashboardI18n } from "../../../i18n/context.js";
+import { settingsIntegrationsMessages } from "../../../i18n/messages/settings-integrations.js";
 
 type PublicProviderId = Exclude<ProviderId, "mockup-cli">;
 
@@ -474,6 +476,7 @@ const ChatProviderLogo: FunctionComponent<{ providerKind: ChatProviderKind; disa
 };
 
 export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
+  const { locale, translate: t } = useDashboardI18n();
   const {
     activeScope,
     editableSettings,
@@ -508,7 +511,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
   const projectOptions = (state.projects ?? (state.selectedProject ? [state.selectedProject] : []))
     .map((project) => ({ value: project.id, label: project.name || project.id }));
   const agentPresetOptions = [
-    { value: "", label: "Built-in project manager" },
+    { value: "", label: t(settingsIntegrationsMessages, "builtInProjectManager") },
     ...(state.projectAgentPresetOptions ?? []).map((option) => ({ value: option.value, label: option.label })),
   ];
   const chatProviderCards = useMemo(() => buildChatProviderCatalogViewModel({
@@ -516,11 +519,13 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     connections: chatProviders.connections,
     bindings: chatProviders.bindings,
     deliveriesByConnection: chatProviders.deliveriesByConnection,
+    locale,
   }), [
     chatProviders.bindings,
     chatProviders.connections,
     chatProviders.definitions,
     chatProviders.deliveriesByConnection,
+    locale,
   ]);
 
   useEffect(() => {
@@ -600,43 +605,43 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     {
       id: "api",
       label: "API",
-      purpose: "Hosted orchestration and provider services",
+      purpose: t(settingsIntegrationsMessages, "groupApiPurpose"),
       items: integrations.filter((integration) => integration.id === "jules"),
     },
     {
       id: "cli",
       label: "CLI",
-      purpose: "Provider credentials and local auth-copy settings",
+      purpose: t(settingsIntegrationsMessages, "groupCliPurpose"),
       items: integrations.filter((integration) => isPublicProviderId(integration.id) && integration.id !== "jules"),
     },
     {
       id: "chat",
-      label: "CHAT CONNECTORS",
-      purpose: "Chat bridges, delivery health, and project/channel bindings",
+      label: t(settingsIntegrationsMessages, "groupChat"),
+      purpose: t(settingsIntegrationsMessages, "groupChatPurpose"),
       items: integrations.filter((integration) => isChatProviderIntegrationId(integration.id)),
     },
     {
       id: "git",
       label: "GIT",
-      purpose: "Source-control tokens, CI, PRs, and git identity",
+      purpose: t(settingsIntegrationsMessages, "groupGitPurpose"),
       items: integrations.filter((integration) => integration.id === "github" || integration.id === "gitlab"),
     },
     {
       id: "storage",
-      label: "STORAGE & MOUNTS",
-      purpose: "Project-linked host storage mounted into Docker workspaces",
+      label: t(settingsIntegrationsMessages, "groupStorage"),
+      purpose: t(settingsIntegrationsMessages, "groupStoragePurpose"),
       items: integrations.filter((integration) => integration.id === "google-drive"),
     },
     {
       id: "pm",
       label: "PM",
-      purpose: "Project management and issue tracker connections",
+      purpose: t(settingsIntegrationsMessages, "groupPmPurpose"),
       items: integrations.filter((integration) => integration.id === "jira" || integration.id === "notion" || integration.id === "asana" || integration.id === "linear"),
     },
     {
       id: "canvas",
-      label: "CANVAS",
-      purpose: "Whiteboard, diagram, and design imports",
+      label: t(settingsIntegrationsMessages, "groupCanvas"),
+      purpose: t(settingsIntegrationsMessages, "groupCanvasPurpose"),
       items: integrations.filter((integration) => integration.id === "miro" || integration.id === "lucid" || integration.id === "figma" || integration.id === "mural"),
     },
   ].filter((group) => group.items.length > 0);
@@ -862,7 +867,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
           ...current,
           setup: { ...current.setup, [field.key]: value },
         }))}
-        placeholder={field.required ? "Required" : "Optional"}
+        placeholder={t(settingsIntegrationsMessages, field.required ? "required" : "optional")}
         mono={field.type === "url" || field.type === "command"}
         aria-label={`${connection.displayName} ${field.label}`}
       />
@@ -879,44 +884,44 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <IntegrationPill label={draft.enabled ? "Binding enabled" : "Binding disabled"} tone={draft.enabled ? "active" : "muted"} />
-              <IntegrationPill label={draft.outboundEnabled ? "Outbound replies on" : "Outbound replies off"} tone={draft.outboundEnabled ? "active" : "muted"} />
+              <IntegrationPill label={t(settingsIntegrationsMessages, draft.enabled ? "bindingEnabled" : "bindingDisabled")} tone={draft.enabled ? "active" : "muted"} />
+              <IntegrationPill label={t(settingsIntegrationsMessages, draft.outboundEnabled ? "outboundRepliesOn" : "outboundRepliesOff")} tone={draft.outboundEnabled ? "active" : "muted"} />
             </div>
             <div className="mt-2 font-mono text-xs font-semibold text-slate-500 dark:text-slate-400">{binding.externalChannelId}</div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <CatalogActionButton label={saving ? "Saving" : "Save"} icon={Save} disabled={saving} tone="primary" onClick={() => void saveChatProviderBinding(binding)} />
-            <CatalogActionButton label="Delete" icon={Trash2} disabled={Boolean(chatProviders.savingId)} onClick={() => void chatProviders.deleteBinding(binding.id)} />
+            <CatalogActionButton label={t(settingsIntegrationsMessages, saving ? "saving" : "save")} icon={Save} disabled={saving} tone="primary" onClick={() => void saveChatProviderBinding(binding)} />
+            <CatalogActionButton label={t(settingsIntegrationsMessages, "delete")} icon={Trash2} disabled={Boolean(chatProviders.savingId)} onClick={() => void chatProviders.deleteBinding(binding.id)} />
           </div>
         </div>
         <div className="grid gap-3 lg:grid-cols-2">
           <label className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Channel name</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t(settingsIntegrationsMessages, "channelName")}</span>
             <TextInput value={draft.externalChannelName} onChange={(value) => updateBindingDraft(binding, (current) => ({ ...current, externalChannelName: value }))} aria-label={`${binding.externalChannelId} channel name`} />
           </label>
           <label className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Project</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t(settingsIntegrationsMessages, "project")}</span>
             <SelectInput value={draft.projectId} onChange={(value) => updateBindingDraft(binding, (current) => ({ ...current, projectId: value }))} options={projectOptions} aria-label={`${binding.externalChannelId} bound project`} />
           </label>
           <label className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Project-manager preset</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t(settingsIntegrationsMessages, "projectManagerPreset")}</span>
             <SelectInput value={draft.agentPresetId} onChange={(value) => updateBindingDraft(binding, (current) => ({ ...current, agentPresetId: value }))} options={agentPresetOptions} aria-label={`${binding.externalChannelId} project-manager preset`} />
           </label>
           <label className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Project selector prefix</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t(settingsIntegrationsMessages, "projectSelectorPrefix")}</span>
             <TextInput value={draft.projectSelectorPrefix} onChange={(value) => updateBindingDraft(binding, (current) => ({ ...current, projectSelectorPrefix: value }))} placeholder="/project" mono aria-label={`${binding.externalChannelId} project selector prefix`} />
           </label>
           <label className="flex min-w-0 flex-col gap-1.5 lg:col-span-2">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Routing hint or project selector</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t(settingsIntegrationsMessages, "routingHint")}</span>
             <TextInput value={draft.projectSelector} onChange={(value) => updateBindingDraft(binding, (current) => ({ ...current, projectSelector: value }))} placeholder="payments, mobile, infra" aria-label={`${binding.externalChannelId} routing hint`} />
           </label>
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {([
-            ["enabled", "Enabled"],
-            ["inboundEnabled", "Inbound"],
-            ["outboundEnabled", "Outbound replies"],
-            ["suppressRichWidgets", "Suppress rich widgets"],
+            ["enabled", t(settingsIntegrationsMessages, "enabled")],
+            ["inboundEnabled", t(settingsIntegrationsMessages, "inbound")],
+            ["outboundEnabled", t(settingsIntegrationsMessages, "outboundReplies")],
+            ["suppressRichWidgets", t(settingsIntegrationsMessages, "suppressRichWidgets")],
           ] as const).map(([key, label]) => (
             <div key={key} className="flex items-center justify-between gap-3 rounded-xl border border-black/[0.05] bg-black/[0.02] px-3 py-2 dark:border-white/[0.06] dark:bg-white/[0.025]">
               <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">{label}</span>
@@ -933,26 +938,26 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
   ) => {
     const fallbackProjectId = projectOptions[0]?.value ?? "";
     const draft = newBindingDrafts[connection.id] ?? createNewBindingDraft(fallbackProjectId);
-    const disabledReason = projectOptions.length === 0 ? "Create or select a project before binding chat channels." : undefined;
+    const disabledReason = projectOptions.length === 0 ? t(settingsIntegrationsMessages, "projectRequiredDescription") : undefined;
     return (
       <div className="rounded-[1.25rem] border border-dashed border-signal-500/22 bg-signal-500/[0.045] p-4 dark:border-signal-400/22 dark:bg-signal-400/[0.055]">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">Add channel binding</div>
-            <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">Create a project/channel link. The same channel id can be added again for another project with a selector or hint.</div>
+            <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t(settingsIntegrationsMessages, "addChannelBinding")}</div>
+            <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t(settingsIntegrationsMessages, "addChannelBindingDescription")}</div>
           </div>
           <CatalogActionButton
-            label="Create binding"
+            label={t(settingsIntegrationsMessages, "createBinding")}
             icon={Link2}
             tone="primary"
             disabled={Boolean(disabledReason) || !draft.externalChannelId.trim() || !draft.projectId.trim() || Boolean(chatProviders.savingId)}
             onClick={() => void createChatProviderBinding(connection)}
           />
         </div>
-        {disabledReason ? <NoticePanel tone="warning" title="Project required">{disabledReason}</NoticePanel> : null}
+        {disabledReason ? <NoticePanel tone="warning" title={t(settingsIntegrationsMessages, "projectRequired")}>{disabledReason}</NoticePanel> : null}
         <div className="grid gap-3 lg:grid-cols-2">
           <label className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">External channel ID</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t(settingsIntegrationsMessages, "externalChannelId")}</span>
             <TextInput
               value={draft.externalChannelId}
               onChange={(value) => setNewBindingDrafts((current) => ({ ...current, [connection.id]: { ...draft, externalChannelId: value } }))}
@@ -962,7 +967,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
             />
           </label>
           <label className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Channel name</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t(settingsIntegrationsMessages, "channelName")}</span>
             <TextInput
               value={draft.externalChannelName}
               onChange={(value) => setNewBindingDrafts((current) => ({ ...current, [connection.id]: { ...draft, externalChannelName: value } }))}
@@ -971,7 +976,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
             />
           </label>
           <label className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Project</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t(settingsIntegrationsMessages, "project")}</span>
             <SelectInput
               value={draft.projectId}
               onChange={(value) => setNewBindingDrafts((current) => ({ ...current, [connection.id]: { ...draft, projectId: value } }))}
@@ -981,7 +986,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
             />
           </label>
           <label className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Project-manager preset</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t(settingsIntegrationsMessages, "projectManagerPreset")}</span>
             <SelectInput
               value={draft.agentPresetId}
               onChange={(value) => setNewBindingDrafts((current) => ({ ...current, [connection.id]: { ...draft, agentPresetId: value } }))}
@@ -990,7 +995,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
             />
           </label>
           <label className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Project selector prefix</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t(settingsIntegrationsMessages, "projectSelectorPrefix")}</span>
             <TextInput
               value={draft.projectSelectorPrefix}
               onChange={(value) => setNewBindingDrafts((current) => ({ ...current, [connection.id]: { ...draft, projectSelectorPrefix: value } }))}
@@ -1000,7 +1005,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
             />
           </label>
           <label className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Routing hint or project selector</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t(settingsIntegrationsMessages, "routingHint")}</span>
             <TextInput
               value={draft.projectSelector}
               onChange={(value) => setNewBindingDrafts((current) => ({ ...current, [connection.id]: { ...draft, projectSelector: value } }))}
@@ -1011,10 +1016,10 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {([
-            ["enabled", "Enabled"],
-            ["inboundEnabled", "Inbound"],
-            ["outboundEnabled", "Outbound replies"],
-            ["suppressRichWidgets", "Suppress rich widgets"],
+            ["enabled", t(settingsIntegrationsMessages, "enabled")],
+            ["inboundEnabled", t(settingsIntegrationsMessages, "inbound")],
+            ["outboundEnabled", t(settingsIntegrationsMessages, "outboundReplies")],
+            ["suppressRichWidgets", t(settingsIntegrationsMessages, "suppressRichWidgets")],
           ] as const).map(([key, label]) => (
             <div key={key} className="flex items-center justify-between gap-3 rounded-xl border border-black/[0.05] bg-white/60 px-3 py-2 dark:border-white/[0.06] dark:bg-void-900/40">
               <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">{label}</span>
@@ -1038,11 +1043,11 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
       ?.connections.find((entry) => entry.id === connection.id);
     const saving = chatProviders.savingId === `connection:${connection.id}`;
     const deliveryMetrics: Array<[typeof Hash, string, string]> = [
-      [Hash, `${connectionVm?.configuredChannelCount ?? 0} channels`, "Configured channels"],
-      [Link2, `${connectionVm?.boundProjectCount ?? 0} projects`, "Bound projects"],
-      [Send, connectionVm?.outboundRepliesEnabled ? "Outbound on" : "Outbound off", "Reply delivery"],
-      [Activity, `${connectionVm?.pendingOutboundCount ?? 0} pending`, "Outbound queue"],
-      [AlertCircle, `${connectionVm?.failedOutboundCount ?? 0} failed`, "Outbound failures"],
+      [Hash, `${connectionVm?.configuredChannelCount ?? 0} ${t(settingsIntegrationsMessages, "channels")}`, t(settingsIntegrationsMessages, "configuredChannels")],
+      [Link2, `${connectionVm?.boundProjectCount ?? 0} ${t(settingsIntegrationsMessages, "projects")}`, t(settingsIntegrationsMessages, "boundProjects")],
+      [Send, t(settingsIntegrationsMessages, connectionVm?.outboundRepliesEnabled ? "outboundOn" : "outboundOff"), t(settingsIntegrationsMessages, "replyDelivery")],
+      [Activity, `${connectionVm?.pendingOutboundCount ?? 0} ${t(settingsIntegrationsMessages, "pending")}`, t(settingsIntegrationsMessages, "outboundQueue")],
+      [AlertCircle, `${connectionVm?.failedOutboundCount ?? 0} ${t(settingsIntegrationsMessages, "failed")}`, t(settingsIntegrationsMessages, "outboundFailures")],
     ];
     return (
       <div key={connection.id} className="rounded-[1.45rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_14px_34px_rgba(15,23,42,0.045)] dark:border-white/[0.07] dark:bg-void-900/46">
@@ -1053,16 +1058,16 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
               <div className="flex flex-wrap items-center gap-2">
                 <div className="text-sm font-semibold text-slate-900 dark:text-white">{connection.displayName}</div>
                 <IntegrationPill label={connectionVm?.statusLabel ?? connection.status} tone={connection.enabled ? "active" : "muted"} />
-                <IntegrationPill label={connectionVm?.authStatusLabel ?? "Credential state unknown"} />
+                <IntegrationPill label={connectionVm?.authStatusLabel ?? t(settingsIntegrationsMessages, "credentialStateUnknown")} />
               </div>
               <div className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                {bridge.label}. Ingress URL and saved credentials are connection-specific; raw secrets are never returned after save.
+                {bridge.label}. {t(settingsIntegrationsMessages, "connectionSecretsDescription")}
               </div>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <CatalogActionButton label={saving ? "Saving" : "Save"} icon={Save} disabled={saving} tone="primary" onClick={() => void saveChatProviderConnection(connection, definition)} />
-            <CatalogActionButton label="Delete" icon={Trash2} disabled={Boolean(chatProviders.savingId)} onClick={() => void chatProviders.deleteConnection(connection.id)} />
+            <CatalogActionButton label={t(settingsIntegrationsMessages, saving ? "saving" : "save")} icon={Save} disabled={saving} tone="primary" onClick={() => void saveChatProviderConnection(connection, definition)} />
+            <CatalogActionButton label={t(settingsIntegrationsMessages, "delete")} icon={Trash2} disabled={Boolean(chatProviders.savingId)} onClick={() => void chatProviders.deleteConnection(connection.id)} />
           </div>
         </div>
 
@@ -1070,20 +1075,20 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
           <div className="space-y-4">
             <div className="grid gap-3 lg:grid-cols-2">
               <label className="flex min-w-0 flex-col gap-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Display name</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t(settingsIntegrationsMessages, "displayName")}</span>
                 <TextInput value={draft.displayName} onChange={(value) => updateConnectionDraft(connection, definition, (current) => ({ ...current, displayName: value }))} aria-label={`${connection.displayName} display name`} />
               </label>
               <label className="flex min-w-0 flex-col gap-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Connection status</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t(settingsIntegrationsMessages, "connectionStatus")}</span>
                 <SelectInput
                   value={draft.status}
                   onChange={(value) => updateConnectionDraft(connection, definition, (current) => ({ ...current, status: value as ChatProviderConnectionStatus }))}
-                  options={["draft", "active", "disabled", "error"].map((status) => ({ value: status, label: status.split("_").join(" ") }))}
+                  options={["draft", "active", "disabled", "error"].map((status) => ({ value: status, label: t(settingsIntegrationsMessages, status === "draft" ? "statusDraft" : status === "active" ? "active" : status === "disabled" ? "disabled" : "statusError") }))}
                   aria-label={`${connection.displayName} connection status`}
                 />
               </label>
             </div>
-            <Row label="Bridge mode" description="Choose the bridge shape that will deliver inbound provider events to this connection.">
+            <Row label={t(settingsIntegrationsMessages, "bridgeMode")} description={t(settingsIntegrationsMessages, "bridgeModeDescription")}>
               <PillChoiceGroup
                 value={draft.bridgeMode}
                 onChange={(value) => updateConnectionDraft(connection, definition, (current) => ({
@@ -1092,21 +1097,21 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                   setup: createDefaultSetupForBridge(definition, value as ChatProviderBridgeMode),
                   secrets: {},
                 }))}
-                options={definition.bridgeModes.map((mode) => ({ value: mode.mode, label: getBridgeModeLabel(mode.mode), hint: mode.label }))}
+                options={definition.bridgeModes.map((mode) => ({ value: mode.mode, label: getBridgeModeLabel(mode.mode, locale), hint: mode.label }))}
                 aria-label={`${connection.displayName} bridge mode`}
               />
             </Row>
-            <Row label="Enabled" description="Disabled connections keep configuration but reject runtime use until enabled.">
+            <Row label={t(settingsIntegrationsMessages, "enabled")} description={t(settingsIntegrationsMessages, "enabledConnectionDescription")}>
               <Toggle aria-label={`${connection.displayName} enabled`} value={draft.enabled} onChange={() => updateConnectionDraft(connection, definition, (current) => ({ ...current, enabled: !current.enabled }))} />
             </Row>
-            <Row label="Ingress URL" description="Configure your managed bridge, webhook, or native connector to send inbound provider events to this URL.">
+            <Row label={t(settingsIntegrationsMessages, "ingressUrl")} description={t(settingsIntegrationsMessages, "ingressUrlDescription")}>
               <TextInput value={connection.ingressUrl} onChange={() => undefined} disabled mono aria-label={`${connection.displayName} ingress URL`} />
             </Row>
 
             <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.02] p-4 dark:border-white/[0.06] dark:bg-white/[0.025]">
               <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
                 <Settings2 className="h-3.5 w-3.5" />
-                Setup fields
+                {t(settingsIntegrationsMessages, "setupFields")}
               </div>
               <div className="grid gap-3 lg:grid-cols-2">
                 {bridge.setupFields.map((field) => (
@@ -1121,7 +1126,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
             <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.02] p-4 dark:border-white/[0.06] dark:bg-white/[0.025]">
               <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
                 <ShieldCheck className="h-3.5 w-3.5" />
-                Credential controls
+                {t(settingsIntegrationsMessages, "credentialControls")}
               </div>
               <div className="grid gap-3 lg:grid-cols-2">
                 {bridge.secretFields.map((field) => {
@@ -1132,8 +1137,8 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                       <SecretInput
                         value={draft.secrets[field.key] ?? ""}
                         onChange={(value) => updateConnectionDraft(connection, definition, (current) => ({ ...current, secrets: { ...current.secrets, [field.key]: value } }))}
-                        placeholder={credential?.configured ? "Stored secret remains unchanged" : "Paste secret"}
-                        helperText={credential?.configured ? `${credential.redactedValue ?? "Stored secret"} configured. Enter a replacement only when rotating it.` : "Saved secrets are returned only as redacted configured-state metadata."}
+                        placeholder={t(settingsIntegrationsMessages, credential?.configured ? "storedSecretUnchanged" : "pasteSecret")}
+                        helperText={credential?.configured ? (credential.redactedValue ?? t(settingsIntegrationsMessages, "storedSecret")) + " " + t(settingsIntegrationsMessages, "configuredReplaceSecret") : t(settingsIntegrationsMessages, "redactedSecretHelp")}
                         mono
                         aria-label={`${connection.displayName} ${field.label}`}
                       />
@@ -1157,7 +1162,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
               ))}
             </div>
 
-            <NoticePanel title="Delivery state">
+            <NoticePanel title={t(settingsIntegrationsMessages, "deliveryState")}>
               {connectionVm && connectionVm.recentFailedDeliveries.length > 0 ? (
                 <div className="space-y-2">
                   {connectionVm.recentFailedDeliveries.map((delivery) => (
@@ -1172,15 +1177,15 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                   ))}
                 </div>
               ) : (
-                "No recent failed outbound messages for this connection."
+                t(settingsIntegrationsMessages, "noFailedDeliveries")
               )}
             </NoticePanel>
           </div>
         </div>
 
         <div className="mt-5 space-y-4">
-          <NoticePanel title="Shared-channel routing">
-            One external channel can bind to multiple projects, and one project can bind to multiple channels. When a channel is shared, Code UX uses project selector prefixes or routing hints first; if no binding is selected unambiguously, inbound handling asks for disambiguation instead of guessing.
+          <NoticePanel title={t(settingsIntegrationsMessages, "sharedChannelRouting")}>
+            {t(settingsIntegrationsMessages, "sharedChannelRoutingDescription")}
           </NoticePanel>
           {renderNewChatProviderBindingEditor(connection)}
           {bindings.length > 0 ? (
@@ -1188,8 +1193,8 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
               {bindings.map((binding) => renderChatProviderBindingEditor(binding))}
             </div>
           ) : (
-            <NoticePanel title="No channel bindings">
-              Add a binding before enabling inbound routing or outbound replies for this provider connection.
+            <NoticePanel title={t(settingsIntegrationsMessages, "noChannelBindings")}>
+              {t(settingsIntegrationsMessages, "noChannelBindingsDescription")}
             </NoticePanel>
           )}
         </div>
@@ -1206,42 +1211,42 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
       <>
         <button className="mb-4 flex items-center gap-2 text-sm text-neutral-400 transition-colors hover:text-white" onClick={() => setSelectedIntegration(null)}>
           <ArrowLeft className="h-4 w-4" />
-          Back to Integrations
+          {t(settingsIntegrationsMessages, "backToIntegrations")}
         </button>
         <SectionCard
-          title={`${label} Connector`}
+          title={`${label} ${t(settingsIntegrationsMessages, "connector")}`}
           watermark={providerKind === "microsoft-teams" ? "TMS" : providerKind.slice(0, 3).toUpperCase()}
           icon={<MessageCircle strokeWidth={2.4} />}
           actions={
             <>
-              <IntegrationPill label={`${providerCard?.connectionCount ?? providerConnections.length} connections`} />
-              <IntegrationPill label={`${providerCard?.failedOutboundCount ?? 0} failed outbound`} tone={(providerCard?.failedOutboundCount ?? 0) > 0 ? "muted" : "neutral"} />
-              <CatalogActionButton label="Refresh" icon={RefreshCw} disabled={chatProviders.loading} onClick={() => void chatProviders.load()} />
-              {definition ? <CatalogActionButton label="Add connection" icon={Plus} tone="primary" disabled={Boolean(chatProviders.savingId)} onClick={() => void addChatProviderConnection(definition)} /> : null}
+              <IntegrationPill label={`${providerCard?.connectionCount ?? providerConnections.length} ${t(settingsIntegrationsMessages, "connections")}`} />
+              <IntegrationPill label={`${providerCard?.failedOutboundCount ?? 0} ${t(settingsIntegrationsMessages, "failedOutbound")}`} tone={(providerCard?.failedOutboundCount ?? 0) > 0 ? "muted" : "neutral"} />
+              <CatalogActionButton label={t(settingsIntegrationsMessages, "refresh")} icon={RefreshCw} disabled={chatProviders.loading} onClick={() => void chatProviders.load()} />
+              {definition ? <CatalogActionButton label={t(settingsIntegrationsMessages, "addConnection")} icon={Plus} tone="primary" disabled={Boolean(chatProviders.savingId)} onClick={() => void addChatProviderConnection(definition)} /> : null}
             </>
           }
         >
           {chatProviders.loading ? (
-            <NoticePanel tone="pending" title="Loading chat connectors">Loading connector setup definitions, connections, bindings, and delivery health.</NoticePanel>
+            <NoticePanel tone="pending" title={t(settingsIntegrationsMessages, "loadingChatConnectors")}>{t(settingsIntegrationsMessages, "loadingChatConnectorsDescription")}</NoticePanel>
           ) : null}
           {chatProviders.error ? (
-            <NoticePanel tone="error" title="Chat connector settings unavailable">{chatProviders.error}</NoticePanel>
+            <NoticePanel tone="error" title={t(settingsIntegrationsMessages, "chatConnectorUnavailable")}>{chatProviders.error}</NoticePanel>
           ) : null}
           {definition ? (
-            <NoticePanel title={`${definition.label} setup guidance`}>
+            <NoticePanel title={`${definition.label} ${t(settingsIntegrationsMessages, "setupGuidance")}`}>
               <ul className="list-disc space-y-1 pl-4">
-                {getChatProviderSetupNotes(definition.kind).map((note) => <li key={note}>{note}</li>)}
+                {getChatProviderSetupNotes(definition.kind, locale).map((note) => <li key={note}>{note}</li>)}
               </ul>
             </NoticePanel>
           ) : (
-            <NoticePanel tone="warning" title="Setup definition unavailable">Refresh chat connector settings to load setup fields for this connector.</NoticePanel>
+            <NoticePanel tone="warning" title={t(settingsIntegrationsMessages, "setupDefinitionUnavailable")}>{t(settingsIntegrationsMessages, "setupDefinitionUnavailableDescription")}</NoticePanel>
           )}
           {definition && providerConnections.length > 0 ? (
             <div className="space-y-5">
               {providerConnections.map((connection) => renderChatProviderConnectionEditor(connection, definition))}
             </div>
           ) : definition ? (
-            <NoticePanel title="No connections yet">Add a connection to configure bridge setup fields, secrets, ingress, and channel bindings for {definition.label}.</NoticePanel>
+            <NoticePanel title={t(settingsIntegrationsMessages, "noConnections")}>{t(settingsIntegrationsMessages, "noConnectionsDescription")}{definition.label}.</NoticePanel>
           ) : null}
         </SectionCard>
       </>
@@ -1339,7 +1344,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     const backButton = (
       <button className="mb-4 flex items-center gap-2 text-sm text-neutral-400 transition-colors hover:text-white" onClick={() => setSelectedIntegration(null)}>
         <ArrowLeft className="h-4 w-4" />
-        Back to Integrations
+        {t(settingsIntegrationsMessages, "backToIntegrations")}
       </button>
     );
 
@@ -1649,38 +1654,38 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
         <>
           {backButton}
           <SectionCard
-            title={`${definition.label} Configuration`}
+            title={definition.label + t(settingsIntegrationsMessages, "configurationSuffix")}
             watermark={getImporterWatermark(integrationId)}
             icon={<Settings2 strokeWidth={2.4} />}
             helpId="importer-configuration"
             actions={
               <>
-                {active ? <IntegrationPill label="Active" tone="active" /> : null}
-                {configured ? <IntegrationPill label="Configured" /> : <IntegrationPill label="Not configured" tone="muted" />}
-                <IntegrationPill label="Read-only import" />
+                {active ? <IntegrationPill label={t(settingsIntegrationsMessages, "active")} tone="active" /> : null}
+                {configured ? <IntegrationPill label={t(settingsIntegrationsMessages, "configured")} /> : <IntegrationPill label={t(settingsIntegrationsMessages, "notConfigured")} tone="muted" />}
+                <IntegrationPill label={t(settingsIntegrationsMessages, "readOnlyImport")} />
               </>
             }
           >
             {activeScope === "system" ? (
-              <NoticePanel title="System-owned importer credentials">
-                Store shared read-only importer credentials here. Projects inherit these values unless they save an override.
+              <NoticePanel title={t(settingsIntegrationsMessages, "systemOwnedImporterCredentials")}>
+                {t(settingsIntegrationsMessages, "systemOwnedImporterCredentialsDescription")}
               </NoticePanel>
             ) : (
-              <NoticePanel title="Project-scope importer override">
-                These fields override the system {definition.label} importer for this project. Cleared fields fall back after reset.
+              <NoticePanel title={t(settingsIntegrationsMessages, "projectScopeImporterOverride")}>
+                {t(settingsIntegrationsMessages, "projectScopeImporterOverridePrefix")}{definition.label}{t(settingsIntegrationsMessages, "projectScopeImporterOverrideSuffix")}
               </NoticePanel>
             )}
-            <NoticePanel title="Read-only importer support">
-              Code UX uses these settings to find and attach external context to sprints. It does not write back to this provider.
+            <NoticePanel title={t(settingsIntegrationsMessages, "readOnlyImporterSupport")}>
+              {t(settingsIntegrationsMessages, "readOnlyImporterSupportDescription")}
             </NoticePanel>
-            <Row label={`Enable ${definition.label}`} description="Allow this importer to appear in sprint import flows once required fields are configured." badge={fieldBadge("enabled")}>
+            <Row label={t(settingsIntegrationsMessages, "enableImporterPrefix") + definition.label} description={t(settingsIntegrationsMessages, "importerAvailableDescription")} badge={fieldBadge("enabled")}>
               <Toggle
-                aria-label={`Enable ${definition.label} importer`}
+                aria-label={t(settingsIntegrationsMessages, "enableImporterPrefix") + definition.label + t(settingsIntegrationsMessages, "enableImporterAriaSuffix")}
                 value={importerSettings.enabled}
                 onChange={() => updateImporter({ enabled: !importerSettings.enabled })}
               />
             </Row>
-            <Row label="API token" description={`Token used for read-only ${definition.label} API requests.`} badge={fieldBadge("apiToken")}>
+            <Row label={t(settingsIntegrationsMessages, "apiToken")} description={t(settingsIntegrationsMessages, "importerTokenPrefix") + definition.label + t(settingsIntegrationsMessages, "importerTokenSuffix")} badge={fieldBadge("apiToken")}>
               <SecretInput
                 value={importerSettings.apiToken}
                 onChange={(value) => updateImporter({ apiToken: value })}
@@ -1688,7 +1693,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                 mono
               />
             </Row>
-            <Row label="API secret" description="Optional secondary secret for deployments that require one." badge={fieldBadge("apiSecret")}>
+            <Row label={t(settingsIntegrationsMessages, "apiSecret")} description={t(settingsIntegrationsMessages, "secondarySecretDescription")} badge={fieldBadge("apiSecret")}>
               <SecretInput
                 value={importerSettings.apiSecret}
                 onChange={(value) => updateImporter({ apiSecret: value })}
@@ -1696,7 +1701,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                 mono
               />
             </Row>
-            <Row label="Base URL" description="Optional custom API base URL for enterprise or regional deployments." badge={fieldBadge("baseUrl")}>
+            <Row label={t(settingsIntegrationsMessages, "baseUrl")} description={t(settingsIntegrationsMessages, "customApiBaseUrlDescription")} badge={fieldBadge("baseUrl")}>
               <TextInput
                 value={importerSettings.baseUrl}
                 onChange={(value) => updateImporter({ baseUrl: value })}
@@ -1725,13 +1730,13 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                 )}
               </Row>
             ))}
-            <Row label="Search limit" description="Maximum matching external items shown in import search." badge={fieldBadge("defaultSearchLimit")} last>
+            <Row label={t(settingsIntegrationsMessages, "searchLimit")} description={t(settingsIntegrationsMessages, "searchLimitDescription")} badge={fieldBadge("defaultSearchLimit")} last>
               <NumberInput
                 value={importerSettings.defaultSearchLimit}
                 min={1}
                 max={250}
                 onChange={(value) => updateImporter({ defaultSearchLimit: value })}
-                aria-label={`${definition.label} search limit`}
+                aria-label={definition.label + t(settingsIntegrationsMessages, "searchLimitAriaSuffix")}
               />
             </Row>
           </SectionCard>
@@ -1751,12 +1756,12 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
         <>
           {backButton}
           {providerId === "jules" ? renderJulesAutomationSettings() : null}
-          <SectionCard title={`${getProviderTypeLabel(providerId)} Integration`} watermark={getProviderWatermark(providerId)} icon={<Plug strokeWidth={2.4} />}>
-            <NoticePanel title="System-owned credentials">
-              Provider credentials and auth-copy mounts are managed per instance at system scope. This keeps multiple named providers independent across every route.
+          <SectionCard title={getProviderTypeLabel(providerId) + t(settingsIntegrationsMessages, "integrationSuffix")} watermark={getProviderWatermark(providerId)} icon={<Plug strokeWidth={2.4} />}>
+            <NoticePanel title={t(settingsIntegrationsMessages, "systemOwnedCredentials")}>
+              {t(settingsIntegrationsMessages, "systemOwnedCredentialsDescription")}
             </NoticePanel>
-            <NoticePanel title="Scope behavior">
-              Project and sprint scopes still control GitHub auth-copy mounts and git config. Provider-specific key or local-auth choices now live on each named provider instance.
+            <NoticePanel title={t(settingsIntegrationsMessages, "scopeBehavior")}>
+              {t(settingsIntegrationsMessages, "scopeBehaviorDescription")}
             </NoticePanel>
           </SectionCard>
         </>
@@ -1767,10 +1772,10 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
       <>
         {backButton}
         {providerId === "jules" ? renderJulesAutomationSettings() : null}
-        <SectionCard title={`${getProviderTypeLabel(providerId)} Credentials`} watermark={getProviderWatermark(providerId)} icon={<Key strokeWidth={2.4} />}>
+        <SectionCard title={getProviderTypeLabel(providerId) + t(settingsIntegrationsMessages, "credentialsSuffix")} watermark={getProviderWatermark(providerId)} icon={<Key strokeWidth={2.4} />}>
           {isDeprecatedProvider(providerId) ? (
             <NoticePanel title="Deprecated provider">
-              {providerLifecycle[providerId].message} Existing and new instances remain usable during the migration period.
+              {getProviderLifecycleMessage(providerId, locale)} {t(settingsIntegrationsMessages, "migrationPeriod")}
             </NoticePanel>
           ) : null}
           <div className="relative overflow-hidden rounded-[1.45rem] border border-black/[0.06] bg-[linear-gradient(135deg,rgba(255,255,255,0.9),rgba(248,250,252,0.62))] px-5 py-4 shadow-[0_14px_34px_rgba(15,23,42,0.045)] dark:border-white/[0.06] dark:bg-[linear-gradient(135deg,rgba(255,255,255,0.065),rgba(255,255,255,0.025))]">
@@ -1779,19 +1784,19 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
               <div className="flex min-w-0 items-start gap-3">
                 <ProviderLogo providerId={providerId} />
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-900 dark:text-white">{getProviderTypeLabel(providerId)} instances</div>
+                  <div className="text-sm font-semibold text-slate-900 dark:text-white">{getProviderTypeLabel(providerId)}{t(settingsIntegrationsMessages, "instancesSuffix")}</div>
                   <div className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                    Add as many named credentials as you need. AI Models routes each one independently for manual or weighted selection.
+                    {t(settingsIntegrationsMessages, "namedCredentialsDescription")}
                   </div>
                 </div>
               </div>
-              <CatalogActionButton label="Add instance" icon={Plus} tone="primary" onClick={() => addProviderInstance(providerId)} />
+              <CatalogActionButton label={t(settingsIntegrationsMessages, "addInstance")} icon={Plus} tone="primary" onClick={() => addProviderInstance(providerId)} />
             </div>
           </div>
 
           {providerEntries.length === 0 ? (
-            <NoticePanel title="No credentials yet">
-              Add a {getProviderTypeLabel(providerId)} instance to make it available for routing.
+            <NoticePanel title={t(settingsIntegrationsMessages, "noCredentialsYet")}>
+              {t(settingsIntegrationsMessages, "noCredentialsPrefix")}{getProviderTypeLabel(providerId)}{t(settingsIntegrationsMessages, "noCredentialsSuffix")}
             </NoticePanel>
           ) : (
             providerEntries.map(([providerConfigId, provider], index) => {
@@ -1826,7 +1831,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     <div className="flex flex-col gap-5">
       {state.selectedProject?.id ? <AutomationCredentialManager projectId={state.selectedProject.id} /> : null}
       <SectionCard
-        title="Integrations"
+        title={t(settingsIntegrationsMessages, "integrations")}
         watermark="INT"
         badge={getBadge("integrations", "cliWorkflow")}
         icon={<Plug strokeWidth={2.4} />}
@@ -1834,9 +1839,9 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
         actions={
           selectedIntegration ? null : (
             <>
-              <IntegrationPill label={`${integrations.length} integrations`} />
-              <IntegrationPill label={dockerExecutionEnabled ? "Docker auth copy" : "Host execution"} tone={dockerExecutionEnabled ? "active" : "neutral"} />
-              <ActionButton label="Import host hints" onClick={() => void handleImportHints()} busy={importingHints} />
+              <IntegrationPill label={`${integrations.length} ${t(settingsIntegrationsMessages, "integrationsCount")}`} />
+              <IntegrationPill label={t(settingsIntegrationsMessages, dockerExecutionEnabled ? "dockerAuthCopy" : "hostExecution")} tone={dockerExecutionEnabled ? "active" : "neutral"} />
+              <ActionButton label={t(settingsIntegrationsMessages, "importHostHints")} onClick={() => void handleImportHints()} busy={importingHints} />
             </>
           )
         }
@@ -1872,21 +1877,21 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
                                 <div className="text-sm font-semibold text-slate-900 dark:text-white">{integration.label}</div>
-                                {active ? <IntegrationPill label="Active" tone="active" /> : null}
+                                {active ? <IntegrationPill label={t(settingsIntegrationsMessages, "active")} tone="active" /> : null}
                               </div>
                               <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{providerCard?.description ?? integration.description}</div>
                             </div>
                           </div>
                           <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pl-14">
                             <div className="flex flex-wrap gap-2">
-                              <IntegrationPill label={`${providerCard?.connectionCount ?? 0} connections`} tone={(providerCard?.connectionCount ?? 0) > 0 ? "neutral" : "muted"} />
-                              <IntegrationPill label={`${providerCard?.configuredChannelCount ?? 0} channels`} />
-                              <IntegrationPill label={`${providerCard?.boundProjectCount ?? 0} projects`} />
-                              <IntegrationPill label={(providerCard?.outboundRepliesEnabled ?? false) ? "Replies on" : "Replies off"} tone={(providerCard?.outboundRepliesEnabled ?? false) ? "active" : "muted"} />
-                              {(providerCard?.failedOutboundCount ?? 0) > 0 ? <IntegrationPill label={`${providerCard?.failedOutboundCount} failed`} tone="muted" /> : null}
-                              {(providerCard?.pendingOutboundCount ?? 0) > 0 ? <IntegrationPill label={`${providerCard?.pendingOutboundCount} pending`} /> : null}
+                              <IntegrationPill label={`${providerCard?.connectionCount ?? 0} ${t(settingsIntegrationsMessages, "connections")}`} tone={(providerCard?.connectionCount ?? 0) > 0 ? "neutral" : "muted"} />
+                              <IntegrationPill label={`${providerCard?.configuredChannelCount ?? 0} ${t(settingsIntegrationsMessages, "channels")}`} />
+                              <IntegrationPill label={`${providerCard?.boundProjectCount ?? 0} ${t(settingsIntegrationsMessages, "projects")}`} />
+                              <IntegrationPill label={t(settingsIntegrationsMessages, (providerCard?.outboundRepliesEnabled ?? false) ? "repliesOn" : "repliesOff")} tone={(providerCard?.outboundRepliesEnabled ?? false) ? "active" : "muted"} />
+                              {(providerCard?.failedOutboundCount ?? 0) > 0 ? <IntegrationPill label={`${providerCard?.failedOutboundCount} ${t(settingsIntegrationsMessages, "failed")}`} tone="muted" /> : null}
+                              {(providerCard?.pendingOutboundCount ?? 0) > 0 ? <IntegrationPill label={`${providerCard?.pendingOutboundCount} ${t(settingsIntegrationsMessages, "pending")}`} /> : null}
                             </div>
-                            <CatalogActionButton label="Manage" icon={Settings2} onClick={() => setSelectedIntegration(integration.id)} />
+                            <CatalogActionButton label={t(settingsIntegrationsMessages, "manage")} icon={Settings2} onClick={() => setSelectedIntegration(integration.id)} />
                           </div>
                         </div>
                       </div>
@@ -1915,20 +1920,20 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
                                 <div className="text-sm font-semibold text-slate-900 dark:text-white">{integration.label}</div>
-                                {isJira && jiraConfigured ? <IntegrationPill label="Active" tone="active" /> : null}
+                                {isJira && jiraConfigured ? <IntegrationPill label={t(settingsIntegrationsMessages, "active")} tone="active" /> : null}
                               </div>
                               <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{integration.description}</div>
                             </div>
                           </div>
                           <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pl-14">
                             <div className="flex flex-wrap gap-2">
-                              <IntegrationPill label={isJira ? "Issue tracker" : "Git host"} />
+                              <IntegrationPill label={t(settingsIntegrationsMessages, isJira ? "issueTracker" : "gitHost")} />
                               <IntegrationPill
-                                label={isJira ? (jiraConfigured ? "Search + transitions" : "Not configured") : isGitLab ? "Token + CI" : "Token + auth mount"}
+                                label={isJira ? (jiraConfigured ? t(settingsIntegrationsMessages, "searchTransitions") : t(settingsIntegrationsMessages, "notConfigured")) : isGitLab ? t(settingsIntegrationsMessages, "tokenCi") : t(settingsIntegrationsMessages, "tokenAuthMount")}
                                 tone={isJira && jiraConfigured ? "neutral" : "muted"}
                               />
                             </div>
-                            <CatalogActionButton label="Manage" icon={Settings2} onClick={() => setSelectedIntegration(integration.id)} />
+                            <CatalogActionButton label={t(settingsIntegrationsMessages, "manage")} icon={Settings2} onClick={() => setSelectedIntegration(integration.id)} />
                           </div>
                         </div>
                       </div>
@@ -1958,17 +1963,17 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
                                 <div className="text-sm font-semibold text-slate-900 dark:text-white">{integration.label}</div>
-                                {active ? <IntegrationPill label="Active" tone="active" /> : null}
+                                {active ? <IntegrationPill label={t(settingsIntegrationsMessages, "active")} tone="active" /> : null}
                               </div>
                               <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{integration.description}</div>
                             </div>
                           </div>
                           <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pl-14">
                             <div className="flex flex-wrap gap-2">
-                              <IntegrationPill label="Read-only import" />
-                              <IntegrationPill label={configured ? "Configured" : "Not configured"} tone={configured ? "neutral" : "muted"} />
+                              <IntegrationPill label={t(settingsIntegrationsMessages, "readOnlyImport")} />
+                              <IntegrationPill label={t(settingsIntegrationsMessages, configured ? "configured" : "notConfigured")} tone={configured ? "neutral" : "muted"} />
                             </div>
-                            <CatalogActionButton label="Manage" icon={Settings2} onClick={() => setSelectedIntegration(integration.id)} />
+                            <CatalogActionButton label={t(settingsIntegrationsMessages, "manage")} icon={Settings2} onClick={() => setSelectedIntegration(integration.id)} />
                           </div>
                         </div>
                       </div>
@@ -1995,17 +2000,17 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
                                 <div className="text-sm font-semibold text-slate-900 dark:text-white">{integration.label}</div>
-                                {active ? <IntegrationPill label="Active" tone="active" /> : null}
+                                {active ? <IntegrationPill label={t(settingsIntegrationsMessages, "active")} tone="active" /> : null}
                               </div>
                               <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{integration.description}</div>
                             </div>
                           </div>
                           <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pl-14">
                             <div className="flex flex-wrap gap-2">
-                              <IntegrationPill label="Docker mount" />
-                              <IntegrationPill label={configured ? "Configured" : "Not configured"} tone={configured ? "neutral" : "muted"} />
+                              <IntegrationPill label={t(settingsIntegrationsMessages, "dockerMount")} />
+                              <IntegrationPill label={t(settingsIntegrationsMessages, configured ? "configured" : "notConfigured")} tone={configured ? "neutral" : "muted"} />
                             </div>
-                            <CatalogActionButton label="Manage" icon={Settings2} onClick={() => setSelectedIntegration(integration.id)} />
+                            <CatalogActionButton label={t(settingsIntegrationsMessages, "manage")} icon={Settings2} onClick={() => setSelectedIntegration(integration.id)} />
                           </div>
                         </div>
                       </div>
@@ -2035,25 +2040,25 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
                               <div className="text-sm font-semibold text-slate-900 dark:text-white">{integration.label}</div>
-                              {active ? <IntegrationPill label="Active" tone="active" /> : null}
+                              {active ? <IntegrationPill label={t(settingsIntegrationsMessages, "active")} tone="active" /> : null}
                             </div>
                             <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{integration.description}</div>
                           </div>
                         </div>
                         <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pl-14">
                           <div className="flex flex-wrap gap-2">
-                            <IntegrationPill label={`${connectedCount} connected`} tone={connectedCount > 0 ? "neutral" : "muted"} />
+                            <IntegrationPill label={`${connectedCount} ${t(settingsIntegrationsMessages, "connected")}`} tone={connectedCount > 0 ? "neutral" : "muted"} />
                             {authLabel ? <IntegrationPill label={authLabel} /> : null}
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
                             <CatalogActionButton
-                              label="Add"
+                              label={t(settingsIntegrationsMessages, "add")}
                               icon={Plus}
                               disabled={activeScope !== "system"}
                               tone="primary"
                               onClick={() => addProviderInstance(providerId)}
                             />
-                            <CatalogActionButton label="Manage" icon={Settings2} onClick={() => setSelectedIntegration(providerId)} />
+                            <CatalogActionButton label={t(settingsIntegrationsMessages, "manage")} icon={Settings2} onClick={() => setSelectedIntegration(providerId)} />
                           </div>
                         </div>
                       </div>

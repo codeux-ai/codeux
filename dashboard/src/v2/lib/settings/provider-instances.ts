@@ -8,6 +8,8 @@ import type {
   SystemSettings,
 } from "../../../types.js";
 import { sanitizeSystemProviderConfig } from "../provider-runtime-preview.js";
+import { settingsIntegrationsMessages } from "../../i18n/messages/settings-integrations.js";
+import { translateDashboardMessage, type DashboardLocale } from "../../i18n/locales.js";
 import {
   DEFAULT_PROVIDER_CONFIG_FILE_PATHS,
   getDefaultThinkingModeForProvider,
@@ -156,6 +158,11 @@ export const sortProviderConfigEntries = <T extends { provider: ProviderId; name
 export const getProviderInstanceLabel = (provider: { provider: ProviderId; name: string }): string => (
   `${provider.name} · ${getProviderTypeLabel(provider.provider)}`
 );
+
+export const getProviderInstanceTypeDescription = (
+  providerId: ProviderId,
+  locale: DashboardLocale = "en",
+): string => `${getProviderTypeLabel(providerId)} ${translateDashboardMessage(settingsIntegrationsMessages, locale, "providerInstance")}`;
 
 export const getHintApiKey = (
   providerId: ProviderId,

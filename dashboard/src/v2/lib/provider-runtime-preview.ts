@@ -1,5 +1,7 @@
 import type { ProviderConfigId, SystemSettings, ProviderId, SystemProviderCredentialSettings } from "../../types.js";
 import { DEFAULT_PROVIDER_CONFIG_FILE_PATHS } from "../../../../src/repositories/settings-defaults.js";
+import { settingsIntegrationsMessages } from "../i18n/messages/settings-integrations.js";
+import { translateDashboardMessage, type DashboardLocale } from "../i18n/locales.js";
 
 export type SystemProviderConfig = SystemSettings["integrations"]["providers"][ProviderConfigId];
 export type ProviderConfigMode = SystemProviderCredentialSettings["providerConfigMode"];
@@ -142,6 +144,29 @@ export const openCodeAuthModeOptions = [
   { value: "LOCAL_AUTH", label: "Local auth", hint: "Copy auth.json cache" },
   { value: "ENV_KEY", label: "Provider key", hint: "Built-in OpenCode provider" },
   { value: "CUSTOM_PROVIDER", label: "Custom endpoint", hint: "OpenAI-compatible config" },
+];
+
+export const getQwenAuthModeOptions = (locale: DashboardLocale = "en") => [
+  { value: "LOCAL_AUTH", label: translateDashboardMessage(settingsIntegrationsMessages, locale, "qwenLocalAuth"), hint: translateDashboardMessage(settingsIntegrationsMessages, locale, "qwenLocalAuthHint") },
+  { value: "ALIBABA_CODING_PLAN", label: translateDashboardMessage(settingsIntegrationsMessages, locale, "codingPlan"), hint: translateDashboardMessage(settingsIntegrationsMessages, locale, "codingPlanHint") },
+  { value: "MODEL_PROVIDER", label: translateDashboardMessage(settingsIntegrationsMessages, locale, "customEndpoint"), hint: translateDashboardMessage(settingsIntegrationsMessages, locale, "qwenCustomEndpointHint") },
+];
+
+export const getQwenProtocolOptions = (locale: DashboardLocale = "en") => [
+  { value: "openai", label: translateDashboardMessage(settingsIntegrationsMessages, locale, "openAiCompatible") },
+  { value: "anthropic", label: "Anthropic" },
+  { value: "gemini", label: "Gemini" },
+];
+
+export const getQwenRegionOptions = (locale: DashboardLocale = "en") => [
+  { value: "international", label: translateDashboardMessage(settingsIntegrationsMessages, locale, "international") },
+  { value: "china", label: translateDashboardMessage(settingsIntegrationsMessages, locale, "china") },
+];
+
+export const getOpenCodeAuthModeOptions = (locale: DashboardLocale = "en") => [
+  { value: "LOCAL_AUTH", label: translateDashboardMessage(settingsIntegrationsMessages, locale, "qwenLocalAuth"), hint: translateDashboardMessage(settingsIntegrationsMessages, locale, "copyAuthCache") },
+  { value: "ENV_KEY", label: translateDashboardMessage(settingsIntegrationsMessages, locale, "providerKey"), hint: translateDashboardMessage(settingsIntegrationsMessages, locale, "providerKeyHint") },
+  { value: "CUSTOM_PROVIDER", label: translateDashboardMessage(settingsIntegrationsMessages, locale, "customEndpoint"), hint: translateDashboardMessage(settingsIntegrationsMessages, locale, "openCodeCustomEndpointHint") },
 ];
 
 export const getQwenEndpointForRegion = (region: string | undefined): string => (

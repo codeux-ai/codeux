@@ -34,3 +34,5 @@ const { translate, translatePlural, formatNumber } = useDashboardI18n();
 English and German must declare exactly the same top-level keys. Interpolation treats replacement values as literal text, plural messages require an `other` form, and locale-aware formatting delegates to the browser's native `Intl` implementation.
 
 Keep each catalog with its owning feature and import it only where the feature is loaded. Translate dashboard-authored interface copy only. Never translate provider output, API responses, stored instructions, project data, runtime diagnostics, or user-authored content.
+
+The Integrations and MCP catalog localizes provider and chat-bridge setup, authentication and connection states, terminal-login controls, automation credentials, MCP categories, local CLI installation, clipboard feedback, and custom-server validation. Provider and product names, credential values, redacted placeholders, paths, endpoints, repository identifiers, tool and server names, scopes, transport literals, terminal streams, and server diagnostics remain verbatim and are never passed through translation interpolation.

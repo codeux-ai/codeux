@@ -1,8 +1,9 @@
 /**
  * @vitest-environment jsdom
  */
-import { fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { fireEvent, render as testingLibraryRender, screen, waitFor } from "@testing-library/preact";
 import { cleanup } from "@testing-library/preact";
+import type { ComponentChildren } from "preact";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, afterEach, beforeEach } from "vitest";
 import { useOnboardingState } from "../../../dashboard/src/v2/hooks/useOnboardingState.js";
@@ -27,6 +28,11 @@ import {
   easyOnboardingSteps,
   onboardingFlowReducer,
 } from "../../../dashboard/src/v2/components/onboarding/use-onboarding-step-flow.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+
+const render = (children: ComponentChildren) => testingLibraryRender(
+  <DashboardI18nProvider initialLocale="en" storage={null}>{children}</DashboardI18nProvider>,
+);
 
 const { navigateMock } = vi.hoisted(() => ({
   navigateMock: vi.fn(),

@@ -1,12 +1,14 @@
 /** @vitest-environment happy-dom */
 import { h } from "preact";
 import { act } from "preact/test-utils";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { cleanup, fireEvent, render as testingLibraryRender, screen, waitFor } from "@testing-library/preact";
+import type { ComponentChildren } from "preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const loginSessionMock = vi.hoisted(() => ({
   args: null as null | {
     onSessionMessage: (message: { type: string; data?: string }) => void;
+    onSessionError: (message: string) => void;
   },
   websocket: {
     readyState: 1,
@@ -27,6 +29,12 @@ vi.mock("../../../dashboard/src/v2/hooks/useInteractiveLoginSession.js", () => (
 }));
 
 import { TerminalLoginModal } from "../../../dashboard/src/v2/components/settings/TerminalLoginModal.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+import type { DashboardLocale } from "../../../dashboard/src/v2/i18n/locales.js";
+
+const render = (children: ComponentChildren, locale: DashboardLocale = "en") => testingLibraryRender(
+  <DashboardI18nProvider initialLocale={locale} storage={null}>{children}</DashboardI18nProvider>,
+);
 
 describe("TerminalLoginModal", () => {
   beforeEach(() => {
@@ -136,5 +144,37 @@ describe("TerminalLoginModal", () => {
       ]);
     });
     expect(document.activeElement).toBe(input);
+  });
+
+  it("localizes terminal failure and clipboard denial without changing provider output", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { readText: vi.fn().mockRejectedValue(new DOMException("denied")) },
+    });
+    render(
+      <TerminalLoginModal
+        providerConfigId="qwen-primary"
+        providerId="qwen-code"
+        providerName="Qwen Code"
+        onClose={vi.fn()}
+      />,
+      "de",
+    );
+
+    act(() => {
+      loginSessionMock.args?.onSessionMessage({ type: "output", data: "provider stream: TOKEN_REDACTED" });
+    });
+    expect(screen.getByTestId("terminal-login-output").textContent).toBe("provider stream: TOKEN_REDACTED");
+
+    const terminal = screen.getByRole("log", { name: "Qwen Code – Ausgabe der Terminalanmeldung für qwen-primary" });
+    fireEvent.contextMenu(terminal, { clientX: 12, clientY: 12 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Text aus Zwischenablage einfügen" }));
+    expect(await screen.findByText(/Zugriff auf die Zwischenablage wurde blockiert/)).toBeDefined();
+
+    act(() => {
+      loginSessionMock.args?.onSessionError("provider network failed: ECONNRESET");
+    });
+    expect(screen.getByText("Verbindung zum Container fehlgeschlagen")).toBeDefined();
+    expect(screen.getByText("provider network failed: ECONNRESET")).toBeDefined();
   });
 });

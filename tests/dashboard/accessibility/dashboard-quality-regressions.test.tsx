@@ -93,6 +93,7 @@ import { FileViewer } from "../../../dashboard/src/v2/components/file-browser/Fi
 import { DiffViewer } from "../../../dashboard/src/v2/components/file-browser/DiffViewer.js";
 import { InvocationsTable } from "../../../dashboard/src/v2/pages/stats/components/system/InvocationsTable.js";
 import { WaveFluid } from "../../../dashboard/src/v2/components/ui/WaveFluid.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
 
 const mockedUseReducedMotion = vi.mocked(useReducedMotion);
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -552,7 +553,7 @@ describe("dashboard accessibility quality regressions", () => {
     };
 
     const { container } = render(
-      <div>
+      <DashboardI18nProvider initialLocale="de" storage={null}><div>
         <ProviderInstanceCard
           providerConfigId="opencode-long"
           provider={provider}
@@ -588,12 +589,12 @@ describe("dashboard accessibility quality regressions", () => {
           expandedId={null}
           onRowExpand={vi.fn()}
         />
-      </div>,
+      </div></DashboardI18nProvider>,
     );
 
     expect(screen.getByRole("region", { name: provider.name })).toBeInTheDocument();
-    expect(screen.getByRole("radiogroup", { name: `${provider.name} authentication mode` })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: `Remove ${provider.name}` })).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: `${provider.name} Authentifizierungsmodus` })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Entfernen: ${provider.name}` })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Delete task TASK-LONG:/ })).toHaveAccessibleName(/Very long task title/);
     expect(container.querySelector(".kanban-card h4")).toHaveClass("break-words");
     expect(screen.getByRole("list", { name: "1 preview sessions" })).toHaveClass("overflow-x-auto");

@@ -47,10 +47,12 @@ Interpolation replaces only named `{variable}` tokens through literal string sub
 
 ## Translation scope
 
-The initial application bundle translates only root-owned shell copy: the skip link, main landmark label, route loading announcement, and hidden footer. Route catalogs should be imported with their route when those features are localized.
+The application shell and the Integrations and MCP settings surfaces have English and German catalogs. The settings catalog covers provider and chat-bridge setup, authentication and connection state, terminal login chrome, automation credentials, MCP tool categories, local CLI installation, clipboard feedback, and custom-server validation.
 
 Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged.
 
+Integration values stay outside translation interpolation: provider and product names, credentials, redacted secret placeholders, detected paths, endpoints, repository identifiers, tool and server names, scopes, transport values, terminal streams, and server-returned failures render verbatim. This keeps locale switching presentational and preserves the credential redaction, secure-storage capability, and API/MCP contract boundaries.
+
 ## Verification
 
-Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization.
+Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. Integration-focused dashboard suites additionally exercise German provider, chat, terminal, automation-credential, and MCP success and failure states while asserting that diagnostics and protected values remain unchanged.
