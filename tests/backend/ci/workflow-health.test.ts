@@ -359,6 +359,7 @@ describe("GitHub workflow health", () => {
     expect(config).toContain("VITE_CODEUX_AUTOMATION_SECURITY: 'true'");
     expect(config).toContain("VITE_CODEUX_FEATURE_CUSTOM_DASHBOARDS: 'true'");
     expect(config).toContain("reuseExistingServer: false");
+    expect(config).toContain("timeout: 120000");
     expect(config).toContain("workers: 1");
     expect(config).toContain("trace: 'retain-on-failure'");
     expect(config).toContain("screenshot: 'only-on-failure'");

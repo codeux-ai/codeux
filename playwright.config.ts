@@ -120,7 +120,9 @@ export default defineConfig({
     // never happens in a clean CI checkout, so it would hang until timeout.
     url: `${dashboardBaseUrl}/health`,
     reuseExistingServer: false,
-    timeout: 60000,
+    // The feature-gated production dashboard build can exceed one minute on
+    // resource-constrained CI runners before the health listener is available.
+    timeout: 120000,
     stdout: 'pipe',
     stderr: 'pipe',
     env: {
