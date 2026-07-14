@@ -112,6 +112,7 @@ export type DocsSlug =
   | 'architecture-card-ci-status-projection'
   | 'architecture-custom-dashboard-foundation'
   | 'architecture-custom-nodes'
+  | 'architecture-dashboard-internationalization'
   | 'architecture-managed-container-runtime'
   | 'architecture-node-flow-builtins-and-security'
   | 'architecture-node-flow-durable-execution'
@@ -894,6 +895,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Custom Node Architecture and Security",
     description: "Custom nodes are project-owned TypeScript packages that pass explicit validation and publication gates before Code UX can execute them. Generated code is never imported or evaluated by the Code UX server.",
   },
+  'architecture-dashboard-internationalization': {
+    id: 'architecture-dashboard-internationalization',
+    path: '/docs/architecture-dashboard-internationalization',
+    section: 'Architecture',
+    title: "Dashboard internationalization",
+    description: "The v2 dashboard includes a dependency-free internationalization foundation for English (en) and German (de). English is the compatibility default, and the dashboard does not infer a locale from browser preferences.",
+  },
   'architecture-managed-container-runtime': {
     id: 'architecture-managed-container-runtime',
     path: '/docs/architecture-managed-container-runtime',
@@ -1069,6 +1077,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-card-ci-status-projection'],
   docsRegistry['architecture-custom-dashboard-foundation'],
   docsRegistry['architecture-custom-nodes'],
+  docsRegistry['architecture-dashboard-internationalization'],
   docsRegistry['architecture-managed-container-runtime'],
   docsRegistry['architecture-node-flow-builtins-and-security'],
   docsRegistry['architecture-node-flow-durable-execution'],
