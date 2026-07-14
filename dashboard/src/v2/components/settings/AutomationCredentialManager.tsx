@@ -34,6 +34,8 @@ import {
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { settingsIntegrationsMessages } from "../../i18n/messages/settings-integrations.js";
 
 interface ProjectOption {
   id: string;
@@ -47,11 +49,7 @@ interface AutomationCredentialManagerProps {
 
 type Feedback = { tone: "success" | "error"; message: string };
 
-const CAPABILITIES: ReadonlyArray<{ value: AutomationCredentialCapability; label: string; description: string }> = [
-  { value: "read", label: "Read", description: "Allow consumers to read from the connected service." },
-  { value: "write", label: "Write", description: "Allow consumers to create or change remote data." },
-  { value: "admin", label: "Admin", description: "Allow explicitly approved administrative operations." },
-];
+const CAPABILITIES: ReadonlyArray<AutomationCredentialCapability> = ["read", "write", "admin"];
 
 const inputClassName = "mt-1.5 w-full min-w-0 rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-signal-500/50 focus:ring-2 focus:ring-signal-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-void-900 dark:text-slate-100";
 const buttonClassName = "inline-flex min-h-9 items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-black/20 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45 dark:border-white/10 dark:bg-white/[0.05] dark:text-slate-200 dark:hover:bg-white/[0.09]";
@@ -85,25 +83,26 @@ const CapabilityPicker: FunctionComponent<{
   disabled?: boolean;
   onChange: (values: string[]) => void;
 }> = ({ legend, values, available, disabled, onChange }) => {
+  const { translate } = useDashboardI18n();
   const options = available
-    ? CAPABILITIES.filter((option) => available.includes(option.value))
+    ? CAPABILITIES.filter((option) => available.includes(option))
     : CAPABILITIES;
   return (
     <fieldset disabled={disabled} className="min-w-0">
       <legend className="text-xs font-bold text-slate-700 dark:text-slate-200">{legend}</legend>
       <div className="mt-2 grid gap-2 sm:grid-cols-3">
         {options.map((option) => (
-          <label key={option.value} className="flex min-w-0 cursor-pointer gap-2 rounded-xl border border-black/[0.07] bg-white/65 p-3 text-xs focus-within:ring-2 focus-within:ring-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.035]">
+          <label key={option} className="flex min-w-0 cursor-pointer gap-2 rounded-xl border border-black/[0.07] bg-white/65 p-3 text-xs focus-within:ring-2 focus-within:ring-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.035]">
             <input
               type="checkbox"
-              value={option.value}
-              checked={values.includes(option.value)}
-              onChange={() => onChange(toggleValue(values, option.value))}
+              value={option}
+              checked={values.includes(option)}
+              onChange={() => onChange(toggleValue(values, option))}
               className="mt-0.5 h-4 w-4 shrink-0 accent-signal-600"
             />
             <span className="min-w-0">
-              <span className="block font-bold text-slate-700 dark:text-slate-200">{option.label}</span>
-              <span className="mt-0.5 block leading-relaxed text-slate-500 dark:text-slate-400">{option.description}</span>
+              <span className="block font-bold text-slate-700 dark:text-slate-200">{translate(settingsIntegrationsMessages, option === "read" ? "capabilityRead" : option === "write" ? "capabilityWrite" : "capabilityAdmin")}</span>
+              <span className="mt-0.5 block leading-relaxed text-slate-500 dark:text-slate-400">{translate(settingsIntegrationsMessages, option === "read" ? "capabilityReadDescription" : option === "write" ? "capabilityWriteDescription" : "capabilityAdminDescription")}</span>
             </span>
           </label>
         ))}
@@ -119,10 +118,12 @@ const ProjectPicker: FunctionComponent<{
   availableProjectIds?: string[];
   disabled?: boolean;
   onChange: (values: string[]) => void;
-}> = ({ legend, projects, values, requiredProjectId, availableProjectIds, disabled, onChange }) => (
+}> = ({ legend, projects, values, requiredProjectId, availableProjectIds, disabled, onChange }) => {
+  const { translate } = useDashboardI18n();
+  return (
   <fieldset disabled={disabled} className="min-w-0">
     <legend className="text-xs font-bold text-slate-700 dark:text-slate-200">{legend}</legend>
-    <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">The managing project is always retained. Select every additional project that may use this credential.</p>
+    <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{translate(settingsIntegrationsMessages, "managingProjectRetained")}</p>
     <div className="mt-2 grid max-h-44 gap-2 overflow-y-auto rounded-xl border border-black/[0.07] bg-white/55 p-2 sm:grid-cols-2 dark:border-white/[0.08] dark:bg-white/[0.025]">
       {projects.filter((project) => !availableProjectIds || availableProjectIds.includes(project.id)).map((project) => {
         const required = project.id === requiredProjectId;
@@ -136,16 +137,18 @@ const ProjectPicker: FunctionComponent<{
               className="mt-0.5 h-4 w-4 shrink-0 accent-signal-600"
             />
             <span className="min-w-0 break-words font-semibold text-slate-700 dark:text-slate-200">
-              {project.name || project.id}{required ? " (managing project)" : ""}
+              {project.name || project.id}{required ? translate(settingsIntegrationsMessages, "managingProjectSuffix") : ""}
             </span>
           </label>
         );
       })}
     </div>
   </fieldset>
-);
+  );
+};
 
 export const AutomationCredentialManager: FunctionComponent<AutomationCredentialManagerProps> = ({ projectId, projects = [] }) => {
+  const { translate, translatePlural } = useDashboardI18n();
   const [credentials, setCredentials] = useState<AutomationCredentialMetadata[]>([]);
   const [health, setHealth] = useState<CredentialBackendHealth | null>(null);
   const [loading, setLoading] = useState(true);
@@ -170,14 +173,14 @@ export const AutomationCredentialManager: FunctionComponent<AutomationCredential
 
   const projectOptions = useMemo<ProjectOption[]>(() => {
     const byId = new Map(projects.map((project) => [project.id, project]));
-    if (!byId.has(projectId)) byId.set(projectId, { id: projectId, name: "Selected project" });
+    if (!byId.has(projectId)) byId.set(projectId, { id: projectId, name: translate(settingsIntegrationsMessages, "selectedProject") });
     for (const credential of credentials) {
       for (const allowedProjectId of credential.allowedProjectIds) {
         if (!byId.has(allowedProjectId)) byId.set(allowedProjectId, { id: allowedProjectId, name: allowedProjectId });
       }
     }
     return [...byId.values()];
-  }, [credentials, projectId, projects]);
+  }, [credentials, projectId, projects, translate]);
 
   const clearSecretFields = useCallback((): void => {
     setValue("");
@@ -205,13 +208,13 @@ export const AutomationCredentialManager: FunctionComponent<AutomationCredential
       ]);
       applyCredentials(nextCredentials);
       setHealth(nextHealth);
-      if (announce) setCreateFeedback({ tone: "success", message: "Credential metadata refreshed." });
+      if (announce) setCreateFeedback({ tone: "success", message: translate(settingsIntegrationsMessages, "credentialMetadataRefreshed") });
     } catch (error) {
       setLoadError(toAutomationCredentialApiError(error).message);
     } finally {
       setLoading(false);
     }
-  }, [applyCredentials, projectId]);
+  }, [applyCredentials, projectId, translate]);
 
   useEffect(() => {
     clearSecretFields();
@@ -266,26 +269,26 @@ export const AutomationCredentialManager: FunctionComponent<AutomationCredential
     setCreateFeedback(undefined);
     try {
       if (!name.trim()) {
-        setCreateFeedback({ tone: "error", message: "Enter a clear credential name." });
+        setCreateFeedback({ tone: "error", message: translate(settingsIntegrationsMessages, "enterCredentialName") });
         return;
       }
       if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/.test(kind.trim())) {
-        setCreateFeedback({ tone: "error", message: "Enter a kind using letters, numbers, dots, underscores, colons, or hyphens." });
+        setCreateFeedback({ tone: "error", message: translate(settingsIntegrationsMessages, "enterCredentialKind") });
         return;
       }
       if (!value) {
-        setCreateFeedback({ tone: "error", message: "Enter the write-only secret value." });
+        setCreateFeedback({ tone: "error", message: translate(settingsIntegrationsMessages, "enterSecretValue") });
         return;
       }
       if (createCapabilities.length === 0) {
-        setCreateFeedback({ tone: "error", message: "Select at least one capability deliberately." });
+        setCreateFeedback({ tone: "error", message: translate(settingsIntegrationsMessages, "selectCapability") });
         return;
       }
       if (scope === "global") {
         const confirmed = await requestConfirmation({
-          title: "Create a globally accessible credential?",
-          body: "Every selected project will be able to use this credential. The selected project remains the only management owner.",
-          confirmLabel: "Create global credential",
+          title: translate(settingsIntegrationsMessages, "createGlobalCredentialTitle"),
+          body: translate(settingsIntegrationsMessages, "createGlobalCredentialBody"),
+          confirmLabel: translate(settingsIntegrationsMessages, "createGlobalCredential"),
           tone: "warning",
         });
         if (!confirmed) return;
@@ -304,7 +307,7 @@ export const AutomationCredentialManager: FunctionComponent<AutomationCredential
       setScope("project");
       setCreateCapabilities([]);
       setCreateAllowedProjects([projectId]);
-      setCreateFeedback({ tone: "success", message: "Credential stored. Its secret value is no longer present in this page." });
+      setCreateFeedback({ tone: "success", message: translate(settingsIntegrationsMessages, "credentialStoredSecretCleared") });
       await load();
     } catch (error) {
       const apiError = toAutomationCredentialApiError(error);
@@ -342,20 +345,20 @@ export const AutomationCredentialManager: FunctionComponent<AutomationCredential
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 id="credential-manager-title" className="text-base font-bold text-slate-900 dark:text-slate-100">Automation credential management</h3>
+            <h3 id="credential-manager-title" className="text-base font-bold text-slate-900 dark:text-slate-100">{translate(settingsIntegrationsMessages, "automationCredentialManagement")}</h3>
             {!loading && backendReady ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-status-green/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-status-green"><ShieldCheck className="h-3 w-3" />Secure storage ready</span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-status-green/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-status-green"><ShieldCheck className="h-3 w-3" />{translate(settingsIntegrationsMessages, "secureStorageReady")}</span>
             ) : null}
           </div>
-          <p className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-500 dark:text-slate-400">Create project-owned or explicitly allowlisted credentials. Secret values are write-only; this page retains only non-secret metadata.</p>
+          <p className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-500 dark:text-slate-400">{translate(settingsIntegrationsMessages, "automationCredentialManagementDescription")}</p>
         </div>
-        <button type="button" className={buttonClassName} disabled={loading} onClick={() => void load(true)} aria-label="Refresh automation credentials">
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />Refresh
+        <button type="button" className={buttonClassName} disabled={loading} onClick={() => void load(true)} aria-label={translate(settingsIntegrationsMessages, "refreshCredentials")}>
+          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />{translate(settingsIntegrationsMessages, "refresh")}
         </button>
       </div>
 
       {loading && credentials.length === 0 ? (
-        <div role="status" className="flex items-center gap-2 rounded-xl border border-black/[0.07] bg-black/[0.02] p-4 text-sm text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.03]"><Loader2 className="h-4 w-4 animate-spin" />Loading credential health and project-visible metadata…</div>
+        <div role="status" className="flex items-center gap-2 rounded-xl border border-black/[0.07] bg-black/[0.02] p-4 text-sm text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.03]"><Loader2 className="h-4 w-4 animate-spin" />{translate(settingsIntegrationsMessages, "loadingCredentialHealth")}</div>
       ) : null}
       {loadError ? (
         <div role="alert" className="rounded-xl border border-status-red/25 bg-status-red/[0.07] p-4 text-sm font-semibold text-status-red">{loadError}</div>
@@ -364,49 +367,49 @@ export const AutomationCredentialManager: FunctionComponent<AutomationCredential
         <div role="alert" className="flex items-start gap-3 rounded-xl border border-status-amber/25 bg-status-amber/[0.08] p-4 text-sm text-amber-900 dark:text-amber-100">
           <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" />
           <div>
-            <div className="font-bold">Secure credential storage is unavailable</div>
+            <div className="font-bold">{translate(settingsIntegrationsMessages, "secureCredentialStorageUnavailable")}</div>
             {health.reason ? <p className="mt-1 text-xs leading-relaxed">{health.reason}</p> : null}
-            <p className="mt-1 text-xs leading-relaxed">Restore the configured secure key provider, then refresh this page. Existing metadata remains visible, but secret-bearing changes, tests, promotion, and revocation are disabled until custody recovers.</p>
+            <p className="mt-1 text-xs leading-relaxed">{translate(settingsIntegrationsMessages, "restoreSecureKeyProvider")}</p>
           </div>
         </div>
       ) : null}
       {!loading && backendReady && credentials.length === 0 ? (
-        <div role="status" className="rounded-xl border border-signal-500/20 bg-signal-500/[0.06] p-4 text-sm text-slate-700 dark:text-slate-200"><strong>Ready, not configured.</strong> Store the first credential below and grant only the capabilities its automation consumer requires.</div>
+        <div role="status" className="rounded-xl border border-signal-500/20 bg-signal-500/[0.06] p-4 text-sm text-slate-700 dark:text-slate-200"><strong>{translate(settingsIntegrationsMessages, "readyNotConfigured")}</strong> {translate(settingsIntegrationsMessages, "storeFirstCredential")}</div>
       ) : null}
       {!loading && backendReady && configuredCount > 0 ? (
-        <div role="status" className="rounded-xl border border-status-green/20 bg-status-green/[0.06] p-4 text-sm text-slate-700 dark:text-slate-200"><strong>Configured.</strong> {configuredCount} active credential{configuredCount === 1 ? " is" : "s are"} ready for compatible project automation.</div>
+        <div role="status" className="rounded-xl border border-status-green/20 bg-status-green/[0.06] p-4 text-sm text-slate-700 dark:text-slate-200"><strong>{translate(settingsIntegrationsMessages, "configuredSentence")}</strong> {translatePlural(settingsIntegrationsMessages, "activeCredentialsReady", configuredCount)}</div>
       ) : null}
 
       <section aria-labelledby="create-credential-title" className="rounded-[1.25rem] border border-black/[0.07] bg-black/[0.02] p-4 sm:p-5 dark:border-white/[0.08] dark:bg-white/[0.025]">
-        <div className="flex items-center gap-2"><Plus className="h-4 w-4 text-signal-600" /><h4 id="create-credential-title" className="text-sm font-bold text-slate-800 dark:text-slate-100">Store a credential</h4></div>
+        <div className="flex items-center gap-2"><Plus className="h-4 w-4 text-signal-600" /><h4 id="create-credential-title" className="text-sm font-bold text-slate-800 dark:text-slate-100">{translate(settingsIntegrationsMessages, "storeCredential")}</h4></div>
         <div className="mt-4 grid gap-4 lg:grid-cols-3">
-          <label className="min-w-0 text-xs font-bold text-slate-700 dark:text-slate-200">Name<input aria-label="Credential name" value={name} onInput={(event) => setName(event.currentTarget.value)} maxLength={128} disabled={!backendReady || busyAction !== null} className={inputClassName} /></label>
-          <label className="min-w-0 text-xs font-bold text-slate-700 dark:text-slate-200">Kind<input aria-label="Credential kind" value={kind} onInput={(event) => setKind(event.currentTarget.value)} placeholder="api-token" maxLength={128} disabled={!backendReady || busyAction !== null} className={inputClassName} /></label>
+          <label className="min-w-0 text-xs font-bold text-slate-700 dark:text-slate-200">{translate(settingsIntegrationsMessages, "name")}<input aria-label={translate(settingsIntegrationsMessages, "credentialName")} value={name} onInput={(event) => setName(event.currentTarget.value)} maxLength={128} disabled={!backendReady || busyAction !== null} className={inputClassName} /></label>
+          <label className="min-w-0 text-xs font-bold text-slate-700 dark:text-slate-200">{translate(settingsIntegrationsMessages, "kind")}<input aria-label={translate(settingsIntegrationsMessages, "credentialKind")} value={kind} onInput={(event) => setKind(event.currentTarget.value)} placeholder="api-token" maxLength={128} disabled={!backendReady || busyAction !== null} className={inputClassName} /></label>
           <label className="min-w-0 text-xs font-bold text-slate-700 dark:text-slate-200">
-            Scope
+            {translate(settingsIntegrationsMessages, "scope")}
             <AvantgardeSelect
-              aria-label="Credential scope"
+              aria-label={translate(settingsIntegrationsMessages, "credentialScope")}
               value={scope}
               onChange={(value) => setScope(value as AutomationCredentialScope)}
               disabled={!backendReady || busyAction !== null}
               className="mt-1.5"
               options={[
-                { value: "project", label: "Project-owned" },
-                { value: "global", label: "Global with allowlist" },
+                { value: "project", label: translate(settingsIntegrationsMessages, "projectOwned") },
+                { value: "global", label: translate(settingsIntegrationsMessages, "globalWithAllowlist") },
               ]}
             />
           </label>
-          <label className="min-w-0 text-xs font-bold text-slate-700 dark:text-slate-200 lg:col-span-3">Secret value<span className="ml-1 font-medium text-slate-400">write-only</span><input aria-label="Secret value" type="password" autoComplete="new-password" value={value} onInput={(event) => setValue(event.currentTarget.value)} disabled={!backendReady || busyAction !== null} className={inputClassName} /></label>
+          <label className="min-w-0 text-xs font-bold text-slate-700 dark:text-slate-200 lg:col-span-3">{translate(settingsIntegrationsMessages, "secretValue")}<span className="ml-1 font-medium text-slate-400">{translate(settingsIntegrationsMessages, "writeOnly")}</span><input aria-label={translate(settingsIntegrationsMessages, "secretValue")} type="password" autoComplete="new-password" value={value} onInput={(event) => setValue(event.currentTarget.value)} disabled={!backendReady || busyAction !== null} className={inputClassName} /></label>
         </div>
-        <div className="mt-4"><CapabilityPicker legend="Capabilities" values={createCapabilities} onChange={setCreateCapabilities} disabled={!backendReady || busyAction !== null} /></div>
-        {scope === "global" ? <div className="mt-4"><ProjectPicker legend="Allowed projects" projects={projectOptions} values={createAllowedProjects} requiredProjectId={projectId} onChange={setCreateAllowedProjects} disabled={!backendReady || busyAction !== null} /></div> : null}
-        <button type="button" disabled={!backendReady || busyAction !== null} onClick={() => void submitCreate()} className={`${buttonClassName} mt-4 border-signal-500/30 bg-signal-600 text-white hover:bg-signal-700 dark:bg-signal-500 dark:text-void-950`}><Plus className="h-4 w-4" />{busyAction === "create" ? "Storing…" : "Store credential"}</button>
+        <div className="mt-4"><CapabilityPicker legend={translate(settingsIntegrationsMessages, "capabilities")} values={createCapabilities} onChange={setCreateCapabilities} disabled={!backendReady || busyAction !== null} /></div>
+        {scope === "global" ? <div className="mt-4"><ProjectPicker legend={translate(settingsIntegrationsMessages, "allowedProjects")} projects={projectOptions} values={createAllowedProjects} requiredProjectId={projectId} onChange={setCreateAllowedProjects} disabled={!backendReady || busyAction !== null} /></div> : null}
+        <button type="button" disabled={!backendReady || busyAction !== null} onClick={() => void submitCreate()} className={`${buttonClassName} mt-4 border-signal-500/30 bg-signal-600 text-white hover:bg-signal-700 dark:bg-signal-500 dark:text-void-950`}><Plus className="h-4 w-4" />{translate(settingsIntegrationsMessages, busyAction === "create" ? "storing" : "storeCredential")}</button>
         <FeedbackMessage feedback={createFeedback} />
       </section>
 
       <section aria-labelledby="visible-credentials-title">
-        <h4 id="visible-credentials-title" className="text-sm font-bold text-slate-800 dark:text-slate-100">Visible to this project</h4>
-        {credentials.length === 0 && !loading ? <p className="mt-2 text-xs text-slate-500">No credential metadata is visible to this project.</p> : null}
+        <h4 id="visible-credentials-title" className="text-sm font-bold text-slate-800 dark:text-slate-100">{translate(settingsIntegrationsMessages, "visibleToProject")}</h4>
+        {credentials.length === 0 && !loading ? <p className="mt-2 text-xs text-slate-500">{translate(settingsIntegrationsMessages, "noCredentialMetadataVisible")}</p> : null}
         <ul className="mt-3 space-y-4">
           {credentials.map((credential) => {
             const canManage = credential.managementProjectId === projectId;
@@ -418,50 +421,50 @@ export const AutomationCredentialManager: FunctionComponent<AutomationCredential
                 <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2"><KeyRound className="h-4 w-4 shrink-0 text-signal-600" /><h5 className="min-w-0 break-words text-sm font-bold text-slate-900 dark:text-slate-100">{credential.name}</h5><span className={`text-[10px] font-bold uppercase tracking-wide ${statusTone}`}>{credential.status}</span></div>
-                    <p className="mt-1 break-words text-xs text-slate-500 dark:text-slate-400">{credential.kind} · {credential.scope === "project" ? "Project-owned" : "Globally accessible"} · metadata version {credential.version}</p>
+                    <p className="mt-1 break-words text-xs text-slate-500 dark:text-slate-400">{credential.kind} · {translate(settingsIntegrationsMessages, credential.scope === "project" ? "projectOwned" : "globallyAccessible")} · {translate(settingsIntegrationsMessages, "metadataVersion", { version: credential.version })}</p>
                   </div>
-                  <span className={`w-fit rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${canManage ? "bg-signal-500/10 text-signal-700 dark:text-signal-300" : "bg-slate-500/10 text-slate-500"}`}>{canManage ? "Managed here" : "Use only"}</span>
+                  <span className={`w-fit rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${canManage ? "bg-signal-500/10 text-signal-700 dark:text-signal-300" : "bg-slate-500/10 text-slate-500"}`}>{translate(settingsIntegrationsMessages, canManage ? "managedHere" : "useOnly")}</span>
                 </div>
                 <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
-                  <div className="min-w-0 rounded-xl bg-black/[0.025] p-3 dark:bg-white/[0.035]"><strong className="block text-slate-700 dark:text-slate-200">Capabilities</strong><span className="mt-1 block break-words text-slate-500">{credential.capabilities.length ? credential.capabilities.join(", ") : "None"}</span></div>
-                  <div className="min-w-0 rounded-xl bg-black/[0.025] p-3 dark:bg-white/[0.035]"><strong className="block text-slate-700 dark:text-slate-200">Project access</strong><span className="mt-1 block break-words text-slate-500">{credential.scope === "project" ? "Owning project only" : credential.allowedProjectIds.join(", ") || "No projects"}</span></div>
+                  <div className="min-w-0 rounded-xl bg-black/[0.025] p-3 dark:bg-white/[0.035]"><strong className="block text-slate-700 dark:text-slate-200">{translate(settingsIntegrationsMessages, "capabilities")}</strong><span className="mt-1 block break-words text-slate-500">{credential.capabilities.length ? credential.capabilities.join(", ") : translate(settingsIntegrationsMessages, "none")}</span></div>
+                  <div className="min-w-0 rounded-xl bg-black/[0.025] p-3 dark:bg-white/[0.035]"><strong className="block text-slate-700 dark:text-slate-200">{translate(settingsIntegrationsMessages, "projectAccess")}</strong><span className="mt-1 block break-words text-slate-500">{credential.scope === "project" ? translate(settingsIntegrationsMessages, "owningProjectOnly") : credential.allowedProjectIds.join(", ") || translate(settingsIntegrationsMessages, "noProjects")}</span></div>
                 </div>
-                {!canManage ? <p className="mt-3 rounded-xl border border-status-amber/20 bg-status-amber/[0.06] p-3 text-xs leading-relaxed text-amber-900 dark:text-amber-100">This globally accessible credential is managed by another project. You may use it where compatible, but management actions are disabled here.</p> : null}
+                {!canManage ? <p className="mt-3 rounded-xl border border-status-amber/20 bg-status-amber/[0.06] p-3 text-xs leading-relaxed text-amber-900 dark:text-amber-100">{translate(settingsIntegrationsMessages, "managedByAnotherProject")}</p> : null}
 
                 <div className="mt-4 grid gap-4 xl:grid-cols-2">
                   <div className="min-w-0 rounded-xl border border-black/[0.06] p-3 dark:border-white/[0.07]">
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-200">Display name<input aria-label={`Rename ${credential.name}`} value={nameDrafts[credential.id] ?? credential.name} onInput={(event) => setNameDrafts((current) => ({ ...current, [credential.id]: event.currentTarget.value }))} disabled={disabled} className={inputClassName} /></label>
-                    <div className="mt-3 flex flex-wrap gap-2"><button type="button" className={buttonClassName} disabled={disabled || !(nameDrafts[credential.id] || "").trim()} onClick={() => void runMutation(credential, "rename", "Credential name updated.", () => updateAutomationCredential(projectId, credential.id, { name: nameDrafts[credential.id].trim(), expectedVersion: credential.version }))}><Pencil className="h-3.5 w-3.5" />Save name</button><button type="button" className={buttonClassName} disabled={disabled || !backendReady || credential.status !== "active"} onClick={() => void runMutation(credential, "test", "Credential test passed.", () => testAutomationCredential(projectId, credential.id, { expectedVersion: credential.version }))}><CheckCircle2 className="h-3.5 w-3.5" />Test</button></div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-200">{translate(settingsIntegrationsMessages, "displayName")}<input aria-label={translate(settingsIntegrationsMessages, "renameCredential", { name: credential.name })} value={nameDrafts[credential.id] ?? credential.name} onInput={(event) => setNameDrafts((current) => ({ ...current, [credential.id]: event.currentTarget.value }))} disabled={disabled} className={inputClassName} /></label>
+                    <div className="mt-3 flex flex-wrap gap-2"><button type="button" className={buttonClassName} disabled={disabled || !(nameDrafts[credential.id] || "").trim()} onClick={() => void runMutation(credential, "rename", translate(settingsIntegrationsMessages, "credentialNameUpdated"), () => updateAutomationCredential(projectId, credential.id, { name: nameDrafts[credential.id].trim(), expectedVersion: credential.version }))}><Pencil className="h-3.5 w-3.5" />{translate(settingsIntegrationsMessages, "saveName")}</button><button type="button" className={buttonClassName} disabled={disabled || !backendReady || credential.status !== "active"} onClick={() => void runMutation(credential, "test", translate(settingsIntegrationsMessages, "credentialTestPassed"), () => testAutomationCredential(projectId, credential.id, { expectedVersion: credential.version }))}><CheckCircle2 className="h-3.5 w-3.5" />{translate(settingsIntegrationsMessages, "test")}</button></div>
                   </div>
 
                   <div className="min-w-0 rounded-xl border border-black/[0.06] p-3 dark:border-white/[0.07]">
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-200">New secret value<span className="ml-1 font-medium text-slate-400">write-only</span><input aria-label={`New secret for ${credential.name}`} type="password" autoComplete="new-password" value={secret} onInput={(event) => setSecretDrafts((current) => ({ ...current, [credential.id]: event.currentTarget.value }))} disabled={disabled || !backendReady || credential.status === "revoked"} className={inputClassName} /></label>
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-200">{translate(settingsIntegrationsMessages, "newSecretValue")}<span className="ml-1 font-medium text-slate-400">{translate(settingsIntegrationsMessages, "writeOnly")}</span><input aria-label={translate(settingsIntegrationsMessages, "newSecretFor", { name: credential.name })} type="password" autoComplete="new-password" value={secret} onInput={(event) => setSecretDrafts((current) => ({ ...current, [credential.id]: event.currentTarget.value }))} disabled={disabled || !backendReady || credential.status === "revoked"} className={inputClassName} /></label>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <button type="button" className={buttonClassName} disabled={disabled || !backendReady || !secret || credential.status !== "active"} onClick={() => void confirmMutation({ title: `Rotate ${credential.name}?`, body: "The current value will stop working immediately after the new write-only value is stored.", confirmLabel: "Rotate value", tone: "warning" }, async () => { try { await runMutation(credential, "rotate", "Credential value rotated and cleared from this page.", () => rotateAutomationCredential(projectId, credential.id, { value: secret, expectedVersion: credential.version })); } finally { clearSecretFields(); } })}><RotateCw className="h-3.5 w-3.5" />Rotate</button>
-                      <button type="button" className={buttonClassName} disabled={disabled || !backendReady || !secret || credential.status === "revoked"} onClick={() => void confirmMutation({ title: `Replace ${credential.name}?`, body: "Use replacement to recover invalid encrypted state. The previous value will stop working immediately.", confirmLabel: "Replace value", tone: "warning" }, async () => { try { await runMutation(credential, "replace", "Credential value replaced and cleared from this page.", () => replaceAutomationCredential(projectId, credential.id, { value: secret, expectedVersion: credential.version })); } finally { clearSecretFields(); } })}>Replace</button>
+                      <button type="button" className={buttonClassName} disabled={disabled || !backendReady || !secret || credential.status !== "active"} onClick={() => void confirmMutation({ title: translate(settingsIntegrationsMessages, "rotateCredential", { name: credential.name }), body: translate(settingsIntegrationsMessages, "rotateCredentialBody"), confirmLabel: translate(settingsIntegrationsMessages, "rotateValue"), tone: "warning" }, async () => { try { await runMutation(credential, "rotate", translate(settingsIntegrationsMessages, "credentialValueRotated"), () => rotateAutomationCredential(projectId, credential.id, { value: secret, expectedVersion: credential.version })); } finally { clearSecretFields(); } })}><RotateCw className="h-3.5 w-3.5" />{translate(settingsIntegrationsMessages, "rotate")}</button>
+                      <button type="button" className={buttonClassName} disabled={disabled || !backendReady || !secret || credential.status === "revoked"} onClick={() => void confirmMutation({ title: translate(settingsIntegrationsMessages, "replaceCredential", { name: credential.name }), body: translate(settingsIntegrationsMessages, "replaceCredentialBody"), confirmLabel: translate(settingsIntegrationsMessages, "replaceValue"), tone: "warning" }, async () => { try { await runMutation(credential, "replace", translate(settingsIntegrationsMessages, "credentialValueReplaced"), () => replaceAutomationCredential(projectId, credential.id, { value: secret, expectedVersion: credential.version })); } finally { clearSecretFields(); } })}>{translate(settingsIntegrationsMessages, "replace")}</button>
                     </div>
                   </div>
                 </div>
 
                 {canManage && credential.status !== "revoked" ? (
                   <div className="mt-4 rounded-xl border border-black/[0.06] p-3 dark:border-white/[0.07]">
-                    <CapabilityPicker legend="Restrict capabilities" values={restrictionCapabilities[credential.id] || []} available={credential.capabilities} onChange={(values) => setRestrictionCapabilities((current) => ({ ...current, [credential.id]: values }))} disabled={busyAction !== null} />
-                    {credential.scope === "global" ? <div className="mt-4"><ProjectPicker legend="Restrict allowed projects" projects={projectOptions} values={restrictionProjects[credential.id] || []} requiredProjectId={projectId} availableProjectIds={credential.allowedProjectIds} onChange={(values) => setRestrictionProjects((current) => ({ ...current, [credential.id]: values }))} disabled={busyAction !== null} /></div> : null}
+                    <CapabilityPicker legend={translate(settingsIntegrationsMessages, "restrictCapabilities")} values={restrictionCapabilities[credential.id] || []} available={credential.capabilities} onChange={(values) => setRestrictionCapabilities((current) => ({ ...current, [credential.id]: values }))} disabled={busyAction !== null} />
+                    {credential.scope === "global" ? <div className="mt-4"><ProjectPicker legend={translate(settingsIntegrationsMessages, "restrictAllowedProjects")} projects={projectOptions} values={restrictionProjects[credential.id] || []} requiredProjectId={projectId} availableProjectIds={credential.allowedProjectIds} onChange={(values) => setRestrictionProjects((current) => ({ ...current, [credential.id]: values }))} disabled={busyAction !== null} /></div> : null}
                     <button
                       type="button"
                       className={`${buttonClassName} mt-3`}
                       disabled={busyAction !== null}
                       onClick={() => void confirmMutation(
                         {
-                          title: `Restrict ${credential.name}?`,
-                          body: "Removed capabilities and project access cannot be restored by restriction. Create or promote a credential for broader access.",
-                          confirmLabel: "Apply restriction",
+                          title: translate(settingsIntegrationsMessages, "restrictCredentialTitle", { name: credential.name }),
+                          body: translate(settingsIntegrationsMessages, "restrictCredentialBody"),
+                          confirmLabel: translate(settingsIntegrationsMessages, "applyRestriction"),
                           tone: "warning",
                         },
                         () => runMutation(
                           credential,
                           "restrict",
-                          "Credential access was restricted.",
+                          translate(settingsIntegrationsMessages, "credentialAccessRestricted"),
                           () => restrictAutomationCredential(projectId, credential.id, {
                             expectedVersion: credential.version,
                             capabilities: restrictionCapabilities[credential.id] || [],
@@ -469,28 +472,28 @@ export const AutomationCredentialManager: FunctionComponent<AutomationCredential
                           }),
                         ),
                       )}
-                    >Apply restriction</button>
+                    >{translate(settingsIntegrationsMessages, "applyRestriction")}</button>
                   </div>
                 ) : null}
 
                 {canManage && credential.scope === "project" && credential.status === "active" ? (
                   <div className="mt-4 rounded-xl border border-signal-500/15 bg-signal-500/[0.035] p-3">
-                    <ProjectPicker legend="Promote to global access" projects={projectOptions} values={promotionProjects[credential.id] || [projectId]} requiredProjectId={projectId} onChange={(values) => setPromotionProjects((current) => ({ ...current, [credential.id]: values }))} disabled={busyAction !== null || !backendReady} />
+                    <ProjectPicker legend={translate(settingsIntegrationsMessages, "promoteToGlobalAccess")} projects={projectOptions} values={promotionProjects[credential.id] || [projectId]} requiredProjectId={projectId} onChange={(values) => setPromotionProjects((current) => ({ ...current, [credential.id]: values }))} disabled={busyAction !== null || !backendReady} />
                     <button
                       type="button"
                       className={`${buttonClassName} mt-3`}
                       disabled={busyAction !== null || !backendReady}
                       onClick={() => void confirmMutation(
                         {
-                          title: `Promote ${credential.name} to global access?`,
-                          body: "Every selected project will gain access. This project remains the only management owner.",
-                          confirmLabel: "Promote credential",
+                          title: translate(settingsIntegrationsMessages, "promoteCredentialTitle", { name: credential.name }),
+                          body: translate(settingsIntegrationsMessages, "promoteCredentialBody"),
+                          confirmLabel: translate(settingsIntegrationsMessages, "promoteCredential"),
                           tone: "warning",
                         },
                         () => runMutation(
                           credential,
                           "promote",
-                          "Credential promoted with the confirmed project allowlist.",
+                          translate(settingsIntegrationsMessages, "credentialPromoted"),
                           () => promoteAutomationCredential(projectId, credential.id, {
                             expectedVersion: credential.version,
                             allowedProjectIds: [...new Set([projectId, ...(promotionProjects[credential.id] || [])])],
@@ -498,13 +501,13 @@ export const AutomationCredentialManager: FunctionComponent<AutomationCredential
                           }),
                         ),
                       )}
-                    >Promote credential</button>
+                    >{translate(settingsIntegrationsMessages, "promoteCredential")}</button>
                   </div>
                 ) : null}
 
                 <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-black/[0.06] pt-4 dark:border-white/[0.07]">
-                  <button type="button" className={`${buttonClassName} border-status-red/25 text-status-red`} disabled={disabled || !backendReady || credential.status === "revoked"} onClick={() => void confirmMutation({ title: `Revoke ${credential.name}?`, body: "Automation consumers will permanently lose access. Revoked credentials cannot be reactivated.", confirmLabel: "Revoke credential", destructive: true, requiredConfirmationText: "REVOKE" }, () => runMutation(credential, "revoke", "Credential revoked.", () => revokeAutomationCredential(projectId, credential.id, { expectedVersion: credential.version })))}><Trash2 className="h-3.5 w-3.5" />Revoke</button>
-                  {busyAction?.startsWith(`${credential.id}:`) ? <span role="status" className="inline-flex items-center gap-1 text-xs text-slate-500"><Loader2 className="h-3.5 w-3.5 animate-spin" />Applying credential change…</span> : null}
+                  <button type="button" className={`${buttonClassName} border-status-red/25 text-status-red`} disabled={disabled || !backendReady || credential.status === "revoked"} onClick={() => void confirmMutation({ title: translate(settingsIntegrationsMessages, "revokeCredentialTitle", { name: credential.name }), body: translate(settingsIntegrationsMessages, "revokeCredentialBody"), confirmLabel: translate(settingsIntegrationsMessages, "revokeCredential"), destructive: true, requiredConfirmationText: "REVOKE" }, () => runMutation(credential, "revoke", translate(settingsIntegrationsMessages, "credentialRevoked"), () => revokeAutomationCredential(projectId, credential.id, { expectedVersion: credential.version })))}><Trash2 className="h-3.5 w-3.5" />{translate(settingsIntegrationsMessages, "revoke")}</button>
+                  {busyAction?.startsWith(`${credential.id}:`) ? <span role="status" className="inline-flex items-center gap-1 text-xs text-slate-500"><Loader2 className="h-3.5 w-3.5 animate-spin" />{translate(settingsIntegrationsMessages, "applyingCredentialChange")}</span> : null}
                 </div>
                 <FeedbackMessage feedback={feedback[credential.id]} />
               </li>

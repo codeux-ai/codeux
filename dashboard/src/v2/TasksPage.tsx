@@ -21,42 +21,46 @@ import { TaskBoardColumns } from "./components/tasks/TaskBoardColumns.js";
 import { TaskBoardOverview } from "./components/tasks/TaskBoardOverview.js";
 import { useInteractionTokens } from "./lib/motion/tokens.js";
 import { useTaskBoardController } from "./hooks/use-task-board-controller.js";
+import { useDashboardI18n } from "./i18n/context.js";
+import { taskMessages } from "./i18n/messages/tasks.js";
 
 type TaskScopePlaceholderMode = "project" | "sprint";
 
 export const TaskBoardFeedback: FunctionComponent<{
   error: string | null;
   filterTransitionPending: boolean;
-}> = ({ error, filterTransitionPending }) => (
-  <>
+}> = ({ error, filterTransitionPending }) => {
+  const { translate } = useDashboardI18n();
+  return <>
     {error && (
       <div role="alert" aria-live="assertive" className="flex min-w-0 items-start gap-3 rounded-2xl border border-status-red/20 bg-status-red/[0.06] px-4 py-3.5 text-status-red sm:px-5">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.2} aria-hidden="true" />
         <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-[0.12em]">Task board update failed</p>
+          <p className="text-xs font-bold uppercase tracking-[0.12em]">{translate(taskMessages, "taskBoardUpdateFailed")}</p>
           <p className="mt-1 break-words text-sm text-slate-600 dark:text-slate-300">{error}</p>
         </div>
       </div>
     )}
     {filterTransitionPending && (
       <div role="status" aria-live="polite" className="rounded-2xl border border-signal-500/15 bg-signal-500/[0.06] px-4 py-3 text-xs font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400">
-        Updating task board filters. Current cards remain visible until results settle.
+        {translate(taskMessages, "updatingFilters")}
       </div>
     )}
-  </>
-);
+  </>;
+};
 
 const TaskScopePlaceholder: FunctionComponent<{
   mode: TaskScopePlaceholderMode;
   hasProjects: boolean;
   onAddProject: () => void;
 }> = ({ mode, hasProjects, onAddProject }) => {
+  const { translate } = useDashboardI18n();
   const isProjectMode = mode === "project";
-  const title = isProjectMode ? "Task work starts with a project." : "Create a sprint to unlock tasks.";
-  const eyebrow = isProjectMode ? "Task Board Standby" : "Sprint Scope Required";
+  const title = translate(taskMessages, isProjectMode ? "taskNeedsProject" : "taskNeedsSprint");
+  const eyebrow = translate(taskMessages, isProjectMode ? "taskProjectStandby" : "taskSprintRequired");
   const body = isProjectMode
-    ? "Connect a project before the task board starts tracking queued work, active implementation, QA review, and completed delivery."
-    : "Tasks are organized inside sprint scope. Create or select a sprint before adding implementation work to the board.";
+    ? translate(taskMessages, "taskNeedsProjectBody")
+    : translate(taskMessages, "taskNeedsSprintBody");
 
   return (
     <section className="overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-6 shadow-[0_8px_32px_rgba(15,23,42,0.06)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_12px_36px_rgba(0,0,0,0.24)] sm:p-8">
@@ -84,7 +88,7 @@ const TaskScopePlaceholder: FunctionComponent<{
                 icon={Plus}
                 className="!inline-flex !min-h-[44px] !items-center !gap-2.5 !rounded-xl !px-5 !py-2.5 !text-[10px] !font-bold !uppercase !tracking-[0.14em] focus-visible:!ring-2 focus-visible:!ring-signal-500/40"
               >
-                {hasProjects ? "Add Project" : "Add First Project"}
+                {translate(taskMessages, hasProjects ? "addProject" : "addFirstProject")}
               </Button>
             ) : (
               <Link
@@ -92,7 +96,7 @@ const TaskScopePlaceholder: FunctionComponent<{
                 className="inline-flex min-h-[44px] items-center gap-2.5 rounded-xl bg-signal-500 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white transition-colors hover:bg-signal-400 focus-visible:ring-2 focus-visible:ring-signal-500/40 motion-reduce:transition-none dark:text-void-900"
               >
                 <Plus className="h-3.5 w-3.5" strokeWidth={2.3} />
-                Plan Sprint
+                {translate(taskMessages, "planSprint")}
               </Link>
             )}
             <Link
@@ -100,7 +104,7 @@ const TaskScopePlaceholder: FunctionComponent<{
               className="inline-flex min-h-[44px] items-center gap-2.5 rounded-xl border border-black/[0.06] bg-white/75 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/40 motion-reduce:transition-none dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:text-white"
             >
               <FolderGit2 className="h-3.5 w-3.5 text-ember-500" strokeWidth={2.1} />
-              {isProjectMode ? "Manage Projects" : "Open Sprints"}
+              {translate(taskMessages, isProjectMode ? "manageProjects" : "openSprints")}
               <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.1} />
             </Link>
           </div>
@@ -109,9 +113,9 @@ const TaskScopePlaceholder: FunctionComponent<{
         <div className="overflow-hidden rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-3 dark:border-white/[0.06] dark:bg-white/[0.035]">
           <div className="space-y-2">
             {[
-              { label: "Project", value: isProjectMode ? "required" : "ready", tone: isProjectMode ? "text-ember-500" : "text-status-green" },
-              { label: "Sprint", value: isProjectMode ? "waiting" : "required", tone: isProjectMode ? "text-signal-500" : "text-ember-500" },
-              { label: "Tasks", value: "locked", tone: "text-slate-500 dark:text-slate-400" },
+              { label: translate(taskMessages, "project"), value: translate(taskMessages, isProjectMode ? "required" : "ready"), tone: isProjectMode ? "text-ember-500" : "text-status-green" },
+              { label: translate(taskMessages, "sprint"), value: translate(taskMessages, isProjectMode ? "waiting" : "required"), tone: isProjectMode ? "text-signal-500" : "text-ember-500" },
+              { label: translate(taskMessages, "tasks"), value: translate(taskMessages, "locked"), tone: "text-slate-500 dark:text-slate-400" },
             ].map((item, index) => (
               <div
                 key={item.label}
@@ -134,6 +138,7 @@ const TaskScopePlaceholder: FunctionComponent<{
 };
 
 export const TasksPage: FunctionComponent = () => {
+  const { translate } = useDashboardI18n();
   const boardRef = useRef<HTMLDivElement>(null);
   const interactionTokens = useInteractionTokens();
   const controller = useTaskBoardController();
@@ -267,24 +272,27 @@ export const TasksPage: FunctionComponent = () => {
 
   return (
     <PageContainer
-      aria-label="Task Board"
+      aria-label={translate(taskMessages, "taskBoard")}
       className={isTaskScopeReady ? "gap-10" : "gap-8"}
       padding={isTaskScopeReady ? "standard" : "sprintsEmpty"}
     >
       <PageHeader
         icon={ListChecks}
-        eyebrow="Delivery workspace"
-        title="Tasks"
+        eyebrow={translate(taskMessages, "deliveryWorkspace")}
+        title={translate(taskMessages, "tasks")}
         subtitle={
           <>
             {selectedProject
               ? taskScopeSprintId
-                ? `Task execution for ${selectedProject.name}, scoped to Sprint ${sprints.find((sprint) => sprint.id === taskScopeSprintId)?.number ?? "..."}.`
-                : `Task execution for ${selectedProject.name}. Showing all tasks across the project.`
-              : "Select a project to manage sprint tasks."}
+                ? translate(taskMessages, "selectedProjectSprintSubtitle", { project: selectedProject.name, sprint: sprints.find((sprint) => sprint.id === taskScopeSprintId)?.number ?? "..." })
+                : translate(taskMessages, "selectedProjectSubtitle", { project: selectedProject.name })
+              : translate(taskMessages, "noProjectSubtitle")}
             {selectedProject && (statusFilter !== "all" || priorityFilter !== "all") && (
               <span className="block text-sm text-signal-600 dark:text-signal-500 mt-1">
-                Filtered to show {statusFilter !== "all" ? statusFilter.replace("_", " ") : "all"} status and {priorityFilter !== "all" ? priorityFilter : "any"} priority.
+                {translate(taskMessages, "filteredSubtitle", {
+                  status: translate(taskMessages, statusFilter === "all" ? "all" : statusFilter === "pending" ? "queued" : statusFilter === "completed" ? "completed" : "inProgressLower"),
+                  priority: translate(taskMessages, priorityFilter === "all" ? "anyPriority" : priorityFilter),
+                })}
               </span>
             )}
           </>
@@ -297,7 +305,7 @@ export const TasksPage: FunctionComponent = () => {
             disabled={!selectedProject || sprints.length === 0}
             className="!flex !min-h-[44px] !w-full !shrink-0 !items-center !justify-center !gap-2.5 !rounded-xl !px-5 !py-2.5 !text-sm !font-bold sm:!w-auto"
           >
-            {(showComposer || editingTask) ? "Close Composer" : "New Task"}
+            {translate(taskMessages, (showComposer || editingTask) ? "closeComposer" : "newTask")}
           </Button>
         }
       />
@@ -323,13 +331,13 @@ export const TasksPage: FunctionComponent = () => {
           aria-labelledby="task-workspace-heading"
           className={`grid min-w-0 items-start gap-6 ${showComposer || editingTask ? "xl:grid-cols-[minmax(0,1fr)_minmax(28rem,40rem)]" : "grid-cols-1"}`}
         >
-          <h2 id="task-workspace-heading" className="sr-only">Task workspace</h2>
+          <h2 id="task-workspace-heading" className="sr-only">{translate(taskMessages, "taskWorkspace")}</h2>
 
           <section
             aria-labelledby="task-board-heading"
             className={`${showComposer || editingTask ? "order-2 xl:order-1" : ""} min-w-0 space-y-6`}
           >
-            <h3 id="task-board-heading" className="sr-only">Task board</h3>
+            <h3 id="task-board-heading" className="sr-only">{translate(taskMessages, "taskBoardRegion")}</h3>
             <TaskBoardFilters
               sprints={sprints}
               selectedSprintId={taskScopeSprintId}

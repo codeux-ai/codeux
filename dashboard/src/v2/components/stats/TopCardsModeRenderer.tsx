@@ -368,54 +368,54 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
     return (
       <>
         <StatsMetricCard
-          label="Total Spend"
-          value={formatAdaptiveCurrency(cost.totalSpend)}
+          label={text("totalSpend")}
+          value={formatAdaptiveCurrency(cost.totalSpend, locale)}
           detail={coverageDetail}
           secondaryDetail={`${formatCount(cost.calls)} provider calls · ${formatTokens(cost.tokens)} tokens`}
           qualityHint={coverageLabel}
           accentHex={STATS_COLORS.clay}
           sparkline={metricSeries.totalCost}
-          signalLabel="Spend"
+          signalLabel={text("spend")}
         />
         <StatsMetricCard
-          label="Average per Task"
-          value={formatAdaptiveCurrency(cost.averageCostPerTask)}
-          detail={taskCount > 0 ? `Across ${formatCount(taskCount)} ${taskCount === 1 ? "task" : "tasks"} with provider usage` : "No tasks with provider usage"}
+          label={text("averagePerTask")}
+          value={formatAdaptiveCurrency(cost.averageCostPerTask, locale)}
+          detail={taskCount > 0 ? plural("acrossTasksWithUsage", taskCount, { count: formatCount(taskCount, locale) }) : text("noTasksWithProviderUsage")}
           secondaryDetail={coverageDetail}
           qualityHint={coverageLabel}
           accentHex={STATS_COLORS.signal}
           sparkline={[]}
-          signalLabel="Tasks"
+          signalLabel={text("tasks")}
         />
         <StatsMetricCard
-          label="Average per Sprint"
-          value={formatAdaptiveCurrency(cost.averageCostPerSprint)}
-          detail={sprintCount > 0 ? `Across ${formatCount(sprintCount)} canonical ${sprintCount === 1 ? "sprint" : "sprints"} with provider usage` : "No canonical sprints with provider usage"}
-          secondaryDetail="Conceptual sprint reruns are combined before averaging"
+          label={text("averagePerSprint")}
+          value={formatAdaptiveCurrency(cost.averageCostPerSprint, locale)}
+          detail={sprintCount > 0 ? plural("acrossCanonicalSprintsWithUsage", sprintCount, { count: formatCount(sprintCount, locale) }) : text("noCanonicalSprintsWithProviderUsage")}
+          secondaryDetail={text("sprintRerunsCombined")}
           qualityHint={coverageLabel}
           accentHex={STATS_COLORS.moss}
           sparkline={[]}
-          signalLabel="Sprints"
+          signalLabel={text("sprints")}
         />
         <StatsMetricCard
-          label="Blended Cost / 1M Tokens"
-          value={formatAdaptiveCurrency(cost.costPerMillionTokens)}
-          detail={cost.tokens > 0 ? `Across ${formatCount(cost.tokens)} tracked tokens` : "No tracked tokens for a blended rate"}
+          label={text("blendedCostPerMillionTokens")}
+          value={formatAdaptiveCurrency(cost.costPerMillionTokens, locale)}
+          detail={cost.tokens > 0 ? text("acrossTrackedTokens", { count: formatCount(cost.tokens, locale) }) : text("noTrackedTokensForRate")}
           secondaryDetail={coverageDetail}
           qualityHint={coverageLabel}
           accentHex={STATS_COLORS.ember}
           sparkline={metricSeries.totalCost}
-          signalLabel="Unit cost"
+          signalLabel={text("unitCost")}
         />
         <StatsMetricCard
-          label="Pricing Coverage"
+          label={text("pricingCoverage")}
           value={formatPricingCoverage(provenance)}
           detail={coverageDetail}
           secondaryDetail={`${formatCount(provenance.configuredPricingInvocationCount)} configured · ${formatCount(provenance.providerReportedCostInvocationCount)} provider reported`}
           qualityHint={coverageLabel}
           accentHex={STATS_COLORS.cyanMuted}
           sparkline={[]}
-          signalLabel="Provenance"
+          signalLabel={text("provenance")}
         />
       </>
     );

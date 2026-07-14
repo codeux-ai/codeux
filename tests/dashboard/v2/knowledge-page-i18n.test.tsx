@@ -141,7 +141,8 @@ describe("Knowledge route German localization", () => {
     renderGermanPage();
 
     const input = await screen.findByRole("textbox", { name: "Suchanfrage für Wissen" });
-    await user.selectOptions(screen.getByRole("combobox", { name: "Suchbereich für Wissen" }), "agent-1");
+    await user.click(screen.getByRole("button", { name: "Suchbereich für Wissen" }));
+    await user.click(screen.getByRole("option", { name: "Dokumente von Agent Alpha" }));
     await user.type(input, "auth flow{Enter}");
 
     await waitFor(() => expect(knowledgeApi.searchKnowledge).toHaveBeenCalledWith("project-current", {
@@ -149,7 +150,7 @@ describe("Knowledge route German localization", () => {
       agentPresetId: "agent-1",
       limit: 6,
     }));
-    expect(screen.getByText("Agent Alpha", { exact: false })).toBeInTheDocument();
+    expect(screen.getAllByText("Agent Alpha", { exact: false }).length).toBeGreaterThan(0);
     expect(await screen.findByText("const untouched = 'ä';")).toBeInTheDocument();
     expect(screen.getByText("API_Guide.md › Raw <heading>")).toBeInTheDocument();
     const formattedProgress = formatKnowledgeProgress(0.876, "de");

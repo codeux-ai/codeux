@@ -10,6 +10,8 @@ import {
 } from "../../lib/automation-credential-api.js";
 import { writeSettingsNavigationState } from "../../lib/settings-navigation-state.js";
 import { DropdownMenu, DropdownMenuItem } from "../ui/DropdownMenu.js";
+import { translateNodesMessage, useNodesI18n } from "../../i18n/messages/nodes.js";
+import type { DashboardLocale } from "../../i18n/locales.js";
 
 export type CredentialSelectionResult = "saved" | "conflict" | "policy-denied" | "error" | "stale";
 
@@ -34,17 +36,18 @@ const issueText = (
   issue: AutomationCredentialCompatibilityIssue,
   missingCapabilities: string[],
   allowedKinds: string[],
+  locale: DashboardLocale,
 ): string => {
   switch (issue) {
-    case "backend_unavailable": return "Secure credential storage is unavailable.";
-    case "backend_insecure": return "Secure credential storage is not ready.";
-    case "not_configured": return "Credential setup is incomplete.";
-    case "not_active": return "Credential is not active.";
-    case "project_access_denied": return "Credential is not available to this project.";
-    case "kind_not_allowed": return `Requires one of these kinds: ${allowedKinds.join(", ")}.`;
+    case "backend_unavailable": return translateNodesMessage(locale, "credentialStorageUnavailable");
+    case "backend_insecure": return translateNodesMessage(locale, "credentialStorageNotReady");
+    case "not_configured": return translateNodesMessage(locale, "credentialSetupIncomplete");
+    case "not_active": return translateNodesMessage(locale, "credentialNotActive");
+    case "project_access_denied": return translateNodesMessage(locale, "credentialProjectDenied");
+    case "kind_not_allowed": return translateNodesMessage(locale, "credentialKindsRequired", { kinds: allowedKinds.join(", ") });
     case "capability_missing": return missingCapabilities.length > 0
-      ? `Missing required access: ${missingCapabilities.join(", ")}.`
-      : "The credential does not grant the required access.";
+      ? translateNodesMessage(locale, "credentialAccessMissing", { capabilities: missingCapabilities.join(", ") })
+      : translateNodesMessage(locale, "credentialAccessNotGranted");
   }
 };
 
@@ -56,6 +59,7 @@ export const NodeCredentialPicker: FunctionComponent<NodeCredentialPickerProps> 
   disabled = false,
   onSelect,
 }) => {
+  const { locale, t } = useNodesI18n();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [options, setOptions] = useState<CredentialOption[]>([]);
@@ -107,16 +111,17 @@ export const NodeCredentialPicker: FunctionComponent<NodeCredentialPickerProps> 
           issue,
           assessment.missingCapabilities,
           requirement.allowedKinds,
+          locale,
         )),
       })));
     } catch {
       if (requestRef.current !== requestId) return;
       setBackendReady(false);
-      setLoadError("Credential metadata could not be loaded. Retry or open Settings to review credential access.");
+      setLoadError(t("credentialMetadataLoadFailed"));
     } finally {
       if (requestRef.current === requestId) setLoading(false);
     }
-  }, [projectId, requirement.allowedKinds, requirement.requiredCapabilities]);
+  }, [locale, projectId, requirement.allowedKinds, requirement.requiredCapabilities, t]);
 
   useEffect(() => {
     requestRef.current += 1;
@@ -155,26 +160,26 @@ export const NodeCredentialPicker: FunctionComponent<NodeCredentialPickerProps> 
       position="bottom"
       align="end"
       className="w-[min(24rem,calc(100vw-1rem))] p-3"
-      menuAriaLabel={`Credential picker for ${requirement.label}`}
+      menuAriaLabel={t("credentialPickerFor", { label: requirement.label })}
       content={(
         <div className="flex max-h-[28rem] flex-col gap-3 overflow-y-auto">
           <div className="px-1">
             <p className="text-sm font-bold text-slate-900 dark:text-white">{requirement.label}</p>
             <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-              Choose a project-visible credential with {requirement.requiredCapabilities.join(", ") || "the declared"} access. Secret values never enter this page.
+              {t("chooseProjectCredential", { capabilities: requirement.requiredCapabilities.join(", ") || t("declaredAccess") })}
             </p>
           </div>
-          {loading ? <p role="status" className="rounded-xl bg-black/[0.03] p-3 text-xs text-slate-500 dark:bg-white/[0.04]">Checking credential compatibility…</p> : null}
+          {loading ? <p role="status" className="rounded-xl bg-black/[0.03] p-3 text-xs text-slate-500 dark:bg-white/[0.04]">{t("checkingCredentialCompatibility")}</p> : null}
           {loadError ? <div role="alert" className="rounded-xl border border-status-red/20 bg-status-red/[0.06] p-3 text-xs text-status-red">{loadError}</div> : null}
           {!loading && backendReady === false ? (
             <div role="alert" className="flex gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[0.08] p-3 text-xs leading-relaxed text-amber-800 dark:text-amber-200">
               <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-              Secure credential storage is unavailable. Existing bindings remain unchanged.
+              {t("credentialStorageUnavailableBindingsUnchanged")}
             </div>
           ) : null}
           {!loading && compatibleOptions.length > 0 ? (
-            <div className="flex flex-col gap-1" aria-label="Compatible credentials">
-              <p className="px-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Compatible</p>
+            <div className="flex flex-col gap-1" aria-label={t("compatibleCredentials")}>
+              <p className="px-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("compatible")}</p>
               {compatibleOptions.map((option) => (
                 <DropdownMenuItem
                   key={option.id}
@@ -184,32 +189,32 @@ export const NodeCredentialPicker: FunctionComponent<NodeCredentialPickerProps> 
                   onClick={() => void choose(option.id)}
                 >
                   <span className="min-w-0"><span className="block truncate font-bold">{option.name}</span><span className="block truncate text-xs text-slate-500">{option.kind}</span></span>
-                  {option.id === boundCredentialId ? <Check className="h-4 w-4 shrink-0 text-status-green" aria-label="Currently bound" /> : null}
+                  {option.id === boundCredentialId ? <Check className="h-4 w-4 shrink-0 text-status-green" aria-label={t("currentlyBound")} /> : null}
                 </DropdownMenuItem>
               ))}
             </div>
           ) : null}
           {!loading && unavailableOptions.length > 0 ? (
-            <div className="flex flex-col gap-1" aria-label="Unavailable credentials">
-              <p className="px-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Unavailable for this slot</p>
+            <div className="flex flex-col gap-1" aria-label={t("unavailableCredentials")}>
+              <p className="px-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("unavailableForSlot")}</p>
               {unavailableOptions.map((option) => (
                 <div key={option.id} className="rounded-xl border border-black/[0.05] px-3 py-2 opacity-75 dark:border-white/[0.06]">
                   <p className="text-sm font-bold text-slate-600 dark:text-slate-300">{option.name} <span className="font-normal text-slate-400">· {option.kind}</span></p>
-                  <p className="mt-1 text-xs leading-relaxed text-slate-500">{option.reasons.join(" ") || "This credential is not compatible with the slot policy."}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-500">{option.reasons.join(" ") || t("credentialSlotPolicyIncompatible")}</p>
                 </div>
               ))}
             </div>
           ) : null}
           {!loading && !loadError && !hasCompatibleChoice ? (
             <div className="rounded-xl border border-black/[0.06] bg-black/[0.025] p-3 text-xs leading-relaxed text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300">
-              <p>No other compatible credential is available for this slot.</p>
+              <p>{t("noOtherCompatibleCredential")}</p>
               <a
                 role="menuitem"
                 href="/config"
                 className="mt-2 inline-flex items-center gap-1.5 rounded-lg font-bold text-signal-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 dark:text-signal-400"
                 onClick={() => writeSettingsNavigationState({ activeCategory: "integrations", activeInvocationRoute: "task_coding", focusedSections: {} })}
               >
-                <Settings className="h-3.5 w-3.5" aria-hidden="true" />Open credential Settings
+                <Settings className="h-3.5 w-3.5" aria-hidden="true" />{t("openCredentialSettings")}
               </a>
             </div>
           ) : null}
@@ -220,7 +225,7 @@ export const NodeCredentialPicker: FunctionComponent<NodeCredentialPickerProps> 
               onClick={() => void choose(null)}
             >
               <Unlink className="h-3.5 w-3.5" aria-hidden="true" />
-              {selectingId === "__unbind__" ? "Removing binding…" : `Remove ${currentOption?.name ?? "credential"} binding`}
+              {selectingId === "__unbind__" ? t("removingBinding") : t("removeCredentialBinding", { credential: currentOption?.name ?? t("credential") })}
             </DropdownMenuItem>
           ) : null}
         </div>
@@ -229,10 +234,10 @@ export const NodeCredentialPicker: FunctionComponent<NodeCredentialPickerProps> 
       <button
         type="button"
         disabled={disabled}
-        aria-label={`Choose credential for ${requirement.label}`}
+        aria-label={t("chooseCredentialFor", { label: requirement.label })}
         className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-signal-500/30 px-2.5 py-1.5 text-xs font-bold text-signal-600 transition hover:bg-signal-500/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 disabled:opacity-50 dark:text-signal-400"
       >
-        <KeyRound className="h-3.5 w-3.5" aria-hidden="true" />{boundCredentialId ? "Replace or remove" : "Bind credential"}
+        <KeyRound className="h-3.5 w-3.5" aria-hidden="true" />{t(boundCredentialId ? "replaceOrRemove" : "bindCredential")}
       </button>
     </DropdownMenu>
   );

@@ -192,7 +192,7 @@ describe("SprintProjectManagementImportModal", () => {
     await user.type(screen.getByPlaceholderText("LIN-42, issue-id"), "LIN-99");
     await user.keyboard("{Enter}");
     await user.click(screen.getByLabelText("Linear status"));
-    await user.click(screen.getByRole("option", { name: "In Progress" }));
+    await user.click(screen.getByRole("option", { name: "In progress" }));
     fireEvent.click(screen.getByRole("button", { name: /^search linear$/i }));
 
     await waitFor(() => {

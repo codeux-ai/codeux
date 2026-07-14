@@ -16,6 +16,7 @@ import {
   SUBPANEL_CLASS,
 } from "../stats-ui-primitives.js";
 import styles from "./CostOverviewPanel.module.css";
+import { useStatsI18n, type StatsI18nValue } from "../../stats-i18n.js";
 
 const CHART_WIDTH = 720;
 const CHART_HEIGHT = 240;
@@ -41,14 +42,14 @@ export interface CostOverviewPanelProps {
   viewModel: CostAnalyticsViewModel;
 }
 
-function formatCount(value: number): string {
+function formatCount(value: number, i18n: StatsI18nValue): string {
   const normalized = Number.isFinite(value) && value > 0 ? value : 0;
-  return new Intl.NumberFormat("en-US").format(normalized);
+  return i18n.formatNumber(normalized);
 }
 
-function formatExactUsd(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return "$0.00";
-  return new Intl.NumberFormat("en-US", {
+function formatExactUsd(value: number, i18n: StatsI18nValue): string {
+  if (!Number.isFinite(value) || value <= 0) return i18n.formatCurrency(0);
+  return new Intl.NumberFormat(i18n.locale, {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 2,
@@ -56,31 +57,26 @@ function formatExactUsd(value: number): string {
   }).format(value);
 }
 
-function formatNamedCount(value: number, singular: string, plural = `${singular}s`): string {
-  const normalized = Number.isFinite(value) && value > 0 ? value : 0;
-  return `${formatCount(normalized)} ${normalized === 1 ? singular : plural}`;
-}
-
-function formatExactAmount(amount: CostAmount): string {
+function formatExactAmount(amount: CostAmount, i18n: StatsI18nValue): string {
   if (amount.usd === null || !Number.isFinite(amount.usd) || amount.provenance.state === "unavailable") {
-    return "Unavailable";
+    return i18n.text("unavailable");
   }
-  if (amount.provenance.state === "unpriced") return "Unpriced";
-  if (amount.provenance.state === "unknown" && amount.usd === 0) return "Coverage unknown";
+  if (amount.provenance.state === "unpriced") return i18n.text("unpriced");
+  if (amount.provenance.state === "unknown" && amount.usd === 0) return i18n.text("coverageUnknown");
 
-  const value = formatExactUsd(Math.max(0, amount.usd));
-  if (amount.provenance.state === "partial") return `${value}+ (priced subtotal)`;
-  if (amount.provenance.state === "unknown") return `${value} (coverage unknown)`;
+  const value = formatExactUsd(Math.max(0, amount.usd), i18n);
+  if (amount.provenance.state === "partial") return i18n.text("pricedSubtotalValue", { value });
+  if (amount.provenance.state === "unknown") return i18n.text("coverageUnknownValue", { value });
   return value;
 }
 
-function coverageLabel(state: CostCoverageState): string {
+function coverageLabel(state: CostCoverageState, i18n: StatsI18nValue): string {
   switch (state) {
-    case "complete": return "Fully priced";
-    case "partial": return "Partial coverage";
-    case "unpriced": return "Unpriced usage";
-    case "unknown": return "Coverage unknown";
-    case "unavailable": return "No usage";
+    case "complete": return i18n.text("fullyPriced");
+    case "partial": return i18n.text("partialCoverage");
+    case "unpriced": return i18n.text("unpricedUsage");
+    case "unknown": return i18n.text("coverageUnknown");
+    case "unavailable": return i18n.text("noUsage");
   }
 }
 
@@ -95,28 +91,29 @@ function coverageTone(state: CostCoverageState): string {
   }
 }
 
-function coverageCopy(provenance: CostProvenance, totalSpend: CostAmount): string {
-  const calls = formatCount(provenance.invocationCount);
-  const invocationLabel = provenance.invocationCount === 1 ? "invocation" : "invocations";
-  const configured = formatCount(provenance.configuredPricingInvocationCount);
-  const reported = formatCount(provenance.providerReportedCostInvocationCount);
-  const unpriced = formatCount(provenance.unpricedInvocationCount);
-  const unknown = formatCount(provenance.unknownInvocationCount);
+function coverageCopy(provenance: CostProvenance, totalSpend: CostAmount, i18n: StatsI18nValue): string {
+  const variables = {
+    calls: formatCount(provenance.invocationCount, i18n),
+    configured: formatCount(provenance.configuredPricingInvocationCount, i18n),
+    reported: formatCount(provenance.providerReportedCostInvocationCount, i18n),
+    unpriced: formatCount(provenance.unpricedInvocationCount, i18n),
+    unknown: formatCount(provenance.unknownInvocationCount, i18n),
+  };
 
   switch (provenance.state) {
     case "unavailable":
-      return "No provider invocations were recorded in this window, so cost metrics are unavailable.";
+      return i18n.text("coverageNoInvocations");
     case "complete":
       if (totalSpend.usd === 0) {
-        return `All ${calls} ${invocationLabel} have a valid pricing source and legitimately total $0.00 (${configured} configured, ${reported} provider reported).`;
+        return i18n.text("coverageCompleteFree", variables);
       }
-      return `All ${calls} ${invocationLabel} are priced: ${configured} from configured rates and ${reported} from provider-reported cost.`;
+      return i18n.text("coverageCompleteDetail", variables);
     case "partial":
-      return `${configured} configured and ${reported} provider-reported invocations are included; ${unpriced} unpriced invocations are excluded. Dollar values are priced subtotals.`;
+      return i18n.text("coveragePartialDetail", variables);
     case "unpriced":
-      return `None of the ${calls} ${invocationLabel} has a usable pricing source. Dollar totals are unavailable, not zero.`;
+      return i18n.text("coverageUnpricedDetail", variables);
     case "unknown":
-      return `Coverage metadata is missing for ${unknown} of ${calls} ${invocationLabel}. Displayed dollar values cannot be treated as complete.`;
+      return i18n.text("coverageUnknownDetail", variables);
   }
 }
 
@@ -168,17 +165,18 @@ function getPeakPoint(points: ChartPoint[]): ChartPoint | null {
   }, null);
 }
 
-function bucketCoverageContext(row: CostOverTimeRow): string {
+function bucketCoverageContext(row: CostOverTimeRow, i18n: StatsI18nValue): string {
   const state = row.amount.provenance.state;
-  if (state === "partial") return "Partial pricing; value is a priced subtotal.";
-  if (state === "unpriced") return "Usage is unpriced; no zero-dollar value is claimed.";
-  if (state === "unknown") return "Pricing coverage is unknown.";
-  if (state === "unavailable") return "No cost value is available.";
-  if (row.amount.usd === 0 && row.calls > 0) return "Fully priced usage with a legitimate zero-dollar cost.";
-  return "Pricing coverage is complete.";
+  if (state === "partial") return i18n.text("bucketPartialPricing");
+  if (state === "unpriced") return i18n.text("bucketUnpriced");
+  if (state === "unknown") return i18n.text("bucketCoverageUnknown");
+  if (state === "unavailable") return i18n.text("bucketNoCost");
+  if (row.amount.usd === 0 && row.calls > 0) return i18n.text("bucketFreeUsage");
+  return i18n.text("bucketCompletePricing");
 }
 
 function SpendChart({ viewModel }: CostOverviewPanelProps): JSX.Element {
+  const i18n = useStatsI18n();
   const titleId = useId();
   const summaryId = useId();
   const points = buildChartPoints(viewModel.costOverTime);
@@ -191,12 +189,12 @@ function SpendChart({ viewModel }: CostOverviewPanelProps): JSX.Element {
   const hasBuckets = points.length > 0;
   const totalState = viewModel.totalSpend.provenance.state;
   const chartSummary = !hasUsage
-    ? "No provider usage was recorded, so there is no spend trend for this window."
+    ? i18n.text("noSpendTrend")
     : !hasBuckets
-      ? "Provider usage was recorded, but no time buckets are available for this window."
+      ? i18n.text("noSpendBuckets")
       : totalState === "unpriced"
-        ? `${points.length} time ${points.length === 1 ? "bucket contains" : "buckets contain"} usage, but no priced spend is available.`
-        : `Spend across ${points.length} time ${points.length === 1 ? "bucket" : "buckets"}. ${peak ? `Peak: ${peak.row.label}, ${formatExactAmount(peak.row.amount)}.` : "No priced bucket values are available."}`;
+        ? i18n.plural("unpricedTimeBuckets", points.length, { count: i18n.formatNumber(points.length) })
+        : i18n.plural("spendAcrossBuckets", points.length, { count: i18n.formatNumber(points.length), detail: peak ? i18n.text("peakBucketDetail", { label: peak.row.label, value: formatExactAmount(peak.row.amount, i18n) }) : i18n.text("noPricedBucketValues") });
 
   const handleBucketKeyDown = (event: JSX.TargetedKeyboardEvent<HTMLButtonElement>, index: number) => {
     let nextIndex: number | null = null;
@@ -215,34 +213,34 @@ function SpendChart({ viewModel }: CostOverviewPanelProps): JSX.Element {
     <section className={styles.chartSection} aria-labelledby={titleId} aria-describedby={summaryId}>
       <div className={styles.chartHeader}>
         <div>
-          <p className={styles.eyebrow}>Time series</p>
-          <h3 id={titleId} className={styles.chartTitle}>Spend over time</h3>
+          <p className={styles.eyebrow}>{i18n.text("timeSeries")}</p>
+          <h3 id={titleId} className={styles.chartTitle}>{i18n.text("spendOverTime")}</h3>
           <p id={summaryId} className={styles.chartSummary}>{chartSummary}</p>
         </div>
         {hasBuckets ? (
-          <div className={styles.chartKey} aria-label="Chart marker key">
-            <span><span className={styles.peakCue} aria-hidden="true">◆</span> Peak</span>
-            <span><span className={styles.selectedCue} aria-hidden="true">◎</span> Selected</span>
+          <div className={styles.chartKey} aria-label={i18n.text("chartMarkerKey")}>
+            <span><span className={styles.peakCue} aria-hidden="true">◆</span> {i18n.text("peak")}</span>
+            <span><span className={styles.selectedCue} aria-hidden="true">◎</span> {i18n.text("selected")}</span>
           </div>
         ) : null}
       </div>
 
       {!hasUsage ? (
         <div className={styles.emptyState} role="status">
-          <strong>No usage in this window</strong>
-          <span>Cost averages and a spend trend will appear after a provider invocation is recorded.</span>
+          <strong>{i18n.text("noUsageInWindow")}</strong>
+          <span>{i18n.text("costAppearsAfterInvocation")}</span>
         </div>
       ) : !hasBuckets ? (
         <div className={styles.emptyState} role="status">
-          <strong>No time buckets available</strong>
-          <span>The headline usage is preserved, but there is not enough bucket data to draw a trend.</span>
+          <strong>{i18n.text("noTimeBucketsAvailable")}</strong>
+          <span>{i18n.text("notEnoughBucketData")}</span>
         </div>
       ) : (
         <>
           <div className={styles.chartFrame} data-responsive-safe="true">
             <div className={styles.yAxis} aria-hidden="true">
-              <span>{peak ? formatAdaptiveCurrency(peak.row.amount) : "No price"}</span>
-              <span>$0</span>
+              <span>{peak ? formatAdaptiveCurrency(peak.row.amount, i18n.locale) : i18n.text("noPrice")}</span>
+              <span>{i18n.formatNumber(0, { style: "currency", currency: "USD", maximumFractionDigits: 0 })}</span>
             </div>
             <div className={styles.plot}>
               <svg
@@ -287,12 +285,12 @@ function SpendChart({ viewModel }: CostOverviewPanelProps): JSX.Element {
                 ))}
               </svg>
 
-              <div className={styles.bucketTargets} aria-label="Spend buckets">
+              <div className={styles.bucketTargets} aria-label={i18n.text("spendBuckets")}>
                 {points.map((point, index) => {
                   const isSelected = selected?.row.id === point.row.id;
                   const isPeak = peak?.row.id === point.row.id;
-                  const exactValue = formatExactAmount(point.row.amount);
-                  const accessibleLabel = `${point.row.label}: ${exactValue}; ${formatCount(point.row.calls)} calls; ${formatCount(point.row.tokens)} tokens. ${bucketCoverageContext(point.row)}${isPeak ? " Peak bucket." : ""}`;
+                  const exactValue = formatExactAmount(point.row.amount, i18n);
+                  const accessibleLabel = i18n.text("spendBucketAccessible", { label: point.row.label, value: exactValue, calls: formatCount(point.row.calls, i18n), tokens: formatCount(point.row.tokens, i18n), coverage: bucketCoverageContext(point.row, i18n), peak: isPeak ? i18n.text("peakBucketSuffix") : "" });
                   return (
                     <button
                       key={point.row.id}
@@ -327,33 +325,33 @@ function SpendChart({ viewModel }: CostOverviewPanelProps): JSX.Element {
           {selected ? (
             <div className={`${SUBPANEL_CLASS} ${styles.bucketDetail}`} role="status" aria-live="polite">
               <div>
-                <span className={styles.detailLabel}>Focused bucket</span>
-                <strong>{selected.row.label}{selected.row.id === peak?.row.id ? " · Peak" : ""}</strong>
+                <span className={styles.detailLabel}>{i18n.text("focusedBucket")}</span>
+                <strong>{selected.row.label}{selected.row.id === peak?.row.id ? ` · ${i18n.text("peak")}` : ""}</strong>
               </div>
               <dl>
-                <div><dt>Exact spend</dt><dd>{formatExactAmount(selected.row.amount)}</dd></div>
-                <div><dt>Calls</dt><dd>{formatCount(selected.row.calls)}</dd></div>
-                <div><dt>Tokens</dt><dd>{formatCount(selected.row.tokens)}</dd></div>
-                <div><dt>Coverage</dt><dd>{coverageLabel(selected.row.amount.provenance.state)}</dd></div>
+                <div><dt>{i18n.text("exactSpend")}</dt><dd>{formatExactAmount(selected.row.amount, i18n)}</dd></div>
+                <div><dt>{i18n.text("calls")}</dt><dd>{formatCount(selected.row.calls, i18n)}</dd></div>
+                <div><dt>{i18n.text("tokens")}</dt><dd>{formatCount(selected.row.tokens, i18n)}</dd></div>
+                <div><dt>{i18n.text("coverage")}</dt><dd>{coverageLabel(selected.row.amount.provenance.state, i18n)}</dd></div>
               </dl>
-              <p>{bucketCoverageContext(selected.row)}</p>
+              <p>{bucketCoverageContext(selected.row, i18n)}</p>
             </div>
           ) : null}
 
           <div className="sr-only">
             <table>
-              <caption>Spend over time data</caption>
+              <caption>{i18n.text("spendOverTimeData")}</caption>
               <thead>
-                <tr><th scope="col">Bucket</th><th scope="col">Exact spend</th><th scope="col">Pricing coverage</th><th scope="col">Calls</th><th scope="col">Tokens</th></tr>
+                <tr><th scope="col">{i18n.text("bucket")}</th><th scope="col">{i18n.text("exactSpend")}</th><th scope="col">{i18n.text("pricingCoverage")}</th><th scope="col">{i18n.text("calls")}</th><th scope="col">{i18n.text("tokens")}</th></tr>
               </thead>
               <tbody>
                 {points.map(({ row }) => (
                   <tr key={row.id}>
                     <th scope="row">{row.label}</th>
-                    <td>{formatExactAmount(row.amount)}</td>
-                    <td>{coverageLabel(row.amount.provenance.state)}</td>
-                    <td>{formatCount(row.calls)}</td>
-                    <td>{formatCount(row.tokens)}</td>
+                    <td>{formatExactAmount(row.amount, i18n)}</td>
+                    <td>{coverageLabel(row.amount.provenance.state, i18n)}</td>
+                    <td>{formatCount(row.calls, i18n)}</td>
+                    <td>{formatCount(row.tokens, i18n)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -366,49 +364,50 @@ function SpendChart({ viewModel }: CostOverviewPanelProps): JSX.Element {
 }
 
 export const CostOverviewPanel: FunctionComponent<CostOverviewPanelProps> = ({ viewModel }) => {
+  const i18n = useStatsI18n();
   const provenance = viewModel.totalSpend.provenance;
   const metrics: MetricDefinition[] = [
     {
-      label: "Total spend",
-      value: formatAdaptiveCurrency(viewModel.totalSpend),
-      detail: provenance.state === "partial" ? "Priced subtotal; unpriced calls excluded" : "Across the selected window",
+      label: i18n.text("totalSpend"),
+      value: formatAdaptiveCurrency(viewModel.totalSpend, i18n.locale),
+      detail: provenance.state === "partial" ? i18n.text("pricedSubtotalCallsExcluded") : i18n.text("acrossSelectedWindow"),
     },
     {
-      label: "Average per task",
-      value: formatAdaptiveCurrency(viewModel.averageCostPerTask),
+      label: i18n.text("averagePerTask"),
+      value: formatAdaptiveCurrency(viewModel.averageCostPerTask, i18n.locale),
       detail: viewModel.averageCostPerTask.entityCount > 0
-        ? `Across ${formatNamedCount(viewModel.averageCostPerTask.entityCount, "task")} with usage`
-        : "No tasks with provider usage",
+        ? i18n.plural("acrossTasksWithUsage", viewModel.averageCostPerTask.entityCount, { count: i18n.formatNumber(viewModel.averageCostPerTask.entityCount) })
+        : i18n.text("noTasksWithProviderUsage"),
     },
     {
-      label: "Average per sprint",
-      value: formatAdaptiveCurrency(viewModel.averageCostPerSprint),
+      label: i18n.text("averagePerSprint"),
+      value: formatAdaptiveCurrency(viewModel.averageCostPerSprint, i18n.locale),
       detail: viewModel.averageCostPerSprint.entityCount > 0
-        ? `Across ${formatNamedCount(viewModel.averageCostPerSprint.entityCount, "canonical sprint")} with usage`
-        : "No sprints with provider usage",
+        ? i18n.plural("acrossCanonicalSprintsWithUsage", viewModel.averageCostPerSprint.entityCount, { count: i18n.formatNumber(viewModel.averageCostPerSprint.entityCount) })
+        : i18n.text("noSprintsWithProviderUsage"),
     },
     {
-      label: "Cost per invocation",
-      value: formatAdaptiveCurrency(viewModel.costPerInvocation),
-      detail: viewModel.calls > 0 ? `Across ${formatNamedCount(viewModel.calls, "provider call")}` : "No provider calls",
+      label: i18n.text("costPerInvocation"),
+      value: formatAdaptiveCurrency(viewModel.costPerInvocation, i18n.locale),
+      detail: viewModel.calls > 0 ? i18n.plural("acrossProviderCalls", viewModel.calls, { count: i18n.formatNumber(viewModel.calls) }) : i18n.text("noProviderCalls"),
     },
     {
-      label: "Blended cost per million tokens",
-      value: formatAdaptiveCurrency(viewModel.costPerMillionTokens),
-      detail: viewModel.tokens > 0 ? `Across ${formatCount(viewModel.tokens)} tracked tokens` : "No tracked tokens",
+      label: i18n.text("blendedCostPerMillionTokens"),
+      value: formatAdaptiveCurrency(viewModel.costPerMillionTokens, i18n.locale),
+      detail: viewModel.tokens > 0 ? i18n.text("acrossTrackedTokens", { count: formatCount(viewModel.tokens, i18n) }) : i18n.text("noTrackedTokens"),
     },
   ];
 
   return (
-    <section className={`${PANEL_CLASS} ${styles.panel}`} aria-label="Cost executive overview" data-responsive-safe="true">
+    <section className={`${PANEL_CLASS} ${styles.panel}`} aria-label={i18n.text("costExecutiveOverview")} data-responsive-safe="true">
       <header className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>Cost intelligence</p>
-          <h2>Executive overview</h2>
-          <p>Spend, normalized rates, and pricing confidence from the shared Cost analytics model.</p>
+          <p className={styles.eyebrow}>{i18n.text("costIntelligence")}</p>
+          <h2>{i18n.text("executiveOverview")}</h2>
+          <p>{i18n.text("executiveOverviewDescription")}</p>
         </div>
         <span className={`${styles.statusBadge} ${coverageTone(provenance.state)}`}>
-          {coverageLabel(provenance.state)}
+          {coverageLabel(provenance.state, i18n)}
         </span>
       </header>
 
@@ -421,9 +420,9 @@ export const CostOverviewPanel: FunctionComponent<CostOverviewPanelProps> = ({ v
           </article>
         ))}
         <article className={`${SUBPANEL_CLASS} ${styles.metric} ${styles.coverageMetric}`}>
-          <h3>Pricing coverage</h3>
-          <p className={styles.metricValue}>{coverageLabel(provenance.state)}</p>
-          <p className={styles.metricDetail}>{coverageCopy(provenance, viewModel.totalSpend)}</p>
+          <h3>{i18n.text("pricingCoverage")}</h3>
+          <p className={styles.metricValue}>{coverageLabel(provenance.state, i18n)}</p>
+          <p className={styles.metricDetail}>{coverageCopy(provenance, viewModel.totalSpend, i18n)}</p>
         </article>
       </div>
 

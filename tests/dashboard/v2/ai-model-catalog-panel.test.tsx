@@ -423,10 +423,10 @@ describe("AIModelCatalogPanel", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Kompatible Modelle vergleichen" }));
     const catalog = screen.getByRole("region", { name: "Modellkatalog" });
-    expect(within(catalog).getByRole("combobox", { name: "Sprachmodelle nach Sprache filtern" })).toHaveValue("de-DE");
+    expect(within(catalog).getByRole("button", { name: "Sprachmodelle nach Sprache filtern" })).toHaveValue("de-DE");
     expect(within(catalog).getByText("Piper German MLS Medium")).toBeInTheDocument();
     expect(within(catalog).queryByText("Kokoro 82M v1.0 Q8")).not.toBeInTheDocument();
-    expect(within(catalog).getByRole("option", { name: "German (Germany)" })).toHaveValue("de-DE");
+    expect(within(catalog).getByRole("button", { name: "Sprachmodelle nach Sprache filtern" })).toHaveTextContent("German (Germany)");
     expect(speechApi.downloadSpeechModel).not.toHaveBeenCalled();
   });
 
