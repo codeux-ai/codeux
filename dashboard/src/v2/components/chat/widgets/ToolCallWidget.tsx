@@ -118,7 +118,7 @@ const StatusBadge: FunctionComponent<{ status?: string | null }> = ({ status }) 
   }
   return (
     <span class="inline-flex items-center gap-1 rounded-full bg-status-green/10 px-2 py-0.5 text-[10px] font-medium text-status-green">
-      <CheckCircle2 size={11} /> {translate(chatMessages, "done")}
+      <CheckCircle2 size={11} /> {status || translate(chatMessages, "done")}
     </span>
   );
 };

@@ -11,11 +11,11 @@ import { formatRelativeChatTime } from "../../../dashboard/src/v2/lib/chat-time.
 import { formatInvocationRetryAt } from "../../../dashboard/src/v2/lib/invocation-retry-time.js";
 import { getNoProjectAssistantPrompts } from "../../../dashboard/src/v2/lib/no-project-chat-assistant.js";
 import { formatTokenCount } from "../../../dashboard/src/v2/lib/token-estimate.js";
-import { getChatWidgetData } from "../../../dashboard/src/v2/lib/chat-widget-view-models.js";
+import { getChatWidgetData, getWorkingBubbleData } from "../../../dashboard/src/v2/lib/chat-widget-view-models.js";
 import type { ChatLiveTaskWidget } from "../../../dashboard/src/v2/lib/chat-live-entities.js";
 import type { ChatMessageRecord } from "../../../dashboard/src/v2/types.js";
 
-vi.mock("gsap", () => ({ default: { fromTo: vi.fn() } }));
+vi.mock("gsap", () => ({ default: { fromTo: vi.fn(), set: vi.fn(), to: vi.fn() } }));
 
 const message: ChatMessageRecord = {
   id: "message-1",
@@ -95,12 +95,42 @@ describe("German Chat localization boundary", () => {
 
     expect(localized.appCreationProgress?.statusLabel).toBe("Der Sprint für Web-App wird geplant.");
     expect(localized.appCreationProgress?.stages[0]?.label).toBe("Planung");
+    expect(localized.appCreationProgress?.stages[0]?.statusLabel).toBe("Wird ausgeführt");
     expect(localized.appCreationProgress?.stackSummary.fields[0]).toEqual({
       key: "framework",
       label: "Framework",
       value: "ProviderFramework",
     });
     expect(localized.appCreationProgress?.sprintLabel).toBe("Server sprint title");
+
+    expect(getWorkingBubbleData({
+      routeKind: "worker",
+      providerLabel: "Provider Brand",
+    }, "de").planName).toBe("Task über Provider Brand");
+  });
+
+  it("preserves tool status, arguments, and output while translating the tool frame", () => {
+    renderGerman(<ChatMessageBubble
+      message={{
+        ...message,
+        id: "message-tool",
+        metadata: {
+          kind: "tool_call",
+          toolName: "provider_tool_name",
+          toolStatus: "PROVIDER_STATUS_VERBATIM",
+          toolCallsJson: {
+            arguments: "{\"instruction\":\"NICHT ÜBERSETZEN\"}",
+            output: "Provider-Ausgabe bleibt unverändert.",
+          },
+        },
+      }}
+    />);
+
+    expect(screen.getByText("PROVIDER_STATUS_VERBATIM")).toBeInTheDocument();
+    expect(screen.getByText("Eingabe")).toBeInTheDocument();
+    expect(screen.getByText("Ausgabe")).toBeInTheDocument();
+    expect(screen.getByText("{\"instruction\":\"NICHT ÜBERSETZEN\"}")).toBeInTheDocument();
+    expect(screen.getByText("Provider-Ausgabe bleibt unverändert.")).toBeInTheDocument();
   });
 
   it("announces unavailable speech input in German", () => {

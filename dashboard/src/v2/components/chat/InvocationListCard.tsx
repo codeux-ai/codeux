@@ -324,7 +324,7 @@ export const InvocationListCard: FunctionComponent<{
                 {invocation.id}
               </div>
               <span id={stateDescriptionId} className="sr-only">
-                {selectionCopy}. {runtimeCopy}. Status {invocationStatus}.
+                {selectionCopy}. {runtimeCopy}. {translate(chatMessages, "statusPrefix")} {invocationStatus}.
               </span>
             </div>
           </div>

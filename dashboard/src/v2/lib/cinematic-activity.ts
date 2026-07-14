@@ -65,15 +65,6 @@ const PHASE_CATEGORY: Record<CinematicActivityPhase, AgentHumorCategory> = {
   error: "error",
 };
 
-const PHASE_LABEL: Record<CinematicActivityPhase, string> = {
-  container_startup: "Container starting",
-  provider_work: "Provider running",
-  planning: "Planning in progress",
-  qa_handoff: "QA review in progress",
-  completion: "Runtime step completed",
-  error: "Runtime needs attention",
-};
-
 const PHASE_MESSAGE_KEY: Record<CinematicActivityPhase, Parameters<typeof translateChatMessage>[1]> = {
   container_startup: "phaseContainerStartup",
   provider_work: "phaseProviderWork",
@@ -138,9 +129,7 @@ const buildCue = (options: {
   const providerLabel = normalizeProviderLabel(options.provider);
   return {
     id: options.id,
-    label: options.locale
-      ? translateChatMessage(options.locale, PHASE_MESSAGE_KEY[options.phase])
-      : PHASE_LABEL[options.phase],
+    label: translateChatMessage(options.locale ?? "en", PHASE_MESSAGE_KEY[options.phase]),
     phase: options.phase,
     providerLabel,
     quote: selectAgentHumorMessage({

@@ -40,7 +40,7 @@ const useStatusMessageNowMs = (nowMs: number | null | undefined): number => {
 
 export const WorkingBubble: FunctionComponent<WorkingBubbleProps> = ({ displayName, runtimeState, phase, nowMs }) => {
   const { locale, translate } = useDashboardI18n();
-  const data = getWorkingBubbleData(runtimeState);
+  const data = getWorkingBubbleData(runtimeState, locale);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
   const resolvedPhase = phase === "starting" ? "starting" : "working";

@@ -984,7 +984,7 @@ export const ChatPage: FunctionComponent = () => {
         value: (
           <span className={`flex items-center gap-1.5 ${headerStatus.text}`}>
             <span className={`inline-block h-1.5 w-1.5 rounded-full ${headerStatus.dot}`} />
-            <span>{translate(chatMessages, inv.status === "running" ? "running" : inv.status === "failed" ? "failed" : inv.status === "completed" ? "completed" : inv.status === "paused" ? "paused" : inv.status === "cancelled" ? "cancelled" : "queued")}</span>
+            <span className="capitalize">{inv.status}</span>
           </span>
         ),
       });

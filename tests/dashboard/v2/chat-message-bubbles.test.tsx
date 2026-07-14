@@ -182,7 +182,7 @@ describe("Chat Message Bubbles", () => {
       const view = within(container);
 
       expect(view.getByText("exec_command")).toBeInTheDocument();
-      expect(view.getByText("done")).toBeInTheDocument();
+      expect(view.getByText("completed")).toBeInTheDocument();
       expect(view.getByText("{\"cmd\":\"pnpm test tests/dashboard/v2/chat-message-bubbles.test.tsx\"}")).toBeInTheDocument();
       expect(view.queryByText("Running a command")).not.toBeInTheDocument();
       expect(view.queryByRole("img", { name: "Assistant" })).not.toBeInTheDocument();

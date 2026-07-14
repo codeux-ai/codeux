@@ -491,7 +491,10 @@ const formatLocalizedStatusLabel = (value: string | null | undefined, locale: Da
     paused: "paused",
     idle: "idle",
   } as const;
-  return normalized && normalized in keys
+  if (!normalized) {
+    return translateChatMessage(locale, "unknown");
+  }
+  return normalized in keys
     ? translateChatMessage(locale, keys[normalized as keyof typeof keys])
     : formatStatusLabel(value);
 };
@@ -648,11 +651,12 @@ const buildAppCreationStageState = (
   id: string,
   label: string,
   status: AppCreationProgressStageStatus,
+  locale: DashboardLocale,
 ): AppCreationProgressStageState => ({
   id,
   label,
   status,
-  statusLabel: formatStatusLabel(status),
+  statusLabel: formatLocalizedStatusLabel(status, locale),
   isActive: status === "running",
   isCompleted: status === "completed",
   isFailed: status === "failed",
@@ -671,13 +675,13 @@ const normalizeAppCreationStages = (
       const id = canonicalAppCreationStageId(rawId);
       const label = readString(stage.label) || formatStatusLabel(id);
       const status = normalizeAppCreationStageStatus(stage.status ?? stage.state, defaultAppCreationStageStatus(id, widgetStatus));
-      return buildAppCreationStageState(id, label, status);
+      return buildAppCreationStageState(id, label, status, locale);
     });
 
   const suppliedById = new Map(suppliedStages.map((stage) => [stage.id, stage]));
   const defaultStages = DEFAULT_APP_CREATION_STAGE_DEFS.map((stage) => (
     suppliedById.get(stage.id)
-    ?? buildAppCreationStageState(stage.id, translateChatMessage(locale, stage.labelKey), defaultAppCreationStageStatus(stage.id, widgetStatus))
+    ?? buildAppCreationStageState(stage.id, translateChatMessage(locale, stage.labelKey), defaultAppCreationStageStatus(stage.id, widgetStatus), locale)
   ));
   const defaultIds = new Set(defaultStages.map((stage) => stage.id));
   const customStages = suppliedStages.filter((stage) => !defaultIds.has(stage.id));
@@ -1877,7 +1881,10 @@ export const mergeInvocationToolMessages = (
   return merged;
 };
 
-export const getWorkingBubbleData = (runtimeState: ConversationRuntimeState | null | undefined): WorkingBubbleState => {
+export const getWorkingBubbleData = (
+  runtimeState: ConversationRuntimeState | null | undefined,
+  locale: DashboardLocale = "en",
+): WorkingBubbleState => {
   if (!runtimeState) {
     return { isPlanning: false };
   }
@@ -1886,8 +1893,8 @@ export const getWorkingBubbleData = (runtimeState: ConversationRuntimeState | nu
                      runtimeState.continuationStatus === "planning";
 
   const planName = runtimeState.providerLabel
-    ? `Task via ${runtimeState.providerLabel}`
-    : "Execution Plan";
+    ? translateChatMessage(locale, "taskViaProvider", { provider: runtimeState.providerLabel })
+    : translateChatMessage(locale, "executionPlan");
 
   return {
     isPlanning,
