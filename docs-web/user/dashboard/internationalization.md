@@ -1,0 +1,42 @@
+# Dashboard Language and Internationalization
+
+The Code UX dashboard supports English and German interface copy. English is the default when no valid saved preference exists. Code UX does not detect a language from your browser, synchronize the choice to the backend, or currently offer other dashboard locales.
+
+## Change the dashboard language
+
+1. Open **Settings**.
+2. Select **Appearance**.
+3. In **Display Settings**, find **Language**.
+4. Choose **English** or **Deutsch**.
+
+The dashboard changes immediately in both System and Project views. You do not need to select **Save Changes**, and changing Language does not mark a Settings draft as modified.
+
+The choice is stored only in your current browser profile. It survives refreshes and browser restarts, and other open Code UX tabs in the same browser profile follow the change. It is not synchronized to another browser, device, user account, backend setting, or project.
+
+If the saved value is missing or invalid, Code UX uses English. If browser storage is unavailable, you can still change the language for the current session, but the choice cannot survive a restart. Clearing the saved preference also returns the dashboard to English.
+
+Code UX updates the page's HTML `lang` value when the language changes so browsers and assistive technologies receive the correct language metadata.
+
+## What changes
+
+Dashboard-owned interface copy changes between English and German, including navigation, buttons, form labels, validation, status framing, accessibility text, and the chrome around the internal Docs viewer. Numbers, dates, times, relative times, lists, percentages, sizes, and plural forms use locale-aware browser formatting where those values are presented by the dashboard.
+
+## What remains unchanged
+
+Internationalization affects presentation only. Backend, API, and MCP contracts are unchanged, and the selected locale is not sent to providers or stored as a Code UX runtime setting.
+
+Provider and runtime output, API messages, diagnostics, names, identifiers, project and sprint data, task prompts, chat messages, stored instructions, paths, source code, and other user-authored content are rendered verbatim. A German dashboard may therefore contain English or other-language content supplied by a user, provider, integration, or runtime.
+
+The internal Docs viewer localizes its own controls, navigation, search, pagination, counts, and status messages. English documentation bodies, titles, descriptions, section names, source paths, and source content remain English.
+
+## Implementation model for contributors
+
+The dependency-free runtime under `dashboard/src/v2/i18n/` uses a closed locale type, safe browser-local persistence, a root Preact provider, and native `Intl` formatters. Typed, feature-owned message bundles require matching English and German keys. Lazy-loaded routes import their catalogs with their feature, keeping route copy out of the eager shell bundle.
+
+Interpolation replaces named `{variable}` tokens as literal text; it does not evaluate values or insert HTML. Plural messages require an `other` form and select a form from the raw count with `Intl.PluralRules`; the displayed count uses locale-aware number formatting.
+
+When adding a feature catalog, keep it with the owning feature, register it in the catalog-parity manifest and imports, and test both localized chrome and unchanged external content. When adding a locale, extend the closed locale and storage contracts, every registered bundle, the Appearance selector, formatter and HTML-language coverage, and the foundation, parity, boundary, feature, and end-to-end tests. Do not ship a partially translated locale or treat English fallback as catalog completeness.
+
+`pnpm run check:dashboard-i18n` is the static-copy guardrail. It flags dashboard-authored literals outside typed catalogs. Exact allowlist entries are reserved for reviewed protocol values, examples, licenses, and content intentionally shown verbatim.
+
+See [Settings](./settings.md) for the full Settings workflow.

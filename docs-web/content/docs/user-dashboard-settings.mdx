@@ -51,6 +51,8 @@ Open **Appearance → Display Settings → Language** to switch dashboard-author
 
 Settings card titles and their help popovers follow the selected language, including the purpose summary, controlled-functions guidance, recommended configuration, and risk notes. Card identity, documentation links, provider names, technical values, runtime/API messages, saved instructions, and the linked English documentation remain unchanged.
 
+The preference survives browser restarts and synchronizes to other open Code UX tabs in the same browser profile. It is not synchronized through the backend, a user account, or project settings. Missing, invalid, cleared, or unavailable browser storage recovers to English; an in-session switch still works when storage cannot persist it. For the complete behavior, content boundaries, and contributor model, see [Dashboard Language and Internationalization](/docs/user-dashboard-internationalization).
+
 ### Language-first speech output
 
 Open **AI Models -> Configure speech** and choose the output language first. Code UX preselects the catalog's preferred compatible local model and a matching voice. The recommendation keeps **Selected**, **Installed / Download required**, and **Output enabled / off** visible as separate states; the normal **Save Changes** action still controls when the draft becomes active.

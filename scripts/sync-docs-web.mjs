@@ -21,6 +21,7 @@ const pinnedOrder = new Map([
   ["user-quicksprints", 90],
   ["user-troubleshooting", 100],
   ["user-dashboard-overview", 110],
+  ["user-dashboard-internationalization", 115],
   ["user-dashboard-projects", 120],
   ["user-dashboard-sprints", 130],
   ["user-dashboard-tasks", 140],

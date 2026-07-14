@@ -26,6 +26,10 @@ When a project is active, the top bar shows tech-stack guidance and styleguide s
 
 The background is an animated Three.js scene ("Deep Ocean") that lazy-loads after the main UI is interactive, so it never blocks first paint. Onboarding can preview Theme, Navigation Mode, Reduced Motion, Background Mode, Static Color, and supported Zoom Level; advanced background controls such as Animation Style, Pattern Overlay, and custom background image remain in **Settings → Appearance**.
 
+## Language
+
+Open **Settings → Appearance → Display Settings → Language** to switch dashboard-owned interface copy between English and Deutsch. English is the default. The change applies immediately, persists only in the current browser profile, follows other open tabs in that profile, and updates the page's HTML `lang` value. It does not modify backend settings, provider/runtime content, or user-authored data. See [Dashboard Language and Internationalization](./internationalization.md) for the full workflow and content boundaries.
+
 ## Pages
 
 | Path | Page | What it does |

@@ -15,6 +15,7 @@ export type DocsSlug =
   | 'user-quicksprints'
   | 'user-troubleshooting'
   | 'user-dashboard-overview'
+  | 'user-dashboard-internationalization'
   | 'user-dashboard-projects'
   | 'user-dashboard-sprints'
   | 'user-dashboard-tasks'
@@ -215,6 +216,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     section: 'User Guide',
     title: "The Dashboard",
     description: "The Code UX dashboard is a real-time Preact application served at http://localhost:4444 (configurable with DASHBOARD_PORT). It is the primary interface for humans operating Code UX.",
+  },
+  'user-dashboard-internationalization': {
+    id: 'user-dashboard-internationalization',
+    path: '/docs/user-dashboard-internationalization',
+    section: 'User Guide',
+    title: "Dashboard Language and Internationalization",
+    description: "The Code UX dashboard supports English and German interface copy. English is the default when no valid saved preference exists. Code UX does not detect a language from your browser, synchronize the choice to the backe...",
   },
   'user-dashboard-projects': {
     id: 'user-dashboard-projects',
@@ -980,6 +988,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['user-quicksprints'],
   docsRegistry['user-troubleshooting'],
   docsRegistry['user-dashboard-overview'],
+  docsRegistry['user-dashboard-internationalization'],
   docsRegistry['user-dashboard-projects'],
   docsRegistry['user-dashboard-sprints'],
   docsRegistry['user-dashboard-tasks'],
