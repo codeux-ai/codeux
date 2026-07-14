@@ -129,6 +129,28 @@ describe("Reduced Motion Visuals", () => {
         expect(container.querySelector("animate")).toBeNull();
     });
 
+    it("PlanningProgressOverlay localizes German controls and keeps supplied progress text intact", () => {
+        const feedback = { ...getPlanningFeedback("plan_only", 10_000, "de"), text: "provider_id=codex-primary wartet" };
+        const { getByRole, getByText } = render(
+            <DashboardI18nProvider initialLocale="de" storage={null}>
+                <PlanningProgressOverlay
+                    isBusy
+                    feedback={feedback}
+                    planningEta={60_000}
+                    elapsedMs={10_000}
+                    isDark={false}
+                    actionType="plan_only"
+                    onCancel={() => {}}
+                    onDismiss={() => {}}
+                />
+            </DashboardI18nProvider>
+        );
+
+        expect(getByRole("progressbar", { name: "provider_id=codex-primary wartet" })).toBeInTheDocument();
+        expect(getByText("Voraussicht")).toBeInTheDocument();
+        expect(getByRole("button", { name: "Aktive Anfrage abbrechen" })).toBeInTheDocument();
+    });
+
     it("CanvasBackground skips GSAP loops and resolves ambient transitions through motion tokens", () => {
         const { container } = render(<CanvasBackground />);
 

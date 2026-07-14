@@ -132,7 +132,8 @@ export function useQuicksprintExecutionState({
         if (!(err instanceof DOMException && err.name === "AbortError")) {
           console.error("Quicksprint execute failed:", err);
           const templateName = selectedTemplate.name;
-          onError?.(translate(sprintAuthoringMessages, "planningFailedNamed", { name: templateName }));
+          const message = err instanceof Error ? err.message : String(err);
+          onError?.(translate(sprintAuthoringMessages, "planningFailedNamed", { name: templateName, message }));
         }
       } finally {
         clearInterval(timer);

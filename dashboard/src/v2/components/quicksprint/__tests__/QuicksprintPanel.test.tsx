@@ -165,4 +165,30 @@ describe("QuicksprintPanel", () => {
       expect.any(Object),
     );
   });
+
+  it("keeps provider failures verbatim inside German execution feedback", async () => {
+    const onExecute = vi.fn().mockRejectedValue(new Error("provider_id=codex-primary unavailable"));
+    render(
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <ExecutionTimelineProvider execution={null}>
+          <QuicksprintPanel
+            projectId="project-1"
+            onClose={vi.fn()}
+            onExecute={onExecute}
+            templates={[makeTemplate("1")]}
+            loading={false}
+          />
+        </ExecutionTimelineProvider>
+      </DashboardI18nProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Template 1" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Planen & starten" }).pop()!);
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Planung für Template 1 fehlgeschlagen: provider_id=codex-primary unavailable",
+      );
+    });
+  });
 });
