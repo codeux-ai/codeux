@@ -4,6 +4,8 @@ import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 interface DrawerProps {
   isOpen: boolean;
@@ -36,6 +38,7 @@ export const Drawer: FunctionComponent<DrawerProps> = ({
   ariaLabelledby,
   ariaDescribedby,
 }) => {
+  const { translate } = useOptionalDashboardI18n();
   const reducedMotion = useReducedMotion();
   const [shouldRender, setShouldRender] = useState(isOpen);
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -47,7 +50,7 @@ export const Drawer: FunctionComponent<DrawerProps> = ({
   });
 
   const hasAccessibleName = ariaLabel || ariaLabelledBy || ariaLabelledby;
-  const fallbackAriaLabel = !hasAccessibleName ? "Drawer" : undefined;
+  const fallbackAriaLabel = !hasAccessibleName ? translate(shellMessages, "drawer") : undefined;
 
   const isRight = position === "right";
   const alignmentClass = isRight ? "right-0" : "left-0";

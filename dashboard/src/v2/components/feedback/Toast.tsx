@@ -5,6 +5,8 @@ import gsap from "gsap";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 export type ToastType = "success" | "error" | "warning" | "info";
 
@@ -54,6 +56,7 @@ export const Toast: FunctionComponent<ToastProps> = ({
   isDismissing = false,
   toastRef,
 }) => {
+  const { translate } = useOptionalDashboardI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const actionButtonRef = useRef<HTMLButtonElement>(null);
   const dismissButtonRef = useRef<HTMLButtonElement>(null);
@@ -70,7 +73,7 @@ export const Toast: FunctionComponent<ToastProps> = ({
   const cssTokens = useInteractionTokens();
   const Icon = icons[type];
   const colorClass = colors[type];
-  const retryText = retryLabel || "Retry";
+  const retryText = retryLabel || translate(shellMessages, "retry");
 
   useLayoutEffect(() => {
     if (!containerRef.current) return;
@@ -221,7 +224,7 @@ export const Toast: FunctionComponent<ToastProps> = ({
               aria-live="polite"
               className="sr-only"
             >
-              {retryPending ? `${retryText} in progress.` : ""}
+              {retryPending ? translate(shellMessages, "retryInProgress", { label: retryText }) : ""}
             </span>
           </button>
         )}
@@ -250,7 +253,7 @@ export const Toast: FunctionComponent<ToastProps> = ({
         }}
         style={{ transitionDuration: cssTokens.controlFeedback.duration, transitionTimingFunction: cssTokens.controlFeedback.ease }}
         className="shrink-0 p-1 rounded-md opacity-70 hover:opacity-100 transition-opacity motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
-        aria-label="Dismiss toast"
+        aria-label={translate(shellMessages, "dismissToast")}
       >
         <X className="w-4 h-4" />
       </button>
