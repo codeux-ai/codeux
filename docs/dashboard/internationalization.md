@@ -45,6 +45,8 @@ Interpolation replaces only named `{variable}` tokens through literal string sub
 
 `useDashboardI18n` exposes `formatNumber`, `formatDate`, `formatTime`, `formatRelativeTime`, and `formatList`. Each function is rebound when the active locale changes and accepts the corresponding native `Intl` options. New localized UI should use these functions instead of adding fixed `en-US` formatters.
 
+The Sprints route owns its catalog in `dashboard/src/v2/i18n/messages/sprints.ts`. The page header, gallery, ledger, menus, bulk actions, importers, rollback flow, status summaries, empty/error states, and ARIA announcements follow the active locale. Sprint and task records, linked issue keys/titles/content, provider names, Git/PR details, review output, runtime events, importer warnings, and API error messages are data rather than interface copy and remain verbatim. Dates, times, counts, percentages, and list summaries use the active locale without changing stored UTC timestamps or sort keys.
+
 ## Translation scope
 
 The initial application bundle translates only root-owned shell copy: the skip link, main landmark label, route loading announcement, and hidden footer. Route catalogs should be imported with their route when those features are localized.
@@ -52,6 +54,8 @@ The initial application bundle translates only root-owned shell copy: the skip l
 Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged.
 
 The Knowledge route follows this boundary with its feature-owned `messages/knowledge.ts` catalog. Headers, controls, document states, ingestion dialogs, search feedback, confirmations, and accessibility announcements switch between English and German. Document titles and contents, paths, agent and model names, identifiers, search excerpts, ingestion diagnostics, and API errors remain verbatim. Counts, file sizes, update dates, and search-match percentages use the active locale's `Intl` formatting.
+
+The feature-gated custom-dashboard workspace owns its catalog in `messages/custom-dashboards.ts`. It localizes management, editor, viewer, validation, publication, and accessibility chrome. Persisted dashboard bundles and user-authored fields remain locale-neutral; known validation issue codes may select a localized explanation, while API, build, log, preview, and iframe diagnostics remain verbatim.
 
 ## Verification
 

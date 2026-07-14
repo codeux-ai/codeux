@@ -5,6 +5,7 @@ import { useEffect } from "preact/hooks";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, cleanup } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
+import { renderWithI18n } from "../render-with-i18n.js";
 import { useSprintsPageData } from "../../../dashboard/src/v2/pages/sprints/use-sprints-page-data.js";
 
 expect.extend(matchers);
@@ -122,7 +123,7 @@ describe("Sprint composer ETA wiring", () => {
   });
 
   it("renders backend ETA and refreshes it after planning invocation", async () => {
-    render(<HookHarness />);
+    renderWithI18n(<HookHarness />);
 
     await waitFor(() => {
       expect(screen.getByTestId("eta-ms")).toHaveTextContent("91000");
@@ -140,7 +141,7 @@ describe("Sprint composer ETA wiring", () => {
   it("falls back safely when ETA endpoint fails", async () => {
     fetchSprintComposerEtaMock.mockReset();
     fetchSprintComposerEtaMock.mockRejectedValueOnce(new Error("eta failed"));
-    render(<HookHarness />);
+    renderWithI18n(<HookHarness />);
 
     await waitFor(() => {
       expect(screen.getByTestId("eta-ms")).toHaveTextContent("180000");
@@ -153,7 +154,7 @@ describe("Sprint composer ETA wiring", () => {
       resolvePlan = resolve;
     }));
 
-    render(<HookHarness />);
+    renderWithI18n(<HookHarness />);
 
     await waitFor(() => {
       expect(screen.getByTestId("eta-ms")).toHaveTextContent("91000");

@@ -14,6 +14,7 @@ import {
   searchProjectIssues,
   type RemoteIssueSummary,
 } from "../../../../../dashboard/src/v2/lib/project-api";
+import { renderWithI18n } from "../../../render-with-i18n.js";
 import { fetchProjectEffectiveSettings } from "../../../../../dashboard/src/v2/lib/settings-api";
 
 expect.extend(matchers);
@@ -78,7 +79,7 @@ const makeResult = (provider: ProjectManagementImportProvider): RemoteIssueSumma
   issueCommentCount: provider === "notion" ? null : 2,
 });
 
-const renderModal = (provider: ProjectManagementImportProvider, onImport = vi.fn()) => render(
+const renderModal = (provider: ProjectManagementImportProvider, onImport = vi.fn()) => renderWithI18n(
   <SprintProjectManagementImportModal
     projectId="project-1"
     provider={provider}

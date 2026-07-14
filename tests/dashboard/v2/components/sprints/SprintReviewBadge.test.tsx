@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SprintReviewBadge } from "../../../../../dashboard/src/v2/components/sprints/SprintReviewBadge.js";
 import type { SprintReviewSummary } from "../../../../../dashboard/src/v2/types.js";
+import { renderWithI18n } from "../../../render-with-i18n.js";
 
 afterEach(() => {
   cleanup();
@@ -32,7 +33,7 @@ async function openWithPointer(): Promise<HTMLElement> {
 
 describe("SprintReviewBadge", () => {
   it("renders running review progress with reduced-motion-safe cues", () => {
-    render(<SprintReviewBadge summary={{
+    renderWithI18n(<SprintReviewBadge summary={{
       status: "running",
       outcome: null,
       summary: null,
@@ -69,7 +70,7 @@ describe("SprintReviewBadge", () => {
       tone: "text-status-red",
     },
   ])("renders the $name state with distinct text, icon, and tone", ({ summary, label, state, tone }) => {
-    const { container } = render(<SprintReviewBadge summary={summary} />);
+    const { container } = renderWithI18n(<SprintReviewBadge summary={summary} />);
 
     expect(screen.getByText(label)).toBeVisible();
     expect(trigger()).toHaveClass(tone);
@@ -79,7 +80,7 @@ describe("SprintReviewBadge", () => {
   });
 
   it("opens on pointer hover and keeps the card open while the pointer moves into it", async () => {
-    render(<SprintReviewBadge summary={baseSummary} />);
+    renderWithI18n(<SprintReviewBadge summary={baseSummary} />);
     const card = await openWithPointer();
 
     expect(trigger()).toHaveAttribute("aria-expanded", "true");
@@ -93,7 +94,7 @@ describe("SprintReviewBadge", () => {
 
   it("opens from keyboard focus, retains focus in disclosures, and restores the trigger on Escape", async () => {
     const user = userEvent.setup();
-    render(<SprintReviewBadge summary={{
+    renderWithI18n(<SprintReviewBadge summary={{
       ...baseSummary,
       outcome: "changes_requested",
       followUpTasks: [{
@@ -120,7 +121,7 @@ describe("SprintReviewBadge", () => {
   });
 
   it("supports click and touch-style activation and dismisses on an outside pointer", async () => {
-    render(<SprintReviewBadge summary={baseSummary} />);
+    renderWithI18n(<SprintReviewBadge summary={baseSummary} />);
 
     fireEvent.click(trigger());
     expect(await screen.findByRole("region", { name: "QA Review Passed" })).toBeVisible();
@@ -132,7 +133,7 @@ describe("SprintReviewBadge", () => {
   });
 
   it("shows labelled review context and all requested-change guidance without relying on color", async () => {
-    render(<SprintReviewBadge summary={{
+    renderWithI18n(<SprintReviewBadge summary={{
       ...baseSummary,
       outcome: "changes_requested",
       summary: "Authentication needs one more guard.",
@@ -157,7 +158,7 @@ describe("SprintReviewBadge", () => {
 
   it("keeps follow-up specifications collapsed until their native disclosures are expanded", async () => {
     const user = userEvent.setup();
-    render(<SprintReviewBadge summary={{
+    renderWithI18n(<SprintReviewBadge summary={{
       ...baseSummary,
       outcome: "changes_requested",
       followUpTasks: [{
@@ -186,7 +187,7 @@ describe("SprintReviewBadge", () => {
 
   it("handles long wrapping content and missing optional metadata", async () => {
     const longSummary = "A long review explanation ".repeat(40);
-    render(<SprintReviewBadge summary={{
+    renderWithI18n(<SprintReviewBadge summary={{
       status: "completed",
       outcome: "pass",
       summary: longSummary,
@@ -204,7 +205,7 @@ describe("SprintReviewBadge", () => {
   });
 
   it("provides an honest fallback when all optional details are missing", async () => {
-    render(<SprintReviewBadge summary={{
+    renderWithI18n(<SprintReviewBadge summary={{
       status: "completed",
       outcome: "pass",
       summary: null,
@@ -237,7 +238,7 @@ describe("SprintReviewBadge", () => {
       } as DOMRect;
     });
 
-    render(<SprintReviewBadge summary={baseSummary} align="left" />);
+    renderWithI18n(<SprintReviewBadge summary={baseSummary} align="left" />);
     const card = await openWithPointer();
     await waitFor(() => {
       expect(card.style.left).toBe("146px");

@@ -17,6 +17,12 @@ The source of truth is the Code UX database. Drafts stay mutable, revisions are 
 
 If validation fails, use the report and logs to create a new revision. Do not publish around the failure; the repository rejects failed, queued, running, cancelled, missing, or mismatched validation sessions before publication state changes. When a dashboard is already published, validating later drafts keeps the active published dashboard open, and validation sessions for the active published revision do not replace its published validation snapshot.
 
+## Localization Boundary
+
+The feature-gated workspace follows the dashboard's active English or German locale. Its management chrome—including editor labels, lifecycle states, validation stages, publication controls, confirmations, empty states, and accessibility labels—is translated with the route-owned custom-dashboard catalog.
+
+Localization never rewrites dashboard data or execution output. Dashboard names and descriptions, manifests, filenames, source code, HTML, source graphs, styleguides, revision IDs, validation logs, preview output, API errors, iframe runtime errors, and unknown build diagnostics are displayed or transported verbatim. Validation explanations are translated only for recognized stable issue codes; detached or unrecognized diagnostics retain their original text. Generated dashboard content remains independent of the management workspace locale.
+
 ## Agent Workflow
 
 Project Manager agents should use the `manage_custom_dashboards` MCP surface rather than writing generated code into `dashboard/src`.

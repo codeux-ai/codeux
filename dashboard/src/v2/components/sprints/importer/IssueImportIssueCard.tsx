@@ -6,6 +6,8 @@ import type {
   IssueImportTruncatedList,
 } from "../../../lib/issue-import-view-models.js";
 import { getSafeUrl } from "../../../lib/safe-url.js";
+import { useDashboardI18n } from "../../../i18n/index.js";
+import { sprintsMessages } from "../../../i18n/messages/sprints.js";
 
 interface IssueImportIssueCardProps {
   provider: IssueImportProviderMetadata;
@@ -47,11 +49,12 @@ export const IssueImportIssueCard: FunctionComponent<IssueImportIssueCardProps> 
   compact = false,
   metadataLimit,
   showConversationToggle = true,
-  conversationLabel = "Append Conversation",
+  conversationLabel,
   conversationDisabled = false,
   onToggle,
   onToggleConversation,
 }) => {
+  const { formatNumber, translate } = useDashboardI18n();
   const safeUrl = getSafeUrl(url ?? "");
   const visibleMetadataRows = typeof metadataLimit === "number"
     ? metadataRows.slice(0, Math.max(0, Math.trunc(metadataLimit)))
@@ -106,7 +109,7 @@ export const IssueImportIssueCard: FunctionComponent<IssueImportIssueCardProps> 
                 <span className="truncate">{row.value}</span>
               </span>
             ))}
-            {metadataOverflowCount > 0 && <OverflowPill label={`+${metadataOverflowCount} details`} />}
+            {metadataOverflowCount > 0 && <OverflowPill label={translate(sprintsMessages, "moreDetails", { count: formatNumber(metadataOverflowCount) })} />}
             {assignees.visible.map((assignee) => (
               <span
                 key={assignee}
@@ -143,11 +146,11 @@ export const IssueImportIssueCard: FunctionComponent<IssueImportIssueCardProps> 
                   className="h-3.5 w-3.5 rounded border-slate-300 text-signal-500 focus:ring-signal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.18] dark:bg-transparent"
                 />
                 <MessageSquare className="h-3.5 w-3.5" strokeWidth={2.1} aria-hidden="true" />
-                {conversationLabel}
+                {conversationLabel ?? translate(sprintsMessages, "appendConversationShort")}
               </label>
             )}
             <span className="inline-flex items-center gap-1 rounded-full border border-black/[0.06] bg-white px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300">
-              <span aria-live="polite">{selectionLabel ?? (selected ? "Selected" : "Click to select")}</span>
+              <span aria-live="polite">{selectionLabel ?? translate(sprintsMessages, selected ? "selected" : "clickToSelect")}</span>
             </span>
           </div>
         </div>
@@ -159,7 +162,7 @@ export const IssueImportIssueCard: FunctionComponent<IssueImportIssueCardProps> 
             rel="noopener noreferrer"
             onClick={(event) => event.stopPropagation()}
             className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 ${provider.accent.focusRingClassName} dark:hover:bg-white/[0.06] dark:hover:text-white`}
-            aria-label={`Open ${issueKey}`}
+            aria-label={translate(sprintsMessages, "openIssue", { key: issueKey })}
           >
             <ExternalLink className="h-4 w-4" strokeWidth={2.1} aria-hidden="true" />
           </a>

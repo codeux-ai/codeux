@@ -7,6 +7,8 @@ import type {
 import type { SprintStatusPresentation } from "../../types/sprint.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MOTION_TOKENS } from "../../lib/motion/tokens.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import { sprintsMessages } from "../../i18n/messages/sprints.js";
 
 export type SprintAttentionIndicatorState =
   | { kind: "failure"; accessibleText: "Sprint execution failed" }
@@ -45,8 +47,10 @@ export const SprintAttentionIndicator: FunctionComponent<SprintAttentionIndicato
   compact = false,
   className = "",
 }) => {
+  const { translate } = useDashboardI18n();
   const reducedMotion = useReducedMotion();
   const isFailure = state.kind === "failure";
+  const accessibleText = translate(sprintsMessages, isFailure ? "sprintExecutionFailed" : "sprintWaitingHuman");
   const motionStyle = reducedMotion
     ? undefined
     : {
@@ -59,8 +63,8 @@ export const SprintAttentionIndicator: FunctionComponent<SprintAttentionIndicato
   return (
     <span
       role="status"
-      aria-label={state.accessibleText}
-      title={state.accessibleText}
+      aria-label={accessibleText}
+      title={accessibleText}
       data-sprint-attention-indicator={state.kind}
       data-compact={compact ? "true" : "false"}
       data-reduced-motion={reducedMotion ? "true" : "false"}
