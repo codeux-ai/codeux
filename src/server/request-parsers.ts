@@ -30,6 +30,8 @@ import type {
 import type {
   ChatProviderBridgeMode,
   ChatProviderConnectionStatus,
+  ChatProviderDeliveryDirection,
+  ChatProviderDeliveryStatus,
   ChatProviderKind,
   ChatProviderRoutingHints,
   ChatProviderSecretConfig,
@@ -247,6 +249,10 @@ function parseJsonRecordField<T extends Record<string, unknown>>(
 
 const CHAT_PROVIDER_KINDS = CHAT_PROVIDER_SETUP_SCHEMAS.map((schema) => schema.kind);
 const CHAT_PROVIDER_CONNECTION_STATUSES: ChatProviderConnectionStatus[] = ["draft", "active", "disabled", "error"];
+const CHAT_PROVIDER_DELIVERY_DIRECTIONS: ChatProviderDeliveryDirection[] = ["inbound", "outbound"];
+const CHAT_PROVIDER_DELIVERY_STATUSES: ChatProviderDeliveryStatus[] = [
+  "pending", "sending", "delivered", "retryable_failure", "processed", "failed", "duplicate", "cancelled",
+];
 
 export function parseChatProviderKind(value: unknown, fieldName = "providerKind"): ChatProviderKind | undefined {
   if (value === undefined || value === null || value === "") {
@@ -427,6 +433,37 @@ export function parseUpdateChatProviderChannelBindingInput(body: unknown): Updat
     outboundEnabled: parseStrictBoolean(input.outboundEnabled, "outboundEnabled"),
     suppressRichWidgets: parseStrictBoolean(input.suppressRichWidgets, "suppressRichWidgets"),
   };
+}
+
+export function parseChatProviderDeliveryDirection(
+  value: unknown,
+  fieldName = "direction",
+): ChatProviderDeliveryDirection | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string" || !CHAT_PROVIDER_DELIVERY_DIRECTIONS.includes(value as ChatProviderDeliveryDirection)) {
+    throwValidation(validationIssue(fieldName, "unsupported_delivery_direction", `Unsupported chat provider delivery direction: ${String(value)}`));
+  }
+  return value as ChatProviderDeliveryDirection;
+}
+
+export function parseChatProviderDeliveryStatus(
+  value: unknown,
+  fieldName = "status",
+): ChatProviderDeliveryStatus | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string" || !CHAT_PROVIDER_DELIVERY_STATUSES.includes(value as ChatProviderDeliveryStatus)) {
+    throwValidation(validationIssue(fieldName, "unsupported_delivery_status", `Unsupported chat provider delivery status: ${String(value)}`));
+  }
+  return value as ChatProviderDeliveryStatus;
+}
+
+export function parseConfirmedApproval(body: unknown): boolean {
+  const input = requireObjectBody(body);
+  const approval = parseJsonRecordField<Record<string, unknown>>(input.approval, "approval");
+  if (!approval || approval.confirmed !== true) {
+    throwValidation(validationIssue("approval.confirmed", "approval_required", "Explicit approval is required."));
+  }
+  return true;
 }
 
 // Project Parsers

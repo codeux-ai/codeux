@@ -161,8 +161,14 @@ export const telegramChatConnectorProfile: ChatConnectorProfile = {
   verification: {
     strategy: "configuration_and_live",
     capabilities: ["setup", "authentication", "outbound"],
+    liveModes: ["official_api"],
     verifyConfiguration: (mode, setup, secrets) => verifyTelegramConfiguration(mode, setup, secrets),
-    verifyLive: (mode, setup, secrets) => verifyTelegramOfficialApi(mode, setup, secrets),
+    verifyLive: (mode, setup, secrets, fetchImplementation) => verifyTelegramOfficialApi(
+      mode,
+      setup,
+      secrets,
+      fetchImplementation,
+    ),
   },
   session: { required: false, scope: "connection", requirements: [] },
   officialDocumentation: [{ label: "Telegram Bot API", url: "https://core.telegram.org/bots/api" }],

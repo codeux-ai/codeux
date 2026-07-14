@@ -150,6 +150,7 @@ export const slackChatConnectorProfile: ChatConnectorProfile = {
   verification: {
     strategy: "configuration_and_live",
     capabilities: ["setup", "authentication", "handshake", "outbound"],
+    liveModes: ["official_api"],
     verifyConfiguration: (mode, setup, secrets) => verifyConnectorConfiguration(setupSchema, mode, setup, secrets),
     live: {
       buildRequest: ({ correlationId }) => ({

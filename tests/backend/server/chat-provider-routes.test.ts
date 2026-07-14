@@ -3,7 +3,7 @@ import type { Server } from "http";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerChatProviderRoutes } from "../../../src/server/chat-provider-routes.js";
 import type { DashboardDependencies } from "../../../src/server/dashboard-server.js";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
@@ -11,6 +11,8 @@ import { ConnectionChatRepository } from "../../../src/repositories/connection-c
 import { ChatProviderRepository } from "../../../src/repositories/chat-provider-repository.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { createChatProviderSecretFixture } from "../helpers/chat-provider-secret-fixture.js";
+import { ChatProviderVerificationService } from "../../../src/services/chat-provider-verification-service.js";
+import { ChatProviderOutboundService } from "../../../src/services/chat-provider-outbound-service.js";
 
 interface TestServerContext {
   baseUrl: string;
@@ -20,6 +22,8 @@ interface TestServerContext {
   chatProviderRepository: ChatProviderRepository;
   connectionChatRepository: ConnectionChatRepository;
   projectManagementRepository: ProjectManagementRepository;
+  chatProviderVerificationService: ChatProviderVerificationService;
+  chatProviderOutboundService: ChatProviderOutboundService;
 }
 
 const serversToClose: Server[] = [];
@@ -46,6 +50,9 @@ describe("chat provider dashboard routes", () => {
 
     expect(response.status).toBe(200);
     const body = await response.json() as any;
+    expect(body.providers.map((provider: any) => provider.kind).sort()).toEqual([
+      "discord", "imessage", "microsoft-teams", "slack", "telegram", "whatsapp",
+    ]);
     expect(body.providers).toEqual(expect.arrayContaining([
       expect.objectContaining({
         kind: "slack",
@@ -325,6 +332,203 @@ describe("chat provider dashboard routes", () => {
       }),
     ]);
   });
+
+  it("verifies connections and exposes local-only connector health without secrets", async () => {
+    const context = await startTestServer();
+    const connection = await createChatProviderSecretFixture(context.chatProviderRepository).createConnection({
+      providerKind: "discord",
+      displayName: "Verification route",
+      bridgeMode: "webhook",
+      secrets: { botToken: "route-verification-secret" },
+    });
+
+    const response = await fetch(`${context.baseUrl}/api/chat-providers/connections/${connection.id}/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    expect(response.status).toBe(200);
+    const verified = await response.json() as any;
+    expect(verified).toMatchObject({
+      status: "verified",
+      providerErrorCode: null,
+      retryable: false,
+      setupGuidance: { providerKind: "discord", requiredSecretFields: ["botToken"] },
+    });
+
+    const healthResponse = await fetch(`${context.baseUrl}/api/chat-providers/health`);
+    expect(healthResponse.status).toBe(200);
+    const serialized = JSON.stringify({ verified, health: await healthResponse.json() });
+    expect(serialized).not.toContain("route-verification-secret");
+    expect(serialized).not.toContain("authorization");
+
+    const unverified = await createChatProviderSecretFixture(context.chatProviderRepository).createConnection({
+      providerKind: "discord",
+      displayName: "Unverified activation",
+      bridgeMode: "webhook",
+      secrets: { botToken: "unverified-secret" },
+    });
+    const activationResponse = await fetch(`${context.baseUrl}/api/chat-providers/connections/${unverified.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "active" }),
+    });
+    expect(activationResponse.status).toBe(409);
+    expect(await activationResponse.json()).toMatchObject({
+      error: expect.stringMatching(/must be verified/i),
+    });
+  });
+
+  it("runs read-only WhatsApp verification without enabling live sends and redacts provider failures", async () => {
+    const accessToken = "rest-meta-access-token-that-must-stay-private";
+    const phoneNumberId = "109876543210987";
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      error: {
+        message: `Invalid ${accessToken} at https://graph.facebook.com/private?token=${accessToken}`,
+        type: "OAuthException",
+        code: 190,
+      },
+    }), { status: 400 }));
+    const context = await startTestServer({ verificationFetch: fetchMock });
+    const connection = await createChatProviderSecretFixture(context.chatProviderRepository).createConnection({
+      providerKind: "whatsapp",
+      displayName: "WhatsApp REST verification",
+      bridgeMode: "official_api",
+      setup: { graphApiVersion: "v23.0", phoneNumberId },
+      secrets: {
+        accessToken,
+        appSecret: "rest-meta-app-secret",
+        webhookVerifyToken: "rest-meta-webhook-token",
+      },
+    });
+
+    const response = await fetch(`${context.baseUrl}/api/chat-providers/connections/${connection.id}/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(
+      `https://graph.facebook.com/v23.0/${phoneNumberId}?fields=id,display_phone_number,verified_name,quality_rating`,
+    );
+    expect(init).toMatchObject({ method: "GET", headers: { authorization: `Bearer ${accessToken}` } });
+    expect(init).not.toHaveProperty("body");
+    const verification = await response.json() as any;
+    expect(verification).toMatchObject({
+      providerKind: "whatsapp",
+      status: "failed",
+      providerErrorCode: "provider_verification_failed",
+      retryable: false,
+      setupGuidance: { liveVerificationAvailable: true },
+    });
+    const serialized = JSON.stringify(verification);
+    expect(serialized).not.toContain(accessToken);
+    expect(serialized).not.toContain("graph.facebook.com/private");
+    expect(serialized).not.toContain("authorization");
+  });
+
+  it("lists both delivery directions, requires retry approval, and redacts payload text", async () => {
+    const context = await startTestServer();
+    const project = createProject(context, "delivery-control");
+    const secretService = createChatProviderSecretFixture(context.chatProviderRepository);
+    const connection = await secretService.createConnection({
+      providerKind: "discord",
+      displayName: "Delivery control",
+      bridgeMode: "webhook",
+      status: "active",
+      setup: { gatewayUrl: "https://provider.example.test/send" },
+      secrets: { botToken: "delivery-control-secret" },
+    });
+    context.chatProviderRepository.updateVerification(connection.id, "verified", null);
+    const binding = context.chatProviderRepository.createChannelBinding({
+      providerConnectionId: connection.id,
+      externalChannelId: "delivery-control-channel",
+      externalChannelName: "Delivery control",
+      projectId: project.id,
+    });
+    const conversationMessage = context.connectionChatRepository.postDashboardMessage(project.id, {
+      title: "Delivery control",
+      bodyMarkdown: "private payload text",
+    });
+    const outbound = context.chatProviderRepository.upsertOutboundDelivery({
+      providerConnectionId: connection.id,
+      channelBindingId: binding.id,
+      externalChannelId: binding.externalChannelId,
+      conversationThreadId: conversationMessage.threadId,
+      conversationMessageId: conversationMessage.id,
+      status: "failed",
+      lastError: "Provider rejected https://provider.example.test/retry?signature=private-signature",
+      payload: { replyText: "private payload text" },
+    });
+    context.chatProviderRepository.recordInboundMessage({
+      providerConnectionId: connection.id,
+      channelBindingId: binding.id,
+      externalChannelId: binding.externalChannelId,
+      externalMessageId: "inbound-control-message",
+      payload: { text: "private inbound text" },
+    });
+
+    const listResponse = await fetch(`${context.baseUrl}/api/chat-providers/deliveries`);
+    const listed = await listResponse.json() as any;
+    expect(listed.deliveries.map((delivery: any) => delivery.direction).sort()).toEqual(["inbound", "outbound"]);
+    expect(JSON.stringify(listed)).not.toContain("private payload text");
+    expect(JSON.stringify(listed)).not.toContain("private inbound text");
+    expect(JSON.stringify(listed)).not.toContain("provider.example.test");
+    expect(listed.deliveries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: outbound.id, lastError: "Provider rejected [REDACTED_URL]" }),
+    ]));
+
+    const deniedProject = createProject(context, "delivery-control-denied");
+    const scopedList = await fetch(`${context.baseUrl}/api/chat-providers/deliveries`, {
+      headers: { "x-test-project-ids": deniedProject.id },
+    });
+    expect((await scopedList.json() as any).deliveries).toEqual([]);
+    const scopedRetry = await fetch(`${context.baseUrl}/api/chat-providers/deliveries/${outbound.id}/retry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-test-project-ids": deniedProject.id },
+      body: JSON.stringify({ approval: { confirmed: true }, projectId: deniedProject.id }),
+    });
+    expect(scopedRetry.status).toBe(403);
+
+    const unapproved = await fetch(`${context.baseUrl}/api/chat-providers/deliveries/${outbound.id}/retry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    expect(unapproved.status).toBe(400);
+    const approved = await fetch(`${context.baseUrl}/api/chat-providers/deliveries/${outbound.id}/retry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approval: { confirmed: true } }),
+    });
+    expect(approved.status).toBe(200);
+    expect(await approved.json()).toMatchObject({ id: outbound.id, direction: "outbound", status: "delivered" });
+
+    const cancellableMessage = context.connectionChatRepository.postDashboardMessage(project.id, {
+      title: "Cancellable delivery",
+      bodyMarkdown: "private cancellation payload",
+    });
+    const cancellable = context.chatProviderRepository.upsertOutboundDelivery({
+      providerConnectionId: connection.id,
+      channelBindingId: binding.id,
+      externalChannelId: binding.externalChannelId,
+      conversationThreadId: cancellableMessage.threadId,
+      conversationMessageId: cancellableMessage.id,
+      payload: { replyText: "private cancellation payload" },
+    });
+    const cancelled = await fetch(`${context.baseUrl}/api/chat-providers/deliveries/${cancellable.id}/cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    expect(cancelled.status).toBe(200);
+    const cancelledBody = await cancelled.json();
+    expect(cancelledBody).toMatchObject({ id: cancellable.id, direction: "outbound", status: "cancelled" });
+    expect(JSON.stringify(cancelledBody)).not.toContain("private cancellation payload");
+  });
 });
 
 async function expectValidationFailure(
@@ -343,19 +547,39 @@ async function expectValidationFailure(
   });
 }
 
-async function startTestServer(): Promise<TestServerContext> {
+async function startTestServer(options: { verificationFetch?: typeof fetch } = {}): Promise<TestServerContext> {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-chat-provider-routes-"));
   tempDirs.push(tempDir);
   const storage = new AppDbStorage(path.join(tempDir, "app.db"));
   const chatProviderRepository = new ChatProviderRepository(storage);
   const chatProviderSecretService = createChatProviderSecretFixture(chatProviderRepository);
+  const chatProviderVerificationService = new ChatProviderVerificationService({
+    chatProviderRepository,
+    chatProviderSecretService,
+    fetchImplementation: options.verificationFetch,
+  });
+  const chatProviderOutboundService = new ChatProviderOutboundService({
+    chatProviderRepository,
+    chatProviderSecretService,
+    adapter: { send: vi.fn(async () => ({ externalMessageId: "provider-delivery-id" })) },
+    jitterRatio: 0,
+  });
   const connectionChatRepository = new ConnectionChatRepository(storage);
   const projectManagementRepository = new ProjectManagementRepository(storage);
   const app = express();
   app.use(express.json());
+  app.use((req, res, next) => {
+    const projectIds = req.headers["x-test-project-ids"];
+    if (typeof projectIds === "string") {
+      res.locals.codeUxPrincipal = { projectIds: projectIds.split(",") };
+    }
+    next();
+  });
   registerChatProviderRoutes(app, {
     chatProviderRepository,
     chatProviderSecretService,
+    chatProviderVerificationService,
+    chatProviderOutboundService,
   } as DashboardDependencies);
   const server = await new Promise<Server>((resolve) => {
     const listening = app.listen(0, "127.0.0.1", () => resolve(listening));
@@ -373,6 +597,8 @@ async function startTestServer(): Promise<TestServerContext> {
     chatProviderRepository,
     connectionChatRepository,
     projectManagementRepository,
+    chatProviderVerificationService,
+    chatProviderOutboundService,
   };
 }
 

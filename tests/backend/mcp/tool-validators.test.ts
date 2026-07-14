@@ -141,6 +141,29 @@ describe("tool argument validators", () => {
       secrets: null,
       approval: { confirmed: true },
     })).not.toThrow();
+
+    expect(() => validateToolArguments("manage_chat_providers", {
+      action: "verify_connection",
+      providerConnectionId: "connection-1",
+    })).not.toThrow();
+    expect(() => validateToolArguments("manage_chat_providers", {
+      action: "list_deliveries",
+      direction: "inbound",
+      deliveryStatus: "retryable_failure",
+    })).not.toThrow();
+    expect(() => validateToolArguments("manage_chat_providers", {
+      action: "retry_delivery",
+      deliveryId: "delivery-1",
+      approval: { confirmed: true },
+    })).not.toThrow();
+    expect(() => validateToolArguments("manage_chat_providers", {
+      action: "cancel_delivery",
+      deliveryId: "delivery-1",
+    })).not.toThrow();
+    expect(() => validateToolArguments("manage_chat_providers", {
+      action: "list_deliveries",
+      direction: "sideways",
+    })).toThrow(McpError);
   });
 
   it("rejects invalid manage_chat_providers arguments without echoing secrets", async () => {

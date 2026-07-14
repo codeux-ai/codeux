@@ -29,6 +29,8 @@ import { ProjectRuntimeRepository } from "../repositories/project-runtime-reposi
 import { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
 import { ChatProviderRepository } from "../repositories/chat-provider-repository.js";
 import type { ChatProviderSecretService } from "../services/chat-provider-secret-service.js";
+import type { ChatProviderVerificationService } from "../services/chat-provider-verification-service.js";
+import type { ChatConnectorRegistry } from "../domain/chat-connectors/registry.js";
 import { ExecutionRepository } from "../repositories/execution-repository.js";
 import { QaReviewRepository } from "../repositories/qa-review-repository.js";
 import { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
@@ -173,6 +175,8 @@ export class CodeUxServer {
   private connectionChatRepository: ConnectionChatRepository;
   private chatProviderRepository: ChatProviderRepository;
   private chatProviderSecretService: ChatProviderSecretService;
+  private chatProviderVerificationService: ChatProviderVerificationService;
+  private chatConnectorRegistry: ChatConnectorRegistry;
   private projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   private projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   private projectAttentionRepository: ProjectAttentionRepository;
@@ -271,6 +275,8 @@ export class CodeUxServer {
     this.connectionChatRepository = deps.connectionChatRepository;
     this.chatProviderRepository = deps.chatProviderRepository;
     this.chatProviderSecretService = deps.chatProviderSecretService;
+    this.chatProviderVerificationService = deps.chatProviderVerificationService;
+    this.chatConnectorRegistry = deps.chatConnectorRegistry;
     this.projectWorkerAssignmentRepository = deps.projectWorkerAssignmentRepository;
     this.projectWorkerAssignmentService = deps.projectWorkerAssignmentService;
     this.projectAttentionRepository = deps.projectAttentionRepository;
@@ -1440,6 +1446,8 @@ export class CodeUxServer {
         connectionChatRepository: this.connectionChatRepository,
         chatProviderRepository: this.chatProviderRepository,
         chatProviderSecretService: this.chatProviderSecretService,
+        chatProviderVerificationService: this.chatProviderVerificationService,
+        chatConnectorRegistry: this.chatConnectorRegistry,
         projectWorkerAssignmentRepository: this.projectWorkerAssignmentRepository,
         projectWorkerAssignmentService: this.projectWorkerAssignmentService,
         projectAttentionRepository: this.projectAttentionRepository,

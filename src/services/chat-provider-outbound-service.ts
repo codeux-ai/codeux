@@ -19,6 +19,7 @@ import {
 import { stripDashboardOnlyWidgets } from "./chat-reply-prompt.js";
 import type { ChatProviderSecretService } from "./chat-provider-secret-service.js";
 import { randomUUID } from "node:crypto";
+import type { ChatConnectorRegistry } from "../domain/chat-connectors/registry.js";
 
 export interface DeliverChatProviderReplyInput {
   projectId: string;
@@ -40,6 +41,7 @@ interface ChatProviderOutboundServiceDependencies {
   random?: () => number;
   leaseDurationMs?: number;
   now?: () => Date;
+  connectorRegistry?: ChatConnectorRegistry;
 }
 
 interface RetryMetadata {
@@ -73,7 +75,7 @@ export class ChatProviderOutboundService {
   private stopping = false;
 
   constructor(private readonly deps: ChatProviderOutboundServiceDependencies) {
-    this.adapter = deps.adapter ?? createDefaultChatProviderOutboundAdapter();
+    this.adapter = deps.adapter ?? createDefaultChatProviderOutboundAdapter(deps.connectorRegistry);
     this.pollIntervalMs = deps.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     this.initialBackoffMs = deps.initialBackoffMs ?? DEFAULT_INITIAL_BACKOFF_MS;
     this.maxAttempts = deps.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
@@ -115,6 +117,9 @@ export class ChatProviderOutboundService {
 
   async cancelDelivery(deliveryId: string): Promise<ChatProviderMessageDeliveryRecord> {
     const delivery = requireDelivery(this.deps.chatProviderRepository.getDelivery(deliveryId), deliveryId);
+    if (delivery.direction !== "outbound") {
+      throw new Error("Only outbound chat provider deliveries can be cancelled.");
+    }
     if (delivery.status === "delivered" || delivery.status === "failed" || delivery.status === "cancelled") {
       return delivery;
     }
@@ -132,6 +137,29 @@ export class ChatProviderOutboundService {
       outcome: "cancelled",
     });
     return cancelled;
+  }
+
+  async retryDelivery(deliveryId: string): Promise<ChatProviderMessageDeliveryRecord> {
+    const delivery = requireDelivery(this.deps.chatProviderRepository.getDelivery(deliveryId), deliveryId);
+    if (delivery.direction !== "outbound") {
+      throw new Error("Only outbound chat provider deliveries can be retried.");
+    }
+    if (delivery.status === "delivered" || delivery.status === "sending") {
+      throw new Error(`Chat provider delivery cannot be retried from status ${delivery.status}.`);
+    }
+    this.deps.chatProviderRepository.updateDeliveryState(deliveryId, {
+      status: "pending",
+      lastError: null,
+      nextAttemptAt: null,
+    });
+    this.log("info", "Retrying chat provider outbound delivery manually", {
+      providerConnectionId: delivery.providerConnectionId,
+      providerKind: delivery.providerKind,
+      channelBindingId: delivery.channelBindingId,
+      deliveryId,
+      outcome: "manual_retry",
+    });
+    return this.attemptDelivery(deliveryId);
   }
 
   async deliverReply(input: DeliverChatProviderReplyInput): Promise<ChatProviderMessageDeliveryRecord | null> {

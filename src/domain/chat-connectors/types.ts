@@ -244,6 +244,8 @@ export interface ChatConnectorProfile {
   verification: {
     strategy: "configuration" | "configuration_and_live";
     capabilities: readonly ("setup" | "authentication" | "handshake" | "outbound")[];
+    /** Modes where verification performs a read-only provider or bridge check. */
+    liveModes?: readonly ChatProviderBridgeMode[];
     verifyConfiguration(
       mode: ChatProviderBridgeMode,
       setup: Record<string, unknown>,
@@ -253,6 +255,7 @@ export interface ChatConnectorProfile {
       mode: ChatProviderBridgeMode,
       setup: Record<string, unknown>,
       secrets: Record<string, unknown> | null,
+      fetchImplementation?: typeof fetch,
     ): Promise<ChatConnectorLiveVerificationResult>;
     live?: ChatConnectorLiveVerification;
   };
@@ -275,6 +278,16 @@ export interface ChatConnectorProfile {
 }
 
 export const DEFAULT_CONNECTOR_TIMEOUT_MS = 15_000;
+
+export function supportsLiveConnectorVerification(
+  profile: ChatConnectorProfile,
+  mode: ChatProviderBridgeMode,
+): boolean {
+  if (profile.verification.liveModes) {
+    return profile.verification.liveModes.includes(mode);
+  }
+  return profile.liveTest.available && profile.liveTest.modes.includes(mode);
+}
 
 export function getBridgeSchema(
   setupSchema: ChatProviderSetupSchema,

@@ -20,6 +20,14 @@ Every send, including the first attempt, claims its delivery through a compare-a
 
 Retryable failures use capped exponential backoff with bounded jitter. Provider `Retry-After` metadata replaces the calculated delay for the durable `next_attempt_at` schedule. A transport failure in a profile-declared ambiguous mode is terminal because the provider may already have accepted the message. Manual cancellation writes terminal `cancelled` state before aborting the active adapter, so completion cannot revive the delivery.
 
+Manual retry is an explicit delivery-control operation, not a status edit. REST requires a confirmed approval payload and MCP uses a one-use, exact-redacted-payload approval. The service returns the new sanitized delivery state and never returns the durable request payload.
+
+## Connection verification and health
+
+`ChatProviderVerificationService` resolves credentials ephemerally, runs the selected profile's required-field validation, and performs a bounded live check only for modes that advertise it. Outcomes persist as `verified` or `failed` with timestamp, capabilities, stable provider error code, retryability, setup guidance, and sanitized diagnostics. Raw credentials, authorization headers, signed URLs, provider payload text, and response bodies are excluded.
+
+The connector health endpoint aggregates only persisted state: configured, active, verified, and error counts plus last outcomes. It performs no network calls and is intentionally separate from `/health` and `/ready`, so an optional provider outage cannot make the Code UX runtime unready.
+
 ## Provider sessions
 
 `ChatProviderSessionRuntimeService` interprets each profile's `session.required` and `session.scope` declarations. A runtime driver is optional; connectors without a managed session driver do not affect dashboard readiness. With a driver, durable session rows use compare-and-set transitions across `pending`, `connecting`, `connected`, `retry_wait`, `resumable`, and terminal states.
@@ -28,7 +36,7 @@ Reconnect attempts are capped and jittered, with at most one timer and active co
 
 ## Lifecycle and logging
 
-Dashboard startup launches ingress recovery, session recovery, and outbound stale-lease recovery independently. Connector failures are logged without blocking the dashboard server or global readiness. Repeated starts are idempotent.
+Dashboard startup launches ingress recovery, session recovery, and outbound stale-lease recovery independently. The production factory shares the same registry-backed secret, verification, ingress, outbound, and session service instances across REST routes, dashboard chat management, standalone MCP management, and lifecycle hooks. Connector failures are logged without blocking the dashboard server or global readiness. Repeated starts are idempotent.
 
 Shutdown order is ingress processing, outbound delivery, provider sessions, then the dashboard server handle. Structured connector logs carry correlation id, provider kind, connection, binding, delivery/session id, attempt, latency, outcome or session transition, retry time, and a redacted provider error code. Callback text, reply text, raw payloads, and credentials are not log metadata by default.
 

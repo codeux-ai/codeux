@@ -1,28 +1,31 @@
-import type { Express, Request } from "express";
+import type { Express, Request, Response } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute } from "./route-utils.js";
 import { HttpRouteError } from "./http-errors.js";
 import { requireTrimmedString } from "./request-parsers.js";
 import { ChatProviderIngressSecurity, ChatProviderIngressSecurityError } from "../services/chat-provider-security.js";
-import { getChatConnectorProfileForMode } from "../domain/chat-connectors/registry.js";
+import { CHAT_CONNECTOR_REGISTRY } from "../domain/chat-connectors/registry.js";
 
 export function registerChatProviderIngressRoutes(router: Express, deps: DashboardDependencies): void {
   if (!deps.chatProviderRepository || !deps.chatProviderIngressService) {
     return;
   }
-  const securityVerifier = new ChatProviderIngressSecurity(undefined, deps.chatProviderRepository);
+  const registry = deps.chatConnectorRegistry ?? CHAT_CONNECTOR_REGISTRY;
+  const securityVerifier = new ChatProviderIngressSecurity(undefined, deps.chatProviderRepository, registry);
 
   const handler = asyncRoute(async (req, res) => {
     const providerConnectionId = requireTrimmedString(
       req.params.providerConnectionId ?? req.params.connectionId,
       "providerConnectionId",
     );
+    const audit = attachIngressAudit(res, deps, providerConnectionId, req.method);
     const connection = deps.chatProviderSecretService
       ? await deps.chatProviderSecretService.resolveConnection(providerConnectionId).catch(() => null)
       : deps.chatProviderRepository!.getConnectionInternal(providerConnectionId);
     if (!connection) {
       throw new HttpRouteError(404, "Chat provider connection not found.");
     }
+    audit.providerKind = connection.providerKind;
 
     try {
       securityVerifier.verify(connection, {
@@ -43,10 +46,22 @@ export function registerChatProviderIngressRoutes(router: Express, deps: Dashboa
       throw error;
     }
 
-    const profile = getChatConnectorProfileForMode(connection.providerKind, connection.bridgeMode);
+    const profile = registry.getForMode(connection.providerKind, connection.bridgeMode);
     const payload = requirePayloadRecord(req.body);
     const handshake = profile.ingress.handshake;
     if (handshake.type === "challenge" && handshake.modes?.includes(connection.bridgeMode)) {
+      if (handshake.handle) {
+        const result = handshake.handle({
+          query: { ...(req.query as Record<string, unknown>), ...payload },
+          setup: connection.setup,
+          secrets: connection.secrets,
+        });
+        if (result.statusCode === 200) {
+          for (const [name, value] of Object.entries(result.headers)) res.setHeader(name, value);
+          res.status(result.statusCode).send(result.body ?? "");
+          return;
+        }
+      }
       const challenge = handshake.challengeField ? payload[handshake.challengeField] : undefined;
       if (payload.type === "url_verification" && typeof challenge === "string" && challenge) {
         res.status(200).json({ [handshake.responseField ?? handshake.challengeField ?? "challenge"]: challenge });
@@ -73,6 +88,7 @@ export function registerChatProviderIngressRoutes(router: Express, deps: Dashboa
         return;
       }
       const accepted = await ingressService.acceptInbound({ providerConnectionId, payload });
+      audit.projectId = resolveDeliveryProjectId(deps, accepted.delivery?.channelBindingId);
       sendAcknowledgement(res, profile.ingress.acknowledgement);
       if (accepted.status === "accepted" && accepted.delivery) {
         setImmediate(() => {
@@ -94,6 +110,7 @@ export function registerChatProviderIngressRoutes(router: Express, deps: Dashboa
       providerConnectionId,
       payload,
     });
+    audit.projectId = resolveDeliveryProjectId(deps, result.delivery?.channelBindingId);
 
     const statusCode = statusCodeForIngressResult(result.status);
     res.status(statusCode).json(result);
@@ -104,17 +121,19 @@ export function registerChatProviderIngressRoutes(router: Express, deps: Dashboa
       req.params.providerConnectionId ?? req.params.connectionId,
       "providerConnectionId",
     );
+    const audit = attachIngressAudit(res, deps, providerConnectionId, req.method);
     const connection = deps.chatProviderSecretService
       ? await deps.chatProviderSecretService.resolveConnection(providerConnectionId).catch(() => null)
       : deps.chatProviderRepository!.getConnectionInternal(providerConnectionId);
     if (!connection) {
       throw new HttpRouteError(404, "Chat provider connection not found.");
     }
+    audit.providerKind = connection.providerKind;
     if (!connection.enabled || connection.status !== "active") {
       throw new HttpRouteError(403, "Chat provider connection is not enabled.");
     }
 
-    const profile = getChatConnectorProfileForMode(connection.providerKind, connection.bridgeMode);
+    const profile = registry.getForMode(connection.providerKind, connection.bridgeMode);
     const handshake = profile.ingress.handshake;
     if (handshake.type !== "challenge" || !handshake.modes.includes(connection.bridgeMode) || !handshake.handle) {
       throw new HttpRouteError(404, "Chat provider handshake is not configured for this connection.");
@@ -143,6 +162,41 @@ export function registerChatProviderIngressRoutes(router: Express, deps: Dashboa
   router.post("/api/chat-providers/connections/:connectionId/ingress", handler);
   router.get("/api/chat-providers/ingress/:providerConnectionId", handshakeHandler);
   router.get("/api/chat-providers/connections/:connectionId/ingress", handshakeHandler);
+}
+
+function attachIngressAudit(
+  res: Response,
+  deps: DashboardDependencies,
+  providerConnectionId: string,
+  method: string,
+): { providerKind?: string; projectId?: string | null } {
+  const context: { providerKind?: string; projectId?: string | null } = {};
+  res.on("finish", () => {
+    try {
+      deps.automationAuditService?.recordSystem({
+        principalId: "chat-provider-ingress",
+        action: `${method} chat_provider_ingress`,
+        resourceType: "chat_provider_connection",
+        resourceId: providerConnectionId,
+        projectId: context.projectId ?? null,
+        outcome: res.statusCode < 400 ? "succeeded" : res.statusCode === 401 || res.statusCode === 403 ? "denied" : "failed",
+        metadata: {
+          statusCode: res.statusCode,
+          providerKind: context.providerKind ?? "unknown",
+        },
+      });
+    } catch {
+      // Ingress acknowledgement must not fail because the optional audit sink is unavailable.
+    }
+  });
+  return context;
+}
+
+function resolveDeliveryProjectId(
+  deps: DashboardDependencies,
+  channelBindingId: string | null | undefined,
+): string | null {
+  return channelBindingId ? deps.chatProviderRepository?.getChannelBinding(channelBindingId)?.projectId ?? null : null;
 }
 
 function requirePayloadRecord(value: unknown): Record<string, unknown> {

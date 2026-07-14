@@ -77,6 +77,11 @@ import { MemoryActions } from "./management/memory-actions.js";
 import { SkillActions } from "./management/skill-actions.js";
 import { ChatProviderActions } from "./management/chat-provider-actions.js";
 import type { ChatProviderSecretService } from "../services/chat-provider-secret-service.js";
+import type { ChatProviderVerificationService } from "../services/chat-provider-verification-service.js";
+import type { ChatProviderOutboundService } from "../services/chat-provider-outbound-service.js";
+import type { ChatConnectorRegistry } from "../domain/chat-connectors/registry.js";
+import type { HeadlessAuthService } from "../services/headless-auth-service.js";
+import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
 import { buildMcpApprovalFingerprint, formatManagementErrorEnvelope } from "./management/payload-parsers.js";
 import { resolveLateBoundDependency, type LateBoundOrValue } from "../shared/late-bound-dependency.js";
 
@@ -92,6 +97,11 @@ export interface ManagementToolHandlerDeps {
   settingsRepository: SettingsRepository;
   chatProviderRepository: ChatProviderRepository;
   chatProviderSecretService?: ChatProviderSecretService;
+  chatProviderVerificationService?: ChatProviderVerificationService;
+  chatProviderOutboundService?: ChatProviderOutboundService;
+  chatConnectorRegistry?: ChatConnectorRegistry;
+  headlessAuthService?: HeadlessAuthService;
+  agentPresetRepository?: AgentPresetRepository;
   agentPresetSyncService: AgentPresetSyncService;
   memoryService: MemoryService;
   memoryPromotionService: MemoryPromotionService;
@@ -139,7 +149,19 @@ export class ManagementToolHandler {
       deps.customDashboardRepository,
       deps.customDashboardValidationService,
     );
-    this.chatProviderActions = new ChatProviderActions(deps.chatProviderRepository, deps.chatProviderSecretService);
+    this.chatProviderActions = new ChatProviderActions(deps.chatProviderRepository, deps.chatProviderSecretService, {
+      chatProviderVerificationService: deps.chatProviderVerificationService,
+      chatProviderOutboundService: deps.chatProviderOutboundService,
+      connectorRegistry: deps.chatConnectorRegistry,
+      authorizeProject: (projectId) => {
+        const agentId = getCurrentMcpAgentId();
+        if (!agentId || agentId === "project-manager-mcp-client") return true;
+        return deps.agentPresetRepository?.getAgentPreset(agentId)?.projectId === projectId;
+      },
+      allowCredentialMutation: () => !deps.headlessAuthService
+        || deps.headlessAuthService.configuration.mode === "local"
+        || deps.headlessAuthService.configuration.remoteCredentialManagement,
+    });
   }
 
   private getSprintActions(): SprintActions {
@@ -247,6 +269,7 @@ export class ManagementToolHandler {
       || args.action === "archive"
       || args.action === "publish"
       || args.action === "rollback"
+      || args.action === "retry_delivery"
       || args.action === "deprecate_claim";
   }
 

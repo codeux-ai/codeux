@@ -8,22 +8,21 @@ Code UX supports external chat channels through the bridge contracts implemented
 
 | Provider kind | Supported bridge modes |
 | --- | --- |
-| `whatsapp` | managed bridge, webhook |
+| `whatsapp` | managed bridge, webhook, official API |
 | `imessage` | managed bridge, native bridge command |
-| `telegram` | managed bridge, bot webhook |
-| `slack` | managed bridge, Events webhook |
+| `telegram` | managed bridge, bot webhook, official API |
+| `slack` | managed bridge, Events webhook, official API |
 | `microsoft-teams` | managed bridge, bot webhook |
 | `discord` | bot/webhook gateway |
 
-These connector labels describe the normalized payloads Code UX can accept and the bridge setup schemas it exposes. Code UX does not call WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, or Discord APIs directly. A managed bridge, webhook gateway, or native command owns provider-specific API interaction.
-
-The contract also defines an additive `official_api` mode for future direct connectors. None of the baseline profiles advertise it, so unsupported provider/mode combinations fail validation without changing existing stored bridge records. Provider-specific baseline details are listed in [Chat Connector Profiles](./chat-connectors/index.md).
+These connector labels describe the normalized payloads and setup schemas Code UX accepts. Official API modes use the profile-owned provider contract; managed/webhook/native modes continue to use their configured bridge. Unsupported provider/mode combinations fail validation. Provider-specific details are listed in [Chat Connector Profiles](./chat-connectors/index.md).
 
 Bridge modes:
 
 - `managed_bridge`: HTTP delivery to a configured managed bridge URL, with bridge credentials used as transport credentials.
 - `webhook`: HTTP delivery to a configured generic gateway URL such as `webhookUrl`, `eventsUrl`, `botEndpointUrl`, or `gatewayUrl`.
 - `native_bridge`: local command execution for native bridge scripts. Code UX writes JSON to stdin, parses the configured command into executable and arguments without shell interpretation, and passes an optional bridge token through the environment.
+- `official_api`: profile-specific authenticated ingress, outbound mapping, provider error classification, and bounded read-only provider verification where advertised. Verification availability is separate from any opt-in test-send capability.
 
 ## Setup Model
 
@@ -105,7 +104,7 @@ Outbound states:
 - `retryable_failure`: a network, HTTP, or native bridge failure will be retried after `delivery.nextAttemptAt`.
 - `failed`: delivery is terminal because routing is disabled, bridge setup is missing, the bridge returned a non-retryable error, or retry attempts were exhausted.
 
-The dashboard lifecycle starts the retry loop. Failed and retryable deliveries are visible through Settings -> Integrations -> Chat Connectors delivery status views and through MCP `manage_chat_providers` inspection. Error text and payload metadata are redacted before being returned through dashboard or MCP reads.
+The dashboard lifecycle starts the retry loop. Failed and retryable deliveries are visible through Settings -> Integrations -> Chat Connectors and MCP. Public results omit stored payload and lease fields; manual retry requires explicit approval, and cancellation records terminal `cancelled` state.
 
 ## Rich Widget Suppression
 
@@ -119,7 +118,7 @@ Approval prompts and management-action summaries remain plain markdown so they c
 
 ## MCP Management
 
-The `manage_chat_providers` tool can list setup definitions, manage connections, manage channel bindings, and inspect outbound delivery state. It does not process inbound messages or force outbound sends.
+The `manage_chat_providers` tool can list setup definitions, manage and verify connections, report local connector health, manage channel bindings, and inspect/control durable deliveries.
 
 Supported actions:
 
@@ -133,13 +132,19 @@ Supported actions:
 - `create_channel_binding`
 - `update_channel_binding`
 - `delete_channel_binding`
+- `verify_connection`
+- `get_health`
+- `list_deliveries`
 - `list_outbound_deliveries`
+- `retry_delivery`
+- `cancel_delivery`
 
 Approval behavior:
 
 - `delete_connection` and `delete_channel_binding` require destructive-action approval.
-- `update_connection` requires a one-use approval handshake before replacing a non-empty `secrets` payload.
-- Approval fingerprints use a redacted payload plus a secret hash; raw secret values are not returned in approval responses.
+- `update_connection` requires one-use approval before replacing secrets or removing/modifying persisted executable/endpoint setup. Omitted URL or command fields count as removal because setup replacements are compared with the stored connection.
+- `retry_delivery` requires one-use approval because it can cause another provider send.
+- Approval fingerprints use an exact redacted payload hash; raw sensitive values are not returned.
 
 Example connection creation:
 

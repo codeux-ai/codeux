@@ -10,6 +10,8 @@ import { ProjectManagementRepository } from "../../../src/repositories/project-m
 import type { ManagementResponseEnvelope } from "../../../src/contracts/internal-management-types.js";
 import { createChatProviderSecretFixture } from "../helpers/chat-provider-secret-fixture.js";
 import type { ChatProviderSecretService } from "../../../src/services/chat-provider-secret-service.js";
+import { ChatProviderVerificationService } from "../../../src/services/chat-provider-verification-service.js";
+import { CHAT_CONNECTOR_REGISTRY, createChatConnectorRegistry } from "../../../src/domain/chat-connectors/registry.js";
 
 const tempDirs: string[] = [];
 const openStorages: AppDbStorage[] = [];
@@ -21,6 +23,7 @@ async function createHarness(): Promise<{
   conversationRepository: ConnectionChatRepository;
   actions: ChatProviderActions;
   secretService: ChatProviderSecretService;
+  verificationService: ChatProviderVerificationService;
 }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-mcp-chat-providers-"));
   tempDirs.push(dir);
@@ -28,13 +31,18 @@ async function createHarness(): Promise<{
   openStorages.push(storage);
   const providerRepository = new ChatProviderRepository(storage);
   const secretService = createChatProviderSecretFixture(providerRepository);
+  const verificationService = new ChatProviderVerificationService({
+    chatProviderRepository: providerRepository,
+    chatProviderSecretService: secretService,
+  });
   return {
     storage,
     projectRepository: new ProjectManagementRepository(storage),
     providerRepository,
     conversationRepository: new ConnectionChatRepository(storage),
-    actions: new ChatProviderActions(providerRepository, secretService),
+    actions: new ChatProviderActions(providerRepository, secretService, { chatProviderVerificationService: verificationService }),
     secretService,
+    verificationService,
   };
 }
 
@@ -61,6 +69,15 @@ describe("ChatProviderActions", () => {
   it("lists provider setup definitions with generated ingress guidance", async () => {
     const { actions } = await createHarness();
 
+    const allResult = expectResult(await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "list_provider_definitions",
+      payload: { baseUrl: "https://codeux.example.test/" },
+    }));
+    expect((allResult.providerDefinitions as Array<{ kind: string }>).map((definition) => definition.kind).sort()).toEqual([
+      "discord", "imessage", "microsoft-teams", "slack", "telegram", "whatsapp",
+    ]);
+
     const result = expectResult(await actions.handleChatProviderAction({
       domain: "chat_providers",
       action: "list_provider_definitions",
@@ -75,7 +92,7 @@ describe("ChatProviderActions", () => {
       defaultBridgeMode: "managed_bridge",
       setupGuidance: {
         providerKind: "slack",
-        ingressUrlTemplate: "https://codeux.example.test/api/chat-providers/{providerConnectionId}/channels/{externalChannelId}/ingress",
+        ingressUrlTemplate: "https://codeux.example.test/api/chat-providers/ingress/{providerConnectionId}",
       },
     });
     expect(JSON.stringify(definitions[0])).toContain("signingSecret");
@@ -110,7 +127,7 @@ describe("ChatProviderActions", () => {
       status: "active",
       setup: { webhookUrl: "https://example.test/telegram" },
       ingressUrls: {
-        connectionIngressUrl: expect.stringContaining(`/api/chat-providers/${connection.id as string}/ingress`),
+        connectionIngressUrl: expect.stringContaining(`/api/chat-providers/ingress/${connection.id as string}`),
       },
     });
     expect(JSON.stringify(createdResult)).not.toContain("telegram-secret-value");
@@ -135,15 +152,23 @@ describe("ChatProviderActions", () => {
     }));
     expect((getResult.connection as Record<string, unknown>).id).toBe(connection.id);
 
+    const updatePayload = {
+      providerConnectionId: connection.id,
+      displayName: "Telegram bridge renamed",
+      enabled: false,
+      setup: { webhookUrl: "https://example.test/telegram-v2" },
+    };
+    const updatePreflight = await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: updatePayload,
+    });
+    expect(updatePreflight.approvalRequired).toBe(true);
     const updateResult = expectResult(await actions.handleChatProviderAction({
       domain: "chat_providers",
       action: "update_connection",
-      payload: {
-        providerConnectionId: connection.id,
-        displayName: "Telegram bridge renamed",
-        enabled: false,
-        setup: { webhookUrl: "https://example.test/telegram-v2" },
-      },
+      payload: updatePayload,
+      approval: { confirmed: true },
     }));
     expect(updateResult.connection).toMatchObject({
       id: connection.id,
@@ -202,6 +227,18 @@ describe("ChatProviderActions", () => {
     expect(JSON.stringify(first)).not.toContain("new-secret");
     expect((await secretService.resolveConnection(connection.id)).secrets).toEqual({ signingSecret: "old-secret" });
 
+    const mismatchedApproval = await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: {
+        providerConnectionId: connection.id,
+        secrets: { signingSecret: "different-secret" },
+      },
+      approval: { confirmed: true },
+    });
+    expect(mismatchedApproval.approvalRequired).toBe(true);
+    expect((await secretService.resolveConnection(connection.id)).secrets).toEqual({ signingSecret: "old-secret" });
+
     const approved = expectResult(await actions.handleChatProviderAction({
       domain: "chat_providers",
       action: "update_connection",
@@ -215,6 +252,17 @@ describe("ChatProviderActions", () => {
     expect(approved.connection).toMatchObject({ id: connection.id });
     expect(JSON.stringify(approved)).not.toContain("new-secret");
     expect((await secretService.resolveConnection(connection.id)).secrets).toEqual({ signingSecret: "new-secret" });
+
+    const reused = await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: {
+        providerConnectionId: connection.id,
+        secrets: { signingSecret: "new-secret" },
+      },
+      approval: { confirmed: true },
+    });
+    expect(reused.approvalRequired).toBe(true);
   });
 
   it("requires approval before deleting connections and channel bindings", async () => {
@@ -317,7 +365,7 @@ describe("ChatProviderActions", () => {
       projectId: projectA.id,
       suppressRichWidgets: true,
       ingressUrls: {
-        channelIngressUrl: expect.stringContaining("/channels/shared-channel/ingress"),
+        channelIngressUrl: expect.stringContaining(`/api/chat-providers/ingress/${connection.id}`),
       },
     });
     expect(bindingB).toMatchObject({
@@ -420,6 +468,7 @@ describe("ChatProviderActions", () => {
         status: "pending",
       }),
     ]);
+    expect(JSON.stringify(result.deliveries)).not.toContain("bodyMarkdown");
 
     providerRepository.updateDeliveryState(pending.id, {
       status: "delivered",
@@ -442,5 +491,416 @@ describe("ChatProviderActions", () => {
         status: "delivered",
       }),
     ]);
+  });
+
+  it("verifies a configured connection and returns redacted health diagnostics", async () => {
+    const { actions, secretService } = await createHarness();
+    const connection = await secretService.createConnection({
+      providerKind: "discord",
+      displayName: "Discord verification",
+      bridgeMode: "webhook",
+      secrets: { botToken: "discord-secret-token" },
+    });
+
+    const verified = expectResult(await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "verify_connection",
+      payload: { providerConnectionId: connection.id },
+    }));
+    expect(verified.verification).toMatchObject({
+      status: "verified",
+      capabilities: ["setup", "authentication", "outbound"],
+      providerErrorCode: null,
+      retryable: false,
+    });
+
+    const health = expectResult(await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "get_health",
+      payload: {},
+    }));
+    expect(health.health).toMatchObject({ configuredCount: 1, verifiedCount: 1, errorCount: 0 });
+    expect(JSON.stringify({ verified, health })).not.toContain("discord-secret-token");
+  });
+
+  it("runs the read-only WhatsApp provider request through MCP and redacts failures", async () => {
+    const accessToken = "mcp-meta-access-token-that-must-stay-private";
+    const phoneNumberId = "109876543210987";
+    const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(new Error(
+      `Meta request failed for ${accessToken} at https://graph.facebook.com/private?token=${accessToken}`,
+    ));
+    const { providerRepository, secretService } = await createHarness();
+    const verificationService = new ChatProviderVerificationService({
+      chatProviderRepository: providerRepository,
+      chatProviderSecretService: secretService,
+      fetchImplementation: fetchMock,
+    });
+    const actions = new ChatProviderActions(providerRepository, secretService, {
+      chatProviderVerificationService: verificationService,
+    });
+    const connection = await secretService.createConnection({
+      providerKind: "whatsapp",
+      displayName: "WhatsApp MCP verification",
+      bridgeMode: "official_api",
+      setup: { graphApiVersion: "v23.0", phoneNumberId },
+      secrets: {
+        accessToken,
+        appSecret: "mcp-meta-app-secret",
+        webhookVerifyToken: "mcp-meta-webhook-token",
+      },
+    });
+
+    const result = expectResult(await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "verify_connection",
+      payload: { providerConnectionId: connection.id },
+    }));
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(
+      `https://graph.facebook.com/v23.0/${phoneNumberId}?fields=id,display_phone_number,verified_name,quality_rating`,
+    );
+    expect(init).toMatchObject({ method: "GET", headers: { authorization: `Bearer ${accessToken}` } });
+    expect(init).not.toHaveProperty("body");
+    expect(result.verification).toMatchObject({
+      providerKind: "whatsapp",
+      status: "failed",
+      providerErrorCode: "provider_verification_failed",
+      retryable: true,
+      setupGuidance: { liveVerificationAvailable: true },
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain(accessToken);
+    expect(serialized).not.toContain("graph.facebook.com/private");
+    expect(serialized).not.toContain("authorization");
+  });
+
+  it("reports verification timeouts without serializing credentials", async () => {
+    const { providerRepository, secretService } = await createHarness();
+    const discord = CHAT_CONNECTOR_REGISTRY.get("discord");
+    const registry = createChatConnectorRegistry(CHAT_CONNECTOR_REGISTRY.profiles.map((profile) => profile.kind === "discord"
+      ? {
+        ...discord,
+        verification: {
+          ...discord.verification,
+          strategy: "configuration_and_live" as const,
+          verifyLive: () => new Promise(() => undefined),
+        },
+        liveTest: { available: true, modes: ["webhook"] as const },
+      }
+      : profile));
+    const verificationService = new ChatProviderVerificationService({
+      chatProviderRepository: providerRepository,
+      chatProviderSecretService: secretService,
+      connectorRegistry: registry,
+      timeoutMs: 25,
+    });
+    const actions = new ChatProviderActions(providerRepository, secretService, {
+      chatProviderVerificationService: verificationService,
+      connectorRegistry: registry,
+    });
+    const connection = await secretService.createConnection({
+      providerKind: "discord",
+      displayName: "Timeout verification",
+      secrets: { botToken: "timeout-secret-token" },
+    });
+
+    const verificationPromise = actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "verify_connection",
+      payload: { providerConnectionId: connection.id },
+    });
+    await vi.advanceTimersByTimeAsync(30);
+    const result = expectResult(await verificationPromise);
+    expect(result.verification).toMatchObject({
+      status: "failed",
+      providerErrorCode: "verification_timeout",
+      retryable: true,
+    });
+    expect(JSON.stringify(result)).not.toContain("timeout-secret-token");
+  });
+
+  it("returns provider failure codes while removing sensitive diagnostics", async () => {
+    const { providerRepository, secretService } = await createHarness();
+    const discord = CHAT_CONNECTOR_REGISTRY.get("discord");
+    const registry = createChatConnectorRegistry(CHAT_CONNECTOR_REGISTRY.profiles.map((profile) => profile.kind === "discord"
+      ? {
+        ...discord,
+        verification: {
+          ...discord.verification,
+          strategy: "configuration_and_live" as const,
+          verifyLive: async () => ({
+            valid: false,
+            issues: ["Provider rejected provider-secret-token at https://provider.example.test/private-check."],
+            providerErrorCode: "invalid_bot_identity",
+            retryable: false,
+            diagnostics: {
+              capability: "authentication",
+              message: "Provider echoed provider-secret-token at https://provider.example.test/private-check.",
+              authorization: "Bearer provider-secret-token",
+              signedUrl: "https://provider.example.test/check?signature=provider-secret-token",
+            },
+          }),
+        },
+        liveTest: { available: true, modes: ["webhook"] as const },
+      }
+      : profile));
+    const verificationService = new ChatProviderVerificationService({
+      chatProviderRepository: providerRepository,
+      chatProviderSecretService: secretService,
+      connectorRegistry: registry,
+    });
+    const actions = new ChatProviderActions(providerRepository, secretService, {
+      chatProviderVerificationService: verificationService,
+      connectorRegistry: registry,
+    });
+    const connection = await secretService.createConnection({
+      providerKind: "discord",
+      displayName: "Provider failure",
+      bridgeMode: "webhook",
+      secrets: { botToken: "provider-secret-token" },
+    });
+
+    const result = expectResult(await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "verify_connection",
+      payload: { providerConnectionId: connection.id },
+    }));
+
+    expect(result.verification).toMatchObject({
+      status: "failed",
+      providerErrorCode: "invalid_bot_identity",
+      retryable: false,
+      diagnostics: {
+        capability: "authentication",
+        message: "Provider echoed [REDACTED] at [REDACTED_URL]",
+      },
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain("provider-secret-token");
+    expect(serialized).not.toContain("authorization");
+    expect(serialized).not.toContain("signedUrl");
+  });
+
+  it("rejects MCP credential, endpoint, command, and verification mutations when credential administration is disabled", async () => {
+    const { providerRepository, secretService, verificationService } = await createHarness();
+    const actions = new ChatProviderActions(providerRepository, secretService, {
+      chatProviderVerificationService: verificationService,
+      allowCredentialMutation: () => false,
+    });
+    const connection = await secretService.createConnection({
+      providerKind: "slack",
+      displayName: "Credential authorization",
+      bridgeMode: "webhook",
+      setup: { eventsUrl: "https://provider.example.test/events" },
+      secrets: { signingSecret: "existing-signing-secret" },
+    });
+    const commandConnection = providerRepository.createConnection({
+      providerKind: "imessage",
+      displayName: "Command authorization",
+      bridgeMode: "native_bridge",
+      setup: { command: "/usr/local/bin/existing-bridge" },
+    });
+
+    await expect(actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "create_connection",
+      payload: {
+        providerKind: "slack",
+        displayName: "Denied credential",
+        secrets: { bridgeApiKey: "denied-secret" },
+      },
+    })).rejects.toThrow(/credential administration is disabled/i);
+    await expect(actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: {
+        providerConnectionId: connection.id,
+        setup: { eventsUrl: "https://provider.example.test/new-events" },
+      },
+    })).rejects.toThrow(/credential administration is disabled/i);
+    await expect(actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: {
+        providerConnectionId: commandConnection.id,
+        setup: { command: "/usr/local/bin/new-bridge" },
+      },
+    })).rejects.toThrow(/credential administration is disabled/i);
+    await expect(actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "verify_connection",
+      payload: { providerConnectionId: connection.id },
+    })).rejects.toThrow(/credential administration is disabled/i);
+  });
+
+  it("compares persisted URL and command setup before requiring exact one-use approval", async () => {
+    const { providerRepository, secretService, verificationService } = await createHarness();
+    const endpointConnection = providerRepository.createConnection({
+      providerKind: "slack",
+      displayName: "Endpoint mutation",
+      bridgeMode: "webhook",
+      setup: { eventsUrl: "https://provider.example.test/events" },
+    });
+    const commandConnection = providerRepository.createConnection({
+      providerKind: "imessage",
+      displayName: "Command mutation",
+      bridgeMode: "native_bridge",
+      setup: { command: "/usr/local/bin/existing-bridge" },
+    });
+    const deniedActions = new ChatProviderActions(providerRepository, secretService, {
+      chatProviderVerificationService: verificationService,
+      allowCredentialMutation: () => false,
+    });
+
+    for (const [providerConnectionId, setup] of [
+      [endpointConnection.id, {}],
+      [endpointConnection.id, { eventsUrl: "https://provider.example.test/replacement" }],
+      [commandConnection.id, {}],
+      [commandConnection.id, { command: "/usr/local/bin/replacement-bridge" }],
+    ] as const) {
+      await expect(deniedActions.handleChatProviderAction({
+        domain: "chat_providers",
+        action: "update_connection",
+        payload: { providerConnectionId, setup },
+      })).rejects.toThrow(/credential administration is disabled/i);
+    }
+
+    const actions = new ChatProviderActions(providerRepository, secretService, {
+      chatProviderVerificationService: verificationService,
+    });
+    const clearPayload = { providerConnectionId: endpointConnection.id, setup: {} };
+    const clearPreflight = await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: clearPayload,
+    });
+    expect(clearPreflight.approvalRequired).toBe(true);
+    expectResult(await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: clearPayload,
+      approval: { confirmed: true },
+    }));
+    expect(providerRepository.getConnection(endpointConnection.id)?.setup).toEqual({});
+
+    const replacementPayload = {
+      providerConnectionId: commandConnection.id,
+      setup: { command: "/usr/local/bin/replacement-bridge" },
+    };
+    const replacementPreflight = await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: replacementPayload,
+    });
+    expect(replacementPreflight.approvalRequired).toBe(true);
+    const mismatched = await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: {
+        providerConnectionId: commandConnection.id,
+        setup: { command: "/usr/local/bin/different-bridge" },
+      },
+      approval: { confirmed: true },
+    });
+    expect(mismatched.approvalRequired).toBe(true);
+    expect(providerRepository.getConnection(commandConnection.id)?.setup).toEqual({
+      command: "/usr/local/bin/existing-bridge",
+    });
+    expectResult(await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: replacementPayload,
+      approval: { confirmed: true },
+    }));
+    expect(providerRepository.getConnection(commandConnection.id)?.setup).toEqual({
+      command: "/usr/local/bin/replacement-bridge",
+    });
+
+    providerRepository.updateConnection(commandConnection.id, {
+      setup: { command: "/usr/local/bin/existing-bridge" },
+    });
+    const reused = await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: replacementPayload,
+      approval: { confirmed: true },
+    });
+    expect(reused.approvalRequired).toBe(true);
+    expect(providerRepository.getConnection(commandConnection.id)?.setup).toEqual({
+      command: "/usr/local/bin/existing-bridge",
+    });
+  });
+
+  it("enforces persisted project ownership and one-use delivery retry approval", async () => {
+    const { projectRepository, providerRepository, conversationRepository, secretService, verificationService } = await createHarness();
+    const allowed = projectRepository.createProject({ name: "Allowed", sourceType: "local", sourceRef: "/tmp/allowed" });
+    const denied = projectRepository.createProject({ name: "Denied", sourceType: "local", sourceRef: "/tmp/denied" });
+    const connection = providerRepository.createConnection({ providerKind: "discord", displayName: "Scoped" });
+    const deniedBinding = providerRepository.createChannelBinding({
+      providerConnectionId: connection.id,
+      externalChannelId: "denied-channel",
+      externalChannelName: "Denied",
+      projectId: denied.id,
+    });
+    const message = conversationRepository.postDashboardMessage(denied.id, {
+      title: "Scoped delivery",
+      bodyMarkdown: "must stay private",
+    });
+    const delivery = providerRepository.upsertOutboundDelivery({
+      providerConnectionId: connection.id,
+      channelBindingId: deniedBinding.id,
+      externalChannelId: "denied-channel",
+      conversationThreadId: message.threadId,
+      conversationMessageId: message.id,
+      payload: { bodyMarkdown: "must stay private" },
+    });
+    const retryDelivery = vi.fn(async () => providerRepository.updateDeliveryState(delivery.id, { status: "pending" }));
+    const scopedActions = new ChatProviderActions(providerRepository, secretService, {
+      chatProviderVerificationService: verificationService,
+      chatProviderOutboundService: { retryDelivery } as any,
+      authorizeProject: (projectId) => projectId === allowed.id,
+    });
+
+    await expect(scopedActions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_channel_binding",
+      payload: { channelBindingId: deniedBinding.id, externalChannelName: "Unauthorized" },
+    })).rejects.toThrow(/not authorized/i);
+
+    const hidden = expectResult(await scopedActions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "list_deliveries",
+      payload: { projectId: allowed.id },
+    }));
+    expect(hidden.deliveries).toEqual([]);
+
+    const unrestrictedActions = new ChatProviderActions(providerRepository, secretService, {
+      chatProviderVerificationService: verificationService,
+      chatProviderOutboundService: { retryDelivery } as any,
+    });
+    const preflight = await unrestrictedActions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "retry_delivery",
+      payload: { deliveryId: delivery.id },
+    });
+    expect(preflight.approvalRequired).toBe(true);
+    const retried = expectResult(await unrestrictedActions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "retry_delivery",
+      payload: { deliveryId: delivery.id },
+      approval: { confirmed: true },
+    }));
+    expect(retried.delivery).not.toHaveProperty("payload");
+    expect(retryDelivery).toHaveBeenCalledTimes(1);
+    const reused = await unrestrictedActions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "retry_delivery",
+      payload: { deliveryId: delivery.id },
+      approval: { confirmed: true },
+    });
+    expect(reused.approvalRequired).toBe(true);
+    expect(retryDelivery).toHaveBeenCalledTimes(1);
   });
 });

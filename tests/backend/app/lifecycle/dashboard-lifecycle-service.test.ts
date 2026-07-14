@@ -241,6 +241,8 @@ describe("dashboard-lifecycle-service", () => {
       memoryRepository: {} as any,
       knowledgeService: {} as any,
       credentialBroker: { health: vi.fn() } as any,
+      chatProviderVerificationService: { id: "verification-service" } as any,
+      chatConnectorRegistry: { id: "connector-registry" } as any,
       chatProviderIngressService: {
         start: vi.fn().mockResolvedValue(undefined),
         stop: vi.fn().mockResolvedValue(undefined),
@@ -294,6 +296,9 @@ describe("dashboard-lifecycle-service", () => {
           port: 3000,
           liveActivityCacheMs: 500,
           credentialBroker: mockDeps.credentialBroker,
+          chatProviderVerificationService: mockDeps.chatProviderVerificationService,
+          chatProviderOutboundService: mockDeps.chatProviderOutboundService,
+          chatConnectorRegistry: mockDeps.chatConnectorRegistry,
           realtimeService: mockDeps.dashboardRealtimeService,
           getUpdateStatus: expect.any(Function),
           cancelThreadTurn: expect.any(Function),
