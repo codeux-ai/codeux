@@ -121,7 +121,7 @@ export const ModelCard: FunctionComponent<{
   rank: number;
   shareOfTotal: number;
 }> = ({ model, rank, shareOfTotal }) => {
-  const { locale, formatNumber } = useStatsI18n();
+  const { locale, formatNumber, text: translate } = useStatsI18n();
   const { icon: Icon, bg, text } = getProviderIcon(model.provider);
   const efficiency = computeUsageEfficiency(model.usage);
   const successTone = getSuccessTone(model.successRate);
@@ -221,7 +221,7 @@ export const ModelCard: FunctionComponent<{
           detail={costPerCall !== null ? `${formatCost(costPerCall, locale)}/${locale === "de" ? "Aufruf" : "call"}` : locale === "de" ? "kein Preissignal" : "no pricing signal"}
         />
         <ModelMetric
-          label="$ / 1M Tok"
+          label={translate("costPerMillionTokens")}
           value={formatPricingValue(costPerMillionTokens, locale)}
           detail={costPerMillionTokens !== null ? (locale === "de" ? "gemischter Token-Satz" : "blended token rate") : locale === "de" ? "Preis nicht verfügbar" : "pricing unavailable"}
         />
@@ -236,12 +236,12 @@ export const ModelCard: FunctionComponent<{
           detail={`${formatTokens(model.usage.cachedInputTokens, locale)} ${locale === "de" ? "im Cache" : "cached"}`}
         />
         <ModelMetric
-          label="Reasoning"
+          label={translate("reasoning")}
           value={formatEfficiencyPercent(efficiency.reasoningShare, locale)}
           detail={`${formatTokens(model.usage.reasoningOutputTokens, locale)} ${locale === "de" ? "Schlussfolgerung" : "reasoning"}`}
         />
         <ModelMetric
-          label="Output / Input"
+          label={translate("outputInputRatio")}
           value={efficiency.outputInputRatio !== null ? formatNumber(efficiency.outputInputRatio, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
           detail={locale === "de" ? "Generierungsverhältnis" : "generation ratio"}
         />

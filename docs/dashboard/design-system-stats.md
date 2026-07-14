@@ -102,6 +102,7 @@ Models compares model activity, latency, reliability, and efficiency.
 - Model pricing stats use `usage.totalCostUsd` and should show total cost, cost per invocation, and blended cost per million tokens only when a positive cost signal exists.
 - Missing model arrays, zero model usage, zero duration samples, and low invocation counts render as explicit low-data states.
 - Long model and provider names must wrap within stable cards and rows; chips and metrics cannot force horizontal page overflow.
+- Model metric labels, including reasoning share, output/input ratio, and per-million-token cost, follow the active dashboard locale while model and provider identifiers remain verbatim.
 
 ### Providers
 

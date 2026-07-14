@@ -216,5 +216,10 @@ describe("ModelsStudio", () => {
     expect(screen.getByLabelText("claude-opus-4-8, Rang 1 der Modellrangliste")).toBeTruthy();
     expect(screen.getAllByText(/55,41\s*\$/).length).toBeGreaterThan(0);
     expect(screen.getByText("Sortierung: Tokens absteigend")).toBeTruthy();
+    expect(screen.getByText("$ / 1 Mio. Tok.")).toBeTruthy();
+    expect(screen.getAllByText("Schlussfolgerung").length).toBeGreaterThan(0);
+    expect(screen.getByText("Ausgabe / Eingabe")).toBeTruthy();
+    expect(screen.queryByText("Reasoning")).toBeNull();
+    expect(screen.queryByText("Output / Input")).toBeNull();
   });
 });

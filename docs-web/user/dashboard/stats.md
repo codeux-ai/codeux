@@ -52,6 +52,8 @@ Data accents stay inside distribution strips, token bars, and small swatches, wi
 ### Models
 Ranks model activity by token volume and tracks invocation volume, latency, reliability, cache efficiency, reasoning share, pricing signals, output velocity, and low-data states for each model used during the active timeframe.
 
+Leaderboard metric labels, including reasoning, output/input ratio, and per-million-token cost, follow the dashboard language. Recorded model and provider identifiers remain unchanged.
+
 ### Providers
 Focuses on provider reliability, telemetry confidence, fallback usage, failure pressure, provider coverage, duration coverage, latency signals, pricing, provider-specific risk, and audit notes when the selected snapshot includes those fields.
 
