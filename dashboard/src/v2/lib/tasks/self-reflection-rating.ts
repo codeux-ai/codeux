@@ -2,6 +2,8 @@ import type {
   TaskSelfReflectionRating,
   TaskSelfReflectionSectionRating,
 } from "../../../../../src/contracts/task-self-reflection-types.js";
+import type { DashboardLocale } from "../../i18n/locales.js";
+import { translateTask } from "../../i18n/messages/tasks.js";
 
 export type SelfReflectionStarState = "filled" | "half" | "empty";
 
@@ -54,29 +56,29 @@ export function getSelfReflectionStarStates(value: unknown): SelfReflectionStarS
   });
 }
 
-export function formatSelfReflectionRatingValue(value: number): string {
-  return new Intl.NumberFormat("en-US", {
+export function formatSelfReflectionRatingValue(value: number, locale: DashboardLocale = "en"): string {
+  return new Intl.NumberFormat(locale, {
     maximumFractionDigits: 1,
     minimumFractionDigits: Number.isInteger(value) ? 0 : 1,
   }).format(value);
 }
 
-export function formatSelfReflectionRatingLabel(value: unknown): string | null {
+export function formatSelfReflectionRatingLabel(value: unknown, locale: DashboardLocale = "en"): string | null {
   const rating = normalizeSelfReflectionRating(value);
   if (rating === null) {
     return null;
   }
 
-  return `${formatSelfReflectionRatingValue(rating)}/5`;
+  return `${formatSelfReflectionRatingValue(rating, locale)}/5`;
 }
 
-export function formatSelfReflectionRatingAriaLabel(value: unknown): string | null {
+export function formatSelfReflectionRatingAriaLabel(value: unknown, locale: DashboardLocale = "en"): string | null {
   const rating = normalizeSelfReflectionRating(value);
   if (rating === null) {
     return null;
   }
 
-  return `Self-reflection rating ${formatSelfReflectionRatingValue(rating)} out of 5`;
+  return translateTask(locale, "selfReflectionAria", { rating: formatSelfReflectionRatingValue(rating, locale) });
 }
 
 export function sortSelfReflectionSectionRatings(
@@ -94,6 +96,7 @@ export function sortSelfReflectionSectionRatings(
 
 export function buildSelfReflectionRatingViewModel(
   rating: TaskSelfReflectionRating | null | undefined,
+  locale: DashboardLocale = "en",
 ): SelfReflectionRatingViewModel | null {
   if (!rating) {
     return null;
@@ -104,8 +107,8 @@ export function buildSelfReflectionRatingViewModel(
     return null;
   }
 
-  const overallRatingLabel = formatSelfReflectionRatingLabel(overallRating);
-  const overallAriaLabel = formatSelfReflectionRatingAriaLabel(overallRating);
+  const overallRatingLabel = formatSelfReflectionRatingLabel(overallRating, locale);
+  const overallAriaLabel = formatSelfReflectionRatingAriaLabel(overallRating, locale);
   if (!overallRatingLabel || !overallAriaLabel) {
     return null;
   }
@@ -116,23 +119,23 @@ export function buildSelfReflectionRatingViewModel(
     overallAriaLabel,
     overallStarStates: getSelfReflectionStarStates(overallRating),
     sections: sortSelfReflectionSectionRatings(rating.sections)
-      .map(toSectionViewModel)
+      .map((section) => toSectionViewModel(section, locale))
       .filter((section): section is SelfReflectionSectionRatingViewModel => section !== null),
   };
 }
 
-function toSectionViewModel(section: TaskSelfReflectionSectionRating): SelfReflectionSectionRatingViewModel | null {
+function toSectionViewModel(section: TaskSelfReflectionSectionRating, locale: DashboardLocale): SelfReflectionSectionRatingViewModel | null {
   const sectionRating = normalizeSelfReflectionRating(section.rating);
   if (sectionRating === null) {
     return null;
   }
 
-  const ratingLabel = formatSelfReflectionRatingLabel(sectionRating);
+  const ratingLabel = formatSelfReflectionRatingLabel(sectionRating, locale);
   if (!ratingLabel) {
     return null;
   }
 
-  const label = section.label.trim() || section.normalizedLabel.trim() || "Unlabeled section";
+  const label = section.label.trim() || section.normalizedLabel.trim() || translateTask(locale, "unlabeledSection");
   const note = section.note?.trim() || null;
 
   return {
@@ -140,7 +143,7 @@ function toSectionViewModel(section: TaskSelfReflectionSectionRating): SelfRefle
     normalizedLabel: section.normalizedLabel,
     rating: sectionRating,
     ratingLabel,
-    ariaLabel: `${label} self-reflection rating ${formatSelfReflectionRatingValue(sectionRating)} out of 5`,
+    ariaLabel: translateTask(locale, "sectionReflectionAria", { section: label, rating: formatSelfReflectionRatingValue(sectionRating, locale) }),
     starStates: getSelfReflectionStarStates(sectionRating),
     note,
   };

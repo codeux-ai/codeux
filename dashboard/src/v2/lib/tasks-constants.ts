@@ -1,5 +1,7 @@
 import { Circle, PlayCircle, CheckCircle2, AlertCircle } from "lucide-preact";
 import type { TaskPriority, TaskStatus, Task } from "../types.js";
+import type { DashboardLocale } from "../i18n/locales.js";
+import { translateTask } from "../i18n/messages/tasks.js";
 
 export const PRIORITY_CFG: Record<TaskPriority, { label: string; color: string; dot: string; bg: string }> = {
   critical: { label: "Critical", color: "text-status-red", dot: "bg-status-red shadow-[0_0_8px_rgba(227,0,15,0.6)]", bg: "bg-status-red/[0.08] border-status-red/20" },
@@ -22,6 +24,29 @@ export const EXECUTOR_LABEL: Record<Task["executorType"], string> = {
   jules: "Jules",
   mcp_worker: "Worker",
 };
+
+const STATUS_MESSAGE_KEY: Record<TaskStatus, "queued" | "inProgress" | "codingCompleted" | "completed" | "qaFailed"> = {
+  pending: "queued",
+  in_progress: "inProgress",
+  coding_completed: "codingCompleted",
+  completed: "completed",
+  QA_REVIEW_FAILED: "qaFailed",
+};
+
+const PRIORITY_MESSAGE_KEY: Record<TaskPriority, "critical" | "high" | "medium" | "low"> = {
+  critical: "critical",
+  high: "high",
+  medium: "medium",
+  low: "low",
+};
+
+export const getTaskStatusLabel = (status: TaskStatus, locale: DashboardLocale = "en"): string => (
+  translateTask(locale, STATUS_MESSAGE_KEY[status])
+);
+
+export const getTaskPriorityLabel = (priority: TaskPriority, locale: DashboardLocale = "en"): string => (
+  translateTask(locale, PRIORITY_MESSAGE_KEY[priority])
+);
 
 export const timeAgo = (iso: string) => {
   const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
