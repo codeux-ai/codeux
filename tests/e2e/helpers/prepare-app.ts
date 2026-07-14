@@ -1,5 +1,7 @@
 import type { APIRequestContext, Page, TestInfo } from '@playwright/test';
+import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs/promises';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import type {
@@ -67,11 +69,127 @@ export interface E2eTaskFixture extends E2eFixtureOptions {
   input?: Omit<CreateTaskInput, 'sprintId' | 'title' | 'promptMarkdown'>;
 }
 
+export interface IsolatedDashboardRuntime {
+  baseUrl: string;
+  dbPath: string;
+  homeDirectory: string;
+  stop: () => Promise<void>;
+}
+
 const RUN_SUFFIX = (process.env.CODEUX_E2E_RUN_ID || new Date().toISOString())
   .replace(/[^a-zA-Z0-9]+/g, '')
   .slice(0, 20)
   .toLowerCase();
 const DASHBOARD_TOUR_STORAGE_KEY = 'codeux:dashboard-tour-hidden:v1';
+
+async function canBindPort(port: number): Promise<boolean> {
+  return await new Promise((resolve) => {
+    const server = net.createServer();
+    server.once('error', () => resolve(false));
+    server.listen(port, '127.0.0.1', () => server.close(() => resolve(true)));
+  });
+}
+
+async function findDashboardPortPair(): Promise<number> {
+  for (let port = 4700; port < 4900; port += 2) {
+    if (await canBindPort(port) && await canBindPort(port + 1)) {
+      return port;
+    }
+  }
+  throw new Error('No available isolated E2E dashboard/MCP port pair found in 4700-4900.');
+}
+
+async function waitForRuntimeHealth(
+  child: ChildProcess,
+  baseUrl: string,
+  readOutput: () => string,
+): Promise<void> {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(`Isolated dashboard runtime exited before becoming healthy.\n${readOutput()}`);
+    }
+    try {
+      const response = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(500) });
+      if (response.ok) return;
+    } catch {
+      // The listener is expected to reject connections while the runtime boots.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Timed out waiting for isolated dashboard runtime health.\n${readOutput()}`);
+}
+
+async function stopChildProcess(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+  child.kill('SIGTERM');
+  const graceful = await Promise.race([
+    exited.then(() => true),
+    new Promise<false>((resolve) => setTimeout(() => resolve(false), 10_000)),
+  ]);
+  if (graceful) return;
+  child.kill('SIGKILL');
+  await exited;
+}
+
+export async function startUnavailableCredentialDashboardRuntime(): Promise<IsolatedDashboardRuntime> {
+  const dashboardPort = await findDashboardPortPair();
+  const homeDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'codeux-e2e-unavailable-credentials-'));
+  const baseUrl = `http://127.0.0.1:${dashboardPort}`;
+  const childEnvironment: NodeJS.ProcessEnv = {
+    ...process.env,
+    HOME: homeDirectory,
+    USERPROFILE: homeDirectory,
+    XDG_CONFIG_HOME: path.join(homeDirectory, '.config'),
+    XDG_DATA_HOME: path.join(homeDirectory, '.local', 'share'),
+    CODE_UX_DIRECTORY_BROWSER_ROOTS: os.tmpdir(),
+    CODEUX_E2E_PROVIDER_CLI_SHIM: process.env.CODEUX_E2E_PROVIDER_CLI_SHIM
+      ?? path.resolve(process.cwd(), 'scripts/e2e/mock-provider-cli.mjs'),
+    CODE_UX_CREDENTIAL_KEY_PROVIDER: 'mounted-key-file',
+    DASHBOARD_PORT: String(dashboardPort),
+    MCP_HTTP_PORT: String(dashboardPort + 1),
+    CODE_UX_DISABLE_MCP_STDIO: '1',
+    MCP_HTTP_ENABLED: 'false',
+    CODE_UX_CONTAINERIZED_GIT: '0',
+    CODE_UX_GIT_CONTAINER_MODE: 'host',
+  };
+  delete childEnvironment.CODE_UX_CREDENTIAL_KEY_FILE;
+  delete childEnvironment.VITEST_IN_MEMORY_DB;
+
+  const child = spawn(process.execPath, [path.resolve(process.cwd(), 'dist/index.js')], {
+    cwd: process.cwd(),
+    env: childEnvironment,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let output = '';
+  const capture = (chunk: Buffer): void => {
+    output = `${output}${chunk.toString('utf8')}`.slice(-16_000);
+  };
+  child.stdout?.on('data', capture);
+  child.stderr?.on('data', capture);
+
+  try {
+    await waitForRuntimeHealth(child, baseUrl, () => output);
+  } catch (error) {
+    await stopChildProcess(child);
+    await fs.rm(homeDirectory, { recursive: true, force: true, maxRetries: 3 });
+    throw error;
+  }
+
+  let stopped = false;
+  return {
+    baseUrl,
+    dbPath: path.join(homeDirectory, '.code-ux', 'app.db'),
+    homeDirectory,
+    stop: async () => {
+      if (stopped) return;
+      stopped = true;
+      await stopChildProcess(child);
+      await fs.rm(homeDirectory, { recursive: true, force: true, maxRetries: 3 });
+    },
+  };
+}
 
 function sanitizeFixtureKey(value: string): string {
   const sanitized = value.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();

@@ -85,18 +85,24 @@ describe("AutomationCredentialManager", () => {
   it("renders unavailable health safely and disables secret writes", async () => {
     vi.mocked(fetchCredentialHealth).mockResolvedValue({
       available: false,
-      secure: false,
-      provider: "electron-safe-storage",
+      secure: true,
+      provider: "mounted-key-file",
       keyId: null,
       keyVersion: null,
-      reason: "OS secure storage is unavailable.",
+      reason: "No mounted credential key file is configured.",
     });
 
     renderManager();
 
     expect(await screen.findByText("Deployment token")).toBeTruthy();
-    expect(screen.getByRole("alert").textContent).toContain("OS secure storage is unavailable.");
+    expect(screen.getByRole("alert").textContent).toContain("No mounted credential key file is configured.");
+    expect(screen.getByRole("alert").textContent).toContain("Restore the configured secure key provider");
     expect((screen.getByRole("button", { name: "Store credential" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Test" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Rotate" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Replace" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Promote credential" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Revoke" }) as HTMLButtonElement).disabled).toBe(true);
     expect(document.body.textContent).not.toContain("plain-secret");
     expect(document.body.textContent).not.toContain("root");
   });

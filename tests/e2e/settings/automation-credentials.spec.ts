@@ -1,23 +1,23 @@
-import { expect, test } from '@playwright/test';
+import { expect, request as playwrightRequest, test } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 import type { AutomationCredentialMetadata } from '../../../src/contracts/automation-credential-types.js';
 import { updateAutomationCredentialViaApi } from '../helpers/e2e-api';
 import { prepareSelectedLocalGitProject, type SeededCodeUxProject } from '../helpers/e2e-fixtures';
+import { startUnavailableCredentialDashboardRuntime } from '../helpers/prepare-app';
 import { openSettingsCategory } from './settings-test-helpers';
 
 const SECRET_CANARY = 'BROWSER_CREDENTIAL_CANARY_8d74f02c1a';
 
 let fixture: SeededCodeUxProject | null = null;
 
-test.beforeEach(async ({ page, request }, testInfo) => {
-  fixture = await prepareSelectedLocalGitProject(page, request, testInfo, 'automation-credentials');
-});
-
 test.afterEach(async () => {
   await fixture?.cleanup();
   fixture = null;
 });
 
-test('manages a write-only credential with durable feedback, keyboard focus, and responsive controls', async ({ page, request }) => {
+test('manages a write-only credential with durable feedback, keyboard focus, and responsive controls', async ({ page, request }, testInfo) => {
+  fixture = await prepareSelectedLocalGitProject(page, request, testInfo, 'automation-credentials');
   const project = fixture!.project;
   await openSettingsCategory(page, 'integrations', 'Integrations');
 
@@ -86,4 +86,116 @@ test('manages a write-only credential with durable feedback, keyboard focus, and
   const publicText = JSON.stringify(await listed.json());
   expect(publicText).not.toContain(SECRET_CANARY);
   await expect(page.locator('body')).not.toContainText(SECRET_CANARY);
+});
+
+test('shows safe metadata and prevents custody-dependent submissions when the explicit provider is unavailable', async ({ browser }, testInfo) => {
+  const runtime = await startUnavailableCredentialDashboardRuntime();
+  const isolatedRequest = await playwrightRequest.newContext({ baseURL: runtime.baseUrl });
+  const context = await browser.newContext({ baseURL: runtime.baseUrl });
+  const page = await context.newPage();
+  let isolatedFixture: SeededCodeUxProject | null = null;
+
+  try {
+    isolatedFixture = await prepareSelectedLocalGitProject(
+      page,
+      isolatedRequest,
+      testInfo,
+      'automation-credentials-unavailable',
+    );
+    const project = isolatedFixture.project;
+    const credentialId = randomUUID();
+    const now = new Date().toISOString();
+    const database = new DatabaseSync(runtime.dbPath);
+    try {
+      database.prepare(`
+        INSERT INTO automation_credentials (
+          id, name, kind, scope, project_id, management_project_id,
+          allowed_project_ids_json, capabilities_json, status, key_id,
+          key_version, version, last_validated_at, validation_status,
+          created_at, updated_at
+        ) VALUES (?, ?, 'http', 'project', ?, ?, '[]', '["read"]', 'active', ?, 1, 1, NULL, 'untested', ?, ?)
+      `).run(
+        credentialId,
+        'Unavailable provider metadata',
+        project.id,
+        project.id,
+        'missing-mounted-key',
+        now,
+        now,
+      );
+    } finally {
+      database.close();
+    }
+
+    await openSettingsCategory(page, 'integrations', 'Integrations');
+    const card = page.locator('[data-integration-card="automation-credentials"]');
+    await expect(card).toContainText('Unavailable');
+    await card.getByRole('button', { name: 'Manage' }).click();
+
+    const alert = page.getByRole('alert').filter({ hasText: 'Secure credential storage is unavailable' });
+    await expect(alert).toContainText('No mounted credential key file is configured.');
+    await expect(alert).toContainText('Restore the configured secure key provider, then refresh this page.');
+
+    const metadata = page.getByText('Unavailable provider metadata', { exact: true }).locator('xpath=ancestor::li[1]');
+    await expect(metadata).toContainText('http · Project-owned · metadata version 1');
+    await expect(metadata).toContainText('Read');
+    await expect(metadata).toContainText('Owning project only');
+    await expect(page.getByText('No credential metadata is visible to this project.')).toHaveCount(0);
+
+    await expect(page.getByLabel('Credential name')).toBeDisabled();
+    await expect(page.getByLabel('Credential kind')).toBeDisabled();
+    await expect(page.getByLabel('Secret value')).toBeDisabled();
+    await expect(metadata.getByLabel('New secret for Unavailable provider metadata')).toBeDisabled();
+
+    const guardedActions = [
+      page.getByRole('button', { name: 'Store credential' }),
+      metadata.getByRole('button', { name: 'Test' }),
+      metadata.getByRole('button', { name: 'Rotate' }),
+      metadata.getByRole('button', { name: 'Replace' }),
+      metadata.getByRole('button', { name: 'Promote credential' }),
+      metadata.getByRole('button', { name: 'Revoke' }),
+    ];
+    for (const action of guardedActions) {
+      await expect(action).toBeDisabled();
+    }
+
+    const mutationRequests: string[] = [];
+    page.on('request', (request) => {
+      if (request.method() !== 'GET' && request.url().includes('/credentials')) {
+        mutationRequests.push(`${request.method()} ${request.url()}`);
+      }
+    });
+    for (const action of guardedActions) {
+      await action.evaluate((button: HTMLButtonElement) => button.click());
+    }
+    await page.waitForTimeout(100);
+    expect(mutationRequests).toEqual([]);
+
+    const healthResponse = await isolatedRequest.get('/api/credentials/health');
+    expect(healthResponse.ok(), await healthResponse.text()).toBe(true);
+    expect(await healthResponse.json()).toMatchObject({
+      available: false,
+      secure: true,
+      provider: 'mounted-key-file',
+      keyId: null,
+      keyVersion: null,
+    });
+    const listResponse = await isolatedRequest.get(`/api/projects/${encodeURIComponent(project.id)}/credentials`);
+    expect(listResponse.ok(), await listResponse.text()).toBe(true);
+    expect(await listResponse.json()).toEqual([
+      expect.objectContaining({
+        id: credentialId,
+        name: 'Unavailable provider metadata',
+        kind: 'http',
+        configured: false,
+        status: 'active',
+      }),
+    ]);
+    await expect(page.locator('body')).not.toContainText(SECRET_CANARY);
+  } finally {
+    await isolatedFixture?.cleanup();
+    await isolatedRequest.dispose();
+    await context.close();
+    await runtime.stop();
+  }
 });
