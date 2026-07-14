@@ -43,8 +43,6 @@ The primary card surface and footer selection button expose whether the project 
 
 ## Creating a project
 
-The Projects page and shared creation dialog follow the dashboard language setting. English and German labels cover local and Git imports, new local and remote repositories, directory browsing, validation, setup scope, and progress feedback. Changing the language does not alter submitted source types, initialization modes, setup choices, names, paths, repository identifiers, providers, or project settings.
-
 Click the dashed **Add Project** card to open the shared modal in local-import mode, then choose **Local Project**, **Git URL**, or **New Project**. Imported local projects receive only a local git-mode project override, so Code UX operates against local Git state. Imported Git URL projects inherit the system remote-git defaults. Imported projects stay techstack-unassigned until you choose a project techstack in settings, use the top bar selector, or run Project Setup Agent techstack detection.
 
 Click **New Project** on the Projects page to initialize a new repository through the same modal. New project initialization does not scaffold application source files in the dashboard; it sends `new-local` or `new-remote` initialization data to the backend repository creation flow.
@@ -92,7 +90,7 @@ Use **Select project** to make a project active, or use **Project settings** to 
 
 ## Deleting a project
 
-Deletion is destructive. The project card's **Delete project** action opens a confirmation dialog that names the project and explains what remains on disk. Confirming sends the existing dashboard deletion request and refreshes the gallery. Project deletion removes the project and its associated local runtime data; it does not delete the repository checkout or files inside `<repo>/.code-ux/`.
+Deletion is destructive. The project card's **Delete project** action sends the existing dashboard deletion request immediately and refreshes the gallery, so verify the target before activating it. Project deletion removes the project and its associated local runtime data; it does not delete the repository checkout or files inside `<repo>/.code-ux/`.
 
 The Settings **Danger Zone** provides a confirmation dialog for its **Delete Project** workflow. Programmatic deletion through the MCP `manage_projects` action remains gated by explicit `approval.confirmed = true`.
 

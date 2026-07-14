@@ -5,6 +5,8 @@ import type { AgentAvatarExpression } from "../../lib/agent-avatar.js";
 import { LazyAgentAvatarScene } from "./LazyAgentAvatarScene.js";
 import { SHOWCASE_EXPRESSIONS } from "../../lib/agent-avatar.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import { agentsMessages } from "../../i18n/messages/agents.js";
 
 /* ── Expression icon + label map (single source of truth) ── */
 export const EXPRESSION_META: Record<string, { Icon: typeof Smile; label: string }> = {
@@ -41,9 +43,18 @@ export const AgentAvatarStage: FunctionComponent<{
   fallbackMode = false,
   disabled = false,
 }) => {
+  const { translate } = useDashboardI18n();
   const reducedMotion = useReducedMotion();
   const shouldFallback = fallbackMode || reducedMotion;
+  const expressionLabels: Record<string, string> = {
+    happy: translate(agentsMessages, "expressionHappy"),
+    sad: translate(agentsMessages, "expressionSad"),
+    angry: translate(agentsMessages, "expressionAngry"),
+    bored: translate(agentsMessages, "expressionBored"),
+    hyped: translate(agentsMessages, "expressionHyped"),
+  };
   const activeMeta = EXPRESSION_META[expression];
+  const activeLabel = expressionLabels[expression] ?? expression;
   return (
     <div
       className={`relative overflow-hidden rounded-[1.5rem] border border-black/[0.06] bg-white/40 shadow-sm backdrop-blur-2xl dark:border-white/[0.07] dark:bg-void-800/40 ${className}`}
@@ -60,7 +71,7 @@ export const AgentAvatarStage: FunctionComponent<{
 
       <div className={`relative w-full ${heightClass}`}>
         <span className="sr-only" aria-live="polite">
-          Bot expression changed to {activeMeta.label}
+          {translate(agentsMessages, "expressionChanged", { expression: activeLabel })}
         </span>
         <LazyAgentAvatarScene
           config={config}
@@ -76,12 +87,12 @@ export const AgentAvatarStage: FunctionComponent<{
           type="button"
           onClick={onRandomize}
           disabled={disabled}
-          title="Randomize appearance"
-          aria-label="Randomize appearance"
+          title={translate(agentsMessages, "randomizeAppearance")}
+          aria-label={translate(agentsMessages, "randomizeAppearance")}
           className="group/rnd absolute right-3 top-3 inline-flex h-9 items-center gap-1.5 rounded-full border border-black/[0.06] bg-white/75 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 shadow-sm backdrop-blur-md transition-all hover:bg-signal-500 hover:text-white dark:hover:text-void-900 hover:shadow-[0_0_18px_rgba(0,224,160,0.35)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.08] dark:text-slate-300 dark:hover:bg-signal-500"
         >
           <RefreshCw className="h-3.5 w-3.5 transition-transform duration-500 group-hover/rnd:rotate-180" strokeWidth={2.5} />
-          Shuffle
+          {translate(agentsMessages, "shuffle")}
         </button>
       )}
 
@@ -93,14 +104,15 @@ export const AgentAvatarStage: FunctionComponent<{
           <div className="flex items-center gap-1 rounded-full border border-black/[0.06] bg-white/75 p-1 shadow-[0_4px_16px_rgba(0,0,0,0.06)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-void-800/75">
             {SHOWCASE_EXPRESSIONS.map((expr) => {
               const meta = EXPRESSION_META[expr];
+              const label = expressionLabels[expr] ?? meta.label;
               const isActive = expression === expr;
               return (
                 <button
                   key={expr}
                   type="button"
                   onClick={() => onExpressionChange(expr)}
-                  title={meta.label}
-                  aria-label={meta.label}
+                  title={label}
+                  aria-label={label}
                   aria-pressed={isActive}
                   className={`flex h-8 w-8 items-center justify-center rounded-full transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 ${
                     isActive
@@ -115,7 +127,7 @@ export const AgentAvatarStage: FunctionComponent<{
           </div>
           {activeMeta && (
             <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
-              {activeMeta.label}
+              {activeLabel}
             </span>
           )}
         </div>

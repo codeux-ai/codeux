@@ -5,6 +5,7 @@ import { clearSelectedMemoryIds, memorySidebarExpandedSignal, searchQuerySignal 
 import { MemoryList } from "./MemoryList.js";
 import { MemorySearch } from "./MemorySearch.js";
 import type { MemNode } from "../../lib/memory-graph.js";
+import { useMemoryI18n } from "../../i18n/messages/memory.js";
 
 interface MemorySidebarProps {
   nodes: MemNode[];
@@ -20,6 +21,7 @@ interface MemorySidebarProps {
 const MemorySidebar = ({ nodes, onSelectNode, refreshing = false, loadError = null, onRetry, onAddMemory, readOnly = false, entityLabel = "memory" }: MemorySidebarProps) => {
   const isExpanded = memorySidebarExpandedSignal.value;
   const previousExpanded = useRef(isExpanded);
+  const { t } = useMemoryI18n();
 
   useEffect(() => {
     if (previousExpanded.current && !isExpanded) {
@@ -33,8 +35,8 @@ const MemorySidebar = ({ nodes, onSelectNode, refreshing = false, loadError = nu
     memorySidebarExpandedSignal.value = !memorySidebarExpandedSignal.value;
   };
 
-  const openLabel = "Open memory sidebar";
-  const closeLabel = "Close memory sidebar";
+  const openLabel = t(entityLabel === "skill" ? "openSkillSidebar" : "openMemorySidebar");
+  const closeLabel = t(entityLabel === "skill" ? "closeSkillSidebar" : "closeMemorySidebar");
 
     return (
         <div
@@ -48,10 +50,10 @@ const MemorySidebar = ({ nodes, onSelectNode, refreshing = false, loadError = nu
                 {isExpanded && (
                     <div className="min-w-0 flex-1">
                         <p className="truncate font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">
-                            {entityLabel === "skill" ? "Skills" : "Memory"}
+                            {entityLabel === "skill" ? t("skills") : t("pageLabel")}
                         </p>
                         <p className="truncate text-[11px] text-slate-500">
-                            {entityLabel === "skill" ? "Browse indexed skills" : "Browse project memory"}
+                            {entityLabel === "skill" ? t("browseIndexedSkills") : t("browseProjectMemory")}
                         </p>
                     </div>
                 )}
@@ -72,7 +74,7 @@ const MemorySidebar = ({ nodes, onSelectNode, refreshing = false, loadError = nu
                         <ChevronDown className="h-4 w-4 lg:hidden" aria-hidden="true" />
                         <ChevronRight className="hidden h-4 w-4 lg:block" aria-hidden="true" />
                         <span className="sr-only">
-                            {isExpanded ? "Collapse sidebar" : "Expand sidebar"}
+                            {isExpanded ? t("collapseSidebar") : t("expandSidebar")}
                         </span>
                     </span>
                     <span className="sr-only">
@@ -93,7 +95,7 @@ const MemorySidebar = ({ nodes, onSelectNode, refreshing = false, loadError = nu
             >
                 <div className="flex h-full min-h-0 min-w-0 flex-col">
                     <div className="shrink-0 border-b border-void-700 p-3">
-                        <MemorySearch />
+                        <MemorySearch entityLabel={entityLabel} />
                     </div>
                     <MemoryList
                         nodes={nodes}
