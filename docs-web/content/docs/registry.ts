@@ -109,6 +109,7 @@ export type DocsSlug =
   | 'operations-server-mode'
   | 'settings-google-drive-mount'
   | 'user-dashboard-custom-dashboards'
+  | 'architecture-chat-connector-runtime-reliability'
   | 'architecture-chat-connectors-discord'
   | 'architecture-chat-connectors-imessage'
   | 'architecture-chat-connectors-overview'
@@ -878,6 +879,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Custom Dashboards",
     description: "Custom dashboards are project-scoped dashboard apps generated and revised by agents, then validated in a detached Docker runtime before publication. Use them when the built-in dashboard pages do not match the operatio...",
   },
+  'architecture-chat-connector-runtime-reliability': {
+    id: 'architecture-chat-connector-runtime-reliability',
+    path: '/docs/architecture-chat-connector-runtime-reliability',
+    section: 'Architecture',
+    title: "Chat connector runtime reliability",
+    description: "External connector callbacks and replies cross process, network, and provider boundaries. Code UX separates durable state changes from model, fetch, command, and reconnect work. Provider-specific policy comes from the...",
+  },
   'architecture-chat-connectors-discord': {
     id: 'architecture-chat-connectors-discord',
     path: '/docs/architecture-chat-connectors-discord',
@@ -889,8 +897,8 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     id: 'architecture-chat-connectors-imessage',
     path: '/docs/architecture-chat-connectors-imessage',
     section: 'Architecture',
-    title: "iMessage Connector Profile",
-    description: "iMessage is registered with managed_bridge and native_bridge transports. Its module owns the unchanged setup schemas, iMessage bridge normalizer, bearer authentication metadata, managed HTTP mapping, native command ma...",
+    title: "iMessage Connector Architecture",
+    description: "The iMessage profile is a transparent third-party bridge contract. It advertises only managed_bridge and native_bridge; it does not expose official_api, imply Apple endorsement, or verify an Apple provider endpoint.",
   },
   'architecture-chat-connectors-overview': {
     id: 'architecture-chat-connectors-overview',
@@ -911,21 +919,21 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/architecture-chat-connectors-slack',
     section: 'Architecture',
     title: "Slack Connector Profile",
-    description: "Slack is registered with managed_bridge and webhook transports. Its module owns the unchanged setup schemas, Events API normalizer, Slack-compatible signature bases and headers, acknowledgements, outbound mapping and...",
+    description: "Slack implements managed_bridge, explicit custom webhook, and direct official_api transports. The custom webhook remains a generic configured bridge URL; only official mode uses Slack APIs, with fixed https://slack.co...",
   },
   'architecture-chat-connectors-telegram': {
     id: 'architecture-chat-connectors-telegram',
     path: '/docs/architecture-chat-connectors-telegram',
     section: 'Architecture',
     title: "Telegram Connector Profile",
-    description: "Telegram is registered with managed_bridge and webhook transports. Its module owns the unchanged setup schemas, Bot API update normalizer, ingress authentication metadata, outbound mapping and response parsing, config...",
+    description: "Telegram implements managed_bridge, webhook, and direct official_api transports. The two legacy modes preserve their existing schemas, bridge URL fallbacks, authentication metadata, response parsing, and retry classif...",
   },
   'architecture-chat-connectors-whatsapp': {
     id: 'architecture-chat-connectors-whatsapp',
     path: '/docs/architecture-chat-connectors-whatsapp',
     section: 'Architecture',
     title: "WhatsApp Connector Profile",
-    description: "WhatsApp is registered with managed_bridge and webhook transports. Its module owns the unchanged managed-plugin and webhook setup schemas, Cloud API-shaped inbound normalizer, bridge authentication metadata, outbound...",
+    description: "WhatsApp implements managed_bridge, webhook, and direct Meta Cloud API official_api transport. The legacy schemas and bridge mappings retain their original meaning; official mode is additive.",
   },
   'architecture-custom-dashboard-foundation': {
     id: 'architecture-custom-dashboard-foundation',
@@ -1106,6 +1114,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['operations-server-mode'],
   docsRegistry['settings-google-drive-mount'],
   docsRegistry['user-dashboard-custom-dashboards'],
+  docsRegistry['architecture-chat-connector-runtime-reliability'],
   docsRegistry['architecture-chat-connectors-discord'],
   docsRegistry['architecture-chat-connectors-imessage'],
   docsRegistry['architecture-chat-connectors-overview'],

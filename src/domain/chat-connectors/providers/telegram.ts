@@ -104,7 +104,7 @@ export const telegramChatConnectorProfile: ChatConnectorProfile = {
       },
     },
     handshake: { type: "none" },
-    acknowledgement: { statusCode: 200, headers: { "content-type": "application/json" }, body: null },
+    acknowledgement: { statusCode: 200, headers: { "content-type": "application/json" }, body: null, deadlineMs: 2_500 },
     ignore: (body, mode = "webhook") => {
       if (mode !== "official_api") {
         return { ignored: false };
@@ -156,6 +156,7 @@ export const telegramChatConnectorProfile: ChatConnectorProfile = {
     isRetryableStatus: (statusCode, mode) => mode === "official_api"
       ? statusCode === 429
       : isLegacyRetryableHttpStatus(statusCode),
+    ambiguousTransportFailureModes: ["official_api"],
   },
   verification: {
     strategy: "configuration_and_live",

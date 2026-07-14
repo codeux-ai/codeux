@@ -936,6 +936,23 @@ export class ChatProviderRepository {
     return row ? this.mapProviderSession(row) : null;
   }
 
+  listProviderSessions(options: { providerConnectionId?: string; limit?: number } = {}): ChatProviderSessionStateRecord[] {
+    const boundedLimit = Math.max(1, Math.min(Math.trunc(options.limit ?? 500), 500));
+    const rows = options.providerConnectionId
+      ? this.db.prepare(`
+          SELECT * FROM chat_provider_sessions
+          WHERE provider_connection_id = ?
+          ORDER BY updated_at ASC
+          LIMIT ${boundedLimit}
+        `).all(options.providerConnectionId) as unknown as ChatProviderSessionRow[]
+      : this.db.prepare(`
+          SELECT * FROM chat_provider_sessions
+          ORDER BY updated_at ASC
+          LIMIT ${boundedLimit}
+        `).all() as unknown as ChatProviderSessionRow[];
+    return rows.map((row) => this.mapProviderSession(row));
+  }
+
   compareAndSetProviderSession(
     sessionId: string,
     expectedVersion: number,
@@ -997,6 +1014,29 @@ export class ChatProviderRepository {
       }
       return claimedIds.map((id) => this.requireDelivery(id));
     });
+  }
+
+  claimOutboundDelivery(
+    deliveryId: string,
+    input: Omit<ClaimChatProviderDeliveriesInput, "limit">,
+  ): ChatProviderMessageDeliveryRecord | null {
+    const leaseOwner = this.requireNonEmpty(input.leaseOwner, "leaseOwner");
+    if (!Number.isFinite(input.leaseDurationMs) || input.leaseDurationMs <= 0) {
+      throw new ValidationError("leaseDurationMs must be greater than zero");
+    }
+    const now = input.now ?? new Date();
+    const nowIso = now.toISOString();
+    const leaseExpiresAt = new Date(now.getTime() + input.leaseDurationMs).toISOString();
+    const update = this.db.prepare(`
+      UPDATE chat_provider_message_deliveries
+      SET status = 'sending', lease_owner = ?, lease_expires_at = ?, updated_at = ?
+      WHERE id = ?
+        AND direction = 'outbound'
+        AND status IN ('pending', 'sending', 'retryable_failure')
+        AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+        AND (lease_owner IS NULL OR lease_expires_at IS NULL OR lease_expires_at <= ?)
+    `).run(leaseOwner, leaseExpiresAt, nowIso, deliveryId, nowIso, nowIso);
+    return update.changes === 1 ? this.requireDelivery(deliveryId) : null;
   }
 
   completeOutboundDelivery(

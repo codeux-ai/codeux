@@ -83,6 +83,8 @@ export interface ChatConnectorAcknowledgement {
   statusCode: number;
   headers: Readonly<Record<string, string>>;
   body: string | null;
+  /** Provider callback deadline. Routes persist accepted work before responding within this bound. */
+  deadlineMs: number;
   immediateModes?: readonly ChatProviderBridgeMode[];
 }
 
@@ -126,6 +128,7 @@ export interface ChatConnectorHttpOutboundRequest {
 
 export interface ChatConnectorCommandOutboundRequest {
   transport: "command";
+  protocol?: "json_stdio" | "imessage_bridge";
   command: string;
   workingDirectory: string;
   tokenSecretKeys: readonly string[];
@@ -184,6 +187,7 @@ export interface ChatConnectorOutboundResponseContext {
   mode?: ChatProviderBridgeMode;
   statusCode: number;
   headers: Readonly<Record<string, string>>;
+  correlationId?: string;
 }
 
 export class ChatConnectorOutboundResponseError extends Error {
@@ -229,6 +233,8 @@ export interface ChatConnectorProfile {
       context?: ChatConnectorOutboundResponseContext,
     ): ChatConnectorOutboundResult;
     isRetryableStatus(statusCode: number, mode?: ChatProviderBridgeMode): boolean;
+    /** Modes where a transport failure may have happened after the provider accepted the send. */
+    ambiguousTransportFailureModes?: readonly ChatProviderBridgeMode[];
     classifyError?(
       statusCode: number,
       responseBody: string,

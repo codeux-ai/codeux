@@ -5,7 +5,6 @@ import { HttpRouteError } from "./http-errors.js";
 import { requireTrimmedString } from "./request-parsers.js";
 import { ChatProviderIngressSecurity, ChatProviderIngressSecurityError } from "../services/chat-provider-security.js";
 import { getChatConnectorProfileForMode } from "../domain/chat-connectors/registry.js";
-import { redactText } from "../shared/security/redaction.js";
 
 export function registerChatProviderIngressRoutes(router: Express, deps: DashboardDependencies): void {
   if (!deps.chatProviderRepository || !deps.chatProviderIngressService) {
@@ -55,26 +54,39 @@ export function registerChatProviderIngressRoutes(router: Express, deps: Dashboa
       }
     }
 
-    if (profile.ingress.ignore?.(payload, connection.bridgeMode) && connection.bridgeMode === "official_api") {
+    const ignoreResult = profile.ingress.ignore?.(payload, connection.bridgeMode);
+    const ignored = typeof ignoreResult === "string"
+      ? Boolean(ignoreResult)
+      : ignoreResult?.ignored === true;
+    if (ignored && connection.bridgeMode === "official_api") {
       sendAcknowledgement(res, profile.ingress.acknowledgement);
       return;
     }
 
     if (profile.ingress.acknowledgement.immediateModes?.includes(connection.bridgeMode)) {
+      const ingressService = deps.chatProviderIngressService!;
+      if (typeof ingressService.acceptInbound !== "function" || typeof ingressService.processAccepted !== "function") {
+        sendAcknowledgement(res, profile.ingress.acknowledgement);
+        setImmediate(() => {
+          void ingressService.processInbound({ providerConnectionId, payload }).catch(() => undefined);
+        });
+        return;
+      }
+      const accepted = await ingressService.acceptInbound({ providerConnectionId, payload });
       sendAcknowledgement(res, profile.ingress.acknowledgement);
-      setImmediate(() => {
-        void deps.chatProviderIngressService!.processInbound({
-          providerConnectionId,
-          payload,
-        }).catch((error) => {
-          deps.logger?.error("Failed to process acknowledged chat provider ingress", {
-            logPurpose: "integration",
-            providerConnectionId,
-            providerKind: connection.providerKind,
-            error: redactText(error instanceof Error ? error.message : String(error)),
+      if (accepted.status === "accepted" && accepted.delivery) {
+        setImmediate(() => {
+          void deps.chatProviderIngressService!.processAccepted(accepted.delivery!.id).catch(() => {
+            deps.logger?.error("Failed to process acknowledged chat provider ingress", {
+              logPurpose: "integration",
+              providerConnectionId,
+              providerKind: connection.providerKind,
+              deliveryId: accepted.delivery!.id,
+              providerErrorCode: "chat_processing_error",
+            });
           });
         });
-      });
+      }
       return;
     }
 
