@@ -9,6 +9,7 @@ import {
 } from "../../lib/live-duration-display.js";
 import type { LiveTaskTimingSummary } from "../../lib/live-stats.js";
 import { formatDuration } from "../../lib/format-duration.js";
+import { useLiveI18n } from "../../i18n/messages/live.js";
 
 function extractRetryAfterIso(errorMessage: string): string | null {
   const match = errorMessage.match(/\[RETRY_AFTER:(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\]/);
@@ -16,6 +17,7 @@ function extractRetryAfterIso(errorMessage: string): string | null {
 }
 
 export const QuotaCountdown: FunctionComponent<{ errorMessage: string }> = memo(({ errorMessage }) => {
+  const { locale, t } = useLiveI18n();
   const retryIso = extractRetryAfterIso(errorMessage);
   const [remaining, setRemaining] = useState(() =>
     retryIso ? Math.max(0, Math.floor((new Date(retryIso).getTime() - Date.now()) / 1000)) : null
@@ -42,8 +44,8 @@ export const QuotaCountdown: FunctionComponent<{ errorMessage: string }> = memo(
       <Clock className="w-3 h-3 flex-shrink-0" strokeWidth={2} />
       <span>
         {remaining <= 0
-          ? "Quota should be available now — retry the task."
-          : `Quota exhausted — resets in ${formatDuration(remaining)}`}
+          ? t("quotaAvailable")
+          : t("quotaResetsIn", { duration: formatDuration(remaining, locale) })}
       </span>
     </div>
   );
@@ -53,6 +55,7 @@ export const TaskDuration: FunctionComponent<{
   taskTiming?: LiveTaskTimingSummary | null;
   dispatchTiming?: LiveDurationDispatchTiming | null;
 }> = memo(({ taskTiming, dispatchTiming }) => {
+  const { locale } = useLiveI18n();
   const [now, setNow] = useState(() => Date.now());
   const display = useMemo(() => deriveLiveDurationDisplay({
     taskTiming,
@@ -84,7 +87,7 @@ export const TaskDuration: FunctionComponent<{
   return (
     <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400">
       <Timer className="w-3 h-3" strokeWidth={2} />
-      <span>{formatDuration(display.elapsedSeconds)}</span>
+      <span>{formatDuration(display.elapsedSeconds, locale)}</span>
     </div>
   );
 });

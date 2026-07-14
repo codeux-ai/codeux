@@ -3,7 +3,6 @@ import { memo } from "preact/compat";
 import { useMemo, useEffect, useRef } from "preact/hooks";
 import { Bot, Radio, Server, Wifi } from "lucide-preact";
 import gsap from "gsap";
-import { formatTime } from "../../../lib/time.js";
 import type { ExecutionDashboardSnapshot } from "../../../types.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
 import { WaveFluid } from "../ui/WaveFluid.js";
@@ -11,6 +10,7 @@ import { useReducedMotion, useResolvedMotionDuration } from "../../hooks/use-red
 import { INTERACTION_TOKENS } from "../../lib/motion/tokens.js";
 import type { ExecutionSnapshotSurfaceState } from "../../../hooks/ExecutionTimelineContext.js";
 import { RuntimeSnapshotSurfaceBadge, RuntimeSnapshotSurfaceNotice } from "./ExecutionRuntimePanel.js";
+import { useLiveI18n } from "../../i18n/messages/live.js";
 
 const CONNECTION_ROLE_LABELS: Record<string, string> = {
   listener: "Listener",
@@ -31,6 +31,7 @@ const statusTone = (value: string | null): string => {
 };
 
 const ConnectionRow: FunctionComponent<{ connection: ExecutionDashboardSnapshot["connections"][0] }> = memo(({ connection }) => {
+  const { t, formatNumber, formatTime } = useLiveI18n();
   const rowRef = useRef<HTMLElement>(null);
   const isReducedMotion = useReducedMotion();
   const highlightDuration = useResolvedMotionDuration(parseFloat(INTERACTION_TOKENS.controlFeedback.duration) / 1000);
@@ -83,7 +84,7 @@ const ConnectionRow: FunctionComponent<{ connection: ExecutionDashboardSnapshot[
             </span>
             {connection.listenMode && (
               <span className="rounded-full border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-500 motion-reduce:ring-1 motion-reduce:ring-signal-500/20">
-                Listening
+                {t("listening")}
               </span>
             )}
           </div>
@@ -109,23 +110,23 @@ const ConnectionRow: FunctionComponent<{ connection: ExecutionDashboardSnapshot[
             {connection.status}
           </div>
           <div className="mt-1 text-[10px] font-mono text-slate-400">
-            {connection.lastHeartbeatAt ? formatTime(connection.lastHeartbeatAt) : "no heartbeat"}
+            {connection.lastHeartbeatAt ? formatTime(new Date(connection.lastHeartbeatAt)) : t("noHeartbeat")}
           </div>
         </div>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2 text-[9px] font-bold uppercase tracking-[0.14em]">
         <span className="rounded-full border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
-          inbox {connection.pendingInboxCount}
+          {t("inboxCount", { count: formatNumber(connection.pendingInboxCount) })}
         </span>
         <span className="rounded-full border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
-          dispatch {connection.activeDispatchCount}
+          {t("dispatchCount", { count: formatNumber(connection.activeDispatchCount) })}
         </span>
         <span className="rounded-full border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
-          threads {connection.threadCount}
+          {t("threadsCount", { count: formatNumber(connection.threadCount) })}
         </span>
         <span className="rounded-full border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
-          runs {connection.tasksRunCount}
+          {t("runsCount", { count: formatNumber(connection.tasksRunCount) })}
         </span>
       </div>
 
@@ -159,6 +160,7 @@ export const LiveConnectionsCard: FunctionComponent<{
   snapshot: ExecutionDashboardSnapshot;
   snapshotSurface?: ExecutionSnapshotSurfaceState;
 }> = memo(({ snapshot, snapshotSurface }) => {
+  const { t, formatNumber } = useLiveI18n();
   const { activeConnections, listeningConnections, workerConnections, pendingInboxTotal } = useMemo(() => {
     const active = snapshot.connections.filter((connection) => connection.status !== "offline");
     return {
@@ -170,7 +172,7 @@ export const LiveConnectionsCard: FunctionComponent<{
   }, [snapshot.connections, snapshot.connections.length]);
 
   return (
-    <aside role="region" aria-label="Live connections" className="group relative overflow-hidden rounded-[1.4rem] border border-black/[0.06] bg-white/75 p-4 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/65 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+    <aside role="region" aria-label={t("liveConnections")} className="group relative overflow-hidden rounded-[1.4rem] border border-black/[0.06] bg-white/75 p-4 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/65 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
       <WaveFluid accentHex="#00E0A0" isActive={activeConnections.length > 0} />
       <BorderTrace accentHex="#00E0A0" />
 
@@ -178,43 +180,43 @@ export const LiveConnectionsCard: FunctionComponent<{
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Radio className="h-4 w-4 text-signal-500" strokeWidth={1.5} aria-hidden="true" />
-            <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400">Live Connections</span>
+            <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("liveConnections")}</span>
           </div>
           <span className="rounded-full border border-black/[0.06] bg-black/[0.02] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.02] dark:text-slate-400">
-            {snapshot.connections.length} total
+            {t("invocationTotal", { count: formatNumber(snapshot.connections.length) })}
           </span>
           <RuntimeSnapshotSurfaceBadge surface={snapshotSurface} />
         </div>
 
         {snapshotSurface && snapshotSurface.kind !== "live" && (
           <div className="mb-4">
-            <RuntimeSnapshotSurfaceNotice surface={snapshotSurface} panelLabel="Live connections" />
+            <RuntimeSnapshotSurfaceNotice surface={snapshotSurface} panelLabel={t("liveConnections")} />
           </div>
         )}
 
         <div className="mb-4 grid grid-cols-2 gap-2">
           {[
-            { icon: <Wifi className="h-3 w-3" strokeWidth={2} aria-hidden="true" />, label: "Active", value: activeConnections.length, tone: "text-signal-500" },
-            { icon: <Radio className="h-3 w-3" strokeWidth={2} aria-hidden="true" />, label: "Listening", value: listeningConnections.length, tone: "text-status-green" },
-            { icon: <Bot className="h-3 w-3" strokeWidth={2} aria-hidden="true" />, label: "Workers", value: workerConnections.length, tone: "text-slate-700 dark:text-slate-200" },
-            { icon: <Server className="h-3 w-3" strokeWidth={2} aria-hidden="true" />, label: "Inbox", value: pendingInboxTotal, tone: "text-status-amber" },
+            { icon: <Wifi className="h-3 w-3" strokeWidth={2} aria-hidden="true" />, label: t("active"), value: activeConnections.length, tone: "text-signal-500" },
+            { icon: <Radio className="h-3 w-3" strokeWidth={2} aria-hidden="true" />, label: t("listening"), value: listeningConnections.length, tone: "text-status-green" },
+            { icon: <Bot className="h-3 w-3" strokeWidth={2} aria-hidden="true" />, label: t("workers"), value: workerConnections.length, tone: "text-slate-700 dark:text-slate-200" },
+            { icon: <Server className="h-3 w-3" strokeWidth={2} aria-hidden="true" />, label: t("inbox"), value: pendingInboxTotal, tone: "text-status-amber" },
           ].map((tile) => (
             <div key={tile.label} className="rounded-lg border border-black/[0.04] bg-black/[0.02] px-2.5 py-2 dark:border-white/[0.05] dark:bg-white/[0.02]">
               <div className="flex items-center justify-between">
                 <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400">{tile.label}</span>
                 <span className="text-slate-400">{tile.icon}</span>
               </div>
-              <div className={`mt-1 text-base font-semibold leading-none ${tile.tone}`}>{tile.value}</div>
+              <div className={`mt-1 text-base font-semibold leading-none ${tile.tone}`}>{formatNumber(tile.value)}</div>
             </div>
           ))}
         </div>
 
         {snapshot.connections.length === 0 ? (
           <p role="status" aria-live="polite" className="rounded-lg border border-black/[0.04] bg-black/[0.015] px-3 py-2.5 text-[11px] font-mono text-slate-400 dark:border-white/[0.05] dark:bg-white/[0.015] dark:text-slate-600">
-            No listeners or workers are connected to the selected project yet.
+            {t("noConnections")}
           </p>
         ) : (
-          <div className="dashboard-scrollbar max-h-[50dvh] sm:max-h-[30rem] space-y-2 overflow-y-auto pr-1" role="log" aria-live="polite" aria-label="Live connections feed">
+          <div className="dashboard-scrollbar max-h-[50dvh] sm:max-h-[30rem] space-y-2 overflow-y-auto pr-1" role="log" aria-live="polite" aria-label={t("liveConnectionsFeed")}>
             {snapshot.connections.map((connection) => (
               <ConnectionRow key={connection.id} connection={connection} />
             ))}

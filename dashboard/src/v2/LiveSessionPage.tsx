@@ -46,6 +46,7 @@ import { useActionFeedback } from "./hooks/use-action-feedback.js";
 import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 import { forceCompleteLiveTask } from "./lib/api/live-tasks-client.js";
 import { getSprintStatusPresentation } from "./lib/sprint-status-presentation.js";
+import { useLiveI18n } from "./i18n/messages/live.js";
 
 const SprintBoatRace = lazy(() => import("./components/SprintBoatRace.js").then(m => ({ default: m.SprintBoatRace })));
 const SprintDag = lazy(() => import("./components/SprintDag.js").then(m => ({ default: m.SprintDag })));
@@ -68,6 +69,7 @@ const EMPTY_LIVE_SESSION_RUNTIME_STATE = {
 
 export const LiveSessionPage: FunctionComponent = () => {
 
+    const { locale, t } = useLiveI18n();
     const contentRef = useRef<HTMLDivElement>(null);
     const prefersReducedMotion = useReducedMotion();
     const interactionTokens = useInteractionTokens();
@@ -262,8 +264,8 @@ export const LiveSessionPage: FunctionComponent = () => {
     }, [hasLiveDurationTicker]);
 
     const { filteredTasks, taskCounts, announcement: filterResultAnnouncement } = useMemo(
-        () => deriveFilteredLiveSessionTasks(visibleTasksWithLiveActivities, visibleStats, activeFilter),
-        [activeFilter, visibleStats, visibleTasksWithLiveActivities],
+        () => deriveFilteredLiveSessionTasks(visibleTasksWithLiveActivities, visibleStats, activeFilter, locale),
+        [activeFilter, locale, visibleStats, visibleTasksWithLiveActivities],
     );
     const selectionMovementStyle = useMemo(() => ({
         transitionDuration: interactionTokens.selectionMovement.duration,
@@ -290,8 +292,8 @@ export const LiveSessionPage: FunctionComponent = () => {
     ), [filteredTasks, forceCompleteErrorByTaskId, forceCompletePendingIds, optimisticallyCompletedTaskIds, rerunningIds, sprintAttentionItems, sprintDispatches, sprintEvents, sprintInvocations, taskTimingMap]);
 
     const transportBannerViewModel = useMemo(
-        () => deriveLiveTransportBannerViewModel({ transportState, isRecovering, error, snapshotUpdatedAt }),
-        [error, isRecovering, snapshotUpdatedAt, transportState],
+        () => deriveLiveTransportBannerViewModel({ transportState, isRecovering, error, snapshotUpdatedAt, locale }),
+        [error, isRecovering, locale, snapshotUpdatedAt, transportState],
     );
     const snapshotSurface = useMemo(
         () => deriveLiveSessionSnapshotSurface({
@@ -300,8 +302,9 @@ export const LiveSessionPage: FunctionComponent = () => {
             snapshotUpdatedAt,
             transportBannerTitle: transportBannerViewModel?.title ?? null,
             error,
+            locale,
         }),
-        [error, isRecovering, snapshotUpdatedAt, transportBannerViewModel?.title, transportState],
+        [error, isRecovering, locale, snapshotUpdatedAt, transportBannerViewModel?.title, transportState],
     );
 
     const handleEditTask = (task: Subtask): void => {
@@ -322,15 +325,15 @@ export const LiveSessionPage: FunctionComponent = () => {
             return;
         }
         const confirmed = await requestConfirm({
-            title: "Force Complete Task",
-            body: `Mark task "${task.title || task.id}" as completed? This bypasses the normal runtime completion path.`,
-            confirmLabel: "Force Complete",
+            title: t("forceCompleteTask"),
+            body: t("forceCompleteConfirm", { task: task.title || task.id }),
+            confirmLabel: t("forceComplete"),
             destructive: true,
         });
         if (!confirmed) {
             return;
         }
-        setPending(`Force completing task "${task.title || task.id}". The live runtime snapshot remains visible while the update is confirmed.`, { autoDismiss: false });
+        setPending(t("forceCompletingTask", { task: task.title || task.id }), { autoDismiss: false });
         setForceCompletePendingIds((prev) => new Set(prev).add(taskRuntimeId));
         setForceCompleteErrorByTaskId((prev) => {
             const next = new Map(prev);
@@ -342,7 +345,7 @@ export const LiveSessionPage: FunctionComponent = () => {
             await forceCompleteLiveTask(realtimeProjectId, taskRuntimeId);
             await refreshRuntimeStatus();
             await refreshGitStatus();
-            setSuccess(`Task "${task.title || task.id}" marked as completed.`);
+            setSuccess(t("taskCompleted", { task: task.title || task.id }));
         } catch (error) {
             setOptimisticallyCompletedTaskIds((prev) => {
                 const next = new Set(prev);
@@ -354,7 +357,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                 next.set(taskRuntimeId, error instanceof Error ? error.message : "Failed to force complete task.");
                 return next;
             });
-            setError(`Failed to force complete task "${task.title || task.id}".`);
+            setError(t("forceCompleteFailed", { task: task.title || task.id }));
         } finally {
             setForceCompletePendingIds((prev) => {
                 const next = new Set(prev);
@@ -367,8 +370,8 @@ export const LiveSessionPage: FunctionComponent = () => {
 
 
     return (
-        <PageContainer aria-label="Live Session" className="gap-16" aria-busy={!initialLoadComplete ? "true" : undefined}>
-            <h1 className="sr-only">Live Session</h1>
+        <PageContainer aria-label={t("liveSession")} className="gap-16" aria-busy={!initialLoadComplete ? "true" : undefined}>
+            <h1 className="sr-only">{t("liveSession")}</h1>
             <ConfirmDialog isOpen={isConfirmOpen} options={confirmOptions} onConfirm={handleConfirm} onCancel={handleCancel} />
             <LiveTransportBanner
                 transportState={transportState}
@@ -396,7 +399,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                 statusTimestamp={status.timestamp}
             />
             <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-                {headerView === "stats" ? "Stats view selected." : headerView === "race" ? "Race view selected." : "DAG view selected."}
+                {t(headerView === "stats" ? "statsViewSelected" : headerView === "race" ? "raceViewSelected" : "dagViewSelected")}
             </div>
 
             {/* ── Header View: Stats or Boat Race ─────────────────────── */}
@@ -409,7 +412,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                 />
             ) : headerView === "race" ? (
                 /* ── Boat Race View ───────────────────────────────── */
-                <Suspense fallback={<div role="status" aria-live="polite" aria-busy="true"><span className="sr-only">Loading sprint race.</span><SkeletonPanel /></div>}>
+                <Suspense fallback={<div role="status" aria-live="polite" aria-busy="true"><span className="sr-only">{t("loadingSprintRace")}</span><SkeletonPanel /></div>}>
                     <SprintBoatRace
                         tasks={visibleTasksWithLiveActivities}
                         dispatches={sprintDispatches}
@@ -417,7 +420,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                     />
                 </Suspense>
             ) : (
-                <Suspense fallback={<div role="status" aria-live="polite" aria-busy="true"><span className="sr-only">Loading sprint DAG.</span><SkeletonPanel /></div>}>
+                <Suspense fallback={<div role="status" aria-live="polite" aria-busy="true"><span className="sr-only">{t("loadingSprintDag")}</span><SkeletonPanel /></div>}>
                     <SprintDag
                         tasks={visibleTasksWithLiveActivities}
                         dispatches={sprintDispatches}
@@ -427,7 +430,7 @@ export const LiveSessionPage: FunctionComponent = () => {
             )}
 
             {/* ── Section Divider ─────────────────────────────────────── */}
-            <SectionDivider label="Task Pipeline" />
+            <SectionDivider label={t("taskPipeline")} />
 
             {/* ── Filter Strip ────────────────────────────────────────── */}
             <LiveTaskFilterStrip
@@ -444,15 +447,15 @@ export const LiveSessionPage: FunctionComponent = () => {
                 {/* Task cards */}
                 <div className="xl:col-span-8 flex flex-col gap-5 min-w-0" style={listReorderStyle}>
                     {!hasSprintContext && !initialLoadComplete ? (
-                        <div role="status" aria-label="Loading live session telemetry" aria-live="polite" aria-busy="true" className="sr-only">
-                            Loading live session telemetry.
+                        <div role="status" aria-label={t("loadingLiveTelemetryAria")} aria-live="polite" aria-busy="true" className="sr-only">
+                            {t("loadingLiveTelemetry")}
                         </div>
                     ) : !hasSprintContext ? (
                         <IdleRuntimeState
-                            title={showStatusPanel ? sprintStatusPresentation.title : "Waiting for Sprint Start"}
+                            title={showStatusPanel ? sprintStatusPresentation.title : t("waitingForSprintStart")}
                             subtitle={showStatusPanel
                                 ? sprintStatusPresentation.detail
-                                : "Launch a sprint to activate live task telemetry, protocol output, and runtime activity for this project."}
+                                : t("waitingForSprintDescription")}
                         />
                     ) : taskCardItems.length === 0 ? (
                         <div role="status" aria-live="polite" className="group relative overflow-hidden rounded-[1.75rem] border-2 border-dashed border-black/[0.06] bg-white/70 p-16 text-center backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60">
@@ -460,8 +463,8 @@ export const LiveSessionPage: FunctionComponent = () => {
                                 <Play className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-4" strokeWidth={1} aria-hidden="true" />
                                 <p className="text-sm text-slate-400 dark:text-slate-600 font-medium">
                                     {activeFilter === "All"
-                                        ? "Awaiting sprint decomposition..."
-                                        : `No ${activeFilter.toLowerCase()} tasks.`
+                                        ? t("awaitingSprintDecomposition")
+                                        : t("noFilteredTasks", { filter: activeFilter.toLocaleLowerCase(locale) })
                                     }
                                 </p>
                             </div>

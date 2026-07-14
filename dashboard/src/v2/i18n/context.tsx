@@ -126,9 +126,13 @@ export const DashboardI18nProvider: FunctionComponent<DashboardI18nProviderProps
 };
 
 export const useDashboardI18n = (): DashboardI18nContextValue => {
-  const context = useContext(DashboardI18nContext);
+  const context = useOptionalDashboardI18n();
   if (!context) {
     throw new Error("useDashboardI18n must be used within DashboardI18nProvider");
   }
   return context;
 };
+
+export const useOptionalDashboardI18n = (): DashboardI18nContextValue | null => (
+  useContext(DashboardI18nContext)
+);

@@ -14,6 +14,7 @@ import {
 import type { RerunTaskOptions } from "../../lib/api/dashboard-api.js";
 import type { ConfirmDialogOptions } from "./use-confirm-dialog.js";
 import { useToast } from "../components/feedback/ToastProvider.js";
+import { useLiveI18n } from "../i18n/messages/live.js";
 
 export function useLiveSessionActions(
     refreshRuntimeStatus: () => Promise<void>,
@@ -25,6 +26,7 @@ export function useLiveSessionActions(
     const rerunningIdsRef = useRef(rerunningIds);
     const pendingActionIdsRef = useRef(pendingActionIds);
     const { addToast } = useToast();
+    const { t } = useLiveI18n();
 
     const handleRerun = useCallback(async (taskId: string, options?: RerunTaskOptions) => {
         if (rerunningIdsRef.current.has(taskId)) {
@@ -39,15 +41,15 @@ export function useLiveSessionActions(
             await refreshGitStatus();
             addToast({
                 type: "success",
-                message: "Task rerun dispatched successfully.",
+                message: t("rerunSuccess"),
             });
         } catch (err) {
-            const message = err instanceof Error ? err.message : "Failed to rerun task.";
+            const message = err instanceof Error ? err.message : t("rerunFailed");
             addToast({
                 type: "error",
                 message,
                 action: {
-                    label: "Retry Rerun",
+                    label: t("retryRerun"),
                     onClick: () => handleRerun(taskId, options),
                 },
                 autoDismissMs: 0,
@@ -74,15 +76,15 @@ export function useLiveSessionActions(
             await refreshGitStatus();
             addToast({
                 type: "success",
-                message: "Action executed successfully.",
+                message: t("actionSuccess"),
             });
         } catch (err) {
-            const message = err instanceof Error ? err.message : "Failed to execute runtime control.";
+            const message = err instanceof Error ? err.message : t("actionFailed");
             addToast({
                 type: "error",
                 message,
                 action: {
-                    label: "Retry",
+                    label: t("retry"),
                     onClick: () => runControlAction(actionId, operation),
                 },
                 autoDismissMs: 0,
@@ -112,9 +114,9 @@ export function useLiveSessionActions(
             return;
         }
         const confirmed = await requestConfirm({
-            title: "Cancel Sprint Run",
-            body: `Request cancellation for sprint run "${targetLabel}"? Running work will be asked to stop and cached runtime rows will remain visible while the request is confirmed.`,
-            confirmLabel: "Cancel Run",
+            title: t("cancelSprintRun"),
+            body: t("cancelSprintConfirm", { target: targetLabel }),
+            confirmLabel: t("cancelRun"),
             destructive: true,
         });
         if (!confirmed) {
@@ -130,9 +132,9 @@ export function useLiveSessionActions(
             return;
         }
         const confirmed = await requestConfirm({
-            title: "Cancel Dispatch",
-            body: `Request cancellation for dispatch "${targetLabel}"? The runtime will keep the current dispatch row visible while the stop request is confirmed.`,
-            confirmLabel: "Cancel Dispatch",
+            title: t("cancelDispatch"),
+            body: t("cancelDispatchConfirm", { target: targetLabel }),
+            confirmLabel: t("cancelDispatch"),
             destructive: true,
         });
         if (!confirmed) {
@@ -148,9 +150,9 @@ export function useLiveSessionActions(
             return;
         }
         const confirmed = await requestConfirm({
-            title: "Force Cancel Sprint Run",
-            body: `Force cancel sprint run "${targetLabel}" now? Use this only when the normal stop request is already pending or stalled.`,
-            confirmLabel: "Force Cancel Run",
+            title: t("forceCancelSprintRun"),
+            body: t("forceCancelSprintConfirm", { target: targetLabel }),
+            confirmLabel: t("forceCancelRun"),
             destructive: true,
         });
         if (!confirmed) {
@@ -166,9 +168,9 @@ export function useLiveSessionActions(
             return;
         }
         const confirmed = await requestConfirm({
-            title: "Force Cancel Dispatch",
-            body: `Force cancel dispatch "${targetLabel}" now? Use this only when the normal stop request is already pending or stalled.`,
-            confirmLabel: "Force Cancel Dispatch",
+            title: t("forceCancelDispatch"),
+            body: t("forceCancelDispatchConfirm", { target: targetLabel }),
+            confirmLabel: t("forceCancelDispatch"),
             destructive: true,
         });
         if (!confirmed) {
@@ -187,9 +189,9 @@ export function useLiveSessionActions(
 
     const handleClaimAttentionItem = useCallback(async (projectId: string, attentionItemId: string) => {
         const confirmed = await requestConfirm({
-            title: "Claim Attention Item",
-            body: "Claim this attention item for the assigned project worker?",
-            confirmLabel: "Claim",
+            title: t("claimAttentionItem"),
+            body: t("claimAttentionConfirm"),
+            confirmLabel: t("claim"),
             tone: "default",
         });
         if (!confirmed) {
@@ -205,9 +207,9 @@ export function useLiveSessionActions(
 
     const handleResolveAttentionItem = useCallback(async (projectId: string, attentionItemId: string) => {
         const confirmed = await requestConfirm({
-            title: "Resolve Attention Item",
-            body: "Resolve this attention item and remove it from the active queue?",
-            confirmLabel: "Resolve",
+            title: t("resolveAttentionItem"),
+            body: t("resolveAttentionConfirm"),
+            confirmLabel: t("resolve"),
             tone: "success",
         });
         if (!confirmed) {
@@ -224,9 +226,9 @@ export function useLiveSessionActions(
 
     const handleDismissAttentionItem = useCallback(async (projectId: string, attentionItemId: string) => {
         const confirmed = await requestConfirm({
-            title: "Dismiss Attention Item",
-            body: "Dismiss this attention item from the active queue?",
-            confirmLabel: "Dismiss",
+            title: t("dismissAttentionItem"),
+            body: t("dismissAttentionConfirm"),
+            confirmLabel: t("dismiss"),
             tone: "neutral",
         });
         if (!confirmed) {

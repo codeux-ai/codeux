@@ -5,7 +5,6 @@ import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { Radio, Bot, CheckCircle2, XCircle, Workflow, ChevronDown, Play, PauseCircle, Clock, RotateCcw } from "lucide-preact";
-import { formatTime } from "../../../lib/time.js";
 import { renderMarkdown } from "../../../lib/markdown.js";
 
 
@@ -26,6 +25,7 @@ import {
 } from "../../lib/live-session-runtime.js";
 import { deriveExecutionRuntimeViewModel } from "../../lib/live-session/execution-runtime-view-model.js";
 import { ContainerBuildStatusInfobox } from "./ContainerBuildStatusInfobox.js";
+import { useLiveI18n } from "../../i18n/messages/live.js";
 
 export const statusTone = (value: string | null): string => {
     if (!value) return "text-slate-400";
@@ -53,12 +53,6 @@ const EXECUTOR_LABELS: Record<string, string> = {
     docker_cli: "CLI",
     jules: "Jules",
     mixed: "Mixed",
-};
-
-const CONNECTION_ROLE_LABELS: Record<string, string> = {
-    listener: "Listener",
-    worker: "Worker",
-    project_manager: "Manager",
 };
 
 function getInterventionHeading(intervention: { attentionType: string | null; ownerType: string | null }): string {
@@ -135,6 +129,7 @@ export const RuntimeSnapshotSurfaceNotice: FunctionComponent<{
     surface?: ExecutionSnapshotSurfaceState;
     panelLabel: string;
 }> = ({ surface = DEFAULT_RUNTIME_SNAPSHOT_SURFACE, panelLabel }) => {
+    const { t } = useLiveI18n();
     if (surface.kind === "live") {
         return null;
     }
@@ -142,9 +137,7 @@ export const RuntimeSnapshotSurfaceNotice: FunctionComponent<{
     const toneClass = surface.kind === "stale"
         ? "border-status-amber/20 bg-status-amber/[0.055] text-status-amber"
         : "border-signal-500/20 bg-signal-500/[0.055] text-signal-700 dark:text-signal-300";
-    const message = surface.kind === "stale"
-        ? `${panelLabel} is showing the last cached runtime snapshot while fresh data is unavailable.`
-        : `${panelLabel} is refreshing and keeping the last cached runtime snapshot visible.`;
+    const message = t(surface.kind === "stale" ? "panelCachedSnapshot" : "panelRefreshingSnapshot", { panel: panelLabel });
 
     return (
         <p
@@ -169,15 +162,16 @@ const RuntimeActionButton: FunctionComponent<{
     icon: ComponentChildren;
     disabledReason?: string | null;
 }> = ({ actionState, labels, ariaLabel, toneClassName, onActivate, icon, disabledReason = null }) => {
+    const { locale, t } = useLiveI18n();
     const statusId = useId();
     const reasonId = useId();
-    const label = getLiveActionLabel(actionState, labels);
-    const statusLabel = getLiveActionStatusLabel(actionState, labels);
-    const unavailableReason = getLiveActionDisabledReason(actionState, labels, disabledReason);
+    const label = getLiveActionLabel(actionState, labels, locale);
+    const statusLabel = getLiveActionStatusLabel(actionState, labels, locale);
+    const unavailableReason = getLiveActionDisabledReason(actionState, labels, disabledReason, locale);
     const isPending = actionState === "pending";
     const isUnavailable = isPending || actionState === "disabled";
     const accessibleLabel = isUnavailable
-        ? `${ariaLabel}. ${unavailableReason ?? statusLabel ?? "Action unavailable."}`
+        ? `${ariaLabel}. ${unavailableReason ?? statusLabel ?? t("actionUnavailable")}`
         : ariaLabel;
     const describedBy = [
         statusLabel ? statusId : null,
@@ -228,6 +222,7 @@ export const ConnectionRuntimePanel: FunctionComponent<{
     collapsible = false,
     defaultOpen = true,
 }) => {
+    const { locale, t, formatNumber, formatTime } = useLiveI18n();
     const { execution: snapshot, snapshotSurface = DEFAULT_RUNTIME_SNAPSHOT_SURFACE } = useExecutionTimeline();
     const [open, setOpen] = useState(defaultOpen);
     const contentId = useId();
@@ -271,7 +266,7 @@ export const ConnectionRuntimePanel: FunctionComponent<{
     if (!snapshot) {
         return (
             <div role="status" aria-live="polite" aria-busy="true" className="rounded-[1.75rem] border border-black/[0.08] bg-white p-5 text-[11px] font-mono text-slate-400 shadow-sm dark:border-white/[0.08] dark:bg-void-800 dark:text-slate-500">
-                Loading live connections.
+                {t("loadingLiveConnections")}
             </div>
         );
     }
@@ -279,19 +274,19 @@ export const ConnectionRuntimePanel: FunctionComponent<{
     const header = (
         <div className="flex flex-wrap items-center gap-2.5">
             <Radio className="h-4 w-4 text-signal-500" strokeWidth={1.5} aria-hidden="true" />
-            <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Live Connections</span>
+            <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("liveConnections")}</span>
             <div className="flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em]">
                 <span className="rounded-full border border-black/[0.05] bg-black/[0.03] px-2 py-1 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-400">
-                    active {activeConnections.length}
+                    {t("active").toLocaleLowerCase(locale)} {formatNumber(activeConnections.length)}
                 </span>
                 <span className="rounded-full border border-signal-500/20 bg-signal-500/10 px-2 py-1 text-signal-500">
-                    listening {listeningConnections.length}
+                    {t("listening").toLocaleLowerCase(locale)} {formatNumber(listeningConnections.length)}
                 </span>
                 <span className="rounded-full border border-black/[0.05] bg-black/[0.03] px-2 py-1 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-400">
-                    workers {workerConnections.length}
+                    {t("workers").toLocaleLowerCase(locale)} {formatNumber(workerConnections.length)}
                 </span>
                 <span className="rounded-full border border-black/[0.05] bg-black/[0.03] px-2 py-1 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-400">
-                    manager {managerConnections.length}
+                    {t("manager").toLocaleLowerCase(locale)} {formatNumber(managerConnections.length)}
                 </span>
             </div>
             <RuntimeSnapshotSurfaceBadge surface={snapshotSurface} />
@@ -331,13 +326,13 @@ export const ConnectionRuntimePanel: FunctionComponent<{
             >
                 <div ref={contentRef} className={collapsible ? "collapsible-content overflow-hidden" : ""}>
                     <div className={`relative z-10 flex flex-col gap-3 ${collapsible ? "px-5 pb-5 pt-0" : "px-5 pb-5 pt-0"}`}>
-                        <RuntimeSnapshotSurfaceNotice surface={snapshotSurface} panelLabel="Live connections" />
+                        <RuntimeSnapshotSurfaceNotice surface={snapshotSurface} panelLabel={t("liveConnections")} />
                         {snapshot.connections.length === 0 ? (
                             <p role="status" aria-live="polite" className="text-[11px] font-mono text-slate-400 dark:text-slate-600">
-                                No listeners or workers are connected to the selected project yet.
+                                {t("noConnections")}
                             </p>
                         ) : (
-                            <div className="max-h-[50dvh] sm:max-h-72 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar" role="log" aria-live="polite" aria-busy={snapshotSurface.isBusy ? "true" : undefined} aria-label="Live connection runtime rows">
+                            <div className="max-h-[50dvh] sm:max-h-72 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar" role="log" aria-live="polite" aria-busy={snapshotSurface.isBusy ? "true" : undefined} aria-label={t("liveConnectionRuntimeRows")}>
                                 {visibleConnections.map((connection) => (
                                     <div
                                         key={connection.id}
@@ -350,11 +345,11 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                                                         {connection.displayName}
                                                     </span>
                                                     <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
-                                                        {CONNECTION_ROLE_LABELS[connection.role] || connection.role}
+                                                        {connection.role === "listener" ? t("listener") : connection.role === "worker" ? t("worker") : connection.role === "project_manager" ? t("manager") : connection.role}
                                                     </span>
                                                     {connection.listenMode && (
                                                         <span className="rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-500">
-                                                            Listening
+                                                            {t("listening")}
                                                         </span>
                                                     )}
                                                 </div>
@@ -398,23 +393,23 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                                                     {connection.status}
                                                 </div>
                                                 <div className="mt-1 text-[10px] font-mono text-slate-400">
-                                                    {connection.lastHeartbeatAt ? formatTime(connection.lastHeartbeatAt) : "no heartbeat"}
+                                                    {connection.lastHeartbeatAt ? formatTime(new Date(connection.lastHeartbeatAt)) : t("noHeartbeat")}
                                                 </div>
                                             </div>
                                         </div>
 
                                         <div className="mt-3 flex flex-wrap gap-2 text-[9px] font-bold uppercase tracking-[0.14em]">
                                             <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
-                                                inbox {connection.pendingInboxCount}
+                                                {t("inboxCount", { count: formatNumber(connection.pendingInboxCount) })}
                                             </span>
                                             <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
-                                                dispatch {connection.activeDispatchCount}
+                                                {t("dispatchCount", { count: formatNumber(connection.activeDispatchCount) })}
                                             </span>
                                             <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
-                                                threads {connection.threadCount}
+                                                {t("threadsCount", { count: formatNumber(connection.threadCount) })}
                                             </span>
                                             <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
-                                                runs {connection.tasksRunCount}
+                                                {t("runsCount", { count: formatNumber(connection.tasksRunCount) })}
                                             </span>
                                         </div>
 
@@ -459,6 +454,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
     collapsible = false,
     defaultOpen = true,
 }) => {
+    const { t, formatNumber } = useLiveI18n();
     const {
         execution: snapshot,
         onOrchestrateSprint,
@@ -517,7 +513,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
     if (!snapshot) {
         return (
             <div role="status" aria-live="polite" aria-busy="true" className="rounded-[1.75rem] border border-black/[0.08] bg-white p-5 text-[11px] font-mono text-slate-400 shadow-sm dark:border-white/[0.08] dark:bg-void-800 dark:text-slate-500">
-                Loading execution runtime.
+                {t("executionRuntime")}
             </div>
         );
     }
@@ -538,7 +534,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
     } = runtimeViewModel!;
 
     return (
-        <div role="region" aria-label="Execution runtime" aria-busy={snapshotSurface.isBusy || activeSprintRuns.length > 0 || activeDispatches.length > 0 ? "true" : undefined} className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
+        <div role="region" aria-label={t("executionRuntimeAria")} aria-busy={snapshotSurface.isBusy || activeSprintRuns.length > 0 || activeDispatches.length > 0 ? "true" : undefined} className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
 
 
 
@@ -552,7 +548,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                 >
                     <div className="flex min-w-0 flex-wrap items-center gap-2.5">
                         <Workflow className="h-4 w-4 text-signal-500" strokeWidth={1.5} aria-hidden="true" />
-                        <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Execution Runtime</span>
+                        <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("executionRuntime")}</span>
                         <div className="flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em]">
                             <span className="rounded-md bg-signal-500/10 px-2 py-0.5 font-mono text-signal-500">
                                 active {activeSprintRuns.length}
@@ -580,7 +576,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                 <div className="relative z-10 flex items-center justify-between gap-4 px-6 pt-6">
                     <div className="flex min-w-0 flex-wrap items-center gap-2.5">
                         <Workflow className="h-4 w-4 text-signal-500" strokeWidth={1.5} aria-hidden="true" />
-                        <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Execution Runtime</span>
+                        <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("executionRuntime")}</span>
                     </div>
                 </div>
             )}
@@ -592,42 +588,42 @@ export const ExecutionRuntimePanel: FunctionComponent<{
             >
                 <div ref={contentRef} className={collapsible ? "collapsible-content overflow-hidden" : ""}>
                     <div className={`relative z-10 space-y-5 ${collapsible ? "px-5 pb-5 pt-0" : "px-5 pb-5 pt-0"}`}>
-                        <RuntimeSnapshotSurfaceNotice surface={snapshotSurface} panelLabel="Execution runtime" />
+                        <RuntimeSnapshotSurfaceNotice surface={snapshotSurface} panelLabel={t("executionRuntime")} />
                         <ContainerBuildStatusInfobox progress={containerBuildProgress} />
                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                             {[
-                                { label: "Active Runs", value: activeSprintRuns.length, accent: "text-signal-500" },
-                                { label: "Active Dispatches", value: activeDispatches.length, accent: "text-slate-700 dark:text-slate-200" },
-                                { label: "Worker Queued", value: queuedWorkers, accent: "text-ember-500" },
-                                { label: "Worker Running", value: runningWorkers, accent: "text-status-green" },
-                                { label: "Connections", value: activeConnections.length, accent: "text-signal-500" },
-                                { label: "Pending Inbox", value: pendingInboxTotal, accent: "text-status-amber" },
+                                { label: t("activeRuns"), value: activeSprintRuns.length, accent: "text-signal-500" },
+                                { label: t("activeDispatches"), value: activeDispatches.length, accent: "text-slate-700 dark:text-slate-200" },
+                                { label: t("workerQueued"), value: queuedWorkers, accent: "text-ember-500" },
+                                { label: t("workerRunning"), value: runningWorkers, accent: "text-status-green" },
+                                { label: t("connections"), value: activeConnections.length, accent: "text-signal-500" },
+                                { label: t("pendingInbox"), value: pendingInboxTotal, accent: "text-status-amber" },
                             ].map(({ label, value, accent }) => (
                                 <div
                                     key={label}
                                     className="rounded-xl border border-black/[0.04] bg-white/55 px-3 py-2 dark:border-white/[0.06] dark:bg-void-900/30"
                                 >
                                     <div className={`text-[9px] font-bold uppercase tracking-[0.14em] ${accent}`}>{label}</div>
-                                    <div className={`mt-1 font-mono text-base font-semibold leading-none ${accent}`}>{value}</div>
+                                    <div className={`mt-1 font-mono text-base font-semibold leading-none ${accent}`}>{formatNumber(value)}</div>
                                 </div>
                             ))}
                         </div>
 
-                        <section aria-label="Sprint runs">
+                        <section aria-label={t("sprintRunsAria")}>
                             <div className="mb-3 flex items-center justify-between gap-3 border-b border-black/[0.04] pb-2 dark:border-white/[0.05]">
-                                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Sprint Runs</span>
+                                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("sprintRuns")}</span>
                                 <span className="rounded-md border border-black/[0.05] bg-black/[0.02] px-2 py-0.5 text-[9px] font-mono text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.025]">{snapshot.sprintRuns.length} total</span>
                             </div>
                             {snapshot.sprintRuns.length === 0 ? (
-                                <div role="status" aria-live="polite" className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 text-[11px] font-mono text-slate-400 dark:border-white/[0.04] dark:bg-white/[0.015] dark:text-slate-500">No sprint runs recorded for the selected project.</div>
+                                <div role="status" aria-live="polite" className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 text-[11px] font-mono text-slate-400 dark:border-white/[0.04] dark:bg-white/[0.015] dark:text-slate-500">{t("noSprintRuns")}</div>
                             ) : (
-                                <div className="space-y-2" role="log" aria-live="polite" aria-busy={snapshotSurface.isBusy ? "true" : undefined} aria-label="Sprint run status rows">
+                                <div className="space-y-2" role="log" aria-live="polite" aria-busy={snapshotSurface.isBusy ? "true" : undefined} aria-label={t("sprintRunStatusRows")}>
                                     {visibleSprintRuns.map((run) => {
                                         const startActionState = getPendingActionState(pendingActionIds, `sprint-start:${run.sprintId}`);
                                         const pauseActionState = getPendingActionState(pendingActionIds, `sprint-pause:${run.id}`);
                                         const cancelActionState = getPendingActionState(pendingActionIds, `sprint-cancel:${run.id}`);
                                         const forceCancelActionState = getPendingActionState(pendingActionIds, `sprint-force-cancel:${run.id}`);
-                                        const startIdleLabel = run.status === "paused" ? "Resume" : "Run Again";
+                                        const startIdleLabel = t(run.status === "paused" ? "resume" : "startAgain");
                                         return (
                                         <div key={run.id} className={`rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015] ${statusRailTone(run.status)}`}>
                                             <div className="flex items-center justify-between gap-3 min-w-0">
@@ -655,8 +651,8 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                 {(run.status === "paused" || run.status === "failed" || run.status === "completed" || run.status === "cancelled") && (
                                                     <RuntimeActionButton
                                                         actionState={startActionState}
-                                                        labels={{ idle: startIdleLabel, pending: run.status === "paused" ? "Resuming" : "Starting", success: "Started", error: "Start Failed" }}
-                                                        ariaLabel={`${run.status === "paused" ? "Resume" : "Run again"} sprint ${run.sprintName}`}
+                                                        labels={{ idle: startIdleLabel, pending: t(run.status === "paused" ? "resuming" : "starting"), success: t("started"), error: t("startFailed") }}
+                                                        ariaLabel={t(run.status === "paused" ? "resumeSprintAria" : "runAgainSprintAria", { sprint: run.sprintName })}
                                                         onActivate={() => onOrchestrateSprint(run.projectId, run.sprintId)}
                                                         toneClassName="border border-signal-500/20 bg-signal-500/10 text-signal-600 hover:bg-signal-500/15 dark:text-signal-400"
                                                         icon={<Play className="h-3 w-3" strokeWidth={2} aria-hidden="true" />}
@@ -665,8 +661,8 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                 {(run.status === "running" || run.status === "queued") && (
                                                     <RuntimeActionButton
                                                         actionState={pauseActionState}
-                                                        labels={{ idle: "Pause", pending: "Pausing", success: "Paused", error: "Pause Failed" }}
-                                                        ariaLabel={`Pause sprint run ${run.sprintName}`}
+                                                        labels={{ idle: t("pause"), pending: t("pausing"), success: t("paused"), error: t("pauseFailed") }}
+                                                        ariaLabel={t("pauseSprintAria", { sprint: run.sprintName })}
                                                         onActivate={() => onPauseSprintRun(run.id)}
                                                         toneClassName="border border-status-amber/20 bg-status-amber/10 text-status-amber hover:bg-status-amber/15"
                                                         icon={<PauseCircle className={`h-3 w-3 ${pauseActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />}
@@ -675,8 +671,8 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                 {(run.status === "running" || run.status === "queued" || run.status === "paused") && (
                                                     <RuntimeActionButton
                                                         actionState={cancelActionState}
-                                                        labels={{ idle: "Cancel", pending: "Cancelling", success: "Cancel Requested", error: "Cancel Failed" }}
-                                                        ariaLabel={`Cancel sprint run ${run.sprintName}`}
+                                                        labels={{ idle: t("cancel"), pending: t("cancelling"), success: t("cancelRequested"), error: t("cancelFailed") }}
+                                                        ariaLabel={t("cancelSprintAria", { sprint: run.sprintName })}
                                                         onActivate={() => onCancelSprintRun(run.id, run.sprintName)}
                                                         toneClassName="border border-status-red/20 bg-status-red/10 text-status-red hover:bg-status-red/15"
                                                         icon={<XCircle className={`h-3 w-3 ${cancelActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />}
@@ -690,8 +686,8 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                         </div>
                                                         <RuntimeActionButton
                                                             actionState={forceCancelActionState}
-                                                            labels={{ idle: "Force Cancel", pending: "Force Cancelling", success: "Force Cancelled", error: "Force Cancel Failed" }}
-                                                            ariaLabel={`Force cancel sprint run ${run.sprintName}`}
+                                                            labels={{ idle: t("forceCancel"), pending: t("forceCancelling"), success: t("forceCancelled"), error: t("forceCancelFailed") }}
+                                                            ariaLabel={t("forceCancelSprintAria", { sprint: run.sprintName })}
                                                             onActivate={() => onForceCancelSprintRun(run.id, run.sprintName)}
                                                             toneClassName="border border-status-red/20 bg-status-red/10 text-status-red hover:bg-status-red/15"
                                                             icon={<XCircle className={`h-3 w-3 ${forceCancelActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />}
@@ -719,7 +715,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                             </div>
                                                         </div>
                                                         <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-                                                            <HumanInterventionBadge summary={run.humanIntervention} label="Details" compact align="right" />
+                                                            <HumanInterventionBadge summary={run.humanIntervention} label={t("details")} compact align="right" />
                                                             <button
                                                                 type="button"
                                                                 onClick={() => setExpandedInterventionIds((current) => {
@@ -763,15 +759,15 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                             )}
                         </section>
 
-                        <section aria-label="Dispatch queue">
+                        <section aria-label={t("dispatchQueueAria")}>
                             <div className="mb-3 flex items-center justify-between gap-3 border-b border-black/[0.04] pb-2 dark:border-white/[0.05]">
-                                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Dispatch Queue</span>
+                                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("dispatchQueue")}</span>
                                 <span className="rounded-md border border-black/[0.05] bg-black/[0.02] px-2 py-0.5 text-[9px] font-mono text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.025]">{snapshot.taskDispatches.length} total</span>
                             </div>
                             {snapshot.taskDispatches.length === 0 ? (
-                                <div role="status" aria-live="polite" className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 text-[11px] font-mono text-slate-400 dark:border-white/[0.04] dark:bg-white/[0.015] dark:text-slate-500">No task dispatches yet.</div>
+                                <div role="status" aria-live="polite" className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 text-[11px] font-mono text-slate-400 dark:border-white/[0.04] dark:bg-white/[0.015] dark:text-slate-500">{t("noDispatches")}</div>
                             ) : (
-                                <div className="max-h-[50dvh] sm:max-h-80 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar" role="log" aria-live="polite" aria-busy={snapshotSurface.isBusy ? "true" : undefined} aria-label="Task dispatch status rows">
+                                <div className="max-h-[50dvh] sm:max-h-80 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar" role="log" aria-live="polite" aria-busy={snapshotSurface.isBusy ? "true" : undefined} aria-label={t("taskDispatchStatusRows")}>
                                     {visibleTaskDispatches.map((dispatch) => {
                                         const dispatchEvents = dispatchEventsByDispatchId.get(dispatch.id) ?? [];
                                         const activeCap = findActiveConcurrencyWait(dispatchEvents, dispatch.status);
@@ -802,7 +798,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                     </div>
                                                     <div className="text-right">
                                                         <div className={`text-[10px] font-bold uppercase tracking-[0.14em] ${statusTone(activeCap ? "PENDING" : dispatch.status)}`}>
-                                                            {activeCap ? `Waiting for slot (${activeCap.currentCount}/${activeCap.limit})` : dispatch.status}
+                                                            {activeCap ? t("waitingForSlot", { current: formatNumber(activeCap.currentCount), limit: formatNumber(activeCap.limit) }) : dispatch.status}
                                                         </div>
                                                         {dispatch.taskRunState && !activeCap && (
                                                             <div className={`mt-1 text-[10px] font-mono ${statusTone(dispatch.taskRunState)}`}>
@@ -830,8 +826,8 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                 {(dispatch.status === "queued" || dispatch.status === "claimed" || dispatch.status === "running") && (
                                                     <RuntimeActionButton
                                                         actionState={cancelActionState}
-                                                        labels={{ idle: "Cancel", pending: "Cancelling", success: "Cancel Requested", error: "Cancel Failed" }}
-                                                        ariaLabel={`Cancel dispatch ${dispatch.taskKey}: ${dispatch.taskTitle}`}
+                                                        labels={{ idle: t("cancel"), pending: t("cancelling"), success: t("cancelRequested"), error: t("cancelFailed") }}
+                                                        ariaLabel={t("cancelDispatchAria", { task: `${dispatch.taskKey}: ${dispatch.taskTitle}` })}
                                                         onActivate={() => onCancelTaskDispatch(dispatch.id, `${dispatch.taskKey}: ${dispatch.taskTitle}`)}
                                                         toneClassName="border border-status-red/20 bg-status-red/10 text-status-red hover:bg-status-red/15"
                                                         icon={<XCircle className={`h-3 w-3 ${cancelActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />}
@@ -845,8 +841,8 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                         </div>
                                                         <RuntimeActionButton
                                                             actionState={forceCancelActionState}
-                                                            labels={{ idle: "Force Cancel", pending: "Force Cancelling", success: "Force Cancelled", error: "Force Cancel Failed" }}
-                                                            ariaLabel={`Force cancel dispatch ${dispatch.taskKey}: ${dispatch.taskTitle}`}
+                                                            labels={{ idle: t("forceCancel"), pending: t("forceCancelling"), success: t("forceCancelled"), error: t("forceCancelFailed") }}
+                                                            ariaLabel={t("forceCancelDispatchAria", { task: `${dispatch.taskKey}: ${dispatch.taskTitle}` })}
                                                             onActivate={() => onForceCancelTaskDispatch(dispatch.id, `${dispatch.taskKey}: ${dispatch.taskTitle}`)}
                                                             toneClassName="border border-status-red/20 bg-status-red/10 text-status-red hover:bg-status-red/15"
                                                             icon={<XCircle className={`h-3 w-3 ${forceCancelActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />}
@@ -856,8 +852,8 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                 {(dispatch.status === "failed" || dispatch.status === "blocked" || dispatch.status === "cancelled") && (
                                                     <RuntimeActionButton
                                                         actionState={retryActionState}
-                                                        labels={{ idle: "Retry", pending: "Retrying", success: "Retry Started", error: "Retry Failed" }}
-                                                        ariaLabel={`Retry dispatch ${dispatch.taskKey}: ${dispatch.taskTitle}`}
+                                                        labels={{ idle: t("retry"), pending: t("retrying"), success: t("retryStarted"), error: t("retryFailed") }}
+                                                        ariaLabel={t("retryDispatchAria", { task: `${dispatch.taskKey}: ${dispatch.taskTitle}` })}
                                                         onActivate={() => onRetryTaskDispatch(dispatch.id)}
                                                         toneClassName="border border-signal-500/20 bg-signal-500/10 text-signal-600 hover:bg-signal-500/15 dark:text-signal-400"
                                                         icon={<RotateCcw className={`h-3 w-3 ${retryActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />}

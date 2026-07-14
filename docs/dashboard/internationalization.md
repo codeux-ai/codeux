@@ -51,6 +51,12 @@ The initial application bundle translates only root-owned shell copy: the skip l
 
 Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged.
 
+### Live route
+
+The lazy-loaded Live route owns `dashboard/src/v2/i18n/messages/live.ts`. It translates route headers, transport and stale-state notices, filters, task controls, runtime panels, attention actions, timeline and DAG legends, boat-race labels, statistics, empty states, confirmations, and screen-reader summaries. Live presentation helpers accept an explicit locale when they run outside a component; component consumers bind the same catalog to the provider locale.
+
+Numbers, timestamps, durations, percentages, token totals, and plural counts use locale-aware formatters. This is a presentation-only boundary: sprint, task, and project names; event messages; provider or agent output; Git branches; pull request and CI details; attention descriptions; runtime diagnostics; intervention content; and API error text are always rendered verbatim. Locale changes do not affect realtime subscriptions, runtime projection, event ordering, status precedence, or action endpoints.
+
 ## Verification
 
-Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization.
+Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. Live-route regressions additionally exercise German reconnecting, recovery, stale, and error states and verify that runtime-authored payload text remains unchanged. Existing Live suites continue to cover replay, duplicate suppression, selected-sprint scoping, action failures, reduced motion, keyboard interaction, and responsive surfaces.

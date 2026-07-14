@@ -1,5 +1,7 @@
 import type { Subtask } from "../../types.js";
 import { getTaskProgressPhase, type TaskProgressPhase } from "../../lib/task-progress.js";
+import type { DashboardLocale } from "../i18n/locales.js";
+import { translateLiveMessage } from "../i18n/messages/live.js";
 
 export interface SprintDagNodeHover {
   prompt: string;
@@ -60,7 +62,7 @@ function isBlockedPhase(phase: TaskProgressPhase): boolean {
   return phase === "FAILED" || phase === "BLOCKED" || phase === "QUOTA";
 }
 
-export function buildSprintDagModel(tasks: Subtask[]): SprintDagModel {
+export function buildSprintDagModel(tasks: Subtask[], locale: DashboardLocale = "en"): SprintDagModel {
   const tasksById = new Map(tasks.map((task) => [task.id, task]));
   const phaseById = new Map(tasks.map((task) => [task.id, getTaskProgressPhase(task)]));
 
@@ -156,11 +158,11 @@ export function buildSprintDagModel(tasks: Subtask[]): SprintDagModel {
 
     const hoverPrompt = typeof task.prompt === "string" && task.prompt.trim().length > 0
       ? task.prompt.trim()
-      : "No prompt provided";
+      : translateLiveMessage(locale, "noPromptProvided");
 
     const hoverDependencies = incoming.map((id) => ({
       id,
-      title: tasksById.get(id)?.title || "Unknown Task",
+      title: tasksById.get(id)?.title || translateLiveMessage(locale, "unknownTask"),
     }));
 
     const outgoing = outgoingById.get(task.id)!;

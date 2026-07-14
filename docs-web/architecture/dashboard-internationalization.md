@@ -34,3 +34,9 @@ const { translate, translatePlural, formatNumber } = useDashboardI18n();
 English and German must declare exactly the same top-level keys. Interpolation treats replacement values as literal text, plural messages require an `other` form, and locale-aware formatting delegates to the browser's native `Intl` implementation.
 
 Keep each catalog with its owning feature and import it only where the feature is loaded. Translate dashboard-authored interface copy only. Never translate provider output, API responses, stored instructions, project data, runtime diagnostics, or user-authored content.
+
+## Live route boundary
+
+The lazy-loaded Live route owns `dashboard/src/v2/i18n/messages/live.ts`. Its catalog covers headers, filters, transport and reconnect notices, task controls, runtime and attention panels, timeline and DAG legends, boat-race labels, statistics, confirmations, empty states, and screen-reader summaries. Numbers, timestamps, durations, percentages, token totals, and plural counts use locale-aware formatters.
+
+Live localization is presentation-only. Sprint, task, and project names; execution event messages; provider or agent output; Git branches; pull request and CI details; attention descriptions; terminal diagnostics; intervention content; and API errors remain verbatim. Switching locale does not alter realtime subscriptions, runtime projection, status precedence, event ordering, or action endpoints.

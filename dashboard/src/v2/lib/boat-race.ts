@@ -1,5 +1,7 @@
 import type { Subtask, ExecutionTaskDispatchSummary } from "../../types.js";
 import { getTaskProgressPhase } from "../../lib/task-progress.js";
+import type { DashboardLocale } from "../i18n/locales.js";
+import { translateLiveMessage, type LiveMessageKey } from "../i18n/messages/live.js";
 
 const BOAT_RACE_HEIGHT_PX = 800;
 
@@ -9,13 +11,13 @@ export interface BoatRaceCheckpoint {
   color: string;
 }
 
-const BOAT_RACE_CHECKPOINTS: readonly BoatRaceCheckpoint[] = [
-  { progress: 0.25, label: "CODING", color: "#00E0A0" },
-  { progress: 0.48, label: "CODE DONE", color: "#0F9FA8" },
-  { progress: 0.62, label: "CI", color: "#5dade2" },
-  { progress: 0.72, label: "QA", color: "#D97706" },
-  { progress: 0.78, label: "MERGE", color: "#FFB800" },
-  { progress: 0.96, label: "COMPLETED", color: "#00AB84" },
+const BOAT_RACE_CHECKPOINTS: readonly (Omit<BoatRaceCheckpoint, "label"> & { key: LiveMessageKey })[] = [
+  { progress: 0.25, key: "coding", color: "#00E0A0" },
+  { progress: 0.48, key: "codeDone", color: "#0F9FA8" },
+  { progress: 0.62, key: "ci", color: "#5dade2" },
+  { progress: 0.72, key: "qa", color: "#D97706" },
+  { progress: 0.78, key: "merge", color: "#FFB800" },
+  { progress: 0.96, key: "completed", color: "#00AB84" },
 ];
 
 export function buildBoatRaceDispatchIndex(
@@ -58,8 +60,12 @@ export function getBoatRaceHeightPx(activeBoatCount: number): number {
   return BOAT_RACE_HEIGHT_PX;
 }
 
-export function getBoatRaceCheckpoints(): readonly BoatRaceCheckpoint[] {
-  return BOAT_RACE_CHECKPOINTS;
+export function getBoatRaceCheckpoints(locale: DashboardLocale = "en"): readonly BoatRaceCheckpoint[] {
+  return BOAT_RACE_CHECKPOINTS.map((checkpoint) => ({
+    progress: checkpoint.progress,
+    color: checkpoint.color,
+    label: translateLiveMessage(locale, checkpoint.key).toLocaleUpperCase(locale),
+  }));
 }
 
 export function isBoatRaceHarbourTask(task: Subtask): boolean {

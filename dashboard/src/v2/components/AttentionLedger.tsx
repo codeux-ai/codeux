@@ -8,10 +8,10 @@ import { useReducedMotion, useResolvedMotionDuration } from "../hooks/use-reduce
 import { INTERACTION_TOKENS } from "../lib/motion/tokens.js";
 import { AlertTriangle, Bot, CheckCircle2, ChevronDown, XCircle } from "lucide-preact";
 import { renderMarkdown } from "../../lib/markdown.js";
-import { formatTime } from "../../lib/time.js";
 import { MARKDOWN_PROSE_CLASS } from "./ui/MarkdownEditorField.js";
 import { useExecutionTimeline } from "../../hooks/ExecutionTimelineContext.js";
 import { ATTENTION_OWNER_LABELS, ATTENTION_SEVERITY_TONE, ATTENTION_TYPE_LABELS, ATTENTION_STATUS_TONE, shortenRuntimeId } from "./live-session/ExecutionRuntimePanel.js";
+import { useLiveI18n } from "../i18n/messages/live.js";
 
 
 
@@ -47,11 +47,15 @@ export const AttentionQueueItemsList: FunctionComponent<{
     pendingActionIds = new Set<string>(),
     showActions = true,
     maxItems = 8,
-    emptyTitle = "Queue clear",
-    emptyDescription = "No active blockers are waiting in the project attention queue.",
-    listLabel = "Active attention items",
+    emptyTitle,
+    emptyDescription,
+    listLabel,
     listClassName = "max-h-[50dvh] sm:max-h-96 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar",
 }) => {
+    const { t, formatTime } = useLiveI18n();
+    const resolvedEmptyTitle = emptyTitle ?? t("queueClear");
+    const resolvedEmptyDescription = emptyDescription ?? t("noActiveBlockers");
+    const resolvedListLabel = listLabel ?? t("activeAttentionItems");
     const listRef = useRef<HTMLDivElement>(null);
     const prevCountRef = useRef<number>(0);
     const reducedMotion = useReducedMotion();
@@ -101,9 +105,9 @@ export const AttentionQueueItemsList: FunctionComponent<{
                 <div className="flex items-start gap-3">
                     <span className="mt-0.5 h-2 w-2 rounded-full bg-status-green shadow-[0_0_0_4px_rgba(0,171,132,0.10)]" aria-hidden="true" />
                     <div>
-                        <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">{emptyTitle}</p>
+                        <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">{resolvedEmptyTitle}</p>
                         <p className="mt-1 text-[11px] font-mono leading-relaxed text-slate-400 dark:text-slate-500">
-                            {emptyDescription}
+                            {resolvedEmptyDescription}
                         </p>
                     </div>
                 </div>
@@ -112,12 +116,12 @@ export const AttentionQueueItemsList: FunctionComponent<{
     }
 
     return (
-        <div ref={listRef} className={listClassName} role="list" aria-live="polite" aria-label={listLabel}>
+        <div ref={listRef} className={listClassName} role="list" aria-live="polite" aria-label={resolvedListLabel}>
             {visibleAttentionItems.map((item) => {
                 const assignedWorkerLabel = item.assignedWorkerEndpointId
                     ? workersByEndpointId.get(item.assignedWorkerEndpointId) || item.assignedWorkerEndpointId
                     : item.ownerType === "worker"
-                        ? "Unassigned"
+                        ? t("unassigned")
                         : ATTENTION_OWNER_LABELS[item.ownerType] || item.ownerType;
                 const canClaim = (
                     showActions
@@ -132,9 +136,9 @@ export const AttentionQueueItemsList: FunctionComponent<{
                 const claimActionState = getPendingActionState(pendingActionIds, claimActionId);
                 const resolveActionState = getPendingActionState(pendingActionIds, resolveActionId);
                 const dismissActionState = getPendingActionState(pendingActionIds, dismissActionId);
-                const claimPendingReason = `Claiming attention item ${item.title} is already in progress.`;
-                const resolvePendingReason = `Resolving attention item ${item.title} is already in progress.`;
-                const dismissPendingReason = `Dismissing attention item ${item.title} is already in progress.`;
+                const claimPendingReason = t("claimPending");
+                const resolvePendingReason = t("resolvePending");
+                const dismissPendingReason = t("dismissPending");
 
                 return (
                     <div
@@ -175,25 +179,25 @@ export const AttentionQueueItemsList: FunctionComponent<{
                                     {shortenRuntimeId(item.taskId) && (
                                         <>
                                             <span className="text-slate-300 dark:text-slate-700">/</span>
-                                            <span>task {shortenRuntimeId(item.taskId)}</span>
+                                            <span>{t("taskReference", { id: shortenRuntimeId(item.taskId) ?? "" })}</span>
                                         </>
                                     )}
                                     {shortenRuntimeId(item.dispatchId) && (
                                         <>
                                             <span className="text-slate-300 dark:text-slate-700">/</span>
-                                            <span>dispatch {shortenRuntimeId(item.dispatchId)}</span>
+                                            <span>{t("dispatchReference", { id: shortenRuntimeId(item.dispatchId) ?? "" })}</span>
                                         </>
                                     )}
                                 </div>
                             </div>
                             <div className="shrink-0 text-right text-[10px] font-mono text-slate-400">
-                                {formatTime(item.updatedAt)}
+                                {formatTime(new Date(item.updatedAt))}
                             </div>
                         </div>
 
                         <div
                             className={`mt-2 line-clamp-2 text-[11px] leading-relaxed text-slate-500 prose-p:my-0 dark:text-slate-400 ${MARKDOWN_PROSE_CLASS}`}
-                            dangerouslySetInnerHTML={{ __html: renderMarkdown(item.summaryMarkdown || "No summary provided.") }}
+                            dangerouslySetInnerHTML={{ __html: renderMarkdown(item.summaryMarkdown || t("noSummaryProvided")) }}
                         />
 
                         {showActions && snapshot?.projectId && (
@@ -211,12 +215,12 @@ export const AttentionQueueItemsList: FunctionComponent<{
                                         }}
                                         {...getLiveActionDisplayProps(claimActionState === "pending", false, claimActionState === "pending" ? claimPendingReason : null)}
                                         className="inline-flex items-center gap-1.5 rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/15 aria-disabled:opacity-50 dark:text-signal-400"
-                                        aria-label={claimActionState === "pending" ? `Claim attention item: ${item.title}. ${claimPendingReason}` : `Claim attention item: ${item.title}`}
-                                        title={claimActionState === "pending" ? claimPendingReason : `Claim attention item: ${item.title}`}
+                                        aria-label={`${t("claimAttentionAria", { title: item.title })}${claimActionState === "pending" ? `. ${claimPendingReason}` : ""}`}
+                                        title={claimActionState === "pending" ? claimPendingReason : t("claimAttentionAria", { title: item.title })}
                                     >
                                         <Bot className={`h-3 w-3 ${claimActionState === "pending" ? "motion-safe:animate-pulse" : ""}`} strokeWidth={2} aria-hidden="true" />
-                                        {claimActionState === "pending" ? "Claiming" : "Claim"}
-                                        {claimActionState === "pending" && <span className="sr-only">Claiming attention item in progress.</span>}
+                                        {t(claimActionState === "pending" ? "claiming" : "claim")}
+                                        {claimActionState === "pending" && <span className="sr-only">{t("claimInProgress")}</span>}
                                     </button>
                                 )}
                                 {onResolveAttentionItem && (
@@ -232,12 +236,12 @@ export const AttentionQueueItemsList: FunctionComponent<{
                                         }}
                                         {...getLiveActionDisplayProps(resolveActionState === "pending", false, resolveActionState === "pending" ? resolvePendingReason : null)}
                                         className="inline-flex items-center gap-1.5 rounded-md border border-status-green/20 bg-status-green/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-green transition-colors hover:bg-status-green/15 aria-disabled:opacity-50"
-                                        aria-label={resolveActionState === "pending" ? `Resolve attention item: ${item.title}. ${resolvePendingReason}` : `Resolve attention item: ${item.title}`}
-                                        title={resolveActionState === "pending" ? resolvePendingReason : `Resolve attention item: ${item.title}`}
+                                        aria-label={`${t("resolveAttentionAria", { title: item.title })}${resolveActionState === "pending" ? `. ${resolvePendingReason}` : ""}`}
+                                        title={resolveActionState === "pending" ? resolvePendingReason : t("resolveAttentionAria", { title: item.title })}
                                     >
                                         <CheckCircle2 className={`h-3 w-3 ${resolveActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
-                                        {resolveActionState === "pending" ? "Resolving" : "Resolve"}
-                                        {resolveActionState === "pending" && <span className="sr-only">Resolving attention item in progress.</span>}
+                                        {t(resolveActionState === "pending" ? "resolving" : "resolve")}
+                                        {resolveActionState === "pending" && <span className="sr-only">{t("resolveInProgress")}</span>}
                                     </button>
                                 )}
                                 {onDismissAttentionItem && (
@@ -253,12 +257,12 @@ export const AttentionQueueItemsList: FunctionComponent<{
                                         }}
                                         {...getLiveActionDisplayProps(dismissActionState === "pending", false, dismissActionState === "pending" ? dismissPendingReason : null)}
                                         className="inline-flex items-center gap-1.5 rounded-md border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:bg-black/[0.035] aria-disabled:opacity-50 dark:border-white/[0.06] dark:text-slate-400 dark:hover:bg-white/[0.04]"
-                                        aria-label={dismissActionState === "pending" ? `Dismiss attention item: ${item.title}. ${dismissPendingReason}` : `Dismiss attention item: ${item.title}`}
-                                        title={dismissActionState === "pending" ? dismissPendingReason : `Dismiss attention item: ${item.title}`}
+                                        aria-label={`${t("dismissAttentionAria", { title: item.title })}${dismissActionState === "pending" ? `. ${dismissPendingReason}` : ""}`}
+                                        title={dismissActionState === "pending" ? dismissPendingReason : t("dismissAttentionAria", { title: item.title })}
                                     >
                                         <XCircle className={`h-3 w-3 ${dismissActionState === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
-                                        {dismissActionState === "pending" ? "Dismissing" : "Dismiss"}
-                                        {dismissActionState === "pending" && <span className="sr-only">Dismissing attention item in progress.</span>}
+                                        {t(dismissActionState === "pending" ? "dismissing" : "dismiss")}
+                                        {dismissActionState === "pending" && <span className="sr-only">{t("dismissInProgress")}</span>}
                                     </button>
                                 )}
                             </div>
@@ -273,6 +277,7 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
     collapsible = false,
     defaultOpen = true,
 }) => {
+    const { t, formatNumber } = useLiveI18n();
     const {
         execution: snapshot,
         onClaimAttentionItem,
@@ -320,17 +325,17 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
         <>
             <div className="flex min-w-0 flex-wrap items-center gap-2.5">
                 <AlertTriangle className="h-4 w-4 text-status-amber" strokeWidth={1.5} aria-hidden="true" />
-                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Attention Queue</span>
+                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("attentionQueue")}</span>
                 <div className="flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em]">
                     <span className="rounded-md bg-status-amber/10 px-2 py-0.5 font-mono text-status-amber">
-                        open {openCount}
+                        {t("openCount", { count: formatNumber(openCount) })}
                     </span>
                     <span className="rounded-md bg-signal-500/10 px-2 py-0.5 font-mono text-signal-500">
-                        claimed {claimedCount}
+                        {t("claimedCount", { count: formatNumber(claimedCount) })}
                     </span>
                     {urgentCount > 0 && (
                         <span className="rounded-md bg-status-red/10 px-2 py-0.5 font-mono text-status-red">
-                            urgent {urgentCount}
+                            {t("urgentCount", { count: formatNumber(urgentCount) })}
                         </span>
                     )}
                 </div>

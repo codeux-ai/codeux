@@ -5,13 +5,14 @@ import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { ChevronDown, Cpu, ExternalLink, MessageSquareText, Timer } from "lucide-preact";
-import { formatTime } from "../../../lib/time.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 import type { ExecutionInvocationRecord } from "../../../types.js";
 import { findLatestContainerBuildProgressFromEvents, findLatestContainerBuildProgressFromInvocations } from "../../../lib/activity.js";
 import { formatInvocationDuration, formatInvocationPurpose, InvocationContextChips } from "../chat/invocation-display.js";
 import { RuntimeSnapshotSurfaceBadge, RuntimeSnapshotSurfaceNotice, statusRailTone, statusTone, shortenRuntimeId } from "./ExecutionRuntimePanel.js";
 import { ContainerBuildStatusInfobox } from "./ContainerBuildStatusInfobox.js";
+import { formatDuration } from "../../lib/format-duration.js";
+import { useLiveI18n, type LiveMessageKey } from "../../i18n/messages/live.js";
 
 const INVOCATION_STATUS_DOT: Record<string, string> = {
   running: "bg-signal-500 shadow-[0_0_8px_rgba(0,224,160,0.35)] motion-reduce:ring-2 motion-reduce:ring-signal-500/30 motion-reduce:shadow-none",
@@ -29,10 +30,31 @@ const getInvocationActivityAt = (invocation: ExecutionInvocationRecord): string 
   invocation.lastMessageAt || invocation.updatedAt || invocation.startedAt || invocation.createdAt
 );
 
+const INVOCATION_PURPOSE_KEYS: Partial<Record<string, LiveMessageKey>> = {
+  planning: "planning",
+  cli_task_coding: "taskCoding",
+  cli_task_review: "taskReview",
+  cli_qa: "qaReview",
+  qa_review: "qaReview",
+  dashboard_reply: "chatReply",
+  worker_dispatch: "workerDispatch",
+};
+
+const INVOCATION_STATUS_KEYS: Partial<Record<string, LiveMessageKey>> = {
+  running: "running",
+  completed: "completed",
+  failed: "failed",
+  cancelled: "cancelled",
+  paused: "paused",
+  pending: "pending",
+  queued: "queued",
+};
+
 const InvocationFeedRow: FunctionComponent<{
   invocation: ExecutionInvocationRecord;
   sprintKeyPrefix?: string;
 }> = memo(({ invocation, sprintKeyPrefix = "SPR" }) => {
+  const { locale, t, formatNumber, formatTime } = useLiveI18n();
   const rowRef = useRef<HTMLDivElement>(null);
   const isReducedMotion = useReducedMotion();
   const motionTokens = useGsapInteractionTokens();
@@ -61,13 +83,21 @@ const InvocationFeedRow: FunctionComponent<{
   }, [invocation.status, isReducedMotion, motionTokens.controlFeedback.duration, motionTokens.controlFeedback.ease]);
 
   const activityAt = getInvocationActivityAt(invocation);
-  const duration = formatInvocationDuration(invocation.startedAt || invocation.createdAt, invocation.finishedAt);
+  const rawDuration = formatInvocationDuration(invocation.startedAt || invocation.createdAt, invocation.finishedAt);
+  const durationStart = Date.parse(invocation.startedAt || invocation.createdAt);
+  const durationEnd = invocation.finishedAt ? Date.parse(invocation.finishedAt) : Date.now();
+  const duration = Number.isFinite(durationStart) && Number.isFinite(durationEnd) && durationEnd >= durationStart
+    ? formatDuration(Math.round((durationEnd - durationStart) / 1000), locale)
+    : rawDuration;
   const tokenTotal = invocation.totalTokens ?? ((invocation.inputTokens ?? 0) + (invocation.outputTokens ?? 0));
   const dotClass = INVOCATION_STATUS_DOT[invocation.status] || "bg-slate-400";
   const providerLabel = invocation.provider || "provider pending";
   const modelLabel = invocation.model || "model pending";
 
-  const purposeLabel = formatInvocationPurpose(invocation.type);
+  const purposeKey = INVOCATION_PURPOSE_KEYS[invocation.type ?? ""];
+  const purposeLabel = purposeKey ? t(purposeKey) : formatInvocationPurpose(invocation.type);
+  const statusKey = INVOCATION_STATUS_KEYS[invocation.status];
+  const statusLabel = locale === "en" ? invocation.status : statusKey ? t(statusKey) : invocation.status;
 
   return (
     <div ref={rowRef} className={`group/row rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015] ${statusRailTone(invocation.status)}`}>
@@ -75,10 +105,13 @@ const InvocationFeedRow: FunctionComponent<{
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
             <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${dotClass} ${invocation.status === "running" ? "motion-safe:animate-pulse" : ""}`} aria-hidden="true" />
-            <span className="sr-only">Invocation status: {invocation.status}.</span>
+            <span className="sr-only">{t("invocationStatus", { status: statusLabel })}</span>
             {statusChanged && (
               <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
-                Invocation status changed from {prevStatus} to {invocation.status}.
+                {t("feedInvocationStatusChanged", {
+                  previous: locale === "en" ? prevStatus : INVOCATION_STATUS_KEYS[prevStatus] ? t(INVOCATION_STATUS_KEYS[prevStatus]!) : prevStatus,
+                  status: statusLabel,
+                })}
               </span>
             )}
             <span className="min-w-0 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
@@ -95,18 +128,18 @@ const InvocationFeedRow: FunctionComponent<{
         </div>
         <div className="shrink-0 text-right">
           <div className={`text-[10px] font-bold uppercase tracking-[0.14em] ${statusTone(invocation.status)}`}>
-            {invocation.status}
+            {statusLabel}
           </div>
           <div className="mt-1 text-[10px] font-mono text-slate-400">
-            {formatTime(activityAt)}
+            {formatTime(new Date(activityAt))}
           </div>
           <a
             href={buildInvocationHref(invocation.id)}
-            aria-label={`Open transcript for ${purposeLabel} invocation ${shortenRuntimeId(invocation.id) ?? invocation.id}`}
+            aria-label={t("openTranscript", { purpose: purposeLabel, id: shortenRuntimeId(invocation.id) ?? invocation.id })}
             className="mt-2 inline-flex items-center gap-1 rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:text-signal-400 dark:focus-visible:ring-offset-void-800"
           >
             <ExternalLink className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
-            Transcript
+            {t("transcript")}
           </a>
         </div>
       </div>
@@ -115,7 +148,7 @@ const InvocationFeedRow: FunctionComponent<{
         <InvocationContextChips invocation={invocation} sprintKeyPrefix={sprintKeyPrefix} />
         <span className="inline-flex items-center gap-1 rounded-md border border-black/[0.05] px-2 py-0.5 text-[10px] font-mono text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
           <MessageSquareText className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
-          {invocation.messageCount} messages
+          {t("messagesCount", { count: formatNumber(invocation.messageCount) })}
         </span>
         {duration && (
           <span className="inline-flex items-center gap-1 rounded-md border border-black/[0.05] px-2 py-0.5 text-[10px] font-mono text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
@@ -125,7 +158,7 @@ const InvocationFeedRow: FunctionComponent<{
         )}
         {tokenTotal > 0 && (
           <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-[10px] font-mono text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
-            {tokenTotal.toLocaleString()} tok
+            {t("tokensShort", { count: formatNumber(tokenTotal) })}
           </span>
         )}
       </div>
@@ -150,6 +183,7 @@ export const InvocationFeedPanel: FunctionComponent<{
   invocations: scopedInvocations,
   sprintKeyPrefix = "SPR",
 }) => {
+  const { t, tp, formatNumber } = useLiveI18n();
   const { execution: snapshot, snapshotSurface } = useExecutionTimeline();
   const [open, setOpen] = useState(defaultOpen);
   const contentId = useId();
@@ -196,7 +230,13 @@ export const InvocationFeedPanel: FunctionComponent<{
     () => invocations.filter((invocation) => invocation.status !== "running" && invocation.status !== "completed" && invocation.status !== "failed").length,
     [invocations],
   );
-  const invocationSummary = `${invocations.length} invocation${invocations.length === 1 ? "" : "s"} shown: ${newCount} new or queued, ${runningCount} running, ${completedCount} completed, ${failedCount} failed.`;
+  const invocationSummary = t("invocationSummary", {
+    total: formatNumber(invocations.length),
+    queued: formatNumber(newCount),
+    running: formatNumber(runningCount),
+    completed: formatNumber(completedCount),
+    failed: formatNumber(failedCount),
+  });
   const containerBuildProgress = useMemo(
     () => findLatestContainerBuildProgressFromInvocations(invocations)
       ?? findLatestContainerBuildProgressFromEvents(snapshot?.recentEvents),
@@ -206,7 +246,7 @@ export const InvocationFeedPanel: FunctionComponent<{
   if (!snapshot) {
     return (
       <div role="status" aria-live="polite" aria-busy="true" className="rounded-[1.75rem] border border-black/[0.08] bg-white p-5 text-[11px] font-mono text-slate-400 shadow-sm dark:border-white/[0.08] dark:bg-void-800 dark:text-slate-500">
-        Loading invocation feed.
+        {t("loadingInvocationFeed")}
       </div>
     );
   }
@@ -214,18 +254,18 @@ export const InvocationFeedPanel: FunctionComponent<{
   const header = (
     <div className="flex flex-wrap items-center gap-2.5">
       <Cpu className="h-4 w-4 text-signal-500" strokeWidth={1.5} aria-hidden="true" />
-      <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Invocation Feed</span>
+      <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("invocationFeed")}</span>
       <span className="rounded-md bg-black/[0.03] px-2 py-0.5 text-[9px] font-mono font-bold text-slate-500 dark:bg-white/[0.04] dark:text-slate-400">
-        {invocations.length} total
+        {t("totalCount", { count: formatNumber(invocations.length) })}
       </span>
       <span className="rounded-md bg-signal-500/10 px-2 py-0.5 text-[9px] font-mono font-bold text-signal-500">
-        {runningCount} live
+        {t("liveCount", { count: formatNumber(runningCount) })}
       </span>
       <span className="rounded-md bg-status-green/10 px-2 py-0.5 text-[9px] font-mono font-bold text-status-green">
-        {completedCount} done
+        {t("doneCount", { count: formatNumber(completedCount) })}
       </span>
       <span className="rounded-md bg-status-red/10 px-2 py-0.5 text-[9px] font-mono font-bold text-status-red">
-        {failedCount} failed
+        {t("failedCount", { count: formatNumber(failedCount) })}
       </span>
       <RuntimeSnapshotSurfaceBadge surface={snapshotSurface} />
       <span className="sr-only">{invocationSummary}</span>
@@ -262,40 +302,40 @@ export const InvocationFeedPanel: FunctionComponent<{
       >
         <div ref={contentRef} className={collapsible ? "collapsible-content overflow-hidden" : ""}>
           <div className="relative z-10 space-y-3 px-5 pb-5 pt-0">
-            <RuntimeSnapshotSurfaceNotice surface={snapshotSurface} panelLabel="Invocation feed" />
+            <RuntimeSnapshotSurfaceNotice surface={snapshotSurface} panelLabel={t("invocationFeed")} />
             <ContainerBuildStatusInfobox progress={containerBuildProgress} className="mb-3" />
             <div className="mb-3 grid grid-cols-3 gap-2">
               {[
-                { label: "Running", value: runningCount, tone: "text-signal-500" },
-                { label: "Done", value: completedCount, tone: "text-status-green" },
-                { label: "Failed", value: failedCount, tone: "text-status-red" },
+                { label: t("running"), value: runningCount, tone: "text-signal-500" },
+                { label: t("done"), value: completedCount, tone: "text-status-green" },
+                { label: t("failed"), value: failedCount, tone: "text-status-red" },
               ].map(({ label, value, tone }) => (
                 <div key={label} className="rounded-xl border border-black/[0.04] bg-white/55 px-3 py-2 dark:border-white/[0.06] dark:bg-void-900/30">
                   <div className={`text-[9px] font-bold uppercase tracking-[0.14em] ${tone}`}>{label}</div>
-                  <div className={`mt-1 font-mono text-base font-semibold leading-none ${tone}`}>{value}</div>
+                  <div className={`mt-1 font-mono text-base font-semibold leading-none ${tone}`}>{formatNumber(value)}</div>
                 </div>
               ))}
             </div>
 
             {invocations.length === 0 ? (
               <p role="status" aria-live="polite" className="text-[11px] font-mono text-slate-400 dark:text-slate-600">
-                No invocation records yet.
+                {t("noInvocationRecords")}
               </p>
             ) : (
               <>
                 <p role={failedCount > 0 ? "alert" : "status"} aria-live={failedCount > 0 ? "assertive" : "polite"} aria-atomic="true" className="mb-2 text-[10px] font-mono text-slate-400 dark:text-slate-500">
                   {failedCount > 0
-                    ? `${failedCount} invocation${failedCount === 1 ? "" : "s"} failed. Open the transcript for details.`
+                    ? tp("invocationFailedCount", failedCount, { count: formatNumber(failedCount) })
                     : runningCount > 0
-                      ? `${runningCount} invocation${runningCount === 1 ? "" : "s"} running.`
-                      : "Invocation feed is current."}
+                      ? tp("invocationRunningCount", runningCount, { count: formatNumber(runningCount) })
+                      : t("invocationFeedCurrent")}
                 </p>
                 <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
                   {invocationSummary}
                 </p>
                 <div
                   role="log"
-                  aria-label="Live invocation feed"
+                  aria-label={t("liveInvocationFeed")}
                   aria-live="polite"
                   aria-busy={snapshotSurface?.isBusy || runningCount > 0 ? "true" : undefined}
                   aria-relevant="additions text"
