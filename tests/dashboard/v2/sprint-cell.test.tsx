@@ -83,6 +83,44 @@ describe("SprintCell", () => {
     expect(onMarkCompleted).toHaveBeenCalled();
   });
 
+  it("calls onMarkQaPassed and hides the action after a passing verdict", async () => {
+    const onMarkQaPassed = vi.fn();
+    const { rerender } = render(
+      <SprintCell
+        sprint={defaultSprint}
+        isEven={true}
+        accentColor="text-blue-500"
+        onMarkQaPassed={onMarkQaPassed}
+      />
+    );
+
+    fireEvent.click(screen.getByTitle("Settings"));
+    fireEvent.click(await screen.findByText("Mark QA Pass"));
+    expect(onMarkQaPassed).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <SprintCell
+        sprint={{
+          ...defaultSprint,
+          latestReview: {
+            status: "completed",
+            outcome: "pass",
+            summary: "Passed manually.",
+            findings: [],
+            reviewer: "Manual QA",
+            finishedAt: "2024-01-02T00:00:00.000Z",
+          },
+        }}
+        isEven={true}
+        accentColor="text-blue-500"
+        onMarkQaPassed={onMarkQaPassed}
+      />
+    );
+
+    fireEvent.click(screen.getByTitle("Settings"));
+    expect(screen.queryByText("Mark QA Pass")).toBeNull();
+  });
+
   it("displays QA Reviewed badge and hover summary", async () => {
     const sprintWithReview = {
       ...defaultSprint,
@@ -136,7 +174,7 @@ describe("SprintCell", () => {
     expect(screen.queryByText("Mark Completed")).toBeNull();
   });
 
-  it("renders only the canonical Human Intervention badge and no redundant alerts", () => {
+  it("renders one human waiting cue above the cell without redundant badges", () => {
     const mockIntervention = {
       title: "Manual Approval Required",
       reason: "Reviewing large diffs",
@@ -156,12 +194,12 @@ describe("SprintCell", () => {
       />
     );
 
-    // Canonical badge should be present
-    expect(screen.getByText("Needs you")).toBeDefined();
-    expect(screen.getByRole("status", { name: "Sprint waiting for human intervention" })).toBeDefined();
+    const waitingCue = screen.getByRole("status", { name: "Sprint waiting for human intervention" });
+    expect(waitingCue).toBeDefined();
+    expect(waitingCue.className).toContain("bottom-full");
+    expect(waitingCue.className).toContain("mb-[10px]");
     expect(screen.getByText("zZZ")).toBeDefined();
-
-    // Redundant inline alert should be absent
+    expect(screen.queryByText("Needs you")).toBeNull();
     expect(screen.queryByText("Human intervention required")).toBeNull();
   });
 
@@ -172,10 +210,10 @@ describe("SprintCell", () => {
         isEven={true}
         accentColor="text-blue-500"
         humanIntervention={{
-          title: "Worker retry",
-          reason: "The worker is retrying execution",
+          title: "Merge conflict",
+          reason: "The worker is resolving a branch conflict",
           instructions: "Wait for the worker",
-          attentionType: null,
+          attentionType: "merge_conflict",
           severity: "medium",
           ownerType: "worker",
         }}
@@ -185,5 +223,6 @@ describe("SprintCell", () => {
     expect(screen.queryByRole("status", { name: "Sprint waiting for human intervention" })).toBeNull();
     expect(screen.queryByText("zZZ")).toBeNull();
     expect(screen.queryByText("Needs you")).toBeNull();
+    expect(screen.queryByText("Merge conflict")).toBeNull();
   });
 });

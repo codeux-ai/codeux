@@ -85,6 +85,8 @@ import type {
 import type {
   CreateProjectInput,
   CreateSprintInput,
+  CreateSprintRollbackInput,
+  CreateSprintRollbackResult,
   CreateTaskInput,
   ImprovePromptInput,
   PlanSprintOptions,
@@ -99,6 +101,7 @@ import type {
   SprintMarkdownImportInput,
   SprintImportedTaskInput,
   SprintRecord,
+  SprintRollbackAssessment,
   TaskRecord,
   UpdateProjectInput,
   UpdateSprintInput,
@@ -140,7 +143,15 @@ import type { SpeechModelManager } from "../services/speech-model-manager.js";
 import type { NodeFlowService } from "../services/node-flow-service.js";
 import type { CustomDashboardRepository } from "../repositories/custom-dashboard-repository.js";
 import type { CustomDashboardValidationService } from "../services/custom-dashboard-validation-service.js";
+import type { CustomDashboardCredentialBindingService } from "../services/custom-dashboard-credential-binding-service.js";
 import type { SkillService } from "../services/skill-service.js";
+import type { CredentialBroker } from "../services/credentials/credential-broker.js";
+import type { ApprovalService } from "../services/node-flows/approval-service.js";
+import type { AutomationWebhookTriggerRepository } from "../repositories/automation-webhook-trigger-repository.js";
+import type { HeadlessAuthService } from "../services/headless-auth-service.js";
+import type { AutomationAuditExportService } from "../services/automation-audit-export-service.js";
+import type { HeadlessOperationalReadinessService } from "../services/headless-operational-readiness-service.js";
+import type { AutomationSloService } from "../services/automation-slo-service.js";
 import type { ManagedRuntimeService } from "../services/managed-runtime-service.js";
 import type { ProviderToolManager } from "../services/provider-tool-manager.js";
 import {
@@ -164,7 +175,7 @@ export type DashboardDependencies = Omit<
   getLocalMcpSetup: () => LocalMcpSetupInfo;
   regenerateLocalMcpAuthToken: () => LocalMcpSetupInfo;
   installLocalMcpProvider: (provider: LocalMcpCliProvider) => Promise<LocalMcpInstallResult> | LocalMcpInstallResult;
-  getDashboardNotifications: () => DashboardNotificationFeed;
+  getDashboardNotifications: (limit?: number) => DashboardNotificationFeed;
 };
 
 export interface DashboardServerOptions {
@@ -186,9 +197,17 @@ export interface DashboardServerOptions {
   speechSynthesisService?: SpeechSynthesisService;
   speechModelManager?: SpeechModelManager;
   nodeFlowService?: NodeFlowService;
+  approvalService?: ApprovalService;
+  automationWebhookTriggerRepository?: AutomationWebhookTriggerRepository;
   customDashboardRepository?: CustomDashboardRepository;
+  customDashboardCredentialBindingService?: CustomDashboardCredentialBindingService;
   customDashboardValidationService?: CustomDashboardValidationService;
   skillService?: SkillService;
+  credentialBroker?: CredentialBroker;
+  headlessAuthService?: HeadlessAuthService;
+  automationAuditService?: AutomationAuditExportService;
+  headlessReadinessService?: HeadlessOperationalReadinessService;
+  automationSloService?: AutomationSloService;
   managedRuntimeService?: ManagedRuntimeService;
   providerToolManager?: ProviderToolManager;
   playwrightBrowserManager?: PlaywrightBrowserManager;
@@ -222,7 +241,7 @@ export interface DashboardServerOptions {
     input?: { status?: "resolved" | "dismissed"; reason?: string; resolutionSummaryMarkdown?: string },
   ) => ExecutionAttentionItemSummary;
   getOverviewTelemetrySnapshot: () => OverviewTelemetrySnapshot;
-  getDashboardNotifications?: () => DashboardNotificationFeed;
+  getDashboardNotifications?: (limit?: number) => DashboardNotificationFeed;
   getLiveActivities: () => Promise<Record<string, JulesActivity[]>>;
   getGitStatus: () => Promise<GitTrackingStatus>;
   getExternalSettingsHints: () => ExternalSettingsHints;
@@ -255,10 +274,16 @@ export interface DashboardServerOptions {
   getSprint: (sprintId: string) => SprintRecord | null;
   createSprint: (projectId: string, input: CreateSprintInput) => SprintRecord;
   updateSprint: (sprintId: string, input: UpdateSprintInput) => SprintRecord;
+  updateSprintBranch?: (projectId: string, sprintId: string) => Promise<import("../contracts/project-management-types.js").SprintBranchUpdateResult>;
+  markSprintCompleted?: (sprintId: string) => Promise<SprintRecord>;
+  markSprintQaPassed?: (sprintId: string) => Promise<SprintRecord> | SprintRecord;
   deleteSprint: (sprintId: string) => void;
+  assessSprintRollback: (projectId: string, sprintId: string) => Promise<SprintRollbackAssessment>;
+  createSprintRollback: (projectId: string, sprintId: string, input: CreateSprintRollbackInput) => Promise<CreateSprintRollbackResult>;
   importSprintFromMarkdown: (projectId: string, input: SprintMarkdownImportInput) => SprintRecord;
   exportSprintToMarkdown: (projectId: string, sprintId: string) => SprintMarkdownExportBundle;
   listTasks: (projectId: string, sprintId?: string) => TaskRecord[];
+  listTaskOverviews?: (projectId: string) => TaskRecord[];
   getTask: (taskId: string) => TaskRecord | null;
   createTask: (projectId: string, input: CreateTaskInput) => TaskRecord;
   createImportedTasks?: (projectId: string, sprintId: string, inputs: SprintImportedTaskInput[]) => TaskRecord[];
@@ -411,12 +436,20 @@ export const configureDashboardApp = (options: DashboardServerOptions): Logger =
     }
   });
 
-  app.get("/ready", (req, res) => {
+  app.get("/ready", async (req, res) => {
     const ready = isReady ? isReady() : { status: "READY" as const };
-    if (ready.status === "READY" || ready.status === "UP") {
-      res.json(ready);
+    const operational = options.headlessReadinessService
+      ? await options.headlessReadinessService.refresh()
+      : null;
+    const response = operational
+      ? { ...operational, runtime: ready }
+      : ready;
+    const isRuntimeReady = ready.status === "READY" || ready.status === "UP";
+    const isOperationallyReady = operational === null || operational.status === "READY";
+    if (isRuntimeReady && isOperationallyReady) {
+      res.json(response);
     } else {
-      res.status(503).json(ready);
+      res.status(503).json(response);
     }
   });
 
@@ -522,6 +555,7 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     port,
     getSprintPreviewSession,
   } = options;
+  await options.headlessReadinessService?.assertStartupReady();
   const dashboardLogger = configureDashboardApp(options);
   if (process.env.NODE_ENV !== "test") {
     const runtime = options.managedRuntimeService ?? managedRuntimeService;
@@ -529,10 +563,13 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     const browser = options.playwrightBrowserManager ?? playwrightBrowserManager;
     const settings = options.getSystemSettings();
     const runtimeLogger = dashboardLogger.child({ component: "managed-runtime-prewarm" });
+    const automaticAssetCheckIntervalMs = 6 * 60 * 60 * 1_000;
     void (async () => {
       let browserPreload: Promise<unknown> = Promise.resolve();
       if (settings.defaults.cliWorkflow.containerImageMode !== "custom") {
-        await runtime.checkForUpdates(runtimeLogger);
+        await runtime.checkForUpdates(runtimeLogger, {
+          minimumIntervalMs: automaticAssetCheckIntervalMs,
+        });
         if (settings.defaults.cliWorkflow.containerInstallPlaywrightBrowsers !== false) {
           browserPreload = browser.prepare(settings.defaults.cliWorkflow, { logger: runtimeLogger }).catch((error: unknown) => {
             runtimeLogger.warn("Playwright browser preload failed; provider CLI preparation will continue.", {
@@ -547,6 +584,7 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
           getActiveProviderTypes(settings),
           settings.defaults.cliWorkflow,
           runtimeLogger,
+          { minimumUpdateIntervalMs: automaticAssetCheckIntervalMs },
         ),
       ]);
     })().catch((error: unknown) => {

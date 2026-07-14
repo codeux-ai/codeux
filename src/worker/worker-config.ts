@@ -15,6 +15,7 @@ export interface WorkerConfig {
   sessionPollIntervalMs: number;
   controlPlaneUrl?: string;
   controlPlaneAuthToken?: string;
+  serviceIdentityId?: string;
   serverCommand: string;
   serverArgs: string[];
   serverCwd?: string;
@@ -103,6 +104,9 @@ export function loadWorkerConfig(argv: string[] = process.argv): WorkerConfig {
       || process.env.CODE_UX_WORKER_AUTH_TOKEN?.trim()
       || process.env.MCP_HTTP_AUTH_TOKEN?.trim()
       || process.env.MCP_HTTPS_AUTH_TOKEN?.trim()
+      || undefined,
+    serviceIdentityId: parseStringFlag(argv, "--service-identity-id")?.trim()
+      || process.env.CODE_UX_WORKER_SERVICE_ID?.trim()
       || undefined,
     serverCommand: parseStringFlag(argv, "--server-command")?.trim() || defaultServer.command,
     serverArgs: serverArgs.length > 0 ? serverArgs : defaultServer.args,

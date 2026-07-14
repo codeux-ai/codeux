@@ -15,6 +15,8 @@ export interface ActivityWriteCoalescerOptions {
   flushIntervalMs?: number;
   /** Flush immediately once this many activities are buffered. */
   maxBuffer?: number;
+  /** Maximum UTF-16 characters retained in one compacted activity row. */
+  maxChunkChars?: number;
   /** Optional structured logger used to surface best-effort persistence failures. */
   logger?: ActivityCoalescerLogger;
 }
@@ -34,6 +36,7 @@ export class ActivityWriteCoalescer {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private readonly flushIntervalMs: number;
   private readonly maxBuffer: number;
+  private readonly maxChunkChars: number;
   private readonly logger: ActivityCoalescerLogger | null;
 
   constructor(
@@ -43,6 +46,7 @@ export class ActivityWriteCoalescer {
   ) {
     this.flushIntervalMs = Math.max(0, options.flushIntervalMs ?? 250);
     this.maxBuffer = Math.max(1, Math.floor(options.maxBuffer ?? 50));
+    this.maxChunkChars = Math.max(256, Math.floor(options.maxChunkChars ?? 16_384));
     this.logger = options.logger ?? null;
   }
 
@@ -67,7 +71,7 @@ export class ActivityWriteCoalescer {
     if (this.buffer.length === 0) {
       return;
     }
-    const batch = this.buffer;
+    const batch = this.compactBatch(this.buffer);
     this.buffer = [];
     try {
       this.sink.appendActivities(this.sessionId, batch);
@@ -79,6 +83,32 @@ export class ActivityWriteCoalescer {
       });
       // Activity persistence is best-effort; never let it break the provider run.
     }
+  }
+
+  /**
+   * Provider CLIs commonly emit one stdout fragment per line. Keeping every fragment as a
+   * separate SQLite row amplifies the same stream again when session sync mirrors it into the
+   * execution feed. Compact only adjacent rows from the same originator, preserving ordering and
+   * the first timestamp while keeping rows bounded for dashboard reads.
+   */
+  private compactBatch(
+    batch: Array<{ originator?: string; description: string; createTime: string }>,
+  ): Array<{ originator?: string; description: string; createTime: string }> {
+    const compacted: Array<{ originator?: string; description: string; createTime: string }> = [];
+    for (const item of batch) {
+      const previous = compacted.at(-1);
+      const separator = previous?.description ? "\n" : "";
+      if (
+        previous
+        && previous.originator === item.originator
+        && previous.description.length + separator.length + item.description.length <= this.maxChunkChars
+      ) {
+        previous.description += `${separator}${item.description}`;
+        continue;
+      }
+      compacted.push({ ...item });
+    }
+    return compacted;
   }
 
   /** Flush any remaining buffered activities and cancel the pending timer. */

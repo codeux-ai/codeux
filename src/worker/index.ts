@@ -524,6 +524,7 @@ async function createRemoteControlPlaneClient(config: WorkerConfig): Promise<Wor
       requestInit: {
         headers: {
           Authorization: `Bearer ${config.controlPlaneAuthToken}`,
+          ...(config.serviceIdentityId ? { "X-Code-UX-Service-Id": config.serviceIdentityId } : {}),
         },
       },
     },

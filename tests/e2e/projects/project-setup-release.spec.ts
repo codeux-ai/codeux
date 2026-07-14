@@ -168,11 +168,11 @@ test.describe('credential-free project setup release flow', () => {
 
     await page.goto('/tasks');
     await expect(page).toHaveURL(/\/tasks$/);
-    await expect(page.getByRole('heading', { name: 'Task Board', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Tasks', exact: true })).toBeVisible();
     await expectProjectSelectedInShell(page, projectName);
     await expectNoPersistentLoading(page);
 
-    await expect(page.getByRole('heading', { name: 'Task Board', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Tasks', exact: true })).toBeVisible();
     await expectProjectSelectedInShell(page, projectName);
     await expectNoHorizontalOverflow(page);
     await expectNoCapturedErrors(errors);

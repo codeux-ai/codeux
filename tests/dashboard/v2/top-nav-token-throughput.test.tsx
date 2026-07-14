@@ -138,7 +138,7 @@ describe("TelemetryStats token throughput", () => {
     expect(screen.getByTestId("throughput-flux-app")).toHaveAttribute("data-direction", "flat");
     expect(countCurveSegments(screen.getByTestId("throughput-line-app").getAttribute("d"))).toBe(19);
     expect(screen.getByTestId("throughput-line-app")).toHaveAttribute("stroke-dashoffset", "0");
-    expect(useHeaderTokenThroughput).toHaveBeenCalledWith(null, "20s", 1000);
+    expect(useHeaderTokenThroughput).toHaveBeenCalledWith(null, "20s");
   });
 
   it("animates the throughput strip upward when the next snapshot increases", async () => {
@@ -189,7 +189,10 @@ describe("TelemetryStats token throughput", () => {
     expect(screen.getByText("running")).toBeInTheDocument();
     expect(screen.getByText("queued")).toBeInTheDocument();
     expect(screen.getAllByText("1")).toHaveLength(2);
-    expect(useProjectTasks).toHaveBeenCalledWith("project-1", [], sprints, null, { enabled: true });
+    expect(useProjectTasks).toHaveBeenCalledWith("project-1", [], sprints, null, {
+      enabled: true,
+      view: "overview",
+    });
   });
 
   it("keeps loading and empty throughput states stable", () => {

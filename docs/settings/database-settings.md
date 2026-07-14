@@ -13,17 +13,20 @@ Use it when you are configuring a new project, auditing inherited settings, or d
 
 ## Controls And Runtime Effect
 
-Pruning removes old completed activity, retention sets the age window, and vacuum compacts storage on startup.
+Pruning advances old runtime history in bounded idle-time batches, retention sets the age window,
+and optional startup page reclaim releases a bounded amount of free SQLite space.
 
 | Control Surface | Runtime Effect | Review Before Saving |
 | --- | --- | --- |
-| Settings card fields | Updates the active Settings scope after you save the page. | Confirm whether you are editing System or Project scope. |
-| Inherited values | Values can flow from system defaults into project and sprint behavior. | Check the source badge before assuming a value is project-specific. |
-| Related runtime paths | The affected service reads the saved settings during planning, dispatch, dashboard rendering, or maintenance work. | Re-run the affected workflow after changing operational settings. |
+| Automatic pruning | Scans and mutates at most 500 rows per table in one maintenance pass. A periodic idle sweep advances the cursor until old history converges. | Disable only when local history must be retained beyond the configured window. |
+| Retention days | Applies to completed task runs, invocation trees, resolved attention items, and terminal provider sessions. Raw terminal provider activity has a one-day window because the durable execution transcript remains available. | Preserved execution invocations and their parent task history are excluded. |
+| Startup vacuum | Requests at most 256 pages through SQLite incremental vacuum. Automatic maintenance never executes a full-file `VACUUM`. | Older database files that predate incremental auto-vacuum may not release file space; the request remains a safe no-op for them. |
 
 ## Recommended Configuration
 
-Keep pruning and vacuum enabled unless you are preserving local forensic history.
+Keep pruning enabled. Leave startup page reclaim disabled unless bounded free-page reclamation is
+useful for the local database. Provider work always takes priority: pruning, reclaim, and WAL
+checkpointing are deferred while an invocation is running.
 
 A practical review flow is:
 
@@ -33,7 +36,10 @@ A practical review flow is:
 
 ## Risks And Gotchas
 
-Short retention can remove useful troubleshooting detail; disabling pruning can grow the local DB quickly.
+Short retention can remove useful troubleshooting detail; disabling pruning can grow the local DB
+quickly. Each pass is intentionally small, so a multi-gigabyte legacy history may require many idle
+periodic sweeps before its on-disk live data converges. Parent rows are deleted only after bounded
+child cleanup, and preserved invocation trees remain linked.
 
 Before applying changes, check:
 

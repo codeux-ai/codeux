@@ -59,7 +59,7 @@ export interface ManageProjectsArgs extends Partial<CreateProjectInput> {
 }
 
 export interface ManageSprintsArgs {
-  action: "list" | "get" | "create" | "update" | "delete" | "start" | "pause" | "cancel" | "force_cancel" | "inspect_run" | "import_issues" | "plan";
+  action: "list" | "get" | "create" | "followup" | "update" | "delete" | "start" | "pause" | "cancel" | "force_cancel" | "inspect_run" | "import_issues" | "plan";
   projectId?: string;
   sprintId?: string;
   sprintRunId?: string;
@@ -220,18 +220,41 @@ export interface ManageAgentsArgs {
 }
 
 export interface ManageNodeFlowsArgs {
-  action: "list" | "get" | "create" | "update" | "delete" | "validate" | "run" | "list_runs" | "get_run" | "attach_to_agent" | "detach_from_agent";
+  action:
+    | "catalog" | "get_node_definition" | "create_draft" | "patch_draft" | "validate_draft"
+    | "create_custom_node" | "update_custom_node" | "validate_custom_node"
+    | "request_credential" | "inspect_bindings" | "dry_run" | "publish" | "compare_versions"
+    | "rollback" | "run" | "cancel" | "retry" | "inspect_run" | "list_runs"
+    | "list" | "get" | "create" | "update" | "delete" | "validate" | "get_run"
+    | "attach_to_agent" | "detach_from_agent" | "attach" | "detach";
   projectId?: string;
   flowId?: string;
   runId?: string;
+  nodeType?: string;
+  nodeVersion?: number;
+  nodeId?: string;
+  slot?: string;
+  draftRevision?: number;
+  fromVersion?: number;
+  toVersion?: number;
+  version?: number;
+  publishedBy?: string;
   name?: string;
   description?: string;
   graph?: NodeFlowGraph;
+  patch?: Record<string, unknown>;
+  operations?: import("./node-flow-types.js").NodeFlowGraphPatchOperation[];
   widgets?: NodeWidgetSchema | Record<string, NodeWidgetSchema>;
   input?: NodeFlowJsonObject;
   agentPresetId?: string;
   skillAlias?: string;
   approval?: ManagementApproval;
+}
+
+export interface RunAttachedFlowArgs {
+  projectId: string;
+  flowId: string;
+  input?: NodeFlowJsonObject;
 }
 
 export interface ManageMemoryArgs {
@@ -354,11 +377,17 @@ export interface ManageCustomDashboardsArgs extends Partial<CreateCustomDashboar
     | "validation_logs"
     | "publish_revision"
     | "archive"
-    | "data_catalog";
+    | "data_catalog"
+    | "list_credential_slots"
+    | "bind_credential"
+    | "unbind_credential";
   projectId?: string;
   dashboardId?: string;
   revisionId?: string;
   validationSessionId?: string;
+  slotId?: string;
+  credentialId?: string;
+  expectedBindingRevision?: number;
   sessionId?: string;
   tail?: number | string;
   approval?: ManagementApproval;

@@ -29,6 +29,11 @@ function TestComponent({ initialData, fetchResource }: any) {
   );
 }
 
+function PollingTestComponent({ fetchResource, pollIntervalMs }: { fetchResource: () => Promise<{ id: string }>; pollIntervalMs: number }) {
+  useRealtimeResource({ initialData: { id: "initial" }, fetchResource, pollIntervalMs });
+  return null;
+}
+
 describe("useRealtimeResource", () => {
   beforeEach(() => {
     cleanup();
@@ -266,5 +271,27 @@ describe("useRealtimeResource", () => {
 
     getByTestId("refetch-silent").click();
     expect(fetchResource).toHaveBeenCalledTimes(3);
+  });
+
+  it("pauses fallback polling in hidden tabs and refreshes once when the tab returns", async () => {
+    vi.useFakeTimers();
+    let hidden = false;
+    const hiddenSpy = vi.spyOn(document, "hidden", "get").mockImplementation(() => hidden);
+    const fetchResource = vi.fn().mockResolvedValue({ id: "snapshot" });
+    render(h(PollingTestComponent, { fetchResource, pollIntervalMs: 1_000 }));
+    await Promise.resolve();
+    fetchResource.mockClear();
+
+    hidden = true;
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(fetchResource).not.toHaveBeenCalled();
+
+    hidden = false;
+    document.dispatchEvent(new Event("visibilitychange"));
+    await Promise.resolve();
+    expect(fetchResource).toHaveBeenCalledTimes(1);
+
+    hiddenSpy.mockRestore();
+    vi.useRealTimers();
   });
 });

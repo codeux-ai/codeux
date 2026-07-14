@@ -2,7 +2,7 @@ import { evaluateMergeReadiness } from "./feature-pr/merge-readiness-policy.js";
 import { deriveChecksFromCiRuns } from "../../../sprint/ci-status-utils.js";
 import { runCommandStrict } from "../../../services/cli-process-runner.js";
 import type { GuardrailService } from "../../../services/guardrail-service.js";
-import { createTemporaryWorktreeBranchMerger, deleteBranchLocally, findRecoverableWorkerBranch, mergeBranchLocallyInTemporaryWorktree, workerBranchHasMergeWork } from "../../../infrastructure/git/local-merge.js";
+import { createTemporaryWorktreeBranchMerger, deleteBranchLocally, findRecoverableWorkerBranch, mergeBranchLocallyInTemporaryWorktree, workerBranchHasMergeWork, workerBranchIsMergedIntoFeature } from "../../../infrastructure/git/local-merge.js";
 import { buildWorkerBranchPrefix } from "../../../services/cli-workflow-utils.js";
 import { matchMergedPrForTask, matchPrForTask } from "./feature-pr/pr-matcher.js";
 import { attemptAutoMerge } from "./feature-pr/automerge-policy.js";
@@ -335,31 +335,46 @@ export class FeaturePrGateService {
             continue;
           }
 
+          const info = taskCiInfoMap.get(task.id)!;
           const hasMergeWork = await workerBranchHasMergeWork({
             repoPath: context.repoPath,
             featureBranch: context.featureBranch,
             workerBranch,
           });
           if (!hasMergeWork) {
+            const recoveredCompletedMerge = context.githubMode === "LOCAL"
+              && info.cliGitPushed
+              && !info.cliGitNoChanges
+              && await workerBranchIsMergedIntoFeature({
+                repoPath: context.repoPath,
+                featureBranch: context.featureBranch,
+                workerBranch,
+              });
             task.status = "COMPLETED";
-            task.merge_indicator = undefined;
+            task.is_merged = recoveredCompletedMerge;
+            task.merge_indicator = recoveredCompletedMerge ? "MERGED" : undefined;
             task.worker_branch = undefined;
             if (context.executionRepository && context.sprintRunId && task.record_id) {
               const taskRun = context.executionRepository.getLatestTaskRun(task.record_id, context.sprintRunId);
               if (taskRun?.id) {
                 context.executionRepository.updateTaskRun(taskRun.id, { workerBranch: null });
                 context.executionRepository.appendTaskRunEvent(taskRun.id, "ci_gate_status", "system", {
-                  state: "no_merge_work",
+                  state: recoveredCompletedMerge ? "merged_branch" : "no_merge_work",
                   taskId: task.id,
                   featureBranch: context.featureBranch,
                   workerBranch,
+                  ...(recoveredCompletedMerge ? { githubMode: context.githubMode } : {}),
                 }, {
-                  sourceEventKey: `ci-gate:no_merge_work:none:${workerBranch}`,
+                  sourceEventKey: recoveredCompletedMerge
+                    ? `ci-gate:merged_branch:${context.featureBranch}:${workerBranch}`
+                    : `ci-gate:no_merge_work:none:${workerBranch}`,
                 });
               }
             }
             await context.persistMergedTask(task);
-            reportText += `- ✅ **No merge work:** Task \`${task.id}\` completed without a PR because no worker branch with unmerged commits exists.\n`;
+            reportText += recoveredCompletedMerge
+              ? `- ✅ **Recovered local merge:** Task \`${task.id}\` was already merged into \`${context.featureBranch}\`; merge metadata was restored.\n`
+              : `- ✅ **No merge work:** Task \`${task.id}\` completed without a PR because no worker branch with unmerged commits exists.\n`;
             continue;
           }
 

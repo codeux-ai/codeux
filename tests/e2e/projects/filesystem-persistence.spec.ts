@@ -83,18 +83,23 @@ async function openAppearanceSettings(page: Page, request: APIRequestContext): P
   await page.goto('/config');
   await expect(page.getByRole('heading', { name: 'Settings & Integration' })).toBeVisible();
   const appearancePanel = page.locator('[data-active-category="appearance"]');
-  if (!await appearancePanel.isVisible()) {
-    await page
-      .getByRole('navigation', { name: 'Settings categories' })
-      .getByRole('button', { name: 'Appearance', exact: true })
-      .click();
+  const appearanceCategory = page
+    .getByRole('navigation', { name: 'Settings categories' })
+    .getByRole('button', { name: /^Appearance/ });
+  await expect(appearanceCategory).toBeVisible();
+  if (await appearanceCategory.getAttribute('aria-current') !== 'page') {
+    await appearanceCategory.click();
   }
   await expect(appearancePanel).toBeVisible();
-  const configureBackground = page.getByRole('button', { name: 'Configure Background', exact: true });
-  if (await configureBackground.isVisible()) {
+  const settingsPanel = page.getByRole('region', { name: 'Settings category panel' });
+  const backToOverview = settingsPanel.getByRole('button', { name: 'Back to category overview', exact: true });
+  if (!await backToOverview.isVisible()) {
+    const configureBackground = settingsPanel.getByRole('button', { name: 'Configure Background', exact: true });
+    await expect(configureBackground).toBeVisible();
     await configureBackground.click();
   }
-  await expect(page.getByRole('region', { name: 'Background', exact: true })).toBeVisible();
+  await expect(backToOverview).toBeVisible();
+  await expect(settingsPanel.getByRole('heading', { name: 'Background', exact: true })).toBeVisible();
 }
 
 test.describe('filesystem persistence', () => {

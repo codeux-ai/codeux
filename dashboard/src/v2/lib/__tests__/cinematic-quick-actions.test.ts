@@ -3,6 +3,7 @@ import {
   buildCinematicQuickActions,
   isInitialProjectCreateAppQuickaction,
 } from "../cinematic-quick-actions.js";
+import type { DashboardFeatureFlagMap } from "../dashboard-feature-flags.js";
 
 const ALL_LABELS = [
   "Create Web App",
@@ -14,11 +15,17 @@ const ALL_LABELS = [
   "Sprint Progress",
   "What’s Failing?",
   "Plan Next Steps",
-  "Add Nodes Workflow",
-  "Add Dashboard",
   "Create Skill",
   "List Skills",
 ];
+
+const buildFeatureFlags = (overrides: Partial<DashboardFeatureFlagMap> = {}): DashboardFeatureFlagMap => ({
+  nodes: true,
+  "custom-dashboards": true,
+  "chat-nodes-workflow-quick-action": false,
+  "chat-custom-dashboard-quick-action": false,
+  ...overrides,
+});
 
 describe("cinematic quick action view model", () => {
   it("builds the complete catalog-driven action set for an eligible project", () => {
@@ -36,7 +43,7 @@ describe("cinematic quick action view model", () => {
       { appKind: "portfolio" },
       { appKind: "game" },
     ]);
-    expect(actions.filter(({ actionType }) => actionType === "send_prompt")).toHaveLength(8);
+    expect(actions.filter(({ actionType }) => actionType === "send_prompt")).toHaveLength(6);
     expect(new Set(actions.map(({ id }) => id))).toHaveLength(actions.length);
     expect(new Set(actions.map(({ zone }) => zone))).toEqual(new Set(["create", "insight", "workflow"]));
   });
@@ -63,5 +70,35 @@ describe("cinematic quick action view model", () => {
       initialEligibilityLoaded: true,
       canCreateInitialAppQuickactions: true,
     })).toEqual([]);
+  });
+
+  it("shows gated workflow actions only when both action and surface flags are enabled", () => {
+    const build = (featureFlags: DashboardFeatureFlagMap) => buildCinematicQuickActions({
+      hasProject: true,
+      initialEligibilityLoaded: false,
+      canCreateInitialAppQuickactions: false,
+      featureFlags,
+    }).map(({ label }) => label);
+
+    expect(build(buildFeatureFlags())).not.toEqual(expect.arrayContaining([
+      "Add Nodes Workflow",
+      "Add Dashboard",
+    ]));
+    expect(build(buildFeatureFlags({
+      "chat-nodes-workflow-quick-action": true,
+      "chat-custom-dashboard-quick-action": true,
+    }))).toEqual(expect.arrayContaining([
+      "Add Nodes Workflow",
+      "Add Dashboard",
+    ]));
+    expect(build(buildFeatureFlags({
+      nodes: false,
+      "custom-dashboards": false,
+      "chat-nodes-workflow-quick-action": true,
+      "chat-custom-dashboard-quick-action": true,
+    }))).not.toEqual(expect.arrayContaining([
+      "Add Nodes Workflow",
+      "Add Dashboard",
+    ]));
   });
 });

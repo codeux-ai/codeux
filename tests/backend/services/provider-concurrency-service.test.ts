@@ -14,6 +14,7 @@ describe("ProviderConcurrencyService", () => {
       tryCreateProviderInvocationUsage: vi.fn(),
       createProviderInvocationUsage: vi.fn(),
       updateProviderInvocationUsage: vi.fn(),
+      getExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-1", status: "running", providerInvocationId: null }),
       listExecutionInvocationsByProviderInvocationId: vi.fn().mockReturnValue([]),
       updateExecutionInvocation: vi.fn(),
       appendExecutionInvocationMessage: vi.fn(),
@@ -39,7 +40,7 @@ describe("ProviderConcurrencyService", () => {
   describe("waitForSlot", () => {
     it("should return immediately if limit is 0", async () => {
       await service.waitForSlot("jules", 0);
-      expect(executionRepository.listRunningProviderInvocationUsages).toHaveBeenCalledWith(["jules"]);
+      expect(executionRepository.listRunningProviderInvocationUsages).not.toHaveBeenCalled();
     });
 
     it("should return immediately if current count is less than limit", async () => {
@@ -61,7 +62,7 @@ describe("ProviderConcurrencyService", () => {
         await waitPromise;
         const duration = Date.now() - start;
 
-        expect(executionRepository.listRunningProviderInvocationUsages).toHaveBeenCalledTimes(2);
+        expect(executionRepository.listRunningProviderInvocationUsages).toHaveBeenCalledTimes(3);
         expect(duration).toBeGreaterThanOrEqual(1900); // 2 seconds sleep
       } finally {
         vi.useRealTimers();
@@ -78,6 +79,25 @@ describe("ProviderConcurrencyService", () => {
 
         await vi.advanceTimersByTimeAsync(5000);
         await assertion;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("waits instead of treating pressure-paused admission as unlimited", async () => {
+      vi.useFakeTimers();
+      try {
+        service = new ProviderConcurrencyService({
+          executionRepository,
+          logger,
+          admissionPolicy: { getEffectiveLimit: vi.fn().mockReturnValue(-1) },
+        });
+        const waitPromise = service.waitForSlot("codex", 0, undefined, 100);
+        const assertion = expect(waitPromise).rejects.toThrow("timed out after 100ms");
+
+        await vi.advanceTimersByTimeAsync(100);
+        await assertion;
+        expect(executionRepository.createProviderInvocationUsage).not.toHaveBeenCalled();
       } finally {
         vi.useRealTimers();
       }
@@ -134,7 +154,7 @@ describe("ProviderConcurrencyService", () => {
       expect(executionRepository.createProviderInvocationUsage).toHaveBeenCalledWith(input);
     });
 
-    it("releases stale Docker provider slots before unlimited claims", async () => {
+    it("does not probe Docker or reconcile stale rows on the unlimited claim fast path", async () => {
       const staleInvocation = {
         id: "provider-stale",
         provider: "qwen-code",
@@ -150,31 +170,22 @@ describe("ProviderConcurrencyService", () => {
         { id: "exec-stale", status: "running", startedAt: "2000-01-01T00:00:00.000Z", lastMessageAt: null },
       ]);
       executionRepository.createProviderInvocationUsage.mockReturnValue({ id: "provider-new" });
+      const dockerService = {
+        getContainerInventory: vi.fn().mockResolvedValue({ available: true, containers: [], fetchedAtMs: Date.now() }),
+      };
       service = new ProviderConcurrencyService({
         executionRepository,
         logger,
-        dockerService: {
-          isAvailable: vi.fn().mockResolvedValue(true),
-          listContainers: vi.fn().mockResolvedValue([]),
-        },
+        dockerService,
       });
 
       const result = await service.waitForSlotAndClaim("qwen-code", 0, { provider: "qwen-code" } as any);
 
       expect(result.id).toBe("provider-new");
-      expect(executionRepository.updateProviderInvocationUsage).toHaveBeenCalledWith("provider-stale", expect.objectContaining({
-        status: "failed",
-      }));
-      expect(executionRepository.updateExecutionInvocation).toHaveBeenCalledWith("exec-stale", expect.objectContaining({
-        status: "failed",
-        errorMessage: expect.stringContaining("Docker container disappeared"),
-      }));
-      expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith("exec-stale", expect.objectContaining({
-        contentMarkdown: expect.stringContaining("Docker container disappeared"),
-        metadata: expect.objectContaining({
-          recovery: "provider_concurrency_stale_docker_reconcile",
-        }),
-      }));
+      expect(dockerService.getContainerInventory).not.toHaveBeenCalled();
+      expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalled();
+      expect(executionRepository.updateExecutionInvocation).not.toHaveBeenCalled();
+      expect(executionRepository.appendExecutionInvocationMessage).not.toHaveBeenCalled();
       expect(executionRepository.createProviderInvocationUsage).toHaveBeenCalledWith({ provider: "qwen-code" });
     });
 
@@ -186,6 +197,180 @@ describe("ProviderConcurrencyService", () => {
 
       expect(result.id).toBe("inv-1");
       expect(executionRepository.tryCreateProviderInvocationUsage).toHaveBeenCalledWith(input, 5);
+    });
+
+    it("passes invocation purpose to an injected admission policy", async () => {
+      const admissionPolicy = {
+        getEffectiveLimit: vi.fn().mockReturnValue(3),
+      };
+      executionRepository.tryCreateProviderInvocationUsage.mockReturnValue({ id: "inv-policy" });
+      service = new ProviderConcurrencyService({ executionRepository, logger, admissionPolicy });
+
+      await service.waitForSlotAndClaim("codex", 0, {
+        provider: "codex",
+        purpose: "worker_reply",
+      } as any);
+
+      expect(admissionPolicy.getEffectiveLimit).toHaveBeenCalledWith({
+        provider: "codex",
+        configuredLimit: 0,
+        purpose: "worker_reply",
+      });
+      expect(executionRepository.tryCreateProviderInvocationUsage).toHaveBeenCalledWith(
+        expect.objectContaining({ purpose: "worker_reply" }),
+        3,
+      );
+    });
+
+    it("reports no immediate capacity while adaptive admission is pressure-paused", async () => {
+      service = new ProviderConcurrencyService({
+        executionRepository,
+        logger,
+        admissionPolicy: { getEffectiveLimit: vi.fn().mockReturnValue(-1) },
+      });
+
+      await expect(service.getAvailableCapacityCount("codex", 0, "task_coding")).resolves.toBe(0);
+      await expect(service.tryClaimSlot("codex", 0, {
+        provider: "codex",
+        purpose: "task_coding",
+      } as any)).resolves.toBeNull();
+      expect(executionRepository.createProviderInvocationUsage).not.toHaveBeenCalled();
+      expect(executionRepository.tryCreateProviderInvocationUsage).not.toHaveBeenCalled();
+    });
+
+    it("heartbeats and records a recoverable task wait while adaptive admission is pressure-paused", async () => {
+      vi.useFakeTimers();
+      try {
+        const admissionPolicy = {
+          getEffectiveLimit: vi.fn()
+            .mockReturnValueOnce(-1)
+            .mockReturnValueOnce(1),
+        };
+        executionRepository.getTaskDispatch.mockReturnValue({ id: "dispatch-pressure", status: "running" });
+        executionRepository.tryCreateProviderInvocationUsage.mockReturnValue({ id: "inv-after-pressure" });
+        service = new ProviderConcurrencyService({ executionRepository, logger, admissionPolicy });
+
+        const wait = service.waitForSlotAndClaim("codex", 0, {
+          provider: "codex",
+          purpose: "task_coding",
+          sessionId: "session-pressure",
+          taskRunId: "task-run-pressure",
+          dispatchId: "dispatch-pressure",
+        } as any, undefined, undefined, "exec-pressure");
+        await vi.advanceTimersByTimeAsync(2000);
+
+        await expect(wait).resolves.toMatchObject({ id: "inv-after-pressure" });
+        expect(executionRepository.updateTaskDispatch).toHaveBeenCalledWith("dispatch-pressure", {
+          lastHeartbeatAt: expect.any(String),
+        });
+        expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
+          "task-run-pressure",
+          "provider_admission_waiting",
+          "system",
+          expect.objectContaining({
+            provider: "codex",
+            reason: "resource_pressure",
+            effectiveLimit: null,
+          }),
+          expect.objectContaining({ sourceEventKey: expect.stringContaining("provider:admission:waiting:exec-pressure") }),
+        );
+        expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
+          "task-run-pressure",
+          "provider_admission_wait_ended",
+          "system",
+          expect.objectContaining({ outcome: "admitted", reason: "resource_pressure" }),
+          expect.objectContaining({ sourceEventKey: expect.stringContaining("provider:admission:ended:exec-pressure") }),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("keeps pressure wait heartbeats low-frequency and closes the wait on timeout", async () => {
+      vi.useFakeTimers();
+      try {
+        executionRepository.getTaskDispatch.mockReturnValue({ id: "dispatch-pressure", status: "running" });
+        service = new ProviderConcurrencyService({
+          executionRepository,
+          logger,
+          admissionPolicy: { getEffectiveLimit: vi.fn().mockReturnValue(-1) },
+        });
+        const wait = service.waitForSlotAndClaim("codex", 0, {
+          provider: "codex",
+          purpose: "task_coding",
+          sessionId: "session-pressure",
+          taskRunId: "task-run-pressure",
+          dispatchId: "dispatch-pressure",
+        } as any, undefined, 25_000, "exec-pressure");
+        const assertion = expect(wait).rejects.toThrow("timed out after 25000ms");
+
+        await vi.advanceTimersByTimeAsync(25_000);
+        await assertion;
+
+        expect(executionRepository.updateTaskDispatch).toHaveBeenCalledTimes(3);
+        expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
+          "task-run-pressure",
+          "provider_admission_wait_ended",
+          "system",
+          expect.objectContaining({ outcome: "timed_out" }),
+          expect.any(Object),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("links a claimed provider usage to the active execution invocation", async () => {
+      const input = { provider: "jules", startedAt: "2026-07-13T12:00:00.000Z" } as any;
+      executionRepository.tryCreateProviderInvocationUsage.mockReturnValue({ id: "inv-linked" });
+
+      const result = await service.waitForSlotAndClaim(
+        "jules",
+        5,
+        input,
+        undefined,
+        undefined,
+        "exec-1",
+      );
+
+      expect(result.id).toBe("inv-linked");
+      expect(executionRepository.tryCreateProviderInvocationUsage).toHaveBeenCalledWith(input, 5);
+      expect(executionRepository.updateExecutionInvocation).toHaveBeenCalledOnce();
+      expect(executionRepository.updateExecutionInvocation).toHaveBeenCalledWith("exec-1", {
+        providerInvocationId: "inv-linked",
+      });
+    });
+
+    it("does not claim provider usage when the execution is cancelled while waiting", async () => {
+      vi.useFakeTimers();
+      try {
+        const executionInvocation = { id: "exec-1", status: "running", providerInvocationId: null };
+        executionRepository.getExecutionInvocation.mockImplementation(() => executionInvocation);
+        executionRepository.tryCreateProviderInvocationUsage.mockReturnValue(null);
+        executionRepository.listRunningProviderInvocationUsages.mockReturnValue([{}]);
+
+        const waitPromise = service.waitForSlotAndClaim(
+          "jules",
+          1,
+          { provider: "jules" } as any,
+          undefined,
+          undefined,
+          "exec-1",
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        expect(executionRepository.tryCreateProviderInvocationUsage).toHaveBeenCalledTimes(1);
+
+        executionInvocation.status = "cancelled";
+        const assertion = expect(waitPromise).rejects.toThrow("provider slot will not be claimed");
+        await vi.advanceTimersByTimeAsync(2000);
+        await assertion;
+
+        expect(executionRepository.tryCreateProviderInvocationUsage).toHaveBeenCalledTimes(1);
+        expect(executionRepository.createProviderInvocationUsage).not.toHaveBeenCalled();
+        expect(executionRepository.updateExecutionInvocation).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("should wait and retry if tryCreate returns null", async () => {
@@ -297,7 +482,9 @@ describe("ProviderConcurrencyService", () => {
       executionRepository.listExecutionInvocationsByProviderInvocationId.mockReturnValue([
         { id: "exec-stale", status: "running", startedAt: "2000-01-01T00:00:00.000Z", lastMessageAt: null },
       ]);
-      executionRepository.tryCreateProviderInvocationUsage.mockReturnValue({ id: "provider-new" });
+      executionRepository.tryCreateProviderInvocationUsage
+        .mockReturnValueOnce(null)
+        .mockReturnValueOnce({ id: "provider-new" });
       service = new ProviderConcurrencyService({
         executionRepository,
         logger,
@@ -450,7 +637,9 @@ describe("ProviderConcurrencyService", () => {
       executionRepository.listExecutionInvocationsByProviderInvocationId.mockReturnValue([
         { id: "exec-completed", status: "running", startedAt: "2000-01-01T00:00:00.000Z", lastMessageAt: null },
       ]);
-      executionRepository.tryCreateProviderInvocationUsage.mockReturnValue({ id: "provider-new" });
+      executionRepository.tryCreateProviderInvocationUsage
+        .mockReturnValueOnce(null)
+        .mockReturnValueOnce({ id: "provider-new" });
       service = new ProviderConcurrencyService({
         executionRepository,
         logger,
@@ -533,7 +722,9 @@ describe("ProviderConcurrencyService", () => {
         }),
         updateTask: vi.fn(),
       };
-      executionRepository.tryCreateProviderInvocationUsage.mockReturnValue({ id: "provider-new" });
+      executionRepository.tryCreateProviderInvocationUsage
+        .mockReturnValueOnce(null)
+        .mockReturnValueOnce({ id: "provider-new" });
       service = new ProviderConcurrencyService({
         executionRepository,
         projectManagementRepository: projectManagementRepository as any,
@@ -603,7 +794,9 @@ describe("ProviderConcurrencyService", () => {
           { id: "stale-1", sessionId: "sessions/abc", startedAt: staleStartedAt, durationMs: 0, purpose: "task_coding" },
         ]);
         executionRepository.getLatestTaskRunBySessionId = vi.fn().mockReturnValue({ state: "COMPLETED" });
-        executionRepository.tryCreateProviderInvocationUsage.mockReturnValue({ id: "inv-3" });
+        executionRepository.tryCreateProviderInvocationUsage
+          .mockReturnValueOnce(null)
+          .mockReturnValueOnce({ id: "inv-3" });
 
         const result = await service.tryClaimSlot("jules", 1, { provider: "jules" } as any);
 
@@ -673,6 +866,28 @@ describe("ProviderConcurrencyService", () => {
       });
       expect(executionRepository.countGlobalRunningTaskRunsPerProvider).toHaveBeenCalledWith(["mockup-cli", "codex", "jules"]);
     });
+
+    it("reports adaptive immediately available capacity for scheduler fan-out", async () => {
+      executionRepository.listRunningProviderInvocationUsages.mockReturnValue([
+        { provider: "codex" },
+      ]);
+      const admissionPolicy = {
+        getEffectiveLimit: vi.fn().mockReturnValue(3),
+      };
+      service = new ProviderConcurrencyService({ executionRepository, logger, admissionPolicy });
+
+      await expect(service.getAvailableCapacityCount("codex", 0, "task_coding")).resolves.toBe(2);
+      expect(admissionPolicy.getEffectiveLimit).toHaveBeenCalledWith({
+        provider: "codex",
+        configuredLimit: 0,
+        purpose: "task_coding",
+      });
+    });
+
+    it("reports null capacity when admission remains unbounded", async () => {
+      await expect(service.getAvailableCapacityCount("codex", 0, "task_coding")).resolves.toBeNull();
+      expect(executionRepository.listRunningProviderInvocationUsages).not.toHaveBeenCalled();
+    });
   });
 
   describe("Reconciliation Throttling", () => {
@@ -680,8 +895,11 @@ describe("ProviderConcurrencyService", () => {
 
     beforeEach(() => {
       dockerService = {
-        isAvailable: vi.fn().mockResolvedValue(true),
-        listContainers: vi.fn().mockResolvedValue([]),
+        getContainerInventory: vi.fn().mockResolvedValue({
+          available: true,
+          containers: [],
+          fetchedAtMs: Date.now(),
+        }),
       };
       service = new ProviderConcurrencyService({
         executionRepository,
@@ -701,6 +919,7 @@ describe("ProviderConcurrencyService", () => {
           status: "running",
           executionMode: "DOCKER",
           sessionId: "session-1",
+          taskRunId: "task-run-active",
           startedAt: "2000-01-01T00:00:00.000Z",
           durationMs: null,
         };
@@ -709,19 +928,21 @@ describe("ProviderConcurrencyService", () => {
         executionRepository.listExecutionInvocationsByProviderInvocationId.mockReturnValue([
           { id: "exec-stale", status: "running", startedAt: "2000-01-01T00:00:00.000Z", lastMessageAt: null },
         ]);
+        executionRepository.getTaskRun.mockReturnValue({ id: "task-run-active", state: "RUNNING" });
 
-        // Return null for 5 checks, then succeed on the 6th
+        // Stay blocked through the 10-second reconciliation boundary, then succeed.
         executionRepository.tryCreateProviderInvocationUsage
           .mockReturnValueOnce(null) // 0s
           .mockReturnValueOnce(null) // 2s
           .mockReturnValueOnce(null) // 4s
           .mockReturnValueOnce(null) // 6s
           .mockReturnValueOnce(null) // 8s
-          .mockReturnValueOnce({ id: "inv-new" }); // 10s
+          .mockReturnValueOnce(null) // 10s
+          .mockReturnValueOnce({ id: "inv-new" }); // 12s
 
         const waitPromise = service.waitForSlotAndClaim("qwen-code", 1, input);
 
-        await vi.advanceTimersByTimeAsync(12000);
+        await vi.advanceTimersByTimeAsync(14000);
 
         const result = await waitPromise;
 
@@ -732,13 +953,14 @@ describe("ProviderConcurrencyService", () => {
         // Check 4: 6s -> throttled
         // Check 5: 8s -> throttled
         // Check 6: 10s -> runs listContainers (throttle expired)
-        expect(dockerService.listContainers).toHaveBeenCalledTimes(2);
+        expect(dockerService.getContainerInventory).toHaveBeenCalledTimes(2);
+        expect(dockerService.getContainerInventory).toHaveBeenCalledWith(10_000);
       } finally {
         vi.useRealTimers();
       }
     });
 
-    it("should not throttle hasAvailableCapacity (forces check)", async () => {
+    it("throttles repeated capacity reconciliation checks", async () => {
       const staleInvocation = {
         id: "provider-stale",
         provider: "qwen-code",
@@ -758,11 +980,10 @@ describe("ProviderConcurrencyService", () => {
       await service.hasAvailableCapacity("qwen-code", 1);
       await service.hasAvailableCapacity("qwen-code", 1);
 
-      // Two calls, throttle should be bypassed
-      expect(dockerService.listContainers).toHaveBeenCalledTimes(2);
+      expect(dockerService.getContainerInventory).toHaveBeenCalledTimes(1);
     });
 
-    it("should coalesce concurrent forced reconciliation checks", async () => {
+    it("coalesces simultaneous bounded claims into one Docker inventory read", async () => {
       const staleInvocation = {
         id: "provider-stale",
         provider: "qwen-code",
@@ -779,26 +1000,74 @@ describe("ProviderConcurrencyService", () => {
         { id: "exec-stale", status: "running", startedAt: "2000-01-01T00:00:00.000Z", lastMessageAt: null },
       ]);
 
-      let resolveListContainers: (val: any) => void;
-      dockerService.listContainers = vi.fn().mockImplementation(() => {
+      let resolveInventory: (val: any) => void;
+      dockerService.getContainerInventory = vi.fn().mockImplementation(() => {
         return new Promise((resolve) => {
-          resolveListContainers = resolve;
+          resolveInventory = resolve;
         });
       });
 
-      // Call hasAvailableCapacity and tryClaimSlot concurrently
-      const promise1 = service.hasAvailableCapacity("qwen-code", 1);
-      const promise2 = service.tryClaimSlot("qwen-code", 1, { provider: "qwen-code" } as any);
+      executionRepository.tryCreateProviderInvocationUsage.mockReturnValue(null);
+      const promise1 = service.tryClaimSlot("qwen-code", 1, { provider: "qwen-code", sessionId: "one" } as any);
+      const promise2 = service.tryClaimSlot("qwen-code", 1, { provider: "qwen-code", sessionId: "two" } as any);
 
       // Wait a tick to let them start and hit the docker check
       await new Promise(resolve => setTimeout(resolve, 0));
 
-      resolveListContainers!([]);
+      resolveInventory!({ available: true, containers: [], fetchedAtMs: Date.now() });
 
-      await Promise.all([promise1, promise2]);
+      await expect(Promise.all([promise1, promise2])).resolves.toEqual([null, null]);
 
-      // Both should have shared the same forced check pass, thus docker check called only once
-      expect(dockerService.listContainers).toHaveBeenCalledTimes(1);
+      expect(dockerService.getContainerInventory).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not reclaim stale Docker rows when inventory reports daemon failure", async () => {
+      const staleInvocation = {
+        id: "provider-stale",
+        provider: "qwen-code",
+        purpose: "qa_review",
+        status: "running",
+        executionMode: "DOCKER",
+        sessionId: "session-1",
+        startedAt: "2000-01-01T00:00:00.000Z",
+        durationMs: null,
+      };
+      executionRepository.listRunningProviderInvocationUsages.mockReturnValue([staleInvocation]);
+      executionRepository.tryCreateProviderInvocationUsage.mockReturnValue(null);
+      dockerService.getContainerInventory.mockResolvedValue({
+        available: false,
+        containers: [],
+        fetchedAtMs: Date.now(),
+      });
+
+      await expect(service.tryClaimSlot("qwen-code", 1, { provider: "qwen-code" } as any)).resolves.toBeNull();
+
+      expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalled();
+      expect(executionRepository.updateExecutionInvocation).not.toHaveBeenCalled();
+    });
+
+    it("does not use an old cached inventory as proof that a container disappeared", async () => {
+      const staleInvocation = {
+        id: "provider-stale",
+        provider: "qwen-code",
+        purpose: "qa_review",
+        status: "running",
+        executionMode: "DOCKER",
+        sessionId: "session-1",
+        startedAt: "2000-01-01T00:00:00.000Z",
+        durationMs: null,
+      };
+      executionRepository.listRunningProviderInvocationUsages.mockReturnValue([staleInvocation]);
+      executionRepository.tryCreateProviderInvocationUsage.mockReturnValue(null);
+      dockerService.getContainerInventory.mockResolvedValue({
+        available: true,
+        containers: [],
+        fetchedAtMs: Date.now() - 2_001,
+      });
+
+      await expect(service.tryClaimSlot("qwen-code", 1, { provider: "qwen-code" } as any)).resolves.toBeNull();
+
+      expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalled();
     });
   });
 });

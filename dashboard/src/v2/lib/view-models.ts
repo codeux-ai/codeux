@@ -85,8 +85,33 @@ function areReviewSummariesEqual(left: Task["latestReview"], right: TaskRecord["
     && left.summary === right.summary
     && left.reviewer === right.reviewer
     && left.finishedAt === right.finishedAt
+    && left.fixInstructions === right.fixInstructions
+    && left.targetTaskKey === right.targetTaskKey
     && left.findings.length === right.findings.length
-    && left.findings.every((finding, index) => finding === right.findings[index]);
+    && left.findings.every((finding, index) => finding === right.findings[index])
+    && areFollowUpTasksEqual(left.followUpTasks, right.followUpTasks);
+}
+
+function areFollowUpTasksEqual(
+  left: NonNullable<Task["latestReview"]>["followUpTasks"],
+  right: NonNullable<TaskRecord["latestReview"]>["followUpTasks"],
+): boolean {
+  if (!left && !right) {
+    return true;
+  }
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+  return left.every((task, index) => {
+    const other = right[index];
+    return Boolean(other)
+      && task.title === other.title
+      && task.promptMarkdown === other.promptMarkdown
+      && task.description === other.description
+      && task.priority === other.priority
+      && task.dependsOnTaskKeys.length === other.dependsOnTaskKeys.length
+      && task.dependsOnTaskKeys.every((key, dependencyIndex) => key === other.dependsOnTaskKeys[dependencyIndex]);
+  });
 }
 
 function areSelfReflectionRatingsEqual(left: Task["selfReflectionRating"], right: TaskRecord["selfReflectionRating"]): boolean {

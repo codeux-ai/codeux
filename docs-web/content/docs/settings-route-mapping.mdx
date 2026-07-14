@@ -13,13 +13,18 @@ Use it when you are configuring a new project, auditing inherited settings, or d
 
 ## Controls And Runtime Effect
 
-Each route chooses a profile, strategy, primary instance, allowed weighted pool, and per-provider overrides.
+Each route chooses a profile, strategy, primary instance, allowed weighted pool, and per-provider overrides. Model and thinking overrides are passed together to every invocation path, including planning and planning retries.
 
 | Control Surface | Runtime Effect | Review Before Saving |
 | --- | --- | --- |
 | Settings card fields | Updates the active Settings scope after you save the page. | Confirm whether you are editing System or Project scope. |
 | Inherited values | Values can flow from system defaults into project and sprint behavior. | Check the source badge before assuming a value is project-specific. |
 | Related runtime paths | The affected service reads the saved settings during planning, dispatch, dashboard rendering, or maintenance work. | Re-run the affected workflow after changing operational settings. |
+| Codex thinking override | Selects the reasoning effort sent to Codex for this route. Codex Sol-family models also offer `max` and `ultra`; other Codex models stop at `xhigh`. | Choose the route model before its thinking override so the available effort levels match the model family. |
+
+The dashboard keeps the current category, focused settings card, and selected invocation route in session state. A hard refresh in the same browser tab returns to that Route Mapping context; saved setting values still come from the active system or project scope.
+
+Route provider pools resolve by provider instance id across `system -> project -> sprint`. A narrower scope can replace which provider ids participate, while each retained provider entry inherits `model`, `thinkingMode`, `enabled`, and `weight` independently. For example, a project-only thinking override keeps the system route model instead of falling back to that provider instance's base model.
 
 ## Recommended Configuration
 

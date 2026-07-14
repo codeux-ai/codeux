@@ -153,11 +153,11 @@ describe("Sprint QA Snapshot", () => {
         expected: { action: "run_review", reason: "needs_review" },
       },
       {
-        name: "skips when a completed changes-requested review exhausted the retry budget",
+        name: "blocks when a completed changes-requested review exhausted the retry budget",
         latestRun: makeRun({ status: "completed", outcome: "changes_requested", runIndex: 1 }),
         maxSprintReviewRuns: 1,
         shouldRunReview: true,
-        expected: { action: "skip_review", reason: "retry_budget_exhausted" },
+        expected: { action: "block_completion", reason: "retry_budget_exhausted" },
       },
       {
         name: "keeps completion blocked while review is running",
@@ -218,7 +218,15 @@ describe("Sprint QA Snapshot", () => {
         latestRuns: [makeRun({ status: "failed", outcome: null, runIndex: 3 })],
         maxSprintReviewRuns: 3,
         shouldRunReview: false,
-      })).toEqual({ action: "block_completion", reason: "awaiting_follow_up" });
+      })).toEqual({ action: "block_completion", reason: "retry_budget_exhausted" });
+    });
+
+    it("honors the exhausted budget even when completed follow-up work changed the snapshot", () => {
+      expect(evaluateSprintQaReviewCycleDecision({
+        latestRuns: [makeRun({ status: "completed", outcome: "changes_requested", runIndex: 5 })],
+        maxSprintReviewRuns: 5,
+        shouldRunReview: true,
+      })).toEqual({ action: "block_completion", reason: "retry_budget_exhausted" });
     });
   });
 });

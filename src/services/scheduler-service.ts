@@ -17,7 +17,6 @@ import type { ExecutionControlService } from "./execution-control-service.js";
 import type { MemoryRemediationService } from "./memory-remediation-service.js";
 import type { TaskRerunService } from "./task-rerun-service.js";
 import type { NodeFlowRuntimeService } from "./node-flow-runtime-service.js";
-import type { PlanningAgentService } from "./planning-agent-service.js";
 import type { NodeFlowRepository } from "../repositories/node-flow-repository.js";
 import type { NodeFlowRunSummaryResponse } from "../contracts/node-flow-types.js";
 import { buildSchedulerOccurrences, computeNextRunAfterOccurrence } from "../domain/scheduler/schedule-time.js";
@@ -34,11 +33,10 @@ export interface SchedulerServiceDeps {
   quicksprintService: QuicksprintService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
   executionControlService: ExecutionControlService;
-  planningAgentService: Pick<PlanningAgentService, "planSprint">;
   taskRerunService?: TaskRerunService;
   memoryRemediationService?: MemoryRemediationService;
   nodeFlowRuntimeService?: NodeFlowRuntimeService;
-  nodeFlowRepository?: Pick<NodeFlowRepository, "getFlow">;
+  nodeFlowRepository?: Pick<NodeFlowRepository, "getFlow" | "getPublication">;
   logger: Logger;
   tickIntervalMs?: number;
 }
@@ -211,6 +209,17 @@ export class SchedulerService {
         continue;
       }
 
+      const wakeupThreadId = freshEntry.targetType === "agent_wakeup"
+        ? freshEntry.agentWakeupTarget?.threadId?.trim()
+        : null;
+      if (
+        wakeupThreadId
+        && typeof this.deps.chatThreadRuntimeService.isThreadBusy === "function"
+        && this.deps.chatThreadRuntimeService.isThreadBusy(wakeupThreadId)
+      ) {
+        continue;
+      }
+
       this.inFlightEntryIds.add(entry.id);
       
       const nextRunAt = freshEntry.scheduleAnchor
@@ -281,11 +290,6 @@ export class SchedulerService {
       const sprintId = entry.sprintTarget?.sprintId;
       if (!sprintId) {
         throw new Error("Scheduled sprint target is missing.");
-      }
-      const tasks = this.deps.projectManagementRepository.listTasks(entry.projectId, sprintId);
-      if (tasks.length === 0) {
-        await this.deps.planningAgentService.planSprint(entry.projectId, sprintId, { autoStart: true });
-        return;
       }
       await this.deps.executionControlService.orchestrateSprint(entry.projectId, sprintId);
       return;
@@ -403,6 +407,9 @@ export class SchedulerService {
       target.input ?? {},
       {
         triggerType: "scheduler",
+        versionSelection: target.versionSelection ?? (target.flowVersion !== undefined
+          ? { mode: "pinned", version: target.flowVersion }
+          : { mode: "latest_published" }),
         triggerPayload: {
           schedulerEntryId: entry.id,
           scheduledFor: occurrenceIso,
@@ -440,6 +447,12 @@ export class SchedulerService {
         throw new Error("nodeFlowTarget.flowId is required.");
       }
       this.validateNodeFlowTargetOwnership(projectId, flowId);
+      const selection = input.nodeFlowTarget?.versionSelection
+        ?? (input.nodeFlowTarget?.flowVersion !== undefined ? { mode: "pinned" as const, version: input.nodeFlowTarget.flowVersion } : { mode: "latest_published" as const });
+      if (selection.mode === "pinned" && typeof this.deps.nodeFlowRepository?.getPublication === "function"
+        && !this.deps.nodeFlowRepository.getPublication(flowId, selection.version)) {
+          throw new Error("Scheduled node flow version must reference a published version.");
+      }
       return;
     }
 

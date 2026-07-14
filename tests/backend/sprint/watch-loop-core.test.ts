@@ -1630,7 +1630,7 @@ describe("WatchLoopRunner", () => {
     );
     expect(runCommandStrict).toHaveBeenCalledWith(
       "git",
-      ["update-ref", "refs/heads/main", "HEAD"],
+      ["update-ref", "refs/heads/main", "feature-sha", "feature-sha"],
       expect.stringContaining("code-ux-local-merge-"),
     );
     expect(runCommandStrict).not.toHaveBeenCalledWith("git", ["checkout", "main"], "/tmp/local-only");

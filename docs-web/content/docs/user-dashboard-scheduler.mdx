@@ -16,16 +16,18 @@ Each scheduler entry has a **target** — the thing that runs when it fires:
 
 | Target | What it does |
 | --- | --- |
-| **Sprint** | Plans and auto-starts an existing sprint with no tasks, or directly orchestrates one that already has tasks. |
+| **Sprint** | Sends the sprint through its normal Start path. Existing tasks run directly; a draft with no tasks is planned automatically first. |
 | **Quicksprint** | Spawns and runs a [quicksprint template](/docs/user-quicksprints), substituting its variables. |
 | **Node flow** | Runs a saved project [node flow](/docs/user-dashboard-node-flows) with optional JSON object input. |
 | **Message** | Posts a project message (for example, a recurring planning or status prompt). |
 | **Memory remediation** | Runs the long-term memory cleanup workflow on a schedule. |
 
-Node-flow entries store `nodeFlowTarget = { flowId, input?, flowVersion? }` inside the existing
+Node-flow entries store `nodeFlowTarget = { flowId, input?, versionSelection }` inside the existing
 target JSON payload, validate that the flow belongs to the selected project, and run through the
 node-flow runtime with scheduler trigger metadata when due. Blank dashboard input is omitted, and
 supplied input must be a JSON object.
+
+Choose a pinned published version when every occurrence must execute the same immutable snapshot, or latest published when each occurrence should pick up the newest publication. A legacy `flowVersion` is treated as a pinned version and affects execution, not just audit metadata.
 
 The backend scheduler contract also supports agent-created wakeups.
 Agent wakeups are stored in the target JSON payload with `origin` and `source` set to
@@ -46,6 +48,12 @@ Agent wakeups created through `scheduler_code_ux` can use one timing mode at a t
 - `afterSprintId`, with optional `offsetMinutes`, to wake after a sprint completes successfully
 - `afterTaskId`, with optional `offsetMinutes`, to wake after a task reaches a terminal project status
 
+When the call comes from a dashboard chat turn, an omitted, null, or blank `threadId` defaults to the
+originating thread and that resolved target is stored with the scheduler entry. A non-empty `threadId`
+explicitly overrides the default. Standalone MCP calls have no originating thread, so omitted or empty
+targets remain threadless. Both contextual and explicit targets must belong to the selected project when
+the wakeup is delivered.
+
 Completion-anchored wakeups are one-time entries. A sprint anchor resolves only when its source
 sprint reaches effective successful `completed` status; failed, cancelled, and otherwise non-completed
 source sprints do not trigger it. The scheduler uses the latest successful sprint run finish time when
@@ -53,11 +61,23 @@ available, otherwise the completed sprint `endDate`, and then applies the config
 anchors continue to use terminal task run or dispatch finish evidence before falling back to the
 task update time.
 
-When a scheduled sprint becomes due, the scheduler checks whether it already has tasks. A sprint
-with no tasks is sent through planning with auto-start enabled, so it launches after planning
-succeeds. A sprint with existing tasks is orchestrated directly. If either planning or direct
-orchestration fails, the scheduler entry moves to `failed` and displays the recorded error in the
-scheduled-entry list.
+When a scheduled sprint becomes due, the scheduler submits it through the same Start path as the
+dashboard and MCP API. A sprint with existing tasks proceeds directly to orchestration. A draft with
+no tasks first refreshes its unchanged feature branch, starts planning automatically, and requests
+orchestration again after the generated tasks are saved. For an `after_sprint_end` follow-up, none of
+that planning work begins until the source sprint completes successfully and the anchor becomes due.
+
+If the scheduler's Start request itself fails, the entry moves to `failed` and displays the recorded
+error. Planning and orchestration continue asynchronously after an accepted request; later provider
+failures remain visible on their planning invocation or sprint run.
+
+### Dashboard planning wakeups
+
+Direct MCP planning started by the assigned Project Manager uses two non-recurring wakeup paths. The manager owns one status check at a time: first at the returned `estimatedCompletionAt`, then, only while status remains `in_progress`, at the next returned timestamp one minute later. It lists before scheduling to avoid duplicates and never turns planning checks into a recurring schedule. An elapsed ETA is not failure, so active planning is not resubmitted, requeued, or reconfigured.
+
+Code UX owns the other path: exactly one due-now completion or failure `agent_wakeup` for the originating dashboard thread after background planning settles. That terminal wakeup reports generated task count and actual auto-start state, or the failure evidence. When it arrives, the Project Manager cancels obsolete pending status checks it created for the same invocation or sprint, excluding the wakeup currently executing. This avoids a later ETA wakeup creating a duplicate dashboard turn.
+
+Standalone MCP calls have no originating dashboard thread, so they receive neither wakeup path. Those clients poll sprint, task, or telemetry state at the returned `nextCheckAt`; reads do not enqueue scheduler work.
 
 ## Recurrence
 

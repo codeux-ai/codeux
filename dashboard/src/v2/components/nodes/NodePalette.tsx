@@ -1,100 +1,43 @@
 import type { FunctionComponent } from "preact";
-import { GitBranch, Play, Plus, Route, Send, Split } from "lucide-preact";
-import type {
-  NodeCanvasNodeKind,
-  NodeCanvasNodeMetadata,
-  NodesCanvasAction,
-} from "../../lib/nodes-canvas-state.js";
-import { Button } from "../ui/Button.js";
-import { Tooltip } from "../ui/Tooltip.js";
-
-export type NodePaletteCreateNodeInput = Extract<NodesCanvasAction, { type: "add_node" }>;
-
-interface NodePaletteTemplate {
-  kind: NodeCanvasNodeKind;
-  label: string;
-  description: string;
-  metadata?: NodeCanvasNodeMetadata;
-  Icon: typeof Play;
-}
+import { Box, LockKeyhole, Plus } from "lucide-preact";
+import type { NodeDefinitionSummary } from "../../lib/node-flow-api.js";
 
 interface NodePaletteProps {
+  definitions: NodeDefinitionSummary[];
   disabled?: boolean;
-  onCreateNode: (input: NodePaletteCreateNodeInput) => void;
+  loading?: boolean;
+  onCreateNode: (definition: NodeDefinitionSummary) => void;
 }
 
-const NODE_TEMPLATES: readonly NodePaletteTemplate[] = [
-  {
-    kind: "trigger",
-    label: "Trigger",
-    description: "Start a graph from a manual or scheduled event.",
-    Icon: Play,
-  },
-  {
-    kind: "agent",
-    label: "Agent",
-    description: "Route work to a planning, implementation, review, or QA agent.",
-    metadata: { agentIntent: "implement" },
-    Icon: Route,
-  },
-  {
-    kind: "task",
-    label: "Task",
-    description: "Draft the concrete work item an agent should execute.",
-    metadata: { taskIntent: "feature" },
-    Icon: GitBranch,
-  },
-  {
-    kind: "condition",
-    label: "Condition",
-    description: "Branch the workflow based on checks or review state.",
-    Icon: Split,
-  },
-  {
-    kind: "output",
-    label: "Output",
-    description: "Collect the final workflow result for runs and agents.",
-    Icon: Send,
-  },
-];
-
-export const NodePalette: FunctionComponent<NodePaletteProps> = ({ disabled = false, onCreateNode }) => (
-  <aside
-    className="flex min-w-0 flex-col gap-3 rounded-[var(--radius-panel)] border border-black/[0.06] bg-white/70 p-4 shadow-[var(--elevation-soft)] dark:border-white/[0.06] dark:bg-white/[0.035] xl:w-[300px] xl:shrink-0"
-    aria-labelledby="node-palette-heading"
-  >
-    <div className="flex items-center justify-between gap-3">
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">Palette</p>
-        <h2 id="node-palette-heading" className="text-base font-bold text-slate-900 dark:text-white">Add nodes</h2>
+export const NodePalette: FunctionComponent<NodePaletteProps> = ({ definitions, disabled = false, loading = false, onCreateNode }) => {
+  const categories = new Map<string, NodeDefinitionSummary[]>();
+  for (const definition of definitions) {
+    categories.set(definition.category, [...(categories.get(definition.category) ?? []), definition]);
+  }
+  return (
+    <aside className="flex min-w-0 flex-col gap-3 rounded-[var(--radius-panel)] border border-black/[0.06] bg-white/70 p-4 shadow-[var(--elevation-soft)] dark:border-white/[0.06] dark:bg-white/[0.035] xl:w-[300px] xl:shrink-0" aria-labelledby="node-palette-heading">
+      <div className="flex items-center justify-between gap-3">
+        <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">T01 registry</p><h2 id="node-palette-heading" className="text-base font-bold text-slate-900 dark:text-white">Node catalog</h2></div>
+        <Plus className="h-4 w-4 text-slate-400" aria-hidden="true" />
       </div>
-      <Plus className="h-4 w-4 text-slate-400" aria-hidden="true" />
-    </div>
-    <div className="grid gap-2" aria-label="Node templates">
-      {NODE_TEMPLATES.map(({ kind, label, description, metadata, Icon }) => (
-        <Tooltip key={kind} content={description} position="right">
-          <Button
-            type="button"
-            aria-label={`Add ${label} node`}
-            variant="secondary"
-            size="md"
-            icon={Icon}
-            disabled={disabled}
-            className="w-full justify-start text-left"
-            onClick={() => onCreateNode({
-              type: "add_node",
-              kind,
-              label: `${label} Node`,
-              ...(metadata ? { metadata } : {}),
-            })}
-          >
-            <span className="flex min-w-0 flex-col items-start">
-              <span className="truncate text-sm">{label}</span>
-              <span className="line-clamp-2 text-xs font-medium text-slate-500 dark:text-slate-400">{description}</span>
-            </span>
-          </Button>
-        </Tooltip>
+      {loading ? <p role="status" className="text-sm text-slate-500">Loading node definitions…</p> : null}
+      {!loading && definitions.length === 0 ? <p role="status" className="text-sm text-slate-500">No governed node definitions are available.</p> : null}
+      {[...categories.entries()].map(([category, entries]) => (
+        <section key={category} aria-labelledby={`node-category-${category}`}>
+          <h3 id={`node-category-${category}`} className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{category}</h3>
+          <div className="grid gap-2">
+            {entries.map((definition) => (
+              <button key={`${definition.type}@${definition.version}`} type="button" disabled={disabled || !definition.executable} onClick={() => onCreateNode(definition)} className="rounded-xl border border-black/[0.07] bg-white/70 p-3 text-left transition hover:border-signal-500/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 disabled:cursor-not-allowed disabled:opacity-55 dark:border-white/[0.07] dark:bg-white/[0.03]" aria-label={`Add ${definition.label} node`}>
+                <span className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white"><Box className="h-4 w-4 text-signal-500" aria-hidden="true" />{definition.label}<span className="ml-auto text-[10px] text-slate-400">v{definition.version}</span></span>
+                <span className="mt-1 block text-xs leading-relaxed text-slate-500">{definition.description}</span>
+                <span className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
+                  <span>{definition.executionKind}</span><span>{definition.sideEffect}</span>{definition.credentials.length ? <span className="inline-flex items-center gap-1"><LockKeyhole className="h-3 w-3" aria-hidden="true" />credential</span> : null}{!definition.executable ? <span>Unavailable</span> : null}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
       ))}
-    </div>
-  </aside>
-);
+    </aside>
+  );
+};

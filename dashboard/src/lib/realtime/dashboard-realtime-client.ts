@@ -31,6 +31,7 @@ class DashboardRealtimeClient {
   private transportState: TransportState = "disconnected";
   private disconnectTimer: number | null = null;
   private onlineListener: (() => void) | null = null;
+  private visibilityListener: (() => void) | null = null;
 
   constructor() {
     if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
@@ -43,12 +44,29 @@ class DashboardRealtimeClient {
       };
       window.addEventListener("online", this.onlineListener);
     }
+    if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+      this.visibilityListener = () => {
+        if (document.hidden) {
+          this.disconnect();
+          return;
+        }
+        if (this.subscriptions.size > 0) {
+          this.reconnectAttempt = 0;
+          this.ensureConnected();
+        }
+      };
+      document.addEventListener("visibilitychange", this.visibilityListener);
+    }
   }
 
   dispose(): void {
     if (this.onlineListener && typeof window !== "undefined" && typeof window.removeEventListener === "function") {
       window.removeEventListener("online", this.onlineListener);
       this.onlineListener = null;
+    }
+    if (this.visibilityListener && typeof document !== "undefined" && typeof document.removeEventListener === "function") {
+      document.removeEventListener("visibilitychange", this.visibilityListener);
+      this.visibilityListener = null;
     }
     this.clearDisconnectTimer();
     this.clearReconnectTimer();
@@ -103,6 +121,10 @@ class DashboardRealtimeClient {
   private ensureConnected(): void {
     this.clearDisconnectTimer();
     if (typeof window === "undefined") {
+      return;
+    }
+    if (typeof document !== "undefined" && document.hidden) {
+      this.setTransportState("disconnected");
       return;
     }
     if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
@@ -240,6 +262,10 @@ class DashboardRealtimeClient {
     this.clearReconnectTimer();
     this.setTransportState("reconnecting");
     if (typeof window === "undefined") {
+      return;
+    }
+    if (typeof document !== "undefined" && document.hidden) {
+      this.setTransportState("disconnected");
       return;
     }
     const delayMs = Math.min(5000, 250 * (2 ** this.reconnectAttempt));

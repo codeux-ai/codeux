@@ -227,6 +227,35 @@ describe("AvantgardeSelect", () => {
     expect(screen.queryByText("Anthropic")).toBeNull();
   });
 
+  it("keeps searchable keyboard selection on an enabled filtered option", async () => {
+    const onChange = vi.fn();
+    const options = [
+      { value: "blocked", label: "Alpha blocked", disabled: true },
+      { value: "ready", label: "Alpha ready" },
+      { value: "other", label: "Beta" },
+    ];
+    render(
+      <AvantgardeSelect
+        value=""
+        onChange={onChange}
+        options={options}
+        searchable
+        aria-label="Searchable state"
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Searchable state" }));
+    const search = await screen.findByPlaceholderText("Search...");
+    fireEvent.input(search, { target: { value: "Alpha" } });
+
+    const disabledOption = screen.getByRole("option", { name: "Alpha blocked" });
+    expect((disabledOption as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.keyDown(search, { key: "Enter" });
+
+    expect(onChange).toHaveBeenCalledOnce();
+    expect(onChange).toHaveBeenCalledWith("ready");
+  });
+
   it("offers a custom-value option when nothing matches and allowCustomValue is set", () => {
     const onChange = vi.fn();
     const options = [{ value: "1", label: "Anthropic" }];

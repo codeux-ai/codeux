@@ -45,9 +45,10 @@ Domain for project CRUD and selection.
 | `list` | – | `projectId` | List sprints for a project. |
 | `get` | – | `sprintId` | Get a sprint. |
 | `create` | – | `projectId`, `name \| title` | Create a sprint. Accepts `goal` or `goalMarkdown`, plus optional sprint metadata. |
+| `followup` | – | `projectId` | Save an idle, unplanned follow-up draft. Accepts the same title and goal aliases as `create` and never starts planning. |
 | `update` | – | `sprintId`, update fields | Update a sprint. Accepts `name` or `title`, and `goal` or `goalMarkdown`. |
 | `delete` | ✅ | `sprintId` | Delete a sprint. |
-| `start` | – | `projectId`, `sprintId` | Begin a sprint run (orchestrate). |
+| `start` | – | `projectId`, `sprintId` | Begin a sprint run. If the sprint has no tasks, plan it with auto-start first. |
 | `pause` | – | `sprintRunId` | Pause an active run. |
 | `cancel` | – | `sprintRunId` | Cancel gracefully. |
 | `force_cancel` | – | `sprintRunId` | Force-cancel (immediate). |
@@ -57,6 +58,8 @@ Domain for project CRUD and selection.
 
 `title` and `goalMarkdown` are MCP-friendly aliases. The repository stores sprint `name` and `goal`.
 
+For follow-up work that must wait for another sprint, call `followup` first, then schedule the returned sprint through `manage_scheduler` with `schedule_sprint`, `scheduleMode: "after_sprint_end"`, and the source sprint id. The draft stays idle and unplanned until that schedule starts it. Do not call `plan` before scheduling: the scheduled `start` performs planning with auto-start only after the source sprint has completed.
+
 The stable immediate response is:
 
 ```json
@@ -65,14 +68,52 @@ The stable immediate response is:
     "status": "started",
     "message": "Sprint planning started in the background. You will be notified when it completes or fails.",
     "projectId": "project-123",
-    "sprintId": "sprint-123"
+    "sprintId": "sprint-123",
+    "planningGuidance": {
+      "status": "in_progress",
+      "asynchronous": true,
+      "isTerminal": false,
+      "invocationId": "planning-request-id",
+      "startedAt": "2026-07-13T10:00:00.000Z",
+      "estimatedDurationMs": 180000,
+      "estimatedCompletionAt": "2026-07-13T10:03:00.000Z",
+      "nextCheckAt": "2026-07-13T10:03:00.000Z",
+      "recheckIntervalMs": 60000,
+      "sampleSize": 2,
+      "isFallbackEstimate": false,
+      "message": "Planning is running asynchronously. Exceeding the estimated completion time is not evidence of failure. Do not requeue, resubmit, or change settings while this invocation remains in progress. Check the same invocation again at 2026-07-13T10:03:00.000Z."
+    }
   }
 }
 ```
 
-The stable `result` fields are `status`, `message`, `projectId`, and `sprintId`. This response acknowledges that background planning started; it does not mark planning complete, promise that tasks already exist, or indicate that optional auto-start has completed. Task persistence, planning self-reflection, and optional sprint execution remain owned by the background workflow.
+`planningGuidance` fields are:
 
-For MCP calls made from dashboard chat, planning success queues a due-now, non-recurring `agent_wakeup` for the originating thread. The wakeup asks the chat agent to recap the generated task count and whether execution actually started. Planning failure queues a same-thread wakeup with the failure reason and asks for a concise failure recap. Standalone MCP clients receive the acknowledgement without a chat wakeup and should poll `manage_sprints` and `manage_tasks`, or inspect relevant `manage_telemetry` state, for completion.
+| Field | Contract |
+| --- | --- |
+| `status` | `in_progress`, `succeeded`, `failed`, `cancelled`, or `paused`; durable `running` and `completed` invocation states project as `in_progress` and `succeeded`. |
+| `asynchronous` | Always `true`. |
+| `isTerminal` | `false` for `in_progress`; `true` for every other status. |
+| `invocationId` | Planning request/invocation identity to retain across checks. The initial request identity can be replaced by the durable invocation id once it exists. |
+| `startedAt` | ISO estimate origin. |
+| `estimatedDurationMs` | Duration selected from recent successful project planning samples or the shared three-minute fallback. |
+| `estimatedCompletionAt` | Estimated finish (`startedAt + estimatedDurationMs`), not a failure deadline. |
+| `nextCheckAt` | Initial check at `estimatedCompletionAt`; later in-progress checks one minute after the current read; `null` when terminal. |
+| `recheckIntervalMs` | Subsequent cadence, `60000` milliseconds. |
+| `sampleSize` | Number of usable completed samples used by the estimate. |
+| `isFallbackEstimate` | Whether the duration came from the fallback rather than project history. |
+| `message` | Actionable in-progress or terminal guidance, including the warning that ETA overrun is not failure. |
+| `errorMessage` | Optional available terminal error evidence; omitted when unavailable or succeeded. |
+
+The existing `result` fields `status`, `message`, `projectId`, and `sprintId` remain stable; `planningGuidance` is additive and backward compatible. This response acknowledges that background planning started; it does not mark planning complete, promise that tasks already exist, or indicate that optional auto-start has completed. Task persistence, planning self-reflection, and optional sprint execution remain owned by the background workflow.
+
+Repeating `plan` for the same project and sprint while the request remains unsettled returns `status: "in_progress"` with a one-minute recheck time and starts neither another provider request nor another terminal callback. Sprint `get` preserves the sprint record and adds current guidance from the active request or latest durable planning invocation. Running reads advance the next check by one minute even after the ETA; succeeded, failed, cancelled, and paused terminal reads set `isTerminal: true`, set `nextCheckAt` to `null`, and surface available failure details. ETA overrun alone is never failure.
+
+For MCP calls made from dashboard chat, planning success queues one due-now, non-recurring `agent_wakeup` for the originating thread. The wakeup asks the chat agent to recap the generated task count and whether execution actually started. Planning failure queues the same kind of same-thread wakeup with the failure reason and asks for a concise failure recap.
+
+The assigned Project Manager creates only one-shot status wakeups: first at `estimatedCompletionAt`, then one at a time at each returned one-minute `nextCheckAt`. It lists before creating to suppress duplicates, never uses recurrence, and does not replan, requeue, or change provider/model/settings while planning is active. When terminal guidance or the runtime terminal wakeup arrives, it stops polling and cancels its obsolete pending checks for that invocation or sprint without cancelling the currently executing wakeup.
+
+Standalone MCP clients receive the acknowledgement without a completion or Project Manager wakeup. They should poll sprint `get`, tasks, or relevant telemetry at `nextCheckAt`; polling does not queue scheduler entries.
 
 This detached behavior applies only to the direct MCP `plan` action. `import_issues` with `planAfterImport` and non-MCP planning callers retain their awaited behavior.
 
@@ -110,6 +151,23 @@ Task create/update fields include `title`, `name`, `promptMarkdown`, `descriptio
 | `start` | – | `projectId`, `templateId` | MCP-friendly alias for executing with default `submitMode: "plan_and_start"`. |
 
 `taskCount` defaults to `5` when omitted. MCP accepts `taskCount` as a number or numeric string. `submitMode` accepts `plan_only` or `plan_and_start`.
+
+---
+
+## `node_flows`
+
+| Action group | Approval | Behavior |
+| --- | --- | --- |
+| Catalog | – | `catalog` and `get_node_definition` return executable manifests and schemas without complete flow graphs. |
+| Drafts | – | `create_draft`, `patch_draft`, and `validate_draft` return validation, policy, credential, capability, and side-effect summaries. `patch_draft` requires `draftRevision`. |
+| Custom nodes | – | `create_custom_node`, `update_custom_node`, and `validate_custom_node` reuse the governed project/build services. |
+| Credentials | – | `request_credential` and `inspect_bindings` expose metadata and permission findings only. |
+| Review | – / ✅ | `dry_run` is side-effect free; `publish` and `rollback` require exact-payload approval; `compare_versions` returns structural summaries. |
+| Operations | – | `run`, `cancel`, `retry`, `inspect_run`, and `list_runs` enforce project ownership and publication selection. Run, retry, and inspection summaries include durable redacted node attempts with attempt/retry outcomes, executor and invocation links, and artifact digests. |
+
+Compatibility aliases remain for legacy list/get/create/update/delete/validate/run/attach/detach calls. Legacy create/update auto-publish for backward compatibility; governed draft actions do not. Attachments grant the agent only `run_attached_flow`, never the full management surface.
+
+Attempt projections expose numbered status history, failure classifications, retry decisions, executor and execution-invocation identifiers, artifact digests, timestamps, and redacted input/output. They exclude credential values, credential-binding ids, and custom-node source. Attached agents continue to receive summary-only flow metadata rather than complete graphs.
 
 ---
 
@@ -248,8 +306,11 @@ Project-scoped generated dashboards, immutable revisions, detached validation se
 | `publish_revision` | – | `dashboardId`, `revisionId`, optional `validationSessionId` | Publish only a passed revision with a valid report. |
 | `archive` | ✅ | `dashboardId` | Clear active publication and mark the dashboard archived. |
 | `data_catalog` | – | `projectId` | Return dashboard summaries and declared source nodes. |
+| `list_credential_slots` | – | `projectId`, `dashboardId` | Return a bounded metadata-only review of declared slots, bindings, backend health, and compatible candidates. Optional `revisionId` reviews an immutable revision. |
+| `bind_credential` | ✅ | `projectId`, `dashboardId`, `slotId`, `credentialId`, `expectedBindingRevision` | Bind or replace a slot by credential ID after the stateful approval handshake. |
+| `unbind_credential` | ✅ | `projectId`, `dashboardId`, `slotId`, `expectedBindingRevision` | Remove a slot binding after the stateful approval handshake. |
 
-Publication rejects failed, queued, running, cancelled, missing, or cross-revision validation sessions before the active publication pointer changes.
+Credential actions reject secret-bearing, malformed approval, or undeclared fields before approval fingerprinting, reduce accepted mutations to their allowed metadata, and never resolve plaintext. Validation and publication review required and bound slots against backend health, project access, status, kind, and required capabilities; a denial blocks the operation before the active publication pointer changes and returns sanitized slot-specific issues. Generic custom-dashboard responses recursively redact known binding IDs from nested content.
 
 ---
 

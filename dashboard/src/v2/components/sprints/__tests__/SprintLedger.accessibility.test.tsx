@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/preact";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
@@ -9,6 +9,7 @@ import { SprintLedgerRow } from "../SprintLedgerRow.js";
 import { SprintLedgerHeader } from "../SprintLedgerHeader.js";
 import { SprintLedgerBulkActions } from "../SprintLedgerBulkActions.js";
 import type { Sprint } from "../../../types.js";
+import type { CiStatusPresentation } from "../../../lib/ci-status-presentation.js";
 
 expect.extend(matchers);
 
@@ -30,6 +31,11 @@ const mockSprint: Sprint = {
   endDate: null,
   featureBranch: null,
   baseCommitSha: null,
+  kind: "standard",
+  rollbackSourceSprintId: null,
+  rollbackMode: null,
+  rollbackInstructions: null,
+  rollbackSafetyReason: null,
   latestReview: undefined,
   id: "sprint-1",
   number: 1,
@@ -44,6 +50,19 @@ const mockSprint: Sprint = {
   updatedAt: "2023-01-02T00:00:00.000Z",
   showcasePinned: false,
   linkedIssues: [],
+};
+
+const failedCiStatus: CiStatusPresentation = {
+  scope: "sprint",
+  state: "failed",
+  label: "CI failed",
+  accessibleLabel: "CI failed. Pull request: Pull request ready. Checks: Checks failed. Merge: Blocked by checks.",
+  failureKind: "ci_checks",
+  steps: [
+    { id: "pull_request", label: "Pull request", state: "successful", statusLabel: "Pull request ready" },
+    { id: "checks", label: "Checks", state: "failed", statusLabel: "Checks failed", failureKind: "ci_checks" },
+    { id: "merge", label: "Merge", state: "pending", statusLabel: "Blocked by checks" },
+  ],
 };
 
 describe("SprintLedger Accessibility", () => {
@@ -236,6 +255,74 @@ describe("SprintLedger Accessibility", () => {
 
     await user.tab();
     expect(screen.getByRole("button", { name: "Select sprint Frontend Onboarding" })).toHaveFocus();
+  });
+
+  it("keeps QA, CI, lifecycle, and human-attention states independently accessible", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <table>
+        <tbody>
+          <SprintLedgerRow
+            sprint={{
+              ...mockSprint,
+              status: "paused",
+              latestReview: {
+                status: "completed",
+                outcome: "changes_requested",
+                summary: "One requested change remains.",
+                findings: [],
+                fixInstructions: "Cover the failed-check recovery path.",
+                targetTaskKey: "T03",
+                reviewer: "QA Worker",
+                finishedAt: "2026-07-13T10:00:00.000Z",
+              },
+            }}
+            isSelected={false}
+            isEven={false}
+            activeRun={undefined}
+            pauseResumeRun={undefined}
+            humanIntervention={{
+              title: "Operator review required",
+              reason: "Confirm the CI repair",
+              instructions: "Resume after review",
+              attentionType: "ci_fix_required",
+              severity: "high",
+              ownerType: "human",
+            }}
+            ciStatus={failedCiStatus}
+            isAnyBulkPending={false}
+            pendingActionIds={new Set()}
+            onToggleRow={vi.fn()}
+            onToggleShowcase={vi.fn()}
+            onSprintToggle={vi.fn()}
+            onSprintPauseResume={vi.fn()}
+            onEdit={vi.fn()}
+            onExport={vi.fn()}
+            onOverrides={vi.fn()}
+            onMarkCompleted={vi.fn()}
+            onDelete={vi.fn()}
+          />
+        </tbody>
+      </table>,
+    );
+
+    expect(screen.getByText("Paused")).toBeVisible();
+    expect(screen.getByText("Needs you")).toBeVisible();
+    expect(screen.queryByText("CI")).not.toBeInTheDocument();
+    const ciTrigger = screen.getByRole("button", { name: /CI status: CI failed.*Show workflow details/i });
+    expect(ciTrigger).toHaveAccessibleName(/CI status: CI failed/i);
+    expect(container.querySelector('[data-ci-icon="failure"]')).toHaveClass("text-status-red");
+
+    await user.click(ciTrigger);
+    const workflow = screen.getByRole("region", { name: "CI workflow details" });
+    expect(within(workflow).getByText("Checks failed")).toBeVisible();
+
+    const qaTrigger = screen.getByRole("button", { name: "QA review details" });
+    expect(qaTrigger).toHaveAccessibleDescription(/QA changes requested/i);
+    await user.click(qaTrigger);
+    const review = screen.getByRole("region", { name: "QA Changes Requested" });
+    expect(within(review).getByText("Cover the failed-check recovery path.")).toBeVisible();
+    expect(within(review).getByText("T03")).toBeVisible();
   });
 
   it("announces bulk selection count through the ledger live region", async () => {

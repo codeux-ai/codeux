@@ -49,6 +49,7 @@ import {
   isProjectManagerClarificationAgent,
   isWorkerClarificationAgent,
   toAgentCodeUxToolAccess,
+  withAttachedFlowAccess,
   withClarificationAudienceAccess,
 } from "../services/agent-mcp-access.js";
 import { JulesSourceResolver } from "../services/jules-source-resolver.js";
@@ -86,6 +87,7 @@ import type { ProjectWorkerAssignmentService } from "../domain/workers/project-w
 import { SprintPreviewRepository } from "../repositories/sprint-preview-repository.js";
 import { SprintPreviewService } from "../services/sprint-preview-service.js";
 import { SprintFileBrowserService } from "../services/sprint-file-browser-service.js";
+import { SprintBranchService } from "../services/sprint-branch-service.js";
 import { resolveEffectiveDashboardSettings } from "../services/settings-resolution-service.js";
 import { ActiveDispatchRegistry } from "../services/active-dispatch-registry.js";
 import { ShutdownContainerService } from "../services/shutdown-container-service.js";
@@ -99,6 +101,11 @@ import { disposeCommandSpawner, shutdownGitHelperPool } from "../shared/subproce
 import { LocalMcpCliConfigService } from "../services/local-mcp-cli-config-service.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { ChatProviderIngressService } from "../services/chat-provider-ingress-service.js";
+import type { HeadlessAuthService } from "../services/headless-auth-service.js";
+import type { AutomationAuditExportService } from "../services/automation-audit-export-service.js";
+import type { HeadlessOperationalReadinessService } from "../services/headless-operational-readiness-service.js";
+import type { AutomationSloService } from "../services/automation-slo-service.js";
+import type { CredentialBroker } from "../services/credentials/credential-broker.js";
 import { ProjectInitializationStateService } from "../services/project-initialization-state-service.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
@@ -176,7 +183,9 @@ export class CodeUxServer {
   private sprintPreviewRepository: SprintPreviewRepository;
   private sprintPreviewService: SprintPreviewService;
   private sprintFileBrowserService: SprintFileBrowserService;
+  private sprintBranchService: SprintBranchService;
   private customDashboardRepository: import("../repositories/custom-dashboard-repository.js").CustomDashboardRepository;
+  private customDashboardCredentialBindingService: import("../services/custom-dashboard-credential-binding-service.js").CustomDashboardCredentialBindingService;
   private customDashboardValidationService: import("../services/custom-dashboard-validation-service.js").CustomDashboardValidationService;
   private agentPresetSyncService: AgentPresetSyncService;
   private executionRepository: ExecutionRepository;
@@ -199,6 +208,7 @@ export class CodeUxServer {
   private quicksprintService: import("../services/quicksprint-service.js").QuicksprintService;
   private projectSetupService: import("../services/project-setup-service.js").ProjectSetupService;
   private schedulerService: import("../services/scheduler-service.js").SchedulerService;
+  private sprintRollbackService: import("../services/sprint-rollback-service.js").SprintRollbackService;
   private nodeFlowService: import("../services/node-flow-service.js").NodeFlowService;
   private chatThreadRuntimeService: import("../services/chat-thread-runtime-service.js").ChatThreadRuntimeService;
   private chatProviderIngressService: ChatProviderIngressService;
@@ -217,6 +227,7 @@ export class CodeUxServer {
   private skillService: import("../services/skill-service.js").SkillService;
   private runtimeCleanupInterval: ReturnType<typeof setInterval> | null = null;
   private sprintPreviewInterval: ReturnType<typeof setInterval> | null = null;
+  private sprintPreviewReconcileInFlight = false;
   private liveSnapshotInterval: ReturnType<typeof setInterval> | null = null;
   private walCheckpointInterval: ReturnType<typeof setInterval> | null = null;
   private readonly startupTaskTimers = new Set<ReturnType<typeof setTimeout>>();
@@ -228,6 +239,11 @@ export class CodeUxServer {
   private closePromise: Promise<void> | null = null;
   private readonly mcpApprovalTracker = new McpApprovalTracker();
   private readonly localMcpCliConfigService = new LocalMcpCliConfigService();
+  private readonly headlessAuthService: HeadlessAuthService;
+  private readonly credentialBroker: CredentialBroker;
+  private readonly automationAuditService: AutomationAuditExportService;
+  private readonly headlessReadinessService: HeadlessOperationalReadinessService;
+  private readonly automationSloService: AutomationSloService;
   private readonly signalHandler: () => void;
   private runtimeProcessLockRelease: RuntimeProcessLockRelease | null = null;
 
@@ -266,7 +282,14 @@ export class CodeUxServer {
     this.sprintPreviewRepository = deps.sprintPreviewRepository;
     this.sprintPreviewService = deps.sprintPreviewService;
     this.sprintFileBrowserService = deps.sprintFileBrowserService;
+    this.sprintBranchService = new SprintBranchService({
+      projectManagementRepository: this.projectManagementRepository,
+      executionRepository: this.executionRepository,
+      settingsRepository: this.settingsRepository,
+      logger: this.logger.child({ component: "sprint-branch-service" }),
+    });
     this.customDashboardRepository = deps.customDashboardRepository;
+    this.customDashboardCredentialBindingService = deps.customDashboardCredentialBindingService;
     this.customDashboardValidationService = deps.customDashboardValidationService;
     this.sprintMarkdownService = deps.sprintMarkdownService;
     this.sprintIssueService = deps.sprintIssueService;
@@ -276,6 +299,11 @@ export class CodeUxServer {
     this.sessionTracking = deps.sessionTracking;
     this.cliWorkflowService = deps.cliWorkflowService;
     this.managementToolHandler = deps.managementToolHandler;
+    this.headlessAuthService = deps.headlessAuthService;
+    this.credentialBroker = deps.credentialBroker;
+    this.automationAuditService = deps.automationAuditService;
+    this.headlessReadinessService = deps.headlessReadinessService;
+    this.automationSloService = deps.automationSloService;
 
     this.activityCacheService = deps.activityCacheService;
     this.taskRerunService = deps.taskRerunService;
@@ -291,6 +319,7 @@ export class CodeUxServer {
     this.quicksprintService = deps.quicksprintService;
     this.projectSetupService = deps.projectSetupService;
     this.schedulerService = deps.schedulerService;
+    this.sprintRollbackService = deps.sprintRollbackService;
     this.nodeFlowService = deps.nodeFlowService;
     this.chatThreadRuntimeService = deps.chatThreadRuntimeService;
     this.chatProviderIngressService = deps.chatProviderIngressService;
@@ -525,6 +554,9 @@ export class CodeUxServer {
           : persistentSkillRetrievalEnabled
             ? toAgentCodeUxToolAccess({ codeUxEnabled: false, codeUxToolToggles: [] }, true)
             : { codeUxEnabled: false, codeUxToolToggles: [] };
+        if (this.nodeFlowService.listAgentSkillsForAgent(agent.projectId, agent.id).length > 0) {
+          resolvedAccess = withAttachedFlowAccess(resolvedAccess);
+        }
         if (workerEligible) {
           resolvedAccess = withClarificationAudienceAccess(resolvedAccess, "worker", "request_clarification");
         }
@@ -587,11 +619,9 @@ export class CodeUxServer {
     }
 
     const runCleanup = (): void => {
-      try {
-        this.runtimeCleanupService.cleanup();
-      } catch (error) {
+      void this.runtimeCleanupService.cleanup().catch((error) => {
         this.logger.error("Runtime cleanup sweep failed", { error });
-      }
+      });
     };
 
     const initialTimer = setTimeout(runCleanup, CodeUxServer.LOOP_INITIAL_DELAY_MS);
@@ -606,11 +636,23 @@ export class CodeUxServer {
     }
 
     const reconcile = (): void => {
-      void this.sprintPreviewService.reconcileSessions().catch((error) => {
-        this.logger.error("Sprint preview reconciliation failed", { error });
-      });
-      void this.sprintFileBrowserService.reconcileSessions().catch((error) => {
-        this.logger.error("File browser reconciliation failed", { error });
+      if (this.sprintPreviewReconcileInFlight) {
+        return;
+      }
+      this.sprintPreviewReconcileInFlight = true;
+      void Promise.allSettled([
+        this.sprintPreviewService.reconcileSessions(),
+        this.sprintFileBrowserService.reconcileSessions(),
+      ]).then((results) => {
+        const [previewResult, fileBrowserResult] = results;
+        if (previewResult.status === "rejected") {
+          this.logger.error("Sprint preview reconciliation failed", { error: previewResult.reason });
+        }
+        if (fileBrowserResult.status === "rejected") {
+          this.logger.error("File browser reconciliation failed", { error: fileBrowserResult.reason });
+        }
+      }).finally(() => {
+        this.sprintPreviewReconcileInFlight = false;
       });
     };
 
@@ -656,14 +698,43 @@ export class CodeUxServer {
 
     const checkpoint = (): void => {
       try {
-        maintenance.checkpointWalDatabases();
+        this.advanceDeferredDatabaseMigrations();
+        if (!this.appDbStorage.hasPendingMaintenanceCriticalIndexes()) {
+          maintenance.runPeriodicMaintenance();
+        }
       } catch (error) {
-        this.logger.error("WAL checkpoint sweep failed", { error });
+        this.logger.error("Periodic database maintenance sweep failed", { error });
       }
     };
 
     this.walCheckpointInterval = setInterval(checkpoint, CodeUxServer.WAL_CHECKPOINT_INTERVAL_MS);
     this.walCheckpointInterval.unref?.();
+  }
+
+  private advanceDeferredDatabaseMigrations(): void {
+    const bounded = this.appDbStorage.runBoundedDataMigrationsIfIdle();
+    if (!bounded.skipped) {
+      const changed = bounded.deletedNonReplayableEvents
+        + bounded.backfilledTaskRunEventProjects
+        + bounded.backfilledProviderInvocations
+        + bounded.backfilledAutomationCredentials
+        + bounded.migratedNodeFlowGraphs
+        + bounded.backfilledNodeFlowPublications;
+      if (changed > 0) {
+        this.logger.info("Advanced bounded database data migrations", { changed });
+      }
+    }
+    void this.appDbStorage.runNextDeferredIndexIfIdle().then((status) => {
+      if (status === "created") {
+        this.logger.info("Created one deferred database index", {
+          remaining: this.appDbStorage.getPendingDeferredIndexCount(),
+        });
+      }
+    }).catch((error) => {
+      this.logger.warn("Deferred database index build failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
 
   private createContext(): ServerContext {
@@ -673,6 +744,7 @@ export class CodeUxServer {
       getAppConfig: () => this.appConfig,
       getEffectiveJulesApiKey: () => this.getEffectiveJulesApiKey(),
       getEffectiveGithubToken: () => this.getEffectiveGithubToken(),
+      getEffectiveGitlabToken: () => this.getEffectiveGitlabToken(),
       getDashboardPort: () => this.getDashboardPort(),
       isJulesApiConfigured: () => this.isJulesApiConfigured(),
       getMissingJulesApiKeyInstruction: () => this.getMissingJulesApiKeyInstruction(),
@@ -1277,6 +1349,10 @@ export class CodeUxServer {
     } catch (error) {
       this.logger.error("Failed to recover runtime state on startup", { error });
     } finally {
+      // Repair attention can retain a claimed virtual endpoint and a live Docker
+      // container across a process boundary. Reconcile and stop that stale owner
+      // before virtual workers are allowed to claim the preserved workspace.
+      this.virtualWorkerService.start();
       this.startupRecoveryCompleted = true;
     }
   }
@@ -1327,6 +1403,14 @@ export class CodeUxServer {
       this.logger.error("Failed to reap merged branches on startup", { error });
     }
 
+    this.advanceDeferredDatabaseMigrations();
+    if (this.appDbStorage.hasPendingMaintenanceCriticalIndexes()) {
+      this.logger.info("Deferring database retention until maintenance-critical indexes are ready", {
+        pendingIndexes: this.appDbStorage.getPendingDeferredIndexCount(),
+      });
+      return;
+    }
+
     try {
       await new DatabaseMaintenanceService({
         appDbStorage: this.appDbStorage,
@@ -1375,6 +1459,7 @@ export class CodeUxServer {
   }
 
   private async runInternal(): Promise<void> {
+    await this.headlessReadinessService.assertStartupReady();
     await bootSettings({
       runtimeContext: this.runtimeContext,
       projectRoot: this.projectRoot,
@@ -1406,7 +1491,7 @@ export class CodeUxServer {
         projectInitializationStateService: this.projectInitializationStateService,
         projectRuntimeRepository: this.projectRuntimeRepository,
         executionRepository: this.executionRepository,
-        getDashboardNotifications: () => this.executionRepository.getDashboardNotifications(),
+        getDashboardNotifications: (limit) => this.executionRepository.getDashboardNotifications({ limit }),
         connectionChatRepository: this.connectionChatRepository,
         chatProviderRepository: this.chatProviderRepository,
         projectWorkerAssignmentRepository: this.projectWorkerAssignmentRepository,
@@ -1428,8 +1513,15 @@ export class CodeUxServer {
         quicksprintService: this.quicksprintService,
         projectSetupService: this.projectSetupService,
         schedulerService: this.schedulerService,
+        sprintRollbackService: this.sprintRollbackService,
         nodeFlowService: this.nodeFlowService,
+        credentialBroker: this.credentialBroker,
+        headlessAuthService: this.headlessAuthService,
+        automationAuditService: this.automationAuditService,
+        headlessReadinessService: this.headlessReadinessService,
+        automationSloService: this.automationSloService,
         customDashboardRepository: this.customDashboardRepository,
+        customDashboardCredentialBindingService: this.customDashboardCredentialBindingService,
         customDashboardValidationService: this.customDashboardValidationService,
         skillService: this.skillService,
         chatThreadRuntimeService: this.chatThreadRuntimeService,
@@ -1472,6 +1564,7 @@ export class CodeUxServer {
         readFileBrowserFile: (sessionId, filePath) => this.sprintFileBrowserService.readFile(sessionId, filePath),
         getFileBrowserChanges: (sessionId) => this.sprintFileBrowserService.getChangeSet(sessionId),
         getFileBrowserDiff: (sessionId, filePath) => this.sprintFileBrowserService.getDiff(sessionId, filePath),
+        updateSprintBranch: (projectId, sprintId) => this.sprintBranchService.updateFromDefault(projectId, sprintId),
         syncGitSettingsFromDashboard: () => syncGitSettingsFromDashboard(this.runtimeContext),
         refreshJulesApiKey: () => this.refreshJulesApiKey(),
         setLogger: (logger) => { this.logger = logger; },
@@ -1521,7 +1614,6 @@ export class CodeUxServer {
     this.startSprintPreviewLoop();
     this.startLiveSnapshotLoop();
     this.startWalCheckpointLoop();
-    this.virtualWorkerService.start();
     this.scheduleBackgroundStartupTasks();
   }
 }

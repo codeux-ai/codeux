@@ -31,24 +31,45 @@ export async function openConfigPage(page: Page): Promise<void> {
 }
 
 export async function openSettingsCategory(page: Page, name: string, panelText: string | RegExp): Promise<void> {
-  await page
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const categoryButton = page
     .getByRole('navigation', { name: 'Settings categories' })
-    .getByRole('button', { name, exact: true })
-    .click();
+    .getByRole('button', { name: new RegExp(`^${escapedName}(?:\\s*,\\s*selected)?(?:\\s*,\\s*pending)?$`) });
+  await expect(categoryButton).toBeVisible();
+  if (await categoryButton.getAttribute('aria-current') !== 'page') {
+    await categoryButton.click();
+  }
+  await expect(categoryButton).toHaveAttribute('aria-current', 'page');
   const panel = page.getByRole('region', { name: 'Settings category panel' });
   await expect(panel).toContainText(panelText);
 }
 
 export async function openSettingsSection(page: Page, title: string): Promise<void> {
   const panel = settingsPanel(page);
-  await panel.getByRole('button', { name: `Configure ${title}`, exact: true }).click();
-  await expect(panel.getByRole('heading', { name: title, exact: true })).toBeVisible();
-  await expect(panel.getByRole('button', { name: 'Back to category overview', exact: true })).toBeVisible();
+  const heading = panel.getByRole('heading', { name: title, exact: true });
+  const backButton = panel.getByRole('button', { name: 'Back to category overview', exact: true });
+
+  if (await heading.isVisible() && await backButton.isVisible()) {
+    return;
+  }
+
+  if (await backButton.isVisible()) {
+    await backButton.click();
+  }
+
+  const configureButton = panel.getByRole('button', { name: `Configure ${title}`, exact: true });
+  await expect(configureButton).toBeVisible();
+  await configureButton.click();
+  await expect(heading).toBeVisible();
+  await expect(backButton).toBeVisible();
 }
 
 export async function returnToSettingsCategoryOverview(page: Page): Promise<void> {
   const panel = settingsPanel(page);
-  await panel.getByRole('button', { name: 'Back to category overview', exact: true }).click();
+  const backButton = panel.getByRole('button', { name: 'Back to category overview', exact: true });
+  if (await backButton.isVisible()) {
+    await backButton.click();
+  }
   await expect(panel.getByRole('button', { name: /^Configure / }).first()).toBeVisible();
 }
 

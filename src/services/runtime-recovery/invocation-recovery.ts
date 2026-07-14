@@ -177,6 +177,9 @@ export class InvocationRecoveryService {
         status: resolution.status,
         finishedAt: reconciledAt,
         errorMessage: resolution.status === "failed" ? resolution.message : null,
+        lastErrorCategory: resolution.status === "failed" ? invocation.lastErrorCategory ?? "UNKNOWN" : null,
+        lastErrorMessage: resolution.status === "failed" ? resolution.message : null,
+        lastRetryAfterIso: null,
       });
       this.deps.executionRepository.appendExecutionInvocationMessage(invocation.id, {
         role: "system",
@@ -230,8 +233,22 @@ export class InvocationRecoveryService {
     const sprintRun = invocation.sprintRunId ? this.deps.executionRepository.getSprintRun(invocation.sprintRunId) : null;
     if (sprintRun && ["completed", "failed", "cancelled"].includes(sprintRun.status)) {
       return {
-        status: "failed",
+        status: sprintRun.status === "cancelled" ? "cancelled" : "failed",
         message: `Recovered stale task coding invocation after the linked sprint run was already ${sprintRun.status}.`,
+      };
+    }
+
+    const dispatch = invocation.dispatchId ? this.deps.executionRepository.getTaskDispatch(invocation.dispatchId) : null;
+    if (
+      dispatch
+      && dispatch.status !== "paused"
+      && !ACTIVE_DISPATCH_STATUSES.includes(dispatch.status as (typeof ACTIVE_DISPATCH_STATUSES)[number])
+    ) {
+      return {
+        status: dispatch.status === "completed"
+          ? "completed"
+          : dispatch.status === "cancelled" ? "cancelled" : "failed",
+        message: `Recovered stale task coding invocation after the linked task dispatch was already ${dispatch.status}.`,
       };
     }
 

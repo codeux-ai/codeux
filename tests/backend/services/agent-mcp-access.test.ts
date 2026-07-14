@@ -13,6 +13,7 @@ import {
   projectManagerClarificationAgentMcpAccess,
   toAgentCodeUxToolAccess,
   workerClarificationAgentMcpAccess,
+  withAttachedFlowAccess,
 } from "../../../src/services/agent-mcp-access.js";
 import type { CustomMcpServer, McpToolToggle } from "../../../src/contracts/app-types.js";
 import type { McpConnectionInfo } from "../../../src/contracts/mcp-connection-types.js";
@@ -56,6 +57,15 @@ describe("sanitizeAgentMcpAccess", () => {
 });
 
 describe("agent MCP defaults", () => {
+  it("grants only the narrow attached-flow operation for flow-backed capabilities", () => {
+    const access = withAttachedFlowAccess({ codeUxEnabled: false, codeUxToolToggles: [] });
+    expect(access.codeUxEnabled).toBe(true);
+    expect(access.audiences).toContain("worker");
+    expect(access.codeUxToolToggles.filter((toggle) => toggle.enabled)).toEqual([
+      { name: "run_attached_flow", enabled: true, isInternal: true },
+    ]);
+  });
+
   it("recognizes assigned, manual, and worker-pool coding agents without admitting planning, QA, or unrelated agents", () => {
     const settings = {
       ...DEFAULT_DASHBOARD_SETTINGS,

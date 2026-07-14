@@ -8,6 +8,7 @@ import { ExecutionRepository } from "../../../src/repositories/execution-reposit
 import { GuardrailRepository } from "../../../src/repositories/guardrail-repository.js";
 import { ProjectAttentionRepository } from "../../../src/repositories/project-attention-repository.js";
 import { ProjectWorkerAssignmentRepository } from "../../../src/repositories/project-worker-assignment-repository.js";
+import { WorkerEndpointRepository } from "../../../src/repositories/worker-endpoint-repository.js";
 import { QaReviewRepository } from "../../../src/repositories/qa-review-repository.js";
 import { SessionTrackingRepository } from "../../../src/repositories/session-tracking-repository.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
@@ -44,6 +45,7 @@ async function createFixture(options?: {
   const guardrailRepository = new GuardrailRepository(storage);
   const projectAttentionRepository = new ProjectAttentionRepository(storage);
   const projectWorkerAssignmentRepository = new ProjectWorkerAssignmentRepository(storage);
+  const workerEndpointRepository = new WorkerEndpointRepository(storage);
   const projectAttentionService = new ProjectAttentionService(
     projectAttentionRepository,
     projectWorkerAssignmentRepository,
@@ -84,6 +86,7 @@ async function createFixture(options?: {
     guardrailRepository,
     projectAttentionRepository,
     projectAttentionService,
+    workerEndpointRepository,
     guardrailService,
     qaReviewRepository,
     sessionTracking,
@@ -124,6 +127,282 @@ describe("RuntimeStartupRecoveryService", () => {
     expect(terminalProviderOrder).toBeLessThan(structOrder);
     expect(structOrder).toBeLessThan(taskCodingOrder);
     expect(taskCodingOrder).toBeLessThan(providerOrder);
+  });
+
+  it.each([
+    {
+      attentionType: "ci_fix_required" as const,
+      purpose: "ci_fix" as const,
+      sessionId: "virtual-cifix-codex-repair-1",
+    },
+    {
+      attentionType: "merge_conflict" as const,
+      purpose: "merge_conflict" as const,
+      sessionId: "virtual-merge-codex-repair-1",
+    },
+  ])("stops and requeues interrupted $attentionType attention while preserving its checkpoint and releasing capacity", async ({
+    attentionType,
+    purpose,
+    sessionId,
+  }) => {
+    const removeContainers = vi.fn().mockResolvedValue(undefined);
+    const {
+      projectRepository,
+      executionRepository,
+      projectAttentionService,
+      workerEndpointRepository,
+      service,
+    } = await createFixture({
+      dockerService: {
+        listContainers: vi.fn().mockResolvedValue([{
+          id: "repair-container",
+          labels: { "code-ux.session-id": sessionId },
+        }]),
+        removeContainers,
+      },
+    });
+    const project = projectRepository.createProject({
+      name: "Repair Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/repair-recovery",
+    });
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:repair-recovery",
+      displayName: "Virtual repair worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType,
+      severity: "high",
+      ownerType: "worker",
+      title: "Repair conflict",
+      summaryMarkdown: "Continue the interrupted repair.",
+      payload: {
+        repoPath: "/workspace/repair-recovery",
+        repairRuntime: {
+          purpose,
+          sessionId,
+          workspaceSessionId: sessionId,
+          provider: "codex",
+          providerConfigId: "codex",
+          model: "codex-model",
+          nativeSessionId: "native-repair-1",
+          activeAttemptId: "attempt-1",
+          attemptRecorded: true,
+          phase: "provider_running",
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    });
+    projectAttentionService.claimItem(item.id, endpoint.id, "virtual_worker_test");
+    const providerInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      attentionItemId: item.id,
+      sessionId,
+      provider: "codex",
+      purpose,
+      status: "running",
+      startedAt: "2026-07-14T10:00:00.000Z",
+    });
+    const legacyProviderInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sessionId,
+      provider: "codex",
+      purpose,
+      status: "running",
+      startedAt: "2026-07-14T10:00:01.000Z",
+    });
+    const unrelatedProject = projectRepository.createProject({
+      name: "Unrelated Repair Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/unrelated-repair-recovery",
+    });
+    const unrelatedProviderInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: unrelatedProject.id,
+      sessionId,
+      provider: "codex",
+      purpose,
+      status: "running",
+      startedAt: "2026-07-14T10:00:02.000Z",
+    });
+    const executionInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      attentionItemId: item.id,
+      providerInvocationId: providerInvocation.id,
+      type: purpose,
+      provider: "codex",
+      status: "running",
+      startedAt: "2026-07-14T10:00:00.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(removeContainers).toHaveBeenCalledWith(["repair-container"], { removeVolumes: false });
+    expect(result.reconciledInterruptedRepairProviderInvocationIds).toHaveLength(2);
+    expect(result.reconciledInterruptedRepairProviderInvocationIds).toEqual(expect.arrayContaining([
+      providerInvocation.id,
+      legacyProviderInvocation.id,
+    ]));
+    expect(result.requeuedInterruptedRepairAttentionItemIds).toEqual([item.id]);
+    expect(executionRepository.getProviderInvocationUsage(providerInvocation.id)).toMatchObject({
+      status: "cancelled",
+      finishedAt: expect.any(String),
+    });
+    expect(executionRepository.getProviderInvocationUsage(legacyProviderInvocation.id)).toMatchObject({
+      status: "cancelled",
+      finishedAt: expect.any(String),
+    });
+    expect(executionRepository.getExecutionInvocation(executionInvocation.id)).toMatchObject({
+      status: "cancelled",
+      finishedAt: expect.any(String),
+      errorMessage: null,
+    });
+    expect(executionRepository.getProviderInvocationUsage(unrelatedProviderInvocation.id)).toMatchObject({
+      status: "running",
+      finishedAt: null,
+    });
+    expect(executionRepository.listRunningProviderInvocationUsages(["codex"]).map((invocation) => invocation.id)).toEqual([
+      unrelatedProviderInvocation.id,
+    ]);
+    expect(projectAttentionService.getItem(item.id)).toMatchObject({
+      status: "open",
+      assignedWorkerEndpointId: null,
+      payload: expect.objectContaining({
+        repairRuntime: expect.objectContaining({
+          sessionId,
+          nativeSessionId: "native-repair-1",
+          activeAttemptId: "attempt-1",
+          attemptRecorded: true,
+        }),
+        repairRecoveryReason: "startup_interrupted_virtual_repair",
+      }),
+    });
+  });
+
+  it.each([
+    { attentionType: "ci_fix_required" as const, purpose: "ci_fix" as const, publicationPhase: "workspace_finalized" },
+    { attentionType: "ci_fix_required" as const, purpose: "ci_fix" as const, publicationPhase: "host_publishing" },
+    { attentionType: "ci_fix_required" as const, purpose: "ci_fix" as const, publicationPhase: "host_published" },
+    { attentionType: "merge_conflict" as const, purpose: "merge_conflict" as const, publicationPhase: "workspace_finalized" },
+    { attentionType: "merge_conflict" as const, purpose: "merge_conflict" as const, publicationPhase: "host_publishing" },
+    { attentionType: "merge_conflict" as const, purpose: "merge_conflict" as const, publicationPhase: "host_published" },
+  ])("finalizes $purpose provider audit as completed from a durable $publicationPhase checkpoint", async ({
+    attentionType,
+    purpose,
+    publicationPhase,
+  }) => {
+    const {
+      projectRepository,
+      executionRepository,
+      projectAttentionService,
+      workerEndpointRepository,
+      service,
+    } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Completed Repair Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/completed-repair-recovery",
+    });
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: `virtual:completed-repair-${purpose}-${publicationPhase}`,
+      displayName: "Virtual completed repair worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+    const sessionId = `virtual-${purpose}-${publicationPhase}`;
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType,
+      severity: "high",
+      ownerType: "worker",
+      title: "Finish checkpointed repair",
+      summaryMarkdown: "Recover provider completion and finish publication.",
+      payload: {
+        repoPath: "/workspace/completed-repair-recovery",
+        repairRuntime: {
+          purpose,
+          sessionId,
+          workspaceSessionId: `${sessionId}-workspace`,
+          provider: "codex",
+          providerConfigId: "codex",
+          model: "codex-model",
+          nativeSessionId: "native-completed-repair",
+          activeAttemptId: "completed-attempt",
+          attemptRecorded: true,
+          phase: "provider_running",
+          workspaceBaselineHead: "baseline-head",
+          workspaceRepairHead: "repair-head",
+          publicationPhase,
+          publishedHeadSha: publicationPhase === "host_published" ? "published-head" : null,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    });
+    projectAttentionService.claimItem(item.id, endpoint.id, "virtual_worker_test");
+    const providerInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      attentionItemId: item.id,
+      sessionId,
+      provider: "codex",
+      purpose,
+      status: "running",
+      startedAt: "2026-07-14T10:00:00.000Z",
+    });
+    const executionInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      attentionItemId: item.id,
+      providerInvocationId: providerInvocation.id,
+      type: purpose,
+      provider: "codex",
+      status: "running",
+      startedAt: "2026-07-14T10:00:00.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledInterruptedRepairProviderInvocationIds).toEqual([providerInvocation.id]);
+    expect(result.requeuedInterruptedRepairAttentionItemIds).toEqual([item.id]);
+    expect(executionRepository.getProviderInvocationUsage(providerInvocation.id)).toMatchObject({
+      status: "completed",
+      finishedAt: expect.any(String),
+    });
+    expect(executionRepository.getExecutionInvocation(executionInvocation.id)).toMatchObject({
+      status: "completed",
+      finishedAt: expect.any(String),
+      errorMessage: null,
+    });
+    expect(executionRepository.listExecutionInvocationMessages(executionInvocation.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "system",
+          contentMarkdown: expect.stringContaining(`durable ${publicationPhase} checkpoint`),
+          metadata: expect.objectContaining({
+            recovery: "startup_completed_virtual_repair_provider",
+            providerInvocationId: providerInvocation.id,
+            sessionId,
+          }),
+        }),
+      ]),
+    );
+    expect(executionRepository.listRunningProviderInvocationUsages(["codex"])).toEqual([]);
+    expect(projectAttentionService.getItem(item.id)).toMatchObject({
+      status: "open",
+      assignedWorkerEndpointId: null,
+      payload: expect.objectContaining({
+        repairRuntime: expect.objectContaining({
+          sessionId,
+          nativeSessionId: "native-completed-repair",
+          workspaceSessionId: `${sessionId}-workspace`,
+          workspaceBaselineHead: "baseline-head",
+          workspaceRepairHead: "repair-head",
+          publicationPhase,
+        }),
+      }),
+    });
   });
 
   it("demotes premature virtual merge-conflict human escalations back to automatic worker attention", async () => {
@@ -525,6 +804,94 @@ describe("RuntimeStartupRecoveryService", () => {
     });
   });
 
+  it("reuses one Docker inventory while cancelling multiple interrupted QA reviewers", async () => {
+    const listContainers = vi.fn().mockResolvedValue([
+      { id: "qa-container-1", labels: { "code-ux.session-id": "qa-review-session-1" } },
+      { id: "qa-container-2", labels: { "code-ux.session-id": "qa-review-session-2" } },
+    ]);
+    const removeContainers = vi.fn().mockResolvedValue(undefined);
+    const {
+      projectRepository,
+      executionRepository,
+      qaReviewRepository,
+    } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Batched QA Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/batched-qa-recovery",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Batched QA Recovery Sprint",
+      number: 9,
+      status: "running",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "docker_cli",
+      status: "running",
+    });
+
+    const qaRunIds: string[] = [];
+    const providerInvocationIds: string[] = [];
+    for (const index of [1, 2]) {
+      const sessionId = `qa-review-session-${index}`;
+      const providerInvocation = executionRepository.createProviderInvocationUsage({
+        projectId: project.id,
+        sprintId: sprint.id,
+        sprintRunId: sprintRun.id,
+        sessionId,
+        provider: "codex",
+        purpose: "qa_review",
+        executionMode: "DOCKER",
+        status: "running",
+        startedAt: `2026-07-14T10:00:0${index}.000Z`,
+      });
+      const executionInvocation = executionRepository.createExecutionInvocation({
+        projectId: project.id,
+        sprintId: sprint.id,
+        sprintRunId: sprintRun.id,
+        providerInvocationId: providerInvocation.id,
+        type: "qa_review",
+        provider: "codex",
+        status: "running",
+        startedAt: `2026-07-14T10:00:0${index}.000Z`,
+      });
+      const qaRun = qaReviewRepository.createRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+        sprintRunId: sprintRun.id,
+        triggerType: "sprint_completion",
+        runIndex: index,
+        payload: { reviewExecutionInvocationId: executionInvocation.id },
+        startedAt: `2026-07-14T10:00:0${index}.000Z`,
+      });
+      qaRunIds.push(qaRun.id);
+      providerInvocationIds.push(providerInvocation.id);
+    }
+
+    const qaRecovery = new QaReviewRecoveryService({
+      executionRepository,
+      qaReviewRepository,
+      dockerService: { listContainers, removeContainers },
+    });
+    const reconciledRunIds = await qaRecovery.reconcileInterruptedQaReviewRuns(new Set([
+      "qa-review-session-1",
+      "qa-review-session-2",
+    ]));
+
+    expect(reconciledRunIds).toHaveLength(2);
+    expect(reconciledRunIds).toEqual(expect.arrayContaining(qaRunIds));
+    expect(listContainers).toHaveBeenCalledTimes(1);
+    expect(removeContainers).toHaveBeenCalledTimes(2);
+    expect(removeContainers).toHaveBeenCalledWith(["qa-container-1"], { removeVolumes: false });
+    expect(removeContainers).toHaveBeenCalledWith(["qa-container-2"], { removeVolumes: false });
+    expect(providerInvocationIds.map((id) => executionRepository.getProviderInvocationUsage(id)?.status)).toEqual([
+      "cancelled",
+      "cancelled",
+    ]);
+  });
+
   it("immediately cancels a fresh QA review row with no backing invocation after restart", async () => {
     const {
       projectRepository,
@@ -603,7 +970,47 @@ describe("RuntimeStartupRecoveryService", () => {
     });
   });
 
-  it("reconciles stale task coding invocation audit rows when the provider invocation already finished", async () => {
+  it("fails a stale pre-provider CLI coding row with useful recovery evidence", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Pre-provider Coding Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/pre-provider-coding-recovery-project",
+    });
+    const invocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      type: "cli_task_coding",
+      provider: "codex",
+      status: "running",
+      startedAt: "2026-03-29T10:00:00.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledTaskCodingInvocationIds).toContain(invocation.id);
+    expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({
+      status: "failed",
+      finishedAt: expect.any(String),
+      errorMessage: expect.stringContaining("without provider runtime linkage"),
+    });
+    expect(executionRepository.listExecutionInvocationMessages(invocation.id)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        role: "system",
+        contentMarkdown: expect.stringContaining("without provider runtime linkage"),
+        metadata: expect.objectContaining({
+          recovery: "startup_task_coding_invocation_reconcile",
+          provider: "codex",
+        }),
+      }),
+    ]));
+  });
+
+  it("settles an interrupted CLI workflow from terminal provider and dispatch evidence", async () => {
     const {
       projectRepository,
       executionRepository,
@@ -624,23 +1031,33 @@ describe("RuntimeStartupRecoveryService", () => {
     const task = projectRepository.createTask(project.id, {
       sprintId: sprint.id,
       title: "Recover stale coding audit",
-      executorType: "jules",
+      executorType: "docker_cli",
       status: "in_progress",
     });
     const sprintRun = executionRepository.createSprintRun({
       projectId: project.id,
       sprintId: sprint.id,
-      executorMode: "jules",
+      executorMode: "docker_cli",
       status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "running",
+      startedAt: "2026-03-29T10:00:00.000Z",
     });
     const taskRun = executionRepository.createTaskRun({
       projectId: project.id,
       sprintId: sprint.id,
       taskId: task.id,
       sprintRunId: sprintRun.id,
-      provider: "jules",
-      mode: "jules",
-      sessionId: "jules-stale-task-coding",
+      dispatchId: dispatch.id,
+      provider: "codex",
+      mode: "docker_cli",
+      sessionId: "cli-stale-task-coding",
       state: "RUNNING",
       startedAt: "2026-03-29T10:00:00.000Z",
     });
@@ -649,12 +1066,17 @@ describe("RuntimeStartupRecoveryService", () => {
       sprintId: sprint.id,
       taskId: task.id,
       sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
       taskRunId: taskRun.id,
-      sessionId: "jules-stale-task-coding",
-      provider: "jules",
+      sessionId: "cli-stale-task-coding",
+      provider: "codex",
       purpose: "task_coding",
       status: "completed",
       startedAt: "2026-03-29T10:00:00.000Z",
+      finishedAt: "2026-03-29T10:02:00.000Z",
+    });
+    executionRepository.updateProviderInvocationUsage(providerInvocation.id, {
+      status: "completed",
       finishedAt: "2026-03-29T10:02:00.000Z",
     });
     const invocation = executionRepository.createExecutionInvocation({
@@ -662,16 +1084,17 @@ describe("RuntimeStartupRecoveryService", () => {
       sprintId: sprint.id,
       taskId: task.id,
       sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
       taskRunId: taskRun.id,
       providerInvocationId: providerInvocation.id,
-      type: "task_coding",
-      provider: "jules",
+      type: "cli_task_coding",
+      provider: "codex",
       status: "running",
       startedAt: "2026-03-29T10:00:01.000Z",
     });
     sessionTracking.createSession({
-      id: "jules-stale-task-coding",
-      provider: "jules",
+      id: "cli-stale-task-coding",
+      provider: "codex",
       taskId: "Sprint 9",
       title: "Recover stale coding audit",
       state: "RUNNING",
@@ -682,12 +1105,34 @@ describe("RuntimeStartupRecoveryService", () => {
 
     const result = await service.recover();
 
+    expect(result.reconciledTerminalProviderDispatchIds).toContain(dispatch.id);
     expect(result.reconciledTaskCodingInvocationIds).toEqual(expect.arrayContaining([invocation.id]));
     expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({
-      status: "completed",
-      errorMessage: null,
+      status: "failed",
+      finishedAt: expect.any(String),
+      errorMessage: expect.stringContaining("linked task run was already FAILED"),
     });
-    expect(sessionTracking.getSession("jules-stale-task-coding")?.state).toBe("COMPLETED");
+    expect(executionRepository.getProviderInvocationUsage(providerInvocation.id)).toMatchObject({
+      status: "completed",
+      finishedAt: "2026-03-29T10:02:00.000Z",
+    });
+    expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({
+      status: expect.stringMatching(/^(failed|cancelled)$/),
+      finishedAt: expect.any(String),
+    });
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({ state: "FAILED" });
+    expect(executionRepository.getSprintRun(sprintRun.id)).toMatchObject({ status: "running" });
+    expect(projectRepository.getTask(task.id)).toMatchObject({ status: "pending" });
+    expect(sessionTracking.getSession("cli-stale-task-coding")?.state).toBe("FAILED");
+    expect(executionRepository.listTaskRunEvents(taskRun.id)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        eventType: "task_dispatch_reconciled",
+        payload: expect.objectContaining({
+          reason: "terminal_provider_active_dispatch_mismatch",
+          providerStatus: "completed",
+        }),
+      }),
+    ]));
   });
 
   it("reconciles stale non-task execution audit rows when the provider invocation already failed", async () => {

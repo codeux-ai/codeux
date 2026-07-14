@@ -38,6 +38,7 @@ import { SprintIssueImportModal } from "../../components/sprints/SprintIssueImpo
 import { SprintJiraImportModal } from "../../components/sprints/SprintJiraImportModal.js";
 import { SprintProjectManagementImportModal } from "../../components/sprints/SprintProjectManagementImportModal.js";
 import { SprintCanvasImportModal } from "../../components/sprints/SprintCanvasImportModal.js";
+import { SprintRollbackModal } from "../../components/sprints/SprintRollbackModal.js";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ActionFeedbackRegion } from "../../components/ui/ActionFeedbackRegion.js";
@@ -49,11 +50,12 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useRouteProjectSelection } from "../../hooks/use-route-project-selection.js";
 import { PageContainer } from "../../components/layout/PageContainer.js";
 import { PageHeader } from "../../components/layout/PageHeader.js";
-import type { SprintLinkedIssueInput } from "../../types.js";
+import type { Sprint, SprintLinkedIssueInput } from "../../types.js";
 import type { SprintImportedTaskInput } from "../../types.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
 const SPRINT_GALLERY_VISIBILITY_STORAGE_KEY = "code_ux_sprints_show_gallery";
+const EMPTY_CI_STATUS_BY_SPRINT_ID = new Map<string, never>();
 type RepositoryIssueImportProvider = "github" | "gitlab";
 
 const getImportedTaskKey = (task: SprintImportedTaskInput): string => (
@@ -181,6 +183,7 @@ export const SprintsPage: FunctionComponent = () => {
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
   const [showSprintGallery, setShowSprintGallery] = useState(readStoredSprintGalleryVisibility);
   const [showIssueImportModal, setShowIssueImportModal] = useState(false);
+  const [rollbackSprint, setRollbackSprint] = useState<Sprint | null>(null);
   const [issueImportProvider, setIssueImportProvider] = useState<RepositoryIssueImportProvider>("github");
   const [isJiraModalOpen, setIsJiraModalOpen] = useState(false);
   const [linkedIssues, setLinkedIssues] = useState<SprintLinkedIssueInput[]>([]);
@@ -220,6 +223,7 @@ export const SprintsPage: FunctionComponent = () => {
     activeRunsBySprintId,
     pauseResumeRunsBySprintId,
     interventionBySprintId,
+    ciStatusBySprintId = EMPTY_CI_STATUS_BY_SPRINT_ID,
     showCreateComposer, setShowCreateComposer,
     editingSprint, setEditingSprint,
     showImportModal, setShowImportModal,
@@ -255,6 +259,7 @@ export const SprintsPage: FunctionComponent = () => {
     handleSprintToggle,
     handleSprintPauseResume,
     handleMarkCompleted,
+    handleMarkQaPassed,
     handleSubmitSprint,
     handleImprovePrompt,
     handleCancelPlanningRequest,
@@ -262,6 +267,7 @@ export const SprintsPage: FunctionComponent = () => {
     handleAppendTask,
     handleDeleteSprint,
     handleToggleShowcase,
+    handleUpdateBranch,
     handleBulkToggleShowcase,
     handleOpenExport,
     handleImportSprint,
@@ -401,6 +407,7 @@ export const SprintsPage: FunctionComponent = () => {
     setEditingSprint(null);
     setShowQuicksprint(false);
     setRowMenu(null);
+    setRollbackSprint(null);
     setLinkedIssues([]);
     clearImportedTaskDrafts();
   }, [
@@ -588,9 +595,17 @@ export const SprintsPage: FunctionComponent = () => {
     setOverrideSprint(sprint);
   }, [setOverrideSprint]);
 
+  const handleUpdateBranchFromLedger = useCallback((sprint: typeof sortedSprints[number]) => {
+    void handleUpdateBranch(sprint);
+  }, [handleUpdateBranch]);
+
   const handleMarkCompletedFromLedger = useCallback((sprintId: string) => {
     void handleMarkCompleted(sprintId);
   }, [handleMarkCompleted]);
+
+  const handleMarkQaPassedFromLedger = useCallback((sprintId: string) => {
+    void handleMarkQaPassed(sprintId);
+  }, [handleMarkQaPassed]);
 
   const handleDeleteSprintFromLedger = useCallback((sprintId: string) => {
     void requestConfirm({
@@ -766,11 +781,13 @@ export const SprintsPage: FunctionComponent = () => {
                     : "max-h-[460rem] overflow-visible translate-y-0 scale-100 opacity-100 blur-0"
                 }`}
               >
-                <div ref={bubblesRef} className="flex flex-wrap justify-center gap-10 py-6 xl:gap-12">
+                <div ref={bubblesRef} className="flex flex-wrap justify-center gap-x-10 gap-y-[4.5rem] pb-6 pt-[4.5rem] xl:gap-x-12 xl:gap-y-20">
                   {showcaseSprints.map((sprint, index) => {
                     const activeRun = activeRunsBySprintId.get(sprint.id);
                     const pendingActionId = activeRun ? `sprint-stop:${activeRun.id}` : `sprint-start:${sprint.id}`;
                     const pinActionId = `sprint-showcase:${sprint.id}`;
+                    const markCompletedActionId = `sprint-mark-completed:${sprint.id}`;
+                    const markQaPassedActionId = `sprint-mark-qa-passed:${sprint.id}`;
                     const pauseResumeRun = pauseResumeRunsBySprintId.get(sprint.id);
                     const isPaused = pauseResumeRun?.status === "paused";
                     const pauseResumeBusy = !!pauseResumeRun && (
@@ -787,13 +804,19 @@ export const SprintsPage: FunctionComponent = () => {
                         sprintKeyPrefix={sprintKeyPrefix}
                         primaryBusy={pendingActionIds.has(pendingActionId)}
                         showcaseBusy={pendingActionIds.has(pinActionId)}
+                        markCompletedBusy={pendingActionIds.has(markCompletedActionId)}
+                        markQaPassedBusy={pendingActionIds.has(markQaPassedActionId)}
+                        updateBranchBusy={pendingActionIds.has(`sprint-update-branch:${sprint.id}`)}
                         isPaused={isPaused}
                         pauseResumeBusy={pauseResumeBusy}
                         humanIntervention={interventionBySprintId.get(sprint.id) || null}
+                        ciStatus={ciStatusBySprintId.get(sprint.id) || null}
                         onPrimaryAction={() => { handleSprintToggle(sprint.id); }}
                         onPauseResume={pauseResumeRun ? () => { handleSprintPauseResume(sprint.id); } : undefined}
                         onAddTasks={() => { void handleOpenAppendTasks(sprint); }}
                         onMarkCompleted={() => { void handleMarkCompleted(sprint.id); }}
+                        onMarkQaPassed={() => { void handleMarkQaPassed(sprint.id); }}
+                        onRollback={() => setRollbackSprint(sprint)}
                         onEdit={() => {
                       setEditingSprint(sprint);
                       setShowCreateComposer(false);
@@ -815,6 +838,7 @@ export const SprintsPage: FunctionComponent = () => {
                         }}
                         onExport={() => { void handleOpenExport(sprint.id, sprint.name); }}
                         onOverrides={() => { setOverrideSprint(sprint); }}
+                        onUpdateBranch={sprint.status === "idle" ? () => { void handleUpdateBranch(sprint); } : undefined}
                         onToggleShowcase={() => { void handleToggleShowcase(sprint); }}
                       />
                     );
@@ -957,6 +981,7 @@ export const SprintsPage: FunctionComponent = () => {
                 activeRunsBySprintId={activeRunsBySprintId}
                 pauseResumeRunsBySprintId={pauseResumeRunsBySprintId}
                 interventionBySprintId={interventionBySprintId}
+                ciStatusBySprintId={ciStatusBySprintId}
                 pendingActionIds={pendingActionIds}
                 onToggleShowcase={handleToggleShowcaseWithSprint}
                 onSprintToggle={handleSprintToggle}
@@ -965,7 +990,10 @@ export const SprintsPage: FunctionComponent = () => {
                 onEditSprint={handleEditSprintFromLedger}
                 onExportSprint={handleExportSprintFromLedger}
                 onOverridesSprint={handleOverridesSprintFromLedger}
+                onUpdateBranchSprint={handleUpdateBranchFromLedger}
                 onMarkCompletedSprint={handleMarkCompletedFromLedger}
+                onMarkQaPassedSprint={handleMarkQaPassedFromLedger}
+                onRollbackSprint={setRollbackSprint}
                 onDeleteSprint={handleDeleteSprintFromLedger}
                 onBulkStart={handleBulkStart}
                 onBulkDelete={handleBulkDelete}
@@ -1125,6 +1153,7 @@ export const SprintsPage: FunctionComponent = () => {
               isCompleted={activeRowMenuSprint.status === "completed"}
               showcaseBusy={pendingActionIds.has(`sprint-showcase:${activeRowMenuSprint.id}`)}
               markCompletedDisabled={pendingActionIds.has(`sprint-mark-completed:${activeRowMenuSprint.id}`)}
+              markQaPassedDisabled={pendingActionIds.has(`sprint-mark-qa-passed:${activeRowMenuSprint.id}`) || activeRowMenuSprint.latestReview?.status === "running"}
               onEdit={() => {
                 setEditingSprint(activeRowMenuSprint);
                 setLinkedIssues(activeRowMenuSprint.linkedIssues || []);
@@ -1139,9 +1168,17 @@ export const SprintsPage: FunctionComponent = () => {
               onOverrides={() => {
                 setOverrideSprint(activeRowMenuSprint);
               }}
+              onUpdateBranch={activeRowMenuSprint.status === "idle" ? () => {
+                void handleUpdateBranch(activeRowMenuSprint);
+              } : undefined}
+              updateBranchBusy={pendingActionIds.has(`sprint-update-branch:${activeRowMenuSprint.id}`)}
               onMarkCompleted={() => {
                 void handleMarkCompleted(activeRowMenuSprint.id);
               }}
+              onMarkQaPassed={() => {
+                void handleMarkQaPassed(activeRowMenuSprint.id);
+              }}
+              onRollback={() => setRollbackSprint(activeRowMenuSprint)}
               onDelete={() => {
                 void requestConfirm({
                   title: "Delete Sprint?",
@@ -1163,6 +1200,13 @@ export const SprintsPage: FunctionComponent = () => {
         </div>,
         document.body
       )}
+      <SprintRollbackModal
+        sprint={rollbackSprint}
+        onClose={() => setRollbackSprint(null)}
+        onCreated={async () => {
+          await Promise.all([refreshSprints(), refreshExecution()]);
+        }}
+      />
     </ExecutionTimelineProvider>
   );
 };

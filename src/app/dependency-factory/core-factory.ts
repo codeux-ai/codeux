@@ -48,6 +48,7 @@ import { KnowledgeIngestionService } from "../../services/knowledge-ingestion-se
 import { KnowledgeService } from "../../services/knowledge-service.js";
 import { NodeFlowService } from "../../services/node-flow-service.js";
 import { ProviderConcurrencyService } from "../../services/provider-concurrency-service.js";
+import { AdaptiveProviderAdmissionPolicy } from "../../services/adaptive-provider-admission-policy.js";
 import { DashboardSettings, ExternalSettingsHints } from "../../contracts/app-types.js";
 import { loadExternalSettingsHints } from "../../config/external-settings.js";
 import { createLogger, type Logger } from "../../shared/logging/logger.js";
@@ -66,6 +67,18 @@ import { SprintFileBrowserRepository } from "../../repositories/sprint-file-brow
 import { DockerService } from "../../services/docker-service.js";
 import { CustomDashboardRepository } from "../../repositories/custom-dashboard-repository.js";
 import { CustomDashboardValidationService } from "../../services/custom-dashboard-validation-service.js";
+import { CustomDashboardCredentialBindingService } from "../../services/custom-dashboard-credential-binding-service.js";
+import { AutomationCredentialRepository } from "../../repositories/automation-credential-repository.js";
+import { AutomationApprovalRepository } from "../../repositories/automation-approval-repository.js";
+import { AutomationOutboxRepository } from "../../repositories/automation-outbox-repository.js";
+import { AutomationWebhookTriggerRepository } from "../../repositories/automation-webhook-trigger-repository.js";
+import { CredentialBroker } from "../../services/credentials/credential-broker.js";
+import { EncryptedSqliteSecretStore } from "../../infrastructure/security/encrypted-sqlite-secret-store.js";
+import { selectCredentialKeyProvider } from "../../services/credentials/key-provider-selection.js";
+import { HeadlessAuthService, loadHeadlessSecurityConfiguration } from "../../services/headless-auth-service.js";
+import { AutomationAuditExportService } from "../../services/automation-audit-export-service.js";
+import { HeadlessOperationalReadinessService } from "../../services/headless-operational-readiness-service.js";
+import { AutomationSloService } from "../../services/automation-slo-service.js";
 
 export interface CoreDependencies {
   providerRunner: IProviderRunner;
@@ -124,7 +137,17 @@ export interface CoreDependencies {
   sprintFileBrowserService: SprintFileBrowserService;
   sprintFileBrowserRepository: SprintFileBrowserRepository;
   customDashboardRepository: CustomDashboardRepository;
+  customDashboardCredentialBindingService: CustomDashboardCredentialBindingService;
   customDashboardValidationService: CustomDashboardValidationService;
+  automationCredentialRepository: AutomationCredentialRepository;
+  automationApprovalRepository: AutomationApprovalRepository;
+  automationOutboxRepository: AutomationOutboxRepository;
+  automationWebhookTriggerRepository: AutomationWebhookTriggerRepository;
+  credentialBroker: CredentialBroker;
+  headlessAuthService: HeadlessAuthService;
+  automationAuditService: AutomationAuditExportService;
+  headlessReadinessService: HeadlessOperationalReadinessService;
+  automationSloService: AutomationSloService;
 }
 
 export function createCoreDependencies(
@@ -180,6 +203,30 @@ export function createCoreDependencies(
   const subtaskRepository = new SubtaskFileRepository();
   const sessionTracking = new SessionTrackingRepository();
   const appDbStorage = new AppDbStorage();
+  const automationCredentialRepository = new AutomationCredentialRepository(appDbStorage);
+  const automationApprovalRepository = new AutomationApprovalRepository(appDbStorage);
+  const automationOutboxRepository = new AutomationOutboxRepository(appDbStorage);
+  const automationWebhookTriggerRepository = new AutomationWebhookTriggerRepository(appDbStorage);
+  const securityConfiguration = loadHeadlessSecurityConfiguration();
+  const credentialKeyProvider = selectCredentialKeyProvider({
+    appConfig: options.appConfig,
+    security: securityConfiguration,
+  });
+  const automationAuditService = new AutomationAuditExportService(appDbStorage);
+  const credentialBroker = new CredentialBroker(
+    automationCredentialRepository,
+    new EncryptedSqliteSecretStore(automationCredentialRepository, credentialKeyProvider),
+    credentialKeyProvider,
+    automationAuditService,
+  );
+  const headlessAuthService = new HeadlessAuthService(securityConfiguration);
+  const automationSloService = new AutomationSloService();
+  const headlessReadinessService = new HeadlessOperationalReadinessService({
+    credentialRepository: automationCredentialRepository,
+    keyProvider: credentialKeyProvider,
+    auditService: automationAuditService,
+    security: securityConfiguration,
+  });
   const dashboardRealtimeEventRepository = new DashboardRealtimeEventRepository(appDbStorage);
   const dashboardRealtimeService = new DashboardRealtimeService(
     dashboardRealtimeEventRepository,
@@ -227,6 +274,12 @@ export function createCoreDependencies(
     projectManagementRepository,
     logger: logger.child({ component: "provider-concurrency-service" }),
     dockerService: new DockerService(),
+    admissionPolicy: process.env.VITEST
+      ? undefined
+      : new AdaptiveProviderAdmissionPolicy({
+          executionRepository,
+          logger: logger.child({ component: "provider-admission-policy" }),
+        }),
   });
   const sprintPreviewRepository = new SprintPreviewRepository(appDbStorage);
   const sprintPreviewService = new SprintPreviewService({
@@ -244,8 +297,15 @@ export function createCoreDependencies(
     logger: logger.child({ component: "sprint-file-browser-service" }),
   });
   const customDashboardRepository = new CustomDashboardRepository(appDbStorage);
+  const customDashboardCredentialBindingService = new CustomDashboardCredentialBindingService({
+    customDashboardRepository,
+    projectManagementRepository,
+    credentialBroker,
+    auditService: automationAuditService,
+  });
   const customDashboardValidationService = new CustomDashboardValidationService({
     customDashboardRepository,
+    customDashboardCredentialBindingService,
     projectManagementRepository,
     settingsRepository,
     logger: logger.child({ component: "custom-dashboard-validation-service" }),
@@ -286,7 +346,7 @@ export function createCoreDependencies(
   const schedulerRepository = new SchedulerRepository(appDbStorage, dashboardRealtimeService);
   const skillRepository = new SkillRepository(appDbStorage);
   const nodeFlowRepository = new NodeFlowRepository(appDbStorage, dashboardRealtimeService);
-  const nodeFlowService = new NodeFlowService(nodeFlowRepository);
+  const nodeFlowService = new NodeFlowService(nodeFlowRepository, undefined, credentialBroker);
   const embeddingService = new EmbeddingService();
   const embeddingModelManager = new EmbeddingModelManager(
     embeddingService,
@@ -390,6 +450,16 @@ export function createCoreDependencies(
     sprintFileBrowserService,
     sprintFileBrowserRepository,
     customDashboardRepository,
+    customDashboardCredentialBindingService,
     customDashboardValidationService,
+    automationCredentialRepository,
+    automationApprovalRepository,
+    automationOutboxRepository,
+    automationWebhookTriggerRepository,
+    credentialBroker,
+    headlessAuthService,
+    automationAuditService,
+    headlessReadinessService,
+    automationSloService,
   };
 }

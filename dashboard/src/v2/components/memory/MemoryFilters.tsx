@@ -6,6 +6,7 @@ import { useInteractionTokens } from "../../lib/motion/index.js";
 import type { MemoryStats } from "../../lib/memory-api.js";
 import type { MemoryScope } from "../../memory-types.js";
 import type { SprintRecord, AgentPreset } from "../../types.js";
+import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 
 type MemTier = "short_term" | "long_term" | "skills";
 const TIER_TABS: { key: MemTier; label: string; scope: MemoryScope }[] = [
@@ -196,23 +197,23 @@ export const MemoryFilters: FunctionComponent<{
                 {showSprintFilter && (
                     <div className="flex min-w-0 flex-[1_1_12rem] flex-col gap-1 sm:max-w-[18rem]">
                         <label htmlFor="sprint-selector" className="sr-only">Filter by Sprint</label>
-                        <select
+                        <AvantgardeSelect
                             id="sprint-selector"
                             aria-label="Filter memory by Sprint"
                             aria-describedby="sprint-selector-status"
                             title="Filter memory by Sprint"
                             value={selectedSprintId ?? ""}
-                            onChange={(e) => handleSprintChange((e.target as HTMLSelectElement).value)}
-                            style={controlTransitionStyle}
-                            className="h-9 w-full min-w-0 max-w-full truncate rounded-lg border border-black/[0.08] bg-white/70 px-3 text-[11px] font-mono font-bold text-slate-600 transition-[background-color,border-color,box-shadow,color] motion-reduce:duration-0 cursor-pointer hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08]
-                                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-void-900">
-                            <option value="">All Sprints</option>
-                            {sprints.map(s => (
-                                <option key={s.id} value={s.id}>
-                                    Sprint {s.number ?? "?"} — {s.name || s.goal?.slice(0, 40) || s.id.slice(0, 8)}
-                                </option>
-                            ))}
-                        </select>
+                            onChange={handleSprintChange}
+                            variant="card"
+                            className="w-full min-w-0"
+                            options={[
+                                { value: "", label: "All Sprints" },
+                                ...sprints.map((s) => ({
+                                    value: s.id,
+                                    label: `Sprint ${s.number ?? "?"} — ${s.name || s.goal?.slice(0, 40) || s.id.slice(0, 8)}`,
+                                })),
+                            ]}
+                        />
                         <span id="sprint-selector-status" className="min-w-0 text-[10px] font-semibold leading-snug text-slate-400">
                             {sprintLabel}
                         </span>
@@ -222,21 +223,20 @@ export const MemoryFilters: FunctionComponent<{
                 {showAgentFilter && (
                     <div className="flex min-w-0 flex-[1_1_12rem] flex-col gap-1 sm:max-w-[18rem]">
                         <label htmlFor="agent-selector" className="sr-only">Filter by Agent Preset</label>
-                        <select
+                        <AvantgardeSelect
                             id="agent-selector"
                             aria-label="Filter memory by Agent Preset"
                             aria-describedby="agent-selector-status"
                             title="Filter memory by Agent Preset"
                             value={selectedAgentPresetId ?? ""}
-                            onChange={(e) => handleAgentChange((e.target as HTMLSelectElement).value)}
-                            style={controlTransitionStyle}
-                            className="h-9 w-full min-w-0 max-w-full truncate rounded-lg border border-black/[0.08] bg-white/70 px-3 text-[11px] font-mono font-bold text-slate-600 transition-[background-color,border-color,box-shadow,color] motion-reduce:duration-0 cursor-pointer hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08]
-                                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-void-900">
-                            <option value="">All Agents</option>
-                            {agentPresets.map(a => (
-                                <option key={a.id} value={a.id}>{a.name}</option>
-                            ))}
-                        </select>
+                            onChange={handleAgentChange}
+                            variant="card"
+                            className="w-full min-w-0"
+                            options={[
+                                { value: "", label: "All Agents" },
+                                ...agentPresets.map((agent) => ({ value: agent.id, label: agent.name })),
+                            ]}
+                        />
                         <span id="agent-selector-status" className="min-w-0 text-[10px] font-semibold leading-snug text-slate-400">
                             {agentLabel}
                         </span>

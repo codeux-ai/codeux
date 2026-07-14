@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { buildProviderSettingsOverride } from "./provider-settings-override.js";
 import {
   buildProviderPrompt,
@@ -49,7 +48,12 @@ import type { SkillService } from "./skill-service.js";
 import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
-import { evaluateQaReviewBudget, isRecoveredStaleQaRun } from "../domain/qa-review/qa-review-budget.js";
+import {
+  evaluateQaReviewBudget,
+  isPendingQaContinuation,
+  isRecoveredStaleQaRun,
+  QA_INFRA_FAILURE_GRACE,
+} from "../domain/qa-review/qa-review-budget.js";
 import { isQaReviewCancellationError, parseQaError } from "../domain/qa-review/qa-review-types.js";
 import { normalizeQaReviewResult } from "../domain/qa-review/qa-review-result-normalizer.js";
 import type { NormalizedQaReviewResult } from "../domain/qa-review/qa-review-types.js";
@@ -137,6 +141,7 @@ export class QualityAssuranceService {
 
   private readonly providerExecutionService: ProviderExecutionService;
   private readonly structuredAgentRequestService: StructuredAgentRequestService;
+  private readonly activeQaContinuationRunIds = new Set<string>();
 
   constructor(private readonly deps: QualityAssuranceServiceDependencies) {
     this.providerExecutionService = new ProviderExecutionService({
@@ -217,18 +222,65 @@ export class QualityAssuranceService {
     const existingRuns = this.deps.qaReviewRepository.countTaskRuns(taskId);
     const decisiveRuns = this.deps.qaReviewRepository.countDecisiveTaskRuns(taskId);
     const latestRun = this.deps.qaReviewRepository.getLatestTaskRun(taskId);
+    const previousTaskCycleRuns = this.deps.qaReviewRepository.listLatestTaskCycleRuns(taskId);
     const taskRun = this.resolveTaskRunForSubtask(args.task, args.sprintRunId);
+    const project = this.deps.projectManagementRepository.getProject(args.projectId);
+    const sprint = this.deps.projectManagementRepository.getSprint(args.sprintId);
+    if (!project || !sprint) {
+      return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
+    }
+    const sprintFeatureBranch = sprint.featureBranch?.trim()
+      || `${settings.git.featureBranchPrefix || "feature/"}sprint-${sprint.number ?? 0}`;
+
+    const pendingTaskContinuation = previousTaskCycleRuns.find((run) => this.isPendingTaskQaContinuation(run)) ?? null;
+    if (pendingTaskContinuation) {
+      return await this.continuePendingTaskQaRun({
+        run: pendingTaskContinuation,
+        task: args.task,
+        taskRun,
+        repoPath: args.repoPath,
+        featureBranch: sprintFeatureBranch,
+        scope,
+        decisiveRuns,
+        maxTaskReviewRuns: qaSettings.maxTaskReviewRuns,
+      });
+    }
+
+    const triggerType = resolveTaskTriggerType(args.task, qaSettings);
+    const triggerSettings = triggerType === "completed_task_without_pr"
+      ? qaSettings.completedTaskWithoutPr
+      : qaSettings.taskCompletion;
+    const configuredReviewerCount = Math.max(1, triggerSettings.agentPresetIds?.length || 0);
+    const latestCycleHasChangesRequest = previousTaskCycleRuns.some((run) => (
+      run.status === "completed" && run.outcome === "changes_requested"
+    ));
+    const latestCycleHasCompletedReviewer = previousTaskCycleRuns.some((run) => run.status === "completed");
+    const recoveringPartialReviewerCycle = previousTaskCycleRuns.length > 0
+      && !latestCycleHasChangesRequest
+      && (
+        previousTaskCycleRuns.length < configuredReviewerCount
+        || previousTaskCycleRuns.some((run) => run.status === "running" || run.status === "cancelled")
+        || (latestCycleHasCompletedReviewer && previousTaskCycleRuns.some((run) => run.status === "failed" || run.status === "errored"))
+        || triggerSettings.agentPresetIds?.some((presetId) => (
+          !previousTaskCycleRuns.some((run) => run.agentPresetId === presetId)
+        ))
+      );
+    const requestExistingRuns = recoveringPartialReviewerCycle ? Math.max(0, existingRuns - 1) : existingRuns;
+    const requestDecisiveRuns = recoveringPartialReviewerCycle
+      && previousTaskCycleRuns.some((run) => run.status === "completed")
+      ? Math.max(0, decisiveRuns - 1)
+      : decisiveRuns;
 
     const requests = await buildQaReviewRequests({
       task: args.task,
       taskRun,
-      project: this.deps.projectManagementRepository.getProject(args.projectId) || null,
-      sprint: this.deps.projectManagementRepository.getSprint(args.sprintId) || null,
+      project,
+      sprint,
       sprintRunId: args.sprintRunId || null,
       settings,
       budgetArgs: {
-        existingRuns,
-        decisiveRuns,
+        existingRuns: requestExistingRuns,
+        decisiveRuns: requestDecisiveRuns,
         latestRun,
       },
       resolveAgent: (projectId, agentPresetId) =>
@@ -248,31 +300,45 @@ export class QualityAssuranceService {
       return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
     }
 
-    const project = this.deps.projectManagementRepository.getProject(args.projectId);
-    const sprint = this.deps.projectManagementRepository.getSprint(args.sprintId);
-    if (!project || !sprint) {
+    const effectiveRequests = recoveringPartialReviewerCycle
+      ? requests.filter((request) => {
+        return !previousTaskCycleRuns.some((run) => (
+          run.agentPresetId === request.agentPresetId && run.status === "completed"
+        ));
+      })
+      : requests;
+    if (effectiveRequests.length === 0) {
       return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
     }
+    const effectiveTriggerType = effectiveRequests[0]!.triggerType;
+    const runIndex = recoveringPartialReviewerCycle
+      ? previousTaskCycleRuns[0]!.runIndex
+      : existingRuns + 1;
 
-    const triggerType = requests[0]!.triggerType;
-    const sprintFeatureBranch = requests[0]!.sprintFeatureBranch;
-    const runIndex = existingRuns + 1;
-
-    const runs = requests.map((request) => {
-      const run = this.deps.qaReviewRepository.createRun(request.runPayload);
+    const runs = effectiveRequests.map((request) => {
+      const resumeFromRun = this.findResumableQaReviewerRun(previousTaskCycleRuns, request.agentPresetId);
+      const run = this.deps.qaReviewRepository.createRun({
+        ...request.runPayload,
+        runIndex,
+        payload: {
+          ...(request.runPayload.payload || {}),
+          runIndex,
+          reviewDispatchStatus: "pending",
+        },
+      });
       // Signal that the task has entered the QA stage so the live view advances
       // from coding-completed → QA and starts timing the review immediately
       // (the review itself can take minutes). Persisting the QA_PENDING indicator
       // makes the stage tag, boat race and stats reflect QA for the whole review,
       // not just the event-derived stage timeline.
       this.appendTaskEvent(taskRun, "qa_review_started", {
-        triggerType: request.triggerType,
+        triggerType: effectiveTriggerType,
         qaReviewRunId: run.id,
         runIndex,
         agentPresetId: request.agentPresetId,
         agentName: request.agentName,
       });
-      return { request, run };
+      return { request, run, resumeFromRun };
     });
     this.setTaskQaPending(args.task, true);
 
@@ -318,11 +384,17 @@ export class QualityAssuranceService {
       caughtError?: unknown;
     }> = [];
 
-    for (const { request, run } of runs) {
+    for (const { request, run, resumeFromRun } of runs) {
       let resolvedReview: NormalizedQaReviewResult | undefined;
       let caughtError: unknown;
 
       try {
+        this.deps.qaReviewRepository.updateRun(run.id, {
+          payload: {
+            ...this.getLatestQaRunPayload(run),
+            reviewDispatchStatus: "running",
+          },
+        });
         resolvedReview = await this.runReview({
           triggerType: request.triggerType,
           scope,
@@ -335,6 +407,8 @@ export class QualityAssuranceService {
           taskRun,
           sprintRunId: args.sprintRunId || null,
           agentPresetId: request.agentPresetId,
+          qaRun: run,
+          resumeFromRun,
           reviewBranch,
           baseBranch: sprintFeatureBranch,
         });
@@ -356,7 +430,7 @@ export class QualityAssuranceService {
           outcome: "pass",
           summaryMarkdown: intentOutcome.summary,
           payload: {
-            ...run.payload,
+            ...this.getLatestQaRunPayload(run),
             ...resolvedReview!.raw,
           },
           finishedAt: new Date().toISOString(),
@@ -382,8 +456,10 @@ export class QualityAssuranceService {
           summaryMarkdown: intentOutcome.summary,
           fixInstructions: intentOutcome.fixInstructions,
           payload: {
-            ...run.payload,
+            ...this.getLatestQaRunPayload(run),
             ...resolvedReview!.raw,
+            continuationKey: `qa-followup:${run.id}`,
+            continuationStatus: intentOutcome.fixInstructions ? "pending" : "skipped",
           },
           finishedAt: qaDecisionFinishedAt,
         });
@@ -407,7 +483,7 @@ export class QualityAssuranceService {
           status: "cancelled",
           summaryMarkdown: qaError.message,
           payload: {
-            ...run.payload,
+            ...this.getLatestQaRunPayload(run),
             error_code: qaError.code,
           },
           finishedAt: new Date().toISOString(),
@@ -438,7 +514,7 @@ export class QualityAssuranceService {
         status: "failed",
         summaryMarkdown: qaError.message,
         payload: {
-          ...run.payload,
+          ...this.getLatestQaRunPayload(run),
           error_code: qaError.code,
         },
         finishedAt: new Date().toISOString(),
@@ -467,91 +543,17 @@ export class QualityAssuranceService {
     const changesRequested = reviewResults.find((result) => result.intentOutcome.intent === "changes_requested");
     if (changesRequested && changesRequested.intentOutcome.intent === "changes_requested") {
       const changesIntent = changesRequested.intentOutcome;
-      const qaDecisionFinishedAt = new Date().toISOString();
-      let continued: QaFixContinuationResult;
-      try {
-        continued = changesIntent.fixInstructions
-          ? await this.requestFixesForTask({
-            task: args.task,
-            taskRun,
-            repoPath: args.repoPath,
-            featureBranch: sprintFeatureBranch,
-            scope,
-            prompt: changesIntent.fixInstructions,
-          })
-          : { applied: false, mode: "none" as const, noProgress: false, blocker: null };
-      } catch (error) {
-        this.deps.qaReviewRepository.updateRun(changesRequested.run.id, {
-          payload: {
-            ...changesRequested.run.payload,
-            ...changesRequested.resolvedReview!.raw,
-            continued: false,
-            continuationMode: "failed",
-            continuationError: error instanceof Error ? error.message : String(error),
-          },
-          finishedAt: qaDecisionFinishedAt,
-        });
-        throw error;
-      }
-
-      this.deps.qaReviewRepository.updateRun(changesRequested.run.id, {
-        payload: {
-          ...changesRequested.run.payload,
-          ...changesRequested.resolvedReview!.raw,
-          continued: continued.applied,
-          continuationMode: continued.mode,
-          followUpNoProgress: continued.noProgress,
-          followUpBlocker: continued.blocker,
-          postExhaustionVerificationEligible: continued.applied
-            && decisiveRuns + 1 === qaSettings.maxTaskReviewRuns,
-        },
-        finishedAt: qaDecisionFinishedAt,
-      });
-
-      if (continued.noProgress) {
-        this.deps.projectManagementRepository.updateTask(taskId, {
-          status: "coding_completed",
-          mergeIndicator: null,
-        });
-        args.task.status = "CODING_COMPLETED";
-      } else if (continued.applied) {
-        this.deps.projectManagementRepository.updateTask(taskId, {
-          status: "in_progress",
-          ...MERGE_PROJECTION_RESET,
-        });
-        args.task.status = "RUNNING";
-      } else {
-        this.deps.projectManagementRepository.updateTask(taskId, {
-          status: "pending",
-          ...MERGE_PROJECTION_RESET,
-        });
-        args.task.status = "PENDING";
-      }
-      // Re-entering the coding stage: drop any stale CI / QA / MERGED indicator.
-      clearMergeProjectionForRerun(args.task);
-
-      this.appendTaskEvent(taskRun, "qa_review_changes_requested", {
-        triggerType: changesRequested.request.triggerType,
-        summary: changesIntent.summary,
+      return await this.continuePendingTaskQaRun({
+        run: this.deps.qaReviewRepository.getRun(changesRequested.run.id) || changesRequested.run,
+        task: args.task,
+        taskRun,
+        repoPath: args.repoPath,
+        featureBranch: sprintFeatureBranch,
+        scope,
+        decisiveRuns: decisiveRuns + 1,
+        maxTaskReviewRuns: qaSettings.maxTaskReviewRuns,
         findings: changesRequested.resolvedReview!.findings,
-        fixInstructions: changesIntent.fixInstructions,
-        qaReviewRunId: changesRequested.run.id,
-        continued: continued.applied,
-        continuationMode: continued.mode,
-        followUpNoProgress: continued.noProgress,
-        followUpBlocker: continued.blocker,
-        postExhaustionVerificationEligible: continued.applied
-          && decisiveRuns + 1 === qaSettings.maxTaskReviewRuns,
-        agentPresetId: changesRequested.request.agentPresetId,
-        agentName: changesRequested.request.agentName,
       });
-
-      return {
-        reviewed: true,
-        reopenedTask: true,
-        mergeBlocked: true,
-        reportText: renderQaChangesRequestedReport(args.task.id, changesIntent.summary, continued.applied),
-      };
     }
 
     const failedReview = reviewResults.find((result) => result.intentOutcome.intent !== "pass");
@@ -652,6 +654,36 @@ export class QualityAssuranceService {
     const latestRuns = historicalLatestRuns.filter((run) => run.sprintRunId === args.sprintRunId);
     const latestRun = latestRuns[0] ?? null;
     const maxRuns = qaSettings.maxSprintReviewRuns;
+    const pendingSprintContinuation = latestRuns.find((run) => isPendingQaContinuation(run)) ?? null;
+
+    if (pendingSprintContinuation) {
+      return await this.continuePendingSprintQaRun({
+        run: pendingSprintContinuation,
+        repoPath: args.repoPath,
+        subtasks: args.subtasks,
+        featureBranch: sprintFeatureBranch,
+        scope,
+        maxRuns,
+      });
+    }
+
+    const sprintPresetIds = Array.isArray(qaSettings.sprintCompletion.agentPresetIds)
+      && qaSettings.sprintCompletion.agentPresetIds.length > 0
+      ? qaSettings.sprintCompletion.agentPresetIds
+      : [null];
+    const latestCycleHasChangesRequest = latestRuns.some((run) => (
+      run.status === "completed" && run.outcome === "changes_requested"
+    ));
+    const latestCycleHasCompletedReviewer = latestRuns.some((run) => run.status === "completed");
+    const potentiallyRecoveringPartialReviewerCycle = latestRuns.length > 0
+      && !latestCycleHasChangesRequest
+      && (
+        latestRuns.length < sprintPresetIds.length
+        || latestRuns.some((run) => run.status === "running" || run.status === "cancelled")
+        || (latestCycleHasCompletedReviewer && latestRuns.some((run) => run.status === "failed" || run.status === "errored"))
+        || sprintPresetIds.some((presetId) => presetId !== null && !latestRuns.some((run) => run.agentPresetId === presetId))
+      );
+
     const currentTaskSnapshot = buildSprintQaSnapshot(args.subtasks);
     const latestTaskUpdatedAt = this.getLatestSprintTaskUpdatedAt(args.projectId, args.sprintId);
     const shouldRunReview = shouldRunSprintQaReview({
@@ -668,18 +700,17 @@ export class QualityAssuranceService {
       shouldRunReview,
     });
 
-    if (sprintQaDecision.action === "skip_review") {
+    if (!potentiallyRecoveringPartialReviewerCycle && sprintQaDecision.action === "skip_review") {
       return { reviewed: false, blockedCompletion: false, mergeBlocked: false, reportText: "" };
     }
 
-    if (sprintQaDecision.action === "block_completion") {
+    if (!potentiallyRecoveringPartialReviewerCycle && sprintQaDecision.action === "block_completion") {
       this.openSprintQaHumanHandoffIfTerminal({
         projectId: args.projectId,
         sprintId: args.sprintId,
         sprintRunId: args.sprintRunId,
         latestRuns,
         maxRuns,
-        shouldRunReview,
       });
       return {
         reviewed: false,
@@ -689,27 +720,75 @@ export class QualityAssuranceService {
       };
     }
 
-    const sprintPresetIds = Array.isArray(qaSettings.sprintCompletion.agentPresetIds)
-      && qaSettings.sprintCompletion.agentPresetIds.length > 0
-      ? qaSettings.sprintCompletion.agentPresetIds
-      : [null];
+    const sprintAgents = await Promise.all(sprintPresetIds.map((configuredAgentPresetId) => (
+      this.deps.agentPresetSyncService.resolveTargetedQualityAssuranceAgent(
+        args.projectId,
+        configuredAgentPresetId,
+      )
+    )));
+    const recoveringPartialReviewerCycle = latestRuns.length > 0
+      && !latestCycleHasChangesRequest
+      && sprintAgents.some((agent) => {
+        const agentRuns = latestRuns.filter((run) => run.agentPresetId === agent.id);
+        if (agentRuns.some((run) => run.status === "completed")) {
+          return false;
+        }
+        return agentRuns.length === 0
+          || agentRuns.some((run) => run.status === "running" || run.status === "cancelled")
+          || (latestCycleHasCompletedReviewer && agentRuns.some((run) => run.status === "failed" || run.status === "errored"));
+      });
+    if (!recoveringPartialReviewerCycle && sprintQaDecision.action === "skip_review") {
+      return { reviewed: false, blockedCompletion: false, mergeBlocked: false, reportText: "" };
+    }
+    if (!recoveringPartialReviewerCycle && sprintQaDecision.action === "block_completion") {
+      this.openSprintQaHumanHandoffIfTerminal({
+        projectId: args.projectId,
+        sprintId: args.sprintId,
+        sprintRunId: args.sprintRunId,
+        latestRuns,
+        maxRuns,
+      });
+      return {
+        reviewed: false,
+        blockedCompletion: true,
+        mergeBlocked: true,
+        reportText: latestRun ? renderSprintQaPendingReport(latestRun) : "",
+      };
+    }
+
     const latestHistoricalRunIndex = historicalLatestRuns.reduce((maxRunIndex, run) => {
       return Math.max(maxRunIndex, typeof run.runIndex === "number" ? run.runIndex : 0);
     }, 0);
-    const runIndex = Math.max(latestRun?.runIndex || 0, latestHistoricalRunIndex) + 1;
+    const runIndex = recoveringPartialReviewerCycle
+      ? latestRuns[0]!.runIndex
+      : Math.max(latestRun?.runIndex || 0, latestHistoricalRunIndex) + 1;
     const sprintReviewResults: Array<{
       agentPresetId: string;
       agentName: string;
       run: QaReviewRunRecord;
       review?: NormalizedQaReviewResult;
       error?: unknown;
-    }> = [];
+    }> = recoveringPartialReviewerCycle
+      ? latestRuns.flatMap((run) => {
+        if (run.status !== "completed" || run.outcome !== "pass") {
+          return [];
+        }
+        return [{
+          agentPresetId: run.agentPresetId || "",
+          agentName: run.agentName || "QA",
+          run,
+          review: this.restoreSprintQaReview(run),
+        }];
+      })
+      : [];
 
-    for (const configuredAgentPresetId of sprintPresetIds) {
-      const agent = await this.deps.agentPresetSyncService.resolveTargetedQualityAssuranceAgent(
-        args.projectId,
-        configuredAgentPresetId,
-      );
+    const agentsToRun = recoveringPartialReviewerCycle
+      ? sprintAgents.filter((agent) => {
+        return !latestRuns.some((run) => run.agentPresetId === agent.id && run.status === "completed");
+      })
+      : sprintAgents;
+    const preparedSprintRuns = agentsToRun.map((agent) => {
+      const resumeFromRun = this.findResumableQaReviewerRun(latestRuns, agent.id);
       const run = this.deps.qaReviewRepository.createRun({
         projectId: args.projectId,
         sprintId: args.sprintId,
@@ -723,10 +802,20 @@ export class QualityAssuranceService {
           taskSnapshot: currentTaskSnapshot,
           agentPresetId: agent.id,
           agentName: agent.name,
+          reviewDispatchStatus: "pending",
         },
       });
+      return { agent, run, resumeFromRun };
+    });
 
+    for (const { agent, run, resumeFromRun } of preparedSprintRuns) {
       try {
+        this.deps.qaReviewRepository.updateRun(run.id, {
+          payload: {
+            ...this.getLatestQaRunPayload(run),
+            reviewDispatchStatus: "running",
+          },
+        });
         const memoryInstructions = resolveAgentMemoryInstructions(
           agent,
           settings.memory?.workerLearningsInstruction
@@ -745,6 +834,8 @@ export class QualityAssuranceService {
           taskRun: null,
           sprintRunId: args.sprintRunId,
           agentPresetId: agent.id,
+          qaRun: run,
+          resumeFromRun,
           // Sprint QA reviews the integrated base branch (where all task work is
           // merged), falling back to the configured default branch.
           reviewBranch: sprintFeatureBranch,
@@ -757,7 +848,7 @@ export class QualityAssuranceService {
             outcome: "pass",
             summaryMarkdown: review.summary,
             payload: {
-              ...run.payload,
+              ...this.getLatestQaRunPayload(run),
               ...review.raw,
               taskSnapshot: currentTaskSnapshot,
             },
@@ -774,7 +865,7 @@ export class QualityAssuranceService {
           summaryMarkdown: review.summary,
           fixInstructions: review.fixInstructions,
           payload: {
-            ...run.payload,
+            ...this.getLatestQaRunPayload(run),
             ...review.raw,
             taskSnapshot: currentTaskSnapshot,
           },
@@ -787,7 +878,7 @@ export class QualityAssuranceService {
           status: qaError.code === "CANCELLED" || isQaReviewCancellationError(error) ? "cancelled" : "failed",
           summaryMarkdown: qaError.message,
           payload: {
-            ...run.payload,
+            ...this.getLatestQaRunPayload(run),
             error_code: qaError.code,
           },
           finishedAt: new Date().toISOString(),
@@ -819,52 +910,78 @@ export class QualityAssuranceService {
       const targetTaskRun = targetTask ? this.resolveTaskRunForSubtask(targetTask, args.sprintRunId) : null;
       const fixInstructions = review.fixInstructions;
       const canContinueTargetTask = Boolean(targetTask && !this.isMergedSubtask(targetTask));
-      const continued = targetTask && fixInstructions && canContinueTargetTask
-        ? await this.requestFixesForTask({
-          task: targetTask,
-          taskRun: targetTaskRun,
-          repoPath: args.repoPath,
-          featureBranch: sprintFeatureBranch,
-          scope,
-          prompt: fixInstructions,
-        })
-        : { applied: false, mode: "none" as const };
-      const createdFollowUpTasks = this.createSprintFollowUpTasks({
-        projectId: args.projectId,
-        sprintId: args.sprintId,
-        targetTask,
-        fixInstructions,
-        review,
-        existingSubtasks: args.subtasks,
-        sourceRunId: changesRequested.run.id,
-      });
-
+      // Reserve the final configured review as a verification/handoff cycle.
+      // Creating more automatic work at the cap leaves no budget to verify it
+      // and previously trapped the sprint in an invisible heartbeat loop.
+      const canApplyAutomaticFollowUp = runIndex < maxRuns;
       this.deps.qaReviewRepository.updateRun(changesRequested.run.id, {
         targetTaskKey: targetTask?.id || review.targetTaskKey,
         targetSessionId: targetTask?.session_id || null,
         targetProvider: targetTask?.provider || null,
         payload: {
-          ...changesRequested.run.payload,
+          ...this.getLatestQaRunPayload(changesRequested.run),
           ...review.raw,
-          continued: continued.applied,
-          continuationMode: continued.mode,
-          continuationSkippedReason: targetTask && fixInstructions && !canContinueTargetTask
-            ? "target_task_already_merged"
-            : undefined,
-          createdFollowUpTaskKeys: createdFollowUpTasks.map((task) => task.taskKey),
+          continuationKey: `sprint-qa-followup:${changesRequested.run.id}`,
+          continuationStatus: canApplyAutomaticFollowUp && targetTask && fixInstructions && canContinueTargetTask
+            ? "pending"
+            : "skipped",
+          continuationTaskRunId: targetTaskRun?.id || null,
+          continuationSkippedReason: !canApplyAutomaticFollowUp
+            ? "sprint_qa_retry_budget_exhausted"
+            : targetTask && fixInstructions && !canContinueTargetTask
+              ? "target_task_already_merged"
+              : undefined,
+          automaticFollowUpSuppressedReason: canApplyAutomaticFollowUp
+            ? undefined
+            : "sprint_qa_retry_budget_exhausted",
           taskSnapshot: currentTaskSnapshot,
         },
         finishedAt: new Date().toISOString(),
       });
 
-      if (continued.applied && targetTask?.record_id) {
-        this.deps.projectManagementRepository.updateTask(targetTask.record_id, {
-          status: "in_progress",
-          ...MERGE_PROJECTION_RESET,
+      if (canApplyAutomaticFollowUp && targetTask && fixInstructions && canContinueTargetTask) {
+        return await this.continuePendingSprintQaRun({
+          run: this.deps.qaReviewRepository.getRun(changesRequested.run.id) || changesRequested.run,
+          repoPath: args.repoPath,
+          subtasks: args.subtasks,
+          featureBranch: sprintFeatureBranch,
+          scope,
+          maxRuns,
+          review,
         });
-        targetTask.status = "RUNNING";
-        // Re-entering the coding stage: drop any stale CI / QA / MERGED indicator.
-        clearMergeProjectionForRerun(targetTask);
+      }
+
+      const createdFollowUpTasks = canApplyAutomaticFollowUp
+        ? this.createSprintFollowUpTasks({
+          projectId: args.projectId,
+          sprintId: args.sprintId,
+          targetTask,
+          fixInstructions,
+          review,
+          existingSubtasks: args.subtasks,
+          sourceRunId: changesRequested.run.id,
+        })
+        : [];
+      this.deps.qaReviewRepository.updateRun(changesRequested.run.id, {
+        payload: {
+          ...this.getLatestQaRunPayload(changesRequested.run),
+          continued: false,
+          continuationMode: "none",
+          createdFollowUpTaskKeys: createdFollowUpTasks.map((task) => task.taskKey),
+        },
+      });
+
+      if (!canApplyAutomaticFollowUp) {
+        const terminalLatestRuns = this.deps.qaReviewRepository
+          .listLatestSprintCycleRuns(args.sprintId)
+          .filter((run) => run.sprintRunId === args.sprintRunId);
+        this.openSprintQaHumanHandoffIfTerminal({
+          projectId: args.projectId,
+          sprintId: args.sprintId,
+          sprintRunId: args.sprintRunId,
+          latestRuns: terminalLatestRuns,
+          maxRuns,
+        });
       }
 
       return {
@@ -874,9 +991,9 @@ export class QualityAssuranceService {
         reportText: renderSprintQaChangesRequestedReport(
           review.summary,
           targetTask?.id || review.targetTaskKey,
-          continued.applied,
+          false,
           createdFollowUpTasks.map((task) => task.taskKey),
-        ),
+        ) + (!canApplyAutomaticFollowUp ? renderSprintQaBudgetExhaustedReport(maxRuns) : ""),
       };
     }
 
@@ -927,11 +1044,10 @@ export class QualityAssuranceService {
     sprintRunId: string;
     latestRuns: QaReviewRunRecord[];
     maxRuns: number;
-    shouldRunReview: boolean;
   }): void {
     const service = this.deps.projectAttentionService;
     const latestRun = args.latestRuns[0] ?? null;
-    if (!service || !latestRun || args.shouldRunReview) {
+    if (!service || !latestRun) {
       return;
     }
 
@@ -947,9 +1063,10 @@ export class QualityAssuranceService {
     const reason = terminalFailure
       ? "terminal_review_failure"
       : "retry_budget_exhausted";
-    const lastProviderError = terminalFailure?.summaryMarkdown?.trim()
+    const latestReviewDetail = terminalFailure?.summaryMarkdown?.trim()
       || latestRun.summaryMarkdown?.trim()
       || "Sprint QA did not produce a passing verdict.";
+    const lastProviderError = terminalFailure ? latestReviewDetail : null;
     const errorCode = terminalFailure?.payload?.error_code;
     const attempts = latestRun.runIndex;
 
@@ -969,7 +1086,7 @@ export class QualityAssuranceService {
         "Sprint completion remains blocked because QA could not produce a passing verdict.",
         `Attempts: ${attempts}/${args.maxRuns}.`,
         `Reason: ${reason}.`,
-        `Latest provider error: ${lastProviderError}`,
+        `${terminalFailure ? "Latest provider error" : "Latest QA result"}: ${latestReviewDetail}`,
         "Resolve this handoff after correcting the provider or reviewing the result to reset sprint QA and allow one fresh review cycle.",
       ].join("\n\n"),
       payload: {
@@ -981,6 +1098,7 @@ export class QualityAssuranceService {
         runsUsed: attempts,
         maxRuns: args.maxRuns,
         lastProviderError,
+        latestQaSummary: latestRun.summaryMarkdown?.trim() || null,
         lastProviderErrorCode: typeof errorCode === "string" ? errorCode : null,
         latestQaRunId: terminalFailure?.id ?? latestRun.id,
         sprintRunId: args.sprintRunId,
@@ -1022,6 +1140,26 @@ export class QualityAssuranceService {
     });
   }
 
+  private findResumableQaReviewerRun(
+    runs: QaReviewRunRecord[],
+    agentPresetId: string | null,
+  ): QaReviewRunRecord | null {
+    return runs.find((run) => (
+      run.agentPresetId === agentPresetId
+      && (run.status === "cancelled" || run.status === "failed")
+      && typeof run.payload?.reviewLogicalSessionId === "string"
+      && run.payload.reviewLogicalSessionId.trim().length > 0
+    )) || null;
+  }
+
+  private getLatestQaRunPayload(run: QaReviewRunRecord): Record<string, unknown> {
+    const repository = this.deps.qaReviewRepository as Partial<QaReviewRepository>;
+    const persistedRun = typeof repository.getRun === "function"
+      ? repository.getRun(run.id)
+      : null;
+    return persistedRun?.payload || run.payload || {};
+  }
+
   private async runReview(args: {
     triggerType: QaReviewTriggerType;
     scope: DashboardSettingsScope;
@@ -1034,6 +1172,8 @@ export class QualityAssuranceService {
     taskRun: TaskRunRecord | null;
     sprintRunId: string | null;
     agentPresetId: string | null;
+    qaRun?: QaReviewRunRecord;
+    resumeFromRun?: QaReviewRunRecord | null;
     reviewBranch: string | undefined;
     baseBranch: string;
   }): Promise<NormalizedQaReviewResult> {
@@ -1053,13 +1193,35 @@ export class QualityAssuranceService {
         is_independent: true,
         status: "COMPLETED",
       };
+      const settings = this.deps.getDashboardSettings(args.scope);
+      const requestedResume = settings.restartInvocationPolicy === "continue" && Boolean(args.resumeFromRun);
+      const candidateResumePayload = requestedResume ? args.resumeFromRun?.payload : null;
       const route = this.deps.taskService.resolveInvocationProvider("qa_review", pseudoTask, {
         scope: args.scope,
         cliOnly: true,
       });
-      const provider = route.provider as CliQaProvider;
-      const providerConfigId = route.providerConfigId || route.provider;
+      const savedProviderConfigId = typeof candidateResumePayload?.reviewProviderConfigId === "string"
+        ? candidateResumePayload.reviewProviderConfigId
+        : null;
+      const savedProvider = typeof candidateResumePayload?.reviewProvider === "string"
+        ? candidateResumePayload.reviewProvider as CliQaProvider
+        : null;
+      const hasSavedRoute = Boolean(
+        requestedResume
+        && savedProviderConfigId
+        && savedProvider
+        && route.providers[savedProviderConfigId],
+      );
+      const provider = hasSavedRoute ? savedProvider! : route.provider as CliQaProvider;
+      const providerConfigId = hasSavedRoute
+        ? savedProviderConfigId!
+        : route.providerConfigId || route.provider;
       const providerSettings = route.providers[providerConfigId];
+      const canResume = requestedResume && hasSavedRoute;
+      const resumePayload = canResume ? candidateResumePayload : null;
+      const savedModel = typeof resumePayload?.reviewModel === "string" && resumePayload.reviewModel.trim()
+        ? resumePayload.reviewModel
+        : providerSettings.model;
 
       const memoryContext = args.agentPresetId
         ? await this.buildMemoryContext(args.scope.projectId!, args.scope.sprintId || null, args.agentPresetId, args.sprintGoal)
@@ -1069,7 +1231,6 @@ export class QualityAssuranceService {
         memoryContext,
       });
       const providerPrompt = buildProviderPrompt(prompt, providerSettings.thinkingMode, provider);
-      const settings = this.deps.getDashboardSettings(args.scope);
       const workflowSettings = {
         ...DEFAULT_CLI_WORKFLOW_SETTINGS,
         ...settings.cliWorkflow,
@@ -1080,7 +1241,83 @@ export class QualityAssuranceService {
         githubToken: settings.git.githubToken,
         gitlabToken: settings.git.gitlabToken,
       });
-      const snapshotSessionId = `qa-review-${provider}-${randomUUID()}`;
+      const savedLogicalSessionId = typeof resumePayload?.reviewLogicalSessionId === "string"
+        ? resumePayload.reviewLogicalSessionId.trim()
+        : "";
+      const logicalSessionId = savedLogicalSessionId
+        || `${args.qaRun ? "cli-" : ""}qa-review-${provider}-${args.qaRun?.id || Date.now().toString(36)}`;
+      const previousProviderInvocation = canResume
+        && typeof this.deps.executionRepository.getLatestProviderInvocationUsageBySession === "function"
+        ? this.deps.executionRepository.getLatestProviderInvocationUsageBySession(logicalSessionId, "qa_review")
+        : null;
+      const savedNativeSessionId = typeof resumePayload?.reviewNativeSessionId === "string"
+        ? resumePayload.reviewNativeSessionId.trim()
+        : "";
+      const continueSessionId = canResume
+        ? previousProviderInvocation?.nativeSessionId
+          || savedNativeSessionId
+          || (provider === "claude-code" ? null : logicalSessionId)
+        : null;
+      const openCodeBaselineRawUsageJson = provider === "opencode"
+        ? previousProviderInvocation?.rawUsageJson
+          || (resumePayload?.reviewOpenCodeBaselineRawUsageJson as Record<string, unknown> | null | undefined)
+          || null
+        : null;
+      const snapshotSessionId = typeof resumePayload?.reviewSnapshotSessionId === "string"
+        && resumePayload.reviewSnapshotSessionId.trim()
+        ? resumePayload.reviewSnapshotSessionId
+        : `${logicalSessionId}-workspace`;
+      const workspaceSessionId = typeof resumePayload?.reviewWorkspaceSessionId === "string"
+        && resumePayload.reviewWorkspaceSessionId.trim()
+        ? resumePayload.reviewWorkspaceSessionId
+        : snapshotSessionId;
+      const existingReviewInvocationId = typeof args.qaRun?.payload?.reviewExecutionInvocationId === "string"
+        ? args.qaRun.payload.reviewExecutionInvocationId
+        : null;
+      const reviewExecutionInvocationId = existingReviewInvocationId
+        || (args.qaRun && typeof this.deps.executionRepository.createExecutionInvocation === "function"
+          ? this.deps.executionRepository.createExecutionInvocation({
+            projectId: args.scope.projectId!,
+            sprintId: args.scope.sprintId || null,
+            taskId: args.taskRun?.taskId || null,
+            sprintRunId: args.sprintRunId,
+            taskRunId: args.taskRun?.id || null,
+            type: "qa_review",
+            provider,
+            model: savedModel,
+            startedAt: new Date().toISOString(),
+          }).id
+          : undefined);
+      if (args.qaRun) {
+        this.deps.qaReviewRepository.updateRun(args.qaRun.id, {
+          payload: {
+            ...this.getLatestQaRunPayload(args.qaRun),
+            reviewLogicalSessionId: logicalSessionId,
+            reviewSnapshotSessionId: snapshotSessionId,
+            reviewWorkspaceSessionId: workspaceSessionId,
+            reviewProvider: provider,
+            reviewProviderConfigId: providerConfigId,
+            reviewModel: savedModel,
+            reviewExecutionInvocationId,
+            reviewContinuationSourceRunId: canResume ? args.resumeFromRun?.id : undefined,
+          },
+        });
+      }
+      if (typeof this.deps.sessionTracking.createSession === "function") {
+        for (const trackedSessionId of new Set([logicalSessionId, workspaceSessionId])) {
+          this.deps.sessionTracking.createSession({
+            id: trackedSessionId,
+            provider,
+            taskId: args.taskRun?.taskId || undefined,
+            title: args.currentTask ? `QA review: ${args.currentTask.title}` : "Sprint QA review",
+            prompt,
+            state: "RUNNING",
+            featureBranch: args.baseBranch,
+            workerBranch: args.reviewBranch,
+            repoPath: args.repoPath,
+          });
+        }
+      }
       let snapshotWorkspace = args.repoPath;
       let shouldCleanupSnapshot = false;
       if (workflowSettings.executionMode === "DOCKER") {
@@ -1096,23 +1333,38 @@ export class QualityAssuranceService {
           sessionId: snapshotSessionId,
           checkout: invocationWorkspace.snapshotCheckout,
           gitPolicy: invocationWorkspace.gitPolicy,
+          reuseExisting: canResume,
         });
         shouldCleanupSnapshot = true;
       } else if (args.reviewBranch) {
         // QA must inspect the requested worker/feature branch in HOST mode too.
         // The visible repository normally remains on the default branch, which
         // otherwise turns every QA check into a false missing-file rejection.
-        snapshotWorkspace = await this.invocationWorkspacePreparer.createHostSnapshotWorkspace({
-          repoPath: args.repoPath,
-          sessionId: snapshotSessionId,
-          checkout: buildInvocationSnapshotCheckout(gitPolicy, {
-            branch: args.reviewBranch,
-            fallbackBranch: args.baseBranch,
-            useDefaultBranch: false,
-          }),
-          gitPolicy,
-        });
+        const savedSnapshotWorkspace = typeof resumePayload?.reviewSnapshotWorkspace === "string"
+          ? resumePayload.reviewSnapshotWorkspace
+          : "";
+        snapshotWorkspace = canResume && savedSnapshotWorkspace
+          && await this.workspaceManager.workspaceExists(savedSnapshotWorkspace)
+          ? savedSnapshotWorkspace
+          : await this.invocationWorkspacePreparer.createHostSnapshotWorkspace({
+            repoPath: args.repoPath,
+            sessionId: snapshotSessionId,
+            checkout: buildInvocationSnapshotCheckout(gitPolicy, {
+              branch: args.reviewBranch,
+              fallbackBranch: args.baseBranch,
+              useDefaultBranch: false,
+            }),
+            gitPolicy,
+          });
         shouldCleanupSnapshot = true;
+      }
+      if (args.qaRun) {
+        this.deps.qaReviewRepository.updateRun(args.qaRun.id, {
+          payload: {
+            ...this.getLatestQaRunPayload(args.qaRun),
+            reviewSnapshotWorkspace: snapshotWorkspace,
+          },
+        });
       }
 
       let result;
@@ -1126,11 +1378,11 @@ export class QualityAssuranceService {
           purpose: "qa_review",
           type: "qa_review",
           provider,
-          ...buildProviderSettingsOverride(providerSettings.model, providerSettings),
+          ...buildProviderSettingsOverride(savedModel, providerSettings),
           providerPrompt,
           repoPath: args.repoPath,
           cwd: snapshotWorkspace,
-          workspaceSessionId: `${args.scope.projectId || "project"}-qa-snapshot`,
+          workspaceSessionId,
           settings: {
             ...settings,
             cliWorkflow: workflowSettings,
@@ -1144,6 +1396,10 @@ export class QualityAssuranceService {
           ].join("\n"),
           providerLabel: "QA",
           sessionIdPrefix: "qa-review",
+          logicalSessionId,
+          continueSessionId,
+          openCodeBaselineRawUsageJson,
+          invocationId: reviewExecutionInvocationId,
           systemRoutingMessage: args.agentInstructions.trim(),
           agentMcpAccess: args.agentPresetId
             ? this.deps.agentPresetRepository?.getAgentPreset(args.agentPresetId)?.mcpAccess ?? null
@@ -1153,7 +1409,19 @@ export class QualityAssuranceService {
             this.touchSprintRunHeartbeat(args.sprintRunId, args.scope.sprintId);
           },
         });
+        if (args.qaRun) {
+          this.deps.qaReviewRepository.updateRun(args.qaRun.id, {
+            payload: {
+              ...this.getLatestQaRunPayload(args.qaRun),
+              reviewNativeSessionId: result.nativeSessionId,
+              reviewOpenCodeBaselineRawUsageJson: result.openCodeBaselineRawUsageJson || openCodeBaselineRawUsageJson,
+            },
+          });
+        }
       } catch (error) {
+        for (const trackedSessionId of new Set([logicalSessionId, workspaceSessionId])) {
+          this.deps.sessionTracking.updateSession?.(trackedSessionId, { state: "FAILED" });
+        }
         throw parseQaError(error);
       } finally {
         if (settings.memory?.enabled && settings.memory.autoCaptureSprint && this.deps.memoryService && result) {
@@ -1168,8 +1436,13 @@ export class QualityAssuranceService {
             );
           }
         }
-        if (shouldCleanupSnapshot) {
+        if (shouldCleanupSnapshot && result) {
           await this.workspaceManager.removeWorktree(args.repoPath, snapshotWorkspace).catch(() => undefined);
+        }
+        if (result) {
+          for (const trackedSessionId of new Set([logicalSessionId, workspaceSessionId])) {
+            this.deps.sessionTracking.updateSession?.(trackedSessionId, { state: "COMPLETED" });
+          }
         }
       }
 
@@ -1225,12 +1498,27 @@ export class QualityAssuranceService {
     return this.deps.qaReviewRepository.updateRun(run.id, {
       status: "cancelled",
       summaryMarkdown: recoveryDecision.summaryMarkdown,
+      payload: {
+        ...this.getLatestQaRunPayload(run),
+        reviewNativeSessionId: providerInvocation?.nativeSessionId || run.payload?.reviewNativeSessionId,
+        reviewOpenCodeBaselineRawUsageJson: providerInvocation?.rawUsageJson
+          || run.payload?.reviewOpenCodeBaselineRawUsageJson,
+      },
       finishedAt: recoveryDecision.finishedAt,
     });
   }
 
   private findLatestQaExecutionInvocation(run: QaReviewRunRecord): ExecutionInvocationRecord | null {
     const executionRepository = this.deps.executionRepository as Partial<ExecutionRepository>;
+    const correlatedInvocationId = typeof run.payload?.reviewExecutionInvocationId === "string"
+      ? run.payload.reviewExecutionInvocationId
+      : null;
+    if (correlatedInvocationId && typeof executionRepository.getExecutionInvocation === "function") {
+      const correlatedInvocation = executionRepository.getExecutionInvocation(correlatedInvocationId);
+      if (correlatedInvocation?.type === "qa_review") {
+        return correlatedInvocation;
+      }
+    }
     if (typeof executionRepository.listExecutionInvocations !== "function") {
       return null;
     }
@@ -1504,6 +1792,526 @@ export class QualityAssuranceService {
     }
   }
 
+  private async continuePendingSprintQaRun(args: {
+    run: QaReviewRunRecord;
+    repoPath: string;
+    subtasks: Subtask[];
+    featureBranch: string;
+    scope: DashboardSettingsScope;
+    maxRuns: number;
+    review?: NormalizedQaReviewResult;
+  }): Promise<SprintQaReviewOutcome> {
+    const targetTask = args.run.targetTaskKey
+      ? args.subtasks.find((task) => task.id === args.run.targetTaskKey) ?? null
+      : null;
+    const review = args.review || this.restoreSprintQaReview(args.run);
+    if (!targetTask || !args.run.fixInstructions?.trim() || this.isMergedSubtask(targetTask)) {
+      this.deps.qaReviewRepository.updateRun(args.run.id, {
+        payload: {
+          ...this.getLatestQaRunPayload(args.run),
+          continuationStatus: "skipped",
+          continuationSkippedReason: !targetTask
+            ? "target_task_missing"
+            : this.isMergedSubtask(targetTask)
+              ? "target_task_already_merged"
+              : "fix_instructions_missing",
+        },
+      });
+      return {
+        reviewed: true,
+        blockedCompletion: true,
+        mergeBlocked: true,
+        reportText: renderSprintQaChangesRequestedReport(
+          args.run.summaryMarkdown || review.summary,
+          args.run.targetTaskKey,
+          false,
+          [],
+        ),
+      };
+    }
+
+    if (this.activeQaContinuationRunIds.has(args.run.id)) {
+      return {
+        reviewed: false,
+        blockedCompletion: true,
+        mergeBlocked: true,
+        reportText: renderSprintQaChangesRequestedReport(
+          args.run.summaryMarkdown || review.summary,
+          targetTask.id,
+          false,
+          [],
+        ),
+      };
+    }
+
+    if (targetTask.record_id) {
+      clearMergeProjectionForRerun(targetTask);
+      this.deps.projectManagementRepository.updateTask(targetTask.record_id, {
+        status: "coding_completed",
+        isMerged: false,
+        mergeIndicator: "QA_PENDING",
+      });
+    }
+    targetTask.status = "CODING_COMPLETED";
+    targetTask.is_merged = false;
+    targetTask.merge_indicator = "QA_PENDING";
+    targetTask.intervention_owner = undefined;
+    targetTask.intervention_hint = undefined;
+
+    const payload = this.getLatestQaRunPayload(args.run);
+    const storedAttemptCount = payload.continuationAttemptCount;
+    const previousAttemptCount = typeof storedAttemptCount === "number" && Number.isFinite(storedAttemptCount)
+      ? Math.max(0, Math.trunc(storedAttemptCount))
+      : 0;
+    const continuationAttemptCount = payload.continuationStatus === "running" && previousAttemptCount > 0
+      ? previousAttemptCount
+      : previousAttemptCount + 1;
+    this.deps.qaReviewRepository.updateRun(args.run.id, {
+      payload: {
+        ...payload,
+        continuationKey: typeof payload.continuationKey === "string"
+          ? payload.continuationKey
+          : `sprint-qa-followup:${args.run.id}`,
+        continuationStatus: "running",
+        continuationAttemptCount,
+        continuationStartedAt: new Date().toISOString(),
+        continuationError: undefined,
+      },
+    });
+
+    const taskRunId = typeof payload.continuationTaskRunId === "string"
+      ? payload.continuationTaskRunId
+      : null;
+    const executionRepository = this.deps.executionRepository as Partial<ExecutionRepository>;
+    const targetTaskRun = taskRunId && typeof executionRepository.getTaskRun === "function"
+      ? executionRepository.getTaskRun(taskRunId)
+      : this.resolveTaskRunForSubtask(targetTask, args.run.sprintRunId || undefined);
+
+    this.activeQaContinuationRunIds.add(args.run.id);
+    let continued: QaFixContinuationResult;
+    try {
+      continued = await this.requestFixesForTask({
+        task: targetTask,
+        taskRun: targetTaskRun,
+        repoPath: args.repoPath,
+        featureBranch: args.featureBranch,
+        scope: args.scope,
+        prompt: args.run.fixInstructions,
+        qaContinuationRunId: args.run.id,
+      });
+    } catch (error) {
+      const failedAt = new Date().toISOString();
+      const retryBudgetExhausted = continuationAttemptCount >= QA_INFRA_FAILURE_GRACE;
+      this.deps.qaReviewRepository.updateRun(args.run.id, {
+        payload: {
+          ...this.getLatestQaRunPayload(args.run),
+          continued: false,
+          continuationMode: "failed",
+          continuationStatus: retryBudgetExhausted ? "failed" : "pending",
+          continuationAttemptCount,
+          continuationError: error instanceof Error ? error.message : String(error),
+          continuationFailedAt: failedAt,
+          continuationSettledAt: retryBudgetExhausted ? failedAt : undefined,
+          followUpNoProgress: retryBudgetExhausted,
+        },
+      });
+      if (targetTask.record_id) {
+        clearMergeProjectionForRerun(targetTask);
+        this.deps.projectManagementRepository.updateTask(targetTask.record_id, {
+          status: "coding_completed",
+          isMerged: false,
+          mergeIndicator: "QA_PENDING",
+        });
+      }
+      targetTask.status = "CODING_COMPLETED";
+      targetTask.is_merged = false;
+      targetTask.merge_indicator = "QA_PENDING";
+      targetTask.intervention_owner = undefined;
+      targetTask.intervention_hint = undefined;
+      throw error;
+    } finally {
+      this.activeQaContinuationRunIds.delete(args.run.id);
+    }
+
+    const createdFollowUpTasks = this.createSprintFollowUpTasks({
+      projectId: args.run.projectId,
+      sprintId: args.run.sprintId,
+      targetTask,
+      fixInstructions: args.run.fixInstructions,
+      review,
+      existingSubtasks: args.subtasks,
+      sourceRunId: args.run.id,
+    });
+    this.deps.qaReviewRepository.updateRun(args.run.id, {
+      payload: {
+        ...this.getLatestQaRunPayload(args.run),
+        continued: continued.applied,
+        continuationMode: continued.mode,
+        continuationStatus: continued.noProgress
+          ? "no_progress"
+          : continued.applied
+            ? "completed"
+            : "skipped",
+        continuationSettledAt: new Date().toISOString(),
+        continuationError: undefined,
+        followUpNoProgress: continued.noProgress,
+        followUpBlocker: continued.blocker,
+        createdFollowUpTaskKeys: createdFollowUpTasks.map((task) => task.taskKey),
+      },
+    });
+
+    if (continued.applied && targetTask.record_id) {
+      clearMergeProjectionForRerun(targetTask);
+      this.deps.projectManagementRepository.updateTask(targetTask.record_id, {
+        status: "coding_completed",
+        isMerged: false,
+        mergeIndicator: "QA_PENDING",
+      });
+      targetTask.status = "CODING_COMPLETED";
+      targetTask.is_merged = false;
+      targetTask.merge_indicator = "QA_PENDING";
+    }
+
+    return {
+      reviewed: true,
+      blockedCompletion: true,
+      mergeBlocked: true,
+      reportText: renderSprintQaChangesRequestedReport(
+        args.run.summaryMarkdown || review.summary,
+        targetTask.id,
+        continued.applied,
+        createdFollowUpTasks.map((task) => task.taskKey),
+      ) + (args.run.runIndex >= args.maxRuns ? renderSprintQaBudgetExhaustedReport(args.maxRuns) : ""),
+    };
+  }
+
+  private restoreSprintQaReview(run: QaReviewRunRecord): NormalizedQaReviewResult {
+    try {
+      return normalizeQaReviewResult(JSON.stringify(run.payload || {}));
+    } catch {
+      return {
+        verdict: "changes_requested",
+        summary: run.summaryMarkdown || "Sprint QA requested follow-up work.",
+        findings: [],
+        fixInstructions: run.fixInstructions,
+        targetTaskKey: run.targetTaskKey,
+        shouldHavePr: null,
+        followUpTasks: [],
+        raw: run.payload || {},
+      };
+    }
+  }
+
+  private isPendingTaskQaContinuation(run: QaReviewRunRecord): boolean {
+    return isPendingQaContinuation(run);
+  }
+
+  private async continuePendingTaskQaRun(args: {
+    run: QaReviewRunRecord;
+    task: Subtask;
+    taskRun: TaskRunRecord | null;
+    repoPath: string;
+    featureBranch: string;
+    scope: DashboardSettingsScope;
+    decisiveRuns: number;
+    maxTaskReviewRuns: number;
+    findings?: string[];
+  }): Promise<TaskQaReviewOutcome> {
+    if (this.activeQaContinuationRunIds.has(args.run.id)) {
+      return {
+        reviewed: false,
+        reopenedTask: false,
+        mergeBlocked: true,
+        reportText: renderQaChangesRequestedReport(
+          args.task.id,
+          args.run.summaryMarkdown || "QA requested follow-up changes.",
+          false,
+        ),
+      };
+    }
+
+    if (this.isLaterTaskRunStillActive(args.run, args.taskRun)) {
+      return {
+        reviewed: false,
+        reopenedTask: false,
+        mergeBlocked: true,
+        reportText: renderQaChangesRequestedReport(
+          args.task.id,
+          args.run.summaryMarkdown || "QA requested follow-up changes.",
+          false,
+        ),
+      };
+    }
+
+    if (this.hasCompletedSameSessionQaFollowUp(
+      args.run,
+      args.taskRun,
+      args.run.targetSessionId?.trim() || args.task.session_id,
+    )) {
+      const reconciledAt = new Date().toISOString();
+      this.deps.qaReviewRepository.updateRun(args.run.id, {
+        payload: {
+          ...(this.deps.qaReviewRepository.getRun(args.run.id)?.payload || args.run.payload || {}),
+          continuationKey: typeof args.run.payload?.continuationKey === "string"
+            ? args.run.payload.continuationKey
+            : `qa-followup:${args.run.id}`,
+          continuationStatus: "completed",
+          continuationMode: "cli",
+          continuationSettledAt: reconciledAt,
+          continuationReconciled: true,
+          continued: true,
+          followUpNoProgress: false,
+          followUpBlocker: null,
+          postExhaustionVerificationEligible: args.decisiveRuns === args.maxTaskReviewRuns,
+        },
+      });
+      if (args.task.record_id) {
+        clearMergeProjectionForRerun(args.task);
+        this.deps.projectManagementRepository.updateTask(args.task.record_id, {
+          status: "coding_completed",
+          isMerged: false,
+          mergeIndicator: "QA_PENDING",
+        });
+      }
+      args.task.status = "CODING_COMPLETED";
+      args.task.merge_indicator = "QA_PENDING";
+      return {
+        reviewed: true,
+        reopenedTask: true,
+        mergeBlocked: true,
+        reportText: renderQaChangesRequestedReport(
+          args.task.id,
+          args.run.summaryMarkdown || "QA requested follow-up changes.",
+          true,
+        ),
+      };
+    }
+
+    // A legacy failure may already have projected this task back to pending or
+    // running ordinary coding. Re-establish the durable QA stage before the
+    // provider side effect so a concurrent snapshot/restart cannot redispatch it
+    // as unrelated task work while this handoff is in flight.
+    if (args.task.record_id) {
+      this.deps.projectManagementRepository.updateTask(args.task.record_id, {
+        status: "coding_completed",
+        isMerged: false,
+        mergeIndicator: "QA_PENDING",
+      });
+    }
+    args.task.status = "CODING_COMPLETED";
+    args.task.is_merged = false;
+    args.task.merge_indicator = "QA_PENDING";
+    args.task.intervention_owner = undefined;
+    args.task.intervention_hint = undefined;
+
+    this.activeQaContinuationRunIds.add(args.run.id);
+    const continuationKey = typeof args.run.payload?.continuationKey === "string"
+      ? args.run.payload.continuationKey
+      : `qa-followup:${args.run.id}`;
+    const latestPayload = (): Record<string, unknown> => (
+      this.deps.qaReviewRepository.getRun(args.run.id)?.payload || args.run.payload || {}
+    );
+    const checkpointPayload = latestPayload();
+    const storedAttemptCount = checkpointPayload.continuationAttemptCount;
+    const previousAttemptCount = typeof storedAttemptCount === "number" && Number.isFinite(storedAttemptCount)
+      ? Math.max(0, Math.trunc(storedAttemptCount))
+      : checkpointPayload.continuationStatus === "failed"
+        ? 1
+        : 0;
+    // A process restart leaves the durable row at `running`. Resuming that same
+    // logical/native provider turn must not consume another failure allowance;
+    // only a fresh dispatch from pending/failed starts a new bounded attempt.
+    const continuationAttemptCount = checkpointPayload.continuationStatus === "running"
+      && previousAttemptCount > 0
+      ? previousAttemptCount
+      : previousAttemptCount + 1;
+
+    this.deps.qaReviewRepository.updateRun(args.run.id, {
+      payload: {
+        ...checkpointPayload,
+        continuationKey,
+        continuationStatus: "running",
+        continuationAttemptCount,
+        continuationStartedAt: new Date().toISOString(),
+        continuationError: undefined,
+        followUpNoProgress: false,
+        followUpBlocker: null,
+      },
+    });
+
+    let continued: QaFixContinuationResult;
+    try {
+      const executionRepository = this.deps.executionRepository as Partial<ExecutionRepository>;
+      const continuationTaskRun = args.run.taskRunId && typeof executionRepository.getTaskRun === "function"
+        ? executionRepository.getTaskRun(args.run.taskRunId) || args.taskRun
+        : args.taskRun;
+      const continuationSessionId = args.run.targetSessionId?.trim() || args.task.session_id;
+      const continuationTask = continuationSessionId && continuationSessionId !== args.task.session_id
+        ? { ...args.task, session_id: continuationSessionId }
+        : args.task;
+      continued = args.run.fixInstructions?.trim()
+        ? await this.requestFixesForTask({
+            task: continuationTask,
+            taskRun: continuationTaskRun,
+            repoPath: args.repoPath,
+            featureBranch: args.featureBranch,
+            scope: args.scope,
+            prompt: args.run.fixInstructions,
+            qaContinuationRunId: args.run.id,
+          })
+        : { applied: false, mode: "none", noProgress: false, blocker: null };
+    } catch (error) {
+      const continuationError = error instanceof Error ? error.message : String(error);
+      const retryBudgetExhausted = continuationAttemptCount >= QA_INFRA_FAILURE_GRACE;
+      const failedAt = new Date().toISOString();
+      this.deps.qaReviewRepository.updateRun(args.run.id, {
+        payload: {
+          ...latestPayload(),
+          continued: false,
+          continuationMode: "failed",
+          continuationStatus: retryBudgetExhausted ? "failed" : "pending",
+          continuationAttemptCount,
+          continuationError,
+          continuationFailedAt: failedAt,
+          continuationSettledAt: retryBudgetExhausted ? failedAt : undefined,
+          followUpNoProgress: retryBudgetExhausted,
+          followUpBlocker: retryBudgetExhausted ? continuationError : null,
+        },
+      });
+      if (args.task.record_id) {
+        this.deps.projectManagementRepository.updateTask(args.task.record_id, {
+          status: "coding_completed",
+          isMerged: false,
+          mergeIndicator: "QA_PENDING",
+        });
+      }
+      args.task.status = "CODING_COMPLETED";
+      args.task.is_merged = false;
+      args.task.merge_indicator = "QA_PENDING";
+      args.task.intervention_owner = undefined;
+      args.task.intervention_hint = undefined;
+      throw error;
+    } finally {
+      this.activeQaContinuationRunIds.delete(args.run.id);
+    }
+
+    const continuationStatus = continued.noProgress
+      ? "no_progress"
+      : continued.applied
+        ? "completed"
+        : "skipped";
+    const postExhaustionVerificationEligible = continued.applied
+      && args.decisiveRuns === args.maxTaskReviewRuns;
+    this.deps.qaReviewRepository.updateRun(args.run.id, {
+      payload: {
+        ...latestPayload(),
+        continued: continued.applied,
+        continuationMode: continued.mode,
+        continuationStatus,
+        continuationSettledAt: new Date().toISOString(),
+        continuationError: undefined,
+        followUpNoProgress: continued.noProgress,
+        followUpBlocker: continued.blocker,
+        postExhaustionVerificationEligible,
+      },
+    });
+
+    const taskId = args.task.record_id?.trim();
+    if (taskId) {
+      if (continued.noProgress) {
+        this.deps.projectManagementRepository.updateTask(taskId, {
+          status: "coding_completed",
+          mergeIndicator: null,
+        });
+        args.task.status = "CODING_COMPLETED";
+      } else if (continued.applied) {
+        clearMergeProjectionForRerun(args.task);
+        this.deps.projectManagementRepository.updateTask(taskId, {
+          status: "coding_completed",
+          isMerged: false,
+          mergeIndicator: "QA_PENDING",
+        });
+        args.task.status = "CODING_COMPLETED";
+        args.task.merge_indicator = "QA_PENDING";
+      } else {
+        this.deps.projectManagementRepository.updateTask(taskId, {
+          status: "pending",
+          ...MERGE_PROJECTION_RESET,
+        });
+        args.task.status = "PENDING";
+      }
+      if (!continued.applied) {
+        clearMergeProjectionForRerun(args.task);
+      }
+    }
+
+    this.appendTaskEvent(args.taskRun, "qa_review_changes_requested", {
+      triggerType: args.run.triggerType,
+      summary: args.run.summaryMarkdown,
+      findings: args.findings || [],
+      fixInstructions: args.run.fixInstructions,
+      qaReviewRunId: args.run.id,
+      continued: continued.applied,
+      continuationMode: continued.mode,
+      continuationStatus,
+      followUpNoProgress: continued.noProgress,
+      followUpBlocker: continued.blocker,
+      postExhaustionVerificationEligible,
+      agentPresetId: args.run.agentPresetId,
+      agentName: args.run.agentName,
+    });
+
+    return {
+      reviewed: true,
+      reopenedTask: true,
+      mergeBlocked: true,
+      reportText: renderQaChangesRequestedReport(
+        args.task.id,
+        args.run.summaryMarkdown || "QA requested follow-up changes.",
+        continued.applied,
+      ),
+    };
+  }
+
+  private isLaterTaskRunAfterQaVerdict(run: QaReviewRunRecord, taskRun: TaskRunRecord | null): boolean {
+    if (!taskRun || !run.taskRunId || taskRun.id === run.taskRunId) {
+      return false;
+    }
+    const qaFinishedAt = Date.parse(run.finishedAt || run.startedAt);
+    const taskRunStartedAt = Date.parse(taskRun.startedAt || "");
+    return !Number.isFinite(qaFinishedAt)
+      || !Number.isFinite(taskRunStartedAt)
+      || taskRunStartedAt > qaFinishedAt;
+  }
+
+  private isLaterTaskRunStillActive(run: QaReviewRunRecord, taskRun: TaskRunRecord | null): boolean {
+    return this.isLaterTaskRunAfterQaVerdict(run, taskRun)
+      && taskRun?.state !== "COMPLETED"
+      && taskRun?.state !== "FAILED";
+  }
+
+  private hasCompletedSameSessionQaFollowUp(
+    run: QaReviewRunRecord,
+    taskRun: TaskRunRecord | null,
+    taskSessionId: string | undefined,
+  ): boolean {
+    if (this.isLaterTaskRunAfterQaVerdict(run, taskRun) && taskRun?.state === "COMPLETED") {
+      const qaFinishedAt = Date.parse(run.finishedAt || run.startedAt);
+      const taskRunFinishedAt = Date.parse(taskRun.finishedAt || "");
+      if (Number.isFinite(taskRunFinishedAt)
+        && (!Number.isFinite(qaFinishedAt) || taskRunFinishedAt > qaFinishedAt)) {
+        return true;
+      }
+    }
+    // A completed provider invocation is not a durable publication checkpoint:
+    // the runtime can still exit after the provider committed in its workspace
+    // but before that patch reached the host worker branch. Only a later task run
+    // that fully settled can reconcile the handoff without re-entering the
+    // publication path; same-run continuations must reuse their saved baseline.
+    void taskSessionId;
+    return false;
+  }
+
   private async requestFixesForTask(args: {
     task: Subtask;
     taskRun: TaskRunRecord | null;
@@ -1511,6 +2319,7 @@ export class QualityAssuranceService {
     featureBranch: string;
     scope: DashboardSettingsScope;
     prompt: string;
+    qaContinuationRunId?: string;
   }): Promise<QaFixContinuationResult> {
     const provider = args.task.provider;
     const sessionId = args.task.session_id?.trim();
@@ -1538,6 +2347,7 @@ export class QualityAssuranceService {
       featureBranch: args.featureBranch,
       scope: args.scope,
       followUpPrompt,
+      qaContinuationRunId: args.qaContinuationRunId,
     });
     return {
       applied: result.producedMergeWork,
@@ -1556,6 +2366,7 @@ export class QualityAssuranceService {
     featureBranch: string;
     scope: DashboardSettingsScope;
     followUpPrompt: string;
+    qaContinuationRunId?: string;
   }): Promise<CliQaFollowUpResult> {
     const settings = this.deps.getDashboardSettings(args.scope);
     const workflowSettings = {
@@ -1797,7 +2608,45 @@ export class QualityAssuranceService {
 
     const providerPrompt = buildProviderPrompt(`${promptBody}\n\n${workspaceGuidance}`, followUpProviderSettings.thinkingMode, args.provider);
     const previousInvocation = this.deps.executionRepository.getLatestProviderInvocationUsageBySession(args.sessionId, "task_coding");
-    const initialHead = (await this.runWorkspaceCommand(worktreePath, "git", ["rev-parse", "HEAD"])).stdout.trim();
+    const persistedContinuationPayload = args.qaContinuationRunId
+      ? this.deps.qaReviewRepository.getRun(args.qaContinuationRunId)?.payload
+      : null;
+    const persistedWorkspaceBaseRef = typeof persistedContinuationPayload?.continuationWorkspaceBaseRef === "string"
+      ? persistedContinuationPayload.continuationWorkspaceBaseRef.trim()
+      : "";
+    const initialHead = persistedWorkspaceBaseRef
+      || (await this.runWorkspaceCommand(worktreePath, "git", ["rev-parse", "HEAD"])).stdout.trim();
+    if (persistedWorkspaceBaseRef) {
+      await this.runWorkspaceCommand(worktreePath, "git", ["rev-parse", "--verify", `${persistedWorkspaceBaseRef}^{commit}`]);
+    } else if (args.qaContinuationRunId) {
+      const run = this.deps.qaReviewRepository.getRun(args.qaContinuationRunId);
+      if (run) {
+        this.deps.qaReviewRepository.updateRun(run.id, {
+          payload: {
+            ...(run.payload || {}),
+            continuationWorkspaceBaseRef: initialHead,
+            continuationWorkspaceBaseRecordedAt: new Date().toISOString(),
+          },
+        });
+      }
+    }
+    // The shared QA coding path is also used by sprint-completion handoffs.
+    // Persist the verification-ready projection immediately before dispatch so
+    // a hard process exit cannot expose this task as ordinary pending/running
+    // coding, regardless of which QA scope initiated the continuation.
+    if (args.task.record_id) {
+      clearMergeProjectionForRerun(args.task);
+      this.deps.projectManagementRepository.updateTask(args.task.record_id, {
+        status: "coding_completed",
+        isMerged: false,
+        mergeIndicator: "QA_PENDING",
+      });
+    }
+    args.task.status = "CODING_COMPLETED";
+    args.task.is_merged = false;
+    args.task.merge_indicator = "QA_PENDING";
+    args.task.intervention_owner = undefined;
+    args.task.intervention_hint = undefined;
     this.deps.sessionTracking.updateSession(args.sessionId, { state: "RUNNING" });
     this.deps.sessionTracking.appendActivity(args.sessionId, {
       originator: "system",
@@ -1834,9 +2683,6 @@ export class QualityAssuranceService {
     });
 
     if (!result.ok) {
-      this.deps.projectManagementRepository.updateTask(args.task.record_id!, {
-        status: "pending",
-      });
       this.deps.sessionTracking.updateSession(args.sessionId, { state: "FAILED" });
       throw new Error(result.stderr || result.stdout || "CLI QA follow-up failed.");
     }
@@ -1893,7 +2739,9 @@ export class QualityAssuranceService {
     // Existing commits/PR state prove that the task has merge work, but they do
     // not prove that this follow-up addressed the latest QA request. Only a
     // patch produced from this invocation counts as continuation progress.
-    const producedMergeWork = applyResult.hasChanges;
+    const previouslyPublishedFromBaseline = !applyResult.hasChanges
+      && await this.workerBranchAdvancedFromBaseline(args.repoPath, workerBranch, initialHead);
+    const producedMergeWork = applyResult.hasChanges || previouslyPublishedFromBaseline;
 
     let prUrl = args.task.pr_url || args.taskRun?.prUrl || null;
     if (hasUnpushed || hasAhead) {
@@ -1941,6 +2789,23 @@ export class QualityAssuranceService {
       state: "COMPLETED",
       prUrl: prUrl || undefined,
     });
+    if (args.taskRun?.id) {
+      // A failed QA continuation can mark the original coding run/dispatch
+      // terminal-failed. Once a same-session continuation succeeds, clear that
+      // stale projection before terminal sprint evaluation; otherwise the
+      // healthy task can still make the whole sprint fail in this cycle.
+      this.deps.executionRepository.updateTaskRun(args.taskRun.id, {
+        state: "COMPLETED",
+      });
+      args.taskRun.state = "COMPLETED";
+      const executionRepository = this.deps.executionRepository as Partial<ExecutionRepository>;
+      if (args.taskRun.dispatchId && typeof executionRepository.updateTaskDispatch === "function") {
+        executionRepository.updateTaskDispatch(args.taskRun.dispatchId, {
+          status: "completed",
+          errorMessage: null,
+        });
+      }
+    }
     if (!producedMergeWork) {
       const blocker = providerOutcome.kind === "blocked" ? providerOutcome.blocker : null;
       this.appendTaskEvent(args.taskRun, "qa_followup_no_progress", {
@@ -2041,6 +2906,31 @@ export class QualityAssuranceService {
     return runCommandStrict(command, args, worktreePath, env ?? process.env);
   }
 
+  private async workerBranchAdvancedFromBaseline(
+    repoPath: string,
+    workerBranch: string,
+    baselineRef: string,
+  ): Promise<boolean> {
+    try {
+      const currentHead = (await runCommandStrict(
+        "git",
+        ["rev-parse", `refs/heads/${workerBranch}`],
+        repoPath,
+      )).stdout.trim();
+      if (!currentHead || currentHead === baselineRef) {
+        return false;
+      }
+      await runCommandStrict(
+        "git",
+        ["merge-base", "--is-ancestor", baselineRef, currentHead],
+        repoPath,
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private async captureMemoriesFromWorkspace(
     projectId: string,
     sprintId: string | undefined,
@@ -2115,6 +3005,13 @@ export class QualityAssuranceService {
     existingSubtasks: Subtask[];
     sourceRunId: string;
   }) {
+    const existing = this.deps.projectManagementRepository
+      .listTasks(args.projectId, args.sprintId)
+      .filter((task) => task.sourceType === "qa_review" && task.sourcePath === args.sourceRunId);
+    if (existing.length > 0) {
+      return existing;
+    }
+
     const tasksToCreate = args.review.followUpTasks.length > 0
       ? args.review.followUpTasks
       : (!args.targetTask && !args.fixInstructions)
@@ -2230,6 +3127,10 @@ function renderSprintQaPendingReport(run: QaReviewRunRecord): string {
     return `\nSprint QA is still waiting on follow-up work before merge.${summary ? ` ${summary}` : ""}\n`;
   }
   return `\nSprint QA must be retried before merge.${summary ? ` ${summary}` : ""}\n`;
+}
+
+function renderSprintQaBudgetExhaustedReport(maxRuns: number): string {
+  return `\nSprint QA used all ${maxRuns} configured review cycles. No additional automatic follow-up tasks were created; human review is required.\n`;
 }
 
 function renderSprintQaFailedReport(error: unknown): string {

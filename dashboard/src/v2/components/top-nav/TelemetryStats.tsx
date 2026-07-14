@@ -270,9 +270,10 @@ export const TelemetryStats: FunctionComponent<TelemetryStatsProps> = ({ project
         () => new Set((sprints || []).filter((s) => s.status === "running").map((s) => s.id)),
         [sprints],
     );
-    const throughput = useHeaderTokenThroughput(null, "20s", 1_000);
+    const throughput = useHeaderTokenThroughput(null, "20s");
     const { tasks } = useProjectTasks(projectId, [], sprints, null, {
-        enabled: activeSprintIds.size > 0,
+      enabled: activeSprintIds.size > 0,
+      view: "overview",
     });
 
     const allTasks = tasks || [];

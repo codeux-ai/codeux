@@ -20,6 +20,7 @@ import {
   writeExecutionInvocationUpdate,
   writeClearExecutionInvocationMessages,
   writeExecutionInvocationMessage,
+  writeSyncExecutionInvocationMessages,
 } from "./execution/execution-invocation-writes.js";
 import {
   writeProviderInvocationRuntimeAssociation,
@@ -48,7 +49,9 @@ import type {
   ExecutionInvocationMessageRecord,
   CreateExecutionInvocationInput,
   UpdateExecutionInvocationInput,
-  AppendExecutionInvocationMessageInput
+  AppendExecutionInvocationMessageInput,
+  SyncExecutionInvocationMessagesResult,
+  SyncExecutionInvocationMessagesOptions,
 } from "../contracts/execution-types.js";
 
 import type {
@@ -266,6 +269,8 @@ function stripMarkdown(value: string): string {
 }
 
 const DASHBOARD_NOTIFICATION_TASK_EVENT_TYPES = new Set([
+  "provider_admission_waiting",
+  "provider_admission_wait_ended",
   "dispatch_error",
   "dispatch_failed",
   "cli_error",
@@ -340,6 +345,7 @@ export class ExecutionRepository {
 
   listExecutionInvocations(params: {
     projectId: string;
+    sprintId?: string;
     sprintRunId?: string;
     taskRunId?: string;
     limit?: number;
@@ -398,6 +404,27 @@ export class ExecutionRepository {
       invocationId,
       input,
       (projectId, includeOverview) => this.notifyRealtime(projectId, includeOverview)
+    );
+  }
+
+  syncExecutionInvocationMessages(
+    invocationId: string,
+    inputs: AppendExecutionInvocationMessageInput[],
+    options: SyncExecutionInvocationMessagesOptions = {},
+  ): SyncExecutionInvocationMessagesResult {
+    return writeSyncExecutionInvocationMessages(
+      this.db,
+      this.logger,
+      {
+        getSprintRun: (id) => this.getSprintRun(id),
+        getTaskDispatch: (id) => this.getTaskDispatch(id),
+        getTaskRun: (id) => this.getTaskRun(id),
+        getExecutionInvocation: (id) => this.getExecutionInvocation(id),
+      },
+      invocationId,
+      inputs,
+      (projectId, includeOverview) => this.notifyRealtime(projectId, includeOverview),
+      options,
     );
   }
 

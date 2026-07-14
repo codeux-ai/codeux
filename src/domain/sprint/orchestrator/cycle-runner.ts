@@ -33,7 +33,7 @@ import { matchPrForTask } from "../ci/feature-pr/pr-matcher.js";
 import { resolveCiEscalationOwner } from "../ci/feature-pr/ci-autofix-policy.js";
 import type { MemoryCategory, CreateMemoryInput } from "../../../contracts/memory-types.js";
 import { isTaskCodeComplete } from "../task-merge-state.js";
-import { shouldVerifyContinuedQaFix } from "../../qa-review/qa-review-budget.js";
+import { isPendingQaContinuation, shouldVerifyContinuedQaFix } from "../../qa-review/qa-review-budget.js";
 import pLimit from "p-limit";
 import { workerBranchHasMergeWork } from "../../../infrastructure/git/local-merge.js";
 import { PROVIDER_IDS } from "../../../repositories/settings-defaults.js";
@@ -97,6 +97,8 @@ export class CycleRunner {
       projectId: args.executionContext.project.id,
       sprintId: args.executionContext.sprint.id,
     });
+    const isAutomaticRollback = args.executionContext.sprint.kind === "rollback"
+      && args.executionContext.sprint.rollbackMode === "automatic";
 
     // Advance the conflict debouncer once per cycle so per-PR `DIRTY` streaks are
     // counted per cycle even though several call sites observe the same PR below.
@@ -109,6 +111,23 @@ export class CycleRunner {
           args.sprintRunId,
         )
       : [];
+    if (isAutomaticRollback) {
+      for (const task of subtasks) {
+        const needsRepair = task.status !== "COMPLETED"
+          || !task.is_merged
+          || task.merge_indicator !== "MERGED";
+        task.status = "COMPLETED";
+        task.is_merged = true;
+        task.merge_indicator = "MERGED";
+        if (needsRepair && task.record_id) {
+          this.deps.projectManagementRepository.updateTask(task.record_id, {
+            status: "completed",
+            isMerged: true,
+            mergeIndicator: "MERGED",
+          });
+        }
+      }
+    }
     let activeProjectAttentionItems = typeof this.deps.projectAttentionService?.listActiveProjectItems === "function"
       ? this.deps.projectAttentionService.listActiveProjectItems(args.executionContext.project.id)
       : [];
@@ -198,7 +217,7 @@ export class CycleRunner {
     let reportText = "";
     let qaFinishedTaskIds = new Set<string>();
     if (subtasks.length > 0) {
-      if (args.loopSteps.statusDerivation) {
+      if (args.loopSteps.statusDerivation && !isAutomaticRollback) {
         qaFinishedTaskIds = await this.reviewCompletedTasks(subtasks, cycleEntryStates, args, dashboardSettings);
       }
       const taskStateBeforeFastBranchGate = snapshotTaskState(subtasks);
@@ -225,13 +244,13 @@ export class CycleRunner {
       }
     }
 
-    if (args.loopSteps.startReadyTasks && subtasks.length > 0) {
+    if (args.loopSteps.startReadyTasks && subtasks.length > 0 && !isAutomaticRollback) {
       const startResult = await this.runStartReadyTasks(subtasks, args, dashboardSettings);
       subtasks = startResult.subtasks;
       reportText += startResult.reportText;
     }
 
-    if (subtasks.length > 0) {
+    if (subtasks.length > 0 && !isAutomaticRollback) {
       const preAutomationTasks = new Map<string, TaskActionRequiredSnapshot>(
         subtasks.map((task) => [
           task.id,
@@ -385,6 +404,7 @@ export class CycleRunner {
             taskId,
             sprintRunId: args.sprintRunId,
             attentionType: "human_escalation_required",
+            deduplicationKey: `guardrail:ci_fix:${taskId}`,
             severity: "high",
             ownerType: "human" as ProjectAttentionOwnerType,
             title: `CI autofix guardrail reached for ${task.id}`,
@@ -449,7 +469,7 @@ export class CycleRunner {
         });
       }
 
-      if (ciGateRefreshNeeded && args.loopSteps.startReadyTasks) {
+      if (ciGateRefreshNeeded && args.loopSteps.startReadyTasks && !isAutomaticRollback) {
         const startResult = await this.runStartReadyTasks(subtasks, args, dashboardSettings);
         subtasks = startResult.subtasks;
         reportText += startResult.reportText;
@@ -527,7 +547,7 @@ export class CycleRunner {
         // Failed CI is not merge work. Once its repair guardrail is exhausted,
         // the CI gate owns a human handoff and the merge protocol must not open
         // a misleading worker merge_required item for the same task.
-        || (task.status === "BLOCKED" && task.merge_indicator === "CI"),
+        || task.merge_indicator === "CI",
       renderInstruction: (templateId, variables) => this.deps.renderInstruction(templateId, variables, args.repoPath),
       onTaskEvent: ({ task, eventType, payload, sourceEventKey }) => {
         appendTaskEvent(task, eventType, payload, sourceEventKey);
@@ -791,6 +811,7 @@ export class CycleRunner {
       taskId,
       sprintRunId: args.sprintRunId,
       attentionType: "human_escalation_required",
+      deduplicationKey: `guardrail:task_coding:${taskId}`,
       severity: "high",
       ownerType: "human" as ProjectAttentionOwnerType,
       title: `Coding guardrail reached for ${task.id}`,
@@ -1318,6 +1339,7 @@ export class CycleRunner {
       const taskIsCodeComplete = isTaskCodeComplete(task);
       const hasSameSessionFollowUpAfterLatestQaRequest = taskIsCodeComplete
         && this.hasCompletedTaskFollowUpAfterLatestQaRequest(task, qaGate, args.sprintRunId);
+      const hasPendingQaFollowUp = isPendingQaContinuation(qaGate.latestRun);
 
       // QA spent its budget without ever clearing this task (no pass — either
       // changes still outstanding at the cap or the reviewer kept failing for
@@ -1325,7 +1347,7 @@ export class CycleRunner {
       // it quietly settle as completed or loop forever.
       const qaNeedsExhaustionPolicy = qaGate.reason === "retries_exhausted"
         || qaGate.reason === "follow_up_no_progress";
-      if (taskIsCodeComplete && qaNeedsExhaustionPolicy && !hasSameSessionFollowUpAfterLatestQaRequest) {
+      if (taskIsCodeComplete && qaNeedsExhaustionPolicy && !hasSameSessionFollowUpAfterLatestQaRequest && !hasPendingQaFollowUp) {
         const policy = settings.agents.qualityAssurance.exhaustionPolicy;
         if (this.applyQaExhaustionPolicy(task, qaGate, args, policy)) {
           if (policy === "FINISH_TASK") {
@@ -1336,7 +1358,8 @@ export class CycleRunner {
       }
 
       const newlyCodeComplete = taskIsCodeComplete && !isTaskCodeComplete({ status: prev });
-      const shouldRunQaReview = taskIsCodeComplete
+      const shouldRunQaReview = hasPendingQaFollowUp
+        || (taskIsCodeComplete
         && (
           qaGate.reason === "pending_review"
           || qaGate.reason === "review_failed"
@@ -1345,7 +1368,7 @@ export class CycleRunner {
             newlyCodeComplete
             || hasSameSessionFollowUpAfterLatestQaRequest
           ))
-        );
+        ));
 
       if (!shouldRunQaReview) {
         continue;

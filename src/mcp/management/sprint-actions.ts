@@ -17,6 +17,12 @@ import type { PlanningAgentService } from "../../services/planning-agent-service
 import type { IssueSearchInput, SprintIssueService } from "../../services/sprint-issue-service.js";
 import type { SchedulerService } from "../../services/scheduler-service.js";
 import type { Logger } from "../../shared/logging/logger.js";
+import type { ExecutionInvocationRecord } from "../../contracts/invocation-types.js";
+import {
+  buildInitialMcpPlanningGuidance,
+  buildSubsequentMcpPlanningGuidance,
+  type McpPlanningGuidance,
+} from "../../domain/planning/mcp-planning-guidance.js";
 import { getCurrentMcpAgentId, getCurrentMcpThreadId } from "../../server/mcp-agent-context.js";
 import { mergePromptWithLinkedIssues } from "../../services/linked-issue-prompt-markdown.js";
 import {
@@ -282,7 +288,16 @@ export interface SprintActionsDeps {
   logger?: Logger;
 }
 
+interface ActivePlanningRequest {
+  promise: ReturnType<PlanningAgentService["startPlanSprint"]>;
+  invocationId: string;
+  startedAt: string;
+  projectInvocations: ExecutionInvocationRecord[];
+}
+
 export class SprintActions {
+  private readonly activePlanningRequests = new Map<string, ActivePlanningRequest>();
+
   constructor(private readonly deps: SprintActionsDeps) {}
 
   async handleSprintAction(args: ManageCodeUxArgs): Promise<ManagementResponseEnvelope> {
@@ -297,15 +312,27 @@ export class SprintActions {
       }
       case "get": {
         const sprintId = readRequiredString(payload, "sprintId");
-        const result = this.deps.projectManagementRepository.getSprint(sprintId);
-        if (!result) {
+        const sprint = this.deps.projectManagementRepository.getSprint(sprintId);
+        if (!sprint) {
           throw new Error(`Sprint not found: ${sprintId}`);
         }
-        return { result };
+        const planningGuidance = this.getPlanningGuidance(sprint, new Date());
+        return {
+          result: planningGuidance
+            ? { ...sprint, planningGuidance }
+            : sprint,
+        };
       }
       case "create": {
         const projectId = readRequiredString(payload, "projectId");
         const input = normalizeCreateSprintInput(payload);
+        const result = this.deps.projectManagementRepository.createSprint(projectId, input);
+        return { result };
+      }
+      case "followup": {
+        const projectId = readRequiredString(payload, "projectId");
+        const input = normalizeCreateSprintInput(payload);
+        input.status = "idle";
         const result = this.deps.projectManagementRepository.createSprint(projectId, input);
         return { result };
       }
@@ -451,9 +478,43 @@ export class SprintActions {
           overrides: payload.overrides as PlanningOverrides | undefined,
         };
 
+        const requestKey = this.planningRequestKey(projectId, sprintId);
+        const activeRequest = this.activePlanningRequests.get(requestKey);
+        if (activeRequest) {
+          return {
+            result: {
+              status: "in_progress",
+              message: "Sprint planning is already in progress. Check the existing request again at the recommended time.",
+              projectId,
+              sprintId,
+              planningGuidance: this.buildActivePlanningGuidance(
+                projectId,
+                sprintId,
+                activeRequest,
+                new Date(),
+              ),
+            },
+          };
+        }
+
+        const projectInvocations = this.deps.executionRepository.listExecutionInvocations({ projectId });
+        const startedAt = new Date().toISOString();
+        const invocationId = `mcp-plan:${projectId}:${sprintId}:${startedAt}`;
+        const planningGuidance: McpPlanningGuidance = buildInitialMcpPlanningGuidance({
+          invocation: { id: invocationId, startedAt },
+          projectInvocations,
+          currentTime: new Date(startedAt),
+        });
+
         const agentId = getCurrentMcpAgentId();
         const threadId = getCurrentMcpThreadId();
         const planning = this.deps.planningAgentService.startPlanSprint(projectId, sprintId, options);
+        this.activePlanningRequests.set(requestKey, {
+          promise: planning,
+          invocationId,
+          startedAt,
+          projectInvocations,
+        });
         void planning.then(
           (result) => this.queuePlanningWakeup({
             projectId,
@@ -479,6 +540,10 @@ export class SprintActions {
             sprintId,
             error: error instanceof Error ? error.message : String(error),
           });
+        }).finally(() => {
+          if (this.activePlanningRequests.get(requestKey)?.promise === planning) {
+            this.activePlanningRequests.delete(requestKey);
+          }
         });
 
         return {
@@ -487,12 +552,76 @@ export class SprintActions {
             message: "Sprint planning started in the background. You will be notified when it completes or fails.",
             projectId,
             sprintId,
+            planningGuidance,
           },
         };
       }
       default:
         throw new Error(`Unknown action: ${action}`);
     }
+  }
+
+  private planningRequestKey(projectId: string, sprintId: string): string {
+    return `${projectId}:${sprintId}`;
+  }
+
+  private getPlanningGuidance(sprint: SprintRecord, currentTime: Date): McpPlanningGuidance | undefined {
+    const requestKey = this.planningRequestKey(sprint.projectId, sprint.id);
+    const activeRequest = this.activePlanningRequests.get(requestKey);
+    if (activeRequest) {
+      return this.buildActivePlanningGuidance(
+        sprint.projectId,
+        sprint.id,
+        activeRequest,
+        currentTime,
+      );
+    }
+
+    const sprintInvocations = this.deps.executionRepository.listExecutionInvocations({
+      projectId: sprint.projectId,
+      sprintId: sprint.id,
+    });
+    const latestPlanningInvocation = sprintInvocations.find((invocation) => invocation.type === "planning");
+    if (!latestPlanningInvocation) {
+      return undefined;
+    }
+
+    const projectInvocations = this.deps.executionRepository.listExecutionInvocations({
+      projectId: sprint.projectId,
+    });
+    return buildSubsequentMcpPlanningGuidance({
+      invocation: latestPlanningInvocation,
+      projectInvocations,
+      currentTime,
+    });
+  }
+
+  private buildActivePlanningGuidance(
+    projectId: string,
+    sprintId: string,
+    activeRequest: ActivePlanningRequest,
+    currentTime: Date,
+  ): McpPlanningGuidance {
+    const requestStartedAtMs = Date.parse(activeRequest.startedAt);
+    const latestActiveInvocation = this.deps.executionRepository.listExecutionInvocations({
+      projectId,
+      sprintId,
+    }).find((invocation) => (
+      invocation.type === "planning"
+      && Date.parse(invocation.startedAt) >= requestStartedAtMs
+    ));
+
+    return buildSubsequentMcpPlanningGuidance({
+      invocation: {
+        id: latestActiveInvocation?.id ?? activeRequest.invocationId,
+        startedAt: latestActiveInvocation?.startedAt ?? activeRequest.startedAt,
+        status: "running",
+        errorMessage: null,
+        lastErrorMessage: null,
+      },
+      projectInvocations: activeRequest.projectInvocations,
+      currentTime,
+    });
   }
 
   private queuePlanningWakeup(args: {

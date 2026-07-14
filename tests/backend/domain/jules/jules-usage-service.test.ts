@@ -32,8 +32,7 @@ describe("JulesUsageService", () => {
       updateProviderInvocationUsage: vi.fn(),
       listExecutionInvocationsByProviderInvocationId: vi.fn().mockReturnValue([]),
       createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-1" }),
-      clearExecutionInvocationMessages: vi.fn(),
-      appendExecutionInvocationMessage: vi.fn(),
+      syncExecutionInvocationMessages: vi.fn(),
     };
     const service = new JulesUsageService(
       {
@@ -58,6 +57,10 @@ describe("JulesUsageService", () => {
     expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalledWith(
       "cli-usage",
       expect.anything(),
+    );
+    expect(executionRepository.syncExecutionInvocationMessages).toHaveBeenCalledWith(
+      "exec-1",
+      expect.arrayContaining([expect.objectContaining({ role: "assistant", contentMarkdown: "done" })]),
     );
   });
 });

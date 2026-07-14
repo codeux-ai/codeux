@@ -93,9 +93,15 @@ This allows all log lines emitted during a tool call to share a single `correlat
 
 Dashboard chat reply turns clone the base Code UX MCP connection and attach the active `threadId` only to that turn. Provider configuration emits the originating thread as the internal `X-Code-Ux-Thread` header on the built-in Code UX MCP connection; non-chat provider runs omit it, and custom MCP servers never receive it. The HTTP gateway validates the header with the same single-value identifier rules used for MCP agent and session headers.
 
-The MCP gateway stores the resolved agent and thread identities in request-scoped `AsyncLocalStorage`. A direct `manage_sprints` `plan` call captures both identities before returning its immediate acknowledgement, so its detached planning continuation can target a completion or failure `agent_wakeup` to the originating dashboard thread after the planning promise settles. This header and context propagation are internal runtime architecture, not public MCP tool arguments.
+`manage_sprints followup` is intentionally synchronous and side-effect-limited: it saves an idle sprint with no tasks and does not start planning or scheduling. The Project Manager then creates a separate `manage_scheduler schedule_sprint` entry anchored with `after_sprint_end`. When that entry becomes due, the normal sprint-start boundary sees that the draft has no tasks, plans it with auto-start, and only then begins execution. This ordering prevents planning from inspecting the repository before the source sprint has completed.
 
-Standalone MCP clients do not have this dashboard thread context. Their background planning still continues server-side, but no chat wakeup is queued; those clients poll sprint/task management or telemetry state for completion.
+The MCP gateway stores the resolved agent and thread identities in request-scoped `AsyncLocalStorage`. A direct `manage_sprints` `plan` call captures both identities before returning its immediate acknowledgement and planning ETA, so its detached planning continuation can target a completion or failure `agent_wakeup` to the originating dashboard thread after the planning promise settles. `SprintActions` tracks that promise per project and sprint to suppress duplicate provider submissions and duplicate terminal callbacks, and to keep `manage_sprints` `get` in progress until the complete planning workflow settles, even if its audit invocation reaches `completed` before task persistence or auto-start finishes. This header and context propagation are internal runtime architecture, not public MCP tool arguments.
+
+The serialized `planningGuidance` returned through the management handler is additive to the existing acknowledgement. Its initial `nextCheckAt` equals the calculated `estimatedCompletionAt`; each later non-terminal read advances `nextCheckAt` by the fixed `recheckIntervalMs` of one minute. An ETA is not a deadline: overrun alone leaves the projection `in_progress` and is not failure evidence. Durable execution states project as `running` → `in_progress`, `completed` → `succeeded`, and `failed`, `cancelled`, or `paused` → their same-named terminal guidance. Terminal projections set `isTerminal: true`, set `nextCheckAt: null`, and include available failure evidence.
+
+Dashboard planning follow-through intentionally has two one-shot paths. The assigned Project Manager owns ETA/status checks created through `scheduler_code_ux`, initially at the ETA and then one at a time at returned one-minute check timestamps. The runtime owns exactly one due-now, non-recurring completion/failure wakeup after the detached promise settles. On that existing terminal wakeup, the Project Manager cancels any obsolete pending status checks it created for the same invocation or sprint before reporting. It never converts these checks to recurrence and does not requeue planning or change provider, model, or settings while guidance remains non-terminal.
+
+Standalone MCP clients do not have this dashboard thread context. Their background planning still continues server-side, but neither a terminal chat wakeup nor an agent-owned dashboard status check is created for them; those clients poll sprint `get`, task management, or telemetry state for completion using `nextCheckAt`. Polling only reads in-memory and durable invocation state and does not enqueue scheduler work.
 
 ## Worker Clarification Dispatch
 
@@ -143,14 +149,17 @@ Runtime behavior:
 
 ## Node Flow Tools
 
-`manage_node_flows` uses `NodeFlowService` as the MCP backend boundary. The action layer parses MCP payloads, applies optional widget schemas into the graph, masks secret-shaped response fields, and delegates graph validation, persistence, run inspection, runtime execution, and agent skill attachments to the service.
+`manage_node_flows` uses `NodeFlowService` as the MCP backend boundary. The thin action layer parses MCP payloads and delegates catalog lookup, optimistic drafts, validation/policy review, credential metadata, publication/version operations, run controls, custom-node authoring, and attachments. Governed responses use graph summaries unless a legacy project-manager `get` explicitly requests the stored flow.
 
 Runtime behavior:
 
-- `create` and `update` validate graph specs before repository writes.
+- `create_draft` and `patch_draft` append immutable versions without auto-publication; stale `draftRevision` values return structured conflicts without writes. Legacy `create` and `update` retain auto-publication compatibility.
+- `dry_run` never invokes the runtime; it reports validation, policy, credential, capability, and side-effect findings with redacted simulated output.
+- `publish` and `rollback` use the stateful exact-payload approval handshake. Runtime execution always resolves a publication.
 - `run` calls the configured node-flow runtime through `NodeFlowService.runFlow`.
+- `cancel`, `retry`, and `inspect_run` operate on project-owned durable run records.
 - `delete` uses the same stateful approval handshake as other destructive management actions.
-- `attach_to_agent` and `detach_from_agent` manage flow-backed skill attachments for agent presets; the agent still needs explicit MCP access if it should call `manage_node_flows` itself.
+- Attachments automatically expose only `run_attached_flow` to the owning agent. That operation verifies project, attachment, publication, and credential policy and records initiating agent/conversation metadata; it does not grant `manage_node_flows` or expose graphs/secrets.
 
 ## Custom MCP Defaults
 

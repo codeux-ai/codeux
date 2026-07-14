@@ -179,7 +179,7 @@ describe("RuntimeCleanupService", () => {
       expiresAt: "2026-03-10T11:40:00.000Z",
     });
 
-    const result = cleanupService.cleanup(new Date("2026-03-10T12:00:00.000Z"));
+    const result = await cleanupService.cleanup(new Date("2026-03-10T12:00:00.000Z"));
     expect(result.blockedDispatchIds).toEqual([dispatch.id]);
 
     const blockedDispatch = executionRepository.getTaskDispatch(dispatch.id);
@@ -300,7 +300,7 @@ describe("RuntimeCleanupService", () => {
       prUrl: "https://github.com/example/repo/pull/16",
     });
 
-    const result = cleanupService.cleanup(new Date("2026-03-13T04:40:00.000Z"));
+    const result = await cleanupService.cleanup(new Date("2026-03-13T04:40:00.000Z"));
     expect(result.reconciledDispatchIds).toEqual([dispatch.id]);
     expect(result.failedSprintRunIds).toEqual([sprintRun.id]);
 
@@ -344,7 +344,7 @@ describe("RuntimeCleanupService", () => {
       error: vi.fn(),
     };
     const dockerRuntimePruneService = {
-      cleanup: vi.fn().mockReturnValue({ prunedPaths: ["/tmp/runtime-a"] }),
+      cleanup: vi.fn().mockResolvedValue({ prunedPaths: ["/tmp/runtime-a"] }),
     };
     const {
       projectRepository,
@@ -402,7 +402,7 @@ describe("RuntimeCleanupService", () => {
       state: "RUNNING",
       startedAt: "2026-03-13T03:30:00.000Z",
     });
-    const result = cleanupService.cleanup(new Date("2026-03-13T04:40:00.000Z"));
+    const result = await cleanupService.cleanup(new Date("2026-03-13T04:40:00.000Z"));
 
     expect(result.forceCancelledDispatchIds).toEqual([dispatch.id]);
     expect(result.prunedDockerRuntimePaths).toEqual(["/tmp/runtime-a"]);
@@ -446,6 +446,27 @@ describe("RuntimeCleanupService", () => {
       reconciledDispatches: 0,
       failedSprintRuns: 0,
     });
+  });
+
+  it("joins overlapping periodic cleanup requests into one sweep", async () => {
+    let finishDockerPrune: ((result: { prunedPaths: string[] }) => void) | undefined;
+    const dockerPruneBlocked = new Promise<{ prunedPaths: string[] }>((resolve) => {
+      finishDockerPrune = resolve;
+    });
+    const dockerRuntimePruneService = {
+      cleanup: vi.fn(() => dockerPruneBlocked),
+    };
+    const { cleanupService } = await createCleanupFixture({
+      dockerRuntimePruneService,
+    });
+
+    const firstCleanup = cleanupService.cleanup(new Date("2026-03-13T04:40:00.000Z"));
+    const secondCleanup = cleanupService.cleanup(new Date("2026-03-13T04:41:00.000Z"));
+
+    expect(secondCleanup).toBe(firstCleanup);
+    expect(dockerRuntimePruneService.cleanup).toHaveBeenCalledTimes(1);
+    finishDockerPrune?.({ prunedPaths: [] });
+    await Promise.all([firstCleanup, secondCleanup]);
   });
 
   it("reconciles failed and blocked task runs and ignores fresh or still-active sprint runs", async () => {
@@ -553,7 +574,7 @@ describe("RuntimeCleanupService", () => {
       expiresAt: "2026-03-13T05:50:00.000Z",
     });
 
-    const result = cleanupService.cleanup(new Date("2026-03-13T05:40:00.000Z"));
+    const result = await cleanupService.cleanup(new Date("2026-03-13T05:40:00.000Z"));
 
     expect(result.reconciledDispatchIds).toEqual([failedDispatch.id, blockedDispatch.id]);
     expect(executionRepository.getTaskDispatch(failedDispatch.id)).toMatchObject({

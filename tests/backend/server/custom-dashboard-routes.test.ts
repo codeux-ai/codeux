@@ -15,6 +15,13 @@ import { CustomDashboardRepository } from "../../../src/repositories/custom-dash
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
 import { CustomDashboardValidationService } from "../../../src/services/custom-dashboard-validation-service.js";
+import { AutomationCredentialRepository } from "../../../src/repositories/automation-credential-repository.js";
+import { MountedKeyFileProvider } from "../../../src/infrastructure/security/mounted-key-file-provider.js";
+import { EncryptedSqliteSecretStore } from "../../../src/infrastructure/security/encrypted-sqlite-secret-store.js";
+import { CredentialBroker } from "../../../src/services/credentials/credential-broker.js";
+import { AutomationAuditExportService } from "../../../src/services/automation-audit-export-service.js";
+import { CustomDashboardCredentialBindingService } from "../../../src/services/custom-dashboard-credential-binding-service.js";
+import { requiredRoleForDashboardRequest } from "../../../src/services/headless-auth-service.js";
 
 const tempDirs: string[] = [];
 
@@ -24,6 +31,20 @@ function manifest(title = "Delivery Pulse"): CustomDashboardManifest {
     title,
     entryFile: "src/dashboard.tsx",
     filePaths: ["src/dashboard.tsx"],
+  };
+}
+
+function credentialManifest(title = "Delivery Pulse"): CustomDashboardManifest {
+  return {
+    ...manifest(title),
+    credentialSlots: [{
+      slotId: "metrics_api",
+      label: "Metrics API",
+      phase: "runtime",
+      required: true,
+      allowedKinds: ["http.token"],
+      requiredCapabilities: ["metrics.read"],
+    }],
   };
 }
 
@@ -42,6 +63,8 @@ async function createFixture(fetchImpl: typeof fetch = fetch): Promise<{
   dir: string;
   repository: CustomDashboardRepository;
   validationService: CustomDashboardValidationService;
+  bindingService: CustomDashboardCredentialBindingService;
+  credentialBroker: CredentialBroker;
   projectId: string;
 }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "custom-dashboard-routes-"));
@@ -54,8 +77,25 @@ async function createFixture(fetchImpl: typeof fetch = fetch): Promise<{
     sourceRef: dir,
   });
   const repository = new CustomDashboardRepository(storage);
+  const credentialRepository = new AutomationCredentialRepository(storage);
+  const keyPath = path.join(dir, "credential-root.key");
+  await fs.writeFile(keyPath, Buffer.alloc(32, 7).toString("base64"), { mode: 0o600 });
+  const keyProvider = new MountedKeyFileProvider(keyPath);
+  const credentialBroker = new CredentialBroker(
+    credentialRepository,
+    new EncryptedSqliteSecretStore(credentialRepository, keyProvider),
+    keyProvider,
+    new AutomationAuditExportService(storage),
+  );
+  const bindingService = new CustomDashboardCredentialBindingService({
+    customDashboardRepository: repository,
+    projectManagementRepository: projects,
+    credentialBroker,
+    auditService: new AutomationAuditExportService(storage),
+  });
   const validationService = new CustomDashboardValidationService({
     customDashboardRepository: repository,
+    customDashboardCredentialBindingService: bindingService,
     projectManagementRepository: projects,
     settingsRepository: new SettingsRepository(path.join(dir, "settings.db")),
     fetchImpl,
@@ -66,9 +106,10 @@ async function createFixture(fetchImpl: typeof fetch = fetch): Promise<{
   app.use(express.json());
   registerCustomDashboardRoutes(app, {
     customDashboardRepository: repository,
+    customDashboardCredentialBindingService: bindingService,
     customDashboardValidationService: validationService,
   } as any);
-  return { app, dir, repository, validationService, projectId: project.id };
+  return { app, dir, repository, validationService, bindingService, credentialBroker, projectId: project.id };
 }
 
 afterEach(async () => {
@@ -228,5 +269,147 @@ describe("custom dashboard routes", () => {
     expect(response.headers["content-security-policy"]).toBeUndefined();
     expect(response.headers.location).toBe(`/api/custom-dashboard-validations/${session.id}/proxy/next`);
     expect(response.text).toContain(`/api/custom-dashboard-validations/${session.id}/proxy/asset.js`);
+  });
+
+  it("binds, replaces, reviews, and unbinds credentials through metadata-only optimistic routes", async () => {
+    const canary = "CUSTOM_DASHBOARD_REAL_SECRET_CANARY_7f8d9a";
+    const { app, repository, credentialBroker, projectId } = await createFixture();
+    const dashboard = repository.createDraft(projectId, {
+      title: "Credential dashboard",
+      manifest: credentialManifest(),
+      fileBundle: fileBundle(),
+    });
+    const first = await credentialBroker.create(projectId, {
+      name: "Metrics one",
+      kind: "http.token",
+      value: canary,
+      scope: "project",
+      allowedProjectIds: [],
+      capabilities: ["metrics.read"],
+    });
+    const second = await credentialBroker.create(projectId, {
+      name: "Metrics two",
+      kind: "http.token",
+      value: `${canary}_REPLACEMENT`,
+      scope: "project",
+      allowedProjectIds: [],
+      capabilities: ["metrics.read"],
+    });
+    const route = `/api/projects/${projectId}/custom-dashboards/${dashboard.id}/credential-bindings`;
+
+    const bound = await request(app).put(route).send({
+      slotId: "metrics_api",
+      credentialId: first.id,
+      expectedBindingRevision: 1,
+    });
+    expect(bound.status).toBe(200);
+    expect(bound.body).toMatchObject({ valid: true, credentialBindingRevision: 2 });
+    expect(bound.body.slots[0].binding).toEqual({ slotId: "metrics_api", credentialId: first.id });
+    expect(JSON.stringify(bound.body)).not.toContain(canary);
+
+    const reviewed = await request(app).get(route);
+    expect(reviewed.status).toBe(200);
+    expect(reviewed.body.slots[0].candidates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ credentialId: first.id, compatible: true }),
+      expect.objectContaining({ credentialId: second.id, compatible: true }),
+    ]));
+
+    const replaced = await request(app).put(route).send({
+      slotId: "metrics_api",
+      credentialId: second.id,
+      expectedBindingRevision: 2,
+    });
+    expect(replaced.body).toMatchObject({ valid: true, credentialBindingRevision: 3 });
+    expect(replaced.body.slots[0].binding.credentialId).toBe(second.id);
+
+    const boundDashboard = repository.getDashboardById(dashboard.id)!;
+    repository.updateDraft(dashboard.id, {
+      manifest: {
+        ...boundDashboard.manifest,
+        metadata: { nested: { credentialId: second.id, value: `prefix-${second.id}-suffix` } },
+      },
+      fileBundle: fileBundle(`export const nested = ${JSON.stringify(second.id)};`),
+      sourceNodeGraph: {
+        nodes: [{
+          id: "metrics",
+          type: "integrations_metadata",
+          title: "Metrics",
+          config: { nested: { credentialId: second.id, value: second.id } },
+        }],
+        edges: [],
+      },
+      styleguide: { nested: { value: second.id } },
+      runtimeMetadata: {
+        validation: {
+          viewerArtifact: {
+            kind: "vite-dist",
+            entryFile: "index.html",
+            files: [{
+              path: "index.html",
+              content: `<main data-binding="${second.id}">Nested</main>`,
+              contentType: "text/html",
+            }],
+          },
+        },
+      },
+    });
+
+    const stale = await request(app).put(route).send({
+      slotId: "metrics_api",
+      credentialId: first.id,
+      expectedBindingRevision: 2,
+    });
+    expect(stale.status).toBe(409);
+
+    const rejectedSecretField = await request(app).put(route).send({
+      slotId: "metrics_api",
+      credentialId: first.id,
+      expectedBindingRevision: 3,
+      value: canary,
+    });
+    expect(rejectedSecretField.status).toBe(400);
+    expect(JSON.stringify(rejectedSecretField.body)).not.toContain(canary);
+
+    const revision = repository.createRevision(dashboard.id);
+    const generic = await request(app).get(`/api/custom-dashboards/${dashboard.id}`);
+    expect(JSON.stringify(generic.body)).not.toContain("credentialBindings");
+    expect(JSON.stringify(generic.body)).not.toContain(second.id);
+    const catalog = await request(app).get(`/api/projects/${projectId}/custom-dashboards/data-catalog`);
+    expect(JSON.stringify(catalog.body)).not.toContain(second.id);
+
+    const validation = repository.createValidationSession(revision.id, {
+      status: "passed",
+      validationReport: passedReport(),
+      finishedAt: new Date().toISOString(),
+    });
+    credentialBroker.revoke(projectId, second.id, { expectedVersion: second.version });
+    const deniedPublication = await request(app)
+      .post(`/api/custom-dashboards/${dashboard.id}/revisions/${revision.id}/publish`)
+      .send({ validationSessionId: validation.id });
+    expect(deniedPublication.status).toBe(400);
+    expect(deniedPublication.body.error).toContain("not active");
+    expect(deniedPublication.body.issues).toEqual([
+      expect.objectContaining({ field: "credentialBindings.metrics_api", code: "not_active" }),
+    ]);
+    expect(JSON.stringify(deniedPublication.body)).not.toContain(second.id);
+    expect(JSON.stringify(deniedPublication.body)).not.toContain(canary);
+    expect(repository.getDashboardById(dashboard.id)?.publishedRevisionId).toBeNull();
+
+    const unbound = await request(app)
+      .delete(`${route}/metrics_api`)
+      .send({ expectedBindingRevision: 3 });
+    expect(unbound.status).toBe(200);
+    expect(unbound.body).toMatchObject({ valid: false, credentialBindingRevision: 4 });
+    expect(unbound.body.issues).toEqual([
+      expect.objectContaining({ field: "credentialBindings.metrics_api", code: "required_binding_missing" }),
+    ]);
+    expect(JSON.stringify(unbound.body)).not.toContain(canary);
+  });
+
+  it("classifies custom dashboard credential-binding routes as credential administration", () => {
+    expect(requiredRoleForDashboardRequest({
+      path: "/api/projects/project-1/custom-dashboards/dashboard-1/credential-bindings",
+      method: "GET",
+    } as any)).toBe("credential_admin");
   });
 });

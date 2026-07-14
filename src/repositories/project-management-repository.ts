@@ -24,7 +24,6 @@ import type {
   UpdateProjectInput,
   UpdateSprintInput,
   UpdateTaskInput,
-  SprintReviewSummary,
 } from "../contracts/project-management-types.js";
 import { AppDbStorage } from "./app-db-storage.js";
 import { slugify } from "../shared/slug.js";
@@ -42,6 +41,9 @@ import { validateTaskDependencies } from "./project-management/task-dependency-g
 import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 import { TaskSelfReflectionRatingRepository } from "./task-self-reflection-rating-repository.js";
 import { calculateSprintProgress } from "../domain/sprint/sprint-progress.js";
+import { resolveTaskCardCiStatus } from "../domain/sprint/card-ci-status.js";
+import { loadCardCiStatusEvidence } from "./project-management/card-ci-status-query.js";
+import { loadLatestTaskReviewSummaryMap } from "./project-management/qa-review-summary-query.js";
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
 const GENERATED_SPRINT_NAME_PREFIX = "Untitled sprint";
@@ -88,6 +90,11 @@ interface SprintRow {
   end_date: string | null;
   feature_branch: string | null;
   base_commit_sha: string | null;
+  kind: SprintRecord["kind"] | null;
+  rollback_source_sprint_id: string | null;
+  rollback_mode: SprintRecord["rollbackMode"];
+  rollback_instructions: string | null;
+  rollback_safety_reason: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -118,11 +125,6 @@ interface TaskRow {
 interface DependencyRow {
   task_id: string;
   depends_on_task_id: string;
-}
-
-interface TaskReviewSummaryRow {
-  task_id: string;
-  latest_task_review_json: string | null;
 }
 
 interface LinkedIssueRow {
@@ -366,8 +368,9 @@ export class ProjectManagementRepository {
 
       this.db.prepare(`
         INSERT INTO sprints (
-          id, project_id, number, slug, name, is_generated_name, original_prompt, goal, status, showcase_pinned, start_date, end_date, feature_branch, base_commit_sha, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          id, project_id, number, slug, name, is_generated_name, original_prompt, goal, status, showcase_pinned, start_date, end_date, feature_branch, base_commit_sha,
+          kind, rollback_source_sprint_id, rollback_mode, rollback_instructions, rollback_safety_reason, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         projectId,
@@ -383,6 +386,11 @@ export class ProjectManagementRepository {
         input.endDate || null,
         input.featureBranch || null,
         input.baseCommitSha || null,
+        input.kind || "standard",
+        input.rollbackSourceSprintId || null,
+        input.rollbackMode || null,
+        input.rollbackInstructions?.trim() || null,
+        input.rollbackSafetyReason?.trim() || null,
         now,
         now
       );
@@ -416,7 +424,8 @@ export class ProjectManagementRepository {
 
       this.db.prepare(`
         UPDATE sprints
-        SET number = ?, slug = ?, name = ?, is_generated_name = ?, original_prompt = ?, goal = ?, status = ?, showcase_pinned = ?, start_date = ?, end_date = ?, feature_branch = ?, base_commit_sha = ?, updated_at = ?
+        SET number = ?, slug = ?, name = ?, is_generated_name = ?, original_prompt = ?, goal = ?, status = ?, showcase_pinned = ?, start_date = ?, end_date = ?, feature_branch = ?, base_commit_sha = ?,
+            rollback_mode = ?, rollback_safety_reason = ?, updated_at = ?
         WHERE id = ?
       `).run(
         input.number === undefined ? current.number : input.number,
@@ -431,6 +440,8 @@ export class ProjectManagementRepository {
         input.endDate === undefined ? current.endDate : input.endDate,
         input.featureBranch === undefined ? current.featureBranch : input.featureBranch,
         input.baseCommitSha === undefined ? current.baseCommitSha : input.baseCommitSha,
+        input.rollbackMode === undefined ? current.rollbackMode : input.rollbackMode,
+        input.rollbackSafetyReason === undefined ? current.rollbackSafetyReason : input.rollbackSafetyReason,
         now,
         sprintId
       );
@@ -454,6 +465,15 @@ export class ProjectManagementRepository {
   deleteSprint(sprintId: string): void {
     try {
       const sprint = this.requireSprint(sprintId);
+      const rollbackReference = this.db.prepare(`
+        SELECT id
+        FROM sprints
+        WHERE rollback_source_sprint_id = ?
+        LIMIT 1
+      `).get(sprintId) as { id: string } | undefined;
+      if (rollbackReference) {
+        throw new ValidationError(`Sprint ${sprintId} is retained as the source of rollback sprint ${rollbackReference.id}.`);
+      }
       const activeRun = this.db.prepare(`
         SELECT id, status
         FROM sprint_runs
@@ -582,6 +602,78 @@ export class ProjectManagementRepository {
       `).all(projectId);
 
     return this.inflateTasks(rows as unknown as TaskRow[]);
+  }
+
+  listTaskOverviews(projectId: string): TaskRecord[] {
+    this.requireProject(projectId);
+    const rows = this.db.prepare(`
+      WITH latest_sprint_runs AS (
+        SELECT sprint_id, status
+        FROM (
+          SELECT
+            sprint_id,
+            status,
+            ROW_NUMBER() OVER (
+              PARTITION BY sprint_id
+              ORDER BY COALESCE(started_at, created_at) DESC, created_at DESC, rowid DESC
+            ) AS row_number
+          FROM sprint_runs
+          WHERE project_id = ?
+        )
+        WHERE row_number = 1
+      )
+      SELECT
+        tasks.id, tasks.project_id, tasks.sprint_id, tasks.task_key, tasks.title,
+        tasks.status, tasks.priority, tasks.executor_type, tasks.agent_preset_id,
+        tasks.model, tasks.sort_order, tasks.is_independent, tasks.is_merged,
+        tasks.merge_indicator, tasks.source_type, tasks.source_path,
+        tasks.created_at, tasks.updated_at
+      FROM tasks
+      INNER JOIN sprints ON sprints.id = tasks.sprint_id
+      LEFT JOIN latest_sprint_runs ON latest_sprint_runs.sprint_id = tasks.sprint_id
+      WHERE tasks.project_id = ?
+        AND (
+          latest_sprint_runs.status IN ('queued', 'running')
+          OR (latest_sprint_runs.status IS NULL AND sprints.status = 'running')
+        )
+      ORDER BY tasks.sort_order ASC, tasks.created_at ASC, tasks.task_key ASC
+    `).all(projectId, projectId) as unknown as Array<Omit<TaskRow, "prompt_markdown" | "description">>;
+
+    const dependencyRows = this.storage.executeChunkedInQuery<DependencyRow>({
+      sqlPrefix: "SELECT task_id, depends_on_task_id FROM task_dependencies WHERE task_id",
+      sqlSuffix: "ORDER BY depends_on_task_id ASC",
+      items: rows.map((row) => row.id),
+    });
+    const dependencyMap = new Map<string, string[]>();
+    for (const dependency of dependencyRows) {
+      const taskDependencies = dependencyMap.get(dependency.task_id) || [];
+      taskDependencies.push(dependency.depends_on_task_id);
+      dependencyMap.set(dependency.task_id, taskDependencies);
+    }
+
+    return rows.map((row) => ({
+      id: row.id,
+      projectId: row.project_id,
+      sprintId: row.sprint_id,
+      taskKey: row.task_key,
+      title: row.title,
+      promptMarkdown: "",
+      description: "",
+      status: row.status,
+      priority: row.priority,
+      executorType: row.executor_type || "auto",
+      agentPresetId: row.agent_preset_id || null,
+      model: row.model || null,
+      sortOrder: toNumber(row.sort_order),
+      dependsOnTaskIds: dependencyMap.get(row.id) || [],
+      isIndependent: toBoolean(row.is_independent),
+      isMerged: toBoolean(row.is_merged),
+      mergeIndicator: row.merge_indicator,
+      sourceType: row.source_type,
+      sourcePath: row.source_path,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
   }
 
   listSprintLinkedIssues(projectId: string, sprintId: string): SprintLinkedIssueRecord[] {
@@ -1161,8 +1253,12 @@ export class ProjectManagementRepository {
     }
 
     const taskIds = rows.map((row) => row.id);
-    const reviewMap = this.getLatestTaskReviewSummaryMap(taskIds);
+    const reviewMap = loadLatestTaskReviewSummaryMap(this.storage, taskIds);
     const selfReflectionRatingMap = this.taskSelfReflectionRatingRepository.getLatestByTaskIds(taskIds);
+    const ciEvidence = loadCardCiStatusEvidence(this.storage, {
+      taskIds,
+      sprintIds: rows.map((row) => row.sprint_id),
+    });
 
     return rows.map((row) => ({
       id: row.id,
@@ -1184,56 +1280,18 @@ export class ProjectManagementRepository {
       latestReview: reviewMap.get(row.id),
       selfReflectionRating: selfReflectionRatingMap.get(row.id),
       mergeIndicator: row.merge_indicator,
+      ciStatus: resolveTaskCardCiStatus({
+        status: row.status,
+        isMerged: toBoolean(row.is_merged),
+        mergeIndicator: row.merge_indicator,
+        latestGateEvent: ciEvidence.latestTaskGateByTaskId.get(row.id),
+        hasActiveFailure: ciEvidence.failedTaskIds.has(row.id),
+      }),
       sourceType: row.source_type,
       sourcePath: row.source_path,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
-  }
-
-  private getLatestTaskReviewSummaryMap(taskIds: string[]): Map<string, SprintReviewSummary> {
-    const rows = this.storage.executeChunkedInQuery<TaskReviewSummaryRow>({
-      sqlPrefix: `
-        SELECT
-          q.task_id,
-          json_object(
-            'status', q.status,
-            'outcome', q.outcome,
-            'summary', q.summary_markdown,
-            'findings', COALESCE(json_extract(q.payload_json, '$.findings'), json_array()),
-            'reviewer', q.agent_name,
-            'finishedAt', q.finished_at
-          ) AS latest_task_review_json
-        FROM qa_review_runs q
-        WHERE q.task_id`,
-      sqlSuffix: `
-          AND q.trigger_type IN ('task_completion', 'completed_task_without_pr')
-          AND q.rowid = (
-            SELECT q2.rowid
-            FROM qa_review_runs q2
-            WHERE q2.task_id = q.task_id
-              AND q2.trigger_type IN ('task_completion', 'completed_task_without_pr')
-            ORDER BY q2.started_at DESC, q2.rowid DESC
-            LIMIT 1
-          )
-      `,
-      items: taskIds,
-    });
-
-    const map = new Map<string, SprintReviewSummary>();
-    for (const row of rows) {
-      if (!row.latest_task_review_json) {
-        continue;
-      }
-      try {
-        const parsed = JSON.parse(row.latest_task_review_json) as SprintReviewSummary;
-        parsed.findings = Array.isArray(parsed.findings) ? parsed.findings : [];
-        map.set(row.task_id, parsed);
-      } catch {
-        // Ignore malformed persisted QA payloads.
-      }
-    }
-    return map;
   }
 
   private hydrateProjects(rows: ProjectRow[]): ProjectSummary[] {
@@ -1340,8 +1398,16 @@ export class ProjectManagementRepository {
       endDate: row.end_date,
       featureBranch: row.feature_branch,
       baseCommitSha: row.base_commit_sha,
+      kind: row.kind === "rollback" ? "rollback" : "standard",
+      rollbackSourceSprintId: row.rollback_source_sprint_id,
+      rollbackMode: row.rollback_mode === "automatic" || row.rollback_mode === "agent_assisted"
+        ? row.rollback_mode
+        : null,
+      rollbackInstructions: row.rollback_instructions,
+      rollbackSafetyReason: row.rollback_safety_reason,
       tasksCount,
       completion,
+      ciStatus: summaryAggregation.ciStatus,
       linkedIssues,
       latestReview: summaryAggregation.latestReview,
       createdAt: row.created_at,
@@ -1900,6 +1966,7 @@ function emptySprintSummaryAggregation(): SprintSummaryAggregation {
     completedTasks: 0,
     progressTasks: [],
     latestRunStatus: null,
+    ciStatus: null,
   };
 }
 

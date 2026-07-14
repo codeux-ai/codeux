@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, session, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, safeStorage, session, shell } from "electron";
 import * as fs from "fs";
 import Module from "module";
 import * as os from "os";
@@ -15,6 +15,9 @@ import {
 } from "./dashboard-network-policy.js";
 import { openCodeUxUpdatesPage, toggleWindowMaximized } from "./window-controls.js";
 import { createDebouncedSaver, loadWindowState, saveWindowState } from "./window-state.js";
+import { ElectronCredentialKeyPersistence } from "./credential-key-persistence.js";
+import { ElectronSafeStorageKeyProvider } from "../infrastructure/security/electron-safe-storage-key-provider.js";
+import { setProcessCredentialKeyProvider } from "../services/credentials/key-provider-registry.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -299,6 +302,10 @@ async function startServer(): Promise<string> {
   registerPackagedNodeModules();
   const dotenv = await import("dotenv");
   dotenv.config({ path: path.join(projectRoot, ".env"), quiet: true });
+  setProcessCredentialKeyProvider(new ElectronSafeStorageKeyProvider(
+    safeStorage,
+    new ElectronCredentialKeyPersistence(path.join(app.getPath("userData"), "credential-root-key.bin")),
+  ));
 
   const [{ loadAppConfig }, { CodeUxServer }] = await Promise.all([
     import("../config/app-config.js"),

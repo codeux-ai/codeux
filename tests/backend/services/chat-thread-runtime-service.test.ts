@@ -94,6 +94,94 @@ describe("ChatThreadRuntimeService", () => {
     service = new ChatThreadRuntimeService(deps);
   });
 
+  const configureSingleFlightThread = () => {
+    const messages: any[] = [];
+    const statusTransitions = new Map<string, number>();
+    let messageCounter = 0;
+    let replyCounter = 0;
+    let runtimeState: any = {
+      routeKind: "virtual",
+      virtualProvider: "codex",
+      modelLabel: "gpt-5.3-codex",
+      sessionIds: ["native-session-1"],
+      replayRequired: false,
+    };
+    const thread = () => ({
+      id: "t1",
+      projectId: "p1",
+      connectionId: null,
+      title: "Thread",
+      runtimeState,
+    });
+    const transitionThrough = (messageId: string, deliveryStatus: "processed" | "failed") => {
+      const targetIndex = messages.findIndex((message) => message.id === messageId);
+      for (const [index, message] of messages.entries()) {
+        if (
+          index <= targetIndex
+          && message.direction === "dashboard_to_connection"
+          && message.deliveryStatus === "pending"
+        ) {
+          message.deliveryStatus = deliveryStatus;
+          statusTransitions.set(message.id, (statusTransitions.get(message.id) ?? 0) + 1);
+        }
+      }
+    };
+
+    deps.connectionChatRepository.postDashboardMessage.mockImplementation((_projectId: string, input: any) => {
+      messageCounter += 1;
+      const message = {
+        id: `msg-${messageCounter}`,
+        threadId: "t1",
+        direction: "dashboard_to_connection",
+        authorType: "dashboard_user",
+        authorConnectionId: null,
+        bodyMarkdown: input.bodyMarkdown,
+        deliveryStatus: "pending",
+        metadata: input.metadata ?? null,
+        createdAt: `2026-07-13T00:00:0${messageCounter}.000Z`,
+      };
+      messages.push(message);
+      return message;
+    });
+    deps.connectionChatRepository.getThread.mockImplementation(thread);
+    deps.connectionChatRepository.listMessages.mockImplementation(() => messages);
+    deps.connectionChatRepository.markDashboardMessagesProcessed.mockImplementation((_threadId: string, options: any) => {
+      transitionThrough(options.upToMessageId, "processed");
+      return thread();
+    });
+    deps.connectionChatRepository.markDashboardMessagesFailed.mockImplementation((_threadId: string, options: any) => {
+      transitionThrough(options.upToMessageId, "failed");
+      return thread();
+    });
+    deps.connectionChatRepository.postSystemMessage.mockImplementation((_projectId: string, input: any) => {
+      replyCounter += 1;
+      const message = {
+        id: `reply-${replyCounter}`,
+        threadId: "t1",
+        direction: "connection_to_dashboard",
+        authorType: "system",
+        authorConnectionId: null,
+        bodyMarkdown: input.bodyMarkdown,
+        deliveryStatus: "processed",
+        metadata: input.metadata ?? null,
+        createdAt: `2026-07-13T00:01:0${replyCounter}.000Z`,
+      };
+      messages.push(message);
+      return message;
+    });
+    deps.connectionChatRepository.updateThread.mockImplementation((_threadId: string, input: any) => {
+      runtimeState = input.runtimeState;
+      return thread();
+    });
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "codex",
+      providers: { codex: { model: "gpt-5.3-codex", apiKey: "codex-key" } },
+    });
+
+    return { messages, statusTransitions };
+  };
+
   it("cancels an in-flight turn for the exact thread only", () => {
     const turnHandle = {
       abortController: new AbortController(),
@@ -106,6 +194,163 @@ describe("ChatThreadRuntimeService", () => {
     expect(turnHandle.abortController.signal.aborted).toBe(true);
     expect(turnHandle.abortController.signal.reason).toBeInstanceOf(Error);
     expect((turnHandle.abortController.signal.reason as Error).message).toBe("Cancelled from the dashboard");
+  });
+
+  it("queues and coalesces scheduled messages without aborting the active turn", async () => {
+    const { messages, statusTransitions } = configureSingleFlightThread();
+    let activeSignal: AbortSignal | null = null;
+    let resolveActive!: (value: any) => void;
+    deps.chatManagementActionService.processManagementAction
+      .mockImplementationOnce((input: any) => {
+        activeSignal = input.signal;
+        return new Promise((resolve) => {
+          resolveActive = resolve;
+        });
+      })
+      .mockResolvedValueOnce({
+        replyMarkdown: "Scheduled work completed.",
+        action: null,
+        approvalRequired: false,
+        nativeSessionId: "native-session-1",
+      });
+
+    const activeTurn = service.postMessage("p1", { threadId: "t1", bodyMarkdown: "Active dashboard request." });
+    await vi.waitFor(() => expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledTimes(1));
+    expect(service.isThreadBusy("t1")).toBe(true);
+
+    await service.postMessage("p1", {
+      threadId: "t1",
+      bodyMarkdown: "First scheduled continuation.",
+      metadata: { source: "agent_scheduler", origin: "agent_scheduler", schedulerEntryId: "entry-1" },
+    });
+    await service.postMessage("p1", {
+      threadId: "t1",
+      bodyMarkdown: "Second scheduled continuation.",
+      metadata: { source: "agent_scheduler", origin: "agent_scheduler", schedulerEntryId: "entry-2" },
+    });
+
+    expect(activeSignal?.aborted).toBe(false);
+    resolveActive({
+      replyMarkdown: "Active work completed.",
+      action: null,
+      approvalRequired: false,
+      nativeSessionId: "native-session-1",
+    });
+    await activeTurn;
+
+    expect(service.isThreadBusy("t1")).toBe(false);
+    expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledTimes(2);
+    const scheduledPrompt = deps.chatManagementActionService.processManagementAction.mock.calls[1]?.[0].prompt as string;
+    expect(scheduledPrompt.indexOf("First scheduled continuation.")).toBeLessThan(
+      scheduledPrompt.indexOf("Second scheduled continuation."),
+    );
+    expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledTimes(2);
+    expect(messages.filter((message) => message.direction === "connection_to_dashboard")).toHaveLength(2);
+    expect(messages.filter((message) => message.direction === "dashboard_to_connection").map((message) => message.deliveryStatus))
+      .toEqual(["processed", "processed", "processed"]);
+    expect([...statusTransitions.values()]).toEqual([1, 1, 1]);
+  });
+
+  it("does not replay or post a failure reply for an explicitly cancelled turn", async () => {
+    const { messages, statusTransitions } = configureSingleFlightThread();
+    deps.chatManagementActionService.processManagementAction.mockImplementation((input: any) => (
+      new Promise((_resolve, reject) => {
+        input.signal.addEventListener("abort", () => reject(input.signal.reason), { once: true });
+      })
+    ));
+
+    const activeTurn = service.postMessage("p1", { threadId: "t1", bodyMarkdown: "Cancel this request." });
+    await vi.waitFor(() => expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledTimes(1));
+
+    expect(service.cancelInFlightTurn("t1")).toEqual({ cancelled: true });
+    const result = await activeTurn;
+
+    expect(result.deliveryStatus).toBe("failed");
+    expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledTimes(1);
+    expect(deps.connectionChatRepository.postSystemMessage).not.toHaveBeenCalled();
+    expect(messages[0]?.deliveryStatus).toBe("failed");
+    expect(statusTransitions.get("msg-1")).toBe(1);
+  });
+
+  it("retains ordinary user supersession and combines the pending messages once", async () => {
+    const { messages, statusTransitions } = configureSingleFlightThread();
+    deps.chatManagementActionService.processManagementAction
+      .mockImplementationOnce((input: any) => (
+        new Promise((_resolve, reject) => {
+          input.signal.addEventListener("abort", () => reject(input.signal.reason), { once: true });
+        })
+      ))
+      .mockResolvedValueOnce({
+        replyMarkdown: "Combined reply.",
+        action: null,
+        approvalRequired: false,
+        nativeSessionId: "native-session-1",
+      });
+
+    const owningTurn = service.postMessage("p1", { threadId: "t1", bodyMarkdown: "First user request." });
+    await vi.waitFor(() => expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledTimes(1));
+    await service.postMessage("p1", { threadId: "t1", bodyMarkdown: "Newer user request." });
+    await owningTurn;
+
+    expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledTimes(2);
+    const combinedPrompt = deps.chatManagementActionService.processManagementAction.mock.calls[1]?.[0].prompt as string;
+    expect(combinedPrompt.indexOf("First user request.")).toBeLessThan(combinedPrompt.indexOf("Newer user request."));
+    expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledTimes(1);
+    expect(messages.filter((message) => message.direction === "connection_to_dashboard")).toHaveLength(1);
+    expect(messages.slice(0, 2).map((message) => message.deliveryStatus)).toEqual(["processed", "processed"]);
+    expect([...statusTransitions.values()]).toEqual([1, 1]);
+  });
+
+  it("records a provider failure once without creating duplicate assistant replies", async () => {
+    const { messages, statusTransitions } = configureSingleFlightThread();
+    deps.chatManagementActionService.processManagementAction.mockRejectedValueOnce(new Error("provider unavailable"));
+
+    const result = await service.postMessage("p1", { threadId: "t1", bodyMarkdown: "Run this once." });
+
+    expect(result.deliveryStatus).toBe("failed");
+    expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledTimes(1);
+    expect(deps.connectionChatRepository.markDashboardMessagesFailed).toHaveBeenCalledTimes(1);
+    expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledTimes(1);
+    expect(messages.filter((message) => message.direction === "connection_to_dashboard")).toHaveLength(1);
+    expect(messages[0]?.deliveryStatus).toBe("failed");
+    expect(statusTransitions.get("msg-1")).toBe(1);
+  });
+
+  it("accepts a scheduler tick during reply finalization as a new single flight", async () => {
+    const { messages, statusTransitions } = configureSingleFlightThread();
+    let tickCount = 0;
+    deps.chatManagementActionService.processManagementAction
+      .mockResolvedValueOnce({
+        replyMarkdown: "Dashboard reply.",
+        action: null,
+        approvalRequired: false,
+        nativeSessionId: "native-session-1",
+      })
+      .mockResolvedValueOnce({
+        replyMarkdown: "Scheduled reply.",
+        action: null,
+        approvalRequired: false,
+        nativeSessionId: "native-session-1",
+      });
+    deps.runDueSchedulerEntriesAfterReply = vi.fn(async () => {
+      tickCount += 1;
+      if (tickCount === 1) {
+        await service.postMessage("p1", {
+          threadId: "t1",
+          bodyMarkdown: "Finalization wakeup.",
+          metadata: { source: "agent_scheduler", origin: "agent_scheduler", schedulerEntryId: "entry-finalize" },
+        });
+      }
+    });
+
+    await service.postMessage("p1", { threadId: "t1", bodyMarkdown: "Finish this reply." });
+
+    expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledTimes(2);
+    expect(deps.connectionChatRepository.postSystemMessage).toHaveBeenCalledTimes(2);
+    expect(messages.filter((message) => message.direction === "connection_to_dashboard")).toHaveLength(2);
+    expect(messages.filter((message) => message.direction === "dashboard_to_connection").map((message) => message.deliveryStatus))
+      .toEqual(["processed", "processed"]);
+    expect([...statusTransitions.values()]).toEqual([1, 1]);
   });
 
   it("throws an error if thread is not found when posting a message", async () => {

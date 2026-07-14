@@ -10,6 +10,8 @@ import {
   Pause,
   Pencil,
   Play,
+  RotateCcw,
+  RefreshCw,
   Sparkles,
   Square,
   XCircle,
@@ -23,7 +25,9 @@ export interface SprintActionMenuProps {
   isCompleted?: boolean;
   showcaseBusy?: boolean;
   markCompletedDisabled?: boolean;
+  markQaPassedDisabled?: boolean;
   deleteBusy?: boolean;
+  updateBranchBusy?: boolean;
   // Run controls (rendered only when the matching handler is provided)
   isRunning?: boolean;
   isPaused?: boolean;
@@ -37,7 +41,10 @@ export interface SprintActionMenuProps {
   onExport?: () => void;
   onToggleShowcase?: () => void;
   onOverrides?: () => void;
+  onUpdateBranch?: () => void;
   onMarkCompleted?: () => void;
+  onMarkQaPassed?: () => void;
+  onRollback?: () => void;
   onDelete?: () => void;
   onClose?: () => void;
   markCompletedIcon?: "square" | "circle";
@@ -54,7 +61,9 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
   isCompleted = false,
   showcaseBusy = false,
   markCompletedDisabled = false,
+  markQaPassedDisabled = false,
   deleteBusy = false,
+  updateBranchBusy = false,
   isRunning = false,
   isPaused = false,
   primaryBusy = false,
@@ -67,7 +76,10 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
   onExport,
   onToggleShowcase,
   onOverrides,
+  onUpdateBranch,
   onMarkCompleted,
+  onMarkQaPassed,
+  onRollback,
   onDelete,
   onClose,
   markCompletedIcon = "circle",
@@ -89,6 +101,9 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
 
   const canPauseResume = Boolean(onPauseResume) && (isRunning || isPaused);
   const hasRunControls = Boolean(onPrimaryAction) || canPauseResume || Boolean(viewTasksHref) || Boolean(onAddTasks);
+  const reviewOutcome = sprint.latestReview?.outcome?.toLowerCase();
+  const isQaPassed = (sprint.latestReview?.status === "completed" || sprint.latestReview?.status === "reviewed")
+    && (reviewOutcome === "pass" || reviewOutcome === "passed" || reviewOutcome === "approved");
 
   const confirmMenuAction = async (
     options: {
@@ -256,6 +271,29 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
         <Sparkles className="h-3.5 w-3.5" strokeWidth={2.1} />
         Overrides
       </button>
+      {onUpdateBranch && (
+        <button
+          type="button"
+          role={role}
+          onClick={() => {
+            onClose?.();
+            onUpdateBranch();
+          }}
+          disabled={updateBranchBusy}
+          title={updateBranchBusy ? "Sprint branch update in progress" : "Fast-forward this draft from the latest default branch"}
+          aria-busy={updateBranchBusy}
+          aria-disabled={updateBranchBusy}
+          aria-label={`Update branch for sprint ${sprint.name}`}
+          className={disabledClassName}
+        >
+          {updateBranchBusy ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" strokeWidth={2.1} />
+          ) : (
+            <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.1} />
+          )}
+          {updateBranchBusy ? "Updating Branch" : "Update Branch"}
+        </button>
+      )}
       <button
         type="button"
         role={role}
@@ -279,7 +317,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
 
       <SectionSeparator />
 
-      {!isCompleted && (
+      {!isCompleted && onMarkCompleted && (
         <button
           type="button"
           role={role}
@@ -299,6 +337,38 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
             <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2.1} />
           )}
           Mark Completed
+        </button>
+      )}
+      {onMarkQaPassed && !isQaPassed && (
+        <button
+          type="button"
+          role={role}
+          onClick={() => {
+            onClose?.();
+            onMarkQaPassed();
+          }}
+          disabled={markQaPassedDisabled}
+          title={markQaPassedDisabled ? "Mark QA pass is unavailable while QA or another sprint action is in progress" : undefined}
+          aria-label={`Mark QA as passed for sprint ${sprint.name}`}
+          aria-disabled={markQaPassedDisabled}
+          className={disabledClassName}
+        >
+          <CheckCircle2 className="h-3.5 w-3.5 text-signal-600 dark:text-signal-300" strokeWidth={2.1} />
+          Mark QA Pass
+        </button>
+      )}
+      {isCompleted && sprint.kind !== "rollback" && onRollback && (
+        <button
+          type="button"
+          role={role}
+          onClick={() => {
+            onClose?.();
+            onRollback();
+          }}
+          className={`${buttonClassName} text-orange-600 hover:bg-orange-500/10 dark:text-orange-300`}
+        >
+          <RotateCcw className="h-3.5 w-3.5" strokeWidth={2.1} />
+          Rollback Sprint
         </button>
       )}
       <button

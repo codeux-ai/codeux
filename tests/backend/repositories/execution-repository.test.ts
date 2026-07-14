@@ -963,6 +963,161 @@ describe("ExecutionRepository", () => {
     expect(paginatedList[0]!.id).toBe(invocation2.id);
   });
 
+  it("reconciles invocation transcripts incrementally in one atomic operation", async () => {
+    const realtimeNotifier = { scheduleProjectExecutionRefresh: vi.fn() };
+    const { projectRepository, executionRepository } = await createRepositoriesWithRealtimeNotifier(realtimeNotifier);
+    const project = projectRepository.createProject({
+      name: "Incremental Transcript Project",
+      sourceType: "local",
+      sourceRef: "/workspace/incremental-transcript",
+    });
+    const invocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      type: "coding",
+      status: "running",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    realtimeNotifier.scheduleProjectExecutionRefresh.mockClear();
+
+    const initial = [
+      { role: "user" as const, contentMarkdown: "prompt", createdAt: "2026-07-14T00:00:00.000Z" },
+      {
+        role: "tool" as const,
+        contentMarkdown: "",
+        toolCallsJson: { callId: "call-1", arguments: "{}" },
+        metadata: { kind: "tool_call", toolStatus: "running" },
+        createdAt: "2026-07-14T00:00:01.000Z",
+      },
+    ];
+    expect(executionRepository.syncExecutionInvocationMessages(invocation.id, initial)).toEqual({
+      inserted: 2,
+      updated: 0,
+      deleted: 0,
+      unchanged: 0,
+    });
+    const originalRows = executionRepository.listExecutionInvocationMessages(invocation.id);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(realtimeNotifier.scheduleProjectExecutionRefresh).toHaveBeenCalledTimes(1);
+
+    realtimeNotifier.scheduleProjectExecutionRefresh.mockClear();
+    expect(executionRepository.syncExecutionInvocationMessages(invocation.id, initial)).toEqual({
+      inserted: 0,
+      updated: 0,
+      deleted: 0,
+      unchanged: 2,
+    });
+    expect(realtimeNotifier.scheduleProjectExecutionRefresh).not.toHaveBeenCalled();
+
+    const appended = [
+      ...initial,
+      { role: "assistant" as const, contentMarkdown: "working", createdAt: "2026-07-14T00:00:02.000Z" },
+    ];
+    expect(executionRepository.syncExecutionInvocationMessages(invocation.id, appended, { changedFromIndex: 2 })).toEqual({
+      inserted: 1,
+      updated: 0,
+      deleted: 0,
+      unchanged: 2,
+    });
+    const appendedRows = executionRepository.listExecutionInvocationMessages(invocation.id);
+    expect(appendedRows.slice(0, 2).map((message) => message.id)).toEqual(originalRows.map((message) => message.id));
+
+    const updated = [
+      initial[0]!,
+      {
+        ...initial[1]!,
+        toolCallsJson: { callId: "call-1", arguments: "{}", output: "passed" },
+        metadata: { kind: "tool_call", toolStatus: "completed" },
+      },
+      appended[2]!,
+    ];
+    expect(executionRepository.syncExecutionInvocationMessages(invocation.id, updated)).toMatchObject({
+      inserted: 0,
+      updated: 1,
+      deleted: 0,
+      unchanged: 2,
+    });
+    const updatedRows = executionRepository.listExecutionInvocationMessages(invocation.id);
+    expect(updatedRows.map((message) => message.id)).toEqual(appendedRows.map((message) => message.id));
+    expect(updatedRows[1]?.metadata).toMatchObject({ toolStatus: "completed" });
+
+    // Tail reconciliation uses the actual suffix rows, not a potentially stale aggregate.
+    (executionRepository as unknown as { db: { prepare: (sql: string) => { run: (...args: unknown[]) => void } } })
+      .db.prepare("UPDATE execution_invocations SET message_count = 1 WHERE id = ?")
+      .run(invocation.id);
+    expect(executionRepository.syncExecutionInvocationMessages(invocation.id, [updated[0]!])).toMatchObject({
+      inserted: 0,
+      updated: 0,
+      deleted: 2,
+      unchanged: 1,
+    });
+    expect(executionRepository.listExecutionInvocationMessages(invocation.id)).toHaveLength(1);
+    expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({ messageCount: 1 });
+  });
+
+  it("rolls back every transcript change when incremental reconciliation fails", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Atomic Transcript Project",
+      sourceType: "local",
+      sourceRef: "/workspace/atomic-transcript",
+    });
+    const invocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      type: "coding",
+      status: "running",
+    });
+    executionRepository.syncExecutionInvocationMessages(invocation.id, [
+      { role: "assistant", contentMarkdown: "first" },
+      { role: "assistant", contentMarkdown: "second" },
+    ]);
+    const circularMetadata: Record<string, unknown> = {};
+    circularMetadata.self = circularMetadata;
+
+    expect(() => executionRepository.syncExecutionInvocationMessages(invocation.id, [
+      { role: "assistant", contentMarkdown: "changed before failure" },
+      { role: "assistant", contentMarkdown: "cannot serialize", metadata: circularMetadata },
+    ])).toThrow(/circular/i);
+
+    expect(executionRepository.listExecutionInvocationMessages(invocation.id).map((message) => message.contentMarkdown)).toEqual([
+      "first",
+      "second",
+    ]);
+    expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({ messageCount: 2 });
+  });
+
+  it("filters listed execution invocations by sprint", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Sprint Invocation Query Project",
+      sourceType: "local",
+      sourceRef: "/workspace/sprint-invocation-query",
+    });
+    const firstSprint = projectRepository.createSprint(project.id, { name: "First sprint" });
+    const secondSprint = projectRepository.createSprint(project.id, { name: "Second sprint" });
+    const firstInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: firstSprint.id,
+      type: "planning",
+      status: "completed",
+      startedAt: "2026-07-13T10:00:00.000Z",
+    });
+    executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: secondSprint.id,
+      type: "planning",
+      status: "running",
+      startedAt: "2026-07-13T10:01:00.000Z",
+    });
+
+    const result = executionRepository.listExecutionInvocations({
+      projectId: project.id,
+      sprintId: firstSprint.id,
+    });
+
+    expect(result.map((invocation) => invocation.id)).toEqual([firstInvocation.id]);
+    expect(result[0]?.sprintId).toBe(firstSprint.id);
+  });
+
   it("enriches listed invocations with sprint number and task key for display/linking", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({
@@ -1107,6 +1262,111 @@ describe("ExecutionRepository", () => {
       expect(notifier.scheduleProjectExecutionRefresh).toHaveBeenLastCalledWith(
         project.id,
         expect.objectContaining({ includeOverview: true }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("schedules project-scoped refreshes for coding invocation creation and preparation messages", async () => {
+    vi.useFakeTimers();
+    try {
+      const notifier = {
+        scheduleProjectExecutionRefresh: vi.fn(),
+      };
+      const { projectRepository, executionRepository } = await createRepositoriesWithRealtimeNotifier(notifier);
+      const project = projectRepository.createProject({
+        name: "Preparation Invocation Project",
+        sourceType: "local",
+        sourceRef: "/workspace/preparation-invocation-project",
+      });
+      const sprint = projectRepository.createSprint(project.id, {
+        name: "Preparation Sprint",
+        number: 1,
+      });
+      const task = projectRepository.createTask(project.id, {
+        sprintId: sprint.id,
+        taskKey: "T01",
+        title: "Prepare coding invocation",
+        promptMarkdown: "Persist the invocation before preparation.",
+      });
+      const sprintRun = executionRepository.createSprintRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+        status: "running",
+        executorMode: "docker_cli",
+      });
+      const dispatch = executionRepository.createTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        executorType: "docker_cli",
+        status: "running",
+      });
+      const taskRun = executionRepository.createTaskRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        dispatchId: dispatch.id,
+        provider: "codex",
+        mode: "docker_cli",
+        state: "RUNNING",
+      });
+
+      vi.runOnlyPendingTimers();
+      await Promise.resolve();
+      notifier.scheduleProjectExecutionRefresh.mockClear();
+
+      const invocation = executionRepository.createExecutionInvocation({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        dispatchId: dispatch.id,
+        taskRunId: taskRun.id,
+        type: "cli_task_coding",
+        status: "running",
+        provider: "codex",
+        model: "gpt-preparation-test",
+        invocationSource: "internal",
+      });
+
+      expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        dispatchId: dispatch.id,
+        taskRunId: taskRun.id,
+        type: "cli_task_coding",
+        status: "running",
+        provider: "codex",
+        model: "gpt-preparation-test",
+        invocationSource: "internal",
+      });
+
+      vi.runOnlyPendingTimers();
+      await Promise.resolve();
+      expect(notifier.scheduleProjectExecutionRefresh).toHaveBeenCalledOnce();
+      expect(notifier.scheduleProjectExecutionRefresh).toHaveBeenLastCalledWith(
+        project.id,
+        expect.objectContaining({ includeOverview: true }),
+      );
+
+      notifier.scheduleProjectExecutionRefresh.mockClear();
+      executionRepository.appendExecutionInvocationMessage(invocation.id, {
+        role: "system",
+        contentMarkdown: "Preparing the task workspace and codex configuration.",
+      });
+
+      vi.runOnlyPendingTimers();
+      await Promise.resolve();
+      expect(notifier.scheduleProjectExecutionRefresh).toHaveBeenCalledOnce();
+      expect(notifier.scheduleProjectExecutionRefresh).toHaveBeenLastCalledWith(
+        project.id,
+        expect.objectContaining({ includeOverview: false }),
       );
     } finally {
       vi.useRealTimers();

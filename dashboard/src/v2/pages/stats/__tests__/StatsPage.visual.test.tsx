@@ -167,7 +167,7 @@ function makeChartState(stats = makeStats()) {
   };
 }
 
-function mockStatsPageData(visualMode: 'trend' | 'composition' | 'models' | 'reliability' | 'ledgers' | 'system') {
+function mockStatsPageData(visualMode: 'trend' | 'composition' | 'cost' | 'models' | 'reliability' | 'ledgers' | 'system') {
   const stats = makeStats();
 
   vi.spyOn(useStatsPageDataModule, 'useStatsPageData').mockReturnValue({
@@ -224,6 +224,7 @@ describe('StatsPage visual tests', () => {
   it.each([
     ['trend', 'Trend', ['Total Tokens', 'Active Time', 'Cost', 'Invocations', 'Cache Rate']],
     ['composition', 'Composition', ['Provider Share', 'Token Anatomy', 'Purpose Activity', 'Merge Conflicts']],
+    ['cost', 'Cost', ['Total Spend', 'Average per Task', 'Average per Sprint', 'Blended Cost / 1M Tokens', 'Pricing Coverage']],
     ['models', 'Models', ['Active Models', 'Top Model', 'Median Latency', 'Success Rate', 'Cache Hit Rate']],
     ['reliability', 'Reliability', ['Provider Health', 'Telemetry Mix', 'Failures', 'Retry Signals', 'Telemetry Gaps']],
     ['ledgers', 'Ledgers', ['Task Rows', 'Sprint Rows', 'Pull Requests', 'Files Changed', 'Merge Conflicts']],
@@ -418,6 +419,7 @@ describe('StatsPage visual tests', () => {
     const expectedModes = [
       ['Trend', 'false'],
       ['Composition', 'true'],
+      ['Cost', 'false'],
       ['Models', 'false'],
       ['Providers', 'false'],
       ['Ledgers', 'false'],

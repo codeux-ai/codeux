@@ -450,10 +450,19 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
       return;
     }
     const intervalId = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
       void refreshInternal({ silent: true });
     }, pollIntervalMs);
 
-    return () => window.clearInterval(intervalId);
+    const handleVisibilityChange = (): void => {
+      if (!document.hidden) void refreshInternal({ silent: true });
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [pollIntervalMs, refreshInternal]);
 
   const updateDataLocally = useCallback((updater: (current: T) => T) => {

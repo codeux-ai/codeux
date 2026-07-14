@@ -43,6 +43,7 @@ Code UX is a container-first multi-provider runtime with an integrated dashboard
 - `src/domain/sprint/ci/*`
 - Atomic step modules in `src/sprint/steps/*`
 - Git-mode behavior is split at the final merge gate. REMOTE mode waits for the hosted completion PR to be observed as merged before marking a run complete. LOCAL mode performs the final `feature -> default` merge in the host repository, restores the user's prior checkout afterward, and keeps the run active or paused with merge attention when the local merge fails.
+- Completed sprints can be reversed through the [Sprint Rollback](./sprint-rollbacks.md) subsystem. It creates a dedicated rollback sprint and chooses a deterministic detached-worktree revert only when history is provably isolated; otherwise it routes a dependency-aware rollback task through an agent. Remote mode ends at a required PR gate, while local mode merges the rollback branch into the configured local default branch without a PR.
 
 ### 4. Instruction template system
 - `src/instructions/instruction-template-service.ts`
@@ -73,6 +74,14 @@ Code UX is a container-first multi-provider runtime with an integrated dashboard
 ### 8. Shared logging and correlation
 - `src/shared/logging/logger.ts`
 - `src/shared/logging/correlation-id.ts`
+
+### 9. Authenticated headless automation boundary
+
+- `src/services/headless-auth-service.ts` resolves local, trusted-proxy, or digest-backed service principals and applies role/project authorization before dashboard administrative routes.
+- `src/services/headless-operational-readiness-service.ts` combines encrypted-data key recovery, durable audit storage, and runner identity checks. The server asserts key recovery before binding listeners.
+- `src/services/automation-audit-export-service.ts` persists correlation-linked, recursively redacted audit rows and exports bounded NDJSON.
+- `src/services/distributed-node-flow-runner-service.ts` grants compare-and-set leases only to project-scoped `automation_runner` service principals.
+- `src/services/automation-slo-service.ts` publishes bounded management latency/error and delivery baselines.
 
 ## Runtime Architecture Diagram
 

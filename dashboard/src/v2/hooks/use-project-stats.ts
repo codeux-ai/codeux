@@ -13,6 +13,10 @@ import { isEqualProjectStatsSnapshot, stabilizeProjectStatsSnapshot } from "../l
 const statsCache = new Map<string, ProjectExecutionStatsSnapshot>();
 const statsInflightRequests = new Map<string, Promise<ProjectExecutionStatsSnapshot>>();
 
+interface UseProjectStatsOptions {
+  realtime?: boolean;
+}
+
 export const clearStatsCacheForTests = (): void => {
   statsCache.clear();
   statsInflightRequests.clear();
@@ -27,6 +31,7 @@ export function useProjectStats(
   projectId: string | null,
   statsQuery: ProjectStatsQuery | ProjectStatsWindow,
   pollIntervalMs: number = 30000,
+  options?: UseProjectStatsOptions,
 ): {
   stats: ProjectExecutionStatsSnapshot | null;
   loading: boolean;
@@ -77,7 +82,7 @@ export function useProjectStats(
     stabilizeNext: stabilizeProjectStatsSnapshot,
     pollIntervalMs: projectId ? pollIntervalMs : 0,
     isAlreadyLoaded: projectCacheEntryRef.current.hadInitialCache || !projectId,
-    realtime: projectId ? {
+    realtime: projectId && options?.realtime !== false ? {
       scopes: [`project:${projectId}`],
       shouldRefetch: (message: DashboardRealtimeServerMessage) => {
         if (message.type === "snapshot_required") {
@@ -103,4 +108,3 @@ export function useProjectStats(
     },
   }), [error, loading, refetch, stats]);
 }
-

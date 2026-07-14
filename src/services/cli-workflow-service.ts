@@ -17,7 +17,7 @@ import type { ProjectManagementRepository } from "../repositories/project-manage
 import { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
 import { runCommandStrict, type CommandResult } from "./cli-process-runner.js";
 import { isReadFileNotFoundToolError, buildReadFileRetryPrompt } from "./cli-workflow-text-utils.js";
-import type { ProviderSettingsOverride } from "./provider-settings-override.js";
+import { buildProviderSettingsOverride, type ProviderSettingsOverride } from "./provider-settings-override.js";
 
 import {
   buildProviderPrompt,
@@ -57,6 +57,8 @@ import type { AgentPresetRepository } from "../repositories/agent-preset-reposit
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
 import { parseTaskExecutionOutcomeFromProviderOutput, type TaskExecutionOutcome } from "../domain/sprint/task-execution-outcome.js";
+import { resolveProviderForInvocation } from "./provider-routing.js";
+import { resolveEffectiveModel } from "./provider-execution-service.js";
 
 interface CliWorkflowServiceDependencies {
   sessionTracking: SessionTrackingRepository;
@@ -280,6 +282,33 @@ export class CliWorkflowService {
     const taskRun = args.taskRunId && this.deps.executionRepository
       ? this.deps.executionRepository.getTaskRun(args.taskRunId)
       : null;
+    const canPersistExecutionInvocation = Boolean(
+      taskRun
+      && this.deps.executionRepository
+      && typeof this.deps.executionRepository.createExecutionInvocation === "function",
+    );
+    const invocationModel = canPersistExecutionInvocation
+      ? (() => {
+        const resolvedProvider = resolveProviderForInvocation(settings, {
+          invocation: "task_coding",
+          task: args.task,
+        });
+        const resolvedProviderSettings = resolvedProvider.providers[args.provider];
+        const providerSettings = args.providerSettingsOverride
+          || buildProviderSettingsOverride(resolvedProviderSettings.model, resolvedProviderSettings);
+        return resolveEffectiveModel({
+          provider: args.provider,
+          model: providerSettings.model,
+          providerMountAuth: providerSettings.providerMountAuth,
+          customModel: providerSettings.customModel,
+          qwenAuthMode: providerSettings.qwenAuthMode,
+          qwenModelId: providerSettings.qwenModelId,
+          openCodeAuthMode: providerSettings.openCodeAuthMode,
+          openCodeProviderId: providerSettings.openCodeProviderId,
+          openCodeModelId: providerSettings.openCodeModelId,
+        });
+      })()
+      : null;
 
     const ctx: PipelineContext = {
       ...args,
@@ -348,6 +377,33 @@ export class CliWorkflowService {
 
     let preserveWorkspaceForShutdown = false;
     try {
+      if (taskRun && invocationModel && this.deps.executionRepository) {
+        const invocation = this.deps.executionRepository.createExecutionInvocation({
+          projectId: taskRun.projectId,
+          sprintId: taskRun.sprintId,
+          taskId: taskRun.taskId,
+          sprintRunId: taskRun.sprintRunId,
+          dispatchId: taskRun.dispatchId || args.dispatchId || null,
+          taskRunId: taskRun.id,
+          type: "cli_task_coding",
+          status: "running",
+          provider: args.provider,
+          model: invocationModel,
+          invocationSource: "internal",
+          agentPresetId: workerAgent?.id,
+        });
+        ctx.executionInvocationId = invocation.id;
+        this.deps.executionRepository.appendExecutionInvocationMessage(invocation.id, {
+          role: "system",
+          contentMarkdown: `Preparing the task workspace and ${args.provider} configuration.`,
+          metadata: {
+            kind: "preparation_started",
+            provider: args.provider,
+            model: invocationModel,
+          },
+        });
+      }
+
       this.appendExecutionEvent(args, "cli_workspace_bound", {
         provider: args.provider,
         repoPath: args.repoPath,
@@ -430,12 +486,13 @@ export class CliWorkflowService {
             dispatchStatus: "blocked",
             errorMessage: blocker,
             workerBranch: null,
-          });
+          }, ctx.executionInvocationId);
           this.appendExecutionEvent(args, "cli_workflow_blocked", {
             provider: args.provider,
             category,
             errorMessage: blocker,
           }, `cli:workflow:blocked:agent:${args.sessionId}`);
+          this.finalizeExecutionInvocation(ctx.executionInvocationId, "failed", finishedAt, blocker);
           return;
         }
         this.appendExecutionEvent(args, "cli_git_no_changes", {
@@ -450,11 +507,12 @@ export class CliWorkflowService {
           // branch, otherwise the orchestrator treats it as merge evidence and
           // falsely advances/merges the task.
           workerBranch: null,
-        });
+        }, ctx.executionInvocationId);
         this.appendExecutionEvent(args, "cli_workflow_completed", {
           provider: args.provider,
           outcome: "no_changes",
         }, "cli:workflow:completed:no-changes");
+        this.finalizeExecutionInvocation(ctx.executionInvocationId, "completed", finishedAt);
         return;
       }
 
@@ -476,7 +534,7 @@ export class CliWorkflowService {
         finishedAt,
         workerBranch: args.workerBranch,
         dispatchStatus: "completed",
-      });
+      }, ctx.executionInvocationId);
 
       const { prUrl } = await executePrFinalizeStage(ctx, { completionTimestamp: finishedAt });
       this.updateExecutionState(args, {
@@ -485,7 +543,7 @@ export class CliWorkflowService {
         prUrl,
         workerBranch: args.workerBranch,
         dispatchStatus: "completed",
-      });
+      }, ctx.executionInvocationId);
       this.appendExecutionEvent(args, "cli_pr_finalized", {
         provider: args.provider,
         prUrl: prUrl || null,
@@ -496,6 +554,7 @@ export class CliWorkflowService {
         outcome: "pushed",
         prUrl: prUrl || null,
       }, `cli:workflow:completed:${prUrl || "none"}`);
+      this.finalizeExecutionInvocation(ctx.executionInvocationId, "completed", finishedAt);
 
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -531,7 +590,7 @@ export class CliWorkflowService {
           finishedAt,
           dispatchStatus: "cancelled",
           errorMessage: "Workflow cancelled by dashboard control.",
-        });
+        }, ctx.executionInvocationId);
         this.appendExecutionEvent(args, "cli_workflow_cancel_requested", {
           provider: args.provider,
           sessionId: args.sessionId,
@@ -551,7 +610,7 @@ export class CliWorkflowService {
           finishedAt,
           dispatchStatus: workflowSettings.retryOnRateLimit ? "quota" : "failed",
           errorMessage: message,
-        });
+        }, ctx.executionInvocationId);
         this.appendExecutionEvent(args, "cli_workflow_rate_limited", {
           provider: args.provider,
           errorMessage: message,
@@ -576,7 +635,7 @@ export class CliWorkflowService {
           finishedAt,
           dispatchStatus: "quota",
           errorMessage: message,
-        });
+        }, ctx.executionInvocationId);
         this.appendExecutionEvent(args, "cli_workflow_quota", {
           provider: args.provider,
           errorMessage: message,
@@ -601,7 +660,7 @@ export class CliWorkflowService {
           finishedAt,
           dispatchStatus: "failed",
           errorMessage: message,
-        });
+        }, ctx.executionInvocationId);
         this.appendExecutionEvent(args, "cli_workflow_failed", {
           provider: args.provider,
           errorMessage: message,
@@ -624,7 +683,7 @@ export class CliWorkflowService {
           finishedAt,
           dispatchStatus: "blocked",
           errorMessage: message,
-        });
+        }, ctx.executionInvocationId);
         this.appendExecutionEvent(args, "cli_workflow_blocked", {
           provider: args.provider,
           category: isNonRecoverableGitWorkflowError(message) ? "git_configuration" : "execution_environment",
@@ -646,7 +705,7 @@ export class CliWorkflowService {
           finishedAt,
           dispatchStatus: "failed",
           errorMessage: message,
-        });
+        }, ctx.executionInvocationId);
         this.appendExecutionEvent(args, "cli_workflow_failed", {
           provider: args.provider,
           errorMessage: message,
@@ -657,6 +716,13 @@ export class CliWorkflowService {
           message,
         });
       }
+      const invocationStatus = abortController.signal.aborted ? "cancelled" : "failed";
+      this.finalizeExecutionInvocation(
+        ctx.executionInvocationId,
+        invocationStatus,
+        finishedAt,
+        invocationStatus === "cancelled" ? "Workflow cancelled by dashboard control." : message,
+      );
     } finally {
       try {
         const cleanupResult = preserveWorkspaceForShutdown
@@ -800,9 +866,20 @@ export class CliWorkflowService {
       dispatchStatus: NonNullable<UpdateTaskDispatchInput["status"]>;
       errorMessage?: string;
     },
+    executionInvocationId?: string,
   ): void {
     const taskRun = this.resolveTaskRun(args);
     if (!taskRun || !this.deps.executionRepository) {
+      return;
+    }
+
+    // Cancellation is persisted before the active provider/workflow has
+    // necessarily observed its abort signal. Ignore a late pipeline update so
+    // the cancelled task and dispatch cannot drift back to another state.
+    if (
+      executionInvocationId
+      && this.deps.executionRepository.getExecutionInvocation(executionInvocationId)?.status === "cancelled"
+    ) {
       return;
     }
 
@@ -837,6 +914,42 @@ export class CliWorkflowService {
         errorMessage: input.errorMessage ?? null,
       });
     }
+  }
+
+  private finalizeExecutionInvocation(
+    invocationId: string | undefined,
+    status: "completed" | "failed" | "cancelled",
+    finishedAt: string,
+    errorMessage?: string,
+  ): void {
+    if (!invocationId || !this.deps.executionRepository) {
+      return;
+    }
+    const invocation = this.deps.executionRepository.getExecutionInvocation(invocationId);
+    if (!invocation || (invocation.status !== "running" && invocation.status !== "paused")) {
+      return;
+    }
+    this.deps.executionRepository.updateExecutionInvocation(invocationId, {
+      status,
+      finishedAt,
+      errorMessage: status === "completed" ? null : errorMessage ?? null,
+      lastErrorCategory: status === "failed" ? invocation.lastErrorCategory ?? "UNKNOWN" : null,
+      lastErrorMessage: status === "completed" ? null : errorMessage ?? null,
+      lastRetryAfterIso: null,
+    });
+    this.deps.executionRepository.appendExecutionInvocationMessage(invocationId, {
+      role: "system",
+      contentMarkdown: status === "completed"
+        ? "CLI workflow completed successfully."
+        : status === "cancelled"
+          ? `CLI workflow cancelled${errorMessage ? `: ${errorMessage}` : "."}`
+          : `CLI workflow failed${errorMessage ? `: ${errorMessage}` : "."}`,
+      metadata: {
+        kind: "cli_workflow_finalized",
+        status,
+      },
+      createdAt: finishedAt,
+    });
   }
 
   private isSprintRunCancelled(sprintRunId?: string | null): boolean {

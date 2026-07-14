@@ -1,3 +1,5 @@
+import type { NodeFlowGraph, NodeFlowJsonObject, NodeFlowJsonValue } from "../../../../src/contracts/node-flow-types.js";
+
 export type NodeCanvasNodeKind = "trigger" | "agent" | "task" | "condition" | "output";
 export type NodeCanvasPortDirection = "input" | "output";
 export type NodeCanvasPortType = "control" | "agent" | "task" | "condition" | "result" | "data";
@@ -66,9 +68,16 @@ export interface NodeCanvasSelectionState {
 }
 
 export interface NodeCanvasGraph {
+  schemaVersion?: 2;
   nodes: NodeCanvasNode[];
   edges: NodeCanvasEdge[];
   selection: NodeCanvasSelectionState;
+}
+
+export interface NodeCanvasGraphMigrationResult {
+  graph: NodeCanvasGraph;
+  migrated: boolean;
+  legacySnapshot: unknown | null;
 }
 
 export type NodeCanvasValidationIssueCode =
@@ -201,6 +210,7 @@ export const createInitialNodeCanvasGraph = (): NodeCanvasGraph => {
   ];
 
   return normalizeNodeCanvasGraph({
+    schemaVersion: 2,
     nodes,
     edges: [
       createNodeCanvasEdge("edge-trigger-1-event-agent-1-in", "trigger-1", "event", "agent-1", "in"),
@@ -487,16 +497,115 @@ export const validateNodeCanvasGraph = (graph: NodeCanvasGraph): NodeCanvasValid
 };
 
 export const serializeNodeCanvasGraph = (graph: NodeCanvasGraph): string => (
-  JSON.stringify(toStableJson(normalizeNodeCanvasGraph(graph)), null, 2)
+  JSON.stringify(toStableJson(toCanonicalNodeFlowGraph(graph)), null, 2)
 );
 
+export const toCanonicalNodeFlowGraph = (graph: NodeCanvasGraph): NodeFlowGraph => {
+  const normalized = normalizeNodeCanvasGraph(graph);
+  return {
+    schemaVersion: 2,
+    nodes: normalized.nodes.map(toCanonicalNode),
+    edges: normalized.edges.map((edge) => ({
+      id: edge.id,
+      fromNodeId: edge.source.nodeId,
+      toNodeId: edge.target.nodeId,
+      fromHandle: toCanonicalPortId(normalized, edge.source.nodeId, edge.source.portId),
+      toHandle: toCanonicalPortId(normalized, edge.target.nodeId, edge.target.portId),
+    })),
+    metadata: { canvasSelection: normalized.selection as unknown as NodeFlowJsonObject },
+  };
+};
+
+const LEGACY_KIND_TO_DEFINITION: Record<NodeCanvasNodeKind, string> = {
+  trigger: "input",
+  agent: "set_fields",
+  task: "provider_prompt",
+  condition: "condition",
+  output: "output",
+};
+
+const LEGACY_PORT_TO_DEFINITION_PORT: Record<NodeCanvasNodeKind, Record<string, string>> = {
+  trigger: { event: "output" },
+  agent: { in: "input", agent: "output" },
+  task: { agent: "input", task: "output" },
+  condition: { task: "input", pass: "true", fail: "false" },
+  output: { result: "input" },
+};
+
+const toCanonicalNode = (node: NodeCanvasNode): NodeFlowGraph["nodes"][number] => {
+  const type = LEGACY_KIND_TO_DEFINITION[node.kind];
+  const values = Object.fromEntries(node.config.map((field) => [field.id, field.value])) as NodeFlowJsonObject;
+  const legacyCanvas: NodeFlowJsonObject = {
+    kind: node.kind,
+    config: node.config.map((field) => ({
+      id: field.id,
+      label: field.label,
+      type: field.type,
+      value: field.value,
+      ...(field.required === undefined ? {} : { required: field.required }),
+      ...(field.options ? { options: [...field.options] } : {}),
+    })) as NodeFlowJsonValue,
+    metadata: node.metadata as NodeFlowJsonValue,
+  };
+
+  let data: NodeFlowJsonObject = { legacyCanvas };
+  if (node.kind === "agent") {
+    data = {
+      fields: {
+        legacyAgentPresetId: values.agentPresetId ?? null,
+        legacyRoutingMode: values.routingMode ?? "auto",
+      },
+      legacyCanvas,
+    };
+  } else if (node.kind === "task") {
+    data = {
+      prompt: typeof values.prompt === "string" && values.prompt.trim() ? values.prompt : node.description || node.label,
+      legacyCanvas,
+    };
+  } else if (node.kind === "condition") {
+    data = { path: "upstream", operator: "truthy", legacyCanvas };
+  }
+
+  return {
+    id: node.id,
+    type,
+    title: node.label,
+    description: node.description,
+    position: node.position,
+    definition: { type, version: 1 },
+    data,
+  };
+};
+
+const toCanonicalPortId = (
+  graph: NodeCanvasGraph,
+  nodeId: string,
+  legacyPortId: string,
+): string => {
+  const kind = graph.nodes.find((node) => node.id === nodeId)?.kind;
+  return kind ? LEGACY_PORT_TO_DEFINITION_PORT[kind][legacyPortId] ?? legacyPortId : legacyPortId;
+};
+
 export const deserializeNodeCanvasGraph = (serialized: string): NodeCanvasGraph => {
+  return deserializeNodeCanvasGraphWithMigration(serialized).graph;
+};
+
+export const deserializeNodeCanvasGraphWithMigration = (serialized: string): NodeCanvasGraphMigrationResult => {
   try {
     const parsed: unknown = JSON.parse(serialized);
-    return normalizeNodeCanvasGraph(parsed);
+    return migrateNodeCanvasGraph(parsed);
   } catch {
-    return createInitialNodeCanvasGraph();
+    return { graph: createInitialNodeCanvasGraph(), migrated: false, legacySnapshot: null };
   }
+};
+
+export const migrateNodeCanvasGraph = (input: unknown): NodeCanvasGraphMigrationResult => {
+  const migrated = !isRecord(input) || input.schemaVersion !== 2;
+  return {
+    graph: normalizeNodeCanvasGraph(input),
+    migrated,
+    legacySnapshot: migrated ? cloneStableValue(input) : null,
+  };
 };
 
 export const normalizeNodeCanvasGraph = (input: unknown): NodeCanvasGraph => {
@@ -512,19 +621,34 @@ export const normalizeNodeCanvasGraph = (input: unknown): NodeCanvasGraph => {
     return createInitialNodeCanvasGraph();
   }
 
+  const nodeKindById = new Map(parsedNodes.map((node) => [node.id, node.kind]));
   const parsedEdges = Array.isArray(input.edges)
-    ? input.edges.map(parseEdge).filter((edge): edge is NodeCanvasEdge => edge !== null)
+    ? input.edges.map(parseEdge).filter((edge): edge is NodeCanvasEdge => edge !== null).map((edge) => ({
+        ...edge,
+        source: {
+          ...edge.source,
+          portId: toLegacyPortId(nodeKindById.get(edge.source.nodeId), edge.source.portId),
+        },
+        target: {
+          ...edge.target,
+          portId: toLegacyPortId(nodeKindById.get(edge.target.nodeId), edge.target.portId),
+        },
+      }))
     : [];
 
   const validNodeIds = new Set(parsedNodes.map((node) => node.id));
-  const parsedSelection = parseSelection(input.selection, validNodeIds, new Set(parsedEdges.map((edge) => edge.id)));
+  const canvasSelection = isRecord(input.metadata) ? input.metadata.canvasSelection : undefined;
+  const parsedSelection = parseSelection(input.selection ?? canvasSelection, validNodeIds, new Set(parsedEdges.map((edge) => edge.id)));
 
   return {
+    schemaVersion: 2,
     nodes: parsedNodes.sort(compareById),
     edges: parsedEdges.sort(compareById),
     selection: parsedSelection,
   };
 };
+
+const cloneStableValue = (value: unknown): unknown => structuredClone(value);
 
 const createNodeCanvasEdge = (
   id: string,
@@ -619,10 +743,12 @@ const normalizeMetadata = (metadata: NodeCanvasNodeMetadata): NodeCanvasNodeMeta
 });
 
 const parseNode = (value: unknown): NodeCanvasNode | null => {
-  if (!isRecord(value) || !isString(value.id) || !isNodeKind(value.kind)) {
+  const canvasData = isRecord(value) ? readCanonicalCanvasData(value.data) : null;
+  const kindValue = isRecord(value) ? value.kind ?? canvasData?.kind ?? value.type : undefined;
+  if (!isRecord(value) || !isString(value.id) || !isNodeKind(kindValue)) {
     return null;
   }
-  const template = createNodeCanvasNode(value.kind, { id: value.id });
+  const template = createNodeCanvasNode(kindValue, { id: value.id });
   const position = isRecord(value.position)
     ? {
         x: finiteOrDefault(typeof value.position.x === "number" ? value.position.x : undefined, template.position.x),
@@ -630,16 +756,23 @@ const parseNode = (value: unknown): NodeCanvasNode | null => {
       }
     : template.position;
 
+  const canonicalPorts = Array.isArray(value.ports) ? value.ports : undefined;
   return {
     ...template,
-    label: isString(value.label) ? value.label : template.label,
+    label: isString(value.label) ? value.label : isString(value.title) ? value.title : template.label,
     description: isString(value.description) ? value.description : template.description,
     position,
-    inputPorts: parsePorts(value.inputPorts, "input", template.inputPorts),
-    outputPorts: parsePorts(value.outputPorts, "output", template.outputPorts),
-    config: parseConfig(value.config, template.config),
-    metadata: parseMetadata(value.metadata),
+    inputPorts: parsePorts(value.inputPorts ?? canonicalPorts?.filter((port) => isRecord(port) && port.direction === "input"), "input", template.inputPorts),
+    outputPorts: parsePorts(value.outputPorts ?? canonicalPorts?.filter((port) => isRecord(port) && port.direction === "output"), "output", template.outputPorts),
+    config: parseConfig(value.config ?? canvasData?.config, template.config),
+    metadata: parseMetadata(value.metadata ?? canvasData?.metadata),
   };
+};
+
+const readCanonicalCanvasData = (value: unknown): Record<string, unknown> | null => {
+  if (!isRecord(value)) return null;
+  if (isRecord(value.legacyCanvas)) return value.legacyCanvas;
+  return isRecord(value.canvas) ? value.canvas : null;
 };
 
 const parsePorts = <TDirection extends NodeCanvasPortDirection>(
@@ -660,17 +793,19 @@ const parsePort = <TDirection extends NodeCanvasPortDirection>(
   value: unknown,
   expectedDirection: TDirection,
 ): (NodeCanvasPort & { direction: TDirection }) | null => {
-  if (!isRecord(value) || !isString(value.id) || !isString(value.label) || !isString(value.type)) {
+  if (!isRecord(value) || !isString(value.id)) {
     return null;
   }
-  if (!["control", "agent", "task", "condition", "result", "data"].includes(value.type)) {
+  const canonicalDescription = isRecord(value.schema) && isString(value.schema.description) ? value.schema.description : undefined;
+  const portType = isString(value.type) ? value.type : canonicalDescription ?? "data";
+  if (!["control", "agent", "task", "condition", "result", "data"].includes(portType)) {
     return null;
   }
   return {
     id: value.id,
-    label: value.label,
+    label: isString(value.label) ? value.label : value.id,
     direction: expectedDirection,
-    type: value.type as NodeCanvasPortType,
+    type: portType as NodeCanvasPortType,
     ...(typeof value.required === "boolean" ? { required: value.required } : {}),
   };
 };
@@ -724,18 +859,28 @@ const parseMetadata = (value: unknown): NodeCanvasNodeMetadata => {
 };
 
 const parseEdge = (value: unknown): NodeCanvasEdge | null => {
-  if (!isRecord(value) || !isString(value.id) || !isRecord(value.source) || !isRecord(value.target)) {
+  if (!isRecord(value) || !isString(value.id)) {
     return null;
   }
-  if (!isString(value.source.nodeId) || !isString(value.source.portId) || !isString(value.target.nodeId) || !isString(value.target.portId)) {
+  const sourceNodeId = isRecord(value.source) ? value.source.nodeId : value.fromNodeId;
+  const sourcePortId = isRecord(value.source) ? value.source.portId : value.fromHandle;
+  const targetNodeId = isRecord(value.target) ? value.target.nodeId : value.toNodeId;
+  const targetPortId = isRecord(value.target) ? value.target.portId : value.toHandle;
+  if (!isString(sourceNodeId) || !isString(sourcePortId) || !isString(targetNodeId) || !isString(targetPortId)) {
     return null;
   }
   return {
     id: value.id,
-    source: { nodeId: value.source.nodeId, portId: value.source.portId },
-    target: { nodeId: value.target.nodeId, portId: value.target.portId },
+    source: { nodeId: sourceNodeId, portId: sourcePortId },
+    target: { nodeId: targetNodeId, portId: targetPortId },
     ...(isString(value.label) ? { label: value.label } : {}),
   };
+};
+
+const toLegacyPortId = (kind: NodeCanvasNodeKind | undefined, canonicalPortId: string): string => {
+  if (!kind) return canonicalPortId;
+  const mapping = LEGACY_PORT_TO_DEFINITION_PORT[kind];
+  return Object.entries(mapping).find(([, mappedPortId]) => mappedPortId === canonicalPortId)?.[0] ?? canonicalPortId;
 };
 
 const parseSelection = (

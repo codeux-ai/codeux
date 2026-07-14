@@ -235,6 +235,8 @@ The restricted `scheduler_code_ux` tool accepts exactly one wakeup timing mode:
 
 `schedule_wakeup` requires `projectId` and `bodyMarkdown`, and may include `title`, `timezone`, `threadId`, and `connectionId`. Completion anchors are persisted as `scheduleAnchor` payloads: `afterSprintId` maps to `{ mode: "after_sprint_end", sourceSprintId, offsetMinutes? }`, and `afterTaskId` maps to `{ mode: "after_task_end", sourceTaskId, offsetMinutes? }`.
 
+When `schedule_wakeup` runs inside an MCP-backed dashboard chat turn, an omitted, null, or blank `threadId` defaults to the originating dashboard thread. Code UX persists that resolved id in `agentWakeupTarget`; an explicit non-empty `threadId` overrides the contextual default. Standalone MCP calls have no thread context, so the target remains threadless when `threadId` is not supplied. Both contextual defaults and explicit overrides remain subject to the normal project/thread ownership validation at delivery.
+
 Every `scheduler_code_ux` entry is persisted as an `agent_scheduler` wakeup target. The runtime stamps `origin: "agent_scheduler"`, `source: "agent_scheduler"`, and `createdByAgentId` from the current MCP agent context. `list` returns only wakeup entries created by the calling agent. `cancel` changes the matching entry status to `cancelled` only when the entry is an agent-scheduler wakeup created by that same agent. Dashboard-created entries, `manage_scheduler` entries, entries without agent-scheduler metadata, task entries, and entries created by another agent are rejected with the standard management validation envelope.
 
 The restricted tool intentionally does not expose due-entry execution, arbitrary update, recurrence editing, sprint scheduling, quicksprint scheduling, memory remediation scheduling, or global scheduler destructive controls.
@@ -249,20 +251,25 @@ The restricted tool intentionally does not expose due-entry execution, arbitrary
 - `publish_revision` publishes only a revision that is already marked passed with a valid report or a revision accompanied by a passed `validationSessionId`.
 - `archive` clears any active publication and marks the dashboard archived. It follows the normal destructive-action approval fingerprint flow.
 - `data_catalog` returns project dashboard summaries and declared source nodes for agents building or inspecting generated dashboards.
+- `list_credential_slots` returns a bounded metadata-only review of declared slots, current bindings, backend health, and compatible credential candidates for the owning project. An optional `revisionId` reviews an immutable revision.
+- `bind_credential` binds or replaces one declared slot by credential ID with `expectedBindingRevision`; `unbind_credential` removes one slot binding with the same optimistic guard. Both mutations require the stateful human-confirmation handshake. Their arguments are strictly validated and reduced to the allowed metadata fields before an approval fingerprint is built, so secret-bearing or unsupported fields cannot enter pending approval state.
 
 Payload fields:
 
-- `projectId` is required for `list`, `create`, `validate_revision`, and `data_catalog`.
-- `dashboardId` is required for `get`, `update`, `create_revision`, `validate_revision`, `publish_revision`, and `archive`.
+- `projectId` is required for `list`, `create`, `validate_revision`, `data_catalog`, and every credential-binding action.
+- `dashboardId` is required for `get`, `update`, `create_revision`, `validate_revision`, `publish_revision`, `archive`, and every credential-binding action.
 - `revisionId` is required for `validate_revision` and `publish_revision`.
 - `sessionId` is required for `validation_status` and `validation_logs`.
 - `validationSessionId` is optional for `publish_revision` and, when supplied, must identify a passed session for the same dashboard, revision, and project.
 - `manifest`, `fileBundle`, `sourceNodeGraph`, `styleguide`, and `runtimeMetadata` are accepted by `create`, `update`, and `create_revision` according to each action's required fields.
 - `tail` limits validation log output.
+- `slotId`, `credentialId`, and `expectedBindingRevision` identify a metadata-only bind/replace operation; unbind omits `credentialId`. Secret-bearing and undeclared fields are rejected.
 
 Validation sessions move through `queued`, `building`, `running`, `passed`, `failed`, or `cancelled`. `validate_revision` starts the detached Docker validation runtime; it does not publish the revision. A passed session means install, build, detached preview startup, and root health checks completed successfully.
 
-`publish_revision` is gated by repository state. The revision must belong to the dashboard, have `validationStatus: "passed"`, have `validatedAt`, and have `validationReport.valid === true`. Failed, queued, running, cancelled, missing, or cross-revision validation sessions are rejected before publication state changes, so the prior published revision remains active.
+`validate_revision` and `publish_revision` perform a fresh metadata-only credential compatibility review. Required unbound slots and missing, revoked, inaccessible, unconfigured, wrong-kind, insufficient-capability, or unavailable-backend bindings fail closed with slot-specific validation issues. Optional unbound slots remain valid. A rejected publication returns the sanitized slot-specific `issues` array in the error result without credential IDs or values. Only after that review does `publish_revision` apply the repository validation-state gate, so the prior published revision remains active on any denial.
+
+Generic custom-dashboard MCP responses recursively redact known binding IDs from dashboard, revision, source, runtime-metadata, validation-report, file, and viewer-artifact content. Only `list_credential_slots`, `bind_credential`, and `unbind_credential` may return binding IDs and non-secret credential metadata. These actions never accept or return plaintext and never call credential secret resolution.
 
 The generated dashboard data-source graph is user-declared JSON with `nodes`, `edges`, and optional `metadata`. Runtime viewer source types currently map to Code UX project execution data, project stats, overview telemetry, non-secret integration metadata, and unavailable `external_api` placeholders. Do not claim arbitrary external API connectors are available through this surface until a dedicated sanitized proxy contract exists.
 
@@ -425,9 +432,13 @@ The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicks
 
 ## Node Flow Tools
 
-`manage_node_flows` exposes project node workflows through the project-manager MCP surface. It supports `list`, `get`, `create`, `update`, `delete`, `validate`, `run`, `list_runs`, `get_run`, `attach_to_agent`, and `detach_from_agent`.
+`manage_node_flows` is the project-manager automation-authoring surface. Governed actions are `catalog`, `get_node_definition`, `create_draft`, `patch_draft`, `validate_draft`, `create_custom_node`, `update_custom_node`, `validate_custom_node`, `request_credential`, `inspect_bindings`, `dry_run`, `publish`, `compare_versions`, `rollback`, `run`, `cancel`, `retry`, `inspect_run`, and `list_runs`. Compatibility aliases remain for `list`, `get`, `create`, `update`, `delete`, `validate`, `get_run`, `attach_to_agent`/`attach`, and `detach_from_agent`/`detach`.
 
-Node-flow management always delegates graph validation and persistence to `NodeFlowService`; `run` delegates execution through the configured node-flow runtime service. Create and update calls reject malformed graph specs before repository writes. `delete` uses the standard stateful approval handshake.
+New drafts are not executable until published. `patch_draft` requires the last observed positive integer `draftRevision`; stale revisions return a `draft_revision_conflict` containing expected and actual revisions without writing. Draft review responses are summaries rather than full graphs: they include validation issues, policy findings, credential requirements, requested capabilities, side-effect diffs, node/edge counts, and the active published version. `publish`, `rollback`, and `delete` use the exact-payload, one-use approval handshake.
+
+`dry_run` performs validation and policy simulation without executing nodes or side effects. It returns `executed: false`, redacted result metadata, and blockers such as missing or denied credential bindings. Credential actions return metadata only; decrypted credential values never cross the service or MCP response boundary. Custom-node validation reuses the governed project generator/build pipeline and returns checks, issues, capabilities, and credential slots rather than source bundles.
+
+Operational `run`, `retry`, and `inspect_run` responses include durable node-attempt history. Each governed attempt projection contains its attempt number and status, failure classification and retry decision, executor and execution-invocation identifiers, artifact digest, timestamps, and redacted input/output. Credential values, credential bindings, and custom-node source are excluded. `inspect_run` reloads attempts from durable storage, so successful attempts, retries, terminal failures, and `attention_required` decisions remain inspectable after the original call or a runtime restart.
 
 The graph payload is the shared `NodeFlowGraph` contract:
 
@@ -436,7 +447,7 @@ The graph payload is the shared `NodeFlowGraph` contract:
 - `inputSchema`: optional graph-level widget schema for run input
 - `metadata`: optional JSON object
 
-Validation checks graph shape, unique node ids, edge endpoints, acyclicity, JSON-safe node data, widget schema fields, select options, finite numeric constraints, and default values that match field types. Runtime support is narrower than graph storage: executable node types are currently `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output`.
+Validation checks graph shape, unique node ids, edge endpoints, acyclicity, JSON-safe node data, widget schema fields, select options, finite numeric constraints, and default values that match field types. The governed built-ins currently registered with executable handlers are `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, `condition`, `switch`, `foreach`, `merge`, `delay`, `approval`, `email_draft`, `email_send`, `execute_subflow`, `webhook_trigger`, and `output`. A registered custom definition can execute only when its validated versioned manifest, immutable artifact, and custom-node runtime are available; unknown, legacy, mockup, and non-executable definitions remain planned or unavailable and are rejected by runtime dispatch.
 
 Agents should build Code UX-adapted flows from structured graph specs instead of cloning n8n workflows one-to-one. A good flow exposes the values an operator or agent should edit, keeps runtime behavior repeatable, names nodes by Code UX behavior, and validates every required field before saving. MCP callers can provide `widgets` as a graph-level `{ fields: [...] }` schema or as node-id keys mapped to each node's `widgetSchema`.
 
@@ -446,6 +457,7 @@ Secret-safe widget guidance:
 - do not put API keys, bearer tokens, cookies, passwords, or private headers in `graph.metadata`, `node.data`, widget defaults, run `input`, or examples
 - use placeholder references such as `settings.provider.default` or `secret://service/token`
 - treat MCP responses as redacted summaries; flow and run responses mask secret-shaped graph data, inputs, trigger payloads, node payloads, and outputs before returning them through MCP
+- treat attempt history as an operational summary: it exposes invocation links and artifact identity, but never credential values, credential-binding ids, or custom-node source
 
 Attach a flow as an agent skill:
 
@@ -458,6 +470,8 @@ Attach a flow as an agent skill:
   "description": "Runs the reusable review node flow."
 }
 ```
+
+An attachment also gives that authenticated agent the narrow `run_attached_flow` capability. Its catalog entry contains only `flowId`, name, description, input schema, and `operation: "run_attached_flow"`; it never includes the graph or credentials. Execution verifies project ownership, the attachment, current publication, and credential policy, then records `initiatingAgentId`, the originating conversation id when present, and `triggerType: "attached_flow"` in run audit metadata.
 
 Run a flow:
 
@@ -794,13 +808,28 @@ The first call returns `approvalRequired: true`. To execute the deprecation afte
 }
 ```
 
-For sprint create/update calls:
+For sprint create/followup/update calls:
 - `name` is the canonical repository field.
 - `title` is accepted as a public MCP alias for `name`.
 - `goal` is the canonical repository field.
 - `goalMarkdown` is accepted as a public MCP alias for `goal`.
 - `linkedIssues` can include imported issue body and conversation markdown. Sprint create merges that context into the goal under `## Linked Issues`; sprint update does the same when a replacement goal is provided. Prompt-only issue body and conversation content are not stored in linked issue repository rows.
 - Missing or blank `projectId`, `sprintId`, `sprintRunId`, `name`, and `title` values are rejected before repository calls so MCP clients receive a validation error instead of a low-level `.trim()` failure.
+
+### `manage_sprints followup`
+
+Use `manage_sprints` with `action: "followup"` when a later sprint should be captured now but must not be planned until its scheduled start. The action accepts the same draft fields and public aliases as sprint creation, requires `projectId`, creates a sprint with `status: "idle"`, and returns the saved sprint record synchronously.
+
+```json
+{
+  "action": "followup",
+  "projectId": "project-123",
+  "title": "Post-migration follow-up",
+  "goalMarkdown": "Apply the findings from the migration sprint."
+}
+```
+
+`followup` does not call the Planning agent, create tasks, start orchestration, or create a scheduler entry. To run it after another sprint, pass the returned sprint id to `manage_scheduler` with `action: "schedule_sprint"`, `scheduleMode: "after_sprint_end"`, and the source sprint id. Never call `manage_sprints plan` for that follow-up first: when the scheduled entry starts the still-unplanned sprint, Code UX plans it with auto-start at that time, after the source sprint has completed.
 
 ### `manage_sprints plan`
 
@@ -812,16 +841,52 @@ The direct MCP `manage_sprints` call with `action: "plan"` validates the project
     "status": "started",
     "message": "Sprint planning started in the background. You will be notified when it completes or fails.",
     "projectId": "project-123",
-    "sprintId": "sprint-123"
+    "sprintId": "sprint-123",
+    "planningGuidance": {
+      "status": "in_progress",
+      "asynchronous": true,
+      "isTerminal": false,
+      "invocationId": "planning-request-id",
+      "startedAt": "2026-07-13T10:00:00.000Z",
+      "estimatedDurationMs": 180000,
+      "estimatedCompletionAt": "2026-07-13T10:03:00.000Z",
+      "nextCheckAt": "2026-07-13T10:03:00.000Z",
+      "recheckIntervalMs": 60000,
+      "sampleSize": 2,
+      "isFallbackEstimate": false,
+      "message": "Planning is running asynchronously. Exceeding the estimated completion time is not evidence of failure. Do not requeue, resubmit, or change settings while this invocation remains in progress. Check the same invocation again at 2026-07-13T10:03:00.000Z."
+    }
   }
 }
 ```
 
-The stable result fields are `status`, `message`, `projectId`, and `sprintId`. The acknowledgement means only that background planning started after synchronous validation. It does not mean tasks already exist, planning self-reflection has finished, or optional `autoStart` has completed.
+`planningGuidance` has this serialized contract:
 
-When the call originates from an MCP-backed dashboard chat turn, Code UX captures the originating agent and thread before the background promise settles. Successful completion then persists an existing due-now, non-recurring `agent_wakeup` targeted to that thread. The scheduler delivers the wakeup through the normal chat-agent path and asks the agent to review the generated tasks, recap their count, and state whether execution actually started. If planning fails, Code UX queues the same kind of same-thread wakeup with the failure reason and asks the agent to provide a concise failure recap.
+| Field | Meaning |
+| --- | --- |
+| `status` | Projected planning state: `in_progress`, `succeeded`, `failed`, `cancelled`, or `paused`. Execution invocation `running` and `completed` values project as `in_progress` and `succeeded`. |
+| `asynchronous` | Always `true`; the planning workflow continues beyond the management response. |
+| `isTerminal` | `false` only for `in_progress`; `true` for every other projected state. |
+| `invocationId` | Stable planning request/invocation identity that clients carry through follow-up checks. The initial acknowledgement may use a request identity until the durable invocation exists. |
+| `startedAt` | ISO timestamp used as the estimate origin. |
+| `estimatedDurationMs` | Calculated duration from recent completed project planning samples, or the shared three-minute fallback. |
+| `estimatedCompletionAt` | `startedAt + estimatedDurationMs`; it is an estimate, not a timeout or failure deadline. |
+| `nextCheckAt` | The recommended next status read. On the initial acknowledgement it equals `estimatedCompletionAt`; later in-progress reads set it to one minute after that read; terminal reads set it to `null`. |
+| `recheckIntervalMs` | The subsequent in-progress polling cadence, currently `60000`. |
+| `sampleSize` | Number of usable completed planning durations included in the estimate. |
+| `isFallbackEstimate` | `true` when the estimate used the fallback instead of project history. |
+| `message` | Actionable state guidance. In-progress text explicitly prohibits treating ETA overrun as failure or changing/requeuing active work; terminal text summarizes the projection. |
+| `errorMessage` | Optional terminal failure evidence, populated from the invocation's available error detail and omitted when none exists or planning succeeded. |
 
-Standalone MCP clients have no originating dashboard chat-thread context, so they receive the same immediate acknowledgement without a completion wakeup. They should poll with `manage_sprints` and `manage_tasks`, or inspect the relevant `manage_telemetry` sprint-run, task-dispatch, and invocation state, to determine when planning and any requested auto-start work have completed.
+The existing result fields `status`, `message`, `projectId`, and `sprintId` remain stable, and `planningGuidance` is an additive backward-compatible field. Its estimate uses the project's recent completed planning durations, with the shared three-minute fallback when no usable history exists. The acknowledgement means only that background planning started after synchronous validation. It does not mean tasks already exist, planning self-reflection has finished, or optional `autoStart` has completed.
+
+A repeated `plan` call for the same project and sprint while that request is unsettled does not submit another provider request or attach another terminal callback. It returns `status: "in_progress"` with guidance to check again one minute later. `manage_sprints` `get` preserves every sprint field and adds `planningGuidance` while an in-memory request or sprint-linked planning invocation is available. A still-running request advances `nextCheckAt` by one minute on each read, even after `estimatedCompletionAt`; elapsed ETA alone never changes status or proves failure. Completed planning maps to `succeeded`; failed, cancelled, and paused planning surfaces its terminal state and available error detail. All terminal guidance sets `isTerminal` to `true` and `nextCheckAt` to `null`, so clients stop polling.
+
+When the call originates from an MCP-backed dashboard chat turn, Code UX captures the originating agent and thread before the background promise settles. Successful completion then persists one existing due-now, non-recurring `agent_wakeup` targeted to that thread. The scheduler delivers the wakeup through the normal chat-agent path and asks the agent to review the generated tasks, recap their count, and state whether execution actually started. If planning fails, Code UX queues the same kind of same-thread wakeup with the failure reason and asks the agent to provide a concise failure recap.
+
+The assigned Project Manager separately follows the returned check schedule with agent-owned, one-shot `scheduler_code_ux` wakeups: first at `estimatedCompletionAt`, then at each in-progress response's one-minute `nextCheckAt`. It lists before scheduling to avoid duplicates and never uses recurrence. While planning remains active it does not call `plan` again, requeue/resubmit work, change provider/model/settings, or treat absent tasks or ETA overrun as failure. When terminal guidance or the runtime-owned completion/failure wakeup arrives, it stops polling and cancels its obsolete pending planning-status checks for that invocation or sprint, without cancelling the wakeup currently executing. This prevents the runtime terminal wakeup and an already-scheduled ETA check from producing duplicate dashboard turns.
+
+Standalone MCP clients have no originating dashboard chat-thread context, so they receive the same immediate acknowledgement without a completion wakeup. They should poll `manage_sprints` with `action: "get"`, or inspect tasks and relevant telemetry, to determine when planning and any requested auto-start work have completed. Status reads never create scheduler entries.
 
 This asynchronous response applies only to the direct MCP `manage_sprints` `plan` action. `import_issues` with `planAfterImport`, dashboard planning routes, scheduled sprint planning, quicksprints, and internal callers continue to await planning completion.
 

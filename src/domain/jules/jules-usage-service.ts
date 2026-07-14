@@ -278,12 +278,12 @@ export class JulesUsageService {
       });
     }
 
-    // Rebuild the transcript in chronological order. Clearing first keeps the
-    // message list authoritative on every (live or final) sync.
-    this.executionRepository.clearExecutionInvocationMessages(execInvocation.id);
-    for (const message of this.buildConversationMessages(activities, prompt, record.createdAt)) {
-      this.executionRepository.appendExecutionInvocationMessage(execInvocation.id, message);
-    }
+    // Activity history is cumulative. Reconcile by stable ordinal so an
+    // eight-second live sync only inserts or updates the changed suffix.
+    this.executionRepository.syncExecutionInvocationMessages(
+      execInvocation.id,
+      this.buildConversationMessages(activities, prompt, record.createdAt),
+    );
 
     this.logger.info("Saved Jules usage telemetry and conversation transcript for task", {
       projectId,

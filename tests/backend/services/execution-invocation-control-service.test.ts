@@ -271,7 +271,14 @@ describe("ExecutionInvocationControlService", () => {
       provider: "codex",
       startedAt: "2026-07-02T10:00:00.000Z",
     });
-    const requestStop = vi.fn().mockResolvedValue({ accepted: true });
+    const requestStop = vi.fn().mockImplementation(async () => {
+      expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({
+        status: "cancelled",
+        finishedAt: expect.any(String),
+        lastErrorMessage: "Invocation cancelled from Chat -> Invocations.",
+      });
+      return { accepted: true };
+    });
     activeDispatchRegistry.register({
       dispatchId: dispatch.id,
       taskRunId: taskRun.id,
@@ -307,6 +314,15 @@ describe("ExecutionInvocationControlService", () => {
     expect(projectRepository.getTask(task.id)?.status).toBe("pending");
     expect(executionRepository.listExecutionInvocationMessages(invocation.id).at(-1)?.contentMarkdown)
       .toContain("Invocation cancelled from Chat -> Invocations.");
+
+    const messageCount = executionRepository.listExecutionInvocationMessages(invocation.id).length;
+    const lateResult = await service.cancelInvocation(invocation.id);
+    expect(lateResult).toMatchObject({
+      cancelled: false,
+      message: "Invocation is already cancelled.",
+    });
+    expect(requestStop).toHaveBeenCalledOnce();
+    expect(executionRepository.listExecutionInvocationMessages(invocation.id)).toHaveLength(messageCount);
   });
 
   it("does not stop containers for terminal invocations", async () => {

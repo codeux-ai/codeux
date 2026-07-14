@@ -3,15 +3,23 @@ import type { ExecutionRepository } from "../../repositories/execution-repositor
 import type { QaReviewRepository } from "../../repositories/qa-review-repository.js";
 import { RECOVERED_STALE_QA_SUMMARY_PREFIX } from "../../domain/qa-review/qa-review-budget.js";
 import { calculateInvocationDurationMs } from "./recovery-utils.js";
+import type { DockerContainer } from "../../contracts/app-types.js";
 
 const QA_RUN_START_TIMEOUT_MS = 60_000;
 
 interface QaReviewRecoveryServiceDeps {
   executionRepository: ExecutionRepository;
   qaReviewRepository?: QaReviewRepository;
+  dockerService?: {
+    listContainers: () => Promise<DockerContainer[]>;
+    removeContainers?: (containerIds: string[], options?: { removeVolumes?: boolean }) => Promise<void>;
+  };
 }
 
 export class QaReviewRecoveryService {
+  private providerContainerInventory: Promise<DockerContainer[]> | null = null;
+  private readonly removedProviderContainerIds = new Set<string>();
+
   constructor(private readonly deps: QaReviewRecoveryServiceDeps) {}
 
   async reconcileInterruptedQaReviewRuns(activeContainerSessionIds: ReadonlySet<string>): Promise<string[]> {
@@ -55,6 +63,9 @@ export class QaReviewRecoveryService {
         ? this.deps.executionRepository.getProviderInvocationUsage(latestInvocation.providerInvocationId)
         : null;
       if (providerInvocation?.status === "running") {
+        if (providerInvocation.executionMode === "DOCKER") {
+          await this.removeProviderContainer(providerInvocation.sessionId);
+        }
         this.deps.executionRepository.updateProviderInvocationUsage(providerInvocation.id, {
           status: "cancelled",
           finishedAt: reconciledAt,
@@ -65,6 +76,12 @@ export class QaReviewRecoveryService {
       this.deps.qaReviewRepository.updateRun(run.id, {
         status: "cancelled",
         summaryMarkdown: failureReason,
+        payload: {
+          ...run.payload,
+          reviewNativeSessionId: providerInvocation?.nativeSessionId || run.payload?.reviewNativeSessionId,
+          reviewOpenCodeBaselineRawUsageJson: providerInvocation?.rawUsageJson
+            || run.payload?.reviewOpenCodeBaselineRawUsageJson,
+        },
         finishedAt: reconciledAt,
       });
       reconciledRunIds.push(run.id);
@@ -73,7 +90,39 @@ export class QaReviewRecoveryService {
     return reconciledRunIds;
   }
 
+  private async removeProviderContainer(sessionId: string): Promise<void> {
+    if (!this.deps.dockerService?.removeContainers) {
+      return;
+    }
+    this.providerContainerInventory ??= this.deps.dockerService.listContainers().catch(() => []);
+    const containers = await this.providerContainerInventory;
+    const containerIds = containers
+      .filter((container) => container.labels?.["code-ux.session-id"]?.trim() === sessionId)
+      .map((container) => container.id || container.names)
+      .filter((containerId): containerId is string => (
+        Boolean(containerId) && !this.removedProviderContainerIds.has(containerId as string)
+      ));
+    if (containerIds.length > 0) {
+      await this.deps.dockerService.removeContainers(containerIds, { removeVolumes: false })
+        .then(() => {
+          for (const containerId of containerIds) {
+            this.removedProviderContainerIds.add(containerId);
+          }
+        })
+        .catch(() => undefined);
+    }
+  }
+
   private findLatestQaExecutionInvocation(run: ReturnType<QaReviewRepository["listRunningRuns"]>[number]): ExecutionInvocationRecord | null {
+    const correlatedInvocationId = typeof run.payload?.reviewExecutionInvocationId === "string"
+      ? run.payload.reviewExecutionInvocationId
+      : null;
+    if (correlatedInvocationId) {
+      const correlatedInvocation = this.deps.executionRepository.getExecutionInvocation(correlatedInvocationId);
+      if (correlatedInvocation?.type === "qa_review") {
+        return correlatedInvocation;
+      }
+    }
     const invocations = run.taskRunId
       ? this.deps.executionRepository.listExecutionInvocations({
           projectId: run.projectId,
@@ -139,6 +188,6 @@ export class QaReviewRecoveryService {
       return `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after its Docker container disappeared for session ${providerInvocation.sessionId}. Code UX will retry the review.`;
     }
 
-    return null;
+    return `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after the runtime process restarted. Code UX will continue the preserved review session.`;
   }
 }

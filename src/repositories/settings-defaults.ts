@@ -17,9 +17,6 @@ import type {
   ProviderId,
   ProviderSettings,
   ProviderStrategy,
-  SkillToggle,
-  TechstackCatalogEntrySettings,
-  TechstackCatalogSettings,
   TechstackSelectionSettings,
   VirtualWorkerProvider,
   WorkerExecutionMode,
@@ -36,44 +33,20 @@ import {
   DEFAULT_DESIGN_GUIDANCE_SETTINGS,
   cloneDesignGuidanceSettings,
 } from "../domain/settings/design-guidance-catalog.js";
+import {
+  DEFAULT_SKILLS,
+  DEFAULT_TECHSTACK_CATALOG,
+} from "../domain/settings/project-creation-defaults.js";
 
-export const INTERNAL_SKILL_NAMES = [
-  "git_manager",
-  "git_manager_remote",
-  "git_manager_local",
-] as const;
+export {
+  BUILTIN_CODE_UX_TECHSTACK,
+  BUILTIN_CODE_UX_TECHSTACK_ID,
+  DEFAULT_SKILLS,
+  DEFAULT_TECHSTACK_CATALOG,
+  INTERNAL_SKILL_NAMES,
+} from "../domain/settings/project-creation-defaults.js";
 
-export const INTERNAL_SKILL_SET = new Set<string>(INTERNAL_SKILL_NAMES);
-
-export const DEFAULT_SKILLS: SkillToggle[] = INTERNAL_SKILL_NAMES.map((name) => ({
-  name,
-  enabled: name === "git_manager_local" ? false : true,
-  isInternal: true,
-}));
-
-export const BUILTIN_CODE_UX_TECHSTACK_ID = "code-ux-internal";
-
-export const BUILTIN_CODE_UX_TECHSTACK: TechstackCatalogEntrySettings = {
-  id: BUILTIN_CODE_UX_TECHSTACK_ID,
-  label: "Code UX Stack",
-  items: [
-    { id: "preact", label: "Preact" },
-    { id: "tanstack-router", label: "TanStack Router" },
-    { id: "gsap", label: "GSAP" },
-    { id: "three-js", label: "Three.js" },
-    { id: "lucide-icons", label: "Lucide Icons" },
-  ],
-};
-
-export const DEFAULT_TECHSTACK_CATALOG: TechstackCatalogSettings = {
-  defaultTechstackId: BUILTIN_CODE_UX_TECHSTACK_ID,
-  entries: [
-    {
-      ...BUILTIN_CODE_UX_TECHSTACK,
-      items: BUILTIN_CODE_UX_TECHSTACK.items.map((item) => ({ ...item })),
-    },
-  ],
-};
+export const INTERNAL_SKILL_SET = new Set<string>(DEFAULT_SKILLS.map((skill) => skill.name));
 
 export const DEFAULT_PROJECT_TECHSTACK: TechstackSelectionSettings = {
   selectedTechstackId: null,
@@ -153,10 +126,15 @@ export const PROVIDER_THINKING_MODE_CATALOG = {
     { value: "high", label: "High" },
   ],
 } as const satisfies Partial<Record<ProviderId, readonly ThinkingModeOption[]>>;
+const CODEX_SOL_THINKING_MODE_OPTIONS = [
+  { value: "max", label: "Max" },
+  { value: "ultra", label: "Ultra" },
+] as const satisfies readonly ThinkingModeOption[];
 export const THINKING_MODES: ThinkingMode[] = [
   ...new Set<ThinkingMode>([
     ...LEGACY_THINKING_MODES,
     ...Object.values(PROVIDER_THINKING_MODE_CATALOG).flat().map((option) => option.value),
+    ...CODEX_SOL_THINKING_MODE_OPTIONS.map((option) => option.value),
   ]),
 ];
 export const DEFAULT_PROVIDER_THINKING_MODES: Record<ProviderId, ThinkingMode> = {
@@ -177,9 +155,22 @@ const LEGACY_THINKING_MODE_ALIASES_BY_PROVIDER: Partial<Record<ProviderId, Recor
   opencode: { SMALL: "low", MEDIUM: "medium", HIGH: "high" },
   antigravity: { SMALL: "low", MEDIUM: "high", HIGH: "high" },
 };
-export const getProviderThinkingModeOptions = (providerId: ProviderId): readonly ThinkingModeOption[] => (
-  (PROVIDER_THINKING_MODE_CATALOG as Partial<Record<ProviderId, readonly ThinkingModeOption[]>>)[providerId] ?? []
-);
+export const isCodexSolModel = (model: unknown): boolean => {
+  if (typeof model !== "string") {
+    return false;
+  }
+  const normalized = model.trim().toLowerCase().replace(/^openai\//, "");
+  return /^gpt-[0-9.]+-sol(?:-|$)/.test(normalized);
+};
+export const getProviderThinkingModeOptions = (
+  providerId: ProviderId,
+  model?: string | null,
+): readonly ThinkingModeOption[] => {
+  const baseOptions = (PROVIDER_THINKING_MODE_CATALOG as Partial<Record<ProviderId, readonly ThinkingModeOption[]>>)[providerId] ?? [];
+  return providerId === "codex" && isCodexSolModel(model)
+    ? [...baseOptions, ...CODEX_SOL_THINKING_MODE_OPTIONS]
+    : baseOptions;
+};
 export const providerSupportsThinkingModeSelection = (providerId: ProviderId): boolean => (
   getProviderThinkingModeOptions(providerId).length > 0
 );
@@ -189,11 +180,12 @@ export const getDefaultThinkingModeForProvider = (providerId: ProviderId): Think
 export const isProviderThinkingModeSupported = (
   providerId: ProviderId,
   value: unknown,
+  model?: string | null,
 ): value is ThinkingMode => {
   if (typeof value !== "string") {
     return false;
   }
-  if (getProviderThinkingModeOptions(providerId).some((option) => option.value === value)) {
+  if (getProviderThinkingModeOptions(providerId, model).some((option) => option.value === value)) {
     return true;
   }
   if (LEGACY_THINKING_MODES.includes(value as LegacyThinkingMode)) {
@@ -207,9 +199,10 @@ export const normalizeProviderThinkingMode = (
   providerId: ProviderId,
   value: unknown,
   fallback: ThinkingMode = getDefaultThinkingModeForProvider(providerId),
+  model?: string | null,
 ): ThinkingMode => {
   if (typeof value === "string") {
-    const options = getProviderThinkingModeOptions(providerId);
+    const options = getProviderThinkingModeOptions(providerId, model);
     if (options.some((option) => option.value === value)) {
       return value as ThinkingMode;
     }
@@ -221,7 +214,7 @@ export const normalizeProviderThinkingMode = (
       return fallback;
     }
   }
-  if (isProviderThinkingModeSupported(providerId, fallback)) {
+  if (isProviderThinkingModeSupported(providerId, fallback, model)) {
     return fallback;
   }
   return getDefaultThinkingModeForProvider(providerId);
@@ -730,7 +723,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   consoleLogLevel: "info",
   debugLogFileLevel: "error",
   consoleLogMode: "standard",
-  dbAutoVacuumOnStartup: true,
+  dbAutoVacuumOnStartup: false,
   dbPruningEnabled: true,
   dbRetentionDays: 14,
   restartSprintPolicy: "continue",

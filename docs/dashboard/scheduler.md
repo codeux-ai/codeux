@@ -26,6 +26,8 @@ The runtime contract additionally accepts:
 
 Task targets are created through the broad scheduler management surface, not through `scheduler_code_ux`. Agent wakeups are intentionally backend-only in the dashboard form; they provide the storage and execution model for the restricted agent scheduler without changing the dashboard target picker. The restricted agent scheduler can create immediate post-reply wakeups with `wakeAfterReply: true`, timed wakeups with `scheduledFor` or relative delays, and completion-anchored wakeups with `afterSprintId` or `afterTaskId`.
 
+For `scheduler_code_ux` calls made during a dashboard chat turn, an omitted, null, or blank `threadId` defaults to the originating MCP thread and the resolved id is persisted in `agentWakeupTarget`. A supplied non-empty `threadId` remains an explicit override. Standalone MCP requests have no originating thread, so omitted or empty targets remain threadless. Contextual and explicit targets follow the same project/thread ownership validation when the wakeup is delivered; the fallback does not permit cross-project delivery.
+
 When `agent_wakeup` entries are created by the secured MCP scheduler tool, the Scheduler page can display them in the calendar, 24-hour view, stats, and scheduled-entry list. They use their own concise target labels, chips, and summaries, for example an agent wakeup thread, instead of falling back to chat labels.
 
 The dashboard form supports operator-created sprint, quicksprint, node-flow, chat, and memory remediation targets. Node-flow entries select a saved project flow and may include optional JSON object input; blank input is omitted from the scheduler payload, and invalid JSON or non-object JSON is rejected before submission. MCP-created `agent_wakeup` entries cannot be safely edited in that form, so their Edit action explains that dashboard editing is unavailable while Pause, Resume, and Delete remain available.
@@ -78,7 +80,7 @@ The target payload keys are:
 - `chatTarget`: `{ bodyMarkdown, threadId?, title?, connectionId? }`
 - `memoryRemediationTarget`: `{ mode, source? }`
 - `taskTarget`: `{ taskId, provider?, origin: "agent_scheduler", source: "agent_scheduler", createdByAgentId? }`
-- `nodeFlowTarget`: `{ flowId, input?, flowVersion? }`
+- `nodeFlowTarget`: `{ flowId, input?, versionSelection }`; legacy `flowVersion` normalizes to pinned selection
 - `agentWakeupTarget`: `{ bodyMarkdown, threadId?, title?, connectionId?, origin: "agent_scheduler", source: "agent_scheduler", createdByAgentId? }`
 
 `node_flow` entries keep their flow id and optional input in `target_json`; ownership is checked when entries are created or updated and again before due-run execution. The persisted `flowVersion` is target metadata and is passed in scheduler trigger payloads for auditability; the current runtime executes through the latest node-flow runtime API. Due-run handling treats the returned node-flow run status as authoritative: only `succeeded` advances the schedule as successful, while `failed` and `cancelled` mark the scheduler entry `failed`, persist the run error, and record the attempted occurrence in `lastRunAt` and `runCount`. `agent_wakeup` and `task` entries always normalize `origin` and `source` to `agent_scheduler` in `target_json`. When the creator supplies `createdByAgentId`, it is preserved with the target payload for later authorization, audit, and notification work. Existing sprint, quicksprint, chat, memory remediation, recurrence, pause/resume, and `after_sprint_end` anchor rows continue to hydrate from the same JSON payload without a schema migration.
@@ -134,7 +136,7 @@ Agent-created `agent_wakeup` and `task` entries are display-only in the dashboar
 ### Due Entry Execution
 
 Due entries execute through existing production paths:
-- sprint entries with no tasks call the planning path with auto-start enabled, so successful planning creates the tasks and starts execution automatically; sprint entries that already have tasks call `ExecutionControlService.orchestrateSprint` directly
+- every sprint entry calls `ExecutionControlService.orchestrateSprint`, regardless of whether tasks already exist. Planned sprints continue directly into orchestration. Unplanned sprints use the normal start pipeline: branch preflight runs first, planning starts automatically, and successful planning requests orchestration again after the generated tasks are saved
 - quicksprint entries call `QuicksprintService.executeQuicksprint`
 - chat entries call `ChatThreadRuntimeService.postMessage`
 - memory remediation entries call `MemoryRemediationService.remediateLongTermMemories`
@@ -144,7 +146,11 @@ Due entries execute through existing production paths:
 
 When an agent schedules a wakeup with `wakeAfterReply: true`, the entry is stored as due now. `ChatThreadRuntimeService` drains due scheduler entries after the current dashboard reply finishes and its in-flight turn is cleared, so the scheduled wakeup can start the next turn immediately without superseding the reply that created it.
 
-The direct MCP `manage_sprints` `plan` action reuses this existing wakeup bridge when it originates in dashboard chat. After background planning settles, Code UX creates a due-now, non-recurring `agent_wakeup` for the originating thread with `origin` and `source` set to `agent_scheduler`. A successful-planning wakeup asks the chat agent to review the generated tasks, recap their count, and report whether auto-start actually began execution. A failed-planning wakeup includes the failure reason and asks for a concise failure recap. Standalone MCP calls have no originating chat thread, so they do not create this wakeup and must poll sprint/task or telemetry state instead.
+The direct MCP `manage_sprints` `plan` action reuses this existing wakeup bridge when it originates in dashboard chat. After background planning settles, Code UX creates exactly one due-now, non-recurring `agent_wakeup` for the originating thread with `origin` and `source` set to `agent_scheduler`. A successful-planning wakeup asks the chat agent to review the generated tasks, recap their count, and report whether auto-start actually began execution. A failed-planning wakeup includes the failure reason and asks for a concise failure recap.
+
+Before that terminal callback, the assigned Project Manager follows `planningGuidance` with its own one-shot status wakeups. The first uses `scheduledFor = estimatedCompletionAt`; if the refreshed status remains `in_progress`, the manager schedules only one replacement at the returned `nextCheckAt`, which is one minute later. These checks never use recurrence. ETA overrun does not mean planning failed, so the manager does not call `plan` again, requeue/resubmit, or change provider/model/settings while guidance remains non-terminal. When the existing runtime completion/failure wakeup arrives, the manager cancels obsolete pending status checks it created for that planning invocation or sprint, excluding the wakeup currently executing. This cleanup prevents a later ETA check from creating a duplicate dashboard turn.
+
+Standalone MCP calls have no originating chat thread, so they create neither the runtime completion wakeup nor Project Manager status wakeups. Standalone clients must poll sprint `get`, task, or telemetry state at the returned `nextCheckAt`; those reads do not create scheduler entries.
 
 This planning-completion behavior is an internal producer of the existing `agent_wakeup` target; it does not add a scheduling action or broaden either scheduler MCP surface. `manage_scheduler` remains the broad project-manager scheduler tool, while `scheduler_code_ux` remains restricted to agent-owned `list`, `schedule_wakeup`, and `cancel` operations.
 
@@ -152,11 +158,11 @@ AI memory remediation entries create a `remediation` invocation record even when
 
 After a successful run, the service advances `nextRunAt` from the scheduled occurrence time. One-time entries move to `completed`; recurring entries stay `scheduled` until their count or end date/time is exhausted. Failed entries move to `failed` with `lastError` for operator visibility. Node-flow entries are durably claimed before `runFlow` is awaited so the same due occurrence is not dispatched again after a restart, then the scheduler entry is finalized from the returned node-flow run status.
 
-For sprint targets, failures from either automatic planning or direct orchestration are recorded on the scheduler entry: the entry moves to `failed`, and `lastError` exposes the failure in the scheduled-entry list.
+For sprint targets, a failure returned while the scheduler submits the normal start request moves the entry to `failed`, and `lastError` exposes that failure in the scheduled-entry list. Planning and orchestration continue asynchronously after an accepted start; later provider failures remain visible through their planning invocation or sprint run rather than rewriting the already accepted scheduler occurrence.
 
 ### Node-Flow Schedules
 
-Node-flow schedules use `targetType: "node_flow"` and `nodeFlowTarget = { flowId, input?, flowVersion? }`.
+Node-flow schedules use `targetType: "node_flow"` and `nodeFlowTarget = { flowId, input?, versionSelection }`. A pinned selection always executes that published graph and policy snapshot after newer versions are published; `latest_published` resolves the newest publication per occurrence.
 
 Behavior:
 
@@ -173,6 +179,7 @@ Behavior:
 
 Anchored entries are evaluated separately from absolute `nextRunAt` polling:
 - An `after_sprint_end` entry is due only after the source sprint's effective status reaches successful `completed`; failed, cancelled, and otherwise non-completed sources remain unresolved.
+- A follow-up sprint stored without planned tasks therefore remains only a draft while its source sprint is running. Its planning provider is not invoked until the completion anchor becomes due and the scheduler submits the follow-up through the normal start path.
 - The anchor timestamp is the latest successful sprint run `finishedAt` when a valid one exists; otherwise the scheduler falls back to the completed sprint's `endDate`.
 - An `after_task_end` entry is due only after the source task reaches `completed` or `QA_REVIEW_FAILED`.
 - The task anchor timestamp is the latest terminal task run `finishedAt` when one exists, then the latest terminal task dispatch `finishedAt`, and finally the task `updatedAt` fallback.

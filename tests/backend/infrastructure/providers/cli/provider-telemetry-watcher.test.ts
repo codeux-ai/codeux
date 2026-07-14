@@ -127,6 +127,79 @@ describe("ProviderTelemetryWatcher", () => {
     await watcher.stop();
   });
 
+  it("consumes Docker Codex byte deltas and skips a zero-byte unchanged poll", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const rollout = [
+      JSON.stringify({ type: "session_meta", payload: { id: "chunk-session" } }),
+      JSON.stringify({
+        type: "response_item",
+        timestamp: "2026-07-14T00:00:00.000Z",
+        payload: { type: "message", role: "assistant", content: [{ type: "output_text", text: "delta" }] },
+      }),
+    ].join("\n");
+    const bytes = Buffer.from(rollout);
+    const readChunk = vi.fn(async (cursor: { sourceId: string | null; offset: number }) => cursor.offset === 0
+      ? {
+          sourceId: "9:100",
+          startOffset: 0,
+          nextOffset: bytes.length,
+          totalBytes: bytes.length,
+          contentBase64: bytes.toString("base64"),
+          reset: true,
+        }
+      : {
+          sourceId: "9:100",
+          startOffset: bytes.length,
+          nextOffset: bytes.length,
+          totalBytes: bytes.length,
+          contentBase64: "",
+          reset: false,
+        });
+    const opts = {
+      provider: "codex" as const,
+      model: "test-model",
+      prompt: "test",
+      cwd: "/cwd",
+      startedMs: Date.parse("2026-07-14T00:00:00.000Z"),
+      workflowSettings: { executionMode: "DOCKER" as const },
+      signal: controller.signal,
+      getAccumulatedRawStdout: () => "",
+      getAccumulatedStderr: () => "",
+      nativeSessionId: null,
+      sessionId: "sess-1",
+      antigravityLogPath: null,
+      readClaudeSessionJsonl: vi.fn(),
+      readCodexLatestSessionJson: vi.fn(),
+      readCodexLatestSessionChunk: readChunk,
+      readQwenLogData: vi.fn(),
+      parseAntigravityConversationId: vi.fn(),
+      readAntigravityTranscript: vi.fn(),
+      resolveAntigravityDatabase: vi.fn(),
+      onTelemetry: vi.fn(),
+    };
+    const watcher = new ProviderTelemetryWatcher(opts as any);
+    watcher.start();
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(1500);
+
+    expect(readChunk).toHaveBeenNthCalledWith(1, { sourceId: null, offset: 0 });
+    expect(readChunk).toHaveBeenNthCalledWith(2, { sourceId: "9:100", offset: bytes.length });
+    expect(opts.readCodexLatestSessionJson).not.toHaveBeenCalled();
+    expect(collectProviderUsageTelemetry).toHaveBeenCalledTimes(1);
+    expect(collectProviderUsageTelemetry).toHaveBeenCalledWith(expect.objectContaining({
+      codexSessionJson: null,
+      codexRollout: expect.objectContaining({
+        nativeSessionId: "chunk-session",
+        conversation: [expect.objectContaining({ text: "delta" })],
+      }),
+    }));
+
+    controller.abort();
+    await watcher.stop();
+  });
+
   it.each([
     {
       provider: "claude-code" as const,

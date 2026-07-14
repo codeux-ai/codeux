@@ -1,17 +1,23 @@
 import type { AppDbStorage } from "../app-db-storage.js";
-import type { SprintReviewSummary, SprintRecord } from "../../contracts/project-management-types.js";
+import type { CardCiStatus, SprintRecord } from "../../contracts/project-management-types.js";
+import type { SprintReviewSummary } from "../../contracts/qa-review-summary.js";
 import type { SprintProgressTask } from "../../domain/sprint/sprint-progress.js";
+import { resolveSprintCardCiStatus, resolveTaskCardCiStatus } from "../../domain/sprint/card-ci-status.js";
 import { toNumber } from "../repository-utils.js";
+import { loadCardCiStatusEvidence } from "./card-ci-status-query.js";
+import { loadLatestSprintReviewSummaryMap } from "./qa-review-summary-query.js";
 
 export interface SprintSummaryAggregation {
   tasksCount: number;
   completedTasks: number;
   progressTasks: SprintProgressTask[];
   latestRunStatus: string | null;
+  ciStatus: CardCiStatus | null;
   latestReview?: SprintReviewSummary;
 }
 
 interface SprintTaskProgressRow {
+  task_id: string;
   sprint_id: string;
   status: SprintProgressTask["status"];
   is_merged: number | string | null;
@@ -22,11 +28,6 @@ interface SprintTaskProgressRow {
 interface SprintLatestRunRow {
   sprint_id: string;
   latest_run_status: string | null;
-}
-
-interface SprintLatestReviewRow {
-  sprint_id: string;
-  latest_sprint_review_json: string | null;
 }
 
 export const sprintSummaryQuery = {
@@ -46,6 +47,11 @@ export const sprintSummaryQuery = {
         s.end_date,
         s.feature_branch,
         s.base_commit_sha,
+        s.kind,
+        s.rollback_source_sprint_id,
+        s.rollback_mode,
+        s.rollback_instructions,
+        s.rollback_safety_reason,
         s.created_at,
         s.updated_at
   `,
@@ -66,6 +72,7 @@ export function loadSprintSummaryAggregationMap(
       completedTasks: 0,
       progressTasks: [],
       latestRunStatus: null,
+      ciStatus: null,
     });
   }
 
@@ -73,9 +80,10 @@ export function loadSprintSummaryAggregationMap(
     return map;
   }
 
-  for (const row of storage.executeChunkedInQuery<SprintTaskProgressRow>({
+  const taskRows = storage.executeChunkedInQuery<SprintTaskProgressRow>({
     sqlPrefix: `
       SELECT
+        t.id AS task_id,
         t.sprint_id,
         t.status,
         t.is_merged,
@@ -90,7 +98,8 @@ export function loadSprintSummaryAggregationMap(
       GROUP BY t.sprint_id, t.id, t.status, t.is_merged, t.merge_indicator
     `,
     items: uniqueSprintIds,
-  })) {
+  });
+  for (const row of taskRows) {
     const aggregate = map.get(row.sprint_id);
     if (aggregate) {
       aggregate.tasksCount += 1;
@@ -102,6 +111,36 @@ export function loadSprintSummaryAggregationMap(
         isMerged: Boolean(toNumber(row.is_merged)),
         mergeIndicator: row.merge_indicator,
         toolCallCount: toNumber(row.coding_tool_call_count),
+      });
+    }
+  }
+
+  const ciEvidence = loadCardCiStatusEvidence(storage, {
+    taskIds: taskRows.map((row) => row.task_id),
+    sprintIds: uniqueSprintIds,
+  });
+  const taskCiStatusesBySprintId = new Map<string, CardCiStatus[]>();
+  for (const row of taskRows) {
+    const ciStatus = resolveTaskCardCiStatus({
+      status: row.status,
+      isMerged: Boolean(toNumber(row.is_merged)),
+      mergeIndicator: row.merge_indicator,
+      latestGateEvent: ciEvidence.latestTaskGateByTaskId.get(row.task_id),
+      hasActiveFailure: ciEvidence.failedTaskIds.has(row.task_id),
+    });
+    if (ciStatus) {
+      const statuses = taskCiStatusesBySprintId.get(row.sprint_id) || [];
+      statuses.push(ciStatus);
+      taskCiStatusesBySprintId.set(row.sprint_id, statuses);
+    }
+  }
+  for (const sprintId of uniqueSprintIds) {
+    const aggregate = map.get(sprintId);
+    if (aggregate) {
+      aggregate.ciStatus = resolveSprintCardCiStatus({
+        taskStatuses: taskCiStatusesBySprintId.get(sprintId) || [],
+        latestMainMergeGateEvent: ciEvidence.latestMainMergeGateBySprintId.get(sprintId),
+        hasActiveMainMergeFailure: ciEvidence.failedSprintIds.has(sprintId),
       });
     }
   }
@@ -131,51 +170,10 @@ export function loadSprintSummaryAggregationMap(
     }
   }
 
-  for (const row of storage.executeChunkedInQuery<SprintLatestReviewRow>({
-    sqlPrefix: `
-      SELECT
-        sprint_id,
-        json_object(
-          'status', status,
-          'outcome', outcome,
-          'summary', summary_markdown,
-          'findings', COALESCE(json_extract(payload_json, '$.findings'), json_array()),
-          'reviewer', agent_name,
-          'finishedAt', finished_at
-        ) AS latest_sprint_review_json
-      FROM (
-        SELECT
-          sprint_id,
-          status,
-          outcome,
-          summary_markdown,
-          payload_json,
-          agent_name,
-          finished_at,
-          ROW_NUMBER() OVER (
-            PARTITION BY sprint_id
-            ORDER BY started_at DESC, rowid DESC
-          ) AS row_number
-        FROM qa_review_runs
-        WHERE sprint_id`,
-    sqlSuffix: `
-          AND trigger_type = 'sprint_completion'
-      )
-      WHERE row_number = 1
-    `,
-    items: uniqueSprintIds,
-  })) {
-    const aggregate = map.get(row.sprint_id);
-    if (!aggregate || !row.latest_sprint_review_json) {
-      continue;
-    }
-    try {
-      const parsed = JSON.parse(row.latest_sprint_review_json) as SprintReviewSummary;
-      parsed.findings = Array.isArray(parsed.findings) ? parsed.findings : [];
-      aggregate.latestReview = parsed;
-    } catch {
-      // Ignore malformed persisted QA payloads.
-    }
+  const reviewMap = loadLatestSprintReviewSummaryMap(storage, uniqueSprintIds);
+  for (const [sprintId, review] of reviewMap) {
+    const aggregate = map.get(sprintId);
+    if (aggregate) aggregate.latestReview = review;
   }
 
   return map;

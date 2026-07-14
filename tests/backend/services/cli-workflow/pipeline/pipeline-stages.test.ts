@@ -431,6 +431,44 @@ describe("executePrepareStage", () => {
 });
 
 describe("executeProviderStage", () => {
+  it("reuses the preparation invocation and defers its completion past provider execution", async () => {
+    const ctx = createMockContext();
+    const executionInvocation = {
+      id: "exec-prepared",
+      status: "running",
+      providerInvocationId: null as string | null,
+    };
+    ctx.executionInvocationId = executionInvocation.id;
+    ctx.deps.executionRepository!.getExecutionInvocation = vi.fn().mockReturnValue(executionInvocation as any);
+    vi.mocked(ctx.deps.executionRepository!.updateExecutionInvocation).mockImplementation((_id, input) => {
+      Object.assign(executionInvocation, input);
+      return executionInvocation as any;
+    });
+    vi.mocked(ctx.providerRunner.runProvider).mockResolvedValueOnce({
+      ok: true,
+      stdout: "success",
+      stderr: "",
+      usageTelemetry: { transcriptText: "success transcript" } as any,
+    });
+
+    await executeProviderStage(ctx, "prompt");
+
+    expect(ctx.deps.executionRepository!.createExecutionInvocation).not.toHaveBeenCalled();
+    expect(ctx.deps.executionRepository!.createProviderInvocationUsage).toHaveBeenCalledOnce();
+    expect(executionInvocation).toMatchObject({
+      status: "running",
+      providerInvocationId: "usage-1",
+    });
+    expect(ctx.deps.executionRepository!.updateExecutionInvocation).not.toHaveBeenCalledWith(
+      "exec-prepared",
+      expect.objectContaining({ status: "completed" }),
+    );
+    expect(ctx.deps.executionRepository!.appendExecutionInvocationMessage).toHaveBeenCalledWith("exec-prepared", {
+      role: "user",
+      contentMarkdown: "prompt",
+    });
+  });
+
   it("passes the narrow clarification gateway and worker identity to a task-coding provider run", async () => {
     const ctx = createMockContext();
     ctx.agentPresetId = "assigned-worker";
@@ -544,6 +582,7 @@ describe("executeProviderStage", () => {
       }),
       undefined,
       undefined,
+      "exec-1",
     );
   });
 

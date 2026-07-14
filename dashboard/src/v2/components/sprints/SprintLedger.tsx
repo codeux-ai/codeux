@@ -17,6 +17,7 @@ import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 import type { Sprint } from "../../types.js";
 import type { ExecutionHumanInterventionSummary } from "../../../../../src/contracts/app-types.js";
+import type { CiStatusPresentation } from "../../lib/ci-status-presentation.js";
 import {
   filterSprints,
   sortSprints,
@@ -45,6 +46,8 @@ import { SprintLedgerHeader } from "./SprintLedgerHeader.js";
 import { SprintLedgerBulkActions } from "./SprintLedgerBulkActions.js";
 import { SprintLedgerRow } from "./SprintLedgerRow.js";
 
+const EMPTY_CI_STATUS_BY_SPRINT_ID = new Map<string, CiStatusPresentation>();
+
 export interface SprintLedgerProps {
   initialQuery?: string;
   sprints: Sprint[];
@@ -55,6 +58,7 @@ export interface SprintLedgerProps {
   activeRunsBySprintId: Map<string, { id: string; status: string }>;
   pauseResumeRunsBySprintId: Map<string, { id: string; status: string }>;
   interventionBySprintId: Map<string, ExecutionHumanInterventionSummary>;
+  ciStatusBySprintId?: ReadonlyMap<string, CiStatusPresentation>;
   pendingActionIds: Set<string>;
   onToggleShowcase: (sprint: Sprint) => void;
   onSprintToggle: (sprintId: string) => void;
@@ -65,7 +69,10 @@ export interface SprintLedgerProps {
   onEditSprint: (sprint: Sprint) => void;
   onExportSprint: (sprint: Sprint) => void;
   onOverridesSprint: (sprint: Sprint) => void;
+  onUpdateBranchSprint?: (sprint: Sprint) => void;
   onMarkCompletedSprint: (sprintId: string) => void;
+  onMarkQaPassedSprint?: (sprintId: string) => void;
+  onRollbackSprint?: (sprint: Sprint) => void;
   onDeleteSprint: (sprintId: string) => void;
   onBulkShowcaseEnable: (sprintIds: string[]) => void;
   onBulkShowcaseDisable: (sprintIds: string[]) => void;
@@ -81,6 +88,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
   activeRunsBySprintId,
   pauseResumeRunsBySprintId,
   interventionBySprintId,
+  ciStatusBySprintId = EMPTY_CI_STATUS_BY_SPRINT_ID,
   pendingActionIds,
   onToggleShowcase,
   onSprintToggle,
@@ -89,7 +97,10 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
   onEditSprint,
   onExportSprint,
   onOverridesSprint,
+  onUpdateBranchSprint,
   onMarkCompletedSprint,
+  onMarkQaPassedSprint,
+  onRollbackSprint,
   onDeleteSprint,
   onBulkStart,
   onBulkDelete,
@@ -677,6 +688,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                   activeRun={activeRunsBySprintId.get(sprint.id)}
                   pauseResumeRun={pauseResumeRunsBySprintId.get(sprint.id)}
                   humanIntervention={actionableInterventionBySprintId.get(sprint.id) || null}
+                  ciStatus={ciStatusBySprintId.get(sprint.id) || null}
                   sprintKeyPrefix={sprintKeyPrefix}
                   pendingActionIds={pendingActionIds}
                   isAnyBulkPending={isAnyBulkPending}
@@ -691,7 +703,10 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                   onEdit={() => onEditSprint(sprint)}
                   onExport={() => onExportSprint(sprint)}
                   onOverrides={() => onOverridesSprint(sprint)}
+                  onUpdateBranch={sprint.status === "idle" && onUpdateBranchSprint ? () => onUpdateBranchSprint(sprint) : undefined}
                   onMarkCompleted={() => onMarkCompletedSprint(sprint.id)}
+                  onMarkQaPassed={onMarkQaPassedSprint ? () => onMarkQaPassedSprint(sprint.id) : undefined}
+                  onRollback={onRollbackSprint ? () => onRollbackSprint(sprint) : undefined}
                   onDelete={() => { void handleDeleteSprint(sprint); }}
                 />
               ))

@@ -79,6 +79,30 @@ describe("ProviderRunner", () => {
     }));
   });
 
+  it("keeps structured Docker provider events out of the activity stream", async () => {
+    const onActivity = vi.fn();
+    dockerRunner.runProviderInDocker.mockImplementation(async (options: any) => {
+      options.onActivity(JSON.stringify({ type: "message", text: "machine event" }), "agent");
+      options.onActivity("Readable progress", "agent");
+      return { ok: true, stdout: "", stderr: "", code: 0, signal: null };
+    });
+
+    await runner.runProvider({
+      provider: "gemini",
+      prompt: "hello",
+      cwd: "/repo",
+      model: "gemini-2.5-pro",
+      apiKey: "key",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity,
+    });
+
+    expect(onActivity).toHaveBeenCalledWith("Readable progress", "agent");
+    expect(onActivity).not.toHaveBeenCalledWith(expect.stringContaining("machine event"), "agent");
+  });
+
   it("executes mockup-cli in host mode without credentials and mutates only the workspace", async () => {
     const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "mockup-cli-host-"));
     const outsidePath = path.join(os.tmpdir(), "mockup-cli-outside.txt");

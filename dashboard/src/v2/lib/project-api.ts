@@ -1,6 +1,7 @@
 import type {
   CreateProjectInput,
   CreateSprintInput,
+  CreateSprintRollbackResult,
   CreateTaskInput,
   IssuePromptContext,
   IssuePromptContextInput,
@@ -21,6 +22,8 @@ import type {
   SprintLinkedIssueInput,
   SprintLinkedIssueRecord,
   SprintRecord,
+  SprintBranchUpdateResult,
+  SprintRollbackAssessment,
   TaskRecord,
   UpdateProjectInput,
   UpdateSprintInput,
@@ -362,6 +365,28 @@ export const createSprint = async (projectId: string, input: CreateSprintInput):
   });
 };
 
+export const assessSprintRollback = async (
+  projectId: string,
+  sprintId: string,
+  signal?: AbortSignal,
+): Promise<SprintRollbackAssessment> => fetchJson<SprintRollbackAssessment>(
+  `/api/projects/${encodeURIComponent(projectId)}/sprints/${encodeURIComponent(sprintId)}/rollback/assessment`,
+  { signal },
+);
+
+export const createSprintRollback = async (
+  projectId: string,
+  sprintId: string,
+  instructions: string,
+): Promise<CreateSprintRollbackResult> => fetchJson<CreateSprintRollbackResult>(
+  `/api/projects/${encodeURIComponent(projectId)}/sprints/${encodeURIComponent(sprintId)}/rollback`,
+  {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ instructions: instructions.trim() || undefined }),
+  },
+);
+
 export const improveSprintPrompt = async (
   projectId: string,
   input: ImprovePromptInput,
@@ -405,6 +430,28 @@ export const updateSprint = async (sprintId: string, input: UpdateSprintInput): 
   });
 };
 
+export const updateSprintBranch = async (
+  projectId: string,
+  sprintId: string,
+): Promise<SprintBranchUpdateResult> => {
+  return fetchJson<SprintBranchUpdateResult>(
+    `/api/projects/${encodeURIComponent(projectId)}/sprints/${encodeURIComponent(sprintId)}/update-branch`,
+    { method: "POST" },
+  );
+};
+
+export const markSprintCompleted = async (sprintId: string): Promise<SprintRecord> => {
+  return fetchJson<SprintRecord>(`/api/sprints/${encodeURIComponent(sprintId)}/complete`, {
+    method: "POST",
+  });
+};
+
+export const markSprintQaPassed = async (sprintId: string): Promise<SprintRecord> => {
+  return fetchJson<SprintRecord>(`/api/sprints/${encodeURIComponent(sprintId)}/qa-pass`, {
+    method: "POST",
+  });
+};
+
 export const deleteSprint = async (sprintId: string): Promise<void> => {
   await fetchJson<{ ok: boolean }>(`/api/sprints/${encodeURIComponent(sprintId)}`, {
     method: "DELETE",
@@ -431,10 +478,13 @@ export const exportSprintMarkdown = async (
   );
 };
 
-export const fetchTasks = async (projectId: string, sprintId?: string): Promise<TaskRecord[]> => {
+export const fetchTasks = async (projectId: string, sprintId?: string, view?: "overview"): Promise<TaskRecord[]> => {
   const url = new URL(`/api/projects/${encodeURIComponent(projectId)}/tasks`, window.location.origin);
   if (sprintId) {
     url.searchParams.set("sprintId", sprintId);
+  }
+  if (view) {
+    url.searchParams.set("view", view);
   }
   return fetchJson<TaskRecord[]>(`${url.pathname}${url.search}`);
 };

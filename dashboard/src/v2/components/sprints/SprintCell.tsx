@@ -3,25 +3,20 @@ import { useRef, useState } from "preact/hooks";
 import { Link } from "@tanstack/react-router";
 import gsap from "gsap";
 import {
-  Activity,
-  AlertTriangle,
   CalendarDays,
   Check,
-  CheckCircle2,
-  Clock3,
+  IdCard,
   Loader2,
   Maximize2,
   MoreVertical,
   Play,
-  Sparkles,
+  RotateCcw,
   Square,
-  XCircle,
 } from "lucide-preact";
 import type { ExecutionHumanInterventionSummary, Sprint, SprintStatus } from "../../types.js";
-import { WaveFluid } from "../ui/WaveFluid.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
-import { HumanInterventionBadge } from "../ui/HumanInterventionBadge.js";
-import { SprintReviewBadge } from "./SprintReviewBadge.js";
+import { WorkflowStatusBadge } from "../ui/WorkflowStatusBadge.js";
+import type { CiStatusPresentation } from "../../lib/ci-status-presentation.js";
 import { SprintActionMenu } from "./SprintActionMenu.js";
 import {
   resolveSprintAttentionIndicatorState,
@@ -29,37 +24,35 @@ import {
 } from "./SprintAttentionIndicator.js";
 import { DropdownMenu } from "../ui/DropdownMenu.js";
 import { getSprintStatusPresentation } from "../../lib/sprint-status-presentation.js";
-import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
-import { MOTION_TOKENS, useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { computeSprintActionMenuPosition } from "../../lib/sprint-menu-positioning.js";
 import { ORGANIC_CELL_SHADOW_CLASS } from "../ui/organic-cell-styles.js";
 import { formatSprintCompletion } from "../../lib/sprint-progress-display.js";
+import { SprintAmbientWaves } from "./SprintAmbientWaves.js";
 
 const CARD_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
 });
+const ACTIVE_WAVE_ACCENT_HEX = "#071521";
 
 const statusMap: Record<SprintStatus, {
   ring: string;
-  text: string;
-  icon: typeof Activity;
-  label: string;
   accentHex: string;
 }> = {
-  running: { ring: "border-status-green/45 shadow-[0_0_34px_rgba(0,171,132,0.28)]", text: "text-status-green", icon: Activity, label: "Running", accentHex: "#00AB84" },
-  paused: { ring: "border-status-amber/45 shadow-[0_0_34px_rgba(245,158,11,0.24)]", text: "text-status-amber", icon: Clock3, label: "Paused", accentHex: "#F59E0B" },
-  completed: { ring: "border-slate-300/50 shadow-[0_0_24px_rgba(148,163,184,0.18)]", text: "text-slate-500 dark:text-slate-400", icon: CheckCircle2, label: "Completed", accentHex: "#94A3B8" },
-  failed: { ring: "border-status-red/55 shadow-[0_0_34px_rgba(227,0,15,0.3)]", text: "text-status-red", icon: XCircle, label: "Failed", accentHex: "#E3000F" },
-  cancelled: { ring: "border-slate-300/35 shadow-[0_0_24px_rgba(148,163,184,0.16)]", text: "text-slate-400 dark:text-slate-500", icon: XCircle, label: "Cancelled", accentHex: "#94A3B8" },
-  idle: { ring: "", text: "text-signal-600 dark:text-signal-300", icon: Clock3, label: "Draft", accentHex: "#00E0A0" },
+  running: { ring: "border-status-green/45 shadow-[0_0_34px_rgba(0,171,132,0.28)]", accentHex: "#00AB84" },
+  paused: { ring: "border-status-amber/45 shadow-[0_0_34px_rgba(245,158,11,0.24)]", accentHex: "#F59E0B" },
+  completed: { ring: "border-slate-300/50 shadow-[0_0_24px_rgba(148,163,184,0.18)]", accentHex: "#94A3B8" },
+  failed: { ring: "", accentHex: "#E3000F" },
+  cancelled: { ring: "border-slate-300/35 shadow-[0_0_24px_rgba(148,163,184,0.16)]", accentHex: "#94A3B8" },
+  idle: { ring: "", accentHex: "#00E0A0" },
 };
 
-const ATTENTION_OVERRIDE_MAP: Partial<Record<string, { label: string; text: string; accentHex: string }>> = {
-  merge_required: { label: "Merge", text: "text-purple-600 dark:text-purple-400", accentHex: "#A855F7" },
-  merge_conflict: { label: "Conflict", text: "text-status-red", accentHex: "#E3000F" },
-  ci_fix_required: { label: "CI", text: "text-blue-600 dark:text-blue-400", accentHex: "#3B82F6" },
+const ATTENTION_ACCENT_MAP: Partial<Record<string, string>> = {
+  merge_required: "#A855F7",
+  merge_conflict: "#E3000F",
+  ci_fix_required: "#3B82F6",
 };
 
 interface SprintCellProps {
@@ -69,9 +62,13 @@ interface SprintCellProps {
   sprintKeyPrefix?: string;
   primaryBusy?: boolean;
   showcaseBusy?: boolean;
+  markCompletedBusy?: boolean;
+  markQaPassedBusy?: boolean;
+  updateBranchBusy?: boolean;
   isPaused?: boolean;
   pauseResumeBusy?: boolean;
   humanIntervention?: ExecutionHumanInterventionSummary | null;
+  ciStatus?: CiStatusPresentation | null;
   onPrimaryAction?: () => void;
   onPauseResume?: () => void;
   onAddTasks?: () => void;
@@ -79,8 +76,11 @@ interface SprintCellProps {
   onDelete?: () => void;
   onExport?: () => void;
   onOverrides?: () => void;
+  onUpdateBranch?: () => void;
   onToggleShowcase?: () => void;
   onMarkCompleted?: () => void;
+  onMarkQaPassed?: () => void;
+  onRollback?: () => void;
 }
 
 const formatSprintKey = (sprint: Sprint, prefix: string = "SPR"): string => (
@@ -102,9 +102,13 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   sprintKeyPrefix = "SPR",
   primaryBusy = false,
   showcaseBusy = false,
+  markCompletedBusy = false,
+  markQaPassedBusy = false,
+  updateBranchBusy = false,
   isPaused = false,
   pauseResumeBusy = false,
   humanIntervention = null,
+  ciStatus = null,
   onPrimaryAction,
   onPauseResume,
   onAddTasks,
@@ -112,16 +116,19 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   onDelete,
   onExport,
   onOverrides,
+  onUpdateBranch,
   onToggleShowcase,
   onMarkCompleted,
+  onMarkQaPassed,
+  onRollback,
 }) => {
-  const reducedMotion = useReducedMotion();
   const interactionTokens = useInteractionTokens();
   const gsapTokens = useGsapInteractionTokens();
 
   const bubbleRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const state = statusMap[sprint.status];
+  const isRollback = sprint.kind === "rollback";
   const statusPresentation = getSprintStatusPresentation({
     state: sprint.status,
     humanInterventionTitle: humanIntervention?.title ?? null,
@@ -133,42 +140,38 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
     latestReviewStatus: sprint.latestReview?.status ?? null,
   });
 
-  const attentionOverride = (sprint.status === "running" || sprint.status === "paused") && humanIntervention?.attentionType
-    ? ATTENTION_OVERRIDE_MAP[humanIntervention.attentionType]
+  const attentionOverride = (sprint.status === "running" || sprint.status === "paused")
+    && humanIntervention?.attentionType
+    && !(ciStatus && humanIntervention.attentionType === "ci_fix_required")
+    ? ATTENTION_ACCENT_MAP[humanIntervention.attentionType]
     : undefined;
 
-  let effectiveLabel = statusPresentation.statusLabel;
-  let effectiveTextTone = state.text;
-  let effectiveAccentHex = state.accentHex;
-  let StatusIcon = state.icon;
+  let effectiveAccentHex = isRollback ? "#F97316" : state.accentHex;
 
-  if (effectiveLabel === "QA") {
-    effectiveTextTone = "text-status-amber";
+  if (statusPresentation.statusLabel === "QA") {
     effectiveAccentHex = "#F59E0B";
-    StatusIcon = Activity;
-  } else if (effectiveLabel === "Merge") {
-    effectiveTextTone = "text-purple-600 dark:text-purple-400";
+  } else if (statusPresentation.statusLabel === "Merge") {
     effectiveAccentHex = "#A855F7";
-    StatusIcon = Activity;
-  } else if (effectiveLabel === "Merge Conflict") {
-    effectiveTextTone = "text-status-red";
+  } else if (statusPresentation.statusLabel === "Merge Conflict") {
     effectiveAccentHex = "#E3000F";
-    StatusIcon = AlertTriangle;
   } else if (attentionOverride) {
-    effectiveLabel = attentionOverride.label;
-    effectiveTextTone = attentionOverride.text;
-    effectiveAccentHex = attentionOverride.accentHex;
+    effectiveAccentHex = attentionOverride;
   }
+  const visualAccentHex = sprint.status === "running"
+    ? ACTIVE_WAVE_ACCENT_HEX
+    : effectiveAccentHex;
 
   const isCompleted = sprint.status === "completed";
   const isRunning = sprint.status === "running";
   const completionLabel = formatSprintCompletion(sprint.completion);
-  const showInterventionBadge = Boolean(humanIntervention) && statusPresentation.showHumanInterventionBadge;
   const attentionIndicatorState = resolveSprintAttentionIndicatorState({
     sprintStatus: sprint.status,
     statusPresentation,
     humanIntervention,
   });
+  const galleryAttentionIndicatorState = attentionIndicatorState?.kind === "human"
+    ? attentionIndicatorState
+    : null;
   const animationClass = isCompleted ? "" : isEven ? "animate-organic" : "animate-organic-reverse";
   const controlFeedbackStyle = {
     transitionDuration: interactionTokens.controlFeedback.duration,
@@ -182,20 +185,14 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
     transitionDuration: interactionTokens.listReorder.duration,
     transitionTimingFunction: interactionTokens.listReorder.ease,
   };
-  const interventionPulseStyle = reducedMotion
-    ? undefined
-    : {
-      animationDuration: `calc(${MOTION_TOKENS.timing.slow} * 12)`,
-      animationTimingFunction: MOTION_TOKENS.easing.standard,
-    };
-
   const handleHoverEnter = () => {
     if (!bubbleRef.current || isCompleted) {
       return;
     }
     gsap.to(bubbleRef.current, {
-      scale: 1.05,
-      rotation: (Math.random() - 0.5) * 4,
+      scale: 1.018,
+      y: -4,
+      rotation: 0,
       duration: gsapTokens.controlFeedback.duration,
       ease: gsapTokens.controlFeedback.ease,
       overwrite: "auto",
@@ -208,6 +205,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
     }
     gsap.to(bubbleRef.current, {
       scale: 1,
+      y: 0,
       rotation: 0,
       duration: gsapTokens.controlFeedback.duration,
       ease: gsapTokens.controlFeedback.ease,
@@ -225,10 +223,11 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   return (
     <div
       ref={bubbleRef}
-      data-sprint-attention={attentionIndicatorState?.kind}
+      data-sprint-attention={galleryAttentionIndicatorState?.kind}
+      data-sprint-kind={sprint.kind}
       onMouseEnter={handleHoverEnter}
       onMouseLeave={handleHoverLeave}
-      className="group relative flex h-72 w-72 shrink-0 cursor-pointer items-center justify-center perspective-1000 transition-transform duration-150 [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none lg:h-80 lg:w-80"
+      className="group relative flex h-72 w-72 shrink-0 cursor-pointer items-center justify-center perspective-1000 transition-transform duration-150 will-change-transform motion-reduce:transition-none motion-reduce:will-change-auto lg:h-80 lg:w-80"
     >
       <div data-organic-cell-shadow className={`pointer-events-none absolute inset-0 ${ORGANIC_CELL_SHADOW_CLASS} transition-all ${animationClass}`} style={listReorderStyle} />
 
@@ -237,7 +236,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
         style={listReorderStyle}
       >
         <div
-          className={`absolute inset-0 overflow-hidden rounded-[inherit] border border-white/70 backdrop-blur-md transition-colors dark:border-white/[0.06] ${isRunning ? "bg-white/72 dark:bg-void-800/82" : "bg-white/55 dark:bg-void-800/65"}`}
+          className={`absolute inset-0 overflow-hidden rounded-[inherit] border backdrop-blur-md transition-colors ${isRollback ? "border-orange-400/35 bg-orange-50/78 dark:border-orange-400/25 dark:bg-orange-950/24" : `border-white/70 dark:border-white/[0.06] ${isRunning ? "bg-white/72 dark:bg-void-800/82" : "bg-white/55 dark:bg-void-800/65"}`}`}
           style={{
             ...listReorderStyle,
             WebkitMaskImage: "-webkit-radial-gradient(white, black)",
@@ -245,21 +244,15 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
           }}
         >
           <div className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.5)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]" />
-          <WaveFluid accentHex={state.accentHex} />
-          <BorderTrace accentHex={state.accentHex} />
+          <div className="pointer-events-none absolute inset-x-12 top-0 h-px bg-gradient-to-r from-transparent via-white/55 to-transparent opacity-60 dark:via-white/10" />
+          <SprintAmbientWaves active={isRunning} />
+          <BorderTrace accentHex={visualAccentHex} />
         </div>
       </div>
 
-      {attentionIndicatorState && (
-        <div
-          data-sprint-attention-border
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 z-[11] rounded-[1.75rem] border-2 border-status-red/70 shadow-[0_0_28px_rgba(227,0,15,0.24),inset_0_0_18px_rgba(227,0,15,0.08)] motion-reduce:shadow-none"
-        />
-      )}
-
       {state.ring && !isCompleted && (
         <div
+          data-sprint-status-ring={sprint.status}
           className={`absolute inset-0 pointer-events-none mix-blend-screen scale-[1.012] ${animationClass}`}
           style={{
             zIndex: 10,
@@ -269,14 +262,14 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
           <div
             className="absolute inset-0 rounded-[inherit] border border-status-green/50 dark:mix-blend-screen"
             style={{
-              borderColor: `${effectiveAccentHex}70`,
+              borderColor: `${visualAccentHex}70`,
             }}
           />
-          {/* Breathtaking ambient breathing glow */}
+          {/* Quiet static depth around the current sprint. */}
           <div
-            className="absolute inset-0 rounded-[inherit] animate-[pulse_3.5s_ease-in-out_infinite] motion-reduce:animate-none"
+            className="absolute inset-0 rounded-[inherit]"
             style={{
-              boxShadow: `0 0 20px ${effectiveAccentHex}40, inset 0 0 10px ${effectiveAccentHex}20`,
+              boxShadow: `0 0 18px ${visualAccentHex}32, inset 0 0 9px ${visualAccentHex}18`,
             }}
           />
         </div>
@@ -302,19 +295,20 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
       )}
 
       <div className="relative z-20 flex h-full w-full flex-col items-center justify-center p-8 text-center">
-        {attentionIndicatorState && (
+        {isRollback && (
+          <div className="absolute left-1/2 top-5 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-orange-500/25 bg-orange-500/10 px-3 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-orange-700 dark:text-orange-300">
+            <RotateCcw className="h-3 w-3" strokeWidth={2.2} />
+            Rollback
+          </div>
+        )}
+        {galleryAttentionIndicatorState && (
           <SprintAttentionIndicator
-            state={attentionIndicatorState}
-            className="absolute left-1/2 top-4 -translate-x-1/2"
+            state={galleryAttentionIndicatorState}
+            className="absolute bottom-full left-1/2 z-[80] mb-[10px] -translate-x-1/2"
           />
         )}
 
-        <div className={`absolute ${attentionIndicatorState ? "top-14" : "top-5"} flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:opacity-100 ${effectiveTextTone}`} style={controlFeedbackStyle}>
-          <StatusIcon className={`h-3.5 w-3.5 ${isRunning ? "animate-pulse motion-reduce:animate-none" : ""}`} strokeWidth={2.5} />
-          <span className="text-[10px] font-bold uppercase tracking-[0.14em]">{effectiveLabel}</span>
-        </div>
-
-        <div className={`absolute left-7 top-7 inline-flex flex-col gap-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.14em] ${accentColor}`}>
+        <div className={`absolute left-6 top-6 inline-flex flex-col gap-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.14em] ${accentColor}`}>
           <div className="flex items-center gap-1.5">
             <CalendarDays className="h-3.5 w-3.5" strokeWidth={2.1} />
             {formatCardDate(sprint.createdAt)}
@@ -323,31 +317,34 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
             {formatBubbleTime(sprint.createdAt)}
           </div>
         </div>
-{(showInterventionBadge || sprint.latestReview) && (
-          <div className="absolute right-4 top-4 z-[60] flex items-center gap-2 lg:right-5 lg:top-5">
-            {sprint.latestReview && (
-              <SprintReviewBadge summary={sprint.latestReview} compact align="right" />
-            )}
-            {showInterventionBadge && humanIntervention && (
-              <div className={reducedMotion ? "" : "animate-pulse"} style={interventionPulseStyle}>
-                <HumanInterventionBadge summary={humanIntervention} label="Needs you" compact align="right" />
-              </div>
-            )}
-          </div>
-        )}
+        <div className="absolute right-5 top-5 z-[60] flex max-w-[11rem] items-center justify-end lg:max-w-[13rem]">
+          <WorkflowStatusBadge
+            scope="sprint"
+            status={sprint.status}
+            review={sprint.latestReview}
+            ciPresentation={ciStatus}
+            humanIntervention={humanIntervention}
+            compact
+            align="right"
+          />
+        </div>
 
-        <div className={`inline-flex items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.03] px-4 py-1.5 font-mono text-[11px] font-bold tracking-[0.14em] transition-transform group-hover:-translate-y-3 group-focus-within:-translate-y-3 motion-reduce:transform-none dark:border-white/[0.06] dark:bg-white/[0.03] ${accentColor}`} style={controlFeedbackStyle}>
-          <Sparkles className="h-3.5 w-3.5" strokeWidth={2.2} />
+        <div
+          data-sprint-key
+          className="inline-flex items-center gap-2 font-mono text-[12px] font-bold tracking-[0.12em] text-blue-600 transition-transform group-hover:-translate-y-3 group-focus-within:-translate-y-3 motion-reduce:transform-none dark:text-blue-300"
+          style={controlFeedbackStyle}
+        >
+          <IdCard className="h-4 w-4" strokeWidth={2.15} aria-hidden="true" />
           {formatSprintKey(sprint, sprintKeyPrefix)}
         </div>
 
         <div className="mt-4 flex w-full flex-col items-center justify-center gap-3 px-4 transition-transform group-hover:-translate-y-3 group-focus-within:-translate-y-3 motion-reduce:transform-none" style={controlFeedbackStyle}>
-          <h3 className="font-display text-xl font-semibold leading-tight tracking-tight text-[var(--text-primary)]">
+          <h3 className="max-w-[13rem] text-balance font-display text-[1.35rem] font-semibold leading-[1.15] tracking-[-0.025em] text-[var(--text-primary)]">
             {sprint.name}
           </h3>
         </div>
 
-        <div className="mt-6 flex items-center justify-center gap-7 text-center transition-transform group-hover:-translate-y-3 group-focus-within:-translate-y-3 motion-reduce:transform-none" style={controlFeedbackStyle}>
+        <div data-sprint-metrics className="mt-6 flex items-center justify-center gap-7 text-center transition-transform group-hover:-translate-y-3 group-focus-within:-translate-y-3 motion-reduce:transform-none" style={controlFeedbackStyle}>
           <div className="flex flex-col items-center">
             <div className="font-mono text-2xl font-semibold text-[var(--text-primary)]">{sprint.tasksCount}</div>
             <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Tasks</div>
@@ -428,6 +425,8 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
                 sprint={sprint}
                 isCompleted={isCompleted}
                 showcaseBusy={showcaseBusy}
+                markCompletedDisabled={markCompletedBusy}
+                markQaPassedDisabled={markQaPassedBusy || sprint.latestReview?.status === "running"}
                 isRunning={isRunning}
                 isPaused={isPaused}
                 primaryBusy={primaryBusy}
@@ -440,7 +439,11 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
                 onExport={onExport}
                 onToggleShowcase={onToggleShowcase}
                 onOverrides={onOverrides}
+                onUpdateBranch={onUpdateBranch}
+                updateBranchBusy={updateBranchBusy}
                 onMarkCompleted={onMarkCompleted}
+                onMarkQaPassed={onMarkQaPassed}
+                onRollback={onRollback}
                 onDelete={onDelete}
                 onClose={() => setMenuOpen(false)}
                 markCompletedIcon="circle"

@@ -1,20 +1,48 @@
 import type { Logger } from "../shared/logging/logger.js";
 import type { AppDbStorage } from "../repositories/app-db-storage.js";
+import type { DatabaseAdapter } from "../repositories/db/database-adapter.js";
 import type { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
 
+const DEFAULT_RETENTION_DAYS = 14;
+const MIN_RETENTION_DAYS = 1;
+const MAX_RETENTION_DAYS = 3_650;
+const PROVIDER_ACTIVITY_DETAIL_RETENTION_MS = 24 * 60 * 60 * 1_000;
+const MAX_MAINTENANCE_ROWS_PER_TABLE = 500;
+const MAX_INCREMENTAL_VACUUM_PAGES = 256;
+
+interface RowIdRow {
+  row_id: number;
+}
+
+interface DatabasePruneResult {
+  taskRunsDeleted: number;
+  executionInvocationsDeleted: number;
+  providerInvocationsDeleted: number;
+  attentionItemsDeleted: number;
+  realtimeEventsDeleted: number;
+  virtualWorkerAssignmentsDeleted: number;
+  providerActivitiesDeleted: number;
+  providerSessionsDeleted: number;
+  staleProviderSessionsRecovered: number;
+}
+
 export interface DatabaseMaintenanceResult {
   prunedTaskRuns: number;
+  prunedExecutionInvocations: number;
+  prunedProviderInvocations: number;
   prunedAttentionItems: number;
   prunedRealtimeEvents: number;
   prunedVirtualWorkerAssignments: number;
   prunedProviderActivities: number;
   prunedProviderSessions: number;
+  recoveredStaleProviderSessions: number;
   pruningFailed: boolean;
   pruningSkipped: boolean;
   vacuumFailed: boolean;
   vacuumSkipped: boolean;
   checkpointFailures: string[];
+  checkpointSkipped: boolean;
 }
 
 export interface DatabaseMaintenanceServiceDeps {
@@ -25,179 +53,490 @@ export interface DatabaseMaintenanceServiceDeps {
 }
 
 export class DatabaseMaintenanceService {
+  private readonly scanCursors = new Map<string, number>();
+
   constructor(private readonly deps: DatabaseMaintenanceServiceDeps) {}
 
   /**
-   * Executes the pruning and vacuuming routines according to the system configuration.
+   * Runs one bounded startup maintenance pass. Provider work always wins: all write-heavy
+   * maintenance and checkpoints are deferred when an invocation is already running.
    */
   async runMaintenance(): Promise<DatabaseMaintenanceResult> {
-    const settings = this.deps.settingsRepository.getSystemSettings();
-    const runtime = settings.runtime;
-
-    const autoVacuum = runtime.dbAutoVacuumOnStartup ?? true;
+    const runtime = this.deps.settingsRepository.getSystemSettings().runtime;
+    const autoVacuum = runtime.dbAutoVacuumOnStartup ?? false;
     const pruningEnabled = runtime.dbPruningEnabled ?? true;
-
-    // Clamp retention days to safe bounds (1 to 3650 days) in case of direct invalid DB states
-    let rawRetentionDays = runtime.dbRetentionDays ?? 14;
-    if (typeof rawRetentionDays !== "number" || !Number.isFinite(rawRetentionDays) || rawRetentionDays <= 0) {
-      rawRetentionDays = 14;
-    }
-    const retentionDays = Math.max(1, Math.min(Math.floor(rawRetentionDays), 3650));
+    const retentionDays = this.normalizeRetentionDays(runtime.dbRetentionDays);
+    const providerWorkActive = this.hasActiveProviderInvocations();
 
     this.deps.logger.info("Starting database maintenance...", {
       autoVacuum,
       pruningEnabled,
       retentionDays,
+      providerWorkActive,
     });
 
     const result: DatabaseMaintenanceResult = {
       prunedTaskRuns: 0,
+      prunedExecutionInvocations: 0,
+      prunedProviderInvocations: 0,
       prunedAttentionItems: 0,
       prunedRealtimeEvents: 0,
       prunedVirtualWorkerAssignments: 0,
       prunedProviderActivities: 0,
       prunedProviderSessions: 0,
+      recoveredStaleProviderSessions: 0,
       pruningFailed: false,
-      pruningSkipped: !pruningEnabled,
+      pruningSkipped: !pruningEnabled || providerWorkActive,
       vacuumFailed: false,
-      vacuumSkipped: !autoVacuum,
+      vacuumSkipped: !autoVacuum || providerWorkActive,
       checkpointFailures: [],
+      checkpointSkipped: providerWorkActive,
     };
 
-    if (pruningEnabled) {
+    if (pruningEnabled && !providerWorkActive) {
       try {
-        const pruneResult = this.pruneData(retentionDays);
-        result.prunedTaskRuns = pruneResult.taskRunsDeleted;
-        result.prunedAttentionItems = pruneResult.attentionItemsDeleted;
-        result.prunedRealtimeEvents = pruneResult.realtimeEventsDeleted;
-        result.prunedVirtualWorkerAssignments = pruneResult.virtualWorkerAssignmentsDeleted;
-        result.prunedProviderActivities = pruneResult.providerActivitiesDeleted;
-        result.prunedProviderSessions = pruneResult.providerSessionsDeleted;
+        this.assignPruneResult(result, this.pruneData(retentionDays));
       } catch (error) {
         result.pruningFailed = true;
         this.deps.logger.error("Failed to prune database records", {
           error: error instanceof Error ? error.message : String(error),
         });
       }
+    } else if (pruningEnabled) {
+      this.deps.logger.info("Skipping database pruning while provider invocations are active.");
     }
 
-    if (autoVacuum) {
+    if (autoVacuum && !providerWorkActive) {
       try {
-        const vacuumFailures = this.vacuumDatabases();
-        if (vacuumFailures.length > 0) {
+        if (this.incrementalVacuumDatabases().length > 0) {
           result.vacuumFailed = true;
         }
       } catch (error) {
         result.vacuumFailed = true;
-        this.deps.logger.error("Failed to vacuum databases", {
+        this.deps.logger.error("Failed to incrementally vacuum databases", {
           error: error instanceof Error ? error.message : String(error),
         });
       }
+    } else if (autoVacuum) {
+      this.deps.logger.info("Skipping incremental startup vacuum while provider invocations are active.");
     }
 
-    try {
-      result.checkpointFailures = this.checkpointWalDatabases();
-    } catch (error) {
-      this.deps.logger.error("Unexpected error during WAL checkpoints", {
-        error: error instanceof Error ? error.message : String(error),
-      });
+    if (!providerWorkActive) {
+      try {
+        result.checkpointFailures = this.checkpointWalDatabases();
+      } catch (error) {
+        this.deps.logger.error("Unexpected error during WAL checkpoints", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     this.deps.logger.info("Database maintenance completed.", { result });
     return result;
   }
 
-  private pruneData(retentionDays: number): {
-    taskRunsDeleted: number;
-    attentionItemsDeleted: number;
-    realtimeEventsDeleted: number;
-    virtualWorkerAssignmentsDeleted: number;
-    providerActivitiesDeleted: number;
-    providerSessionsDeleted: number;
-  } {
-    const retentionMs = retentionDays * 24 * 60 * 60 * 1000;
-    const thresholdDate = new Date(Date.now() - retentionMs).toISOString();
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  /**
+   * Advances every retention category by one bounded batch, then checkpoints WAL files. The server
+   * calls this on its low-frequency maintenance timer so large histories converge gradually.
+   */
+  runPeriodicMaintenance(): void {
+    if (this.hasActiveProviderInvocations()) {
+      this.deps.logger.debug("Skipping periodic database maintenance while provider invocations are active.");
+      return;
+    }
 
+    const runtime = this.deps.settingsRepository.getSystemSettings().runtime;
+    if (runtime.dbPruningEnabled ?? true) {
+      const retentionDays = this.normalizeRetentionDays(runtime.dbRetentionDays);
+      try {
+        this.pruneData(retentionDays);
+      } catch (error) {
+        this.deps.logger.error("Periodic database pruning failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    this.checkpointWalDatabases();
+  }
+
+  private normalizeRetentionDays(value: unknown): number {
+    if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+      return DEFAULT_RETENTION_DAYS;
+    }
+    return Math.max(MIN_RETENTION_DAYS, Math.min(Math.floor(value), MAX_RETENTION_DAYS));
+  }
+
+  private assignPruneResult(result: DatabaseMaintenanceResult, pruned: DatabasePruneResult): void {
+    result.prunedTaskRuns = pruned.taskRunsDeleted;
+    result.prunedExecutionInvocations = pruned.executionInvocationsDeleted;
+    result.prunedProviderInvocations = pruned.providerInvocationsDeleted;
+    result.prunedAttentionItems = pruned.attentionItemsDeleted;
+    result.prunedRealtimeEvents = pruned.realtimeEventsDeleted;
+    result.prunedVirtualWorkerAssignments = pruned.virtualWorkerAssignmentsDeleted;
+    result.prunedProviderActivities = pruned.providerActivitiesDeleted;
+    result.prunedProviderSessions = pruned.providerSessionsDeleted;
+    result.recoveredStaleProviderSessions = pruned.staleProviderSessionsRecovered;
+  }
+
+  private hasActiveProviderInvocations(): boolean {
+    const row = this.deps.appDbStorage.getDatabase().prepare(`
+      SELECT 1 AS active
+      FROM provider_invocations
+      WHERE status = 'running'
+      LIMIT 1
+    `).get() as { active?: number } | undefined;
+    return row?.active === 1;
+  }
+
+  private pruneData(retentionDays: number): DatabasePruneResult {
+    const retentionMs = retentionDays * 24 * 60 * 60 * 1_000;
+    const thresholdDate = new Date(Date.now() - retentionMs).toISOString();
+    const oneDayAgo = new Date(Date.now() - PROVIDER_ACTIVITY_DETAIL_RETENTION_MS).toISOString();
     const appDb = this.deps.appDbStorage.getDatabase();
     const sessionDb = this.deps.sessionTracking.getDatabase();
 
-    // 1. Prune app.db completed/failed task runs
-    this.deps.logger.debug(`Pruning completed/failed task runs older than ${retentionDays} days...`, { thresholdDate });
-    const runPruned = appDb.prepare(`
-      DELETE FROM task_runs
-      WHERE finished_at IS NOT NULL AND finished_at < ?
-    `).run(thresholdDate);
+    // Remove potentially large child trees first. Parent rows are deleted only after every child
+    // table is empty, so no parent deletion can trigger an unbounded foreign-key cascade.
+    const invocationMessagesDeleted = this.deleteBatch({
+      cursorKey: "app.execution-invocation-messages",
+      db: appDb,
+      table: "execution_invocation_messages",
+      whereSql: `EXISTS (
+        SELECT 1
+        FROM execution_invocations
+        WHERE execution_invocations.id = execution_invocation_messages.invocation_id
+          AND execution_invocations.finished_at IS NOT NULL
+          AND execution_invocations.finished_at < ?
+          AND execution_invocations.preserved_at IS NULL
+      )`,
+      params: [thresholdDate],
+    });
+    const taskRunEventsDeleted = this.deleteTaskRunChildBatch(
+      appDb,
+      "app.task-run-events",
+      "task_run_events",
+      "task_run_id",
+      thresholdDate,
+    );
+    const taskRatingsDeleted = this.deleteTaskRunChildBatch(
+      appDb,
+      "app.task-ratings",
+      "task_self_reflection_ratings",
+      "source_task_run_id",
+      thresholdDate,
+    );
+    const qaReviewRunsDeleted = this.deleteTaskRunChildBatch(
+      appDb,
+      "app.qa-review-runs",
+      "qa_review_runs",
+      "task_run_id",
+      thresholdDate,
+    );
+    const nodeFlowRunsDetached = this.detachExecutionInvocationBatch(
+      appDb,
+      "app.node-flow-runs",
+      "node_flow_runs",
+      thresholdDate,
+    );
+    const nodeFlowNodeRunsDetached = this.detachExecutionInvocationBatch(
+      appDb,
+      "app.node-flow-node-runs",
+      "node_flow_node_runs",
+      thresholdDate,
+    );
 
-    // 2. Prune app.db resolved attention items
-    this.deps.logger.debug(`Pruning resolved attention items older than ${retentionDays} days...`, { thresholdDate });
-    const attentionPruned = appDb.prepare(`
-      DELETE FROM project_attention_items
-      WHERE resolved_at IS NOT NULL AND resolved_at < ?
-    `).run(thresholdDate);
+    const executionInvocationsDeleted = this.deleteBatch({
+      cursorKey: "app.execution-invocations",
+      db: appDb,
+      table: "execution_invocations",
+      whereSql: `finished_at IS NOT NULL
+        AND finished_at < ?
+        AND preserved_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM execution_invocation_messages
+          WHERE execution_invocation_messages.invocation_id = execution_invocations.id
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM node_flow_runs
+          WHERE node_flow_runs.execution_invocation_id = execution_invocations.id
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM node_flow_node_runs
+          WHERE node_flow_node_runs.execution_invocation_id = execution_invocations.id
+        )`,
+      params: [thresholdDate],
+    });
 
-    // 3. Prune app.db stale realtime events (older than 1 day)
-    this.deps.logger.debug("Pruning stale dashboard realtime events...", { oneDayAgo });
-    const eventsPruned = appDb.prepare(`
-      DELETE FROM dashboard_realtime_events
-      WHERE created_at < ?
-    `).run(oneDayAgo);
+    // Keep provider rows while any execution invocation still references them. This preserves the
+    // durable link for retained or preserved invocations instead of relying on ON DELETE SET NULL.
+    const providerInvocationsDeleted = this.deleteBatch({
+      cursorKey: "app.provider-invocations",
+      db: appDb,
+      table: "provider_invocations",
+      whereSql: `finished_at IS NOT NULL
+        AND finished_at < ?
+        AND NOT EXISTS (
+          SELECT 1
+          FROM execution_invocations
+          WHERE execution_invocations.provider_invocation_id = provider_invocations.id
+        )`,
+      params: [thresholdDate],
+    });
 
-    // 4. Purge released ephemeral virtual-worker assignment history. These rows are not used
-    // for live assignment lookup and can grow quickly if startup reconciliation regresses.
-    this.deps.logger.debug("Pruning released virtual worker assignments...");
-    const virtualAssignmentsPruned = appDb.prepare(`
-      DELETE FROM project_worker_assignments
-      WHERE worker_endpoint_type = 'virtual_cli'
-        AND status = 'released'
-    `).run();
+    const taskRunsDeleted = this.deleteBatch({
+      cursorKey: "app.task-runs",
+      db: appDb,
+      table: "task_runs",
+      whereSql: `finished_at IS NOT NULL
+        AND finished_at < ?
+        AND NOT EXISTS (
+          SELECT 1 FROM execution_invocations
+          WHERE execution_invocations.task_run_id = task_runs.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM provider_invocations
+          WHERE provider_invocations.task_run_id = task_runs.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM task_run_events
+          WHERE task_run_events.task_run_id = task_runs.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM task_self_reflection_ratings
+          WHERE task_self_reflection_ratings.source_task_run_id = task_runs.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM qa_review_runs
+          WHERE qa_review_runs.task_run_id = task_runs.id
+        )`,
+      params: [thresholdDate],
+    });
 
-    // 5. Prune session-tracking.db completed/failed sessions and their activities
-    this.deps.logger.debug(`Pruning provider sessions and activities older than ${retentionDays} days...`, { thresholdDate });
-    
-    // First, delete activities belonging to the old sessions
-    const activitiesPruned = sessionDb.prepare(`
-      DELETE FROM provider_activities
-      WHERE session_id IN (
-        SELECT id FROM provider_sessions
-        WHERE update_time < ? AND state != 'RUNNING'
-      )
-    `).run(thresholdDate);
+    // Attention rows also own invocation trees through cascading foreign keys. Wait until those
+    // invocation rows have independently satisfied retention and been pruned.
+    const attentionItemsDeleted = this.deleteBatch({
+      cursorKey: "app.attention-items",
+      db: appDb,
+      table: "project_attention_items",
+      whereSql: `resolved_at IS NOT NULL
+        AND resolved_at < ?
+        AND NOT EXISTS (
+          SELECT 1 FROM execution_invocations
+          WHERE execution_invocations.attention_item_id = project_attention_items.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM provider_invocations
+          WHERE provider_invocations.attention_item_id = project_attention_items.id
+        )`,
+      params: [thresholdDate],
+    });
 
-    const sessionsPruned = sessionDb.prepare(`
-      DELETE FROM provider_sessions
-      WHERE update_time < ? AND state != 'RUNNING'
-    `).run(thresholdDate);
+    const realtimeEventsDeleted = this.deleteBatch({
+      cursorKey: "app.realtime-events",
+      db: appDb,
+      table: "dashboard_realtime_events",
+      whereSql: "created_at < ?",
+      params: [oneDayAgo],
+    });
+    const virtualWorkerAssignmentsDeleted = this.deleteBatch({
+      cursorKey: "app.virtual-worker-assignments",
+      db: appDb,
+      table: "project_worker_assignments",
+      whereSql: "worker_endpoint_type = 'virtual_cli' AND status = 'released'",
+      params: [],
+    });
 
-    const result = {
-      taskRunsDeleted: runPruned.changes,
-      attentionItemsDeleted: attentionPruned.changes,
-      realtimeEventsDeleted: eventsPruned.changes,
-      virtualWorkerAssignmentsDeleted: virtualAssignmentsPruned.changes,
-      providerActivitiesDeleted: activitiesPruned.changes,
-      providerSessionsDeleted: sessionsPruned.changes,
+    const staleProviderSessionsRecovered = this.updateBatch({
+      cursorKey: "sessions.stale-provider-sessions",
+      db: sessionDb,
+      table: "provider_sessions",
+      setSql: "state = 'CANCELLED'",
+      whereSql: "state = 'RUNNING' AND provider != 'jules' AND update_time < ?",
+      params: [thresholdDate],
+    });
+    const providerActivitiesDeleted = this.deleteBatch({
+      cursorKey: "sessions.provider-activities",
+      db: sessionDb,
+      table: "provider_activities",
+      whereSql: `EXISTS (
+        SELECT 1
+        FROM provider_sessions
+        WHERE provider_sessions.id = provider_activities.session_id
+          AND provider_sessions.update_time < ?
+          AND provider_sessions.state != 'RUNNING'
+      )`,
+      params: [oneDayAgo],
+    });
+    const providerSessionsDeleted = this.deleteBatch({
+      cursorKey: "sessions.provider-sessions",
+      db: sessionDb,
+      table: "provider_sessions",
+      whereSql: `update_time < ?
+        AND state != 'RUNNING'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM provider_activities
+          WHERE provider_activities.session_id = provider_sessions.id
+        )`,
+      params: [thresholdDate],
+    });
+
+    const result: DatabasePruneResult = {
+      taskRunsDeleted,
+      executionInvocationsDeleted,
+      providerInvocationsDeleted,
+      attentionItemsDeleted,
+      realtimeEventsDeleted,
+      virtualWorkerAssignmentsDeleted,
+      providerActivitiesDeleted,
+      providerSessionsDeleted,
+      staleProviderSessionsRecovered,
     };
-    this.deps.logger.info("Pruned old database records successfully", result);
+    this.deps.logger.info("Pruned bounded database record batches", {
+      ...result,
+      invocationMessagesDeleted,
+      taskRunEventsDeleted,
+      taskRatingsDeleted,
+      qaReviewRunsDeleted,
+      nodeFlowRunsDetached,
+      nodeFlowNodeRunsDetached,
+      maxRowsPerTable: MAX_MAINTENANCE_ROWS_PER_TABLE,
+    });
     return result;
   }
 
+  private deleteTaskRunChildBatch(
+    db: DatabaseAdapter,
+    cursorKey: string,
+    table: string,
+    taskRunColumn: string,
+    thresholdDate: string,
+  ): number {
+    return this.deleteBatch({
+      cursorKey,
+      db,
+      table,
+      whereSql: `EXISTS (
+        SELECT 1
+        FROM task_runs
+        WHERE task_runs.id = ${table}.${taskRunColumn}
+          AND task_runs.finished_at IS NOT NULL
+          AND task_runs.finished_at < ?
+          AND NOT EXISTS (
+            SELECT 1
+            FROM execution_invocations
+            WHERE execution_invocations.task_run_id = task_runs.id
+              AND execution_invocations.preserved_at IS NOT NULL
+          )
+      )`,
+      params: [thresholdDate],
+    });
+  }
+
+  private detachExecutionInvocationBatch(
+    db: DatabaseAdapter,
+    cursorKey: string,
+    table: string,
+    thresholdDate: string,
+  ): number {
+    return this.updateBatch({
+      cursorKey,
+      db,
+      table,
+      setSql: "execution_invocation_id = NULL",
+      whereSql: `execution_invocation_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1
+          FROM execution_invocations
+          WHERE execution_invocations.id = ${table}.execution_invocation_id
+            AND execution_invocations.finished_at IS NOT NULL
+            AND execution_invocations.finished_at < ?
+            AND execution_invocations.preserved_at IS NULL
+        )`,
+      params: [thresholdDate],
+    });
+  }
+
+  private deleteBatch(args: {
+    cursorKey: string;
+    db: DatabaseAdapter;
+    table: string;
+    whereSql: string;
+    params: unknown[];
+  }): number {
+    return this.mutateBatch({
+      ...args,
+      buildSql: (placeholders) => `
+        DELETE FROM ${args.table}
+        WHERE rowid IN (${placeholders})
+          AND (${args.whereSql})
+      `,
+    });
+  }
+
+  private updateBatch(args: {
+    cursorKey: string;
+    db: DatabaseAdapter;
+    table: string;
+    setSql: string;
+    whereSql: string;
+    params: unknown[];
+  }): number {
+    return this.mutateBatch({
+      ...args,
+      buildSql: (placeholders) => `
+        UPDATE ${args.table}
+        SET ${args.setSql}
+        WHERE rowid IN (${placeholders})
+          AND (${args.whereSql})
+      `,
+    });
+  }
+
+  private mutateBatch(args: {
+    cursorKey: string;
+    db: DatabaseAdapter;
+    table: string;
+    params: unknown[];
+    buildSql: (placeholders: string) => string;
+  }): number {
+    const cursor = this.scanCursors.get(args.cursorKey) ?? 0;
+    const candidates = args.db.prepare(`
+      SELECT rowid AS row_id
+      FROM ${args.table}
+      WHERE rowid > ?
+      ORDER BY rowid ASC
+      LIMIT ?
+    `).all(cursor, MAX_MAINTENANCE_ROWS_PER_TABLE) as unknown as RowIdRow[];
+
+    if (candidates.length === 0) {
+      this.scanCursors.set(args.cursorKey, 0);
+      return 0;
+    }
+
+    const rowIds = candidates.map((candidate) => candidate.row_id);
+    const lastRowId = rowIds[rowIds.length - 1];
+    this.scanCursors.set(
+      args.cursorKey,
+      candidates.length < MAX_MAINTENANCE_ROWS_PER_TABLE ? 0 : lastRowId,
+    );
+    const placeholders = rowIds.map(() => "?").join(", ");
+    return args.db.prepare(args.buildSql(placeholders)).run(...rowIds, ...args.params).changes;
+  }
+
   /**
-   * Truncates each database's write-ahead log back into the main file. SQLite only resets the WAL
-   * high-water mark on a TRUNCATE checkpoint; without periodic checkpoints a long-lived process lets
-   * the WAL grow to hundreds of MB (observed: a 39MB session-tracking.db with a 267MB WAL), which
-   * bloats memory/disk and slows every read. Cheap and non-destructive — a checkpoint that cannot
-   * complete (busy) is a no-op rather than an error, so this is safe to call on a timer.
+   * Checkpoints each database without forcing active readers or writers through a TRUNCATE barrier.
+   * The server invokes this only after confirming that no provider invocation is running.
    */
   checkpointWalDatabases(): string[] {
     const failures: string[] = [];
-    const targets: Array<{ label: string; db: { exec: (sql: string) => void } }> = [
-      { label: "app.db", db: this.deps.appDbStorage.getDatabase() },
-      { label: "session-tracking.db", db: this.deps.sessionTracking.getDatabase() },
-      { label: "settings.db", db: this.deps.settingsRepository.getDatabase() },
-    ];
+    const targets = this.databaseTargets();
     for (const target of targets) {
       try {
-        target.db.exec("PRAGMA wal_checkpoint(TRUNCATE);");
+        target.db.exec("PRAGMA wal_checkpoint(PASSIVE);");
       } catch (error) {
         failures.push(target.label);
         this.deps.logger.warn("WAL checkpoint failed", {
@@ -209,26 +548,34 @@ export class DatabaseMaintenanceService {
     return failures;
   }
 
-  private vacuumDatabases(): string[] {
+  /**
+   * Reclaims at most a fixed number of freelist pages per database. SQLite treats this as a no-op
+   * for legacy databases that are not in incremental auto-vacuum mode; automatic maintenance never
+   * falls back to the unbounded full-file VACUUM operation.
+   */
+  private incrementalVacuumDatabases(): string[] {
     const failures: string[] = [];
-    const targets: Array<{ label: string; db: { exec: (sql: string) => void } }> = [
-      { label: "app.db", db: this.deps.appDbStorage.getDatabase() },
-      { label: "session-tracking.db", db: this.deps.sessionTracking.getDatabase() },
-      { label: "settings.db", db: this.deps.settingsRepository.getDatabase() },
-    ];
-
-    for (const target of targets) {
+    for (const target of this.databaseTargets()) {
       try {
-        this.deps.logger.info(`Executing VACUUM on ${target.label}...`);
-        target.db.exec("VACUUM;");
+        this.deps.logger.info(`Executing bounded incremental vacuum on ${target.label}...`, {
+          maxPages: MAX_INCREMENTAL_VACUUM_PAGES,
+        });
+        target.db.exec(`PRAGMA incremental_vacuum(${MAX_INCREMENTAL_VACUUM_PAGES});`);
       } catch (error) {
         failures.push(target.label);
-        this.deps.logger.error(`Failed to execute VACUUM on ${target.label}`, {
+        this.deps.logger.error(`Failed to incrementally vacuum ${target.label}`, {
           error: error instanceof Error ? error.message : String(error),
         });
       }
     }
-
     return failures;
+  }
+
+  private databaseTargets(): Array<{ label: string; db: DatabaseAdapter }> {
+    return [
+      { label: "app.db", db: this.deps.appDbStorage.getDatabase() },
+      { label: "session-tracking.db", db: this.deps.sessionTracking.getDatabase() },
+      { label: "settings.db", db: this.deps.settingsRepository.getDatabase() },
+    ];
   }
 }

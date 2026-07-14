@@ -30,22 +30,36 @@ export const thinkingModeOptions: Array<{ value: ThinkingMode; label: string }> 
       "opencode",
       "antigravity",
     ] as ProviderId[])
-      .flatMap((providerId) => getProviderThinkingModeOptionsFromDefaults(providerId))
+      .flatMap((providerId) => getProviderThinkingModeOptionsFromDefaults(
+        providerId,
+        providerId === "codex" ? "gpt-5.6-sol" : undefined,
+      ))
       .map((option) => [option.value, option] as const),
   ).values(),
 ];
 
-export const getProviderThinkingModeOptions = (providerId: ProviderId): Array<{ value: ThinkingMode; label: string }> => (
-  [...getProviderThinkingModeOptionsFromDefaults(providerId)]
+export const getProviderThinkingModeOptions = (
+  providerId: ProviderId,
+  model?: string | null,
+): Array<{ value: ThinkingMode; label: string }> => (
+  [...getProviderThinkingModeOptionsFromDefaults(providerId, model)]
 );
 
-export const getProviderThinkingModeValue = (providerId: ProviderId, value: ThinkingMode): ThinkingMode => (
-  normalizeProviderThinkingMode(providerId, value)
+export const getProviderThinkingModeValue = (
+  providerId: ProviderId,
+  value: ThinkingMode,
+  model?: string | null,
+): ThinkingMode => (
+  normalizeProviderThinkingMode(providerId, value, undefined, model)
 );
 
-export const getProviderThinkingModeLabel = (providerId: ProviderId, value: ThinkingMode): string => {
-  const normalized = normalizeProviderThinkingMode(providerId, value);
-  return getProviderThinkingModeOptions(providerId).find((option) => option.value === normalized)?.label || normalized;
+export const getProviderThinkingModeLabel = (
+  providerId: ProviderId,
+  value: ThinkingMode,
+  model?: string | null,
+): string => {
+  const normalized = normalizeProviderThinkingMode(providerId, value, undefined, model);
+  return getProviderThinkingModeOptions(providerId, model).find((option) => option.value === normalized)?.label || normalized;
 };
 
 export interface ProviderDisplayMetadata {

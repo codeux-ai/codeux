@@ -12,7 +12,30 @@ Server mode is different from ordinary `--headless` mode:
 
 ## Threat Model
 
-Server mode is still a single-user trusted Code UX runtime. Any authenticated MCP client can inspect and mutate projects, settings, sprints, tasks, memory, and execution state exposed through enabled MCP tools. It is not a multi-tenant service and does not implement per-user RBAC.
+MCP bearer access remains a runtime-wide control-plane identity. The dashboard administrative API has a separate authenticated-headless boundary with project-scoped roles; do not treat an MCP bearer as a dashboard service identity.
+
+## Authenticated Dashboard API
+
+Remote dashboard/API operation is fail-closed. Setting a non-loopback `DASHBOARD_HOST` without an explicit authentication mode defaults the API to `service_token`, so unconfigured callers receive `401`/`403` instead of inheriting desktop access. Loopback desktop mode remains `local`.
+
+Choose one boundary:
+
+- `CODE_UX_DASHBOARD_AUTH_MODE=service_token`: define `CODE_UX_SERVICE_IDENTITIES_JSON` as an array of identities with `id`, `displayName`, a lowercase SHA-256 `tokenSha256`, `roles`, `projectIds`, and `enabled`. Workers may send the matching id with `--service-identity-id` or `CODE_UX_WORKER_SERVICE_ID`; the bearer remains in `CODE_UX_WORKER_AUTH_TOKEN`.
+- `CODE_UX_DASHBOARD_AUTH_MODE=trusted_proxy`: terminate OIDC at a trusted proxy, set `CODE_UX_TRUSTED_PROXY_SECRET`, and have the proxy overwrite `X-Code-UX-Proxy-Secret`, `X-Code-UX-Principal-Id`, `X-Code-UX-Roles`, `X-Code-UX-Project-Ids`, and optional name/kind headers. Never forward client-supplied copies.
+
+Roles are `credential_admin`, `automation_author`, `automation_publisher`, `automation_runner`, and `viewer`. Project ids are explicit; `*` is an operator-only all-project grant. Credential routes additionally require `CODE_UX_REMOTE_CREDENTIAL_MANAGEMENT=true`. Enabling that flag without a healthy secure key provider makes readiness fail.
+
+The `credential_admin` role can read `/api/admin/readiness`, `/api/admin/audit/export`, and `/api/admin/metrics/slo` even when remote credential management is disabled. The feature flag gates credential creation, binding, testing, rotation, replacement, revocation, promotion, restriction, and credential-health routes; it does not disable operational readiness, audit, or SLO inspection.
+
+TLS is assumed at the reverse proxy. Authenticated remote requests must arrive with HTTPS or a trusted `X-Forwarded-Proto: https`; `CODE_UX_ALLOW_INSECURE_HTTP=true` is limited to isolated test networks. Same-origin browser checks, no-store headers, host validation, and a 600-request/minute administrative API limiter remain active. Webhook and provider-ingress endpoints retain their dedicated authentication schemes.
+
+Example identity generation (the JSON stores only the digest):
+
+```bash
+token="$(openssl rand -base64 48 | tr -d '\n')"
+digest="$(printf '%s' "$token" | sha256sum | cut -d' ' -f1)"
+# Put $token in the runner secret manager and $digest in CODE_UX_SERVICE_IDENTITIES_JSON.
+```
 
 Use server mode when:
 
@@ -81,6 +104,26 @@ Use `/health` for process liveness. It only proves that the listener is up.
 Use `/ready` for runtime readiness. It reports whether the Code UX runtime finished the required startup path and can accept work. During startup, maintenance such as Docker cleanup, preview reconciliation, branch reaping, and recovery work can continue after the listener binds, so `/health` can pass before `/ready`.
 
 Do not include `Authorization` headers in probe logs. The probe endpoints do not require bearer credentials.
+
+`/ready` also reports `credentialKey`, `auditStore`, and `distributedRunner`. `/health` remains live during a key-provider outage, while `/ready` returns `503`. Startup aborts before dashboard or MCP binding when encrypted credential rows exist but their key provider cannot recover the wrapping key. Server mode never auto-provisions local-file custody. Select a provider with `CODE_UX_CREDENTIAL_KEY_PROVIDER=mounted-key-file|vault|kms`; mounted files use `CODE_UX_CREDENTIAL_KEY_FILE` and owner-only permissions. Vault/KMS modes require their host adapter to be configured and healthy.
+
+The same explicit-custody requirement applies to dashboard-disabled headless operation, authenticated dashboards, non-loopback dashboard bindings, and remote credential management. Only the trusted loopback local dashboard auto-provisions its owner-only user-home key; Electron uses OS `safeStorage`. Remote setup therefore fails closed rather than borrowing the local-dashboard key, deriving a key, or falling back to plaintext. Restore the configured mount or the exact Vault/KMS key version before enabling runners; do not copy root keys into SQLite, a project checkout, deployment logs, or diagnostic bundles.
+
+Authenticated operators can inspect `/api/admin/readiness`, export redacted NDJSON from `/api/admin/audit/export`, and sample `/api/admin/metrics/slo`. Audit rows include the correlation id, principal, project, action, outcome, and redacted metadata for management requests, credential access, runs, attempts, approvals, and outbox delivery.
+
+## Backup, Restore, Rotation, And Rollback
+
+Back up `~/.code-ux/app.db` with a SQLite-aware snapshot that includes/checkpoints WAL state, the settings database, project `.code-ux/` directories, and the external key-provider versions needed by every encrypted envelope. Never place plaintext service tokens or root keys in the database backup. Restore into an isolated host, restore keys first, run `/ready`, then enable runners.
+
+Rotate service tokens by adding the new digest, deploying the new runner secret, observing successful authenticated calls, and disabling the old identity entry. Rotate credential values through the credential rotation API; existing graph bindings keep the credential id and resolve the new version. Retain old KMS/Vault key versions until every envelope has been rewrapped and a restore drill succeeds.
+
+To roll back an automation, create a new draft from the earlier immutable version, review it, and publish it. In-flight runs remain pinned to their original publication. Stop runner admission before database recovery; after restore, startup recovery requeues only known-safe work and leaves unknown external outcomes in `attention_required`.
+
+## Baseline SLOs And Alerts
+
+Initial operator baselines are 99.9% authenticated management availability, p95 management latency below 500 ms, zero unauthorized project grants, zero secret disclosure, and zero duplicate outbox side effects. Alert when readiness is not ready for 5 minutes, management 5xx rate exceeds 1% for 10 minutes, p95 exceeds 1 second for 10 minutes, leases repeatedly expire, denied credential access spikes, outbox failures remain pending for 5 minutes, or any audit/secret scanning check fails.
+
+Local mode is intentionally a trusted loopback desktop boundary. Authenticated headless mode adds API RBAC, project scope, key readiness, durable audit, and service identities, but it is not a general multi-tenant identity platform: OIDC token validation belongs at the trusted proxy, Vault/KMS require host adapters, and MCP bearer authority remains broader than dashboard roles.
 
 ## Client Connections
 
@@ -194,6 +237,8 @@ Existing HTTP sessions authenticated with the previous token should be treated a
 | Worker appears stale or offline | Heartbeats stopped, the worker process is down, network access failed, or the stable connection key changed unexpectedly. | Restart the worker with the same `--connection-key`, verify `/ready`, and check logs for bounded connection metadata. |
 | Worker connects but does not claim work | No active project assignment, project not included in `--project-id` / `--active-project-id`, stale endpoint status, task executor mismatch, or no lease returned. | Confirm project assignment and worker status, then verify queued dispatches. Do not start local execution without a lease token. |
 | `/health` passes but `/ready` fails | Listener is alive but runtime readiness has not completed or the server is degraded. | Wait for startup recovery to finish, then inspect structured logs. Use `/ready` for load balancer readiness gates. |
+| `/ready` reports credential custody unavailable | The explicit mounted-file, Vault, or KMS provider is missing, insecure, unhealthy, or cannot return the required key version. | Keep runners disabled, inspect metadata-only readiness and provider configuration, and restore the exact provider/key version. Do not print key material or substitute a new key for encrypted rows. |
+| A credential operation returns a version conflict | Another operator changed metadata, scope, capabilities, status, or encrypted value first. | Refresh the metadata-only record, review the new version, and intentionally retry with that version. Do not bypass optimistic concurrency. |
 | Secret values appear in an exported settings bundle | The export was explicitly approved with `includeSecrets: true`. | Store the bundle only in approved secret storage, rotate exposed credentials if it was shared, and prefer redacted exports for review. |
 
 ## Related Docs
@@ -201,4 +246,5 @@ Existing HTTP sessions authenticated with the previous token should be treated a
 - [MCP Runtime and Dispatch](../mcp/runtime-and-dispatch.md)
 - [Streamable HTTP Worker Gateway](../architecture/streamable-http-worker-gateway.md)
 - [Security Hardening](./security-hardening.md)
+- [Automation Credential Security](./credential-security.md)
 - [CLI Commands Reference](../reference/cli-commands.md)

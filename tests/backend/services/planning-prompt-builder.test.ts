@@ -130,6 +130,13 @@ describe("PlanningPromptBuilder", () => {
       expect(prompt).toContain("## Example Output A");
       expect(prompt).toContain("## Example Output B");
       expect(prompt).toContain("## Required Output");
+      expect(prompt).toContain("never compress the plan into an arbitrary numerical target");
+      expect(prompt).toContain("dependency-injection/registration path");
+      expect(prompt).toContain("restart/reconnect");
+      expect(prompt).toContain("executable integration/E2E coverage");
+      expect(prompt).toContain("observable acceptance signal");
+      expect(prompt).toContain("Their task counts are not recommendations");
+      expect(prompt).not.toContain("Prefer 3 to 8 tasks");
     });
 
     it("should use sprint name if number is null", () => {

@@ -37,7 +37,7 @@ import {
   resolveAntigravityContainerLogPath,
   cleanupProviderRuntimeArtifacts
 } from "./provider-runtime-artifacts.js";
-import { readQwenLogData, readCodexLatestSessionJson, readClaudeSessionJsonl, parseAntigravityConversationId, readAntigravityTranscript } from "./provider-transcripts.js";
+import { readQwenLogData, readCodexLatestSessionChunk, readCodexLatestSessionJson, readClaudeSessionJsonl, readClaudeSessionJsonlChunk, parseAntigravityConversationId, readAntigravityTranscript } from "./provider-transcripts.js";
 import { parseOpenCodeJsonLines } from "./provider-logs/opencode-log-parser.js";
 import { parseAntigravityDatabase } from "./provider-logs/antigravity-log-parser.js";
 import { runMockupCliProvider } from "./mockup-cli-provider.js";
@@ -53,6 +53,11 @@ import {
 import { buildQwenRuntimeConfig, buildOpenCodeRuntimeConfig, type QwenRuntimeSettings, type OpenCodeRuntimeSettings } from "./provider-runtime-config.js";
 import type { PersistentSkillStorageRuntimeMount } from "../../../services/skill-service.js";
 import type { GoogleDriveRuntimeMount } from "../../../services/google-drive-mount-service.js";
+import type { ProviderTranscriptCursor } from "./provider-transcript-chunks.js";
+import { BoundedTextBuffer } from "../../../shared/subprocess/bounded-text-buffer.js";
+
+const PROVIDER_LIVE_STDOUT_MAX_CHARS = 512 * 1024;
+const PROVIDER_LIVE_STDERR_MAX_CHARS = 32 * 1024;
 
 export interface ProviderRunResult extends CommandResult {
   usageTelemetry: ProviderUsageTelemetry;
@@ -354,20 +359,25 @@ export class ProviderRunner implements IProviderRunner {
       await resetQwenOpenAiLogDir(cwd,  workflowSettings.executionMode,  sessionId, this.dockerRunner.removeWorkspaceDir ? this.dockerRunner.removeWorkspaceDir.bind(this.dockerRunner) : undefined);
     }
 
-    let accumulatedStdout = "";
-    let accumulatedStderr = "";
+    const accumulatedStderr = new BoundedTextBuffer(PROVIDER_LIVE_STDERR_MAX_CHARS);
     // Raw stdout including structured JSON lines that are suppressed from the
     // activity feed. The codex live-telemetry watcher parses this so the
     // conversation is built from the exec --json stream in real time even when
     // the rollout file isn't yet readable.
-    let accumulatedRawStdout = "";
+    const accumulatedRawStdout = new BoundedTextBuffer(PROVIDER_LIVE_STDOUT_MAX_CHARS);
+    const retainsLiveStdout = provider === "codex" || provider === "gemini" || provider === "opencode";
     const trackingOnActivity = (desc: string, originator?: string) => {
+      if (originator === "agent" && this.shouldSuppressStructuredStdout(provider, desc)) {
+        accumulatedRawStdout.append(desc + "\n");
+        return;
+      }
       const sanitizedDesc = sanitizeInvocationOutputText(desc);
       if (originator === "agent") {
-        accumulatedStdout += sanitizedDesc + "\n";
-        accumulatedRawStdout += desc + "\n";
+        if (retainsLiveStdout) {
+          accumulatedRawStdout.append(desc + "\n");
+        }
       } else if (originator === "provider") {
-        accumulatedStderr += sanitizedDesc + "\n";
+        accumulatedStderr.append(sanitizedDesc + "\n");
       }
       onActivity(sanitizedDesc, originator);
     };
@@ -409,7 +419,7 @@ export class ProviderRunner implements IProviderRunner {
           if (this.shouldSuppressStructuredStdout(provider, line)) {
             // Keep the structured line out of the activity feed but retain it
             // for the telemetry watcher's stream parsing.
-            accumulatedRawStdout += line + "\n";
+            accumulatedRawStdout.append(line + "\n");
             return;
           }
           trackingOnActivity(line, "agent");
@@ -434,8 +444,8 @@ export class ProviderRunner implements IProviderRunner {
         invocationId: input.invocationId,
         providerInvocationId: input.providerInvocationId,
         purpose: input.purpose,
-        getAccumulatedRawStdout: () => accumulatedRawStdout,
-        getAccumulatedStderr: () => accumulatedStderr,
+        getAccumulatedRawStdout: () => accumulatedRawStdout.toString(),
+        getAccumulatedStderr: () => accumulatedStderr.toString(),
         nativeSessionId,
         sessionId,
         antigravityLogPath,
@@ -445,21 +455,37 @@ export class ProviderRunner implements IProviderRunner {
           ? { getCodexLatestSessionJsonMetadata: async () => this.readCodexLatestSessionMetadata() }
           : {}),
         readClaudeSessionJsonl: async (id) => readClaudeSessionJsonl(cwd, id, workflowSettings.executionMode, this.dockerRunner),
+        ...(this.dockerRunner.readWorkspaceFileChunk || workflowSettings.executionMode === "HOST"
+          ? { readClaudeSessionJsonlChunk: async (id: string, cursor: ProviderTranscriptCursor) =>
+              readClaudeSessionJsonlChunk(cwd, id, workflowSettings.executionMode, cursor, this.dockerRunner) }
+          : {}),
         readCodexLatestSessionJson: async () => readCodexLatestSessionJson(cwd, workflowSettings.executionMode, this.dockerRunner),
+        ...(this.dockerRunner.readLatestWorkspaceFileChunk || workflowSettings.executionMode === "HOST"
+          ? { readCodexLatestSessionChunk: async (cursor: ProviderTranscriptCursor) =>
+              readCodexLatestSessionChunk(cwd, workflowSettings.executionMode, cursor, this.dockerRunner) }
+          : {}),
         ...(workflowSettings.executionMode === "HOST"
           ? { getQwenLogDataMetadata: async () => this.readQwenLogMetadata(sessionId) }
-          : {}),
+          : this.dockerRunner.readWorkspaceDirectoryMetadata
+            ? { getQwenLogDataMetadata: async () => this.dockerRunner.readWorkspaceDirectoryMetadata!(cwd, CONTAINER_QWEN_OPENAI_LOG_DIR, "*.json") }
+            : {}),
         readQwenLogData: async () => readQwenLogData(cwd, workflowSettings.executionMode, sessionId, startedMs, this.dockerRunner),
         ...(workflowSettings.executionMode === "HOST"
           ? { getAntigravityLogMetadata: async (logPath: string) => this.readFileMetadata(logPath) }
-          : {}),
+          : this.dockerRunner.readWorkspaceFileMetadata
+            ? { getAntigravityLogMetadata: async (logPath: string) => this.dockerRunner.readWorkspaceFileMetadata!(cwd, logPath) }
+            : {}),
         parseAntigravityConversationId: async (logPath) => parseAntigravityConversationId(cwd, logPath, workflowSettings.executionMode, this.dockerRunner),
         ...(workflowSettings.executionMode === "HOST"
           ? { getAntigravityTranscriptMetadata: async (resolvedId: string) => this.readAntigravityTranscriptMetadata(resolvedId) }
-          : {}),
+          : this.dockerRunner.readWorkspaceFileMetadata
+            ? { getAntigravityTranscriptMetadata: async (resolvedId: string) => this.readDockerAntigravityMetadata(cwd, resolvedId, ".jsonl") }
+            : {}),
         ...(workflowSettings.executionMode === "HOST"
           ? { getAntigravityDatabaseMetadata: async (resolvedId: string) => this.readAntigravityDatabaseMetadata(resolvedId) }
-          : {}),
+          : this.dockerRunner.readWorkspaceFileMetadata
+            ? { getAntigravityDatabaseMetadata: async (resolvedId: string) => this.readDockerAntigravityMetadata(cwd, resolvedId, ".db") }
+            : {}),
         readAntigravityTranscript: async (resolvedId) => readAntigravityTranscript(cwd, resolvedId, workflowSettings.executionMode, this.dockerRunner),
         resolveAntigravityDatabase: async (resolvedId, destPath) => this.resolveAntigravityDatabase(cwd, resolvedId, workflowSettings.executionMode, destPath),
       });
@@ -527,13 +553,20 @@ export class ProviderRunner implements IProviderRunner {
         readAntigravityDiagnostics,
       });
 
+      const finalCodexRollout = provider === "codex" && watcher
+        ? await (async () => {
+            await watcher.stop();
+            return watcher.readFinalCodexRollout();
+          })()
+        : null;
+
       const capturedText = input.codexOutputPath
         ? await this.readProviderOutputPath(cwd, input.codexOutputPath, workflowSettings.executionMode)
         : "";
       const claudeSessionJsonl = provider === "claude-code" && nativeSessionId
         ? await readClaudeSessionJsonl(cwd, nativeSessionId, workflowSettings.executionMode, this.dockerRunner)
         : null;
-      const codexSessionJson = provider === "codex"
+      const codexSessionJson = provider === "codex" && !finalCodexRollout
         ? await readCodexLatestSessionJson(cwd, workflowSettings.executionMode, this.dockerRunner)
         : null;
       const qwenLog = provider === "qwen-code"
@@ -601,6 +634,7 @@ export class ProviderRunner implements IProviderRunner {
         nativeSessionId: resolvedNativeSessionId || nativeSessionId,
         claudeSessionJsonl,
         codexSessionJson,
+        codexRollout: finalCodexRollout,
         qwenReportedUsage: qwenLog?.usage ?? null,
         qwenConversation: qwenLog?.conversation ?? null,
         startTimeMs: startedMs,
@@ -919,6 +953,29 @@ export class ProviderRunner implements IProviderRunner {
     return "missing";
   }
 
+  private async readDockerAntigravityMetadata(
+    cwd: string,
+    conversationId: string,
+    kind: ".jsonl" | ".db",
+  ): Promise<string | null> {
+    const candidates = kind === ".db"
+      ? [
+          pathPosix.join(CONTAINER_RUNTIME_HOME, ".gemini", "antigravity-cli", "conversations", `${conversationId}.db`),
+          pathPosix.join(CONTAINER_RUNTIME_HOME, ".gemini", "antigravity", "conversations", `${conversationId}.db`),
+        ]
+      : [
+          pathPosix.join(CONTAINER_RUNTIME_HOME, ".gemini", "antigravity-cli", "brain", conversationId, ".system_generated", "logs", "transcript.jsonl"),
+          pathPosix.join(CONTAINER_RUNTIME_HOME, ".gemini", "antigravity-cli", "brain", conversationId, ".system_generated", "logs", "overview.txt"),
+          pathPosix.join(CONTAINER_RUNTIME_HOME, ".gemini", "antigravity", "brain", conversationId, ".system_generated", "logs", "transcript.jsonl"),
+          pathPosix.join(CONTAINER_RUNTIME_HOME, ".gemini", "antigravity", "brain", conversationId, ".system_generated", "logs", "overview.txt"),
+        ];
+    for (const candidate of candidates) {
+      const metadata = await this.dockerRunner.readWorkspaceFileMetadata?.(cwd, candidate);
+      if (metadata) return metadata;
+    }
+    return "missing";
+  }
+
   private async readFileMetadata(filePath: string): Promise<string> {
     const stat = await fs.stat(filePath).catch(() => null);
     if (!stat) {
@@ -1075,7 +1132,7 @@ export class ProviderRunner implements IProviderRunner {
         : ["exec", "--yolo", "--json", "--output-last-message", codexOutputPath];
       args.push(...codexProviderArgs);
       if (thinkingMode) {
-        args.push("-c", `model_reasoning_effort="${normalizeProviderThinkingMode("codex", thinkingMode)}"`);
+        args.push("-c", `model_reasoning_effort="${normalizeProviderThinkingMode("codex", thinkingMode, undefined, model)}"`);
       }
       if (model && model !== "default") {
         args.push("--model", model);
@@ -1439,12 +1496,8 @@ export class ProviderRunner implements IProviderRunner {
     if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
       return false;
     }
-    try {
-      JSON.parse(trimmed);
-      return true;
-    } catch {
-      return false;
-    }
+    return (trimmed.startsWith("{") && trimmed.endsWith("}"))
+      || (trimmed.startsWith("[") && trimmed.endsWith("]"));
   }
 
   private async writeLocalMcpConfig(

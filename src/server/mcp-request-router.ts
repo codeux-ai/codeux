@@ -43,6 +43,7 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
     .register("scheduler_code_ux", async (input) => (await args.managementToolHandler.handleScheduler(input)) as McpToolResponse)
     .register("manage_agents", async (input) => (await args.managementToolHandler.handleManageAgents(input)) as McpToolResponse)
     .register("manage_node_flows", async (input) => (await args.managementToolHandler.handleManageNodeFlows(input)) as McpToolResponse)
+    .register("run_attached_flow", async (input) => (await args.managementToolHandler.handleRunAttachedFlow(input)) as McpToolResponse)
     .register("manage_memory", async (input) => (await args.managementToolHandler.handleManageMemory(input)) as McpToolResponse)
     .register("add_long_term_memory", async (input) => (await args.managementToolHandler.handleAddLongTermMemory(input)) as McpToolResponse)
     .register("manage_skills", async (input) => (await args.managementToolHandler.handleManageSkills(input)) as McpToolResponse)

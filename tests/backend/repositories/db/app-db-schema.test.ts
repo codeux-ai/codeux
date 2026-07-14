@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppDbStorage } from "../../../../src/repositories/app-db-storage.js";
 import { SqliteDatabaseAdapter } from "../../../../src/repositories/db/sqlite-database-adapter.js";
-import { APP_DB_SCHEMA_TABLES } from "../../../../src/repositories/db/app-db-schema.js";
+import {
+  APP_DB_SCHEMA_READ_INDEXES,
+  APP_DB_SCHEMA_TABLES,
+} from "../../../../src/repositories/db/app-db-schema.js";
 import { runMigrations } from "../../../../src/repositories/db/app-db-migrations.js";
 import * as fs from "fs/promises";
 import * as os from "os";
@@ -113,6 +116,8 @@ describe("AppDbSchema", () => {
     const adapter = new SqliteDatabaseAdapter(path.join(dir, "app.db"));
     try {
       adapter.exec(APP_DB_SCHEMA_TABLES);
+      adapter.exec(APP_DB_SCHEMA_READ_INDEXES);
+      runMigrations(adapter);
 
       const getIndex = (name: string) => {
         return adapter.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name=?").get(name);
@@ -208,6 +213,7 @@ describe("AppDbSchema", () => {
       expect(getTable("node_flow_node_runs")).toBeDefined();
       expect(getColumnNames("node_flow_runs")).toContain("execution_invocation_id");
       expect(getColumnNames("node_flow_node_runs")).toContain("execution_invocation_id");
+      expect(getColumnNames("automation_credentials")).toContain("management_project_id");
       expect(getColumnNames("sprint_linked_issues")).toEqual(expect.arrayContaining([
         "issue_body_markdown",
         "issue_conversation_markdown",
@@ -230,6 +236,14 @@ describe("AppDbSchema", () => {
       expect(getIndexCount("idx_guardrail_ledger_task_purpose")).toBe(1);
       expect(getIndexCount("idx_memory_claims_project_fingerprint_active")).toBe(1);
       expect(getIndexCount("idx_node_flows_project_updated")).toBe(1);
+      expect(getColumnNames("sprints")).toEqual(expect.arrayContaining([
+        "kind",
+        "rollback_source_sprint_id",
+        "rollback_mode",
+        "rollback_instructions",
+        "rollback_safety_reason",
+      ]));
+      expect(getIndexCount("idx_sprints_rollback_source")).toBe(1);
     } finally {
       storage.close();
     }
@@ -247,6 +261,7 @@ describe("AppDbSchema", () => {
     const first = new SqliteDatabaseAdapter(dbPath);
     try {
       first.exec(APP_DB_SCHEMA_TABLES);
+      first.exec(APP_DB_SCHEMA_READ_INDEXES);
       runMigrations(first);
       first.prepare(`
         INSERT INTO projects (id, slug, name, base_dir, status, created_at, updated_at)
@@ -284,6 +299,7 @@ describe("AppDbSchema", () => {
     try {
       const before = getSchemaSignature(second);
       second.exec(APP_DB_SCHEMA_TABLES);
+      second.exec(APP_DB_SCHEMA_READ_INDEXES);
       runMigrations(second);
       const after = getSchemaSignature(second);
 

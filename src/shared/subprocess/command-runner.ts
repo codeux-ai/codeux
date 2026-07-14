@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import { createReadStream } from "fs";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 import { createHash } from "crypto";
 import {
   DockerHelperContainerPool,
@@ -13,6 +14,8 @@ import {
 } from "./command-spawner-client.js";
 import type { SpawnerCommandOptions, SpawnerRawResult } from "./command-spawner-protocol.js";
 import { isRuntimeShutdownInProgress } from "../../services/shutdown-state.js";
+import { BoundedTextBuffer } from "./bounded-text-buffer.js";
+import { expandHomePath } from "../config/home-path.js";
 
 declare const spawnCommandBrand: unique symbol;
 declare const spawnArgumentBrand: unique symbol;
@@ -239,31 +242,38 @@ export class CommandRunner {
     resolvedCommand: ResolvedCommand,
     options: CommandOptions = {},
   ): Promise<CommandResult> {
+    const safeCwd = this.validateSpawnCwd(options.cwd);
+    const safeStdinFile = options.stdinFile
+      ? this.validateStdinFile(options.stdinFile, safeCwd)
+      : undefined;
+    const safeOptions: CommandOptions = safeCwd === undefined && safeStdinFile === undefined
+      ? options
+      : { ...options, cwd: safeCwd, stdinFile: safeStdinFile };
     const spawner = this.getSpawner();
     if (spawner) {
       try {
         const spawnerOptions: SpawnerCommandOptions = {
-          ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
-          ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),
-          ...(options.stdinFile !== undefined ? { stdinFile: options.stdinFile } : {}),
-          ...(options.trimOutput !== undefined ? { trimOutput: options.trimOutput } : {}),
-          maxStdoutChars: options.maxStdoutChars ?? CommandRunner.DEFAULT_MAX_STDOUT_CHARS,
-          maxStderrChars: options.maxStderrChars ?? CommandRunner.DEFAULT_MAX_STDERR_CHARS,
-          streamStdoutLines: Boolean(options.onStdoutLine),
-          streamStderrLines: Boolean(options.onStderrLine),
-          ...spawner.buildEnvPayload(options.env),
+          ...(safeOptions.cwd !== undefined ? { cwd: safeOptions.cwd } : {}),
+          ...(safeOptions.timeout !== undefined ? { timeout: safeOptions.timeout } : {}),
+          ...(safeOptions.stdinFile !== undefined ? { stdinFile: safeOptions.stdinFile } : {}),
+          ...(safeOptions.trimOutput !== undefined ? { trimOutput: safeOptions.trimOutput } : {}),
+          maxStdoutChars: safeOptions.maxStdoutChars ?? CommandRunner.DEFAULT_MAX_STDOUT_CHARS,
+          maxStderrChars: safeOptions.maxStderrChars ?? CommandRunner.DEFAULT_MAX_STDERR_CHARS,
+          streamStdoutLines: Boolean(safeOptions.onStdoutLine),
+          streamStderrLines: Boolean(safeOptions.onStderrLine),
+          ...spawner.buildEnvPayload(safeOptions.env),
         };
         const raw = await spawner.run(
           resolvedCommand.command,
           resolvedCommand.args,
           spawnerOptions,
           {
-            onStdoutLine: options.onStdoutLine,
-            onStderrLine: options.onStderrLine,
-            signal: options.signal,
+            onStdoutLine: safeOptions.onStdoutLine,
+            onStderrLine: safeOptions.onStderrLine,
+            signal: safeOptions.signal,
           },
         );
-        return this.finalizeResult(raw, options, resolvedCommand.containerHostCwd);
+        return this.finalizeResult(raw, safeOptions, resolvedCommand.containerHostCwd);
       } catch (error) {
         if (!(error instanceof HostUnavailableError)) {
           throw error;
@@ -271,7 +281,7 @@ export class CommandRunner {
         // Host unavailable/aborted-before-dispatch: fall through to the in-process path.
       }
     }
-    return this.spawnProcessInline(resolvedCommand, options);
+    return this.spawnProcessInline(resolvedCommand, safeOptions);
   }
 
   /**
@@ -367,6 +377,58 @@ export class CommandRunner {
     });
   }
 
+  private validateSpawnCwd(cwd: string | undefined): SpawnPath | undefined {
+    if (cwd === undefined) {
+      return undefined;
+    }
+    if (!cwd.trim() || cwd.includes("\0")) {
+      throw new Error("cwd cannot be empty or contain null bytes");
+    }
+
+    const resolved = path.resolve(cwd);
+    let canonical: string;
+    try {
+      // cwd is selected from a registered local project or a runtime-owned
+      // workspace. Canonicalize it immediately before dispatch so relative
+      // segments and symlink aliases cannot change the directory boundary
+      // observed by the child process.
+      canonical = fs.realpathSync(resolved);
+    } catch {
+      throw new Error(`cwd is not an existing directory: ${resolved}`);
+    }
+
+    const trustedRoots = [
+      os.homedir(),
+      process.cwd(),
+      os.tmpdir(),
+      ...(process.env.CODE_UX_DIRECTORY_BROWSER_ROOTS ?? "").split(","),
+    ].filter((root) => root.trim().length > 0).map((root) => {
+      const resolvedRoot = path.resolve(expandHomePath(root.trim()));
+      try {
+        return fs.realpathSync(resolvedRoot);
+      } catch {
+        return resolvedRoot;
+      }
+    });
+    for (const root of trustedRoots) {
+      // Keep the filesystem check and the returned value in the branch guarded
+      // by the normalized absolute-path prefix check. The relative-path test
+      // then enforces the separator boundary so sibling prefixes do not match.
+      if (canonical.startsWith(root)) {
+        const relative = path.relative(root, canonical);
+        const isInsideRoot = relative === ""
+          || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+        if (isInsideRoot) {
+          if (!fs.statSync(canonical).isDirectory()) {
+            throw new Error(`cwd is not an existing directory: ${canonical}`);
+          }
+          return canonical as SpawnPath;
+        }
+      }
+    }
+    throw new Error("cwd must be inside the home, application, temporary, or configured local roots");
+  }
+
   private validateStdinFile(stdinFile: string, cwd?: string): SpawnPath {
     if (!stdinFile || stdinFile.includes("\0")) {
       throw new Error("stdinFile cannot be empty or contain null bytes");
@@ -404,7 +466,8 @@ export class CommandRunner {
     return new Promise((resolve) => {
       const spawnCommand = this.validateSpawnCommand(resolvedCommand.command);
       const spawnArgs = this.validateSpawnArgs(resolvedCommand.args);
-      const safeStdinFile = stdinFile ? this.validateStdinFile(stdinFile, cwd) : null;
+      const safeCwd = this.validateSpawnCwd(cwd);
+      const safeStdinFile = stdinFile ? this.validateStdinFile(stdinFile, safeCwd) : null;
 
       // shell:false (explicit) — the command and its arguments are passed
       // directly to execvp without any shell interpretation, so argument values
@@ -413,16 +476,18 @@ export class CommandRunner {
       // layer, never assembled from raw user-supplied strings.
       // codeql[js/path-injection]
       const child = spawn(spawnCommand, spawnArgs, {
-        cwd,
+        // safeCwd is the canonical existing directory returned by
+        // validateSpawnCwd immediately above.
+        cwd: safeCwd,
         env,
         shell: false,
         stdio: [safeStdinFile ? "pipe" : "ignore", "pipe", "pipe"],
       });
 
-      let stdout = "";
-      let stderr = "";
-      let stdoutBuffer = "";
-      let stderrBuffer = "";
+      const stdout = new BoundedTextBuffer(maxStdoutChars);
+      const stderr = new BoundedTextBuffer(maxStderrChars);
+      const stdoutLineBuffer = new BoundedTextBuffer(maxStdoutChars);
+      const stderrLineBuffer = new BoundedTextBuffer(maxStderrChars);
       let stdoutClipped = false;
       let stderrClipped = false;
       let timedOut = false;
@@ -446,7 +511,8 @@ export class CommandRunner {
           signal.removeEventListener("abort", abortHandler);
         }
 
-        let finalStderr = trimOutput ? stderr.trim() : stderr;
+        const retainedStderr = stderr.takeString();
+        let finalStderr = trimOutput ? retainedStderr.trim() : retainedStderr;
         if (extraStderr) {
           const separator = finalStderr.length > 0 && !finalStderr.endsWith("\n") ? "\n" : "";
           finalStderr = `${finalStderr}${separator}${extraStderr}`;
@@ -455,9 +521,10 @@ export class CommandRunner {
           finalStderr = `...${finalStderr}`;
         }
 
+        const retainedStdout = stdout.takeString();
         let normalizedStdout = resolvedCommand.containerHostCwd
-          ? this.mapContainerStdoutToHost(stdout, resolvedCommand.containerHostCwd)
-          : stdout;
+          ? this.mapContainerStdoutToHost(retainedStdout, resolvedCommand.containerHostCwd)
+          : retainedStdout;
         normalizedStdout = trimOutput ? normalizedStdout.trim() : normalizedStdout;
         if (stdoutClipped) {
           normalizedStdout = `...${normalizedStdout}`;
@@ -527,38 +594,16 @@ export class CommandRunner {
       const handleData = (data: Buffer, isStderr: boolean, callback?: (line: string) => void) => {
         const text = data.toString();
         if (isStderr) {
-          stderr += text;
-          if (stderr.length > maxStderrChars) {
-            stderr = stderr.slice(-maxStderrChars);
-            stderrClipped = true;
-          }
+          stderr.append(text);
+          stderrClipped = stderr.clipped;
           if (callback) {
-            stderrBuffer += text;
-            const lines = stderrBuffer.split("\n");
-            stderrBuffer = lines.pop() ?? "";
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (trimmed.length > 0) {
-                callback(trimmed);
-              }
-            }
+            this.emitCompletedLines(stderrLineBuffer, text, callback);
           }
         } else {
-          stdout += text;
-          if (stdout.length > maxStdoutChars) {
-            stdout = stdout.slice(-maxStdoutChars);
-            stdoutClipped = true;
-          }
+          stdout.append(text);
+          stdoutClipped = stdout.clipped;
           if (callback) {
-            stdoutBuffer += text;
-            const lines = stdoutBuffer.split("\n");
-            stdoutBuffer = lines.pop() ?? "";
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (trimmed.length > 0) {
-                callback(trimmed);
-              }
-            }
+            this.emitCompletedLines(stdoutLineBuffer, text, callback);
           }
         }
       };
@@ -572,11 +617,13 @@ export class CommandRunner {
       });
 
       child.on("close", (code) => {
-        if (onStdoutLine && stdoutBuffer.trim().length > 0) {
-          onStdoutLine(stdoutBuffer.trim());
+        const finalStdoutLine = stdoutLineBuffer.takeString().trim();
+        if (onStdoutLine && finalStdoutLine.length > 0) {
+          onStdoutLine(finalStdoutLine);
         }
-        if (onStderrLine && stderrBuffer.trim().length > 0) {
-          onStderrLine(stderrBuffer.trim());
+        const finalStderrLine = stderrLineBuffer.takeString().trim();
+        if (onStderrLine && finalStderrLine.length > 0) {
+          onStderrLine(finalStderrLine);
         }
 
         const ok = code === 0 && !timedOut && !aborted;
@@ -588,6 +635,26 @@ export class CommandRunner {
         finish(ok, code, extra);
       });
     });
+  }
+
+  private emitCompletedLines(
+    pending: BoundedTextBuffer,
+    chunk: string,
+    callback: (line: string) => void,
+  ): void {
+    const lastNewline = chunk.lastIndexOf("\n");
+    if (lastNewline < 0) {
+      pending.append(chunk);
+      return;
+    }
+    const completed = `${pending.takeString()}${chunk.slice(0, lastNewline)}`;
+    for (const line of completed.split("\n")) {
+      const trimmed = line.trim();
+      if (trimmed.length > 0) {
+        callback(trimmed);
+      }
+    }
+    pending.append(chunk.slice(lastNewline + 1));
   }
 
   /**

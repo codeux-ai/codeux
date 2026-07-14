@@ -5,6 +5,7 @@ import type {
   BaseAgentUpdateNotice,
 } from "../contracts/agent-preset-types.js";
 import type { ProviderId, Subtask } from "../contracts/app-types.js";
+import { extractJsonFromText } from "../domain/llm/json-extraction.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
 import { EntityNotFoundError, ValidationError } from "../repositories/repository-utils.js";
@@ -184,12 +185,11 @@ export class AgentBaseUpdateService {
   }
 
   private parseUpdatePayload(bodyMarkdown: string): AgentBaseUpdatePayload {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(bodyMarkdown.trim());
-    } catch {
+    const extraction = extractJsonFromText(bodyMarkdown);
+    if (!extraction.success) {
       throw new ValidationError("Base-agent update response was not raw valid JSON.");
     }
+    const parsed = extraction.data;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       throw new ValidationError("Base-agent update response must be a JSON object.");
     }

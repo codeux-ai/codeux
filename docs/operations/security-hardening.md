@@ -1,5 +1,15 @@
 # Security Hardening
 
+## Headless identity boundary
+
+Remote dashboard/API access must use either digest-backed service identities or an OIDC-capable trusted reverse proxy as documented in [Secure Headless Server Mode](./server-mode.md). Never expose credential management by setting only `DASHBOARD_HOST`; it also requires the `credential_admin` role, project scope, TLS, and `CODE_UX_REMOTE_CREDENTIAL_MANAGEMENT=true`.
+
+Treat trusted identity headers as credentials: the proxy must remove inbound copies, inject its own values, authenticate to the loopback backend with `CODE_UX_TRUSTED_PROXY_SECRET`, and emit `X-Forwarded-Proto: https`. Keep `/health` and `/ready` free of authorization headers. Keep webhook and chat-provider ingress secrets separate from dashboard identities.
+
+Service identity JSON stores only SHA-256 token digests. Give automation runners only `automation_runner` plus the exact project ids they lease. Split authoring, publishing, approval/running, credential administration, and viewing identities where operational separation matters. Audit export is secret-redacted but still security-sensitive operational data; restrict and retain it according to incident policy.
+
+Encrypted credential rows make key recovery a startup invariant. Backups are incomplete without the referenced KMS/Vault versions or owner-only mounted key. A missing key must produce `/ready` 503 and startup failure, never metadata-only success or an unencrypted fallback.
+
 This page documents the concrete security posture of Code UX. Code UX operates as a single-user trusted process designed for local development or isolated execution. It explicitly does not feature multi-tenant RBAC, full authentication for standard UI flows, or protection from hostile users with existing network access to the application.
 
 ## Dependency Audit Enforcement
@@ -82,7 +92,7 @@ While Code UX trusts the developer and any connected systems, several specific p
 - **Dashboard Login Port Binding:** Interactive dashboard-login containers do not use Docker host networking by default. Codex and Claude Code OAuth callback ports are published only on host loopback as `127.0.0.1:<port>:<port>`; other provider login containers publish no host ports unless a provider-specific flow explicitly requires it. Public dashboard binding does not change this callback-port rule.
 
 ### Subprocess & Settings Mutation Safety
-- **Shell-Free Command Execution:** Shared subprocess execution validates command names, argument null bytes, and stdin file paths immediately before spawning, then runs with `shell: false` so arguments are not reinterpreted by a shell.
+- **Shell-Free Command Execution:** Shared subprocess execution validates command names, argument null bytes, stdin file paths, and working directories immediately before spawning. Working directories must resolve to existing real directories inside the user home, application directory, OS temporary directory, or an explicit `CODE_UX_DIRECTORY_BROWSER_ROOTS` entry before either the inline or helper-process boundary. Commands run with `shell: false` so arguments are not reinterpreted by a shell.
 - **Prototype Pollution Guards:** Dotted settings paths are parsed through a safe-key validator before clone-on-write mutation. `__proto__`, `constructor`, `prototype`, and empty path segments are rejected before any assignment.
 
 ## Trust Model & Limitations

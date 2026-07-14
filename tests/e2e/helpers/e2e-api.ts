@@ -11,6 +11,19 @@ import type {
   UpdateSprintInput,
   UpdateTaskInput,
 } from '../../../src/contracts/project-management-types.js';
+import type {
+  AutomationCredentialMetadata,
+  CreateAutomationCredentialInput,
+  UpdateAutomationCredentialMetadataInput,
+} from '../../../src/contracts/automation-credential-types.js';
+import type {
+  CreateCustomDashboardDraftInput,
+  CustomDashboardRecord,
+} from '../../../src/contracts/custom-dashboard-types.js';
+import type {
+  CreateNodeFlowInput,
+  NodeFlowDraftReview,
+} from '../../../src/contracts/node-flow-types.js';
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null;
 
@@ -182,4 +195,61 @@ export async function deleteTaskViaApi(
 ): Promise<void> {
   const query = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
   await expectApiResponse(await request.delete(`/api/tasks/${encodeURIComponent(taskId)}${query}`), [200, 404]);
+}
+
+export async function createAutomationCredentialViaApi(
+  request: APIRequestContext,
+  projectId: string,
+  input: CreateAutomationCredentialInput,
+): Promise<AutomationCredentialMetadata> {
+  return parseJson<AutomationCredentialMetadata>(
+    await request.post(`/api/projects/${encodeURIComponent(projectId)}/credentials`, {
+      headers: jsonHeaders(),
+      data: input satisfies JsonValue,
+    }),
+    [201],
+  );
+}
+
+export async function updateAutomationCredentialViaApi(
+  request: APIRequestContext,
+  projectId: string,
+  credentialId: string,
+  input: UpdateAutomationCredentialMetadataInput,
+): Promise<AutomationCredentialMetadata> {
+  return parseJson<AutomationCredentialMetadata>(
+    await request.patch(`/api/projects/${encodeURIComponent(projectId)}/credentials/${encodeURIComponent(credentialId)}`, {
+      headers: jsonHeaders(),
+      data: input satisfies JsonValue,
+    }),
+    [200],
+  );
+}
+
+export async function createNodeFlowDraftViaApi(
+  request: APIRequestContext,
+  projectId: string,
+  input: CreateNodeFlowInput,
+): Promise<NodeFlowDraftReview> {
+  return parseJson<NodeFlowDraftReview>(
+    await request.post(`/api/projects/${encodeURIComponent(projectId)}/node-flow-drafts`, {
+      headers: jsonHeaders(),
+      data: input satisfies JsonValue,
+    }),
+    [201],
+  );
+}
+
+export async function createCustomDashboardViaApi(
+  request: APIRequestContext,
+  projectId: string,
+  input: CreateCustomDashboardDraftInput,
+): Promise<CustomDashboardRecord> {
+  return parseJson<CustomDashboardRecord>(
+    await request.post(`/api/projects/${encodeURIComponent(projectId)}/custom-dashboards`, {
+      headers: jsonHeaders(),
+      data: input satisfies JsonValue,
+    }),
+    [201],
+  );
 }

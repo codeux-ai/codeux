@@ -1,5 +1,5 @@
 import { createContext, type ComponentChildren, type FunctionComponent } from "preact";
-import { useContext, useId, useMemo, useRef, useState } from "preact/hooks";
+import { useContext, useEffect, useId, useMemo, useRef, useState } from "preact/hooks";
 import { ArrowLeft, ArrowRight, BookOpenText } from "lucide-preact";
 import type { SettingsValueSource } from "../../../../types.js";
 import { getSettingsSubcategoryDoc, toHelpSections, type SettingsSubcategoryId } from "../../../lib/settings-subcategory-docs.js";
@@ -29,28 +29,56 @@ export const useSettingsDetailWorkspace = (): SettingsDetailWorkspaceContextValu
 
 export const SettingsDetailWorkspaceProvider: FunctionComponent<{
   enabled?: boolean;
+  activeSection?: string | null;
+  onActiveSectionChange?: (sectionId: string | null) => void;
+  validateActiveSection?: boolean;
   children: ComponentChildren;
-}> = ({ enabled = true, children }) => (
-  <SettingsDetailWorkspaceProviderState enabled={enabled}>
+}> = ({ enabled = true, activeSection, onActiveSectionChange, validateActiveSection = true, children }) => (
+  <SettingsDetailWorkspaceProviderState
+    enabled={enabled}
+    activeSection={activeSection}
+    onActiveSectionChange={onActiveSectionChange}
+    validateActiveSection={validateActiveSection}
+  >
     {children}
   </SettingsDetailWorkspaceProviderState>
 );
 
 const SettingsDetailWorkspaceProviderState: FunctionComponent<{
   enabled: boolean;
+  activeSection?: string | null;
+  onActiveSectionChange?: (sectionId: string | null) => void;
+  validateActiveSection: boolean;
   children: ComponentChildren;
-}> = ({ enabled, children }) => {
-  const [activeSection, setActiveSection] = useState<string | null>(null);
+}> = ({ enabled, activeSection: controlledActiveSection, onActiveSectionChange, validateActiveSection, children }) => {
+  const [localActiveSection, setLocalActiveSection] = useState<string | null>(null);
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const controlled = typeof onActiveSectionChange === "function";
+  const activeSection = controlled ? controlledActiveSection ?? null : localActiveSection;
+  const setActiveSection = controlled ? onActiveSectionChange : setLocalActiveSection;
   const value = useMemo<SettingsDetailWorkspaceContextValue>(() => ({
     enabled,
     activeSection: enabled ? activeSection : null,
     openSection: setActiveSection,
     closeSection: () => setActiveSection(null),
-  }), [activeSection, enabled]);
+  }), [activeSection, enabled, setActiveSection]);
+
+  useEffect(() => {
+    if (!enabled || !validateActiveSection || !activeSection || !workspaceRef.current) {
+      return;
+    }
+    const hasMatchingSection = Array.from(
+      workspaceRef.current.querySelectorAll<HTMLElement>("[data-settings-detail-section]"),
+    ).some((section) => section.dataset.settingsDetailSection === activeSection);
+    if (!hasMatchingSection) {
+      setActiveSection(null);
+    }
+  }, [activeSection, enabled, setActiveSection, validateActiveSection]);
 
   return (
     <SettingsDetailWorkspaceContext.Provider value={value}>
       <div
+        ref={workspaceRef}
         data-settings-detail-active={enabled && activeSection ? "true" : "false"}
         className={enabled && activeSection ? "[&_[data-settings-overview-only]]:hidden" : undefined}
       >
@@ -196,7 +224,7 @@ export const SectionCard: FunctionComponent<{
   }
 
   return (
-    <section aria-labelledby={titleId} data-settings-accent={danger ? "red" : accent} className={`relative overflow-hidden rounded-[1.75rem] border p-5 shadow-[var(--elevation-base)] backdrop-blur-sm ${featured || isFocusedDetail ? "xl:col-span-2 2xl:col-span-full" : ""} ${
+    <section aria-labelledby={titleId} data-settings-detail-section={resolvedSectionId} data-settings-accent={danger ? "red" : accent} className={`relative overflow-hidden rounded-[1.75rem] border p-5 shadow-[var(--elevation-base)] backdrop-blur-sm ${featured || isFocusedDetail ? "xl:col-span-2 2xl:col-span-full" : ""} ${
     danger
       ? "border-status-red/20 bg-status-red/[0.03] dark:border-status-red/20 dark:bg-status-red/[0.04]"
       : "border-[color:var(--border-hairline)] bg-[var(--surface-glass)]"

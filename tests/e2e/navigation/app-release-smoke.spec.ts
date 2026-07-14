@@ -21,7 +21,7 @@ const routeSmokeCases: RouteSmokeCase[] = [
   {
     path: '/tasks',
     tourId: 'nav-tasks',
-    landmark: (page) => page.getByRole('heading', { name: 'Task Board', exact: true }),
+    landmark: (page) => page.getByRole('heading', { name: 'Tasks', exact: true }),
   },
   {
     path: '/projects',
@@ -223,7 +223,7 @@ test('normal app shell loads and global shell behavior works', async ({ page, re
 
   await page.locator('[data-tour-id="nav-tasks"]').click();
   await expect(page).toHaveURL(/\/tasks$/);
-  await expect(page.getByRole('heading', { name: 'Task Board', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Tasks', exact: true })).toBeVisible();
   await ensureProjectSelectedInShell(page, project.name);
   await expectNoPersistentLoading(page);
   await expectNoCapturedErrors(errors);
@@ -269,13 +269,13 @@ test('task board remains usable across mobile and desktop release viewports', as
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/tasks');
-  await expect(page.getByRole('heading', { name: 'Task Board', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Tasks', exact: true })).toBeVisible();
   await ensureProjectSelectedInShell(page, project.name);
   await expect(page.getByRole('button', { name: 'New Task' })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
   await page.setViewportSize({ width: 1366, height: 900 });
-  await expect(page.getByRole('heading', { name: 'Task Board', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Tasks', exact: true })).toBeVisible();
   await ensureProjectSelectedInShell(page, project.name);
   await expect(page.getByRole('button', { name: 'New Task' })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Workspace navigation' })).toBeVisible();

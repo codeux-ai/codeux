@@ -8,7 +8,7 @@ import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
 import { fetchLocalDirectories } from "../../lib/project-api.js";
 import type { LocalDirectoryBrowserResponse, ProjectSetupOptions } from "../../types.js";
 import type { ApplicationKind } from "../../../types.js";
-import { DEFAULT_DASHBOARD_SETTINGS } from "../../../lib/settings.js";
+import { BUILTIN_CODE_UX_TECHSTACK_ID } from "../../../../../src/domain/settings/project-creation-defaults.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
@@ -123,7 +123,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const nameInputRef = useRef<HTMLInputElement>(null);
     const [touched, setTouched] = useState({ name: false, path: false, slug: false });
     const newProjectTechstackId = quickActionDefaults?.selectedTechstackId
-        ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.defaultTechstackId;
+        ?? BUILTIN_CODE_UX_TECHSTACK_ID;
     const newProjectApplicationKind = quickActionDefaults?.applicationKind ?? null;
     const quickActionContextLabel = quickActionDefaults?.applicationKind === 'web'
         ? 'Web App'

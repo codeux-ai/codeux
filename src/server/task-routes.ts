@@ -8,7 +8,13 @@ export function registerTaskRoutes(router: Express, deps: DashboardDependencies)
   router.get("/api/projects/:projectId/tasks", syncRoute((req, res) => {
     try {
       const sprintId = parseTrimmedString(req.query.sprintId);
-      res.json(deps.listTasks(requireTrimmedString(req.params.projectId, "projectId"), sprintId));
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
+      const view = parseTrimmedString(req.query.view);
+      if (view === "overview" && !sprintId && deps.listTaskOverviews) {
+        res.json(deps.listTaskOverviews(projectId));
+        return;
+      }
+      res.json(deps.listTasks(projectId, sprintId));
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to list tasks"));
     }

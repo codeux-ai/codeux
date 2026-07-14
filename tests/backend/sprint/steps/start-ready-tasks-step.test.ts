@@ -188,4 +188,37 @@ describe("start-ready-tasks-step", () => {
       source: "pre_dispatch",
     }));
   });
+
+  it("coalesces unchanged provider-cap diagnostics across rapid orchestration cycles", async () => {
+    const subtasks: Subtask[] = [
+      { id: "1", title: "t1", prompt: "p1", depends_on: [], is_independent: false, status: "PENDING" },
+      { id: "2", title: "t2", prompt: "p2", depends_on: [], is_independent: false, status: "PENDING" },
+    ];
+    const infoSpy = vi.fn();
+    const logger = { info: infoSpy, error: vi.fn() } as any;
+    const options = {
+      action: "orchestrate" as const,
+      getConsecutiveFailures: () => 0,
+      setConsecutiveFailures: vi.fn(),
+      maxFailures: 3,
+      startTask: vi.fn(),
+      resolveSessionName: (session: any) => session.id,
+      extractSessionId: (session: any) => session.id,
+      logger,
+      getProviderForTask: () => "codex",
+      getProviderSettings: () => ({ maxConcurrentTasks: 2 }),
+      getRunningCounts: () => ({ codex: 2 }),
+    };
+
+    await runStartReadyTasksStep(subtasks, options);
+    await runStartReadyTasksStep(subtasks, options);
+
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+
+    await runStartReadyTasksStep([
+      { id: "3", title: "t3", prompt: "p3", depends_on: [], is_independent: false, status: "PENDING" },
+    ], options);
+
+    expect(infoSpy).toHaveBeenCalledTimes(2);
+  });
 });

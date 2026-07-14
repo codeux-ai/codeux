@@ -72,9 +72,13 @@ A failing threshold fails CI.
 - **In-memory repositories** for orchestrator integration tests rather than spinning up Postgres.
 - **Supertest** for HTTP route tests against the Express app.
 
+Automatic base-agent update regressions are covered by `tests/backend/integration/agent-base-update-invocation.test.ts`. Keep that harness on the real `AgentBaseUpdateService` → `StructuredAgentRequestService` → `StructuredProviderResponseService` → `AgentPresetSyncService` path, with only the provider execution boundary replaced by deterministic output. The suite must continue to verify the `planning` / `agent_base_update` invocation contract, same-session parse retries at the configured cap, and that parse or provider failures leave both instruction markdown and the stored bundled-revision baseline untouched.
+
 ## Writing new tests
 
 A behavioural change *must* include or update tests. PRs without test coverage for non-trivial logic will be requested-changes in review.
+
+For shared QA or CI card behavior, run `pnpm exec vitest run tests/dashboard/v2/qa-ci-card-status.integration.test.tsx`. This deterministic suite passes one review and execution snapshot through the real Task, Live, and Sprint page projections before rendering the Task, Live, Sprint gallery, and Sprint ledger cards. It covers accessible labels, keyboard-only details and follow-up expansion, failure recovery, attention precedence, unrelated-event isolation, Escape focus restoration, and reconnect replay without Docker, provider CLIs, Git hosting, or a live database.
 
 Conventions:
 

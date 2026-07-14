@@ -2,6 +2,21 @@
 
 Code UX records provider work in `execution_invocations` and `execution_invocation_messages` so the dashboard can show prompt history, live agent transcripts, tool activity, token usage, and terminal status for each provider-backed run.
 
+Asynchronous planning guidance uses a shared, side-effect-free domain projection. ETA samples come from the ten most recently started, completed planning invocations for the project; active, unsuccessful, paused, non-planning, and malformed samples are ignored, and no usable history falls back to three minutes. The initial check is scheduled at the calculated ETA. If the invocation is still running when checked, the next check is exactly one minute later even after that ETA has elapsed. Elapsed time alone never changes status or justifies duplicate planning; only completed, failed, cancelled, or paused invocation records produce terminal guidance, always without a next check.
+
+## CLI task-coding lifecycle
+
+CLI task coding uses two durable records with different responsibilities:
+
+- The execution invocation covers the complete Code UX workflow, including cancellable workspace/provider preparation, provider execution, Git finalization, and pull-request finalization. It becomes visible after cancellation registration and before preparation begins, so an early running row means “workflow in progress,” not “provider usage started.”
+- The provider invocation is created and linked only when Code UX atomically claims provider capacity. Its `started_at`, duration, concurrency occupancy, and token/tool telemetry begin at claim/run time. Preparation never creates a provider usage placeholder.
+
+The workflow remains truthful on every exit path. Preparation failures close the execution invocation without provider usage. Pre-claim cancellation aborts preparation or capacity waiting and records no provider duration or tokens; post-claim cancellation closes the linked provider usage independently. Runtime shutdown preserves eligible workspace state for startup reconciliation instead of inventing a provider result.
+
+A resumed preserved workspace receives a new workflow execution record. When recovery proves provider work already completed in that workspace, Code UX skips a second provider call and resumes Git/PR finalization without duplicating usage. Otherwise the resumed attempt claims a new provider row. Each actual provider claim has its own usage record; the execution link is absent before claim, never represents preparation, and is not shared as unrelated execution accounting. Distinct retried claims keep distinct provider usage history.
+
+Provider completion does not finish the workflow row by itself. The CLI workflow owns the execution invocation's terminal state because Git and PR work can continue after provider capacity and usage accounting have ended.
+
 Provider transcript parsing is intentionally provider-specific at the edge and normalized before persistence. The shared boundary is `ParsedConversationTurn` from `src/infrastructure/providers/cli/provider-logs/provider-conversation-types.ts`, and persistence maps those turns through `src/services/provider-conversation-message-mapper.ts`.
 
 That mapper keeps the existing message-role contract: readable reasoning becomes an assistant message marked with `metadata.kind = "reasoning"`, injected context becomes a system message, and tool calls/results become tool messages with capped payloads. Provider/model identity, call ids, status, timestamps, and per-turn token evidence remain in message metadata when available.
@@ -51,6 +66,16 @@ Live provider telemetry is metadata-first. `provider-telemetry-watcher.ts` check
 Final post-process usage collection remains authoritative. Live telemetry is best effort for dashboard freshness; final collection reconciles the persisted provider usage row when the provider finishes.
 
 Jules remains outside this local CLI parser and watcher path. Its remote session synchronizer records its transcript separately and derives estimated usage from accumulated input/output characters; Code UX does not describe those estimates as provider-native token telemetry.
+
+## Dashboard and recovery behavior
+
+Chat's Invocations rail is server-authoritative. It reads the paginated `GET /api/projects/:projectId/execution/invocations` projection; `project.execution.updated` and `snapshot_required` trigger REST refetches for the list and selected transcript instead of creating browser-only invocation rows.
+
+The cinematic feedback model is separate from whichever invocation is selected in that rail. Only the latest running `dashboard_reply` or `worker_reply` for the resolved Project Manager preset is eligible, with `startedAt` and invocation id providing deterministic precedence. The model loads the persisted transcript through the existing invocation-message endpoint and exposes only non-empty normalized assistant prose. User/system turns, injected context, reasoning, tool arguments, and tool output are never promoted into stage copy.
+
+Logical tool activity is deduplicated by normalized `metadata.toolCallId`; a stable message id is the fallback only when no call id exists. The frontend refreshes this projection when the active invocation or its `messageCount`, `lastMessageAt`, or `updatedAt` changes, preserves same-invocation feedback during refresh, and aborts or generation-invalidates stale work after project/invocation changes. Terminal or missing invocations clear the feedback. A transcript request failure remains a local, non-fatal state and does not replace the normal chat transcript or make unrelated work foreground activity.
+
+Startup recovery reconciles stale workflow and provider rows from durable task-run, sprint-run, dispatch, process, and Docker-container evidence. Preparation-only rows can fail without provider linkage, terminal provider rows are reconciled without extending their usage window, and a recovered completed provider attempt may continue from its preserved workspace without a duplicate provider run.
 
 ## Focused verification
 

@@ -1,8 +1,8 @@
 import { buildProviderSettingsOverride } from "./provider-settings-override.js";
 import { randomUUID } from "crypto";
 import type { CliWorkflowSettings, DashboardSettings, GitCiRunStatus, JulesSession, ProviderId, ProviderSettings, QwenModelProviderSettings, ThinkingMode, WorkerExecutionMode, Subtask } from "../contracts/app-types.js";
-import type { ProviderInvocationUsageRecord, WorkerTaskDispatchClaim } from "../contracts/execution-types.js";
-import type { ProjectAttentionItemRecord } from "../contracts/project-attention-types.js";
+import type { ProviderInvocationUsageRecord, TaskDispatchRecord, WorkerTaskDispatchClaim } from "../contracts/execution-types.js";
+import type { ProjectAttentionItemRecord, RepairAttentionRuntimeState } from "../contracts/project-attention-types.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
 import type { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
@@ -15,7 +15,10 @@ import { buildProviderPrompt, DEFAULT_CLI_WORKFLOW_SETTINGS, sanitizeToken } fro
 import { isReadFileNotFoundToolError, buildReadFileRetryPrompt } from "./cli-workflow-text-utils.js";
 import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
 import { buildInvocationGitPolicy, InvocationWorkspacePreparer } from "../infrastructure/providers/cli/invocation-workspace-preparer.js";
-import { WorkspaceArtifactService } from "../infrastructure/providers/cli/workspace-artifact-service.js";
+import {
+  WorkspaceArtifactService,
+  type AppliedWorkspacePatchResult,
+} from "../infrastructure/providers/cli/workspace-artifact-service.js";
 import { CODE_UX_GIT_PATHSPEC_EXCLUDE, CODE_UX_REPO_DIR } from "../infrastructure/git/code-ux-gitignore.js";
 import { ProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
@@ -57,8 +60,11 @@ import {
   resolveVirtualWorkerAttentionRoute,
   type VirtualWorkerAttentionRoute,
 } from "../domain/workers/virtual-worker-scheduling-policy.js";
-import { planVirtualWorkerCycle } from "../domain/workers/virtual-worker-cycle-plan.js";
 import { getFailedJobLabels, getFailedLogSnippets, selectNewestCiRun } from "../sprint/ci-status-utils.js";
+import {
+  VirtualWorkerCycleRegistry,
+  type VirtualWorkerCycleReservation,
+} from "./virtual-worker-cycle-registry.js";
 
 const VIRTUAL_WORKER_RECONCILE_MS = 3_000;
 const VIRTUAL_WORKER_SESSION_POLL_MS = 2_000;
@@ -75,6 +81,7 @@ const VIRTUAL_WORKER_CLI_PROVIDER_POOL: ProviderId[] = [
 
 interface TaskCiFixContinuation {
   provider: Exclude<ProviderId, "jules">;
+  providerConfigId: string;
   providerSettings: ProviderSettings;
   sessionId: string;
   resumeSessionId: string;
@@ -83,6 +90,10 @@ interface TaskCiFixContinuation {
   previousInvocation: ProviderInvocationUsageRecord | null;
   workerAgent: AgentPresetRecord | null;
 }
+
+type VirtualWorkerCycleWork =
+  | { kind: "attention"; attentionItemId: string }
+  | { kind: "dispatch"; dispatchId: string; taskId: string; sprintId: string };
 
 function sleep(ms: number): Promise<void> {
   if (ms <= 0) {
@@ -204,13 +215,21 @@ export class VirtualWorkerService {
 
   private readonly providerRunner = new ProviderRunner(new DockerRunner());
 
+  private readonly cycleRegistry = new VirtualWorkerCycleRegistry();
+
   private readonly activeCycles = new Map<string, Promise<void>>();
 
   private readonly scheduledProjects = new Set<string>();
 
+  private readonly launchingProjects = new Set<string>();
+
   private readonly deferredProjectSchedules = new Map<string, ReturnType<typeof setTimeout>>();
 
   private reconcileTimer: ReturnType<typeof setInterval> | null = null;
+
+  private reconcileInProgress = false;
+
+  private stopped = false;
 
   private readonly providerExecutionService: ProviderExecutionService;
 
@@ -234,6 +253,7 @@ export class VirtualWorkerService {
     if (this.reconcileTimer) {
       return;
     }
+    this.stopped = false;
 
     this.cleanupOrphanedVirtualWorkers();
     void this.reconcile().catch((error) => {
@@ -248,6 +268,7 @@ export class VirtualWorkerService {
   }
 
   stop(): void {
+    this.stopped = true;
     if (this.reconcileTimer) {
       clearInterval(this.reconcileTimer);
       this.reconcileTimer = null;
@@ -259,7 +280,7 @@ export class VirtualWorkerService {
   }
 
   scheduleProject(projectId: string, reason: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): void {
-    if (this.activeCycles.has(projectId) || this.scheduledProjects.has(projectId) || this.deferredProjectSchedules.has(projectId)) {
+    if (this.stopped || this.scheduledProjects.has(projectId) || this.launchingProjects.has(projectId) || this.deferredProjectSchedules.has(projectId)) {
       return;
     }
     if (!this.projectNeedsVirtualWorker(projectId, resolver)) {
@@ -269,27 +290,25 @@ export class VirtualWorkerService {
     this.scheduledProjects.add(projectId);
     queueMicrotask(() => {
       this.scheduledProjects.delete(projectId);
-      if (this.activeCycles.has(projectId) || !this.projectNeedsVirtualWorker(projectId, resolver)) {
+      if (this.stopped || !this.projectNeedsVirtualWorker(projectId, resolver)) {
         return;
       }
-
-      const cycle = this.runProjectCycle(projectId, reason, resolver)
+      this.launchingProjects.add(projectId);
+      void this.launchAvailableProjectCycles(projectId, reason, resolver)
         .catch((error) => {
-          this.deps.logger?.error("Virtual worker cycle failed", { projectId, reason, error });
+          this.deps.logger?.error("Virtual worker project launch failed", { projectId, reason, error });
         })
         .finally(() => {
-          this.activeCycles.delete(projectId);
-          if (this.projectNeedsVirtualWorker(projectId, resolver)) {
+          this.launchingProjects.delete(projectId);
+          if (!this.stopped && this.projectNeedsVirtualWorker(projectId, resolver)) {
             this.scheduleProjectLater(projectId, "remaining_worker_work", resolver);
           }
         });
-
-      this.activeCycles.set(projectId, cycle);
     });
   }
 
   private scheduleProjectLater(projectId: string, reason: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): void {
-    if (this.activeCycles.has(projectId) || this.scheduledProjects.has(projectId) || this.deferredProjectSchedules.has(projectId)) {
+    if (this.stopped || this.scheduledProjects.has(projectId) || this.launchingProjects.has(projectId) || this.deferredProjectSchedules.has(projectId)) {
       return;
     }
     if (!this.projectNeedsVirtualWorker(projectId, resolver)) {
@@ -305,6 +324,18 @@ export class VirtualWorkerService {
   }
 
   async reconcile(): Promise<void> {
+    if (this.stopped || this.reconcileInProgress) {
+      return;
+    }
+    this.reconcileInProgress = true;
+    try {
+      this.reconcileProjects();
+    } finally {
+      this.reconcileInProgress = false;
+    }
+  }
+
+  private reconcileProjects(): void {
     const cycleCache = new Map<string, DashboardSettings>();
     const resolver = (pId: string, sId?: string | null): DashboardSettings => {
       const key = `${pId}:${sId ?? ""}`;
@@ -322,11 +353,11 @@ export class VirtualWorkerService {
     const activeProjectIds = computeReconciliationCandidates(
       activeAttentionProjects,
       pendingDispatchProjects,
-      Array.from(this.activeCycles.keys())
+      this.cycleRegistry.listProjectIds(),
     );
 
     for (const projectId of activeProjectIds) {
-      if (this.activeCycles.has(projectId) || this.scheduledProjects.has(projectId) || this.deferredProjectSchedules.has(projectId)) {
+      if (this.scheduledProjects.has(projectId) || this.launchingProjects.has(projectId) || this.deferredProjectSchedules.has(projectId)) {
         continue;
       }
       if (this.projectNeedsVirtualWorker(projectId, resolver, pendingDispatchProjects.includes(projectId))) {
@@ -349,20 +380,23 @@ export class VirtualWorkerService {
     const nextAttentionItem = peekNextWorkerAttention(activeItems, effectiveResolver);
     const projectHasPendingDispatch = hasPendingDispatch
       ?? this.deps.executionRepository.listProjectIdsWithPendingDispatches().includes(projectId);
-    const pendingDispatchAvailable = projectHasPendingDispatch && this.deps.executionRepository
-      .listTaskDispatches({ projectId })
-      .some((dispatch) => (
-        dispatch.status === "queued"
-        && !hasPendingManagerClarificationForScope({
-          taskId: dispatch.taskId,
-          dispatchId: dispatch.id,
-        }, activeItems)
-      ));
-    const executionMode = !nextAttentionItem && pendingDispatchAvailable
-      ? resolveWorkerExecutionMode(effectiveResolver(projectId))
-      : "VIRTUAL";
+    const eligibleDispatches = projectHasPendingDispatch
+      ? this.listEligibleQueuedDispatches(projectId, activeItems)
+      : [];
+    const pendingDispatchAvailable = !nextAttentionItem && eligibleDispatches.some((dispatch) => {
+      const settings = effectiveResolver(projectId, dispatch.sprintId);
+      const maxCycles = Math.max(1, Math.floor(settings.workers.maxConcurrency));
+      return resolveWorkerExecutionMode(settings) === "VIRTUAL"
+        && this.cycleRegistry.countProject(projectId) < maxCycles
+        && !this.cycleRegistry.hasAttention(projectId)
+        && !this.cycleRegistry.hasDispatchConflict(projectId, dispatch.id, dispatch.taskId);
+    });
+    const executionMode: WorkerExecutionMode = "VIRTUAL";
+    const projectCycleBlocked = nextAttentionItem
+      ? this.cycleRegistry.countProject(projectId) > 0
+      : !pendingDispatchAvailable;
     return projectNeedsVirtualWorker(
-      this.activeCycles.has(projectId),
+      projectCycleBlocked,
       nextAttentionItem,
       executionMode,
       pendingDispatchAvailable,
@@ -370,17 +404,197 @@ export class VirtualWorkerService {
     );
   }
 
-  private async runProjectCycle(projectId: string, reason: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): Promise<void> {
+  private listEligibleQueuedDispatches(
+    projectId: string,
+    activeItems: ProjectAttentionItemRecord[],
+  ): TaskDispatchRecord[] {
+    return this.deps.executionRepository.listTaskDispatches({ projectId })
+      .filter((dispatch) => (
+        dispatch.status === "queued"
+        && !hasPendingManagerClarificationForScope({
+          taskId: dispatch.taskId,
+          dispatchId: dispatch.id,
+        }, activeItems)
+      ));
+  }
+
+  private async launchAvailableProjectCycles(
+    projectId: string,
+    reason: string,
+    resolver?: (pId: string, sId?: string | null) => DashboardSettings,
+  ): Promise<void> {
+    const effectiveResolver = resolver || ((pId: string, sId?: string | null) => this.resolveDashboardSettings(pId, sId));
+    const activeItems = this.deps.projectAttentionService.listActiveProjectItems(projectId);
+    const attentionItem = peekNextWorkerAttention(activeItems, effectiveResolver);
+    if (attentionItem) {
+      const reservation: VirtualWorkerCycleReservation = {
+        id: `attention:${attentionItem.id}:${randomUUID()}`,
+        projectId,
+        kind: "attention",
+        attentionItemId: attentionItem.id,
+        taskId: attentionItem.taskId || undefined,
+      };
+      if (this.cycleRegistry.tryReserve(reservation, 1)) {
+        this.startReservedCycle(reservation, { kind: "attention", attentionItemId: attentionItem.id }, reason, resolver);
+      }
+      return;
+    }
+
+    const providerBudgets = new Map<ProviderId, number>();
+    for (const dispatch of this.listEligibleQueuedDispatches(projectId, activeItems)) {
+      const settings = effectiveResolver(projectId, dispatch.sprintId);
+      if (resolveWorkerExecutionMode(settings) !== "VIRTUAL") {
+        continue;
+      }
+      const providerConfigId = settings.workers.virtualWorkerProvider;
+      const providerSettings = settings.aiProvider.providers[providerConfigId];
+      const provider = providerSettings?.provider || "codex";
+      let providerBudget = providerBudgets.get(provider);
+      if (providerBudget === undefined) {
+        const capacityService = this.deps.providerConcurrencyService as ProviderConcurrencyService & {
+          getAvailableCapacityCount?: (
+            providerId: ProviderId,
+            limit: number,
+            purpose?: "task_coding",
+          ) => Promise<number | null>;
+        };
+        if (typeof capacityService.getAvailableCapacityCount === "function") {
+          const available = await capacityService.getAvailableCapacityCount(
+            provider,
+            providerSettings?.maxConcurrentTasks ?? 0,
+            "task_coding",
+          );
+          providerBudget = available ?? Number.POSITIVE_INFINITY;
+        } else {
+          providerBudget = await capacityService.hasAvailableCapacity(
+            provider,
+            providerSettings?.maxConcurrentTasks ?? 0,
+          ) ? Number.POSITIVE_INFINITY : 0;
+        }
+        providerBudgets.set(provider, providerBudget);
+      }
+      if (providerBudget <= 0) {
+        continue;
+      }
+      const maxCycles = Math.max(1, Math.floor(settings.workers.maxConcurrency));
+      const reservation: VirtualWorkerCycleReservation = {
+        id: `dispatch:${dispatch.id}:${randomUUID()}`,
+        projectId,
+        kind: "dispatch",
+        dispatchId: dispatch.id,
+        taskId: dispatch.taskId,
+        providerId: provider,
+      };
+      if (!this.cycleRegistry.tryReserve(reservation, maxCycles)) {
+        continue;
+      }
+      providerBudgets.set(provider, providerBudget - 1);
+      this.startReservedCycle(reservation, {
+        kind: "dispatch",
+        dispatchId: dispatch.id,
+        taskId: dispatch.taskId,
+        sprintId: dispatch.sprintId,
+      }, reason, resolver);
+    }
+  }
+
+  private startReservedCycle(
+    reservation: VirtualWorkerCycleReservation,
+    work: VirtualWorkerCycleWork,
+    reason: string,
+    resolver?: (pId: string, sId?: string | null) => DashboardSettings,
+  ): void {
+    const cycle = this.runProjectCycle(reservation.projectId, reason, resolver, work)
+      .catch((error) => {
+        this.deps.logger?.error("Virtual worker cycle failed", {
+          projectId: reservation.projectId,
+          reason,
+          cycleKind: reservation.kind,
+          dispatchId: reservation.dispatchId ?? null,
+          attentionItemId: reservation.attentionItemId ?? null,
+          error,
+        });
+      })
+      .finally(() => {
+        this.activeCycles.delete(reservation.id);
+        this.cycleRegistry.release(reservation.id);
+        if (!this.stopped && this.projectNeedsVirtualWorker(reservation.projectId, resolver)) {
+          this.scheduleProjectLater(reservation.projectId, "remaining_worker_work", resolver);
+        }
+      });
+    this.activeCycles.set(reservation.id, cycle);
+  }
+
+  private async runProjectCycle(
+    projectId: string,
+    reason: string,
+    resolver?: (pId: string, sId?: string | null) => DashboardSettings,
+    requestedWork?: VirtualWorkerCycleWork,
+  ): Promise<void> {
     const effectiveResolver = resolver || ((pId, sId) => this.resolveDashboardSettings(pId, sId));
+    const activeItems = this.deps.projectAttentionService.listActiveProjectItems(projectId);
+    const nextAttentionItem = peekNextWorkerAttention(activeItems, effectiveResolver);
+    const attentionItem = requestedWork?.kind === "attention"
+      ? nextAttentionItem?.id === requestedWork.attentionItemId ? nextAttentionItem : null
+      : requestedWork?.kind === "dispatch"
+        ? null
+        : nextAttentionItem;
+
+    // Repair/worker attention is project-exclusive. New coding work waits until
+    // the attention item is settled, while already-running provider work keeps
+    // its durable dispatch lease and is allowed to finish normally.
+    if (nextAttentionItem && requestedWork?.kind === "dispatch") {
+      return;
+    }
+
+    const nextDispatch = attentionItem
+      ? null
+      : this.listEligibleQueuedDispatches(projectId, activeItems)
+        .find((dispatch) => !requestedWork || (
+          requestedWork.kind === "dispatch"
+          && dispatch.id === requestedWork.dispatchId
+          && dispatch.taskId === requestedWork.taskId
+        )) ?? null;
+    if (!attentionItem && !nextDispatch) {
+      return;
+    }
+
+    const attentionRoute = attentionItem
+      ? resolveVirtualWorkerAttentionRoute(attentionItem)
+      : null;
+    if (attentionRoute === "skip_orchestrator_handled") {
+      return;
+    }
+
+    const cycleSettings = effectiveResolver(projectId, nextDispatch?.sprintId || attentionItem?.sprintId);
+    let cycleProviderType: ProviderId;
+    let providerLimit: number;
+    if (attentionItem && attentionRoute) {
+      const capacity = await this.resolveAttentionProviderCapacity(attentionItem, attentionRoute, cycleSettings);
+      cycleProviderType = capacity.provider;
+      providerLimit = capacity.limit;
+    } else {
+      const providerConfigId = cycleSettings.workers.virtualWorkerProvider;
+      const providerSettings = cycleSettings.aiProvider.providers[providerConfigId];
+      cycleProviderType = providerSettings?.provider || "codex";
+      providerLimit = providerSettings?.maxConcurrentTasks ?? 0;
+    }
+
+    if (!(await this.deps.providerConcurrencyService.hasAvailableCapacity(cycleProviderType, providerLimit))) {
+      this.deps.logger?.info("Virtual worker deferred until the routed provider has capacity", {
+        projectId,
+        provider: cycleProviderType,
+        dispatchId: nextDispatch?.id ?? null,
+        attentionItemId: attentionItem?.id ?? null,
+        attentionType: attentionItem?.attentionType ?? null,
+      });
+      return;
+    }
 
     // Create the virtual endpoint first so that downstream operations (like task dispatch) have a valid target ID.
-    // If the planner determines no work is needed, the endpoint is safely cleaned up in the finally block.
-    const initialCycleSettings = this.resolveCycleSettings(projectId, resolver);
-    const initialCycleProviderType = initialCycleSettings.aiProvider.providers[initialCycleSettings.workers.virtualWorkerProvider]?.provider || "codex";
-
     const endpoint = this.deps.workerEndpointRepository.createVirtualEndpoint({
       endpointKey: `virtual:${projectId}:${Date.now().toString(36)}:${sanitizeToken(randomUUID().slice(0, 8))}`,
-      displayName: `Virtual ${this.getProviderLabel(initialCycleProviderType)} Worker`,
+      displayName: `Virtual ${this.getProviderLabel(cycleProviderType)} Worker`,
       status: "connected",
       transport: "internal",
       capabilities: {
@@ -392,23 +606,19 @@ export class VirtualWorkerService {
     this.deps.projectWorkerAssignmentService.ensureWorkerAssignment(projectId, endpoint.id);
 
     try {
-      const activeItems = this.deps.projectAttentionService.listActiveProjectItems(projectId);
-      const attentionItem = peekNextWorkerAttention(activeItems, effectiveResolver);
-      const nextDispatch = this.deps.executionRepository
-        .listTaskDispatches({ projectId })
-        .find((dispatch) => (
-          dispatch.status === "queued"
-          && !hasPendingManagerClarificationForScope({
-            taskId: dispatch.taskId,
-            dispatchId: dispatch.id,
-          }, activeItems)
-        ));
-      // Do not lease ordinary coding work while a CI/merge repair is waiting.
-      // A leased dispatch is durable, so claiming it and then prioritizing the
-      // attention item would strand the dispatch until lease recovery.
-      const dispatchClaim = attentionItem || !nextDispatch
-        ? null
-        : this.deps.workerTaskDispatchService.claimNextDispatchForWorker({
+      if (attentionItem && attentionRoute) {
+        await this.handleAttentionItem(
+          endpoint.id,
+          attentionItem,
+          reason,
+          attentionRoute,
+          planVirtualWorkerAttentionClaim(attentionItem, reason).claimReason,
+        );
+        return;
+      }
+
+      if (nextDispatch) {
+        const dispatchClaim = this.deps.workerTaskDispatchService.claimNextDispatchForWorker({
           projectId,
           workerEndpointId: endpoint.id,
           executionMode: "VIRTUAL",
@@ -416,35 +626,9 @@ export class VirtualWorkerService {
           taskId: nextDispatch.taskId,
           sprintId: nextDispatch.sprintId,
         });
-
-      const plan = await planVirtualWorkerCycle({
-        projectId,
-        cycleReason: reason,
-        attentionItem,
-        dispatchClaim,
-        isProviderConcurrencyAvailable: async (pId, limit) => await this.deps.providerConcurrencyService.hasAvailableCapacity(pId, limit),
-        resolveSettings: effectiveResolver,
-        resolveAttentionProviderCapacity: async (item, attentionRoute, settings) => (
-          await this.resolveAttentionProviderCapacity(item, attentionRoute, settings)
-        ),
-      });
-
-      if (plan.type === "HANDLE_ATTENTION") {
-        await this.handleAttentionItem(
-          endpoint.id,
-          plan.attentionItem,
-          reason,
-          plan.attentionRoute,
-          plan.claimReason,
-        );
-      } else if (plan.type === "DISPATCH_READY") {
-        await this.handleTaskDispatch(endpoint.id, plan.dispatchClaim);
-      } else if (plan.type === "PROVIDER_CONCURRENCY_UNAVAILABLE") {
-        this.deps.logger?.info("Virtual worker deferred until the routed provider has capacity", {
-          projectId,
-          attentionItemId: attentionItem?.id ?? null,
-          attentionType: attentionItem?.attentionType ?? null,
-        });
+        if (dispatchClaim) {
+          await this.handleTaskDispatch(endpoint.id, dispatchClaim);
+        }
       }
     } finally {
       this.deps.projectWorkerAssignmentService.releaseWorkerAssignment(projectId, endpoint.id, "virtual_worker_cycle_complete");
@@ -571,14 +755,10 @@ export class VirtualWorkerService {
   }
 
   private resolveCycleSettings(projectId: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): DashboardSettings {
-    const effectiveResolver = resolver || ((pId, sId) => this.resolveDashboardSettings(pId, sId));
+    const effectiveResolver = resolver || ((pId: string, sId?: string | null) => this.resolveDashboardSettings(pId, sId));
     const attentionItem = this.deps.projectAttentionService.listActiveProjectItems(projectId)
       .find((item) => item.ownerType === "worker");
-    if (attentionItem) {
-      return effectiveResolver(projectId, attentionItem.sprintId);
-    }
-
-    return effectiveResolver(projectId);
+    return effectiveResolver(projectId, attentionItem?.sprintId);
   }
 
   private async resolveAttentionProviderCapacity(
@@ -606,7 +786,7 @@ export class VirtualWorkerService {
       const providerSettings = settings.aiProvider.providers[providerConfigId];
       return {
         provider: providerSettings?.provider || "codex",
-        limit: settings.workers.maxConcurrency,
+        limit: providerSettings?.maxConcurrentTasks ?? 0,
       };
     }
 
@@ -728,6 +908,7 @@ export class VirtualWorkerService {
 
     return {
       provider,
+      providerConfigId: providerConfigId!,
       providerSettings: {
         ...configured,
         model: codingInvocation?.model?.trim() || taskRecord.model?.trim() || configured.model,
@@ -868,9 +1049,217 @@ export class VirtualWorkerService {
     }
   }
 
+  private readRepairRuntime(
+    item: ProjectAttentionItemRecord,
+    purpose: RepairAttentionRuntimeState["purpose"],
+  ): RepairAttentionRuntimeState | null {
+    const value = this.asRecord(item.payload?.repairRuntime);
+    if (
+      value?.purpose !== purpose
+      || typeof value.sessionId !== "string"
+      || typeof value.workspaceSessionId !== "string"
+      || typeof value.provider !== "string"
+      || typeof value.providerConfigId !== "string"
+      || typeof value.model !== "string"
+    ) {
+      return null;
+    }
+    return {
+      purpose,
+      sessionId: value.sessionId,
+      workspaceSessionId: value.workspaceSessionId,
+      provider: value.provider,
+      providerConfigId: value.providerConfigId,
+      model: value.model,
+      nativeSessionId: typeof value.nativeSessionId === "string" ? value.nativeSessionId : null,
+      activeAttemptId: typeof value.activeAttemptId === "string" ? value.activeAttemptId : null,
+      attemptRecorded: value.attemptRecorded === true,
+      phase: value.phase === "workspace_ready" || value.phase === "provider_running" || value.phase === "interrupted"
+        ? value.phase
+        : "claimed",
+      workspaceBaselineHead: typeof value.workspaceBaselineHead === "string" ? value.workspaceBaselineHead : null,
+      workspaceRepairHead: typeof value.workspaceRepairHead === "string" ? value.workspaceRepairHead : null,
+      publicationPhase: value.publicationPhase === "workspace_finalized"
+        || value.publicationPhase === "host_publishing"
+        || value.publicationPhase === "host_published"
+        ? value.publicationPhase
+        : "pending",
+      publishedHeadSha: typeof value.publishedHeadSha === "string" ? value.publishedHeadSha : null,
+      updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : new Date().toISOString(),
+    };
+  }
+
+  private checkpointRepairRuntime(
+    item: ProjectAttentionItemRecord,
+    runtime: Omit<RepairAttentionRuntimeState, "updatedAt">,
+  ): RepairAttentionRuntimeState {
+    const checkpoint: RepairAttentionRuntimeState = {
+      ...runtime,
+      updatedAt: new Date().toISOString(),
+    };
+    const updated = this.deps.projectAttentionService.patchItemPayload(item.id, {
+      repairRuntime: checkpoint,
+    });
+    item.payload = updated.payload;
+    return checkpoint;
+  }
+
+  private latestRepairInvocation(runtime: RepairAttentionRuntimeState): ProviderInvocationUsageRecord | null {
+    return this.deps.executionRepository.getLatestProviderInvocationUsageBySession(runtime.sessionId);
+  }
+
+  private buildRepairPublicationCommitMessage(summary: string, workspaceRepairHead: string | null): string {
+    return workspaceRepairHead
+      ? `${summary}\n\nCode-UX-Repair-Head: ${workspaceRepairHead}`
+      : summary;
+  }
+
+  private async findPublishedRepairCommit(args: {
+    repoPath: string;
+    workerBranch: string;
+    workspaceRepairHead: string | null;
+    githubMode: "REMOTE" | "LOCAL";
+    gitAuth: GitHttpAuthOptions;
+  }): Promise<string | null> {
+    if (!args.workspaceRepairHead) {
+      return null;
+    }
+    const marker = `Code-UX-Repair-Head: ${args.workspaceRepairHead}`;
+    let commitSha: string;
+    try {
+      commitSha = (await runCommandStrict(
+        "git",
+        [
+          "log",
+          "-1",
+          "--format=%H",
+          "--fixed-strings",
+          `--grep=${marker}`,
+          `refs/heads/${args.workerBranch}`,
+        ],
+        args.repoPath,
+      )).stdout.trim();
+    } catch {
+      return null;
+    }
+    if (!commitSha) {
+      return null;
+    }
+    await this.ensureRepairBranchPublished(args);
+    return commitSha;
+  }
+
+  private async findTreeEquivalentPublishedRepair(args: {
+    repoPath: string;
+    worktreePath: string;
+    workerBranch: string;
+    workspaceBaselineHead: string | null;
+    workspaceRepairHead: string | null;
+    expectedCommitSubject: string;
+    requiredParentRefs: string[];
+    githubMode: "REMOTE" | "LOCAL";
+    gitAuth: GitHttpAuthOptions;
+  }): Promise<string | null> {
+    if (!args.workspaceBaselineHead || !args.workspaceRepairHead) {
+      return null;
+    }
+    let workspaceRepairTree: string;
+    let workspaceBaselineTree: string;
+    let hostCandidates: Array<{ head: string; tree: string; subject: string }>;
+    try {
+      workspaceRepairTree = await this.workspaceArtifactService.resolveWorkspaceTree(args.worktreePath);
+      workspaceBaselineTree = (await this.runWorkspaceCommand(
+        args.worktreePath,
+        "git",
+        ["rev-parse", `${args.workspaceBaselineHead}^{tree}`],
+      )).stdout.trim();
+      const hostLog = (await runCommandStrict(
+        "git",
+        [
+          "log",
+          "--format=%H%x09%T%x09%s",
+          "--fixed-strings",
+          `--grep=${args.expectedCommitSubject}`,
+          `refs/heads/${args.workerBranch}`,
+        ],
+        args.repoPath,
+      )).stdout;
+      hostCandidates = hostLog.split("\n").map((line) => {
+        const [head = "", tree = "", subject = ""] = line.split("\t");
+        return { head: head.trim(), tree: tree.trim(), subject: subject.trim() };
+      });
+    } catch {
+      return null;
+    }
+    if (
+      !workspaceRepairTree
+      || !workspaceBaselineTree
+      || (workspaceRepairTree === workspaceBaselineTree
+        && (args.requiredParentRefs.length === 0 || args.workspaceRepairHead === args.workspaceBaselineHead))
+    ) {
+      return null;
+    }
+    for (const candidate of hostCandidates) {
+      if (
+        !candidate.head
+        || candidate.head === args.workspaceBaselineHead
+        || candidate.tree !== workspaceRepairTree
+        || candidate.subject !== args.expectedCommitSubject
+      ) {
+        continue;
+      }
+      try {
+        await runCommandStrict(
+          "git",
+          ["merge-base", "--is-ancestor", args.workspaceBaselineHead, candidate.head],
+          args.repoPath,
+        );
+      } catch {
+        continue;
+      }
+      let hasRequiredParents = true;
+      for (const parentRef of args.requiredParentRefs) {
+        try {
+          await runCommandStrict(
+            "git",
+            ["merge-base", "--is-ancestor", parentRef, candidate.head],
+            args.repoPath,
+          );
+        } catch {
+          hasRequiredParents = false;
+          break;
+        }
+      }
+      if (hasRequiredParents) {
+        await this.ensureRepairBranchPublished(args);
+        return candidate.head;
+      }
+    }
+    return null;
+  }
+
+  private async ensureRepairBranchPublished(args: {
+    repoPath: string;
+    workerBranch: string;
+    githubMode: "REMOTE" | "LOCAL";
+    gitAuth: GitHttpAuthOptions;
+  }): Promise<void> {
+    if (args.githubMode === "LOCAL") {
+      return;
+    }
+    const pushEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(args.repoPath, args.gitAuth);
+    await runCommandStrict(
+      "git",
+      ["push", "-u", "origin", `refs/heads/${args.workerBranch}:refs/heads/${args.workerBranch}`],
+      args.repoPath,
+      pushEnv ?? process.env,
+    );
+  }
+
   private async resolveMergeConflictAttention(workerEndpointId: string, item: ProjectAttentionItemRecord): Promise<void> {
     const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
     const guardrailScope = { projectId: item.projectId, sprintId: item.sprintId };
+    const savedRuntime = this.readRepairRuntime(item, "merge_conflict");
     const workerAgent = await this.deps.agentPresetSyncService?.resolveTargetedCodingAgent(
       item.projectId,
       settings.agents?.routing?.mergeConflict?.agentPresetId ?? null,
@@ -893,9 +1282,20 @@ export class VirtualWorkerService {
         }
         : null,
     });
-    const provider = route.provider as Exclude<ProviderId, "jules">;
-    const providerConfigId = route.providerConfigId || route.provider;
-    const providerSettings = route.providers[providerConfigId];
+    const savedProviderSettings = savedRuntime
+      && savedRuntime.provider !== "jules"
+      && settings.aiProvider.providers[savedRuntime.providerConfigId]?.provider === savedRuntime.provider
+      ? route.providers[savedRuntime.providerConfigId] || settings.aiProvider.providers[savedRuntime.providerConfigId]
+      : null;
+    const provider = (savedProviderSettings ? savedRuntime!.provider : route.provider) as Exclude<ProviderId, "jules">;
+    const providerConfigId = savedProviderSettings
+      ? savedRuntime!.providerConfigId
+      : route.providerConfigId || route.provider;
+    const resolvedProviderSettings = savedProviderSettings || route.providers[providerConfigId];
+    const providerSettings: ProviderSettings = {
+      ...resolvedProviderSettings,
+      model: savedRuntime?.model || resolvedProviderSettings.model,
+    };
     const workflowSettings = {
       ...DEFAULT_CLI_WORKFLOW_SETTINGS,
       ...settings.cliWorkflow,
@@ -967,8 +1367,9 @@ export class VirtualWorkerService {
       return;
     }
 
+    const isRestartContinuation = Boolean(savedRuntime?.activeAttemptId && savedRuntime.attemptRecorded);
     const mergeConflictEval = this.evaluateMergeConflictGuardrail(settings, guardrailScope, item);
-    if (mergeConflictEval && !mergeConflictEval.allowed && mergeConflictEval.action !== "WARN_ONLY") {
+    if (!isRestartContinuation && mergeConflictEval && !mergeConflictEval.allowed && mergeConflictEval.action !== "WARN_ONLY") {
       this.escalateAttentionToHuman(
         workerEndpointId,
         item,
@@ -981,9 +1382,30 @@ export class VirtualWorkerService {
     // failures, crashes, and quota-exhausted runs all consume the retry budget. Recording
     // only on success (the previous behavior) meant a conflict that never resolved retried
     // indefinitely until the provider API limit was hit instead of escalating after `cap`.
-    this.recordMergeConflictAttempt(guardrailScope, item);
+    const sessionId = savedRuntime?.sessionId
+      || `virtual-merge-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+    let repairRuntime = this.checkpointRepairRuntime(item, {
+      purpose: "merge_conflict",
+      sessionId,
+      workspaceSessionId: savedRuntime?.workspaceSessionId || sessionId,
+      provider,
+      providerConfigId,
+      model: savedRuntime?.model || providerSettings.model,
+      nativeSessionId: savedRuntime?.nativeSessionId || null,
+      activeAttemptId: savedRuntime?.activeAttemptId || randomUUID(),
+      // Persist the marker before recording. A process exit in this tiny window can
+      // under-count once, but can never charge the same interrupted attempt twice.
+      attemptRecorded: true,
+      phase: "claimed",
+      workspaceBaselineHead: savedRuntime?.workspaceBaselineHead || null,
+      workspaceRepairHead: savedRuntime?.workspaceRepairHead || null,
+      publicationPhase: savedRuntime?.publicationPhase || "pending",
+      publishedHeadSha: savedRuntime?.publishedHeadSha || null,
+    });
+    if (!isRestartContinuation) {
+      this.recordMergeConflictAttempt(guardrailScope, item);
+    }
 
-    const sessionId = `virtual-merge-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
     let worktreePath = this.workspaceManager.buildWorktreePath(repoPath, sessionId, workflowSettings.executionMode);
     const title = item.title;
     let succeeded = false;
@@ -995,23 +1417,29 @@ export class VirtualWorkerService {
       ? resolveAgentMemoryInstructions(workerAgent || {}, settings.memory?.workerLearningsInstruction)
       : "";
 
-    this.deps.sessionTracking.createSession({
-      id: sessionId,
-      provider,
-      taskId: buildTaskRunKey(repoPath, 0, `attention-${item.id}`),
-      title,
-      prompt: item.summaryMarkdown,
-      state: "RUNNING",
-      featureBranch: sourceBranch,
-      workerBranch: sourceBranch,
-      repoPath,
-    });
+    const trackedSession = this.deps.sessionTracking.getSession(sessionId);
+    if (trackedSession) {
+      this.deps.sessionTracking.updateSession(sessionId, { state: "RUNNING" });
+    } else {
+      this.deps.sessionTracking.createSession({
+        id: sessionId,
+        provider,
+        taskId: buildTaskRunKey(repoPath, 0, `attention-${item.id}`),
+        title,
+        prompt: item.summaryMarkdown,
+        state: "RUNNING",
+        featureBranch: sourceBranch,
+        workerBranch: sourceBranch,
+        repoPath,
+      });
+    }
     this.deps.sessionTracking.appendActivity(sessionId, {
       originator: "system",
       description: `Virtual worker claimed merge conflict between ${sourceBranch} and ${targetBranch}.`,
     });
 
     let cleanedUp = false;
+    let preserveWorkspace = false;
     try {
       const effectiveWorkflowSettings = await this.resolveVirtualWorkerWorkflowSettings({
         workflowSettings,
@@ -1021,9 +1449,10 @@ export class VirtualWorkerService {
       });
       const prepared = await this.invocationWorkspacePreparer.prepareWorktree({
         repoPath,
-        worktreePath: this.workspaceManager.buildWorktreePath(repoPath, sessionId, effectiveWorkflowSettings.executionMode),
+        worktreePath: this.workspaceManager.buildWorktreePath(repoPath, repairRuntime.workspaceSessionId, effectiveWorkflowSettings.executionMode),
         workerBranch: sourceBranch,
         featureBranch: targetBranch,
+        resumeSessionId: repairRuntime.workspaceSessionId,
         gitAuth,
         gitPolicy: buildInvocationGitPolicy({
           githubMode: settings.git.githubMode,
@@ -1034,96 +1463,188 @@ export class VirtualWorkerService {
       });
       const finalWorktreePath = prepared.worktreePath;
       worktreePath = finalWorktreePath;
-      initialHead = (await this.runWorkspaceCommand(finalWorktreePath, "git", ["rev-parse", "HEAD"])).stdout.trim();
-      const hasConflicts = await this.runMergeIntoSource(finalWorktreePath, targetRef, sessionId);
-      if (hasConflicts) {
-        const workspaceGuidance = await this.workspaceManager.buildWorkspaceGuidance(item.summaryMarkdown, finalWorktreePath);
-        const providerPrompt = buildProviderPrompt(
-          this.buildMergeConflictPrompt(
-            item,
-            sourceBranch,
-            targetBranch,
-            workspaceGuidance,
-            workerAgent?.instructionMarkdown,
-            memoryContext,
-            memoryInstructions,
-          ),
-          providerSettings.thinkingMode,
-          provider,
-        );
-        await this.runProviderWithRetry({
-          provider,
-          providerPrompt,
-          workflowSettings: effectiveWorkflowSettings,
-          repoPath,
-          worktreePath: finalWorktreePath,
-          sessionId,
-          attentionItem: item,
-          purpose: "merge_conflict",
-          model: providerSettings.model,
-          thinkingMode: providerSettings.thinkingMode,
-          apiKey: providerSettings.apiKey,
-          maxConcurrentTasks: providerSettings.maxConcurrentTasks,
-          qwenAuthMode: providerSettings.qwenAuthMode,
-          qwenRegion: providerSettings.qwenRegion,
-          qwenBaseUrl: providerSettings.qwenBaseUrl,
-          qwenEnvKey: providerSettings.qwenEnvKey,
-          qwenModelId: providerSettings.qwenModelId,
-          qwenProtocol: providerSettings.qwenProtocol,
-          qwenAdditionalModelProviders: providerSettings.qwenAdditionalModelProviders,
-        openCodeAuthMode: providerSettings.openCodeAuthMode,
-        openCodeProviderId: providerSettings.openCodeProviderId,
-        openCodeModelId: providerSettings.openCodeModelId,
-        openCodeBaseUrl: providerSettings.openCodeBaseUrl,
-        openCodeEnvKey: providerSettings.openCodeEnvKey,
-        openCodePackage: providerSettings.openCodePackage,
-          providerMountAuth: providerSettings.mountAuth,
-          providerAuthPath: providerSettings.authPath,
-          providerConfigMode: providerSettings.providerConfigMode,
-          providerConfigPath: providerSettings.providerConfigPath,
-          customBaseUrl: providerSettings.customBaseUrl,
-          customModel: providerSettings.customModel,
-          githubToken: settings.git.githubToken,
-          agentMcpAccess: workerAgent ? workerClarificationAgentMcpAccess(workerAgent.mcpAccess) : null,
-          mcpAgentId: workerAgent?.id ?? null,
+      repairRuntime = this.checkpointRepairRuntime(item, {
+        ...repairRuntime,
+        phase: "workspace_ready",
+      });
+      const currentWorkspaceHead = (await this.runWorkspaceCommand(finalWorktreePath, "git", ["rev-parse", "HEAD"])).stdout.trim();
+      if (!repairRuntime.workspaceBaselineHead) {
+        repairRuntime = this.checkpointRepairRuntime(item, {
+          ...repairRuntime,
+          workspaceBaselineHead: currentWorkspaceHead,
         });
       }
-      await this.ensureMergeConflictResolved(finalWorktreePath);
-      await this.ensureMergeConflictPreservesPromptLiterals(finalWorktreePath, item);
-      await this.finalizeMergeCommit(finalWorktreePath, sourceBranch, targetBranch);
-      await this.ensureTargetMergedIntoSource(finalWorktreePath, targetRef);
-      if (settings.memory?.enabled && settings.memory.autoCaptureSprint) {
-        await this.captureMemoriesFromWorkspace(
-          item.projectId,
-          item.sprintId || undefined,
-          workerAgent?.id || null,
-          finalWorktreePath,
-          item.id,
-        );
+      initialHead = repairRuntime.workspaceBaselineHead || currentWorkspaceHead;
+      let workspaceFinalized = repairRuntime.publicationPhase !== "pending";
+      if (!workspaceFinalized && prepared.resumed === true && currentWorkspaceHead !== initialHead) {
+        workspaceFinalized = await this.isWorkspaceMergeFinalized(finalWorktreePath, targetRef);
+        if (workspaceFinalized) {
+          repairRuntime = this.checkpointRepairRuntime(item, {
+            ...repairRuntime,
+            workspaceRepairHead: currentWorkspaceHead,
+            publicationPhase: "workspace_finalized",
+          });
+        }
       }
-      const patchText = await this.workspaceArtifactService.exportBinaryPatch(finalWorktreePath, initialHead);
-      const applyResult = await this.workspaceArtifactService.applyPatchToBranch({
-        repoPath,
-        baseRef: initialHead,
-        workerBranch: sourceBranch,
-        patchText,
-        commitMessage: `fix(merge): resolve ${targetBranch} into ${sourceBranch}`,
-        parentRefs: settings.git.githubMode === "LOCAL" ? [targetBranch] : [`origin/${targetBranch}`],
-        // A conflict resolved by keeping the source side leaves the tree unchanged but
-        // still needs a merge commit recording the target as a parent, otherwise the PR
-        // keeps reporting the conflict and the resolution loops forever.
-        forceMergeCommit: true,
-        gitAuth,
-        gitIdentity: effectiveWorkflowSettings.containerMountGitConfig
-          ? undefined
-          : {
-            name: effectiveWorkflowSettings.containerGitUserName,
-            email: effectiveWorkflowSettings.containerGitUserEmail,
-          },
-        githubMode: settings.git.githubMode,
-      });
-      let hasUnpushed = applyResult.hasChanges;
-      let hasAhead = applyResult.hasChanges;
+      if (!workspaceFinalized) {
+        const resumedMerge = prepared.resumed === true && await this.workspaceHasMergeInProgress(finalWorktreePath);
+        const hasConflicts = resumedMerge
+          ? (await this.listUnresolvedFiles(finalWorktreePath)).length > 0
+          : await this.runMergeIntoSource(finalWorktreePath, targetRef, sessionId);
+        if (hasConflicts) {
+          const workspaceGuidance = await this.workspaceManager.buildWorkspaceGuidance(item.summaryMarkdown, finalWorktreePath);
+          const providerPrompt = buildProviderPrompt(
+            this.buildMergeConflictPrompt(
+              item,
+              sourceBranch,
+              targetBranch,
+              workspaceGuidance,
+              workerAgent?.instructionMarkdown,
+              memoryContext,
+              memoryInstructions,
+            ),
+            providerSettings.thinkingMode,
+            provider,
+          );
+          const previousInvocation = this.latestRepairInvocation(repairRuntime);
+          repairRuntime = this.checkpointRepairRuntime(item, {
+            ...repairRuntime,
+            nativeSessionId: previousInvocation?.nativeSessionId || repairRuntime.nativeSessionId,
+            phase: "provider_running",
+          });
+          const nativeSessionId = await this.runProviderWithRetry({
+            provider,
+            providerPrompt,
+            workflowSettings: effectiveWorkflowSettings,
+            repoPath,
+            worktreePath: finalWorktreePath,
+            sessionId,
+            attentionItem: item,
+            purpose: "merge_conflict",
+            model: providerSettings.model,
+            thinkingMode: providerSettings.thinkingMode,
+            apiKey: providerSettings.apiKey,
+            maxConcurrentTasks: providerSettings.maxConcurrentTasks,
+            qwenAuthMode: providerSettings.qwenAuthMode,
+            qwenRegion: providerSettings.qwenRegion,
+            qwenBaseUrl: providerSettings.qwenBaseUrl,
+            qwenEnvKey: providerSettings.qwenEnvKey,
+            qwenModelId: providerSettings.qwenModelId,
+            qwenProtocol: providerSettings.qwenProtocol,
+            qwenAdditionalModelProviders: providerSettings.qwenAdditionalModelProviders,
+            openCodeAuthMode: providerSettings.openCodeAuthMode,
+            openCodeProviderId: providerSettings.openCodeProviderId,
+            openCodeModelId: providerSettings.openCodeModelId,
+            openCodeBaseUrl: providerSettings.openCodeBaseUrl,
+            openCodeEnvKey: providerSettings.openCodeEnvKey,
+            openCodePackage: providerSettings.openCodePackage,
+            providerMountAuth: providerSettings.mountAuth,
+            providerAuthPath: providerSettings.authPath,
+            providerConfigMode: providerSettings.providerConfigMode,
+            providerConfigPath: providerSettings.providerConfigPath,
+            customBaseUrl: providerSettings.customBaseUrl,
+            customModel: providerSettings.customModel,
+            continueSessionId: repairRuntime.nativeSessionId,
+            openCodeBaselineRawUsageJson: provider === "opencode"
+              ? previousInvocation?.rawUsageJson ?? null
+              : null,
+            githubToken: settings.git.githubToken,
+            agentMcpAccess: workerAgent ? workerClarificationAgentMcpAccess(workerAgent.mcpAccess) : null,
+            mcpAgentId: workerAgent?.id ?? null,
+          });
+          if (nativeSessionId) {
+            repairRuntime = this.checkpointRepairRuntime(item, {
+              ...repairRuntime,
+              nativeSessionId,
+              phase: "provider_running",
+            });
+          }
+        }
+        await this.ensureMergeConflictResolved(finalWorktreePath);
+        await this.ensureMergeConflictPreservesPromptLiterals(finalWorktreePath, item);
+        await this.finalizeMergeCommit(finalWorktreePath, sourceBranch, targetBranch);
+        await this.ensureTargetMergedIntoSource(finalWorktreePath, targetRef);
+        if (settings.memory?.enabled && settings.memory.autoCaptureSprint) {
+          await this.captureMemoriesFromWorkspace(
+            item.projectId,
+            item.sprintId || undefined,
+            workerAgent?.id || null,
+            finalWorktreePath,
+            item.id,
+          );
+        }
+        const workspaceRepairHead = (await this.runWorkspaceCommand(finalWorktreePath, "git", ["rev-parse", "HEAD"])).stdout.trim();
+        repairRuntime = this.checkpointRepairRuntime(item, {
+          ...repairRuntime,
+          workspaceRepairHead,
+          publicationPhase: "workspace_finalized",
+        });
+      }
+      const repairCommitSubject = `fix(merge): resolve ${targetBranch} into ${sourceBranch}`;
+      let recoveredPublishedHead = repairRuntime.publicationPhase === "host_publishing"
+        && repairRuntime.workspaceRepairHead !== repairRuntime.workspaceBaselineHead
+        ? await this.findPublishedRepairCommit({
+          repoPath,
+          workerBranch: sourceBranch,
+          workspaceRepairHead: repairRuntime.workspaceRepairHead,
+          githubMode: settings.git.githubMode,
+          gitAuth,
+        })
+        : null;
+      if (!recoveredPublishedHead && repairRuntime.publicationPhase === "host_publishing") {
+        recoveredPublishedHead = await this.findTreeEquivalentPublishedRepair({
+          repoPath,
+          worktreePath: finalWorktreePath,
+          workerBranch: sourceBranch,
+          workspaceBaselineHead: repairRuntime.workspaceBaselineHead,
+          workspaceRepairHead: repairRuntime.workspaceRepairHead,
+          expectedCommitSubject: repairCommitSubject,
+          requiredParentRefs: settings.git.githubMode === "LOCAL" ? [targetBranch] : [`origin/${targetBranch}`],
+          githubMode: settings.git.githubMode,
+          gitAuth,
+        });
+      }
+      const alreadyPublished = Boolean(recoveredPublishedHead)
+        || (repairRuntime.publicationPhase === "host_published" && Boolean(repairRuntime.publishedHeadSha));
+      let applyResult: AppliedWorkspacePatchResult = {
+        hasChanges: alreadyPublished,
+        commitSha: recoveredPublishedHead || repairRuntime.publishedHeadSha || undefined,
+      };
+      if (!alreadyPublished) {
+        const patchText = await this.workspaceArtifactService.exportBinaryPatch(
+          finalWorktreePath,
+          repairRuntime.workspaceBaselineHead || initialHead,
+        );
+        repairRuntime = this.checkpointRepairRuntime(item, {
+          ...repairRuntime,
+          publicationPhase: "host_publishing",
+        });
+        applyResult = await this.workspaceArtifactService.applyPatchToBranch({
+          repoPath,
+          baseRef: repairRuntime.workspaceBaselineHead || initialHead,
+          workerBranch: sourceBranch,
+          patchText,
+          commitMessage: this.buildRepairPublicationCommitMessage(
+            repairCommitSubject,
+            repairRuntime.workspaceRepairHead,
+          ),
+          parentRefs: settings.git.githubMode === "LOCAL" ? [targetBranch] : [`origin/${targetBranch}`],
+          // A conflict resolved by keeping the source side leaves the tree unchanged but
+          // still needs a merge commit recording the target as a parent, otherwise the PR
+          // keeps reporting the conflict and the resolution loops forever.
+          forceMergeCommit: true,
+          gitAuth,
+          gitIdentity: effectiveWorkflowSettings.containerMountGitConfig
+            ? undefined
+            : {
+              name: effectiveWorkflowSettings.containerGitUserName,
+              email: effectiveWorkflowSettings.containerGitUserEmail,
+            },
+          githubMode: settings.git.githubMode,
+        });
+      }
+      let hasUnpushed = alreadyPublished || applyResult.hasChanges;
+      let hasAhead = alreadyPublished || applyResult.hasChanges;
       if (!applyResult.hasChanges) {
         hasUnpushed = await this.prService.hasUnpushedCommits(repoPath, sourceBranch, targetBranch);
         hasAhead = await this.prService.hasWorkerBranchCommitsAgainstFeature(repoPath, sourceBranch, targetBranch);
@@ -1147,6 +1668,11 @@ export class VirtualWorkerService {
         || ((hasUnpushed || hasAhead)
           ? (await runCommandStrict("git", ["rev-parse", `refs/heads/${sourceBranch}`], repoPath)).stdout.trim()
           : initialHead);
+      repairRuntime = this.checkpointRepairRuntime(item, {
+        ...repairRuntime,
+        publicationPhase: "host_published",
+        publishedHeadSha: headSha,
+      });
       this.deps.sessionTracking.updateSession(sessionId, { state: "COMPLETED" });
       this.deps.sessionTracking.appendActivity(sessionId, {
         originator: "system",
@@ -1179,6 +1705,13 @@ export class VirtualWorkerService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (isProviderCancellationError(error)) {
+        preserveWorkspace = true;
+        const previousInvocation = this.latestRepairInvocation(repairRuntime);
+        repairRuntime = this.checkpointRepairRuntime(item, {
+          ...repairRuntime,
+          nativeSessionId: previousInvocation?.nativeSessionId || repairRuntime.nativeSessionId,
+          phase: "interrupted",
+        });
         this.deps.sessionTracking.updateSession(sessionId, { state: "CANCELLED" });
         this.deps.sessionTracking.appendActivity(sessionId, {
           originator: "system",
@@ -1193,6 +1726,13 @@ export class VirtualWorkerService {
           provider,
           error,
         });
+        this.deps.projectAttentionService.requeueItem(item.id, {
+          repairRuntime,
+          lastVirtualWorkerError: message,
+          lastVirtualWorkerInterruptedAt: new Date().toISOString(),
+          lastVirtualWorkerProvider: provider,
+          lastVirtualWorkerSessionId: sessionId,
+        });
         return;
       }
       this.deps.sessionTracking.updateSession(sessionId, { state: "FAILED" });
@@ -1202,8 +1742,17 @@ export class VirtualWorkerService {
       });
       const retryEval = this.evaluateMergeConflictGuardrail(settings, guardrailScope, item);
       if (!retryEval || retryEval.allowed || retryEval.action === "WARN_ONLY") {
+        preserveWorkspace = true;
         const now = new Date().toISOString();
         this.deps.projectAttentionService.requeueItem(item.id, {
+          repairRuntime: {
+            ...repairRuntime,
+            nativeSessionId: this.latestRepairInvocation(repairRuntime)?.nativeSessionId || repairRuntime.nativeSessionId,
+            activeAttemptId: null,
+            attemptRecorded: false,
+            phase: "interrupted",
+            updatedAt: now,
+          },
           lastVirtualWorkerError: message,
           lastVirtualWorkerFailedAt: now,
           lastVirtualWorkerProvider: provider,
@@ -1234,11 +1783,9 @@ export class VirtualWorkerService {
         item.summaryMarkdown.trim(),
       ].join("\n"));
     } finally {
-      // Virtual merge worktrees are ephemeral — always clean up to prevent
-      // stale worktree references from poisoning subsequent git fetch operations.
       const shouldCleanup = succeeded
         ? workflowSettings.cleanupWorktreeOnSuccess
-        : true;
+        : !preserveWorkspace;
       if (shouldCleanup) {
         await this.workspaceManager.removeWorktree(repoPath, worktreePath).catch(() => undefined);
         cleanedUp = true;
@@ -1297,6 +1844,7 @@ export class VirtualWorkerService {
 
   private async resolveCiFixAttention(workerEndpointId: string, item: ProjectAttentionItemRecord): Promise<void> {
     const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
+    const savedRuntime = this.readRepairRuntime(item, "ci_fix");
     const taskContinuation = await this.resolveTaskCiFixContinuation(item, settings);
     const workerAgent = taskContinuation?.workerAgent
       || await this.deps.agentPresetSyncService?.resolveTargetedCodingAgent(
@@ -1322,10 +1870,22 @@ export class VirtualWorkerService {
         }
         : null,
     });
-    const provider = taskContinuation?.provider
-      || ciFixRoute!.provider as Exclude<ProviderId, "jules">;
-    const providerConfigId = ciFixRoute?.providerConfigId || ciFixRoute?.provider || provider;
-    const providerSettings = taskContinuation?.providerSettings || ciFixRoute!.providers[providerConfigId];
+    const savedProviderSettings = savedRuntime
+      && savedRuntime.provider !== "jules"
+      && settings.aiProvider.providers[savedRuntime.providerConfigId]?.provider === savedRuntime.provider
+      ? settings.aiProvider.providers[savedRuntime.providerConfigId]
+      : null;
+    const provider = (savedProviderSettings
+      ? savedRuntime!.provider
+      : taskContinuation?.provider || ciFixRoute!.provider) as Exclude<ProviderId, "jules">;
+    const providerConfigId = savedProviderSettings
+      ? savedRuntime!.providerConfigId
+      : taskContinuation?.providerConfigId || ciFixRoute?.providerConfigId || ciFixRoute?.provider || provider;
+    const resolvedProviderSettings = savedProviderSettings || taskContinuation?.providerSettings || ciFixRoute!.providers[providerConfigId];
+    const providerSettings: ProviderSettings = {
+      ...resolvedProviderSettings,
+      model: savedRuntime?.model || resolvedProviderSettings.model,
+    };
     const workflowSettings = {
       ...DEFAULT_CLI_WORKFLOW_SETTINGS,
       ...settings.cliWorkflow,
@@ -1352,7 +1912,8 @@ export class VirtualWorkerService {
     const maxRetries = ciFixEval?.cap ?? 0;
     const capLabel = maxRetries > 0 ? String(maxRetries) : "∞";
 
-    if (ciFixEval && !ciFixEval.allowed && ciFixEval.action !== "WARN_ONLY") {
+    const isRestartContinuation = Boolean(savedRuntime?.activeAttemptId && savedRuntime.attemptRecorded);
+    if (!isRestartContinuation && ciFixEval && !ciFixEval.allowed && ciFixEval.action !== "WARN_ONLY") {
       this.escalateAttentionToHuman(workerEndpointId, item, `Virtual worker reached the CI autofix guardrail (${retryCount}/${capLabel}). Escalating to human.`);
       return;
     }
@@ -1360,9 +1921,7 @@ export class VirtualWorkerService {
     // Record the attempt up-front so failed/crashed CI-fix runs also consume the retry
     // budget — recording only on success let an unfixable failure retry until the
     // provider API limit instead of escalating after `cap` attempts.
-    this.deps.guardrailService?.record(guardrailScope, guardrailKey, "ci_fix");
-
-    const sessionId = taskContinuation?.sessionId
+    const sessionId = savedRuntime?.sessionId || taskContinuation?.sessionId
       || `virtual-cifix-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
     const resumeTarget = taskContinuation
       ? { sessionId: taskContinuation.resumeSessionId }
@@ -1371,7 +1930,26 @@ export class VirtualWorkerService {
         workerBranch: branchName,
         providers: [provider],
       });
-    const workspaceOwnerSessionId = resumeTarget?.sessionId || sessionId;
+    const workspaceOwnerSessionId = savedRuntime?.workspaceSessionId || resumeTarget?.sessionId || sessionId;
+    let repairRuntime = this.checkpointRepairRuntime(item, {
+      purpose: "ci_fix",
+      sessionId,
+      workspaceSessionId: workspaceOwnerSessionId,
+      provider,
+      providerConfigId,
+      model: savedRuntime?.model || providerSettings.model,
+      nativeSessionId: savedRuntime?.nativeSessionId || taskContinuation?.continueSessionId || null,
+      activeAttemptId: savedRuntime?.activeAttemptId || randomUUID(),
+      attemptRecorded: true,
+      phase: "claimed",
+      workspaceBaselineHead: savedRuntime?.workspaceBaselineHead || null,
+      workspaceRepairHead: savedRuntime?.workspaceRepairHead || null,
+      publicationPhase: savedRuntime?.publicationPhase || "pending",
+      publishedHeadSha: savedRuntime?.publishedHeadSha || null,
+    });
+    if (!isRestartContinuation) {
+      this.deps.guardrailService?.record(guardrailScope, guardrailKey, "ci_fix");
+    }
     let worktreePath = this.workspaceManager.buildWorkspaceRef(repoPath, workspaceOwnerSessionId, workflowSettings.executionMode);
     const title = item.title;
     let succeeded = false;
@@ -1383,7 +1961,7 @@ export class VirtualWorkerService {
       ? resolveAgentMemoryInstructions(workerAgent || {}, settings.memory?.workerLearningsInstruction)
       : "";
 
-    if (taskContinuation) {
+    if (this.deps.sessionTracking.getSession(sessionId)) {
       this.deps.sessionTracking.updateSession(sessionId, { state: "RUNNING" });
     } else {
       this.deps.sessionTracking.createSession({
@@ -1404,6 +1982,7 @@ export class VirtualWorkerService {
     });
 
     let cleanedUp = false;
+    let preserveWorkspace = false;
     const gitAuth: GitHttpAuthOptions = {
       githubToken: settings.git.githubToken,
       gitlabToken: settings.git.gitlabToken,
@@ -1420,7 +1999,7 @@ export class VirtualWorkerService {
         worktreePath: this.workspaceManager.buildWorkspaceRef(repoPath, workspaceOwnerSessionId, effectiveWorkflowSettings.executionMode),
         workerBranch: branchName,
         featureBranch: branchName,
-        resumeSessionId: resumeTarget?.sessionId,
+        resumeSessionId: repairRuntime.workspaceSessionId,
         gitAuth,
         gitPolicy: buildInvocationGitPolicy({
           githubMode: settings.git.githubMode,
@@ -1431,92 +2010,167 @@ export class VirtualWorkerService {
       });
       const finalWorktreePath = prepared.worktreePath;
       worktreePath = finalWorktreePath;
-      initialHead = (await this.runWorkspaceCommand(finalWorktreePath, "git", ["rev-parse", "HEAD"])).stdout.trim();
-
-      const workspaceGuidance = await this.workspaceManager.buildWorkspaceGuidance(item.summaryMarkdown, finalWorktreePath);
-      const providerPrompt = buildProviderPrompt(
-        this.buildCiFixPrompt(
-          item,
-          branchName,
-          workspaceGuidance,
-          workerAgent?.instructionMarkdown,
-          memoryContext,
-          memoryInstructions,
-        ),
-        providerSettings.thinkingMode,
-        provider,
-      );
-      await this.runProviderWithRetry({
-        provider,
-        providerPrompt,
-        workflowSettings: effectiveWorkflowSettings,
-        repoPath,
-        worktreePath: finalWorktreePath,
-        sessionId,
-        attentionItem: item,
-        purpose: "ci_fix",
-        model: providerSettings.model,
-        thinkingMode: providerSettings.thinkingMode,
-        apiKey: providerSettings.apiKey,
-        maxConcurrentTasks: providerSettings.maxConcurrentTasks,
-        qwenAuthMode: providerSettings.qwenAuthMode,
-
-        qwenRegion: providerSettings.qwenRegion,
-        qwenBaseUrl: providerSettings.qwenBaseUrl,
-        qwenEnvKey: providerSettings.qwenEnvKey,
-        qwenModelId: providerSettings.qwenModelId,
-        qwenProtocol: providerSettings.qwenProtocol,
-        qwenAdditionalModelProviders: providerSettings.qwenAdditionalModelProviders,
-        openCodeAuthMode: providerSettings.openCodeAuthMode,
-        openCodeProviderId: providerSettings.openCodeProviderId,
-        openCodeModelId: providerSettings.openCodeModelId,
-        openCodeBaseUrl: providerSettings.openCodeBaseUrl,
-        openCodeEnvKey: providerSettings.openCodeEnvKey,
-        openCodePackage: providerSettings.openCodePackage,
-        providerMountAuth: providerSettings.mountAuth,
-        providerAuthPath: providerSettings.authPath,
-        providerConfigMode: providerSettings.providerConfigMode,
-        providerConfigPath: providerSettings.providerConfigPath,
-        customBaseUrl: providerSettings.customBaseUrl,
-        customModel: providerSettings.customModel,
-        taskRunId: taskContinuation?.taskRunId || undefined,
-        continueSessionId: taskContinuation?.continueSessionId,
-        openCodeBaselineRawUsageJson: provider === "opencode"
-          ? taskContinuation?.previousInvocation?.rawUsageJson ?? null
-          : null,
-        githubToken: settings.git.githubToken,
-        agentMcpAccess: workerAgent ? workerClarificationAgentMcpAccess(workerAgent.mcpAccess) : null,
-        mcpAgentId: workerAgent?.id ?? null,
+      repairRuntime = this.checkpointRepairRuntime(item, {
+        ...repairRuntime,
+        phase: "workspace_ready",
       });
+      const currentWorkspaceHead = (await this.runWorkspaceCommand(finalWorktreePath, "git", ["rev-parse", "HEAD"])).stdout.trim();
+      if (!repairRuntime.workspaceBaselineHead) {
+        repairRuntime = this.checkpointRepairRuntime(item, {
+          ...repairRuntime,
+          workspaceBaselineHead: currentWorkspaceHead,
+        });
+      }
+      initialHead = repairRuntime.workspaceBaselineHead || currentWorkspaceHead;
 
-      if (settings.memory?.enabled && settings.memory.autoCaptureSprint) {
-        await this.captureMemoriesFromWorkspace(
-          item.projectId,
-          item.sprintId || undefined,
-          workerAgent?.id || null,
-          finalWorktreePath,
-          item.id,
+      if (repairRuntime.publicationPhase === "pending") {
+        const workspaceGuidance = await this.workspaceManager.buildWorkspaceGuidance(item.summaryMarkdown, finalWorktreePath);
+        const providerPrompt = buildProviderPrompt(
+          this.buildCiFixPrompt(
+            item,
+            branchName,
+            workspaceGuidance,
+            workerAgent?.instructionMarkdown,
+            memoryContext,
+            memoryInstructions,
+          ),
+          providerSettings.thinkingMode,
+          provider,
         );
+        const previousInvocation = this.latestRepairInvocation(repairRuntime)
+          || taskContinuation?.previousInvocation
+          || null;
+        repairRuntime = this.checkpointRepairRuntime(item, {
+          ...repairRuntime,
+          nativeSessionId: previousInvocation?.nativeSessionId || repairRuntime.nativeSessionId,
+          phase: "provider_running",
+        });
+        const nativeSessionId = await this.runProviderWithRetry({
+          provider,
+          providerPrompt,
+          workflowSettings: effectiveWorkflowSettings,
+          repoPath,
+          worktreePath: finalWorktreePath,
+          sessionId,
+          attentionItem: item,
+          purpose: "ci_fix",
+          model: providerSettings.model,
+          thinkingMode: providerSettings.thinkingMode,
+          apiKey: providerSettings.apiKey,
+          maxConcurrentTasks: providerSettings.maxConcurrentTasks,
+          qwenAuthMode: providerSettings.qwenAuthMode,
+          qwenRegion: providerSettings.qwenRegion,
+          qwenBaseUrl: providerSettings.qwenBaseUrl,
+          qwenEnvKey: providerSettings.qwenEnvKey,
+          qwenModelId: providerSettings.qwenModelId,
+          qwenProtocol: providerSettings.qwenProtocol,
+          qwenAdditionalModelProviders: providerSettings.qwenAdditionalModelProviders,
+          openCodeAuthMode: providerSettings.openCodeAuthMode,
+          openCodeProviderId: providerSettings.openCodeProviderId,
+          openCodeModelId: providerSettings.openCodeModelId,
+          openCodeBaseUrl: providerSettings.openCodeBaseUrl,
+          openCodeEnvKey: providerSettings.openCodeEnvKey,
+          openCodePackage: providerSettings.openCodePackage,
+          providerMountAuth: providerSettings.mountAuth,
+          providerAuthPath: providerSettings.authPath,
+          providerConfigMode: providerSettings.providerConfigMode,
+          providerConfigPath: providerSettings.providerConfigPath,
+          customBaseUrl: providerSettings.customBaseUrl,
+          customModel: providerSettings.customModel,
+          taskRunId: taskContinuation?.taskRunId || undefined,
+          continueSessionId: repairRuntime.nativeSessionId,
+          openCodeBaselineRawUsageJson: provider === "opencode"
+            ? previousInvocation?.rawUsageJson ?? null
+            : null,
+          githubToken: settings.git.githubToken,
+          agentMcpAccess: workerAgent ? workerClarificationAgentMcpAccess(workerAgent.mcpAccess) : null,
+          mcpAgentId: workerAgent?.id ?? null,
+        });
+        if (nativeSessionId) {
+          repairRuntime = this.checkpointRepairRuntime(item, {
+            ...repairRuntime,
+            nativeSessionId,
+            phase: "provider_running",
+          });
+        }
+
+        if (settings.memory?.enabled && settings.memory.autoCaptureSprint) {
+          await this.captureMemoriesFromWorkspace(
+            item.projectId,
+            item.sprintId || undefined,
+            workerAgent?.id || null,
+            finalWorktreePath,
+            item.id,
+          );
+        }
+        const workspaceRepairHead = (await this.runWorkspaceCommand(finalWorktreePath, "git", ["rev-parse", "HEAD"])).stdout.trim();
+        repairRuntime = this.checkpointRepairRuntime(item, {
+          ...repairRuntime,
+          workspaceRepairHead,
+          publicationPhase: "workspace_finalized",
+        });
       }
 
-      const patchText = await this.workspaceArtifactService.exportBinaryPatch(finalWorktreePath, initialHead);
-      const applyResult = await this.workspaceArtifactService.applyPatchToBranch({
-        repoPath,
-        baseRef: initialHead,
-        workerBranch: branchName,
-        patchText,
-        commitMessage: `fix(ci): resolve failing checks on ${branchName}`,
-        gitAuth,
-        gitIdentity: effectiveWorkflowSettings.containerMountGitConfig
-          ? undefined
-          : {
-            name: effectiveWorkflowSettings.containerGitUserName,
-            email: effectiveWorkflowSettings.containerGitUserEmail,
-          },
-        githubMode: settings.git.githubMode,
-      });
-      let hasUnpushed = applyResult.hasChanges;
-      let hasAhead = applyResult.hasChanges;
+      const repairCommitSubject = `fix(ci): resolve failing checks on ${branchName}`;
+      let recoveredPublishedHead = repairRuntime.publicationPhase === "host_publishing"
+        && repairRuntime.workspaceRepairHead !== repairRuntime.workspaceBaselineHead
+        ? await this.findPublishedRepairCommit({
+          repoPath,
+          workerBranch: branchName,
+          workspaceRepairHead: repairRuntime.workspaceRepairHead,
+          githubMode: settings.git.githubMode,
+          gitAuth,
+        })
+        : null;
+      if (!recoveredPublishedHead && repairRuntime.publicationPhase === "host_publishing") {
+        recoveredPublishedHead = await this.findTreeEquivalentPublishedRepair({
+          repoPath,
+          worktreePath: finalWorktreePath,
+          workerBranch: branchName,
+          workspaceBaselineHead: repairRuntime.workspaceBaselineHead,
+          workspaceRepairHead: repairRuntime.workspaceRepairHead,
+          expectedCommitSubject: repairCommitSubject,
+          requiredParentRefs: [],
+          githubMode: settings.git.githubMode,
+          gitAuth,
+        });
+      }
+      const alreadyPublished = Boolean(recoveredPublishedHead)
+        || (repairRuntime.publicationPhase === "host_published" && Boolean(repairRuntime.publishedHeadSha));
+      let applyResult: AppliedWorkspacePatchResult = {
+        hasChanges: alreadyPublished,
+        commitSha: recoveredPublishedHead || repairRuntime.publishedHeadSha || undefined,
+      };
+      if (!alreadyPublished) {
+        const patchText = await this.workspaceArtifactService.exportBinaryPatch(
+          finalWorktreePath,
+          repairRuntime.workspaceBaselineHead || initialHead,
+        );
+        repairRuntime = this.checkpointRepairRuntime(item, {
+          ...repairRuntime,
+          publicationPhase: "host_publishing",
+        });
+        applyResult = await this.workspaceArtifactService.applyPatchToBranch({
+          repoPath,
+          baseRef: repairRuntime.workspaceBaselineHead || initialHead,
+          workerBranch: branchName,
+          patchText,
+          commitMessage: this.buildRepairPublicationCommitMessage(
+            repairCommitSubject,
+            repairRuntime.workspaceRepairHead,
+          ),
+          gitAuth,
+          gitIdentity: effectiveWorkflowSettings.containerMountGitConfig
+            ? undefined
+            : {
+              name: effectiveWorkflowSettings.containerGitUserName,
+              email: effectiveWorkflowSettings.containerGitUserEmail,
+            },
+          githubMode: settings.git.githubMode,
+        });
+      }
+      let hasUnpushed = alreadyPublished || applyResult.hasChanges;
+      let hasAhead = alreadyPublished || applyResult.hasChanges;
       if (!applyResult.hasChanges) {
         hasUnpushed = await this.prService.hasUnpushedCommits(repoPath, branchName, compareBaseBranch);
         hasAhead = await this.prService.hasWorkerBranchCommitsAgainstFeature(repoPath, branchName, compareBaseBranch);
@@ -1539,6 +2193,11 @@ export class VirtualWorkerService {
         || ((hasUnpushed || hasAhead)
           ? (await runCommandStrict("git", ["rev-parse", `refs/heads/${branchName}`], repoPath)).stdout.trim()
           : initialHead);
+      repairRuntime = this.checkpointRepairRuntime(item, {
+        ...repairRuntime,
+        publicationPhase: "host_published",
+        publishedHeadSha: headSha,
+      });
       this.deps.sessionTracking.updateSession(sessionId, { state: "COMPLETED" });
       this.deps.sessionTracking.appendActivity(sessionId, {
         originator: "system",
@@ -1570,6 +2229,28 @@ export class VirtualWorkerService {
       succeeded = true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      if (isProviderCancellationError(error)) {
+        preserveWorkspace = true;
+        const previousInvocation = this.latestRepairInvocation(repairRuntime);
+        repairRuntime = this.checkpointRepairRuntime(item, {
+          ...repairRuntime,
+          nativeSessionId: previousInvocation?.nativeSessionId || repairRuntime.nativeSessionId,
+          phase: "interrupted",
+        });
+        this.deps.sessionTracking.updateSession(sessionId, { state: "CANCELLED" });
+        this.deps.sessionTracking.appendActivity(sessionId, {
+          originator: "system",
+          description: `Virtual worker CI-fix run cancelled before completion: ${message}`,
+        });
+        this.deps.projectAttentionService.requeueItem(item.id, {
+          repairRuntime,
+          lastVirtualWorkerError: message,
+          lastVirtualWorkerInterruptedAt: new Date().toISOString(),
+          lastVirtualWorkerProvider: provider,
+          lastVirtualWorkerSessionId: sessionId,
+        });
+        return;
+      }
       this.deps.sessionTracking.updateSession(sessionId, { state: "FAILED" });
       this.deps.sessionTracking.appendActivity(sessionId, {
         originator: "system",
@@ -1577,8 +2258,17 @@ export class VirtualWorkerService {
       });
       const retryEval = this.deps.guardrailService?.evaluate(guardrailScope, guardrailKey, "ci_fix") ?? null;
       if (retryEval && (retryEval.allowed || retryEval.action === "WARN_ONLY")) {
+        preserveWorkspace = true;
         const now = new Date().toISOString();
         this.deps.projectAttentionService.requeueItem(item.id, {
+          repairRuntime: {
+            ...repairRuntime,
+            nativeSessionId: this.latestRepairInvocation(repairRuntime)?.nativeSessionId || repairRuntime.nativeSessionId,
+            activeAttemptId: null,
+            attemptRecorded: false,
+            phase: "interrupted",
+            updatedAt: now,
+          },
           lastVirtualWorkerError: message,
           lastVirtualWorkerFailedAt: now,
           lastVirtualWorkerProvider: provider,
@@ -1609,7 +2299,7 @@ export class VirtualWorkerService {
         item.summaryMarkdown.trim(),
       ].join("\n"));
     } finally {
-      const shouldCleanup = taskContinuation
+      const shouldCleanup = taskContinuation || preserveWorkspace
         ? false
         : succeeded
           ? workflowSettings.cleanupWorktreeOnSuccess
@@ -1776,6 +2466,15 @@ export class VirtualWorkerService {
     ].filter(Boolean).join("\n");
   }
 
+  private async workspaceHasMergeInProgress(worktreePath: string): Promise<boolean> {
+    try {
+      const result = await this.runWorkspaceCommand(worktreePath, "git", ["rev-parse", "--verify", "MERGE_HEAD"]);
+      return result.stdout.trim().length > 0;
+    } catch {
+      return false;
+    }
+  }
+
   private async runMergeIntoSource(worktreePath: string, targetRef: string, sessionId: string): Promise<boolean> {
     try {
       await this.runWorkspaceCommand(worktreePath, "git", ["merge", "--no-ff", "--no-commit", targetRef]);
@@ -1844,7 +2543,7 @@ export class VirtualWorkerService {
     githubToken: string;
     agentMcpAccess?: AgentMcpAccessConfig | null;
     mcpAgentId?: string | null;
-  }): Promise<void> {
+  }): Promise<string | null> {
     const effectiveModel = resolveEffectiveModel({
       provider: args.provider,
       model: args.model,
@@ -1907,6 +2606,7 @@ export class VirtualWorkerService {
     if (!result.ok) {
       throw new Error(result.stderr || result.stdout || "Provider failed without output.");
     }
+    return result.nativeSessionId || null;
   }
 
   private async isMergeConflictResolvedOnRemote(
@@ -2147,6 +2847,18 @@ export class VirtualWorkerService {
       await this.runWorkspaceCommand(worktreePath, "git", ["merge-base", "--is-ancestor", targetRef, "HEAD"]);
     } catch {
       throw new Error(`Merge verification failed: ${targetRef} is not contained in the resolved source branch.`);
+    }
+  }
+
+  private async isWorkspaceMergeFinalized(worktreePath: string, targetRef: string): Promise<boolean> {
+    if (await this.workspaceHasMergeInProgress(worktreePath)) {
+      return false;
+    }
+    try {
+      await this.ensureTargetMergedIntoSource(worktreePath, targetRef);
+      return true;
+    } catch {
+      return false;
     }
   }
 

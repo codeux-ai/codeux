@@ -3,6 +3,9 @@ import type {
   CreateCustomDashboardDraftInput,
   CreateCustomDashboardRevisionInput,
   CreateCustomDashboardValidationSessionInput,
+  CustomDashboardCredentialBinding,
+  CustomDashboardCredentialPhase,
+  CustomDashboardCredentialSlotDeclaration,
   CustomDashboardDataSourceEdge,
   CustomDashboardDataSourceNode,
   CustomDashboardDataSourceNodeGraph,
@@ -18,6 +21,7 @@ import type {
   CustomDashboardValidationSessionRecord,
   CustomDashboardValidationStatus,
   UpdateCustomDashboardDraftInput,
+  UpdateCustomDashboardCredentialBindingsInput,
   UpdateCustomDashboardValidationSessionInput,
 } from "../contracts/custom-dashboard-types.js";
 import { AppDbStorage } from "./app-db-storage.js";
@@ -35,6 +39,8 @@ interface CustomDashboardRow {
   source_node_graph_json: string;
   styleguide_json: string;
   runtime_metadata_json: string;
+  credential_bindings_json: string;
+  credential_binding_revision: number | string;
   published_revision_id: string | null;
   created_at: string;
   updated_at: string;
@@ -52,6 +58,7 @@ interface CustomDashboardRevisionRow {
   validation_status: string | null;
   validation_report_json: string | null;
   runtime_metadata_json: string;
+  credential_bindings_json: string;
   validated_at: string | null;
   created_at: string;
   updated_at: string;
@@ -88,6 +95,31 @@ const VALIDATION_STATUSES: readonly CustomDashboardValidationStatus[] = [
   "failed",
   "cancelled",
 ];
+
+const CREDENTIAL_PHASES: readonly CustomDashboardCredentialPhase[] = ["build", "runtime"];
+const MAX_CREDENTIAL_SLOTS = 32;
+const MAX_SLOT_ID_LENGTH = 64;
+const MAX_SLOT_LABEL_LENGTH = 128;
+const MAX_CREDENTIAL_KIND_LENGTH = 128;
+const MAX_CAPABILITY_LENGTH = 128;
+const MAX_CREDENTIAL_ID_LENGTH = 256;
+const MAX_SLOT_LIST_ITEMS = 32;
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
+const SLOT_ID = /^[a-z][a-z0-9_-]*$/;
+const CREDENTIAL_IDENTIFIER = /^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/;
+
+export class CustomDashboardCredentialBindingConflictError extends Error {
+  constructor(
+    public readonly dashboardId: string,
+    public readonly expectedBindingRevision: number,
+    public readonly actualBindingRevision: number,
+  ) {
+    super(
+      `Custom dashboard credential bindings changed concurrently for ${dashboardId}; expected revision ${expectedBindingRevision}, current revision ${actualBindingRevision}.`,
+    );
+    this.name = "CustomDashboardCredentialBindingConflictError";
+  }
+}
 
 export class CustomDashboardRepository {
   private readonly db: DatabaseAdapter;
@@ -137,8 +169,9 @@ export class CustomDashboardRepository {
     this.db.prepare(`
       INSERT INTO custom_dashboards (
         id, project_id, title, description, status, manifest_json, files_json,
-        source_node_graph_json, styleguide_json, runtime_metadata_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)
+        source_node_graph_json, styleguide_json, runtime_metadata_json,
+        credential_bindings_json, credential_binding_revision, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, '[]', 1, ?, ?)
     `).run(
       id,
       projectId,
@@ -173,6 +206,12 @@ export class CustomDashboardRepository {
     const runtimeMetadata = input.runtimeMetadata === undefined
       ? current.runtimeMetadata
       : this.normalizeJsonObject(input.runtimeMetadata);
+    this.assertBoundCredentialPoliciesUnchanged(
+      current.credentialBindings ?? [],
+      current.manifest.credentialSlots ?? [],
+      manifest.credentialSlots ?? [],
+    );
+    this.normalizeCredentialBindings(current.credentialBindings ?? [], manifest.credentialSlots ?? []);
 
     this.db.prepare(`
       UPDATE custom_dashboards
@@ -201,6 +240,40 @@ export class CustomDashboardRepository {
     return this.requireDashboard(dashboardId);
   }
 
+  updateCredentialBindings(
+    dashboardId: string,
+    input: UpdateCustomDashboardCredentialBindingsInput,
+  ): CustomDashboardRecord {
+    const current = this.requireDashboard(dashboardId);
+    if (current.status === "archived") {
+      throw new ValidationError("Archived custom dashboards cannot update credential bindings.");
+    }
+    const expectedBindingRevision = Number(input?.expectedBindingRevision);
+    if (!Number.isInteger(expectedBindingRevision) || expectedBindingRevision < 1) {
+      throw new ValidationError("Custom dashboard expectedBindingRevision must be a positive integer.");
+    }
+    const bindings = this.normalizeCredentialBindings(input?.bindings, current.manifest.credentialSlots ?? []);
+    const now = new Date().toISOString();
+    const update = this.db.prepare(`
+      UPDATE custom_dashboards
+      SET credential_bindings_json = ?,
+          credential_binding_revision = credential_binding_revision + 1,
+          updated_at = ?
+      WHERE id = ?
+        AND credential_binding_revision = ?
+    `).run(this.serializeJson(bindings), now, current.id, expectedBindingRevision);
+
+    if (update.changes !== 1) {
+      const actual = this.requireDashboard(current.id).credentialBindingRevision ?? 1;
+      throw new CustomDashboardCredentialBindingConflictError(
+        current.id,
+        expectedBindingRevision,
+        actual,
+      );
+    }
+    return this.requireDashboard(current.id);
+  }
+
   createRevision(dashboardId: string, input: CreateCustomDashboardRevisionInput = {}): CustomDashboardRevisionRecord {
     const dashboard = this.requireDashboard(dashboardId);
     if (dashboard.status === "archived") {
@@ -218,13 +291,22 @@ export class CustomDashboardRepository {
     const runtimeMetadata = input.runtimeMetadata === undefined
       ? dashboard.runtimeMetadata
       : this.normalizeJsonObject(input.runtimeMetadata);
+    const credentialBindings = this.normalizeCredentialBindings(
+      dashboard.credentialBindings ?? [],
+      manifest.credentialSlots ?? [],
+    );
+    this.assertBoundCredentialPoliciesUnchanged(
+      credentialBindings,
+      dashboard.manifest.credentialSlots ?? [],
+      manifest.credentialSlots ?? [],
+    );
 
     this.db.prepare(`
       INSERT INTO custom_dashboard_revisions (
         id, dashboard_id, project_id, revision_number, manifest_json, files_json,
         source_node_graph_json, styleguide_json, validation_status, validation_report_json,
-        runtime_metadata_json, validated_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, NULL, ?, ?)
+        runtime_metadata_json, credential_bindings_json, validated_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL, ?, ?)
     `).run(
       id,
       dashboard.id,
@@ -235,6 +317,7 @@ export class CustomDashboardRepository {
       this.serializeJson(sourceNodeGraph),
       this.serializeJson(styleguide),
       this.serializeJson(runtimeMetadata),
+      this.serializeJson(credentialBindings),
       now,
       now,
     );
@@ -633,8 +716,194 @@ export class CustomDashboardRepository {
       filePaths,
       ...(input.description?.trim() ? { description: input.description.trim() } : {}),
       ...(input.dataSources ? { dataSources: this.normalizeSourceNodeGraph(input.dataSources) } : {}),
+      credentialSlots: this.normalizeCredentialSlotDeclarations(input.credentialSlots),
       ...(input.metadata ? { metadata: this.normalizeJsonObject(input.metadata) } : {}),
     };
+  }
+
+  private normalizeCredentialSlotDeclarations(
+    input: CustomDashboardCredentialSlotDeclaration[] | undefined,
+  ): CustomDashboardCredentialSlotDeclaration[] {
+    if (input === undefined) {
+      return [];
+    }
+    if (!Array.isArray(input)) {
+      throw new ValidationError("Custom dashboard manifest credentialSlots must be an array.");
+    }
+    if (input.length > MAX_CREDENTIAL_SLOTS) {
+      throw new ValidationError(
+        `Custom dashboard manifest credentialSlots cannot contain more than ${MAX_CREDENTIAL_SLOTS} entries.`,
+      );
+    }
+    const slotIds = new Set<string>();
+    return input.map((declaration, index) => {
+      if (!declaration || typeof declaration !== "object" || Array.isArray(declaration)) {
+        throw new ValidationError(`Custom dashboard credential slot declaration ${index + 1} must be an object.`);
+      }
+      const slotId = this.normalizeBoundedString(
+        declaration.slotId,
+        `Custom dashboard credential slot ${index + 1} slotId`,
+        MAX_SLOT_ID_LENGTH,
+      );
+      if (!SLOT_ID.test(slotId)) {
+        throw new ValidationError(
+          `Custom dashboard credential slotId must start with a lowercase letter and contain only lowercase letters, numbers, underscores, and hyphens: ${slotId}`,
+        );
+      }
+      if (slotIds.has(slotId)) {
+        throw new ValidationError(`Custom dashboard credential slotId is duplicated: ${slotId}`);
+      }
+      slotIds.add(slotId);
+      const label = this.normalizeBoundedString(
+        declaration.label,
+        `Custom dashboard credential slot ${slotId} label`,
+        MAX_SLOT_LABEL_LENGTH,
+      );
+      const phase = typeof declaration.phase === "string" ? declaration.phase.trim() : "";
+      if (!CREDENTIAL_PHASES.includes(phase as CustomDashboardCredentialPhase)) {
+        throw new ValidationError(`Custom dashboard credential slot ${slotId} phase must be build or runtime.`);
+      }
+      if (typeof declaration.required !== "boolean") {
+        throw new ValidationError(`Custom dashboard credential slot ${slotId} required must be a boolean.`);
+      }
+      return {
+        slotId,
+        label,
+        phase: phase as CustomDashboardCredentialPhase,
+        required: declaration.required,
+        allowedKinds: this.normalizeCredentialIdentifierList(
+          declaration.allowedKinds,
+          `Custom dashboard credential slot ${slotId} allowedKinds`,
+          MAX_CREDENTIAL_KIND_LENGTH,
+        ),
+        requiredCapabilities: this.normalizeCredentialIdentifierList(
+          declaration.requiredCapabilities,
+          `Custom dashboard credential slot ${slotId} requiredCapabilities`,
+          MAX_CAPABILITY_LENGTH,
+        ),
+      };
+    });
+  }
+
+  private normalizeCredentialBindings(
+    input: CustomDashboardCredentialBinding[] | undefined,
+    declarations: CustomDashboardCredentialSlotDeclaration[],
+  ): CustomDashboardCredentialBinding[] {
+    if (!Array.isArray(input)) {
+      throw new ValidationError("Custom dashboard credential bindings must be an array.");
+    }
+    if (input.length > MAX_CREDENTIAL_SLOTS) {
+      throw new ValidationError(
+        `Custom dashboard credential bindings cannot contain more than ${MAX_CREDENTIAL_SLOTS} entries.`,
+      );
+    }
+    const declaredSlotIds = new Set(declarations.map((declaration) => declaration.slotId));
+    const boundSlotIds = new Set<string>();
+    return input.map((binding, index) => {
+      if (!binding || typeof binding !== "object" || Array.isArray(binding)) {
+        throw new ValidationError(`Custom dashboard credential binding ${index + 1} must be an object.`);
+      }
+      const keys = Object.keys(binding);
+      if (keys.some((key) => key !== "slotId" && key !== "credentialId")) {
+        throw new ValidationError("Custom dashboard credential bindings may contain only slotId and credentialId.");
+      }
+      const slotId = this.normalizeBoundedString(
+        binding.slotId,
+        `Custom dashboard credential binding ${index + 1} slotId`,
+        MAX_SLOT_ID_LENGTH,
+      );
+      if (!declaredSlotIds.has(slotId)) {
+        throw new ValidationError(`Custom dashboard credential binding references an undeclared slot: ${slotId}`);
+      }
+      if (boundSlotIds.has(slotId)) {
+        throw new ValidationError(`Custom dashboard credential binding is duplicated for slot: ${slotId}`);
+      }
+      boundSlotIds.add(slotId);
+      return {
+        slotId,
+        credentialId: this.normalizeBoundedString(
+          binding.credentialId,
+          `Custom dashboard credential binding ${slotId} credentialId`,
+          MAX_CREDENTIAL_ID_LENGTH,
+        ),
+      };
+    });
+  }
+
+  private normalizeCredentialIdentifierList(
+    input: string[],
+    fieldName: string,
+    maxItemLength: number,
+  ): string[] {
+    if (!Array.isArray(input) || input.length === 0) {
+      throw new ValidationError(`${fieldName} must contain at least one value.`);
+    }
+    if (input.length > MAX_SLOT_LIST_ITEMS) {
+      throw new ValidationError(`${fieldName} cannot contain more than ${MAX_SLOT_LIST_ITEMS} entries.`);
+    }
+    const normalized = input.map((value, index) => {
+      const identifier = this.normalizeBoundedString(
+        value,
+        `${fieldName} entry ${index + 1}`,
+        maxItemLength,
+      );
+      if (!CREDENTIAL_IDENTIFIER.test(identifier)) {
+        throw new ValidationError(
+          `${fieldName} entries may contain only letters, numbers, dots, underscores, colons, and hyphens.`,
+        );
+      }
+      return identifier;
+    });
+    return [...new Set(normalized)];
+  }
+
+  private assertBoundCredentialPoliciesUnchanged(
+    bindings: CustomDashboardCredentialBinding[],
+    currentDeclarations: CustomDashboardCredentialSlotDeclaration[],
+    nextDeclarations: CustomDashboardCredentialSlotDeclaration[],
+  ): void {
+    const currentBySlotId = new Map(currentDeclarations.map((declaration) => [declaration.slotId, declaration]));
+    const nextBySlotId = new Map(nextDeclarations.map((declaration) => [declaration.slotId, declaration]));
+    for (const binding of bindings) {
+      const current = currentBySlotId.get(binding.slotId);
+      const next = nextBySlotId.get(binding.slotId);
+      if (!current || !next || !this.sameCredentialSlotPolicy(current, next)) {
+        throw new ValidationError(
+          `Custom dashboard credential slot ${binding.slotId} must be unbound before its policy can change.`,
+        );
+      }
+    }
+  }
+
+  private sameCredentialSlotPolicy(
+    current: CustomDashboardCredentialSlotDeclaration,
+    next: CustomDashboardCredentialSlotDeclaration,
+  ): boolean {
+    return current.phase === next.phase
+      && current.required === next.required
+      && this.sameStringSet(current.allowedKinds, next.allowedKinds)
+      && this.sameStringSet(current.requiredCapabilities, next.requiredCapabilities);
+  }
+
+  private sameStringSet(current: string[], next: string[]): boolean {
+    return current.length === next.length && current.every((value) => next.includes(value));
+  }
+
+  private normalizeBoundedString(value: unknown, fieldName: string, maxLength: number): string {
+    if (typeof value !== "string") {
+      throw new ValidationError(`${fieldName} must be a string.`);
+    }
+    const normalized = value.trim();
+    if (!normalized) {
+      throw new ValidationError(`${fieldName} is required.`);
+    }
+    if (normalized.length > maxLength) {
+      throw new ValidationError(`${fieldName} must be at most ${maxLength} characters.`);
+    }
+    if (CONTROL_CHARACTERS.test(normalized)) {
+      throw new ValidationError(`${fieldName} cannot contain control characters.`);
+    }
+    return normalized;
   }
 
   private normalizeFileBundle(input: CustomDashboardFileBundle): CustomDashboardFileBundle {
@@ -845,6 +1114,14 @@ export class CustomDashboardRepository {
     return this.normalizeValidationReport(parsed as CustomDashboardValidationReport);
   }
 
+  private parseCredentialBindings(
+    value: string,
+    declarations: CustomDashboardCredentialSlotDeclaration[],
+  ): CustomDashboardCredentialBinding[] {
+    const parsed = this.parseJson(value);
+    return this.normalizeCredentialBindings(parsed as CustomDashboardCredentialBinding[], declarations);
+  }
+
   private parseJson(value: string): unknown {
     try {
       return JSON.parse(value) as unknown;
@@ -877,17 +1154,23 @@ export class CustomDashboardRepository {
   }
 
   private mapDashboardRow(row: CustomDashboardRow): CustomDashboardRecord {
+    const manifest = this.parseManifest(row.manifest_json);
     return {
       id: row.id,
       projectId: row.project_id,
       title: row.title,
       description: row.description ?? "",
       status: this.normalizeDashboardStatus(row.status),
-      manifest: this.parseManifest(row.manifest_json),
+      manifest,
       fileBundle: this.parseFileBundle(row.files_json),
       sourceNodeGraph: this.parseSourceNodeGraph(row.source_node_graph_json),
       styleguide: this.parseJsonObject(row.styleguide_json),
       runtimeMetadata: this.parseJsonObject(row.runtime_metadata_json),
+      credentialBindings: this.parseCredentialBindings(
+        row.credential_bindings_json,
+        manifest.credentialSlots ?? [],
+      ),
+      credentialBindingRevision: toNumber(row.credential_binding_revision),
       publishedRevisionId: row.published_revision_id,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -895,18 +1178,23 @@ export class CustomDashboardRepository {
   }
 
   private mapRevisionRow(row: CustomDashboardRevisionRow): CustomDashboardRevisionRecord {
+    const manifest = this.parseManifest(row.manifest_json);
     return {
       id: row.id,
       dashboardId: row.dashboard_id,
       projectId: row.project_id,
       revisionNumber: toNumber(row.revision_number),
-      manifest: this.parseManifest(row.manifest_json),
+      manifest,
       fileBundle: this.parseFileBundle(row.files_json),
       sourceNodeGraph: this.parseSourceNodeGraph(row.source_node_graph_json),
       styleguide: this.parseJsonObject(row.styleguide_json),
       validationStatus: row.validation_status ? this.normalizeValidationStatus(row.validation_status) : null,
       validationReport: this.parseValidationReport(row.validation_report_json),
       runtimeMetadata: this.parseJsonObject(row.runtime_metadata_json),
+      credentialBindings: this.parseCredentialBindings(
+        row.credential_bindings_json,
+        manifest.credentialSlots ?? [],
+      ),
       validatedAt: row.validated_at,
       createdAt: row.created_at,
       updatedAt: row.updated_at,

@@ -48,13 +48,14 @@ action-specific fields, and an optional `approval` object for destructive action
 | `request_clarification` | orchestration | Raise an idempotent, project-owned Markdown question from an eligible coding agent. |
 | `reply_to_clarification` | orchestration | Answer a pending clarification as the eligible project-manager agent or an unscoped project-manager client. |
 | `manage_projects` | orchestration | List, get, create, update, select, set up, and delete projects. |
-| `manage_sprints` | orchestration | Plan, start, pause, cancel, inspect, import issues into, and edit sprints. |
+| `manage_sprints` | orchestration | Save unplanned follow-up drafts; plan, start, pause, cancel, inspect, import issues into, and edit sprints. |
 | `manage_tasks` | orchestration | Create, edit, start, stop, pause, and inspect tasks. |
 | `manage_quicksprints` | orchestration | Manage quicksprint templates and execute them. |
 | `manage_scheduler` | orchestration | Create and run scheduled sprints, quicksprints, messages, and node flows. |
 | `scheduler_code_ux` | orchestration | Agent-owned wakeups with restricted list/schedule/cancel actions. |
 | `manage_agents` | agents & memory | Manage agent presets and sync them to project markdown. |
-| `manage_node_flows` | agents & memory | Manage reusable node workflows, run them, and attach them as agent skills. |
+| `manage_node_flows` | agents & memory | Govern draft automation graphs, credentials, publication, versions, and runs. |
+| `run_attached_flow` | agents & memory | Run one published flow attached to the authenticated agent without exposing its graph or credentials. |
 | `manage_memory` | agents & memory | Inspect, search, promote, and re-embed short/long-term memory. |
 | `add_long_term_memory` | agents & memory | Store one canonical durable project memory and return rich confirmation-widget data. |
 | `manage_skills` | agents & memory | Manage persistent skill storages, skill markdown, and agent storage attachments. |
@@ -62,7 +63,7 @@ action-specific fields, and an optional `approval` object for destructive action
 | `search_skills` | agents & memory | Semantic retrieval over persistent project skills, optionally scoped to an agent or storage. |
 | `manage_settings` | platform | Get/resolve/patch/replace/reset system, project, and sprint settings. |
 | `manage_preview` | platform | Manage sprint preview containers (start/stop/rebuild, logs, scripts). |
-| `manage_custom_dashboards` | platform | Manage project custom dashboard drafts, revisions, detached validation sessions, publication, archiving, and data catalog lookup. |
+| `manage_custom_dashboards` | platform | Manage project custom dashboard drafts, metadata-only credential bindings, revisions, detached validation sessions, publication, archiving, and data catalog lookup. |
 | `manage_chat_providers` | platform | Manage external chat provider setup definitions, connections, bindings, and outbound delivery state. |
 | `manage_telemetry` | platform | Read execution snapshots, invocations, sprint runs, and dispatches. |
 
@@ -120,18 +121,18 @@ Clarification states are `pending`, `replied`, `expired`, and `cancelled`. Repea
 | Tool | `action` values |
 | --- | --- |
 | `manage_projects` | `list`, `get`, `create`, `update`, `select`, `setup`, `delete` |
-| `manage_sprints` | `list`, `get`, `create`, `update`, `delete`, `start`, `pause`, `cancel`, `force_cancel`, `inspect_run`, `import_issues`, `plan` |
+| `manage_sprints` | `list`, `get`, `create`, `followup`, `update`, `delete`, `start`, `pause`, `cancel`, `force_cancel`, `inspect_run`, `import_issues`, `plan` |
 | `manage_tasks` | `list`, `get`, `create`, `update`, `delete`, `start`, `stop`, `force_stop`, `pause`, `inspect_run` |
 | `manage_quicksprints` | `list_templates`, `get_template`, `create_template`, `update_template`, `delete_template`, `execute`, `start` |
 | `manage_scheduler` | `list`, `create`, `update`, `delete`, `run_due`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `schedule_node_flow` |
 | `scheduler_code_ux` | `list`, `schedule_wakeup`, `cancel` |
 | `manage_agents` | `list`, `get`, `create`, `update`, `delete`, `sync` |
-| `manage_node_flows` | `list`, `get`, `create`, `update`, `delete`, `validate`, `run`, `list_runs`, `get_run`, `attach_to_agent`, `detach_from_agent` |
+| `manage_node_flows` | `catalog`, `get_node_definition`, `create_draft`, `patch_draft`, `validate_draft`, custom-node and credential actions, `dry_run`, `publish`, `compare_versions`, `rollback`, `run`, `cancel`, `retry`, `inspect_run`, plus compatibility aliases |
 | `manage_memory` | `list`, `get`, `count`, `create`, `update`, `delete`, `search`, `promote`, `get_map`, `model_status`, `start_reembed` |
 | `manage_skills` | `authoring_prompt`, `list_storages`, `get_storage`, `create_storage`, `update_storage`, `delete_storage`, `reset_storage`, `list_agent_storages`, `attach_storage`, `detach_storage`, `list_skills`, `get_skill`, `create_skill`, `update_skill`, `delete_skill`, `import_markdown`, `export_markdown` |
 | `manage_settings` | `get_system`, `get_project_override`, `resolve_project_effective`, `get_sprint_override`, `resolve_sprint_effective`, `replace_system_settings`, `patch_system_setting`, `replace_project_settings`, `patch_project_setting`, `reset_project_settings`, `replace_sprint_settings`, `patch_sprint_setting`, `reset_sprint_settings`, `export_settings_bundle`, `apply_settings_bundle` |
 | `manage_preview` | `list_sessions`, `start_session`, `stop_session`, `rebuild_session`, `remove_session`, `get_logs`, `get_url`, `get_script`, `update_script` |
-| `manage_custom_dashboards` | `list`, `get`, `create`, `update`, `create_revision`, `validate_revision`, `validation_status`, `validation_logs`, `publish_revision`, `archive`, `data_catalog` |
+| `manage_custom_dashboards` | `list`, `get`, `create`, `update`, `create_revision`, `validate_revision`, `validation_status`, `validation_logs`, `publish_revision`, `archive`, `data_catalog`, `list_credential_slots`, `bind_credential`, `unbind_credential` |
 | `manage_chat_providers` | `list_provider_definitions`, `list_connections`, `get_connection`, `create_connection`, `update_connection`, `delete_connection`, `list_channel_bindings`, `create_channel_binding`, `update_channel_binding`, `delete_channel_binding`, `list_outbound_deliveries` |
 | `manage_telemetry` | `get_project_stats_snapshot`, `get_project_execution_snapshot`, `list_execution_invocations`, `list_execution_invocation_messages`, `list_sprint_runs`, `list_task_dispatches` |
 
@@ -139,13 +140,21 @@ For `manage_projects` setup, clients may send setup options either as `setup.opt
 
 For the full per-action payloads and return shapes, see [Management actions](./management-actions.md).
 
+Custom-dashboard credential actions are project-scoped and metadata-only. `list_credential_slots` returns bounded compatible credential metadata; `bind_credential` and `unbind_credential` require `projectId`, `dashboardId`, `slotId`, `expectedBindingRevision`, and the stateful approval handshake, with `credentialId` added for bind/replace. Before fingerprinting, their arguments are strictly validated and rebuilt from only those allowed metadata fields, so secret-bearing, malformed approval, or undeclared fields cannot enter pending approval state. Validation and publication fail closed on required or incompatible bindings without resolving plaintext; publication errors retain sanitized slot-specific issues, and generic custom-dashboard MCP responses recursively redact known binding IDs from nested content.
+
+### Scheduled follow-up sprint drafts
+
+`manage_sprints` with `action: "followup"` saves a new idle sprint without calling the Planning agent, creating tasks, starting orchestration, or creating a schedule. For work that must begin after another sprint, create the draft first and then pass its returned id to `manage_scheduler` `schedule_sprint` with `scheduleMode: "after_sprint_end"` and the source sprint id. Never call `plan` before that schedule: starting the still-unplanned draft automatically plans it with auto-start after the source sprint completes.
+
 ### Background sprint planning
 
-`manage_sprints` with `action: "plan"` returns a `status: "started"` acknowledgement immediately after synchronous precondition validation, while planning continues server-side. The stable `result` fields are `status`, `message`, `projectId`, and `sprintId`; the acknowledgement does not mean generated tasks already exist or that optional auto-start has completed.
+`manage_sprints` with `action: "plan"` returns a `status: "started"` acknowledgement immediately after synchronous precondition validation, while planning continues server-side. The stable `result` fields are `status`, `message`, `projectId`, and `sprintId`; additive `planningGuidance` supplies status, terminality, invocation/start identity, calculated duration and ETA, next-check timing, one-minute recheck cadence, sample/fallback metadata, an actionable message, and optional failure evidence. See [Management actions](./management-actions.md#sprints) for the field-by-field contract. The acknowledgement does not mean generated tasks already exist or that optional auto-start has completed.
 
-For dashboard chat-originated calls, Code UX queues a due-now, non-recurring `agent_wakeup` after planning settles. It targets the originating thread and asks the chat agent to recap the generated task count and whether execution actually started. Planning failures queue a same-thread wakeup containing the failure reason and a request for a concise failure recap.
+The first recommended status check is at `estimatedCompletionAt`. Every later `in_progress` read recommends a `nextCheckAt` one minute after that read. Passing the ETA does not prove failure. Repeating `plan` while the same project/sprint request is unsettled reuses the active request without another provider submission or terminal callback. Terminal `succeeded`, `failed`, `cancelled`, and `paused` guidance sets `nextCheckAt` to `null`; failed guidance includes available error evidence.
 
-Standalone MCP clients do not have originating dashboard chat-thread context. They receive the same acknowledgement without a completion wakeup and should poll `manage_sprints` and `manage_tasks`, or inspect relevant `manage_telemetry` state, for completion.
+For dashboard chat-originated calls, Code UX queues one due-now, non-recurring `agent_wakeup` after planning settles. It targets the originating thread and asks the chat agent to recap the generated task count and whether execution actually started. Planning failures queue a same-thread wakeup containing the failure reason and a request for a concise failure recap. The assigned Project Manager uses separate one-shot wakeups for ETA/status checks, never recurrence; it avoids replanning, requeueing, or configuration changes while status is active and cancels obsolete checks when terminal state or the runtime terminal wakeup arrives.
+
+Standalone MCP clients do not have originating dashboard chat-thread context. They receive the same acknowledgement without completion or Project Manager wakeups and should poll `manage_sprints` at `nextCheckAt`, inspect `manage_tasks`, or inspect relevant `manage_telemetry` state for completion. Reads do not create scheduler entries.
 
 ## `add_long_term_memory`
 
@@ -182,6 +191,12 @@ the current reply is sent, allowing an agent to answer first and continue with M
 turn. `afterSprintId` and `afterTaskId` create one-time completion anchors; `offsetMinutes` delays the
 wakeup after the source sprint or task finishes.
 
+For MCP-backed dashboard chat turns, an omitted, null, or blank `threadId` defaults to the originating
+dashboard thread and the resolved id is persisted in the scheduler target. An explicit non-empty
+`threadId` overrides that default. Standalone MCP calls have no originating thread, so an omitted or
+empty target remains threadless. The normal project/thread ownership check applies to contextual and
+explicit targets when the wakeup is delivered.
+
 Security model: Code UX stamps restricted scheduler entries with `origin: "agent_scheduler"`,
 `source: "agent_scheduler"`, and `createdByAgentId` from the current MCP agent context. The server
 enforces this metadata on list and cancel, so an agent cannot cancel dashboard-created entries,
@@ -191,21 +206,22 @@ memory remediation, or global scheduler destructive controls.
 
 ## Node flows
 
-`manage_node_flows` exposes project node workflows through MCP. It supports graph validation, CRUD,
-runtime execution, run inspection, and flow-backed agent skill attachments.
+`manage_node_flows` exposes governed project automation authoring through MCP. Draft patches require an optimistic `draftRevision`; conflicts return expected/actual revisions without writes. Validation and dry-run responses contain policy findings, required credentials, requested capabilities, side-effect diffs, and redacted summaries. Publication and rollback require exact-payload approval. Legacy CRUD/run/attach aliases remain compatible.
 
-Create and update calls validate the structured graph before repository writes. `run` delegates to the
-node-flow runtime through `NodeFlowService.runFlow`, and `delete` requires the normal approval
-handshake. Responses mask secret-shaped graph data, inputs, and outputs before returning them to MCP
-clients.
+Operational run, retry, and inspection responses include durable, numbered node attempts with statuses, failure classifications, retry decisions, executor and execution-invocation identifiers, artifact digests, timestamps, and redacted input/output. Credential values, credential-binding ids, and custom-node source are omitted. Attached agents still receive summary-only flow metadata and never complete graphs.
+
+Attached flows appear to the owning authenticated agent only as name, description, input schema, flow id, and the `run_attached_flow` operation. Calls enforce project ownership, attachment, publication, and credential policy and record agent/conversation provenance without exposing complete graphs or credential material.
 
 Agents should build Code UX-adapted node flows rather than cloning n8n workflows one-to-one. Graphs
 should include dynamic widget schemas for editable graph inputs and node fields; callers can provide
 `widgets` as a graph-level `{ fields: [...] }` schema or as node-id keys mapped to node widget schemas.
 
-Executable node types are currently `input`, `set_fields`, `template`, `provider_prompt`,
-`http_request`, and `output`. Graph validation accepts structured drafts, but runtime execution rejects
-unsupported node types.
+The governed built-ins currently registered with executable handlers are `input`, `set_fields`,
+`template`, `provider_prompt`, `http_request`, `condition`, `switch`, `foreach`, `merge`, `delay`,
+`approval`, `email_draft`, `email_send`, `execute_subflow`, `webhook_trigger`, and `output`. A
+registered custom definition can execute only when its validated versioned manifest, immutable
+artifact, and custom-node runtime are available. Unknown, legacy, mockup, and non-executable
+definitions remain planned or unavailable and are rejected by runtime dispatch.
 
 Minimal create payload:
 

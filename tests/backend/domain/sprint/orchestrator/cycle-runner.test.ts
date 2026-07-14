@@ -91,6 +91,87 @@ function buildDeps(): SprintOrchestratorDependencies {
 }
 
 describe("CycleRunner attention sync", () => {
+  it("never dispatches or reviews the audit task of an automatic rollback", async () => {
+    const deps = buildDeps();
+    const reviewCompletedTask = vi.fn();
+    deps.qualityAssuranceService = {
+      reconcileRunningTaskQaReviews: vi.fn(),
+      getTaskMergeGateStatus: vi.fn().mockReturnValue({
+        mergeAllowed: false,
+        reason: "pending_review",
+        latestRun: null,
+        runsUsed: 0,
+        maxRuns: 3,
+      }),
+      reviewCompletedTask,
+    } as any;
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks).mockResolvedValue([{
+      id: "ROLLBACK",
+      record_id: "rollback-audit-task",
+      title: "Automatic rollback audit",
+      prompt: "No provider invocation is required.",
+      depends_on: [],
+      // Deliberately use PENDING to prove that even a stale/corrupt projection
+      // cannot make an automatic rollback audit task dispatchable.
+      status: "PENDING",
+      is_independent: true,
+      is_merged: true,
+      merge_indicator: "MERGED",
+    }] as any);
+
+    const result = await new CycleRunner(deps).run({
+      action: "orchestrate",
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
+      executionContext: {
+        project: { id: "project-1", name: "Project 1" } as any,
+        sprint: {
+          id: "rollback-sprint",
+          name: "Rollback Sprint",
+          kind: "rollback",
+          rollbackMode: "automatic",
+        } as any,
+        sprintNumber: 2,
+        repoPath: "/repo/project-1",
+        featureBranch: "rollback/1-test",
+        defaultBranch: "main",
+      },
+      repoPath: "/repo/project-1",
+      defaultFeatureBranch: "rollback/1-test",
+      retryFailed: true,
+      loopSteps: {
+        loadSubtasks: true,
+        sessionSync: false,
+        statusDerivation: true,
+        startReadyTasks: true,
+        statusTable: false,
+        mergeProtocol: false,
+        actionRequiredProtocol: false,
+      } as any,
+      ciIntelligence: { enabled: false } as any,
+      githubMode: "REMOTE",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      sprintRunId: "run-1",
+    });
+
+    expect(deps.startTask).not.toHaveBeenCalled();
+    expect(reviewCompletedTask).not.toHaveBeenCalled();
+    expect(deps.approveSessionPlan).not.toHaveBeenCalled();
+    expect(deps.sendSessionMessage).not.toHaveBeenCalled();
+    expect(deps.projectManagementRepository.updateTask).toHaveBeenCalledWith("rollback-audit-task", {
+      status: "completed",
+      isMerged: true,
+      mergeIndicator: "MERGED",
+    });
+    expect(result.subtasks[0]).toMatchObject({
+      id: "ROLLBACK",
+      status: "COMPLETED",
+      is_merged: true,
+      merge_indicator: "MERGED",
+    });
+  });
+
   it("opens a resettable human handoff when the coding guardrail is exhausted", () => {
     const deps = buildDeps();
     vi.mocked(deps.guardrailService!.evaluate).mockReturnValue({
@@ -131,6 +212,7 @@ describe("CycleRunner attention sync", () => {
         taskId: "task-10",
         sprintRunId: "run-1",
         attentionType: "human_escalation_required",
+        deduplicationKey: "guardrail:task_coding:task-10",
         ownerType: "human",
         title: "Coding guardrail reached for T10",
         payload: expect.objectContaining({
@@ -2334,6 +2416,7 @@ describe("CycleRunner attention sync", () => {
       expect.objectContaining({
         taskId: "task-1",
         attentionType: "human_escalation_required",
+        deduplicationKey: "guardrail:ci_fix:task-1",
         ownerType: "human",
         summaryMarkdown: expect.stringContaining("AssertionError: expected true to be false"),
         payload: expect.objectContaining({
@@ -2955,6 +3038,85 @@ describe("CycleRunner attention sync", () => {
         taskKey: "T1",
       }),
     );
+  });
+
+  it("replays a legacy failed QA fix handoff after restart even when old code changed the task state", async () => {
+    const deps = buildDeps();
+    const reviewCompletedTask = vi.fn().mockResolvedValue({
+      reviewed: true,
+      reopenedTask: true,
+      mergeBlocked: true,
+      reportText: "Resumed the pending QA follow-up.",
+    });
+    deps.qualityAssuranceService = {
+      getTaskMergeGateStatus: vi.fn().mockReturnValue({
+        mergeAllowed: false,
+        reason: "changes_requested",
+        summary: "QA requested fixes.",
+        latestRun: {
+          id: "qa-run-pending-followup",
+          status: "completed",
+          outcome: "changes_requested",
+          fixInstructions: "Address the review findings.",
+          payload: {
+            continuationStatus: "failed",
+            continuationMode: "failed",
+            continued: false,
+          },
+        },
+        runsUsed: 1,
+        maxRuns: 2,
+      }),
+      reviewCompletedTask,
+    } as any;
+    deps.getDashboardSettings = vi.fn().mockReturnValue({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      agents: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents,
+        qualityAssurance: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+          enabled: true,
+        },
+      },
+    });
+
+    const runner = new CycleRunner(deps);
+    const task = {
+      id: "T1",
+      record_id: "task-1",
+      title: "Restarted task",
+      prompt: "Finish implementation",
+      depends_on: [],
+      is_independent: true,
+      status: "RUNNING",
+      merge_indicator: "QA_PENDING",
+      provider: "codex",
+      session_id: "cli-codex-session-1",
+    };
+
+    await (runner as any).reviewCompletedTasks(
+      [task],
+      new Map([["T1", "RUNNING"]]),
+      {
+        executionContext: {
+          project: { id: "project-1", name: "Project 1" } as any,
+          sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+          sprintNumber: 1,
+          repoPath: "/repo/project-1",
+          featureBranch: "feature/sprint-1",
+          defaultBranch: "main",
+        },
+        repoPath: "/repo/project-1",
+        sprintRunId: "run-1",
+      } as any,
+      deps.getDashboardSettings(),
+    );
+
+    expect(reviewCompletedTask).toHaveBeenCalledTimes(1);
+    expect(reviewCompletedTask).toHaveBeenCalledWith(expect.objectContaining({
+      task: expect.objectContaining({ id: "T1", status: "RUNNING" }),
+    }));
+    expect(deps.startTask).not.toHaveBeenCalled();
   });
 
   describe("QA exhaustion policy", () => {

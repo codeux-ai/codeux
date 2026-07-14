@@ -29,11 +29,30 @@ import { ChatProviderOutboundService } from "../../services/chat-provider-outbou
 import { SpeechTranscriptionService } from "../../services/speech-transcription-service.js";
 import { SpeechSynthesisService } from "../../services/speech-synthesis-service.js";
 import { SpeechModelManager } from "../../services/speech-model-manager.js";
+import { SprintRollbackService } from "../../services/sprint-rollback-service.js";
 import { NodeFlowRuntimeService } from "../../services/node-flow-runtime-service.js";
 import { NodeFlowService } from "../../services/node-flow-service.js";
+import { NodeFlowRecoveryService } from "../../services/node-flows/node-flow-recovery-service.js";
 import { resolveEffectiveDashboardSettings } from "../../services/settings-resolution-service.js";
+import { ApprovalService } from "../../services/node-flows/approval-service.js";
+import { MockSideEffectProvider, OutboxService } from "../../services/node-flows/outbox-service.js";
+import { EgressPolicyService } from "../../services/node-flows/egress-policy-service.js";
+import { AutomationApprovalRepository } from "../../repositories/automation-approval-repository.js";
+import { AutomationOutboxRepository } from "../../repositories/automation-outbox-repository.js";
+import { AutomationWebhookTriggerRepository } from "../../repositories/automation-webhook-trigger-repository.js";
+import { CustomNodeRepository } from "../../repositories/custom-node-repository.js";
+import { CustomNodeRuntimeService } from "../../services/custom-nodes/custom-node-runtime-service.js";
+import { CustomNodeProjectService } from "../../services/custom-nodes/custom-node-project-service.js";
+import { CustomNodeBuildService } from "../../services/custom-nodes/custom-node-build-service.js";
+import { customNodeDefinitionFromArtifact } from "../../contracts/custom-node-types.js";
+import { registerCustomNodeDefinition } from "../../domain/node-flows/node-definition-registry.js";
 
 export interface DashboardDependencies {
+  credentialBroker: CoreDependencies["credentialBroker"];
+  headlessAuthService: CoreDependencies["headlessAuthService"];
+  automationAuditService: CoreDependencies["automationAuditService"];
+  headlessReadinessService: CoreDependencies["headlessReadinessService"];
+  automationSloService: CoreDependencies["automationSloService"];
   chatThreadRuntimeService: ChatThreadRuntimeService;
   chatProviderRepository: CoreDependencies["chatProviderRepository"];
   chatProviderIngressService: ChatProviderIngressService;
@@ -42,6 +61,8 @@ export interface DashboardDependencies {
   speechSynthesisService: SpeechSynthesisService;
   speechModelManager: SpeechModelManager;
   nodeFlowService: CoreDependencies["nodeFlowService"];
+  approvalService: ApprovalService;
+  automationWebhookTriggerRepository: CoreDependencies["automationWebhookTriggerRepository"];
   activityCacheService: ActivityCacheService;
   taskRerunService: TaskRerunService;
   executionControlService: ExecutionControlService;
@@ -52,6 +73,7 @@ export interface DashboardDependencies {
   projectSetupService: ProjectSetupService;
   sprintIssueService: CoreDependencies["sprintIssueService"];
   schedulerService: SchedulerService;
+  sprintRollbackService: SprintRollbackService;
   searchJiraIssues: CoreDependencies["sprintIssueService"]["searchJiraIssues"];
   searchJiraProjectStatuses: CoreDependencies["sprintIssueService"]["searchJiraProjectStatuses"];
   replaceSprintLinkedIssues: CoreDependencies["projectManagementRepository"]["replaceSprintLinkedIssues"];
@@ -112,10 +134,21 @@ export function createDashboardDependencies(
     activeDispatchRegistry,
     logger: logger.child({ component: "execution-invocation-control-service" }),
   });
+  const sprintRollbackService = new SprintRollbackService({
+    projectManagementRepository,
+    settingsRepository,
+    orchestrateSprint: (projectId, sprintId) => executionControlService.orchestrateSprint(projectId, sprintId),
+    getGitAuth: () => ({
+      githubToken: context.getEffectiveGithubToken(),
+      gitlabToken: context.getEffectiveGitlabToken(),
+    }),
+    logger: logger.child({ component: "sprint-rollback-service" }),
+  });
 
   const managementToolHandler = new ManagementToolHandler({
     sprintPreviewService: coreDeps.sprintPreviewService,
     customDashboardRepository: coreDeps.customDashboardRepository,
+    customDashboardCredentialBindingService: coreDeps.customDashboardCredentialBindingService,
     customDashboardValidationService: coreDeps.customDashboardValidationService,
     executionRepository: coreDeps.executionRepository,
     getDashboardSettings: () => resolveDashboardSettings(),
@@ -220,15 +253,56 @@ export function createDashboardDependencies(
   const speechModelManager = new SpeechModelManager(
     logger.child({ component: "speech-model-manager" }),
   );
+  const approvalRepository = coreDeps.automationApprovalRepository
+    ?? new AutomationApprovalRepository(coreDeps.appDbStorage);
+  const outboxRepository = coreDeps.automationOutboxRepository
+    ?? new AutomationOutboxRepository(coreDeps.appDbStorage);
+  const webhookTriggerRepository = coreDeps.automationWebhookTriggerRepository
+    ?? new AutomationWebhookTriggerRepository(coreDeps.appDbStorage);
+  const approvalService = new ApprovalService(approvalRepository, coreDeps.automationAuditService);
+  const egressPolicyService = new EgressPolicyService();
+  const customNodeRepository = new CustomNodeRepository(coreDeps.appDbStorage);
+  const customNodeProjectService = new CustomNodeProjectService();
+  const customNodeBuildService = new CustomNodeBuildService({ repository: customNodeRepository, projectService: customNodeProjectService });
+  for (const { artifact } of customNodeRepository.listPublications()) {
+    registerCustomNodeDefinition(customNodeDefinitionFromArtifact(artifact));
+  }
+  const customNodeRuntimeService = new CustomNodeRuntimeService({
+    repository: customNodeRepository,
+    credentialBroker: coreDeps.credentialBroker,
+    egressPolicyService,
+  });
   const nodeFlowRuntimeService = new NodeFlowRuntimeService({
     nodeFlowRepository: coreDeps.nodeFlowRepository,
     executionRepository,
     projectManagementRepository,
     settingsRepository,
     providerExecutionService,
+    credentialBroker: coreDeps.credentialBroker,
+    egressPolicyService,
+    customNodeRuntimeService,
+    approvalService,
+    outboxService: new OutboxService(outboxRepository, new MockSideEffectProvider(), coreDeps.automationAuditService),
+    auditService: coreDeps.automationAuditService,
     getDashboardSettings: (projectId) => resolveDashboardSettings({ projectId }),
   });
-  const nodeFlowService = new NodeFlowService(coreDeps.nodeFlowRepository, nodeFlowRuntimeService);
+  if (coreDeps.nodeFlowRepository) {
+    const recoveryService = new NodeFlowRecoveryService(coreDeps.nodeFlowRepository, approvalService, nodeFlowRuntimeService);
+    recoveryService.recover();
+    void recoveryService.resumeDecidedApprovals().catch((error: unknown) => {
+      logger.error("Failed to resume a decided node-flow approval during startup recovery", { error: error instanceof Error ? error.message : String(error) });
+    });
+  }
+  const nodeFlowService = new NodeFlowService(coreDeps.nodeFlowRepository, nodeFlowRuntimeService, coreDeps.credentialBroker, {
+    repository: customNodeRepository,
+    projectService: customNodeProjectService,
+    buildService: customNodeBuildService,
+    resolveProjectRoot: (projectId) => {
+      const project = coreDeps.projectManagementRepository.getProject(projectId);
+      if (!project) throw new Error(`Project not found: ${projectId}`);
+      return project.baseDir;
+    },
+  });
 
   const activityCacheService = new ActivityCacheService(
     {
@@ -490,6 +564,12 @@ export function createDashboardDependencies(
   });
 
   planningAgentServiceRef.set(planningAgentService);
+  sprintOrchestrator.setUnplannedSprintPlanner((projectId, sprintId) => (
+    planningAgentService.startPlanSprint(projectId, sprintId, {
+      autoStart: true,
+      replan: false,
+    })
+  ));
 
   const agentBaseUpdateService = new AgentBaseUpdateService({
     projectManagementRepository,
@@ -539,7 +619,6 @@ export function createDashboardDependencies(
     quicksprintService,
     chatThreadRuntimeService,
     executionControlService,
-    planningAgentService,
     taskRerunService,
     memoryRemediationService,
     nodeFlowRuntimeService,
@@ -549,6 +628,11 @@ export function createDashboardDependencies(
   schedulerServiceRef.set(schedulerService);
 
   return {
+    credentialBroker: coreDeps.credentialBroker,
+    headlessAuthService: coreDeps.headlessAuthService,
+    automationAuditService: coreDeps.automationAuditService,
+    headlessReadinessService: coreDeps.headlessReadinessService,
+    automationSloService: coreDeps.automationSloService,
     chatProviderRepository,
     chatThreadRuntimeService,
     chatProviderIngressService,
@@ -557,6 +641,8 @@ export function createDashboardDependencies(
     speechSynthesisService,
     speechModelManager,
     nodeFlowService,
+    approvalService,
+    automationWebhookTriggerRepository: webhookTriggerRepository,
     activityCacheService,
     taskRerunService,
     executionControlService,
@@ -567,6 +653,7 @@ export function createDashboardDependencies(
     projectSetupService,
     sprintIssueService: coreDeps.sprintIssueService,
     schedulerService,
+    sprintRollbackService,
     searchJiraIssues: coreDeps.sprintIssueService.searchJiraIssues.bind(coreDeps.sprintIssueService),
     searchJiraProjectStatuses: coreDeps.sprintIssueService.searchJiraProjectStatuses?.bind(coreDeps.sprintIssueService)
       ?? (() => {

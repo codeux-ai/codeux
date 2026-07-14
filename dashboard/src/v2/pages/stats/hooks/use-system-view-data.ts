@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
+import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
+import type { DashboardRealtimeServerMessage } from "../../../../types.js";
+import { subscribeToDashboardRealtime } from "../../../../lib/realtime/dashboard-realtime-client.js";
 import { fetchProjectInvocations } from "../../../lib/invocation-api.js";
 import type { ExecutionInvocationRecord, ExecutionInvocationStatus, ProjectInvocationsQuery, ProjectInvocationsQueryResult } from "../../../types.js";
 
@@ -66,6 +68,8 @@ const EMPTY_FILTERS: SystemFilters = {
   provider: [],
   errorCategories: [],
 };
+
+const REALTIME_REFRESH_DEBOUNCE_MS = 150;
 
 const normalizeText = (value: string | null | undefined): string => (value || "").trim().toLowerCase();
 
@@ -411,6 +415,8 @@ export function useSystemViewData(projectId: string) {
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [page, setPage] = useState(0);
+  const requestSequenceRef = useRef(0);
+  const realtimeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pageSize = 100;
 
   useEffect(() => {
@@ -419,6 +425,7 @@ export function useSystemViewData(projectId: string) {
 
   useEffect(() => {
     if (!projectId) {
+      requestSequenceRef.current += 1;
       setLegacyAllInvocations(null);
       setServerResult(null);
       setLoading(false);
@@ -430,6 +437,7 @@ export function useSystemViewData(projectId: string) {
     setError(null);
 
     const controller = new AbortController();
+    const requestSequence = ++requestSequenceRef.current;
 
     const query: ProjectInvocationsQuery = {
       limit: pageSize,
@@ -445,6 +453,9 @@ export function useSystemViewData(projectId: string) {
 
     void fetchProjectInvocations(projectId, query, { signal: controller.signal })
       .then((response: ExecutionInvocationRecord[] | ProjectInvocationsQueryResult) => {
+        if (controller.signal.aborted || requestSequence !== requestSequenceRef.current) {
+          return;
+        }
         if (Array.isArray(response)) {
           setLegacyAllInvocations(response);
           setServerResult(null);
@@ -455,7 +466,11 @@ export function useSystemViewData(projectId: string) {
         setLoading(false);
       })
       .catch((fetchError: unknown) => {
-        if (fetchError instanceof Error && fetchError.name === "AbortError") {
+        if (
+          controller.signal.aborted
+          || requestSequence !== requestSequenceRef.current
+          || (fetchError instanceof Error && fetchError.name === "AbortError")
+        ) {
           return;
         }
         setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
@@ -517,6 +532,42 @@ export function useSystemViewData(projectId: string) {
   const refetch = useCallback(() => {
     setRefreshKey((current) => current + 1);
   }, []);
+
+  useEffect(() => {
+    if (!projectId) {
+      return;
+    }
+
+    const scheduleRealtimeRefresh = (): void => {
+      if (realtimeRefreshTimerRef.current !== null) {
+        globalThis.clearTimeout(realtimeRefreshTimerRef.current);
+      }
+      realtimeRefreshTimerRef.current = globalThis.setTimeout(() => {
+        realtimeRefreshTimerRef.current = null;
+        refetch();
+      }, REALTIME_REFRESH_DEBOUNCE_MS);
+    };
+
+    const unsubscribe = subscribeToDashboardRealtime(
+      [`project:${projectId}`],
+      (message: DashboardRealtimeServerMessage) => {
+        if (
+          message.type === "snapshot_required"
+          || (message.type === "event" && message.event.eventType === "project.execution.updated")
+        ) {
+          scheduleRealtimeRefresh();
+        }
+      },
+    );
+
+    return () => {
+      unsubscribe();
+      if (realtimeRefreshTimerRef.current !== null) {
+        globalThis.clearTimeout(realtimeRefreshTimerRef.current);
+        realtimeRefreshTimerRef.current = null;
+      }
+    };
+  }, [projectId, refetch]);
 
   const hasMore = serverResult !== null ? (page * pageSize + serverResult.items.length < serverResult.totalCount) : false;
   const totalCount = serverResult !== null ? serverResult.totalCount : (legacyAllInvocations?.length || 0);

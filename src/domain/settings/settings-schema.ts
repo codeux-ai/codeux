@@ -134,8 +134,15 @@ const validateProviderSettings = (
   }
   if (typeof value.thinkingMode !== "string") {
     issues.push({ path: `${path}.thinkingMode`, message: "Expected a string" });
-  } else if (providerId && !isProviderThinkingModeSupported(providerId, value.thinkingMode)) {
-    const options = getProviderThinkingModeOptions(providerId).map((option) => option.value);
+  } else if (providerId && !isProviderThinkingModeSupported(
+    providerId,
+    value.thinkingMode,
+    typeof value.model === "string" ? value.model : undefined,
+  )) {
+    const options = getProviderThinkingModeOptions(
+      providerId,
+      typeof value.model === "string" ? value.model : undefined,
+    ).map((option) => option.value);
     const expected = options.length > 0 ? options.join(", ") : "no configurable thinking modes";
     issues.push({ path: `${path}.thinkingMode`, message: `Expected one of for ${providerId}: ${expected}` });
   } else if (!providerId && !THINKING_MODES.includes(value.thinkingMode as ThinkingMode)) {
@@ -261,10 +268,15 @@ const validateAiProvider = (
           const baseProvider = isRecord(baseProviderSettings) && typeof baseProviderSettings.provider === "string" && PROVIDER_IDS.includes(baseProviderSettings.provider as ProviderId)
             ? baseProviderSettings.provider as ProviderId
             : null;
+          const effectiveModel = typeof override.model === "string"
+            ? override.model
+            : isRecord(baseProviderSettings) && typeof baseProviderSettings.model === "string"
+              ? baseProviderSettings.model
+              : undefined;
           if (typeof override.thinkingMode !== "string") {
             issues.push({ path: `${routePath}.providers.${providerId}.thinkingMode`, message: "Expected a string" });
-          } else if (baseProvider && !isProviderThinkingModeSupported(baseProvider, override.thinkingMode)) {
-            const options = getProviderThinkingModeOptions(baseProvider).map((option) => option.value);
+          } else if (baseProvider && !isProviderThinkingModeSupported(baseProvider, override.thinkingMode, effectiveModel)) {
+            const options = getProviderThinkingModeOptions(baseProvider, effectiveModel).map((option) => option.value);
             const expected = options.length > 0 ? options.join(", ") : "no configurable thinking modes";
             issues.push({ path: `${routePath}.providers.${providerId}.thinkingMode`, message: `Expected one of for ${baseProvider}: ${expected}` });
           } else if (!baseProvider && !THINKING_MODES.includes(override.thinkingMode as ThinkingMode)) {

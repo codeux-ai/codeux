@@ -1,5 +1,5 @@
 import type { DashboardSettings, ProjectSettingsOverride, ProviderId } from "../types.js";
-import { cloneDefaultSettings } from "./settings.js";
+import { DEFAULT_SKILLS } from "../../../src/domain/settings/project-creation-defaults.js";
 import { sanitizeSystemProviderConfig } from "../v2/lib/provider-runtime-preview.js";
 
 const syncGitManagerSkills = (
@@ -96,12 +96,15 @@ export const updateGitHubModeForSettings = <TSettings extends GitHubModeSettings
 export const buildGitHubModeProjectSettingsOverride = (
   githubMode: DashboardSettings["git"]["githubMode"],
 ): ProjectSettingsOverride => {
-  const settings = updateGitHubMode(cloneDefaultSettings(), githubMode);
+  const skills = syncGitManagerSkills(
+    DEFAULT_SKILLS.map((skill) => ({ ...skill })),
+    githubMode,
+  );
   return {
     git: {
-      githubMode: settings.git.githubMode,
+      githubMode,
     } as ProjectSettingsOverride["git"],
-    skills: settings.skills,
+    skills,
   };
 };
 

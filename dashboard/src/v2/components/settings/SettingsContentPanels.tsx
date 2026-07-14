@@ -79,7 +79,12 @@ export const SettingsContentPanels: FunctionComponent<{
           transitionTimingFunction: tokens.enterExit.ease,
         }}
       >
-        <SettingsDetailWorkspaceProvider enabled={detailWorkspace}>
+        <SettingsDetailWorkspaceProvider
+          enabled={detailWorkspace}
+          activeSection={state.activeSettingsSection}
+          onActiveSectionChange={state.setActiveSettingsSection}
+          validateActiveSection={!state.loading}
+        >
           {renderPanel()}
         </SettingsDetailWorkspaceProvider>
       </div>

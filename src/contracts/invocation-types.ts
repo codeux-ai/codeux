@@ -167,3 +167,15 @@ export interface AppendExecutionInvocationMessageInput {
   metadata?: Record<string, unknown> | null;
   createdAt?: string;
 }
+
+export interface SyncExecutionInvocationMessagesResult {
+  inserted: number;
+  updated: number;
+  deleted: number;
+  unchanged: number;
+}
+
+export interface SyncExecutionInvocationMessagesOptions {
+  /** Stable ordinal at which reconciliation should begin. Prefix rows are trusted unchanged. */
+  changedFromIndex?: number;
+}

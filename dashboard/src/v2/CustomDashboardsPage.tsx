@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
+import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { AlertTriangle, ExternalLink, LayoutDashboard, RefreshCw, Save } from "lucide-preact";
 import { PageContainer } from "./components/layout/PageContainer.js";
 import { PageHeader } from "./components/layout/PageHeader.js";
@@ -12,18 +12,27 @@ import { useActionFeedback } from "./hooks/use-action-feedback.js";
 import { useProjectData } from "./context/project-data.js";
 import {
   archiveCustomDashboard,
+  bindCustomDashboardCredential,
   createCustomDashboard,
   createCustomDashboardRevision,
   fetchCustomDashboard,
+  fetchCustomDashboardCredentialBindings,
   fetchCustomDashboardDataCatalog,
   fetchCustomDashboardValidationLogs,
   fetchCustomDashboardValidationSession,
   fetchCustomDashboards,
   publishCustomDashboardRevision,
   startCustomDashboardValidation,
+  unbindCustomDashboardCredential,
   updateCustomDashboardDraft,
+  CustomDashboardCredentialBindingApiError,
+  type CustomDashboardCredentialBindingReview,
   type CustomDashboardDataCatalogResponse,
 } from "./lib/custom-dashboard-api.js";
+import {
+  fetchAutomationCredentials,
+  fetchCredentialHealth,
+} from "./lib/automation-credential-api.js";
 import {
   createDefaultCustomDashboardDraft,
   hasDraftChanged,
@@ -38,7 +47,12 @@ import {
   type CustomDashboardEditorTab,
 } from "./components/custom-dashboards/CustomDashboardEditorPanel.js";
 import { CustomDashboardValidationPanel } from "./components/custom-dashboards/CustomDashboardValidationPanel.js";
+import { CustomDashboardCredentialSlotsPanel } from "./components/custom-dashboards/CustomDashboardCredentialSlotsPanel.js";
 import { CustomDashboardViewer } from "./components/custom-dashboards/CustomDashboardViewer.js";
+import type {
+  AutomationCredentialMetadata,
+  CredentialBackendHealth,
+} from "../../../src/contracts/automation-credential-types.js";
 import type {
   CreateCustomDashboardRevisionInput,
   CustomDashboardDataSourceNodeGraph,
@@ -88,6 +102,14 @@ export const CustomDashboardsPage: FunctionComponent = () => {
   const [revisions, setRevisions] = useState<CustomDashboardRevisionRecord[]>([]);
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<CustomDashboardDataCatalogResponse | null>(null);
+  const [credentialReview, setCredentialReview] = useState<CustomDashboardCredentialBindingReview | null>(null);
+  const [credentialMetadata, setCredentialMetadata] = useState<AutomationCredentialMetadata[]>([]);
+  const [credentialHealth, setCredentialHealth] = useState<CredentialBackendHealth | null>(null);
+  const [credentialLoading, setCredentialLoading] = useState(false);
+  const [credentialLoadError, setCredentialLoadError] = useState<string | null>(null);
+  const [savingCredentialSlotId, setSavingCredentialSlotId] = useState<string | null>(null);
+  const [credentialSlotErrors, setCredentialSlotErrors] = useState<Record<string, string>>({});
+  const [credentialSlotAnnouncements, setCredentialSlotAnnouncements] = useState<Record<string, string>>({});
   const [draft, setDraft] = useState<CustomDashboardDraftState | null>(null);
   const [activeTab, setActiveTab] = useState<CustomDashboardEditorTab>("manifest");
   const [selectedFilePath, setSelectedFilePath] = useState("src/dashboard.tsx");
@@ -109,12 +131,54 @@ export const CustomDashboardsPage: FunctionComponent = () => {
     clearError,
   } = useActionFeedback();
   const archiveConfirm = useConfirmDialog();
+  const bindingActionControllerRef = useRef<AbortController | null>(null);
+  const credentialLoadControllerRef = useRef<AbortController | null>(null);
 
   const selectedRevision = useMemo(
     () => revisions.find((revision) => revision.id === selectedRevisionId) ?? null,
     [revisions, selectedRevisionId],
   );
   const dirty = useMemo(() => draft ? hasDraftChanged(selectedDashboard, draft) : false, [draft, selectedDashboard]);
+  const hasCredentialSlots = Boolean(selectedDashboard?.manifest.credentialSlots?.length);
+
+  const adoptCredentialReview = useCallback((review: CustomDashboardCredentialBindingReview): void => {
+    setCredentialReview(review);
+    setSelectedDashboard((current) => current?.id === review.dashboardId
+      ? {
+          ...current,
+          credentialBindings: review.slots.flatMap((slotReview) => slotReview.binding ? [slotReview.binding] : []),
+          credentialBindingRevision: review.credentialBindingRevision ?? current.credentialBindingRevision,
+        }
+      : current);
+  }, []);
+
+  const loadCredentialState = useCallback(async (
+    nextProjectId: string,
+    dashboardId: string,
+    signal?: AbortSignal,
+  ): Promise<CustomDashboardCredentialBindingReview | null> => {
+    setCredentialLoading(true);
+    setCredentialLoadError(null);
+    try {
+      const [review, credentials, health] = await Promise.all([
+        fetchCustomDashboardCredentialBindings(nextProjectId, dashboardId, signal),
+        fetchAutomationCredentials(nextProjectId, signal),
+        fetchCredentialHealth(signal),
+      ]);
+      if (signal?.aborted) return null;
+      setCredentialMetadata(credentials);
+      setCredentialHealth(health);
+      adoptCredentialReview(review);
+      return review;
+    } catch (error) {
+      if (!signal?.aborted) {
+        setCredentialLoadError(error instanceof Error ? error.message : "Credential metadata could not be loaded.");
+      }
+      return null;
+    } finally {
+      if (!signal?.aborted) setCredentialLoading(false);
+    }
+  }, [adoptCredentialReview]);
 
   const loadProjectDashboards = useCallback(async (nextProjectId: string, signal?: AbortSignal): Promise<void> => {
     setLoading(true);
@@ -196,12 +260,131 @@ export const CustomDashboardsPage: FunctionComponent = () => {
     return () => controller.abort();
   }, [loadDashboardDetail, selectedDashboardId]);
 
+  useEffect(() => {
+    bindingActionControllerRef.current?.abort();
+    credentialLoadControllerRef.current?.abort();
+    setSavingCredentialSlotId(null);
+    setCredentialSlotErrors({});
+    setCredentialSlotAnnouncements({});
+    if (!projectId || !selectedDashboardId || !hasCredentialSlots) {
+      setCredentialReview(null);
+      setCredentialMetadata([]);
+      setCredentialHealth(null);
+      setCredentialLoadError(null);
+      setCredentialLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    credentialLoadControllerRef.current = controller;
+    void loadCredentialState(projectId, selectedDashboardId, controller.signal).finally(() => {
+      if (credentialLoadControllerRef.current === controller) credentialLoadControllerRef.current = null;
+    });
+    return () => {
+      controller.abort();
+      if (credentialLoadControllerRef.current === controller) credentialLoadControllerRef.current = null;
+    };
+  }, [hasCredentialSlots, loadCredentialState, projectId, selectedDashboardId]);
+
   const refreshSelectedDashboard = useCallback(async (): Promise<void> => {
     if (!selectedDashboardId) {
       return;
     }
     await loadDashboardDetail(selectedDashboardId);
   }, [loadDashboardDetail, selectedDashboardId]);
+
+  const refreshCredentialState = useCallback((): void => {
+    if (!projectId || !selectedDashboardId || !hasCredentialSlots) return;
+    credentialLoadControllerRef.current?.abort();
+    const controller = new AbortController();
+    credentialLoadControllerRef.current = controller;
+    void loadCredentialState(projectId, selectedDashboardId, controller.signal).finally(() => {
+      if (credentialLoadControllerRef.current === controller) credentialLoadControllerRef.current = null;
+    });
+  }, [hasCredentialSlots, loadCredentialState, projectId, selectedDashboardId]);
+
+  const completeCredentialMutation = useCallback(async (
+    slotId: string,
+    announcement: string,
+    operation: (expectedBindingRevision: number, signal: AbortSignal) => Promise<CustomDashboardCredentialBindingReview>,
+  ): Promise<void> => {
+    if (!projectId || !selectedDashboardId || credentialReview?.credentialBindingRevision === null || credentialReview?.credentialBindingRevision === undefined) {
+      setCredentialSlotErrors((current) => ({ ...current, [slotId]: "Refresh credential metadata before changing this binding." }));
+      return;
+    }
+    bindingActionControllerRef.current?.abort();
+    credentialLoadControllerRef.current?.abort();
+    credentialLoadControllerRef.current = null;
+    const controller = new AbortController();
+    bindingActionControllerRef.current = controller;
+    const mutationProjectId = projectId;
+    const mutationDashboardId = selectedDashboardId;
+    setSavingCredentialSlotId(slotId);
+    setCredentialSlotErrors((current) => ({ ...current, [slotId]: "" }));
+    setCredentialSlotAnnouncements((current) => ({ ...current, [slotId]: "" }));
+    try {
+      const review = await operation(credentialReview.credentialBindingRevision, controller.signal);
+      if (controller.signal.aborted) return;
+      adoptCredentialReview(review);
+      setCredentialSlotAnnouncements((current) => ({ ...current, [slotId]: announcement }));
+      setValidationSession(null);
+      setLogs("");
+      await loadDashboardDetail(mutationDashboardId, controller.signal);
+      if (!controller.signal.aborted) {
+        await loadCredentialState(mutationProjectId, mutationDashboardId, controller.signal);
+      }
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      if (error instanceof CustomDashboardCredentialBindingApiError && error.status === 409) {
+        await loadDashboardDetail(mutationDashboardId, controller.signal);
+        if (!controller.signal.aborted) {
+          await loadCredentialState(mutationProjectId, mutationDashboardId, controller.signal);
+          setCredentialSlotErrors((current) => ({
+            ...current,
+            [slotId]: "Bindings changed in another session. The dashboard was refreshed; review the current binding and explicitly retry your change.",
+          }));
+        }
+      } else {
+        const policyMessage = error instanceof CustomDashboardCredentialBindingApiError && error.issues.length > 0
+          ? error.issues.map((issue) => issue.message).join(" ")
+          : error instanceof Error
+            ? error.message
+            : "The credential binding could not be changed.";
+        setCredentialSlotErrors((current) => ({ ...current, [slotId]: policyMessage }));
+      }
+    } finally {
+      if (bindingActionControllerRef.current === controller) {
+        bindingActionControllerRef.current = null;
+        setSavingCredentialSlotId(null);
+      }
+    }
+  }, [adoptCredentialReview, credentialReview?.credentialBindingRevision, loadCredentialState, loadDashboardDetail, projectId, selectedDashboardId]);
+
+  const handleBindCredential = useCallback(async (slotId: string, credentialId: string): Promise<void> => {
+    await completeCredentialMutation(
+      slotId,
+      "Credential binding saved. Validation and publication readiness were refreshed.",
+      (expectedBindingRevision, signal) => bindCustomDashboardCredential(
+        projectId ?? "",
+        selectedDashboardId ?? "",
+        { slotId, credentialId, expectedBindingRevision },
+        signal,
+      ),
+    );
+  }, [completeCredentialMutation, projectId, selectedDashboardId]);
+
+  const handleUnbindCredential = useCallback(async (slotId: string): Promise<void> => {
+    await completeCredentialMutation(
+      slotId,
+      "Credential unbound. Validation and publication readiness were refreshed.",
+      (expectedBindingRevision, signal) => unbindCustomDashboardCredential(
+        projectId ?? "",
+        selectedDashboardId ?? "",
+        slotId,
+        expectedBindingRevision,
+        signal,
+      ),
+    );
+  }, [completeCredentialMutation, projectId, selectedDashboardId]);
 
   const buildDraftInput = useCallback((): UpdateCustomDashboardDraftInput & CreateCustomDashboardRevisionInput => {
     if (!draft) {
@@ -520,6 +703,23 @@ export const CustomDashboardsPage: FunctionComponent = () => {
                 selectedFilePath={selectedFilePath}
                 onSelectedFilePathChange={setSelectedFilePath}
                 catalog={catalog}
+                credentialPanel={hasCredentialSlots ? (
+                  <CustomDashboardCredentialSlotsPanel
+                    projectId={projectId}
+                    dashboardId={selectedDashboard.id}
+                    review={credentialReview}
+                    credentials={credentialMetadata}
+                    health={credentialHealth}
+                    loading={credentialLoading}
+                    loadError={credentialLoadError}
+                    savingSlotId={savingCredentialSlotId}
+                    slotErrors={credentialSlotErrors}
+                    slotAnnouncements={credentialSlotAnnouncements}
+                    onBind={handleBindCredential}
+                    onUnbind={handleUnbindCredential}
+                    onRefresh={refreshCredentialState}
+                  />
+                ) : undefined}
               />
               <CustomDashboardValidationPanel
                 dashboard={selectedDashboard}

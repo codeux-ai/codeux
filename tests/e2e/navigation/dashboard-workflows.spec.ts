@@ -17,7 +17,7 @@ const routeCases: RouteCase[] = [
   { path: '/', landmark: (page) => page.getByRole('heading', { name: 'Overview' }) },
   { path: '/projects', landmark: (page) => page.getByRole('heading', { name: 'Manage Projects' }) },
   { path: '/sprints', landmark: (page) => page.getByRole('region', { name: 'Sprint Ledger' }) },
-  { path: '/tasks', landmark: (page) => page.getByRole('heading', { name: 'Task Board', exact: true }) },
+  { path: '/tasks', landmark: (page) => page.getByRole('heading', { name: 'Tasks', exact: true }) },
   { path: '/agents', landmark: (page) => page.getByRole('region', { name: 'Agents' }) },
   { path: '/stats', landmark: (page) => page.getByRole('region', { name: 'Statistics' }) },
   { path: '/scheduler', landmark: (page) => page.getByTestId('scheduler-page-root') },
@@ -131,7 +131,7 @@ async function createTaskFromUi(
 ): Promise<TaskRecord> {
   await page.goto(`/tasks?sprintId=${encodeURIComponent(sprintId)}`);
   await selectProjectFromDashboard(page, project);
-  await expect(page.getByRole('heading', { name: 'Task Board', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Tasks', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'New Task' }).click();
 
   const composer = page.locator('form').filter({ hasText: /Task Composer|Create task/i });
@@ -196,7 +196,7 @@ test.describe('dashboard workflows before orchestration', () => {
       dependsOnTitle: firstTaskTitle,
     });
 
-    await expect(page.getByRole('region', { name: /Queued 2 tasks/i })).toBeVisible();
+    await expect(page.getByRole('region', { name: /Queued lane, 2 tasks/i })).toBeVisible();
     await expect(page.getByLabel(new RegExp(`Task ${escapeRegExp(firstTask.taskKey)}: ${escapeRegExp(firstTaskTitle)}\\. Status queued`, 'i'))).toBeVisible();
     await expect(page.getByLabel(new RegExp(`Task ${escapeRegExp(secondTask.taskKey)}: ${escapeRegExp(secondTaskTitle)}\\. Status queued`, 'i'))).toBeVisible();
     await expect(page.getByText(/1 dependency blocker/i).first()).toBeVisible();

@@ -34,6 +34,7 @@ import { ActivityWriteCoalescer } from "./activity-write-coalescer.js";
 import { SERVER_SHUTDOWN_STOP_REASON } from "./active-dispatch-registry.js";
 import { isRuntimeShutdownInProgress } from "./shutdown-state.js";
 import { composeGoogleDrivePrompt, resolveGoogleDriveMount } from "./google-drive-mount-service.js";
+import { isDeepStrictEqual } from "node:util";
 
 /** Counts tool-call turns in a parsed provider conversation, for tool-call stats. */
 function countConversationToolCalls(conversation: ParsedConversationTurn[] | undefined | null): number {
@@ -73,23 +74,117 @@ function buildPersistedInvocationMessages(
   return messages;
 }
 
+interface ConversationMessageMapperState {
+  revision: number | null;
+  messages: AppendExecutionInvocationMessageInput[];
+  messageCountByTurnPrefix: number[];
+}
+
+function buildPersistedInvocationMessagesIncremental(
+  provider: CliProviderId,
+  model: string,
+  conversation: ParsedConversationTurn[],
+  trackPromptInInvocation: boolean | undefined,
+  telemetry: ProviderUsageTelemetry,
+  state: ConversationMessageMapperState,
+): { changed: boolean; changedFromIndex?: number; messages: AppendExecutionInvocationMessageInput[] } {
+  const revision = telemetry.conversationRevision;
+  if (revision !== undefined && state.revision === revision) {
+    return { changed: false, messages: state.messages };
+  }
+
+  if (revision !== undefined) {
+    const requestedChangedTurn = telemetry.conversationChangedFromIndex;
+    const changedTurn = state.revision !== null
+      && requestedChangedTurn !== undefined
+      && requestedChangedTurn >= 0
+      && requestedChangedTurn <= conversation.length
+      ? requestedChangedTurn
+      : 0;
+    const changedMessage = state.messageCountByTurnPrefix[changedTurn] ?? 0;
+    const messages = state.messages.slice(0, changedMessage);
+    const messageCountByTurnPrefix = state.messageCountByTurnPrefix.slice(0, changedTurn + 1);
+    if (messageCountByTurnPrefix.length === 0) {
+      messageCountByTurnPrefix.push(0);
+    }
+    for (let index = changedTurn; index < conversation.length; index += 1) {
+      const turn = conversation[index]!;
+      if (trackPromptInInvocation !== false || turn.kind !== "user") {
+        messages.push(conversationTurnToMessage(turn, provider, model));
+      }
+      messageCountByTurnPrefix[index + 1] = messages.length;
+    }
+    state.revision = revision;
+    state.messages = messages;
+    state.messageCountByTurnPrefix = messageCountByTurnPrefix;
+    return { changed: true, changedFromIndex: changedMessage, messages };
+  }
+
+  const messages = conversation
+    .filter((turn) => trackPromptInInvocation !== false || turn.kind !== "user")
+    .map((turn) => conversationTurnToMessage(turn, provider, model));
+  state.revision = null;
+  state.messages = messages;
+  state.messageCountByTurnPrefix = [];
+  return { changed: true, messages };
+}
+
 function persistInvocationMessages(
   executionRepository: ExecutionRepository,
   execInvocationId: string,
   messages: AppendExecutionInvocationMessageInput[],
   trackPromptInInvocation: boolean | undefined,
-): void {
-  const existingMessages = typeof executionRepository.listExecutionInvocationMessages === "function"
-    ? executionRepository.listExecutionInvocationMessages(execInvocationId)
-    : [];
-  const preservedMessages = existingMessages
-    .filter((message) => shouldPreserveInvocationMessage(message, trackPromptInInvocation))
-    .map(toAppendInvocationMessageInput);
-
-  executionRepository.clearExecutionInvocationMessages?.(execInvocationId);
-  for (const message of [...preservedMessages, ...messages]) {
-    executionRepository.appendExecutionInvocationMessage?.(execInvocationId, message);
+  state: InvocationMessagePersistenceState,
+  changedFromIndex?: number,
+): boolean {
+  if (!state.preservedMessages) {
+    state.preservedMessages = executionRepository.listExecutionInvocationMessages(execInvocationId)
+      .filter((message) => shouldPreserveInvocationMessage(message, trackPromptInInvocation))
+      .map(toAppendInvocationMessageInput);
   }
+  const nextMessages = state.preservedMessages.length > 0
+    ? [...state.preservedMessages, ...messages]
+    : messages;
+  if (changedFromIndex === undefined && areInvocationMessagesEqual(state.lastMessages, nextMessages)) {
+    return false;
+  }
+  if (changedFromIndex === undefined) {
+    executionRepository.syncExecutionInvocationMessages(execInvocationId, nextMessages);
+  } else {
+    executionRepository.syncExecutionInvocationMessages(execInvocationId, nextMessages, {
+      changedFromIndex: state.preservedMessages.length + changedFromIndex,
+    });
+  }
+  state.lastMessages = nextMessages;
+  return true;
+}
+
+interface InvocationMessagePersistenceState {
+  preservedMessages: AppendExecutionInvocationMessageInput[] | null;
+  lastMessages: AppendExecutionInvocationMessageInput[] | null;
+}
+
+function areInvocationMessagesEqual(
+  left: AppendExecutionInvocationMessageInput[] | null,
+  right: AppendExecutionInvocationMessageInput[],
+): boolean {
+  if (!left || left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    const previous = left[index]!;
+    const next = right[index]!;
+    if (
+      previous.role !== next.role
+      || previous.contentMarkdown !== next.contentMarkdown
+      || previous.createdAt !== next.createdAt
+      || !isDeepStrictEqual(previous.toolCallsJson ?? null, next.toolCallsJson ?? null)
+      || !isDeepStrictEqual(previous.metadata ?? null, next.metadata ?? null)
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function shouldPreserveInvocationMessage(
@@ -110,6 +205,7 @@ function toAppendInvocationMessageInput(
     contentMarkdown: message.contentMarkdown,
     ...(message.toolCallsJson ? { toolCallsJson: message.toolCallsJson } : {}),
     ...(message.metadata ? { metadata: message.metadata } : {}),
+    createdAt: message.createdAt,
   };
 }
 
@@ -231,6 +327,10 @@ export interface ExecutionProviderRunArgs {
   trackPromptInInvocation?: boolean;
   trackAssistantInInvocation?: boolean;
   finalizeExecutionInvocation?: boolean;
+  /** Sanitizes provider-controlled text before node-flow callers allow it to reach durable records. */
+  redactTextForPersistence?: (value: string) => string;
+  /** Sanitizes provider-controlled usage payloads before durable telemetry writes. */
+  redactJsonForPersistence?: (value: Record<string, unknown> | null) => Record<string, unknown> | null;
 
   /** MCP server connection info for injecting management tools into the CLI provider. */
   mcpConnection?: McpConnectionInfo | null;
@@ -273,7 +373,18 @@ export class ProviderExecutionService {
   async executeProvider(args: ExecutionProviderRunArgs): Promise<ProviderRunResult>;
   async executeProvider(args: ExecutionProviderRunArgs): Promise<ProviderRunResult> {
     let execInvocationId: string | null = args.invocationId || null;
-    let lastPersistedMessagesSignature: string | null = null;
+    let messagePersistenceState: InvocationMessagePersistenceState = {
+      preservedMessages: null,
+      lastMessages: null,
+    };
+    let conversationMapperState: ConversationMessageMapperState = {
+      revision: null,
+      messages: [],
+      messageCountByTurnPrefix: [0],
+    };
+    if (execInvocationId) {
+      this.assertExecutionInvocationCanRun(execInvocationId);
+    }
     const effectiveModel = resolveEffectiveModel(args);
     const scopedSettings = args.projectId.trim() && this.deps.getDashboardSettings
       ? this.deps.getDashboardSettings({
@@ -311,7 +422,12 @@ export class ProviderExecutionService {
     });
 
     const runProviderInner = async (p: string, retrySystemMessage?: string, continueSessionId?: string | null, openCodeBaselineRawUsageJson?: Record<string, unknown> | null): Promise<ProviderRunResult> => {
-      const startedAt = new Date().toISOString();
+      messagePersistenceState = { preservedMessages: null, lastMessages: null };
+      conversationMapperState = { revision: null, messages: [], messageCountByTurnPrefix: [0] };
+      if (execInvocationId) {
+        this.assertExecutionInvocationCanRun(execInvocationId);
+      }
+      const executionStartedAt = new Date().toISOString();
 
       // Coalesce the per-line streaming activity firehose into batched transactions so concurrent
       // sprints don't saturate the single thread with one INSERT per output line. Only used when
@@ -343,19 +459,19 @@ export class ProviderExecutionService {
           type: args.type,
           provider: args.provider,
           model: effectiveModel,
-          startedAt,
+          startedAt: executionStartedAt,
           invocationSource: args.invocationSource,
         })?.id || null;
       }
 
-      if (execInvocationId && retrySystemMessage) {
+      if (execInvocationId && retrySystemMessage && this.isExecutionInvocationStillRunning(execInvocationId)) {
         this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
           role: "system",
           contentMarkdown: retrySystemMessage,
         });
       }
 
-      if (execInvocationId && args.trackPromptInInvocation !== false) {
+      if (execInvocationId && args.trackPromptInInvocation !== false && this.isExecutionInvocationStillRunning(execInvocationId)) {
         this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
           role: "user",
           contentMarkdown: p,
@@ -380,7 +496,6 @@ export class ProviderExecutionService {
         purpose: args.purpose,
         model: effectiveModel,
         executionMode: args.workflowSettings.executionMode,
-        startedAt,
         promptChars: p.length,
       };
 
@@ -391,20 +506,26 @@ export class ProviderExecutionService {
           usageInput,
           args.signal,
           args.concurrencyWaitTimeoutMs,
+          execInvocationId ?? undefined,
         );
       } else {
         // Fallback for cases where ProviderConcurrencyService is not provided, 
         // e.g. in some specialized service tests, though in production it should be present
         // when an execution repository is present.
+        if (execInvocationId) {
+          this.assertExecutionInvocationCanRun(execInvocationId);
+        }
         invocation = this.deps.executionRepository?.createProviderInvocationUsage(usageInput);
+        if (invocation && execInvocationId) {
+          this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
+            providerInvocationId: invocation.id,
+          });
+        }
       }
 
-      if (invocation && execInvocationId) {
-        this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
-          providerInvocationId: invocation.id,
-        });
+      if (execInvocationId) {
+        this.assertExecutionInvocationCanRun(execInvocationId);
       }
-
       const startedMs = Date.now();
       this.deps.logger?.info("Provider invocation started", {
         logPurpose: "invocation",
@@ -479,13 +600,15 @@ export class ProviderExecutionService {
             usageSignature !== lastPersistedUsageSignature
             && invocation
             && this.deps.executionRepository
-            && this.isProviderInvocationStillRunning(invocation.id)
+            && this.isProviderWorkStillRunning(invocation.id, execInvocationId)
           ) {
             const durationMs = Date.now() - startedMs;
             this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
               status: "running",
               model: effectiveModel,
-              nativeSessionId: telemetry.nativeSessionId || undefined,
+              nativeSessionId: telemetry.nativeSessionId
+                ? args.redactTextForPersistence?.(telemetry.nativeSessionId) ?? telemetry.nativeSessionId
+                : undefined,
               durationMs,
               transcriptChars: telemetry.transcriptText.length,
               inputTokens: telemetry.inputTokens,
@@ -495,7 +618,11 @@ export class ProviderExecutionService {
               totalTokens: telemetry.totalTokens,
               toolCallCount: countConversationToolCalls(telemetry.conversation),
               usageSource: telemetry.usageSource,
-              rawUsageJson: telemetry.rawUsageJson || undefined,
+              rawUsageJson: telemetry.rawUsageJson
+                ? args.redactJsonForPersistence
+                  ? args.redactJsonForPersistence(telemetry.rawUsageJson)
+                  : telemetry.rawUsageJson
+                : undefined,
             });
             this.refreshLinkedDispatchHeartbeat(args.dispatchId);
             lastPersistedUsageSignature = usageSignature;
@@ -512,24 +639,23 @@ export class ProviderExecutionService {
               // just as agentic but were previously collapsed to prompt + final
               // answer. Raw text-only telemetry is left for completion fallback
               // so live rewrites do not remove retry/error audit messages.
-              const messages = buildPersistedInvocationMessages(
+              const mappedConversation = buildPersistedInvocationMessagesIncremental(
                 args.provider,
                 effectiveModel,
-                p,
                 telemetry.conversation,
-                telemetry.transcriptText,
                 args.trackPromptInInvocation,
+                telemetry,
+                conversationMapperState,
               );
-              const signature = JSON.stringify(messages);
-
-              if (signature !== lastPersistedMessagesSignature) {
+              if (mappedConversation.changed) {
                 persistInvocationMessages(
                   this.deps.executionRepository,
                   execInvocationId,
-                  messages,
+                  mappedConversation.messages,
                   args.trackPromptInInvocation,
+                  messagePersistenceState,
+                  mappedConversation.changedFromIndex,
                 );
-                lastPersistedMessagesSignature = signature;
               }
             }
           }
@@ -549,7 +675,7 @@ export class ProviderExecutionService {
             invocation
             && this.deps.executionRepository
             && !preserveForStartupRecovery
-            && this.isProviderInvocationStillRunning(invocation.id)
+            && this.isProviderWorkStillRunning(invocation.id, execInvocationId)
           ) {
             const finishedAt = new Date().toISOString();
             const durationMs = Date.now() - startedMs;
@@ -587,14 +713,28 @@ export class ProviderExecutionService {
       // Persist any buffered streaming activity from the completed run before recording usage.
       activityCoalescer?.stop();
 
+      if (args.invocationId && execInvocationId && !this.isExecutionInvocationStillRunning(execInvocationId)) {
+        this.assertExecutionInvocationCanRun(execInvocationId);
+      }
+
       if (invocation && this.deps.executionRepository) {
         const finishedAt = new Date().toISOString();
         const durationMs = Date.now() - startedMs;
-        if (this.isProviderInvocationStillRunning(invocation.id) && !isServerShutdownAbort(args.signal)) {
+        // A successful runner result is authoritative even if shutdown began while
+        // the result was being returned. Preserve `running` for startup recovery only
+        // when shutdown interrupts without a terminal result; otherwise a completed
+        // repair can be published while its provider audit row remains stuck running.
+        const shouldPersistTerminalUsage = this.isProviderWorkStillRunning(invocation.id, execInvocationId)
+          && (result.ok || !isServerShutdownAbort(args.signal));
+        if (shouldPersistTerminalUsage) {
           this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
-            status: (args.signal?.aborted || isRuntimeShutdownInProgress()) ? "cancelled" : (result.ok ? "completed" : "failed"),
+            status: result.ok
+              ? "completed"
+              : (args.signal?.aborted || isRuntimeShutdownInProgress()) ? "cancelled" : "failed",
             model: effectiveModel,
-            nativeSessionId: result.nativeSessionId,
+            nativeSessionId: result.nativeSessionId
+              ? args.redactTextForPersistence?.(result.nativeSessionId) ?? result.nativeSessionId
+              : result.nativeSessionId,
             finishedAt,
             durationMs,
             transcriptChars: result.usageTelemetry.transcriptText.length,
@@ -605,12 +745,16 @@ export class ProviderExecutionService {
             totalTokens: result.usageTelemetry.totalTokens,
             toolCallCount: countConversationToolCalls(result.usageTelemetry.conversation),
             usageSource: result.usageTelemetry.usageSource,
-            rawUsageJson: result.usageTelemetry.rawUsageJson,
+            rawUsageJson: result.usageTelemetry.rawUsageJson
+              ? args.redactJsonForPersistence
+                ? args.redactJsonForPersistence(result.usageTelemetry.rawUsageJson)
+                : result.usageTelemetry.rawUsageJson
+              : result.usageTelemetry.rawUsageJson,
           });
         }
 
-        if (args.taskRunId) {
-            this.deps.executionRepository.appendTaskRunEvent(args.taskRunId, "cli_provider_usage_reported", "system", {
+        if (args.taskRunId && shouldPersistTerminalUsage) {
+          this.deps.executionRepository.appendTaskRunEvent(args.taskRunId, "cli_provider_usage_reported", "system", {
             provider: args.provider,
             model: effectiveModel,
             purpose: args.purpose,
@@ -689,7 +833,7 @@ export class ProviderExecutionService {
       }
 
       if (providerResult.ok) {
-        if (execInvocationId && this.isExecutionInvocationStillRunning(execInvocationId) && !isRuntimeShutdownInProgress()) {
+        if (execInvocationId && this.isExecutionInvocationStillRunning(execInvocationId)) {
           if (args.finalizeExecutionInvocation !== false) {
             this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
               status: "completed",
@@ -709,15 +853,14 @@ export class ProviderExecutionService {
                 providerResult.usageTelemetry.transcriptText,
                 args.trackPromptInInvocation,
               );
-              const signature = JSON.stringify(messages);
-              if (this.deps.executionRepository && signature !== lastPersistedMessagesSignature) {
+              if (this.deps.executionRepository) {
                 persistInvocationMessages(
                   this.deps.executionRepository,
                   execInvocationId,
                   messages,
                   args.trackPromptInInvocation,
+                  messagePersistenceState,
                 );
-                lastPersistedMessagesSignature = signature;
               }
             } else {
               const fallbackText = args.expectTextOutput
@@ -736,20 +879,21 @@ export class ProviderExecutionService {
       }
 
       const classification = classifyProviderError(args.provider, providerResult);
+      const persistedUserMessage = args.redactTextForPersistence?.(classification.userMessage) ?? classification.userMessage;
       const retryDecision = resolveProviderRetryDecision(classification, args.workflowSettings);
       const retryAfterIso = retryDecision
         && !(retryDecision.kind === "rate_limit" && rateLimitRetryCount >= args.workflowSettings.maxRateLimitRetries)
         ? retryDecision.retryAtIso
         : null;
-      if (execInvocationId) {
+      if (execInvocationId && this.isExecutionInvocationStillRunning(execInvocationId)) {
         this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
           lastErrorCategory: classification.category,
-          lastErrorMessage: classification.userMessage,
+          lastErrorMessage: persistedUserMessage,
           lastRetryAfterIso: retryAfterIso,
         });
         this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
           role: "system",
-          contentMarkdown: `Provider error (${classification.category}): ${classification.userMessage}`,
+          contentMarkdown: `Provider error (${classification.category}): ${persistedUserMessage}`,
           metadata: {
             provider: args.provider,
             model: args.model,
@@ -779,7 +923,7 @@ export class ProviderExecutionService {
             });
           }
 
-          if (execInvocationId) {
+          if (execInvocationId && this.isExecutionInvocationStillRunning(execInvocationId)) {
             this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
               role: "system",
               contentMarkdown: retryMessage,
@@ -874,6 +1018,22 @@ export class ProviderExecutionService {
   private isProviderInvocationStillRunning(providerInvocationId: string): boolean {
     const current = this.deps.executionRepository?.getProviderInvocationUsage?.(providerInvocationId);
     return !current || current.status === "running";
+  }
+
+  private isProviderWorkStillRunning(providerInvocationId: string, executionInvocationId: string | null): boolean {
+    return this.isProviderInvocationStillRunning(providerInvocationId)
+      && (!executionInvocationId || !this.isExecutionInvocationCancelled(executionInvocationId));
+  }
+
+  private assertExecutionInvocationCanRun(executionInvocationId: string): void {
+    const current = this.deps.executionRepository?.getExecutionInvocation?.(executionInvocationId);
+    if (current?.status === "cancelled") {
+      throw new Error(`Execution invocation ${executionInvocationId} is ${current.status}; provider execution will not continue.`);
+    }
+  }
+
+  private isExecutionInvocationCancelled(executionInvocationId: string): boolean {
+    return this.deps.executionRepository?.getExecutionInvocation?.(executionInvocationId)?.status === "cancelled";
   }
 
   private isExecutionInvocationStillRunning(executionInvocationId: string): boolean {

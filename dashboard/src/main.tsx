@@ -7,6 +7,7 @@ import {
   createRootRoute,
   RouterProvider,
   Outlet,
+  useRouterState,
 } from "@tanstack/react-router";
 import { KineticDock } from "./v2/components/KineticDock.js";
 import { Sidebar } from "./v2/components/layout/Sidebar.js";
@@ -18,15 +19,11 @@ import { fetchSystemSettings } from "./v2/lib/settings-api.js";
 import type { DashboardSettings, SystemSettings } from "./types.js";
 import { SkeletonPanel } from "./v2/components/layout/SkeletonLoader.js";
 import { DashboardV2 } from "./v2/DashboardV2.js";
-import { LiveSessionPage } from "./v2/LiveSessionPage.js";
-import { OnboardingExperience } from "./v2/components/onboarding/OnboardingExperience.js";
-import { GuidedDashboardTour } from "./v2/components/onboarding/GuidedDashboardTour.js";
-import { TitleBar } from "./v2/components/TitleBar.js";
-import { AddProjectModal, type AddProjectModalSubmission } from "./v2/components/ui/AddProjectModal.js";
+import type { AddProjectModalSubmission } from "./v2/components/ui/AddProjectModal.js";
 import { ASSISTANT_OPEN_ADD_PROJECT_EVENT } from "./v2/lib/no-project-chat-assistant.js";
 import { isDashboardFeatureEnabled } from "./v2/lib/dashboard-feature-flags.js";
 import { buildProjectCreationSettingsOverride } from "./lib/settings-updaters.js";
-import { DEFAULT_DASHBOARD_SETTINGS } from "./lib/settings.js";
+import { BUILTIN_CODE_UX_TECHSTACK_ID } from "../../src/domain/settings/project-creation-defaults.js";
 import "./styles.css";
 
 const isElectron = typeof window !== "undefined" && Boolean(window.codeUxDesktop);
@@ -49,17 +46,28 @@ import { BACKGROUND_PATTERNS } from "./v2/lib/background-patterns.js";
 const BackgroundManager = lazy(() => import("./v2/components/backgrounds/BackgroundManager.js").then((module) => ({
   default: module.BackgroundManager,
 })));
+const AddProjectModal = lazy(() => import("./v2/components/ui/AddProjectModal.js").then((module) => ({ default: module.AddProjectModal })));
+const OnboardingExperience = lazy(() => import("./v2/components/onboarding/OnboardingExperience.js").then((module) => ({ default: module.OnboardingExperience })));
+const GuidedDashboardTour = lazy(() => import("./v2/components/onboarding/GuidedDashboardTour.js").then((module) => ({ default: module.GuidedDashboardTour })));
+const TitleBar = lazy(() => import("./v2/components/TitleBar.js").then((module) => ({ default: module.TitleBar })));
 
 // 0. AppLayout extracted to use context hooks
 const AppLayout = () => {
   const { selectedProject, createProject } = useProjectData();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
   const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
   const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
   const [appearancePreview, setAppearancePreview] = useState<DashboardSettings["appearance"] | null>(null);
   const [assistantAddProjectOpen, setAssistantAddProjectOpen] = useState(false);
+  const [deferredShellReady, setDeferredShellReady] = useState(false);
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)').matches : false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDeferredShellReady(true), 1_000);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -131,7 +139,7 @@ const AppLayout = () => {
         isPrivate: project.isPrivate,
         settingsOverrides: buildProjectCreationSettingsOverride({
           ...(isLocalProject ? { githubMode: "LOCAL" as const } : {}),
-          selectedTechstackId: project.selectedTechstackId ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.defaultTechstackId,
+          selectedTechstackId: project.selectedTechstackId ?? BUILTIN_CODE_UX_TECHSTACK_ID,
           applicationKind: project.applicationKind ?? null,
         }),
       });
@@ -238,7 +246,7 @@ const AppLayout = () => {
       >
         Skip to main content
       </a>
-      {isElectron && <TitleBar />}
+      {isElectron && <Suspense fallback={null}><TitleBar /></Suspense>}
       <div className="flex flex-1 min-h-0 overflow-hidden">
       {showSidebar && <Sidebar isMobile={isMobile} isOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} experienceMode={appearanceSettings?.experienceMode} />}
 
@@ -251,12 +259,13 @@ const AppLayout = () => {
           uploaded background image) and looked like a full page reload.
         */}
         <Suspense fallback={null}>
-          {!backgroundImage && (
+          {!backgroundImage && deferredShellReady && (
             <BackgroundManager
               mode={backgroundMode}
               animation={animatedBackground}
               staticColor={staticBackgroundColor}
               isDark={isDark}
+              suspendAnimation={pathname === "/nodes"}
             />
           )}
         </Suspense>
@@ -296,16 +305,22 @@ const AppLayout = () => {
         </div>
 
         {!showSidebar && <KineticDock experienceMode={appearanceSettings?.experienceMode} />}
-        <OnboardingExperience />
-        <GuidedDashboardTour />
+        {deferredShellReady && (
+          <Suspense fallback={null}>
+            <OnboardingExperience />
+            <GuidedDashboardTour />
+          </Suspense>
+        )}
         {assistantAddProjectOpen && (
-          <AddProjectModal
-            onClose={() => setAssistantAddProjectOpen(false)}
-            onAdd={(project) => {
-              void handleAssistantCreateProject(project);
-              setAssistantAddProjectOpen(false);
-            }}
-          />
+          <Suspense fallback={null}>
+            <AddProjectModal
+              onClose={() => setAssistantAddProjectOpen(false)}
+              onAdd={(project) => {
+                void handleAssistantCreateProject(project);
+                setAssistantAddProjectOpen(false);
+              }}
+            />
+          </Suspense>
         )}
         <footer className="sr-only">Dashboard Footer</footer>
       </div>
@@ -316,6 +331,7 @@ const AppLayout = () => {
 
 // Route components — each dynamic import becomes its own chunk in the build
 const SprintsPage   = lazy(() => import("./v2/pages/sprints/SprintsPage.js").then(m => ({ default: m.SprintsPage })));
+const LiveSessionPage = lazy(() => import("./v2/LiveSessionPage.js").then(m => ({ default: m.LiveSessionPage })));
 const ProjectsPage  = lazy(() => import("./v2/ProjectsPage.js").then(m => ({ default: m.ProjectsPage })));
 const ChatPage      = lazy(() => import("./v2/ChatPage.js").then(m => ({ default: m.ChatPage })));
 const TasksPage     = lazy(() => import("./v2/TasksPage.js").then(m => ({ default: m.TasksPage })));

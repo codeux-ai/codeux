@@ -197,4 +197,22 @@ describe("Dashboard API Cache", () => {
       installers: { platform: "linux", recommendedMode: "docker-engine-git", options: [] },
     });
   });
+
+  it("briefly reuses completed onboarding readiness checks", async () => {
+    const readiness = {
+      checkedAt: "2026-07-07T00:00:00.000Z",
+      cluster: { status: "ready", label: "Cluster ready", detail: "Ready." },
+      dependencies: [],
+      providers: [],
+      installers: { platform: "linux", recommendedMode: "docker-engine-git", options: [] },
+    };
+    vi.mocked(fetchJsonModule.fetchJson).mockResolvedValue(readiness as any);
+
+    await expect(fetchOnboardingReadiness()).resolves.toEqual(readiness);
+    await expect(fetchOnboardingReadiness()).resolves.toEqual(readiness);
+    expect(fetchJsonModule.fetchJson).toHaveBeenCalledTimes(1);
+
+    await expect(fetchOnboardingReadiness({ force: true })).resolves.toEqual(readiness);
+    expect(fetchJsonModule.fetchJson).toHaveBeenCalledTimes(2);
+  });
 });

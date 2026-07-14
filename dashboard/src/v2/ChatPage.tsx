@@ -110,6 +110,7 @@ const buildComposerStatus = (input: {
   pendingDashboardMessages: number;
   selectedProject: boolean;
   sending: boolean;
+  speechError: string | null;
   trimmedInput: string;
 }): ComposerStatusViewModel => {
   const disabledReason = !input.selectedProject
@@ -144,6 +145,15 @@ const buildComposerStatus = (input: {
       tone: "failed",
       visibleText: `Send failed: ${input.error}`,
       liveText: `Failed: ${input.error}`,
+      disabledReason,
+    };
+  }
+
+  if (input.speechError) {
+    return {
+      tone: "failed",
+      visibleText: `Voice playback failed: ${input.speechError} The transcript is still available.`,
+      liveText: `Voice playback failed: ${input.speechError}`,
       disabledReason,
     };
   }
@@ -371,6 +381,7 @@ export const ChatPage: FunctionComponent = () => {
     pendingDashboardMessages,
     selectedProject: Boolean(selectedProject),
     sending,
+    speechError: transcriptSpeech.error,
     trimmedInput: trimmedComposerInput,
   }), [
     activeConnection?.displayName,
@@ -379,6 +390,7 @@ export const ChatPage: FunctionComponent = () => {
     pendingDashboardMessages,
     selectedProject,
     sending,
+    transcriptSpeech.error,
     trimmedComposerInput,
   ]);
   const sendDisabled = Boolean(composerStatus.disabledReason);
@@ -1153,6 +1165,11 @@ export const ChatPage: FunctionComponent = () => {
               {error && (
                 <div role="alert" aria-live="assertive" className="rounded-xl border border-status-red/25 bg-status-red/[0.08] px-3 py-2 text-xs font-semibold leading-relaxed text-status-red">
                   Transcript could not update: {error}. Use the invocation actions above when available, or switch to Threads to continue the conversation.
+                </div>
+              )}
+              {transcriptSpeech.error && (
+                <div role="alert" aria-live="assertive" className="rounded-xl border border-status-red/25 bg-status-red/[0.08] px-3 py-2 text-xs font-semibold leading-relaxed text-status-red">
+                  Voice playback failed: {transcriptSpeech.error} The transcript is still available.
                 </div>
               )}
               {invocationMessagesLoading && invocationMessages.length > 0 && (

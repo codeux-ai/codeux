@@ -124,6 +124,8 @@ Runtime aggregation is fail-closed for the latest cycle:
 - review budgets count distinct `run_index` values, not reviewer rows, so two reviewers in one cycle consume one QA attempt
 - reviewer rows stay visible independently in `qa_review_runs`, task events, and dashboard history with their own agent identity and payload details
 
+Task and sprint cards project one representative reviewer from the newest `run_index`. Within that cycle, the shared projection prioritizes `running`, then `changes_requested`, provider failures (`failed`, `cancelled`, or `errored`), `pass`, and finally other states. A passing reviewer therefore cannot hide an active, blocking, or provider-failed reviewer from the summary badge.
+
 Example trigger settings:
 
 ```json
@@ -163,6 +165,10 @@ Provider/infrastructure failures in sprint-completion QA are also retryable with
 Recovery guarantees:
 
 - task QA no longer depends only on catching a single in-cycle transition edge; if a task is already code-complete and still has no successful QA run, Code UX will enqueue the missing review on the next orchestration cycle instead of leaving the task parked in `QA_PENDING`
+- every task- and sprint-completion reviewer row records the exact review execution invocation, logical reviewer session, isolated workspace session, reviewer preset, and continuation provenance. Under the restart `continue` policy, a retry reuses that reviewer workspace and continues the provider's native session when available instead of starting the review again without its prior investigation context. Reuse verifies that the preserved Docker snapshot has a valid Git `HEAD`; if restart interrupted initialization after volume creation, Code UX rebuilds the snapshot from the requested review branch instead of reviewing an empty volume.
+- a `changes_requested` result persists its coding-handoff state before Code UX invokes the target coding session. If the runtime stops after saving the verdict but before finishing that handoff, the next cycle resumes the pending handoff. If the same-session coding follow-up already completed, recovery settles the handoff from that execution evidence and schedules verification rather than invoking the coding provider again. This closes the post-verdict crash window that could otherwise leave a task parked indefinitely at `QA_PENDING`.
+- a transient provider exit during that coding handoff preserves the original target session/workspace, restores the task to `CODING_COMPLETED` with `QA_PENDING`, and leaves the handoff retryable. Successful and execution-reconciled handoffs also remain `CODING_COMPLETED`/`QA_PENDING` until verification is scheduled, so a restart cannot mistake the crash window for ordinary task work. Continuation failures are capped by `QA_INFRA_FAILURE_GRACE`; exhausting the cap records no-progress evidence so the normal QA exhaustion policy settles or escalates the task.
+- when a later same-session handoff succeeds, Code UX also reconciles the original task-run and dispatch back to completed before sprint terminal evaluation. An earlier failed continuation therefore cannot leave stale runtime evidence that falsely fails an otherwise healthy sprint.
 - if a QA run row is left behind in `running` state after its backing execution invocation has already finished, Code UX now automatically converts that stale row into a retryable failed run so the gate can recover instead of blocking indefinitely
 - before task QA starts, Code UX polls feature PR status with any task-level PR URLs already recorded by Jules. This lets orchestration recover the PR head branch even when the Jules PR base branch has drifted from the currently configured sprint feature branch.
 - if a prior task QA run requested changes, Code UX sends fix instructions back to the same task session when possible and tracks that work as same-session follow-up instead of creating a new task branch.
@@ -206,7 +212,7 @@ This separation keeps repository writes, provider calls, task status mutations, 
 - if the latest QA verdict is `changes_requested`, Code UX keeps the merge blocked at the retry cap unless a completed Code UX-applied QA continuation is waiting for verification
 - if the latest QA verdict is `changes_requested` and a same-session CLI QA follow-up completes after that verdict, Code UX schedules verification before applying `FINISH_TASK`, `FAIL_TASK`, or `ESCALATE_TO_HUMAN`
 - a passing task QA result is final for that completion state and is not retriggered just because orchestration loops again
-- task-level QA runs are now surfaced in task list records and live runtime snapshots. The Tasks page and Live page both show a compact QA badge, including a spinner state while the latest task QA run is still `running`.
+- task-level QA runs are surfaced in task list records and live runtime snapshots. Tasks, Live, Sprints, and Overview project the latest review into the shared six-stage delivery workflow badge, including an active QA stage while the latest task QA run is still `running`.
 
 ### Sprint completion QA
 
@@ -222,6 +228,7 @@ Behavior:
 - if QA requests follow-up work and Code UX can continue that task session, sprint completion is held open
 - if sprint-completion QA targets a task that is already merged, Code UX does not reopen that settled session; it records the target for traceability and creates follow-up sprint tasks so repair work goes through a new tracked task branch
 - if QA creates follow-up tasks, sprint completion is held open until those new tasks finish and sprint QA passes on a later run
+- automatic follow-up creation is allowed only before the final configured sprint review cycle. The final cycle is reserved for verification: if it still requests changes, Code UX records the findings, creates one sprint-scoped human handoff, and does not create another unreviewable task batch
 - sprint QA runs once for the finished sprint, then only runs again after a prior `changes_requested` or failed result and meaningful sprint task state changes have occurred
 - a passing sprint QA result is final for that sprint state and is not retriggered by another orchestration cycle with no real work changes
 - sprint task state changes are detected purely by serializing all current subtasks into a `SprintQaSnapshot` (including status, prompt, and merge indicators) and comparing it with the payload of the latest QA run; if a historical QA run lacks a saved snapshot, Code UX falls back to comparing the newest task modification timestamp against the QA run's finish timestamp
@@ -230,20 +237,30 @@ Behavior:
   - later runs are only used to check QA-requested fixes or follow-up work
   - `maxSprintReviewRuns = 3` is the default sprint QA budget for new or unset settings
   - `maxSprintReviewRuns = 1` means sprint fixes are not re-checked by QA
+- an exhausted sprint QA budget is authoritative even when completed follow-up work changed the task snapshot. Snapshot changes cannot start an over-budget review or suppress the required human handoff
 - if every reviewer in the latest sprint QA cycle passes, Code UX proceeds to main-merge evaluation and eventual completion
 - if any reviewer is still running, failed, requested changes, or waiting on follow-up work, the main merge stays blocked
 - reviewer rows remain visible per agent, while the shared `run_index` spends one sprint QA budget cycle
 - while a sprint QA review is running, Code UX now refreshes the parent sprint-run heartbeat and lease so long reviews are not mistaken for stalled orchestration and failed by runtime cleanup
 - stale sprint-level `running` QA rows are also reconciled against execution invocation state before gating; if the backing invocation already ended, Code UX reclassifies the stale row and immediately allows a retry instead of keeping sprint completion blocked forever
+- an operator can explicitly choose `Mark QA Pass` from the Sprints page when human review should override a non-passing sprint-completion verdict. Code UX records a new terminal `sprint_completion` QA cycle with `outcome = 'pass'`, `Manual QA` reviewer identity, and dashboard provenance; any stale running rows in that sprint review stream are closed first. The action also resolves the matching sprint-scoped QA handoff, but does not resolve task QA or unrelated sprint attention. The dashboard disables the override while a sprint QA provider review is actively running and hides it after a passing verdict.
+- `maxSprintReviewRuns` limits review cycles, not the number of defects that an earlier review can split into tracked work. Keeping task-completion QA enabled catches task-local defects before merge and reduces the amount of remediation deferred to the full integrated-sprint review
 
 ## Session Continuation
 
-QA does not open an isolated side-channel for fixes.
+QA review and QA-requested fixes use two related but distinct session tracks:
 
-Instead:
+- the reviewer runs in an isolated review workspace and owns its own durable logical/provider session
+- any requested implementation fix returns to the target task's coding session and worktree
+
+For the reviewer track, Code UX persists the exact execution invocation and workspace binding on the reviewer-specific QA row before dispatch. A runtime restart under the `continue` invocation policy closes the interrupted audit invocation, preserves the snapshot workspace, and starts a correlated continuation with the same logical session. When the CLI provider supplied a native session id, Code UX passes it to the resumed invocation so the reviewer retains conversation context as well as filesystem state. Multi-reviewer cycles recover each preset independently; timestamp proximity is only a compatibility fallback for older rows that predate exact invocation correlation.
+
+For the fix track, QA does not open an isolated side-channel. Instead:
 
 - Jules tasks receive a follow-up message on the existing Jules session
 - CLI tasks resume the existing worker session/worktree when possible
+
+The QA row records a pending continuation before that follow-up begins. Completion updates that same handoff record, which lets startup and later watch cycles distinguish work that still needs dispatch from a follow-up that already finished before the final QA payload write.
 
 For CLI follow-up runs, Code UX:
 
@@ -271,6 +288,29 @@ The QA provider is prompted to return JSON only with:
 Result parsing and structure normalization are fully delegated to `src/domain/qa-review/qa-review-result-normalizer.ts`.
 
 That contract keeps the follow-up automation deterministic instead of scraping prose heuristically.
+
+### Shared summary projection
+
+Tasks, Sprints, and Live expose one backward-compatible `SprintReviewSummary` contract from `src/contracts/qa-review-summary.ts`. The original fields remain unchanged:
+
+- `status`
+- `outcome`
+- `summary`
+- `findings`
+- `reviewer`
+- `finishedAt`
+
+When approved structured data exists, the same summary can also include:
+
+- `fixInstructions`
+- `targetTaskKey`
+- `followUpTasks`, normalized to `title`, `promptMarkdown`, nullable `description`, `dependsOnTaskKeys`, and `priority`
+
+`src/repositories/project-management/qa-review-summary-query.ts` owns the batched task-level and sprint-level read path. It selects the newest `run_index` for each task or sprint, then applies the same fail-closed representative-row precedence as `QaReviewRepository`: `running`, `changes_requested`, `failed`, `pass`, then other states. Start time and row identity provide deterministic ordering inside the same precedence tier. This prevents a passing reviewer from hiding a blocking reviewer in the same multi-reviewer cycle.
+
+The query reads only dedicated summary columns and the approved `findings`, `fixInstructions`, `targetTaskKey`, and `followUpTasks` payload fields. Unknown payload keys, raw provider responses, prompts, credentials, and malformed follow-up entries are not projected. Dedicated `fix_instructions` and `target_task_key` columns take precedence, with approved payload values used only as compatibility fallbacks.
+
+No migration is required. Legacy rows without structured follow-up fields retain the original six-field response, malformed payload JSON yields safe empty findings and absent optional fields, and explicit `followUpTasks: []` remains an approved empty specification. `ProjectManagementRepository`, `sprint-summary-query.ts`, and `RuntimeStatusProjection` all use this shared query, so Tasks, Sprints, and Live return identical normalization behavior without per-card database fetches.
 
 QA agent responses are processed using the shared structured response helper (`StructuredProviderResponseService`). This ensures that if the agent returns malformed JSON or omits required fields, Code UX automatically triggers an in-session retry to correct the output shape before failing the review.
 

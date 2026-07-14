@@ -534,7 +534,7 @@ describe('ChatPage Accessibility', () => {
     expect(window.location.search).not.toContain("draft=");
   });
 
-  it('presents and dispatches the full eligible 3D chat quick action set without changing the composer', async () => {
+  it('presents and dispatches the default eligible 3D chat quick action set without changing the composer', async () => {
     const user = userEvent.setup();
     mocks.reducedMotion.value = true;
     const handleSend = vi.fn(() => Promise.resolve());
@@ -564,7 +564,7 @@ describe('ChatPage Accessibility', () => {
     const labels = [
       "Create Web App", "Create Desktop App", "Create Onlineshop", "Create Portfolio", "Create Game",
       "Status Report", "Sprint Progress", "What’s Failing?", "Plan Next Steps",
-      "Add Nodes Workflow", "Add Dashboard", "Create Skill", "List Skills",
+      "Create Skill", "List Skills",
     ];
     expect(screen.getByRole("group", { name: "Project quick actions" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Create quick actions" })).toBeInTheDocument();
@@ -573,6 +573,8 @@ describe('ChatPage Accessibility', () => {
     expect(document.querySelector("[data-quick-action-group='insight']")).toHaveClass("md:flex", "md:flex-wrap");
     expect(document.querySelector("[data-quick-action-group='workflow']")).toHaveClass("md:flex", "md:flex-wrap");
     labels.forEach((label) => expect(screen.getByRole("button", { name: label })).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "Add Nodes Workflow" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add Dashboard" })).not.toBeInTheDocument();
     const iconTiles = Array.from(document.querySelectorAll<HTMLElement>("[data-quick-action-icon]"));
     expect(iconTiles).toHaveLength(labels.length);
     expect(new Set(iconTiles.map((tile) => tile.className))).toHaveLength(labels.length);

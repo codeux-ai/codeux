@@ -56,18 +56,29 @@ Virtual workers create `worker_endpoints.endpoint_type = virtual_cli` and do not
 
 ## Cycle Behavior
 
-Each virtual cycle is project-scoped and one-shot:
+Each virtual cycle is project-scoped and one-shot, but a project may run several independent coding
+cycles concurrently:
 
-1. Scheduler notices worker work for a project.
-2. Code UX creates an ephemeral virtual endpoint and project assignment.
-3. The cycle handles one worker-owned attention item or one pending dispatch.
-4. It executes that single unit of work.
-5. It releases the assignment and deletes the endpoint.
-6. If more worker work remains, it schedules another cycle.
+1. The scheduler resolves the effective worker and provider capacity before creating an endpoint.
+2. It reserves distinct pending dispatches in the process-local cycle registry and claims each
+   dispatch through its atomic SQLite lease.
+3. Each admitted dispatch receives its own ephemeral endpoint and assignment and runs independently.
+4. Fan-out is bounded by `workers.maxConcurrency` and the selected provider's current effective
+   capacity. A local batch consumes its provider budget as cycles launch; the atomic provider claim
+   remains the final cross-process authority.
+5. Each cycle releases its assignment and deletes its endpoint independently when it settles.
 
-This is intentionally not an endless watch loop.
+The same dispatch or task cannot receive two in-process reservations. Reconcile passes do not
+overlap, and deferred scheduling is coalesced per project. This is intentionally not an endless
+watch loop.
 
-The background reconcile loop stays conservative (`3s`) to avoid unnecessary sqlite write contention, while virtual worker session completion polling is tighter (`2s`) because it only checks local session and dispatch state. Initial scheduling operations use microtask queueing to consolidate rapid sync events while preventing simultaneous cycle overlap for the same project. If a cycle finishes and work still remains, follow-up scheduling is deferred on the reconcile timer cadence instead of recursively queueing more microtasks, so dashboard HTTP probes and shutdown signals stay responsive even when persisted worker state is temporarily unchanged.
+Worker-owned attention remains exclusive because repair or intervention work can change shared
+project state. Waiting attention prevents new coding cycles, waits for current project dispatches to
+settle, and then runs alone. Attention claims use a conditional SQLite update so a second worker
+cannot steal an already-claimed item. Attention that arrives after durable coding work started does
+not cancel that work.
+
+The background reconcile loop stays conservative (`3s`) to avoid unnecessary sqlite write contention, while virtual worker session completion polling is tighter (`2s`) because it only checks local session and dispatch state. Initial scheduling operations use microtask queueing to consolidate rapid sync events. If a cycle finishes and work still remains, follow-up scheduling is deferred on the reconcile timer cadence instead of recursively queueing more microtasks, so dashboard HTTP probes and shutdown signals stay responsive even when persisted worker state is temporarily unchanged.
 
 ## Planning Boundary
 
@@ -75,7 +86,8 @@ Virtual worker scheduling is split between pure domain policies and the stateful
 
 - `src/domain/workers/virtual-worker-scheduling-policy.ts` decides whether a project should schedule a cycle from plain inputs: worker execution mode, active-cycle state, queued-cycle state, next eligible attention item, and pending-dispatch presence.
 - The same policy module filters attention eligibility, defers orchestrator-managed clarification retries, chooses attention routing (`merge_conflict`, `ci_fix`, `action_required`, or human escalation), and formats virtual claim reasons for open versus reclaimable claimed items.
-- `src/domain/workers/virtual-worker-cycle-plan.ts` combines the next attention item, the next dispatch claim, resolved settings, and provider capacity into a typed `VirtualWorkerCycleAction`. Dispatches keep precedence over attention when both are available.
+- `src/services/virtual-worker-cycle-registry.ts` owns the minimal in-process reservation state needed
+  for parallel dispatches while durable dispatch and attention ownership remains in SQLite.
 
 The pure helpers receive repository/service state as values and do not mutate storage, call providers, start containers, or log. This makes idle worker selection, busy worker skipping, retry deferral, disabled worker mode, and attention escalation directly unit-testable.
 
@@ -116,6 +128,7 @@ For planning flows, Code UX (`src/services/planning-agent-service.ts`):
 - maintains same-session continuation semantics during retries (`src/infrastructure/providers/cli/provider-runner.ts` and `src/infrastructure/providers/cli/provider-runtime-artifacts.ts`); subsequent JSON retry requests continue the same underlying provider session using `continueSessionId` (falling back from `nativeSessionId` to the logical `sessionId`)
 - records execution and provider invocation trails during retries, so operators will see an initial system message indicating the retry followed by a new provider invocation recording the follow-up prompt and reply
 - when Docker execution mode is active, planning runs inside a snapshot workspace volume and captures `.task-learnings.md` back out of that snapshot instead of trying to read host files directly; in `REMOTE` git mode, fresh planning invocations refresh `origin` and check out only `origin/<branch>` for the explicit sprint feature branch or the effective runtime git default branch, never the host repo's current checkout, so new planning does not start from a stale local branch, while restart/continue actions reuse the preserved snapshot for session continuity
+- in `LOCAL` git mode, sprint branch allocation and preflight use local heads only and never fetch, inspect, fast-forward from, or push to `origin`, even when the repository has a remote configured
 - allows sprint compose, improve, and `Plan & Start` to work even when no live MCP listener is attached
 
 Provider CLI workspace preparation is centralized through `InvocationWorkspacePreparer`. Its shared provider-invocation option builder constructs snapshot checkout, git policy, and fresh/continue lifecycle values for Docker provider calls, while its continuation resolver locates preserved workspaces and their current branches. Fresh Docker invocations in `REMOTE` git mode use explicit remote refs only: planning, project setup, dashboard/chat replies, worker inbox replies, node-flow provider prompts, QA review snapshots, task coding, QA follow-up, CI autofix, and merge-conflict repair all materialize from `origin/<branch>` refs rather than local branches or the host repo's current checkout. Dashboard/chat replies resolve dashboard settings with the project scope before building this policy, so local Git projects keep `LOCAL` snapshot behavior and do not require `origin/<defaultBranch>`. Continuation/restart flows may reuse a preserved workspace for provider-session continuity; if a preserved workspace is missing and a new workspace must be materialized, the same remote-only branch policy applies.
@@ -139,11 +152,13 @@ For merge conflicts, Code UX:
 - counts task-scoped merge-conflict attempts in the guardrail ledger; sprint-level final merge conflicts have no task row, so their retry count is stored on the attention item payload as `mergeConflictResolutionAttempts` before each real provider run
 - stops opening new worker-owned repair attempts for a task once the existing `merge_conflict` item has escalated to an active human handoff, preventing repeated container startup failures from cycling after the guardrail limit is reached
 
-Merge-conflict handling intentionally stays isolated from the original task workspace. It always runs in a dedicated ephemeral Docker workspace so conflict resolution cannot pollute the task's normal follow-up workspace.
+Merge-conflict handling intentionally stays isolated from the original task workspace, so conflict resolution cannot pollute the task's normal follow-up workspace. Its dedicated Docker workspace is ephemeral after terminal settlement, but it is preserved while an interrupted attempt remains eligible for restart continuation. The attention payload checkpoints the repair session, workspace, provider/model, native provider session, attempt id, and phase before provider execution; a resumed worker can therefore continue the same merge-in-progress state without replaying the merge or charging the interrupted attempt twice.
 
-For task-scoped CI autofix, Code UX defaults to continuing the original task coding session exactly like a QA follow-up: it reuses the logical/native provider session, provider family, effective model, coding-agent instructions, and preserved task workspace. Settings → AI Models → CI fix exposes **Continue from same session and model as coding task** as an opt-out; disabling it uses the standalone CI Fix route. Sprint-level final-merge repair has no originating task session and always uses that route. The CI-fix prompt also receives the active agent's memory context and writes new durable learnings back into memory from the reused workspace.
+Repair checkpoints also persist the workspace's original Git baseline, its finalized repair head, and the host-publication phase. CI-fix and merge-conflict recovery therefore always export against the pre-repair baseline even when the provider committed inside the preserved workspace before a restart. Once workspace finalization is durable, recovery skips provider execution and resumes host publication; merge recovery can also recognize a completed merge commit by its changed head and target-branch ancestry if the process exited immediately before that phase checkpoint. Host publication commits carry the durable repair head as a commit trailer. Recovery from `host_publishing` searches the worker branch for that trailer and, in remote mode, idempotently pushes the existing branch before settling, so a restart after patch materialization but before the `host_published` checkpoint never applies the repair twice. For legacy unmarked checkpoints, recovery derives the effective workspace tree including uncommitted tracked and untracked edits, then searches reachable host repair commits rather than only the branch tip. It accepts a commit only when that tree and the exact repair subject match, the saved baseline is its ancestor, and merge repairs retain the target parent; a tree-identical merge is allowed only when its saved repair commit differs from the baseline. The published host head is then checkpointed before attention settlement.
 
-Workspace artifact export captures both tracked edits and newly created untracked files from the worker workspace. This matters for CI autofix follow-ups that add missing modules or tests after the original task run; the exporter uses a temporary Git index for untracked files and still excludes the transient `.task-learnings.md` memory-capture file, legacy `.code-ux-home/` provider state, and root `.pnpm-store/` package-cache state from commits. It asks Git to discover untracked files internally before diffing, so preserved Docker workspaces with many untracked paths cannot exceed command argument limits. Current Docker workers keep provider HOME and Code UX-managed npm/pnpm cache paths in a paired runtime volume mounted outside `/workspace`, so fresh workspaces contain only the coding checkout.
+For task-scoped CI autofix, Code UX defaults to continuing the original task coding session exactly like a QA follow-up: it reuses the logical/native provider session, provider family, effective model, coding-agent instructions, and preserved task workspace. Settings → AI Models → CI fix exposes **Continue from same session and model as coding task** as an opt-out; disabling it uses the standalone CI Fix route. Sprint-level final-merge repair has no originating task session and always uses that route. Standalone CI repair checkpoints its own logical/native session and isolated workspace on the attention item, giving it the same restart-continuation semantics as merge-conflict repair. The CI-fix prompt also receives the active agent's memory context and writes new durable learnings back into memory from the reused workspace.
+
+Workspace artifact export captures both tracked edits and newly created untracked files from the worker workspace. This matters for CI autofix follow-ups that add missing modules or tests after the original task run; the exporter uses a temporary Git index for untracked files and still excludes the transient `.task-learnings.md` memory-capture file, legacy `.code-ux-home/` provider state, and root `.pnpm-store/` package-cache state from commits. It asks Git to discover untracked files internally before diffing, so preserved Docker workspaces with many untracked paths cannot exceed command argument limits. Docker-volume exports fuse discovery, staging, diffing, and temporary-index cleanup into one helper-container invocation, avoiding four or five Docker control-plane round trips per completed task. Host-side patch transaction files stay inside Git's administrative directory, keeping materialization commands on the warm project Git helper instead of forcing one-shot helpers for an external temporary-index bind. When a LOCAL branch advances while an isolated worker is running, patch materialization first applies the diff against the workspace's true base, then three-way merges that tree onto the current descendant worker tip. Concurrent branch work is retained, an identical file already materialized by the original task is de-duplicated, and genuine overlapping edits still fail as conflicts. Current Docker workers keep provider HOME and Code UX-managed npm/pnpm cache paths in a paired runtime volume mounted outside `/workspace`, so fresh workspaces contain only the coding checkout.
 
 Immediately before every Docker provider launch attempt, Code UX reasserts ownership of that runtime volume for the container's effective non-root UID/GID. Performing this at the atomic `docker run` boundary covers newly created, previously root-owned, and concurrently recreated volumes, preventing restart recovery or startup pruning from leaving CI/QA repair unable to create provider configuration or cache directories. Workspace seed helpers explicitly trust the mounted `/workspace` path while initializing Git, then restore the provider UID/GID; this keeps restart recovery from tripping Git's dubious-ownership protection on a correctly non-root-owned volume.
 
@@ -161,7 +176,7 @@ When feature-PR CI retries exhaust their guardrail, the runtime task remains blo
 
 If Docker is unavailable when the CI autofix flow starts, Code UX degrades that specific repair run to a host-backed worktree instead of looping on an unrecoverable Docker failure. Merge-conflict resolution does not use this fallback: it remains Docker-only so conflict repair stays isolated from the reusable task workspace.
 
-For QA review execution, Code UX now runs the review itself against a fresh snapshot workspace rather than the mutable task workspace. This keeps review inspection isolated while still allowing QA-requested coding follow-ups to continue in the original task workspace when appropriate. Both the review agent and QA-requested coding follow-ups now receive their current memory context, and QA follow-up edits capture fresh learnings back into memory from the actual workspace used for the fix.
+For QA review execution, Code UX now runs the review itself against a fresh snapshot workspace rather than the mutable task workspace. This keeps review inspection isolated while still allowing QA-requested coding follow-ups to continue in the original task workspace when appropriate. The QA row checkpoints the reviewer logical session, exact execution invocation, and review workspace before dispatch; restart continuation reuses those records and the provider-native session when available. Both the review agent and QA-requested coding follow-ups now receive their current memory context, and QA follow-up edits capture fresh learnings back into memory from the actual workspace used for the fix.
 
 Unsupported worker-owned attention types are escalated back to human attention with a summary.
 
@@ -179,7 +194,13 @@ It deduplicates this project set and explicitly ignores all other projects in th
 
 ## Recovery
 
-Startup cleanup prunes orphaned `virtual_cli` endpoints from previous runs.
+Startup cleanup prunes orphaned `virtual_cli` endpoints from previous runs. Under the restart invocation `continue` policy, it also requeues claimed `ci_fix_required` and `merge_conflict` attention owned by those stopped endpoints. The requeued payload retains its repair-runtime checkpoint, while the next virtual worker:
+
+- reuses the same logical session and workspace session
+- resolves the latest provider invocation for the previous native session and OpenCode usage baseline
+- resumes an in-progress Git merge instead of starting it again
+- avoids recording a second guardrail attempt for the same interrupted attempt id
+- preserves the workspace again if the continuation is cancelled or fails while still retryable, and clears it through normal cleanup only after terminal settlement
 
 Startup cleanup also removes stale Code UX Docker assets through a background, label-filtered prune so server boot does not wait on full Docker daemon scans (managed via `DockerAssetPruneService`):
 
@@ -210,4 +231,9 @@ When running inside isolated or containerized worker environments (e.g., Gemini 
 - **POSIX and Windows Path Matching**: CLI session queries in the tracking repository match using both Windows and POSIX-normalized host paths, falling back to `/workspace` when matching containerized sessions.
 
 ## Scheduling and Execution Split
-To enable pure unit testing of virtual worker scheduling rules, Code UX extracts cycle planning into a pure domain function (`planVirtualWorkerCycle`). The VirtualWorkerService gathers state (e.g. attention items, task dispatches, available provider concurrency) and passes it to the planner. The planner then returns an explicit `VirtualWorkerCycleAction` without producing side effects, and the service executes the requested routing decision.
+
+Pure eligibility and attention-routing rules remain in
+`virtual-worker-scheduling-policy.ts`. Parallel fan-out needs current per-dispatch settings, provider
+budgets, and durable claims, so `VirtualWorkerService` coordinates those side effects while
+`VirtualWorkerCycleRegistry` enforces only in-process duplicate/exclusivity rules. This removes the
+obsolete serial cycle-plan layer without moving cross-process ownership out of SQLite.

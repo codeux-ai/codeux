@@ -210,6 +210,16 @@ export function decideTaskStatusDerivation(
     return { status: "BLOCKED", resetRuntime: false };
   }
 
+  // CI and explicit handoffs are post-coding blockers. Their provider session
+  // is normally already COMPLETED, so dependency derivation must not turn the
+  // task back into fresh PENDING coding work after a gate runs in this cycle.
+  if (
+    task.status === "BLOCKED"
+    && (task.merge_indicator === "CI" || Boolean(task.intervention_owner))
+  ) {
+    return { status: "BLOCKED", resetRuntime: false };
+  }
+
   if (task.status === "CODING_COMPLETED" || task.status === "COMPLETED") {
     const projection = resolveTaskPipelineStage({
       status: task.status,

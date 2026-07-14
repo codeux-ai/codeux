@@ -1,3 +1,5 @@
+import type { AutomationCredentialCompatibilityIssue } from "./automation-credential-types.js";
+
 export type NodeWidgetFieldType =
   | "text"
   | "textarea"
@@ -14,6 +16,86 @@ export type NodeFlowJsonValue =
   | NodeFlowJsonValue[]
   | { [key: string]: NodeFlowJsonValue };
 export type NodeFlowJsonObject = { [key: string]: NodeFlowJsonValue };
+
+export type AutomationApprovalStatus = "pending" | "approved" | "rejected" | "expired";
+
+export interface AutomationApprovalRecord {
+  id: string;
+  projectId: string;
+  flowId: string;
+  runId: string;
+  nodeId: string;
+  logicalItem: string;
+  status: AutomationApprovalStatus;
+  request: NodeFlowJsonObject;
+  decision: NodeFlowJsonObject | null;
+  requestedAt: string;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const NODE_FLOW_SCHEMA_VERSION = 2 as const;
+export type NodeFlowSchemaVersion = typeof NODE_FLOW_SCHEMA_VERSION;
+
+export type NodeFlowPortDirection = "input" | "output";
+export type NodeFlowPortCardinality = "one" | "many";
+export type NodeFlowSideEffect = "none" | "read" | "write" | "external";
+
+export interface NodeFlowValueSchema {
+  type: "any" | "object" | "array" | "string" | "number" | "boolean" | "null";
+  description?: string;
+  required?: string[];
+  properties?: Record<string, NodeFlowValueSchema>;
+  items?: NodeFlowValueSchema;
+}
+
+export interface NodeFlowDefinitionReference {
+  type: string;
+  version: number;
+}
+
+export interface NodeFlowPort {
+  id: string;
+  direction: NodeFlowPortDirection;
+  schema: NodeFlowValueSchema;
+  required?: boolean;
+  cardinality?: NodeFlowPortCardinality;
+}
+
+export interface NodeFlowCredentialBinding {
+  slot: string;
+  credentialId: string;
+}
+
+export interface NodeFlowRetryPolicy {
+  maxAttempts: number;
+  backoffMs: number;
+  maxBackoffMs?: number;
+}
+
+export interface NodeFlowTimeoutPolicy {
+  timeoutMs: number;
+}
+
+export interface NodeFlowExecutionPolicy {
+  retry?: NodeFlowRetryPolicy;
+  timeout?: NodeFlowTimeoutPolicy;
+}
+
+export interface NodeFlowPublicationMetadata {
+  publicationId: string;
+  publishedAt: string;
+  publishedBy: string;
+  sourceVersion: number;
+}
+
+export interface NodeFlowSchemas {
+  input?: NodeFlowValueSchema;
+  output?: NodeFlowValueSchema;
+}
 
 export interface NodeWidgetSelectOption {
   label: string;
@@ -51,6 +133,13 @@ export interface NodeFlowNode {
   widgetSchema?: NodeWidgetSchema;
   position?: NodeFlowNodePosition;
   data?: NodeFlowJsonObject;
+  definition?: NodeFlowDefinitionReference;
+  ports?: NodeFlowPort[];
+  credentialBindings?: NodeFlowCredentialBinding[];
+  policy?: NodeFlowExecutionPolicy;
+  capabilities?: string[];
+  sideEffect?: NodeFlowSideEffect;
+  disabled?: boolean;
 }
 
 export interface NodeFlowEdge {
@@ -62,10 +151,13 @@ export interface NodeFlowEdge {
 }
 
 export interface NodeFlowGraph {
+  schemaVersion?: NodeFlowSchemaVersion;
   nodes: NodeFlowNode[];
   edges: NodeFlowEdge[];
   inputSchema?: NodeWidgetSchema;
+  schemas?: NodeFlowSchemas;
   metadata?: NodeFlowJsonObject;
+  publication?: Readonly<NodeFlowPublicationMetadata>;
 }
 
 export interface NodeFlowRecord {
@@ -90,6 +182,17 @@ export interface NodeFlowVersionRecord {
   createdAt: string;
 }
 
+export interface NodeFlowPublicationRecord {
+  id: string;
+  flowId: string;
+  projectId: string;
+  version: number;
+  graph: NodeFlowGraph;
+  policy: import("./node-flow-execution-policy-types.js").NodeFlowExecutionPolicySnapshot;
+  publishedBy: string;
+  createdAt: string;
+}
+
 export interface CreateNodeFlowInput {
   id?: string;
   title: string;
@@ -101,6 +204,80 @@ export interface UpdateNodeFlowInput {
   title?: string;
   description?: string;
   graph?: NodeFlowGraph;
+}
+
+export type NodeFlowGraphPatchOperation =
+  | { op: "upsert_node"; node: NodeFlowNode }
+  | { op: "remove_node"; nodeId: string }
+  | { op: "upsert_edge"; edge: NodeFlowEdge }
+  | { op: "remove_edge"; edgeId?: string; fromNodeId?: string; toNodeId?: string }
+  | { op: "set_input_schema"; inputSchema: NodeWidgetSchema | null }
+  | { op: "set_metadata"; metadata: NodeFlowJsonObject | null };
+
+export interface PatchNodeFlowDraftInput {
+  projectId: string;
+  draftRevision: number;
+  graph?: NodeFlowGraph;
+  operations?: NodeFlowGraphPatchOperation[];
+  title?: string;
+  description?: string;
+}
+
+export interface NodeFlowConcurrencyConflict {
+  code: "draft_revision_conflict";
+  flowId: string;
+  expectedDraftRevision: number;
+  actualDraftRevision: number;
+  message: string;
+}
+
+export interface NodeFlowPolicyFinding {
+  severity: "info" | "warning" | "error";
+  code: string;
+  nodeId?: string;
+  message: string;
+}
+
+export interface NodeFlowRequiredCredential {
+  nodeId: string;
+  slot: string;
+  allowedKinds: string[];
+  requiredCapabilities: string[];
+  required: boolean;
+  credentialId: string | null;
+  status: "bound" | "missing" | "denied";
+  backendReady: boolean | null;
+  configured: boolean | null;
+  active: boolean | null;
+  projectAccess: boolean | null;
+  kindAllowed: boolean | null;
+  capabilitiesAllowed: boolean | null;
+  missingCapabilities: string[];
+  compatibilityIssues: AutomationCredentialCompatibilityIssue[];
+}
+
+export interface NodeFlowCredentialRequestResult extends NodeFlowRequiredCredential {
+  requestStatus: "already_bound" | "requested";
+  /** This compatibility endpoint never writes or replaces a graph credential binding. */
+  persistence: "none";
+  bindingChanged: false;
+}
+
+export interface NodeFlowDraftReview {
+  flowId: string;
+  projectId: string;
+  name: string;
+  description: string;
+  draftRevision: number;
+  nodeCount: number;
+  edgeCount: number;
+  valid: boolean;
+  validationIssues: NodeFlowValidationIssue[];
+  policyFindings: NodeFlowPolicyFinding[];
+  requiredCredentials: NodeFlowRequiredCredential[];
+  requestedCapabilities: string[];
+  sideEffectDiffs: Array<{ nodeId: string; sideEffect: NodeFlowSideEffect; description: string }>;
+  publishedVersion: number | null;
 }
 
 export interface NodeFlowValidationIssue {
@@ -132,15 +309,25 @@ export interface AttachNodeFlowSkillInput {
   description?: string;
 }
 
-export type NodeFlowRunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
-export type NodeFlowNodeRunStatus = "pending" | "running" | "succeeded" | "failed" | "skipped" | "cancelled";
+export type NodeFlowRunStatus =
+  | "queued" | "running" | "approval_waiting" | "retry_waiting"
+  | "attention_required" | "succeeded" | "failed" | "cancelled";
+export type NodeFlowNodeRunStatus =
+  | "pending" | "running" | "approval_waiting" | "retry_waiting" | "attention_required"
+  | "succeeded" | "failed" | "skipped" | "cancelled";
 
 export interface NodeFlowRunRecord {
   id: string;
   flowId: string;
   projectId: string;
   version: number;
+  publicationId: string | null;
   status: NodeFlowRunStatus;
+  policy: import("./node-flow-execution-policy-types.js").NodeFlowExecutionPolicySnapshot;
+  leaseOwner: string | null;
+  leaseExpiresAt: string | null;
+  heartbeatAt: string | null;
+  cancelRequestedAt: string | null;
   executionInvocationId: string | null;
   triggerType: string;
   triggerPayload: NodeFlowJsonObject | null;
@@ -159,6 +346,7 @@ export interface NodeFlowNodeRunRecord {
   flowId: string;
   projectId: string;
   nodeId: string;
+  logicalItem: string;
   status: NodeFlowNodeRunStatus;
   executionInvocationId: string | null;
   input: NodeFlowJsonObject | null;
@@ -168,6 +356,28 @@ export interface NodeFlowNodeRunRecord {
   finishedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface NodeFlowNodeAttemptRecord {
+  id: string;
+  runId: string;
+  nodeRunId: string;
+  nodeId: string;
+  logicalItem: string;
+  attemptNumber: number;
+  status: NodeFlowNodeRunStatus;
+  executorId: string;
+  invocationId: string | null;
+  artifactDigest: string | null;
+  input: NodeFlowJsonObject | null;
+  output: NodeFlowJsonObject | null;
+  credentialIds: string[];
+  failureClassification: import("./node-flow-execution-policy-types.js").NodeFlowFailureClassification | null;
+  retryDecision: "retry" | "stop" | "attention_required" | null;
+  errorMessage: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  createdAt: string;
 }
 
 export interface NodeFlowListResponse {
@@ -186,6 +396,8 @@ export interface CreateNodeFlowRunInput {
   flowId: string;
   projectId: string;
   version: number;
+  publicationId?: string | null;
+  policy?: import("./node-flow-execution-policy-types.js").NodeFlowExecutionPolicySnapshot;
   status?: NodeFlowRunStatus;
   executionInvocationId?: string | null;
   triggerType?: string;
@@ -204,6 +416,10 @@ export interface UpdateNodeFlowRunInput {
   errorMessage?: string | null;
   startedAt?: string | null;
   finishedAt?: string | null;
+  leaseOwner?: string | null;
+  leaseExpiresAt?: string | null;
+  heartbeatAt?: string | null;
+  cancelRequestedAt?: string | null;
 }
 
 export interface CreateNodeFlowNodeRunInput {
@@ -211,6 +427,7 @@ export interface CreateNodeFlowNodeRunInput {
   flowId: string;
   projectId: string;
   nodeId: string;
+  logicalItem?: string;
   status?: NodeFlowNodeRunStatus;
   executionInvocationId?: string | null;
   input?: NodeFlowJsonObject | null;
@@ -234,10 +451,15 @@ export interface RunNodeFlowOptions {
   triggerType?: string;
   triggerPayload?: NodeFlowJsonObject;
   signal?: AbortSignal;
+  versionSelection?: import("./node-flow-execution-policy-types.js").NodeFlowVersionSelection;
+  /** Internal recursion guard propagated only by Execute Subflow. */
+  subflowDepth?: number;
+  executorId?: string;
 }
 
 export interface NodeFlowRunSummaryResponse {
   run: NodeFlowRunRecord;
   nodeRuns: NodeFlowNodeRunRecord[];
+  attempts?: NodeFlowNodeAttemptRecord[];
   output: NodeFlowJsonObject | null;
 }

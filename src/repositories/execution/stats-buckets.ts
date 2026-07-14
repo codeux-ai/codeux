@@ -35,6 +35,12 @@ export function createEmptyUsageTotals(): ExecutionUsageTotals {
     estimatedInvocationCount: 0,
     unavailableInvocationCount: 0,
     unsupportedInvocationCount: 0,
+    costCoverage: {
+      configuredPricingInvocationCount: 0,
+      providerReportedCostInvocationCount: 0,
+      unpricedInvocationCount: 0,
+      providerReportedCostUsd: 0,
+    },
   };
 }
 

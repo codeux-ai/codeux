@@ -57,11 +57,16 @@ import type { ChatProviderOutboundService } from "../../services/chat-provider-o
 import type { QuicksprintService } from "../../services/quicksprint-service.js";
 import type { ProjectSetupService } from "../../services/project-setup-service.js";
 import type { SchedulerService } from "../../services/scheduler-service.js";
+import type { SprintRollbackService } from "../../services/sprint-rollback-service.js";
 import type { ChatProviderIngressService } from "../../services/chat-provider-ingress-service.js";
 import type { SpeechTranscriptionService } from "../../services/speech-transcription-service.js";
 import type { SpeechSynthesisService } from "../../services/speech-synthesis-service.js";
 import type { SpeechModelManager } from "../../services/speech-model-manager.js";
 import type { NodeFlowService } from "../../services/node-flow-service.js";
+import type { HeadlessAuthService } from "../../services/headless-auth-service.js";
+import type { AutomationAuditExportService } from "../../services/automation-audit-export-service.js";
+import type { HeadlessOperationalReadinessService } from "../../services/headless-operational-readiness-service.js";
+import type { AutomationSloService } from "../../services/automation-slo-service.js";
 import type { MemoryService } from "../../services/memory-service.js";
 import type { KnowledgeService } from "../../services/knowledge-service.js";
 import type { MemoryPromotionService } from "../../services/memory-promotion-service.js";
@@ -70,6 +75,7 @@ import type { EmbeddingService } from "../../services/embedding-service.js";
 import type { MemoryRepository } from "../../repositories/memory-repository.js";
 import type { CustomDashboardRepository } from "../../repositories/custom-dashboard-repository.js";
 import type { CustomDashboardValidationService } from "../../services/custom-dashboard-validation-service.js";
+import type { CustomDashboardCredentialBindingService } from "../../services/custom-dashboard-credential-binding-service.js";
 import type { SkillService } from "../../services/skill-service.js";
 import type { GuardrailService } from "../../services/guardrail-service.js";
 import type { ProjectSettings } from "../../contracts/settings-scope-types.js";
@@ -87,7 +93,11 @@ import {
   getOnboardingRuntimeReadiness,
   invalidateOnboardingRuntimeReadinessCache,
 } from "../../services/onboarding-readiness-service.js";
-import type { SprintImportedTaskInput } from "../../contracts/project-management-types.js";
+import type {
+  SprintBranchUpdateResult,
+  SprintImportedTaskInput,
+} from "../../contracts/project-management-types.js";
+import { SprintManualActionService } from "../../services/sprint-manual-action-service.js";
 import type { McpConnectionInfo } from "../../contracts/mcp-connection-types.js";
 import type {
   LocalMcpCliConfigService,
@@ -96,6 +106,7 @@ import type {
   LocalMcpSetupInfo,
 } from "../../services/local-mcp-cli-config-service.js";
 import type { ProjectInitializationStateService } from "../../services/project-initialization-state-service.js";
+import type { CredentialBroker } from "../../services/credentials/credential-broker.js";
 
 const updateCheckerService = new UpdateCheckerService();
 
@@ -111,7 +122,7 @@ export interface BootDashboardDeps {
   projectInitializationStateService: ProjectInitializationStateService;
   projectRuntimeRepository: ProjectRuntimeRepository;
   executionRepository: ExecutionRepository;
-  getDashboardNotifications?: () => ReturnType<ExecutionRepository["getDashboardNotifications"]>;
+  getDashboardNotifications?: (limit?: number) => ReturnType<ExecutionRepository["getDashboardNotifications"]>;
   connectionChatRepository: ConnectionChatRepository;
   chatProviderRepository: ChatProviderRepository;
   projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
@@ -131,6 +142,7 @@ export interface BootDashboardDeps {
   quicksprintService: QuicksprintService;
   projectSetupService: ProjectSetupService;
   schedulerService: SchedulerService;
+  sprintRollbackService: SprintRollbackService;
   sprintIssueService: SprintIssueService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
   chatProviderIngressService: ChatProviderIngressService;
@@ -139,7 +151,13 @@ export interface BootDashboardDeps {
   speechModelManager: SpeechModelManager;
   chatProviderOutboundService?: ChatProviderOutboundService;
   nodeFlowService?: NodeFlowService;
+  credentialBroker: CredentialBroker;
+  headlessAuthService: HeadlessAuthService;
+  automationAuditService: AutomationAuditExportService;
+  headlessReadinessService: HeadlessOperationalReadinessService;
+  automationSloService: AutomationSloService;
   customDashboardRepository?: CustomDashboardRepository;
+  customDashboardCredentialBindingService?: CustomDashboardCredentialBindingService;
   customDashboardValidationService?: CustomDashboardValidationService;
   skillService: SkillService;
   dashboardRealtimeService: DashboardRealtimeService;
@@ -184,6 +202,7 @@ export interface BootDashboardDeps {
     selectedPort?: string | number | null;
   }) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>;
   listFileBrowserSessions: (projectId: string) => Promise<FileBrowserSession[]>;
+  updateSprintBranch: (projectId: string, sprintId: string) => Promise<SprintBranchUpdateResult>;
   startFileBrowserSession: (projectId: string, sprintId: string) => Promise<FileBrowserSession>;
   rebuildFileBrowserSession: (sessionId: string) => Promise<FileBrowserSession>;
   stopFileBrowserSession: (sessionId: string) => Promise<FileBrowserSession>;
@@ -467,6 +486,14 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     projectManagementRepository: deps.projectManagementRepository,
     logger: deps.logger.child({ component: "instruction-file-service" }),
   });
+  const sprintManualActionService = new SprintManualActionService({
+    projectManagementRepository: deps.projectManagementRepository,
+    executionRepository: deps.executionRepository,
+    executionControlService: deps.executionControlService,
+    qaReviewRepository: deps.qaReviewRepository,
+    projectAttentionRepository: deps.projectAttentionRepository,
+    logger: deps.logger.child({ component: "sprint-manual-action-service" }),
+  });
 
   const getDefaultOnboardingRuntimeReadiness = deps.getOnboardingRuntimeReadiness
     ?? (async () => getOnboardingRuntimeReadiness(
@@ -494,7 +521,13 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     speechSynthesisService: deps.speechSynthesisService,
     speechModelManager: deps.speechModelManager,
     nodeFlowService: deps.nodeFlowService,
+    credentialBroker: deps.credentialBroker,
+    headlessAuthService: deps.headlessAuthService,
+    automationAuditService: deps.automationAuditService,
+    headlessReadinessService: deps.headlessReadinessService,
+    automationSloService: deps.automationSloService,
     customDashboardRepository: deps.customDashboardRepository,
+    customDashboardCredentialBindingService: deps.customDashboardCredentialBindingService,
     customDashboardValidationService: deps.customDashboardValidationService,
     skillService: deps.skillService,
     projectManagementRepository: deps.projectManagementRepository,
@@ -525,7 +558,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     },
     getOverviewTelemetrySnapshot: cache.getOverviewTelemetrySnapshot,
     getDashboardNotifications: deps.getDashboardNotifications
-      ?? (() => deps.executionRepository.getDashboardNotifications()),
+      ?? ((limit) => deps.executionRepository.getDashboardNotifications({ limit })),
     // `/api/projects/:id/execution` is the public REST snapshot and includes
     // recent events/invocations; realtime execution pushes stay feed-less above.
     getProjectExecutionSnapshot: cache.getProjectExecutionSnapshot,
@@ -711,10 +744,16 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     getSprint: (sprintId) => deps.projectManagementRepository.getSprint(sprintId),
     createSprint: (projectId, input) => deps.projectManagementRepository.createSprint(projectId, input),
     updateSprint: (sprintId, input) => deps.projectManagementRepository.updateSprint(sprintId, input),
+    updateSprintBranch: (projectId, sprintId) => deps.updateSprintBranch(projectId, sprintId),
+    markSprintCompleted: (sprintId) => sprintManualActionService.markCompleted(sprintId),
+    markSprintQaPassed: (sprintId) => sprintManualActionService.markQaPassed(sprintId),
     deleteSprint: (sprintId) => deps.projectManagementRepository.deleteSprint(sprintId),
+    assessSprintRollback: (projectId, sprintId) => deps.sprintRollbackService.assess(projectId, sprintId),
+    createSprintRollback: (projectId, sprintId, input) => deps.sprintRollbackService.create(projectId, sprintId, input),
     importSprintFromMarkdown: (projectId, input) => deps.sprintMarkdownService.importSprint(projectId, input),
     exportSprintToMarkdown: (projectId, sprintId) => deps.sprintMarkdownService.exportSprint(projectId, sprintId),
     listTasks: (projectId, sprintId) => deps.projectManagementRepository.listTasks(projectId, sprintId),
+    listTaskOverviews: (projectId) => deps.projectManagementRepository.listTaskOverviews(projectId),
     getTask: (taskId) => deps.projectManagementRepository.getTask(taskId),
     createTask: (projectId, input) => deps.projectManagementRepository.createTask(projectId, input),
     createImportedTasks: (projectId, sprintId, inputs) => {

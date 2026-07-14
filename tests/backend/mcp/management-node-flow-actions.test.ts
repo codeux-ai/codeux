@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ManagementToolHandler } from "../../../src/mcp/management-tool-handler.js";
-import type { NodeFlowGraph, NodeFlowRecord } from "../../../src/contracts/node-flow-types.js";
+import type { NodeFlowGraph, NodeFlowNodeAttemptRecord, NodeFlowRecord } from "../../../src/contracts/node-flow-types.js";
+import { runWithMcpAgentContext } from "../../../src/server/mcp-agent-context.js";
 
 const validGraph: NodeFlowGraph = {
   nodes: [
@@ -19,6 +20,28 @@ const flowRecord = (overrides: Partial<NodeFlowRecord> = {}): NodeFlowRecord => 
   version: 1,
   createdAt: "2026-07-07T00:00:00.000Z",
   updatedAt: "2026-07-07T00:00:00.000Z",
+  ...overrides,
+});
+
+const attemptRecord = (overrides: Partial<NodeFlowNodeAttemptRecord> = {}): NodeFlowNodeAttemptRecord => ({
+  id: "attempt-1",
+  runId: "run-1",
+  nodeRunId: "node-run-1",
+  nodeId: "provider",
+  attemptNumber: 1,
+  status: "succeeded",
+  executorId: "executor-1",
+  invocationId: "invocation-1",
+  artifactDigest: "sha256:artifact-1",
+  input: { prompt: "Ship", apiKey: "secret-canary" },
+  output: { result: "done", authorization: "secret-canary" },
+  credentialIds: ["credential-1"],
+  failureClassification: null,
+  retryDecision: "stop",
+  errorMessage: null,
+  startedAt: "2026-07-07T00:00:00.000Z",
+  finishedAt: "2026-07-07T00:00:01.000Z",
+  createdAt: "2026-07-07T00:00:00.000Z",
   ...overrides,
 });
 
@@ -77,6 +100,11 @@ describe("manage_node_flows", () => {
   });
 
   it("delegates runs to the node-flow runtime service through NodeFlowService", async () => {
+    const persistedAttempt = {
+      ...attemptRecord(),
+      customSource: "custom-source-canary",
+      sourceRevision: "source-revision-canary",
+    };
     const nodeFlowService = {
       runFlow: vi.fn(async () => ({
         run: {
@@ -97,6 +125,7 @@ describe("manage_node_flows", () => {
           updatedAt: "2026-07-07T00:00:01.000Z",
         },
         nodeRuns: [],
+        attempts: [persistedAttempt],
         output: { ok: true },
       })),
     };
@@ -112,9 +141,92 @@ describe("manage_node_flows", () => {
 
     expect(nodeFlowService.runFlow).toHaveBeenCalledWith("project-1", "flow-1", { prompt: "Ship" }, {
       triggerType: "mcp_management",
+      versionSelection: { mode: "latest_published" },
     });
     expect(parsed.result.run.id).toBe("run-1");
     expect(parsed.result.output).toEqual({ ok: true });
+    expect(parsed.result.attempts[0]).toMatchObject({
+      attemptNumber: 1,
+      status: "succeeded",
+      executorId: "executor-1",
+      invocationId: "invocation-1",
+      artifactDigest: "sha256:artifact-1",
+      input: { prompt: "Ship", apiKey: "[REDACTED]" },
+      output: { result: "done", authorization: "[REDACTED]" },
+      retryDecision: "stop",
+    });
+    expect(JSON.stringify(parsed)).not.toContain("secret-canary");
+    expect(JSON.stringify(parsed)).not.toContain("custom-source-canary");
+    expect(parsed.result.attempts[0]).not.toHaveProperty("credentialIds");
+    expect(parsed.result.attempts[0]).not.toHaveProperty("customSource");
+    expect(parsed.result.attempts[0]).not.toHaveProperty("sourceRevision");
+  });
+
+  it("inspects durable retries, terminal failures, and attention-required attempt decisions", async () => {
+    const attempts = [
+      attemptRecord({
+        id: "attempt-1",
+        attemptNumber: 1,
+        status: "failed",
+        failureClassification: "transient",
+        retryDecision: "retry",
+        invocationId: "invocation-retry-1",
+        artifactDigest: null,
+        output: null,
+        errorMessage: "Service temporarily unavailable",
+      }),
+      attemptRecord({
+        id: "attempt-2",
+        attemptNumber: 2,
+        status: "failed",
+        failureClassification: "permanent",
+        retryDecision: "stop",
+        invocationId: "invocation-retry-2",
+        artifactDigest: "sha256:failure-artifact",
+        errorMessage: "Request failed",
+      }),
+      attemptRecord({
+        id: "attempt-3",
+        nodeId: "external-write",
+        nodeRunId: "node-run-2",
+        attemptNumber: 1,
+        status: "failed",
+        failureClassification: "unknown_side_effect",
+        retryDecision: "attention_required",
+        invocationId: "invocation-attention-1",
+        artifactDigest: null,
+        errorMessage: "External outcome is unknown",
+      }),
+    ];
+    const nodeFlowService = {
+      getRun: vi.fn(() => ({
+        id: "run-1",
+        projectId: "project-1",
+        triggerPayload: null,
+        input: { password: "secret-canary" },
+        output: null,
+      })),
+      listNodeRuns: vi.fn(() => ({ nodeRuns: [] })),
+      listNodeAttempts: vi.fn(() => ({ attempts })),
+    };
+    const handler = createHandler(nodeFlowService);
+
+    const response = await handler.handleManageNodeFlows({
+      action: "inspect_run",
+      projectId: "project-1",
+      runId: "run-1",
+    });
+    const parsed = parseResponse(response);
+
+    expect(nodeFlowService.listNodeAttempts).toHaveBeenCalledWith("run-1");
+    expect(parsed.result.attempts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ attemptNumber: 1, failureClassification: "transient", retryDecision: "retry", invocationId: "invocation-retry-1" }),
+      expect.objectContaining({ attemptNumber: 2, failureClassification: "permanent", retryDecision: "stop", invocationId: "invocation-retry-2", artifactDigest: "sha256:failure-artifact" }),
+      expect.objectContaining({ failureClassification: "unknown_side_effect", retryDecision: "attention_required", invocationId: "invocation-attention-1" }),
+    ]));
+    expect(parsed.result.run.input.password).toBe("[REDACTED]");
+    expect(JSON.stringify(parsed)).not.toContain("secret-canary");
+    expect(parsed.result.attempts.every((attempt: Record<string, unknown>) => !("credentialIds" in attempt))).toBe(true);
   });
 
   it("requires exact approval before deleting a flow", async () => {
@@ -193,6 +305,7 @@ describe("manage_node_flows", () => {
     const nodeFlowService = {
       get: vi.fn(() => flowRecord()),
       listAgentSkills: vi.fn(() => []),
+      validateDraft: vi.fn(() => ({ publishedVersion: 1, requiredCredentials: [] })),
     };
     const handler = createHandler(nodeFlowService);
 
@@ -203,5 +316,58 @@ describe("manage_node_flows", () => {
       apiToken: "[REDACTED]",
       visible: "ok",
     });
+
+    const agentResponse = await runWithMcpAgentContext("agent-1", "thread-1", () =>
+      handler.handleManageNodeFlows({ action: "get", flowId: "flow-1" }));
+    expect(parseResponse(agentResponse).result.flow).not.toHaveProperty("graph");
+  });
+
+  it("returns governed draft conflicts and structured dry-run findings", async () => {
+    const nodeFlowService = {
+      patchDraft: vi.fn(() => ({ conflict: { code: "draft_revision_conflict", expectedDraftRevision: 1, actualDraftRevision: 2 } })),
+      dryRun: vi.fn(() => ({ status: "blocked", validationIssues: [], policyFindings: [{ code: "missing_credential" }], requiredCredentials: [{ status: "missing" }], result: { executed: false } })),
+    };
+    const handler = createHandler(nodeFlowService);
+    const conflict = parseResponse(await handler.handleManageNodeFlows({ action: "patch_draft", projectId: "project-1", flowId: "flow-1", draftRevision: 1, operations: [{ op: "set_metadata", metadata: {} }] }));
+    const dryRun = parseResponse(await handler.handleManageNodeFlows({ action: "dry_run", projectId: "project-1", flowId: "flow-1", input: { token: "never-returned" } }));
+    expect(conflict.result.conflict).toMatchObject({ code: "draft_revision_conflict", actualDraftRevision: 2 });
+    expect(dryRun.result).toMatchObject({ status: "blocked", result: { executed: false } });
+  });
+
+  it("requires exact approval for publish and rollback", async () => {
+    const nodeFlowService = { publishDraft: vi.fn(() => ({ draftRevision: 2 })), rollback: vi.fn(() => ({ draftRevision: 3 })) };
+    const handler = createHandler(nodeFlowService);
+    const publishArgs = { action: "publish" as const, projectId: "project-1", flowId: "flow-1", draftRevision: 2, approval: { confirmed: true } };
+    expect(parseResponse(await handler.handleManageNodeFlows(publishArgs)).approvalRequired).toBe(true);
+    expect(parseResponse(await handler.handleManageNodeFlows(publishArgs)).result.draft.draftRevision).toBe(2);
+    const rollbackArgs = { action: "rollback" as const, projectId: "project-1", flowId: "flow-1", draftRevision: 2, version: 1, approval: { confirmed: true } };
+    expect(parseResponse(await handler.handleManageNodeFlows(rollbackArgs)).approvalRequired).toBe(true);
+    expect(parseResponse(await handler.handleManageNodeFlows(rollbackArgs)).result.draft.draftRevision).toBe(3);
+  });
+
+  it("validates required optimistic and operational fields", async () => {
+    const handler = createHandler({});
+    const patch = await handler.handleManageNodeFlows({ action: "patch_draft", projectId: "project-1", flowId: "flow-1" });
+    const cancel = await handler.handleManageNodeFlows({ action: "cancel", projectId: "project-1" });
+    expect(parseResponse(patch).result).toMatchObject({ errorType: "validation", field: "draftRevision" });
+    expect(parseResponse(cancel).result).toMatchObject({ errorType: "validation", field: "runId" });
+  });
+
+  it("executes an attached flow with authenticated agent and conversation metadata", async () => {
+    const runFlow = vi.fn(async () => ({ run: { id: "run-1", triggerPayload: null, input: null, output: { ok: true } }, nodeRuns: [], attempts: [attemptRecord()], output: { ok: true } }));
+    const handler = createHandler({
+      listAgentSkillsForAgent: () => [{ flowId: "flow-1", skillName: "Review", description: "" }],
+      get: () => ({ id: "flow-1", projectId: "project-1", graph: { nodes: [], edges: [] } }),
+      validateDraft: () => ({ publishedVersion: 1, requiredCredentials: [] }),
+      runFlow,
+    });
+    const response = await runWithMcpAgentContext("agent-1", "thread-1", () => handler.handleRunAttachedFlow({ projectId: "project-1", flowId: "flow-1", input: { prompt: "review" } }));
+    expect(parseResponse(response).result.run.id).toBe("run-1");
+    expect(parseResponse(response).result.attempts[0]).toMatchObject({ invocationId: "invocation-1", executorId: "executor-1" });
+    expect(JSON.stringify(parseResponse(response))).not.toContain("secret-canary");
+    expect(parseResponse(response).result.attempts[0]).not.toHaveProperty("credentialIds");
+    expect(runFlow).toHaveBeenCalledWith("project-1", "flow-1", { prompt: "review" }, expect.objectContaining({
+      triggerPayload: expect.objectContaining({ initiatingAgentId: "agent-1", conversationId: "thread-1" }),
+    }));
   });
 });

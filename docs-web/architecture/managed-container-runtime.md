@@ -4,7 +4,7 @@ The managed container runtime removes first-invocation Docker builds while keepi
 
 ## Runtime Flow
 
-At startup Code UX pulls the stable `base` and `browser` channel tags from GHCR, resolves immutable repository digests, smoke-tests Node 24, and activates verified digests for future containers. Pulls run in the background and fail open to the last verified digest.
+At startup Code UX checks the stable `base` and `browser` channel tags when the persisted update watermark is older than six hours, resolves immutable repository digests, smoke-tests Node 24, and activates verified digests for future containers. Restarts inside the freshness window issue no registry pull. Checks run in the background and fail open to the last verified digest.
 
 The `base` image is a multi-architecture `node:24-trixie-slim` development environment. The `browser` image adds pinned Playwright, Playwright MCP, and Linux browser dependencies, but contains no browser binary. CI rejects embedded browser/Widevine artifacts, smoke-tests both targets, publishes SBOM/provenance attestations, and signs their digests.
 
@@ -30,7 +30,7 @@ Credentials stay in isolated credential/runtime mounts. Provider-native auto-upd
 
 ## Failure And Rollback
 
-Runtime and provider update checks occur on every startup without blocking readiness. Existing verified artifacts remain active during update work. A failed update reports status but does not break a working provider. When no compatible verified provider exists, only that provider's Login/invocation fails.
+Runtime and provider update checks occur automatically at most once per six-hour freshness window without blocking readiness. Existing verified artifacts remain active during update work. Manual provider preparation still forces an update check. A failed update reports status but does not break a working provider. When no compatible verified provider exists, only that provider's Login/invocation fails.
 
 Runtime, browser, and provider pointers live under `~/.code-ux/runtime/`. Cleanup preserves active assets and recent rollback versions.
 

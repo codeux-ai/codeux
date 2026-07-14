@@ -1,11 +1,16 @@
-import type { AgentRoutingMode, VirtualWorkerProvider } from "./app-types.js";
+import type { AgentRoutingMode, CardCiStatus, VirtualWorkerProvider } from "./app-types.js";
+export type { CardCiStatus } from "./app-types.js";
 import type { ProjectSettingsOverride } from "./settings-scope-types.js";
 import type { TaskSelfReflectionRating } from "./task-self-reflection-types.js";
 import type { ProjectWorkerAssignmentRecord } from "./worker-types.js";
+import type { SprintReviewSummary } from "./qa-review-summary.js";
+export type { QaReviewFollowUpTask, SprintReviewSummary } from "./qa-review-summary.js";
 
 export type ProjectStatus = "running" | "failed" | "intervention" | "idle";
 export type ProjectSourceType = "local" | "git";
 export type SprintStatus = "running" | "paused" | "completed" | "failed" | "cancelled" | "idle";
+export type SprintKind = "standard" | "rollback";
+export type SprintRollbackMode = "automatic" | "agent_assisted";
 export type TaskStatus = "pending" | "in_progress" | "coding_completed" | "completed" | "QA_REVIEW_FAILED";
 export type TaskPriority = "critical" | "high" | "medium" | "low";
 export type TaskExecutorType = "auto" | "docker_cli" | "jules" | "mcp_worker";
@@ -46,15 +51,6 @@ export interface ProjectSummary {
   updatedAt: string;
 }
 
-
-export interface SprintReviewSummary {
-  status: string;
-  outcome: string | null;
-  summary: string | null;
-  findings: string[];
-  reviewer: string | null;
-  finishedAt: string | null;
-}
 
 export type LinkedIssueProvider = "github" | "gitlab" | "jira" | "notion" | "asana" | "linear" | "miro" | "lucid" | "figma" | "mural";
 export type LinkedIssueCloseState = "open" | "closed" | "close_failed";
@@ -274,8 +270,14 @@ export interface SprintRecord {
   endDate: string | null;
   featureBranch: string | null;
   baseCommitSha: string | null;
+  kind: SprintKind;
+  rollbackSourceSprintId: string | null;
+  rollbackMode: SprintRollbackMode | null;
+  rollbackInstructions: string | null;
+  rollbackSafetyReason: string | null;
   tasksCount: number;
   completion: number;
+  ciStatus?: CardCiStatus | null;
   linkedIssues: SprintLinkedIssueRecord[];
   latestReview?: SprintReviewSummary;
   createdAt: string;
@@ -306,6 +308,7 @@ export interface TaskRecord {
   latestReview?: SprintReviewSummary;
   selfReflectionRating?: TaskSelfReflectionRating;
   mergeIndicator: string | null;
+  ciStatus?: CardCiStatus | null;
   sourceType: string | null;
   sourcePath: string | null;
   createdAt: string;
@@ -361,6 +364,36 @@ export interface CreateSprintInput {
   endDate?: string | null;
   featureBranch?: string | null;
   baseCommitSha?: string | null;
+  /** Internal metadata used by SprintRollbackService. Dashboard create parsing does not expose it. */
+  kind?: SprintKind;
+  rollbackSourceSprintId?: string | null;
+  rollbackMode?: SprintRollbackMode | null;
+  rollbackInstructions?: string | null;
+  rollbackSafetyReason?: string | null;
+}
+
+export interface SprintRollbackAssessment {
+  sourceSprintId: string;
+  eligible: boolean;
+  recommendedMode: SprintRollbackMode;
+  reasons: string[];
+}
+
+export interface CreateSprintRollbackInput {
+  instructions?: string;
+}
+
+export interface CreateSprintRollbackResult {
+  rollbackSprint: SprintRecord;
+  mode: SprintRollbackMode;
+  assessment: SprintRollbackAssessment;
+}
+
+export interface SprintBranchUpdateResult {
+  status: "advanced" | "already_current";
+  featureBranch: string;
+  defaultBranch: string;
+  commitSha: string;
 }
 
 export interface UpdateSprintInput {
@@ -376,6 +409,9 @@ export interface UpdateSprintInput {
   endDate?: string | null;
   featureBranch?: string | null;
   baseCommitSha?: string | null;
+  /** Internal rollback metadata; public request parsing intentionally omits these fields. */
+  rollbackMode?: SprintRollbackMode | null;
+  rollbackSafetyReason?: string | null;
 }
 
 export interface PlanningOverrides {

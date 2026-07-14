@@ -41,6 +41,7 @@ import { FileTree } from "./components/file-browser/FileTree.js";
 import { FileViewer } from "./components/file-browser/FileViewer.js";
 import { ChangesList } from "./components/file-browser/ChangesList.js";
 import { DiffViewer } from "./components/file-browser/DiffViewer.js";
+import { AvantgardeSelect } from "./components/ui/AvantgardeSelect.js";
 
 type BrowserMode = "files" | "changes";
 type FileBrowserAction = "rebuild" | "stop";
@@ -726,22 +727,18 @@ const LaunchPanel: FunctionComponent<LaunchPanelProps> = ({
 
       <div class="flex w-full flex-col items-stretch gap-2 sm:flex-row">
         <label class="sr-only" htmlFor="file-browser-launch-sprint">Sprint to browse</label>
-        <select
+        <AvantgardeSelect
           id="file-browser-launch-sprint"
           value={launchSprintId}
-          onChange={(event) => onLaunchSprintChange((event.currentTarget as HTMLSelectElement).value)}
+          onChange={onLaunchSprintChange}
           disabled={launching}
           aria-describedby={launchDisabledReason ? "file-browser-launch-status" : undefined}
           title={launching ? "The file browser container is starting." : "Choose the sprint to browse"}
-          class="h-11 flex-1 rounded-2xl border border-black/[0.08] bg-white/85 px-4 text-sm font-medium text-slate-700 outline-none transition focus:border-signal-500/40 disabled:cursor-not-allowed disabled:border-black/[0.06] disabled:bg-black/[0.03] disabled:text-slate-400 disabled:opacity-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-200 dark:disabled:bg-white/[0.02] dark:disabled:text-slate-500"
-        >
-          {sprints.length === 0 && <option value="">No sprints available</option>}
-          {sprints.map((sprint) => (
-            <option key={sprint.id} value={sprint.id}>
-              {sprint.name}
-            </option>
-          ))}
-        </select>
+          className="flex-1"
+          options={sprints.length === 0
+            ? [{ value: "", label: "No sprints available" }]
+            : sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))}
+        />
         <button
           type="button"
           onClick={onLaunch}

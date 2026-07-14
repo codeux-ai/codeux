@@ -1,7 +1,12 @@
 import { expect, test } from "vitest";
 import { buildTaskBoardSprintScopeState, buildTaskBoardViewModel } from "../../../dashboard/src/v2/lib/tasks/task-board-view-model.js";
 import type { Sprint, Task } from "../../../dashboard/src/v2/types.js";
-import type { ExecutionRuntimeEventSummary, ExecutionTaskDispatchSummary, Subtask } from "../../../dashboard/src/types.js";
+import type {
+  ExecutionAttentionItemSummary,
+  ExecutionRuntimeEventSummary,
+  ExecutionTaskDispatchSummary,
+  Subtask,
+} from "../../../dashboard/src/types.js";
 import type { TaskSelfReflectionRating } from "../../../src/contracts/task-self-reflection-types.js";
 
 function createMockTask(id: string, overrides: Partial<Task> = {}): Task {
@@ -86,6 +91,29 @@ function createRuntimeEvent(overrides: Partial<ExecutionRuntimeEventSummary> = {
     connectionRole: null,
     createdAt: "2026-07-03T10:05:00.000Z",
     payload: null,
+    ...overrides,
+  };
+}
+
+function createAttentionItem(overrides: Partial<ExecutionAttentionItemSummary> = {}): ExecutionAttentionItemSummary {
+  return {
+    id: "attention-1",
+    sprintId: "sprint-1",
+    taskId: "task-1",
+    sprintRunId: "run-1",
+    dispatchId: "dispatch-1",
+    attentionType: "ci_fix_required",
+    severity: "high",
+    ownerType: "worker",
+    status: "open",
+    assignedWorkerEndpointId: null,
+    title: "CI checks failed",
+    summaryMarkdown: "The build workflow failed.",
+    payload: { projectId: "project-1", taskId: "task-1", prNumber: 42 },
+    openedAt: "2026-07-03T10:00:00.000Z",
+    claimedAt: null,
+    resolvedAt: null,
+    updatedAt: "2026-07-03T10:00:00.000Z",
     ...overrides,
   };
 }
@@ -293,6 +321,239 @@ test("buildTaskBoardViewModel reuses unchanged card view models across unrelated
 
   expect(next.taskViewModels.get("task-1")).toBe(initial.taskViewModels.get("task-1"));
   expect(next.taskViewModels.get("dep-1")).toBe(initial.taskViewModels.get("dep-1"));
+});
+
+test("buildTaskBoardViewModel derives task-scoped CI progress from matching execution events", () => {
+  const task = createMockTask("TASK-1", {
+    recordId: "task-1",
+    sprintId: "sprint-1",
+  });
+  const event = createRuntimeEvent({
+    id: "ci-progress",
+    projectId: "project-1",
+    sprintId: "sprint-1",
+    sprintRunId: "run-1",
+    taskId: "task-1",
+    taskKey: "TASK-1",
+    eventType: "ci_gate_status",
+    prUrl: "https://example.com/pr/42",
+    payload: { state: "waiting_checks", hasPendingChecks: true, prNumber: 42 },
+  });
+
+  const vm = buildTaskBoardViewModel({
+    tasks: [task],
+    optimisticTasks: [],
+    statusFilter: "all",
+    priorityFilter: "all",
+    listWindow: 50,
+    projectId: "project-1",
+    taskScopeSprintId: "sprint-1",
+    taskDispatches: [],
+    attentionItems: [],
+    recentEvents: [event],
+    subtasks: [],
+  });
+
+  expect(vm.taskViewModels.get("task-1")?.ciStatusPresentation).toMatchObject({
+    scope: "task",
+    state: "in_progress",
+    label: "CI running",
+  });
+  expect(vm.taskViewModels.get("task-1")?.ciStatusPresentation?.steps[1]).toMatchObject({
+    id: "checks",
+    state: "in_progress",
+    statusLabel: "Checks running",
+  });
+});
+
+test("buildTaskBoardViewModel shows active CI attention as failure and removes it after resolution", () => {
+  const task = createMockTask("TASK-1", {
+    recordId: "task-1",
+    sprintId: "sprint-1",
+    mergeIndicator: "CI",
+  });
+  const openAttention = createAttentionItem();
+  const failed = buildTaskBoardViewModel({
+    tasks: [task],
+    optimisticTasks: [],
+    statusFilter: "all",
+    priorityFilter: "all",
+    listWindow: 50,
+    projectId: "project-1",
+    taskScopeSprintId: "sprint-1",
+    taskDispatches: [],
+    attentionItems: [openAttention],
+    recentEvents: [],
+    subtasks: [],
+  });
+  expect(failed.taskViewModels.get("task-1")?.ciStatusPresentation).toMatchObject({
+    state: "failed",
+    label: "CI failed",
+  });
+
+  const resolved = buildTaskBoardViewModel({
+    tasks: [task],
+    optimisticTasks: [],
+    statusFilter: "all",
+    priorityFilter: "all",
+    listWindow: 50,
+    projectId: "project-1",
+    taskScopeSprintId: "sprint-1",
+    taskDispatches: [],
+    attentionItems: [{
+      ...openAttention,
+      status: "resolved",
+      resolvedAt: "2026-07-03T10:05:00.000Z",
+      updatedAt: "2026-07-03T10:05:00.000Z",
+    }],
+    recentEvents: [],
+    subtasks: [],
+    previousTaskViewModels: failed.taskViewModels,
+  });
+
+  expect(resolved.taskViewModels.get("task-1")).not.toBe(failed.taskViewModels.get("task-1"));
+  expect(resolved.taskViewModels.get("task-1")?.ciStatusPresentation?.state).not.toBe("failed");
+});
+
+test("buildTaskBoardViewModel replaces stale failed CI events with newer success", () => {
+  const task = createMockTask("TASK-1", { recordId: "task-1", sprintId: "sprint-1" });
+  const failedEvent = createRuntimeEvent({
+    id: "ci-failed",
+    projectId: "project-1",
+    sprintId: "sprint-1",
+    taskId: "task-1",
+    taskKey: "TASK-1",
+    eventType: "ci_gate_status",
+    createdAt: "2026-07-03T10:05:00.000Z",
+    payload: { state: "waiting_checks", hasFailedChecks: true, prNumber: 42 },
+  });
+  const successfulEvent = createRuntimeEvent({
+    ...failedEvent,
+    id: "ci-success",
+    createdAt: "2026-07-03T10:06:00.000Z",
+    payload: { state: "merge_confirmed", prNumber: 42 },
+  });
+
+  const vm = buildTaskBoardViewModel({
+    tasks: [task],
+    optimisticTasks: [],
+    statusFilter: "all",
+    priorityFilter: "all",
+    listWindow: 50,
+    projectId: "project-1",
+    taskScopeSprintId: "sprint-1",
+    taskDispatches: [],
+    attentionItems: [],
+    recentEvents: [failedEvent, successfulEvent],
+    subtasks: [],
+  });
+
+  expect(vm.taskViewModels.get("task-1")?.ciStatusPresentation).toMatchObject({
+    state: "successful",
+    label: "CI passed",
+  });
+});
+
+test("buildTaskBoardViewModel excludes CI evidence from other projects, sprints, and task records", () => {
+  const task = createMockTask("TASK-1", { recordId: "task-1", sprintId: "sprint-1" });
+  const baseCiEvent = createRuntimeEvent({
+    eventType: "ci_gate_status",
+    payload: { state: "waiting_checks", hasFailedChecks: true },
+  });
+  const vm = buildTaskBoardViewModel({
+    tasks: [task],
+    optimisticTasks: [],
+    statusFilter: "all",
+    priorityFilter: "all",
+    listWindow: 50,
+    projectId: "project-1",
+    taskScopeSprintId: "sprint-1",
+    taskDispatches: [],
+    attentionItems: [
+      createAttentionItem({ id: "other-project", payload: { projectId: "project-2", taskId: "task-1" } }),
+      createAttentionItem({ id: "other-sprint", sprintId: "sprint-2" }),
+      createAttentionItem({ id: "other-task", taskId: "task-2", payload: { projectId: "project-1", taskId: "task-2" } }),
+    ],
+    recentEvents: [
+      { ...baseCiEvent, id: "other-project", projectId: "project-2", sprintId: "sprint-1", taskId: "task-1" },
+      { ...baseCiEvent, id: "other-sprint", projectId: "project-1", sprintId: "sprint-2", taskId: "task-1" },
+      { ...baseCiEvent, id: "other-task", projectId: "project-1", sprintId: "sprint-1", taskId: "task-2", taskKey: "TASK-1" },
+    ],
+    subtasks: [],
+  });
+
+  expect(vm.taskViewModels.get("task-1")?.ciStatusPresentation).toBeNull();
+});
+
+test("buildTaskBoardViewModel keeps CI source signatures stable and refreshes on workflow changes", () => {
+  const task = createMockTask("TASK-1", { recordId: "task-1", sprintId: "sprint-1" });
+  const event = createRuntimeEvent({
+    id: "ci-event",
+    projectId: "project-1",
+    sprintId: "sprint-1",
+    taskId: "task-1",
+    eventType: "ci_gate_status",
+    payload: { state: "waiting_checks", hasPendingChecks: true, nested: { b: 2, a: 1 } },
+  });
+  const initial = buildTaskBoardViewModel({
+    tasks: [task], optimisticTasks: [], statusFilter: "all", priorityFilter: "all", listWindow: 50,
+    projectId: "project-1", taskScopeSprintId: "sprint-1", taskDispatches: [], attentionItems: [], recentEvents: [event], subtasks: [],
+  });
+  const contentEquivalent = buildTaskBoardViewModel({
+    tasks: [task], optimisticTasks: [], statusFilter: "all", priorityFilter: "all", listWindow: 50,
+    projectId: "project-1", taskScopeSprintId: "sprint-1", taskDispatches: [], attentionItems: [],
+    recentEvents: [{ ...event, payload: { nested: { a: 1, b: 2 }, hasPendingChecks: true, state: "waiting_checks" } }],
+    subtasks: [], previousTaskViewModels: initial.taskViewModels,
+  });
+  expect(contentEquivalent.taskViewModels.get("task-1")).toBe(initial.taskViewModels.get("task-1"));
+
+  const changed = buildTaskBoardViewModel({
+    tasks: [task], optimisticTasks: [], statusFilter: "all", priorityFilter: "all", listWindow: 50,
+    projectId: "project-1", taskScopeSprintId: "sprint-1", taskDispatches: [], attentionItems: [],
+    recentEvents: [{ ...event, id: "ci-success", createdAt: "2026-07-03T10:06:00.000Z", payload: { state: "merge_confirmed" } }],
+    subtasks: [], previousTaskViewModels: contentEquivalent.taskViewModels,
+  });
+  expect(changed.taskViewModels.get("task-1")).not.toBe(contentEquivalent.taskViewModels.get("task-1"));
+  expect(changed.taskViewModels.get("task-1")?.ciStatusPresentation?.state).toBe("successful");
+});
+
+test("buildTaskBoardViewModel refreshes cards when structured QA follow-up content changes", () => {
+  const review: NonNullable<Task["latestReview"]> = {
+    status: "completed",
+    outcome: "changes_requested",
+    summary: "Follow-up work is required.",
+    findings: ["Keyboard focus regressed."],
+    reviewer: "QA Reviewer",
+    finishedAt: "2026-07-13T12:00:00.000Z",
+    followUpTasks: [{
+      title: "Repair focus",
+      promptMarkdown: "Restore focus after closing the menu.",
+      description: "Keep focus on the action trigger.",
+      priority: "high",
+      dependsOnTaskKeys: [],
+    }],
+  };
+  const task = createMockTask("task-1", { latestReview: review });
+  const initial = buildTaskBoardViewModel({
+    tasks: [task], optimisticTasks: [], statusFilter: "all", priorityFilter: "all", listWindow: 50,
+    taskScopeSprintId: "sprint-1", taskDispatches: [], recentEvents: [], subtasks: [],
+  });
+  const updatedTask = createMockTask("task-1", {
+    latestReview: {
+      ...review,
+      followUpTasks: [{
+        ...review.followUpTasks[0],
+        promptMarkdown: "Restore focus and add keyboard regression coverage.",
+      }],
+    },
+  });
+  const updated = buildTaskBoardViewModel({
+    tasks: [updatedTask], optimisticTasks: [], statusFilter: "all", priorityFilter: "all", listWindow: 50,
+    taskScopeSprintId: "sprint-1", taskDispatches: [], recentEvents: [], subtasks: [],
+    previousTaskViewModels: initial.taskViewModels,
+  });
+
+  expect(updated.taskViewModels.get("task-1")).not.toBe(initial.taskViewModels.get("task-1"));
 });
 
 test("buildTaskBoardViewModel refreshes card view models when self-reflection rating content changes", () => {

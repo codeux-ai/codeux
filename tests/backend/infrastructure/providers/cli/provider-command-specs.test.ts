@@ -67,6 +67,10 @@ describe("Provider Command Specs", () => {
         command: "codex",
         args: ["exec", "--yolo", "--json", "--output-last-message", "codex-last-message.txt", "-c", "model_reasoning_effort=\"xhigh\"", "--model", "gpt-4o", "hello"]
       });
+
+      expect(providerSpecs["codex"]("gpt-5.6-sol", "hello", "max").args).toContain("model_reasoning_effort=\"max\"");
+      expect(providerSpecs["codex"]("gpt-5.6-sol-pro", "hello", "ultra").args).toContain("model_reasoning_effort=\"ultra\"");
+      expect(providerSpecs["codex"]("gpt-5.6-luna", "hello", "ultra").args).toContain("model_reasoning_effort=\"high\"");
     });
 
     it("generates correct command for qwen-code", () => {

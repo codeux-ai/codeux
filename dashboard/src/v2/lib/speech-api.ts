@@ -168,11 +168,17 @@ export async function deleteSpeechModel(modelId: string): Promise<void> {
   if (!response.ok) throw new Error("Speech model could not be deleted.");
 }
 
-export async function synthesizeSpeech(text: string, projectId?: string | null, voice?: string | null): Promise<Blob> {
+export async function synthesizeSpeech(
+  text: string,
+  projectId?: string | null,
+  voice?: string | null,
+  signal?: AbortSignal,
+): Promise<Blob> {
   const response = await fetch("/api/speech/synthesis", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text, projectId, voice }),
+    signal,
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as { error?: { message?: string } | string };

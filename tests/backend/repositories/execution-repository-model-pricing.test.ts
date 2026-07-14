@@ -57,6 +57,12 @@ describe("ExecutionRepository model pricing", () => {
     expect(snapshot.usage.inputCostUsd).toBeCloseTo(5, 5);
     expect(snapshot.usage.outputCostUsd).toBeCloseTo(30, 5);
     expect(snapshot.usage.totalCostUsd).toBeCloseTo(35, 5);
+    expect(snapshot.usage.costCoverage).toEqual({
+      configuredPricingInvocationCount: 1,
+      providerReportedCostInvocationCount: 0,
+      unpricedInvocationCount: 0,
+      providerReportedCostUsd: 0,
+    });
   });
 
   it("prefers a user price override over the catalogue base price", async () => {
@@ -311,6 +317,12 @@ describe("ExecutionRepository model pricing", () => {
     expect(snapshot.usage.totalCostUsd).toBeCloseTo(1.23, 5);
     expect(snapshot.providers.find((provider) => provider.id === "opencode")?.usage.totalCostUsd).toBeCloseTo(1.23, 5);
     expect(snapshot.models.find((model) => model.provider === "opencode")?.usage.totalCostUsd).toBeCloseTo(1.23, 5);
+    expect(snapshot.usage.costCoverage).toEqual({
+      configuredPricingInvocationCount: 0,
+      providerReportedCostInvocationCount: 1,
+      unpricedInvocationCount: 0,
+      providerReportedCostUsd: 1.23,
+    });
   });
 
   it("omits cost when the provider/model has no catalogue match and no override", async () => {
@@ -343,5 +355,159 @@ describe("ExecutionRepository model pricing", () => {
     expect(snapshot.usage.inputCostUsd).toBe(0);
     expect(snapshot.usage.outputCostUsd).toBe(0);
     expect(snapshot.usage.totalCostUsd).toBe(0);
+    expect(snapshot.usage.costCoverage).toEqual({
+      configuredPricingInvocationCount: 0,
+      providerReportedCostInvocationCount: 0,
+      unpricedInvocationCount: 1,
+      providerReportedCostUsd: 0,
+    });
+  });
+
+  it("rolls mixed cost coverage through tasks, purposes, models, and canonical sprints", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Mixed Cost Coverage Project",
+      sourceType: "local",
+      sourceRef: "/workspace/model-pricing-mixed-coverage",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Canonical Cost Sprint",
+      number: 4,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Aggregate cost coverage",
+      promptMarkdown: "Exercise all cost sources.",
+    });
+    const firstRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "completed",
+    });
+    const secondRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "completed",
+    });
+
+    const createCompletedInvocation = (
+      sessionId: string,
+      provider: "codex" | "opencode" | "jules",
+      model: string,
+      purpose: "task_coding" | "qa_coverage",
+      sprintRunId: string,
+      rawUsageJson?: Record<string, unknown>,
+    ) => {
+      const invocation = executionRepository.createProviderInvocationUsage({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId,
+        sessionId,
+        provider,
+        purpose,
+        model,
+      });
+      executionRepository.updateProviderInvocationUsage(invocation.id, {
+        status: "completed",
+        finishedAt: new Date().toISOString(),
+        inputTokens: 1_000_000,
+        cachedInputTokens: 500_000,
+        outputTokens: 1_000_000,
+        reasoningOutputTokens: 0,
+        totalTokens: 2_500_000,
+        usageSource: "reported",
+        rawUsageJson,
+      });
+    };
+
+    createCompletedInvocation(
+      "configured-cost",
+      "codex",
+      "gpt-5.5",
+      "task_coding",
+      firstRun.id,
+      { cost: 999 },
+    );
+    createCompletedInvocation(
+      "reported-zero-cost",
+      "opencode",
+      "unknown-provider/zero-model",
+      "qa_coverage",
+      secondRun.id,
+      { cost: 0 },
+    );
+    createCompletedInvocation(
+      "unpriced-cost",
+      "jules",
+      "default",
+      "task_coding",
+      secondRun.id,
+    );
+
+    const snapshot = executionRepository.getProjectStatsSnapshot(project.id, "24h");
+    const expectedCoverage = {
+      configuredPricingInvocationCount: 1,
+      providerReportedCostInvocationCount: 1,
+      unpricedInvocationCount: 1,
+      providerReportedCostUsd: 0,
+    };
+
+    expect(snapshot.usage.totalCostUsd).toBeCloseTo(35.25, 5);
+    expect(snapshot.usage.costCoverage).toEqual(expectedCoverage);
+    expect(snapshot.tasks).toHaveLength(1);
+    expect(snapshot.tasks[0]?.usage.costCoverage).toEqual(expectedCoverage);
+    expect(snapshot.purposes.find((purpose) => purpose.id === "task_coding")?.usage.costCoverage).toEqual({
+      configuredPricingInvocationCount: 1,
+      providerReportedCostInvocationCount: 0,
+      unpricedInvocationCount: 1,
+      providerReportedCostUsd: 0,
+    });
+    expect(snapshot.purposes.find((purpose) => purpose.id === "qa_coverage")?.usage.costCoverage).toEqual({
+      configuredPricingInvocationCount: 0,
+      providerReportedCostInvocationCount: 1,
+      unpricedInvocationCount: 0,
+      providerReportedCostUsd: 0,
+    });
+    expect(snapshot.models.find((model) => model.provider === "codex")?.usage.costCoverage?.configuredPricingInvocationCount).toBe(1);
+    expect(snapshot.models.find((model) => model.provider === "opencode")?.usage.costCoverage?.providerReportedCostInvocationCount).toBe(1);
+    expect(snapshot.models.find((model) => model.provider === "jules")?.usage.costCoverage?.unpricedInvocationCount).toBe(1);
+    expect(snapshot.sprints).toHaveLength(2);
+    expect(snapshot.costAnalytics?.sprints).toHaveLength(1);
+    expect(snapshot.costAnalytics?.sprints[0]).toMatchObject({
+      id: sprint.id,
+      usage: {
+        totalCostUsd: 35.25,
+        costCoverage: expectedCoverage,
+      },
+    });
+    expect(snapshot.buckets.reduce(
+      (sum, bucket) => sum + (bucket.usage.costCoverage?.unpricedInvocationCount ?? 0),
+      0,
+    )).toBe(1);
+  });
+
+  it("returns zero-filled cost coverage for an empty stats window", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Empty Cost Coverage Project",
+      sourceType: "local",
+      sourceRef: "/workspace/model-pricing-empty-window",
+    });
+
+    const snapshot = executionRepository.getProjectStatsSnapshot(project.id, {
+      window: "custom",
+      from: "2020-01-01T00:00:00.000Z",
+      to: "2020-01-02T00:00:00.000Z",
+    });
+
+    expect(snapshot.usage.costCoverage).toEqual({
+      configuredPricingInvocationCount: 0,
+      providerReportedCostInvocationCount: 0,
+      unpricedInvocationCount: 0,
+      providerReportedCostUsd: 0,
+    });
+    expect(snapshot.costAnalytics?.sprints).toEqual([]);
   });
 });

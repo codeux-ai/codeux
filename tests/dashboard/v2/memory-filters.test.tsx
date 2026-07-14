@@ -149,20 +149,24 @@ describe("MemoryFilters", () => {
         const user = userEvent.setup();
         renderFilters();
 
-        const sprintSelect = screen.getByRole("combobox", { name: "Filter memory by Sprint" });
-        const agentSelect = screen.getByRole("combobox", { name: "Filter memory by Agent Preset" });
+        const sprintSelect = screen.getByRole("button", { name: "Filter memory by Sprint" });
+        const agentSelect = screen.getByRole("button", { name: "Filter memory by Agent Preset" });
 
-        await user.selectOptions(sprintSelect, "sprint-2");
-        await user.selectOptions(agentSelect, "agent-2");
+        await user.click(sprintSelect);
+        await user.click(screen.getByRole("option", { name: /Sprint 2/ }));
+        await user.click(agentSelect);
+        await user.click(screen.getByRole("option", { name: "Agent Two" }));
 
         expect(selectedSprintIdSignal.value).toBe("sprint-2");
         expect(selectedAgentPresetIdSignal.value).toBe("agent-2");
 
-        await user.selectOptions(sprintSelect, "");
+        await user.click(sprintSelect);
+        await user.click(screen.getByRole("option", { name: "All Sprints" }));
         expect(selectedSprintIdSignal.value).toBeUndefined();
         expect(screen.getByText("Sprint filter cleared.")).toBeInTheDocument();
 
-        await user.selectOptions(agentSelect, "");
+        await user.click(agentSelect);
+        await user.click(screen.getByRole("option", { name: "All Agents" }));
         expect(selectedAgentPresetIdSignal.value).toBeUndefined();
         expect(screen.getByText("Agent filter set to all agents.")).toBeInTheDocument();
     });
@@ -208,6 +212,6 @@ describe("MemoryFilters", () => {
 
         expect(activeTierSignal.value).toBe("long_term");
         expect(screen.queryByRole("combobox", { name: "Filter memory by Sprint" })).toBeNull();
-        expect(screen.getByRole("combobox", { name: "Filter memory by Agent Preset" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Filter memory by Agent Preset" })).toBeInTheDocument();
     });
 });

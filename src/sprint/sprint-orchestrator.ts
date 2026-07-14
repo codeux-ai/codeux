@@ -136,6 +136,8 @@ export class SprintOrchestrator {
   private readonly watchLoopRunner: WatchLoopRunner;
   private readonly actionRunner: SprintActionRunner;
   private readonly activeOrchestrations = new Set<string>();
+  private readonly activeAutomaticPlanning = new Map<string, Promise<unknown>>();
+  private unplannedSprintPlanner: ((projectId: string, sprintId: string) => Promise<unknown>) | null = null;
   // Debounces transient `DIRTY` states on the feature→main PR (keyed by PR url, so
   // concurrent sprints don't collide) across watch-loop cycles.
   private readonly mainMergeConflictDebouncer = new MergeConflictDebouncer();
@@ -153,6 +155,35 @@ export class SprintOrchestrator {
       this.watchLoopRunner,
       this.runPlanningAction.bind(this),
     );
+  }
+
+  setUnplannedSprintPlanner(planner: (projectId: string, sprintId: string) => Promise<unknown>): void {
+    this.unplannedSprintPlanner = planner;
+  }
+
+  private startAutomaticPlanning(projectId: string, sprintId: string): "started" | "in_progress" {
+    const scopeKey = `${projectId}:${sprintId}`;
+    if (this.activeAutomaticPlanning.has(scopeKey)) {
+      return "in_progress";
+    }
+    if (!this.unplannedSprintPlanner) {
+      throw new Error("Automatic sprint planning is not configured.");
+    }
+
+    const planning = this.unplannedSprintPlanner(projectId, sprintId);
+    this.activeAutomaticPlanning.set(scopeKey, planning);
+    void planning.catch((error) => {
+      this.deps.logger.error("Automatic planning for an unplanned sprint failed.", {
+        projectId,
+        sprintId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }).finally(() => {
+      if (this.activeAutomaticPlanning.get(scopeKey) === planning) {
+        this.activeAutomaticPlanning.delete(scopeKey);
+      }
+    });
+    return "started";
   }
 
   private getDashboardPort(): number {
@@ -550,6 +581,36 @@ export class SprintOrchestrator {
       githubToken: dashboardSettings.git.githubToken,
       gitlabToken: dashboardSettings.git.gitlabToken,
     };
+    const hasTaskExecutionHistory = args.action === "orchestrate"
+      && typeof this.deps.sprintExecutionStateService.hasTaskExecutionHistory === "function"
+      ? this.deps.sprintExecutionStateService.hasTaskExecutionHistory(
+        executionContext.project.id,
+        executionContext.sprint.id,
+      )
+      : false;
+    const branchPreflightOptions = githubMode === "LOCAL"
+      ? {
+        localOnly: true,
+        ...(args.action === "orchestrate" && !hasTaskExecutionHistory
+          ? {
+            fastForwardFromDefault: true,
+            ...(executionContext.sprint.baseCommitSha
+              ? { expectedFeatureCommitSha: executionContext.sprint.baseCommitSha }
+              : {}),
+          }
+          : {}),
+      }
+      : {
+        ...gitAuthOptions,
+        ...(args.action === "orchestrate" && !hasTaskExecutionHistory
+          ? {
+            fastForwardFromDefault: true,
+            ...(executionContext.sprint.baseCommitSha
+              ? { expectedFeatureCommitSha: executionContext.sprint.baseCommitSha }
+              : {}),
+          }
+          : {}),
+      };
 
     const enabledProviders = Object.entries(dashboardSettings.aiProvider.providers)
       .filter(([, provider]) => provider.enabled)
@@ -587,7 +648,7 @@ export class SprintOrchestrator {
         && !args.feature_branch?.trim()
         && !executionContext.sprint.featureBranch?.trim();
       if (shouldAllocateFreshBranchName) {
-        const allocatedBranch = await resolveUniqueSprintBranchName(repoPath, defaultFeatureBranch, gitAuthOptions);
+        const allocatedBranch = await resolveUniqueSprintBranchName(repoPath, defaultFeatureBranch, branchPreflightOptions);
         if (allocatedBranch !== defaultFeatureBranch) {
           this.deps.logger.info("Allocated unique sprint feature branch because the generated branch already exists.", {
             projectId: executionContext.project.id,
@@ -602,16 +663,54 @@ export class SprintOrchestrator {
       }
 
       const branchPreparation = args.action === "orchestrate"
-        ? await prepareBranchForOrchestration(repoPath, defaultFeatureBranch, defaultBranch, gitAuthOptions)
+        ? await prepareBranchForOrchestration(repoPath, defaultFeatureBranch, defaultBranch, branchPreflightOptions)
         : null;
       const branchAvailability = branchPreparation
-        ?? await runBranchPreflightStep(repoPath, defaultFeatureBranch, gitAuthOptions);
+        ?? await runBranchPreflightStep(repoPath, defaultFeatureBranch, branchPreflightOptions);
+
+      if (branchPreparation?.defaultBranchSync === "failed") {
+        const text = [
+          "### Sprint Branch Update Failed",
+          "",
+          `Code UX could not safely fast-forward \`${defaultFeatureBranch}\` from \`${defaultBranch}\`.`,
+          "No task was dispatched and no feature-branch history was rewritten. Resolve the Git state, then start the sprint again.",
+        ].join("\n");
+        this.recordBlockedSprintRun({
+          action: args.action,
+          projectId: executionContext.project.id,
+          sprintId: executionContext.sprint.id,
+          eventType: "branch_preflight_blocked",
+          payload: {
+            featureBranch: defaultFeatureBranch,
+            defaultBranch,
+            reason: "default_branch_fast_forward_failed",
+          },
+        });
+        return { content: [{ type: "text", text }] };
+      }
+
+      if (branchPreparation?.defaultBranchSync) {
+        this.deps.logger.info("Evaluated sprint feature branch against the default branch before task dispatch.", {
+          projectId: executionContext.project.id,
+          sprintId: executionContext.sprint.id,
+          featureBranch: defaultFeatureBranch,
+          defaultBranch,
+          result: branchPreparation.defaultBranchSync,
+          hasTaskExecutionHistory,
+        });
+      }
 
       // Record the fork point the first time the branch is created. This is the stable
       // checkpoint the file browser diffs against, and it must be captured now — once the
       // sprint merges back, the fork point can no longer be recovered from the branch refs.
       const updateFields: import("../contracts/project-management-types.js").UpdateSprintInput = {};
-      if (branchPreparation?.baseCommitSha && !executionContext.sprint.baseCommitSha) {
+      if (
+        branchPreparation?.baseCommitSha
+        && (
+          !executionContext.sprint.baseCommitSha
+          || (!hasTaskExecutionHistory && executionContext.sprint.baseCommitSha !== branchPreparation.baseCommitSha)
+        )
+      ) {
         updateFields.baseCommitSha = branchPreparation.baseCommitSha;
       }
       if (!executionContext.sprint.featureBranch) {
@@ -663,23 +762,35 @@ export class SprintOrchestrator {
       }
     }
 
-    if (loopSteps.planningPreflight && (args.action === "orchestrate" || args.action === "status")) {
+    if (args.action === "orchestrate" || args.action === "status") {
       const hasPlannedTasks = this.deps.sprintExecutionStateService.hasPlannedTasks(
         executionContext.project.id,
         executionContext.sprint.id,
       );
       if (!hasPlannedTasks) {
-        const planningBlocker = await this.renderPlanningBlocker(planningTarget, repoPath);
-        this.recordBlockedSprintRun({
-          action: args.action,
-          projectId: executionContext.project.id,
-          sprintId: executionContext.sprint.id,
-          eventType: "planning_preflight_blocked",
-          payload: {
-            planningTarget,
-          },
-        });
-        return { content: [{ type: "text", text: planningBlocker }] };
+        if (args.action === "orchestrate" && this.unplannedSprintPlanner) {
+          const planningStatus = this.startAutomaticPlanning(
+            executionContext.project.id,
+            executionContext.sprint.id,
+          );
+          const text = planningStatus === "started"
+            ? "Sprint planning started automatically. Orchestration will begin after tasks are saved."
+            : "Sprint planning is already in progress. Orchestration will begin after tasks are saved.";
+          return { content: [{ type: "text", text }] };
+        }
+        if (loopSteps.planningPreflight) {
+          const planningBlocker = await this.renderPlanningBlocker(planningTarget, repoPath);
+          this.recordBlockedSprintRun({
+            action: args.action,
+            projectId: executionContext.project.id,
+            sprintId: executionContext.sprint.id,
+            eventType: "planning_preflight_blocked",
+            payload: {
+              planningTarget,
+            },
+          });
+          return { content: [{ type: "text", text: planningBlocker }] };
+        }
       }
     }
 

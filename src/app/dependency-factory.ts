@@ -29,6 +29,7 @@ export interface ServerContext {
   getAppConfig: () => AppConfig;
   getEffectiveJulesApiKey: () => string | undefined;
   getEffectiveGithubToken: () => string | undefined;
+  getEffectiveGitlabToken: () => string | undefined;
   getDashboardPort: () => number;
   isJulesApiConfigured: () => boolean;
   getMissingJulesApiKeyInstruction: () => string;

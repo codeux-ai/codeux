@@ -4,24 +4,63 @@ The **Sprints** page (`/sprints`) is where you plan, manage, and launch sprint r
 
 ## The sprint gallery and ledger
 
-Sprints are viewed either in a visual organic cell gallery or a dense ledger format. Each sprint cell/row shows:
+Sprints are viewed either in a visual organic cell gallery or a dense ledger format. Their hierarchy is intentionally different:
 
-- **Status pill** — `idle`, `running`, `paused`, `completed`, `failed`, `cancelled`.
+- **Gallery workflow badge** — one interactive delivery badge replaces hover-only lifecycle and merge-conflict badges. Activate it for the complete Coding → PR → QA → CI → Merge → Completion flow.
+- **Sprint key** — a blue, unboxed ID lockup keeps keys such as `CODUX-227` crisp without a decorative pill.
+- **Active spectral waves** — running cells use a restrained deep-sea composition of soft blue, cyan, and violet wave fields with slow ambient movement; reduced motion keeps the same composition static.
+- **Ledger lifecycle status** — dense rows retain their direct `idle`, `running`, `paused`, `completed`, `failed`, or `cancelled` label.
 - **Task counters** — completed / total, plus failures.
 - **Goal** — first line of the sprint goal.
 - **Action buttons** — Plan / Orchestrate / Pause / Cancel as appropriate, with inactive pause guidance kept out of the visible row to preserve ledger density.
 
 ### Sprint attention indicators
 
-Failed execution and eligible human intervention receive a red border around the complete gallery cell or ledger row. A failure shows a pulsing exclamation indicator labelled **Sprint execution failed**. A sprint waiting on a person shows a compact person and visible `zZZ` cue labelled **Sprint waiting for human intervention**. Failure takes precedence if both states are available.
+Failed gallery cells rely on the interactive delivery workflow badge for their visible and accessible failure state. They do not add a duplicate **Execution failed** banner, red perimeter, or static outer failure ring. A sprint genuinely waiting on a person instead shows an amber person and visible `zZZ` cue labelled **Sprint waiting for human intervention**, positioned exactly 10px above the gallery cell without a red perimeter.
 
-When reduced motion is enabled, the exclamation stops pulsing and the waiting cue stops bouncing; the red border, indicator, visible context, and semantic label remain. Worker- and system-owned transient pauses are not shown as requests for human action. Normal status, progress, review badges, links, and controls also remain available in both attention states.
+When reduced motion is enabled, optional attention motion stops while the waiting indicator, visible context, and semantic label remain. The waiting cue is limited to human-owned active intervention. Worker- and system-owned items—including merge conflicts a worker can resolve—do not show **Waiting for you**, a separate merge-conflict badge, or a human-attention border. Failed and worker-owned operational state remains available through the interactive workflow details.
+
+## Delivery workflow and QA review details
+
+Sprint cells and ledger rows keep their sprint lifecycle status and use one bright delivery workflow badge in place of the standalone QA and CI badges. The workflow badge remains mounted even when a refreshed execution snapshot has no historical CI events, so it no longer flashes and disappears. While the sprint is running, its badge stays on Coding instead of aggregating and flipping between child-task PR, CI, and Merge activity; individual cards on Tasks and Live show those transitions. Once the sprint completes, the full PR, CI, Merge, and Completion rail settles successfully, including when older gate events are no longer present in the current snapshot.
+
+| Presentation | Meaning |
+| --- | --- |
+| Green check, **QA passed** | The QA run completed with a passing verdict. |
+| Signal-colored spinner, **QA review running** | A QA provider is actively reviewing the work. Reduced motion replaces the spin and pulse with a static ring and label. |
+| Blue pencil, **QA edits** / **QA changes requested** | QA completed successfully and requested changes. This is an actionable review outcome, not a provider failure. |
+| Red X, **QA failed** | The QA provider run failed, errored, or was cancelled before returning a usable verdict. It does not mean QA requested code changes. |
+
+Hovering, focusing, or activating the badge opens one viewport-positioned interaction region without a visible outer card. The independent opaque Delivery flow card shows Coding → Pull request → QA → CI → Merge → Completion, and six circles are joined by motion-safe animated dotted connectors. When review data exists, a floating responsive arrow links an independent opaque QA review card with the outcome, summary, findings, fix instructions, reviewer metadata, and collapsed follow-up specifications. `Escape` restores focus to the exact trigger that opened it.
+
+Generated follow-up task specifications are collapsed initially, so long prompts do not dominate the review. Each **Follow-up task N** button exposes `aria-expanded` and can be toggled with the keyboard or touch. Expansion reveals the generated title, description, priority, dependency task keys (or **None**), and full Markdown prompt in a bounded scrolling area. The card uses one column on constrained screens, may split summary and findings on wider screens, clamps to the viewport, and scrolls vertically when needed. Reduced motion removes spinner, pulse, rotation, and transition movement without removing labels, borders, focus rings, expanded content, or state semantics.
+
+## Six-stage delivery flow
+
+The workflow badge summarizes six stages shared by Sprints, Tasks, Overview, and Live. Sprint-run intervention summaries do not override this workflow trigger because they may represent a generic pause or runtime error; genuinely human-waiting sprints retain the separate amber waiting cue described above:
+
+1. **Coding** — waiting, active, paused, complete, or failed.
+2. **Pull request** — waiting, creating, missing, or ready.
+3. **QA** — pending, reviewing, passed, blue **QA edits**, or provider/runtime failure.
+4. **CI** — pending, running, passed, or failed checks.
+5. **Merge** — waiting, ready, merging, merged, not required, conflict, or failed attempt.
+6. **Completion** — waiting, complete, failed, or cancelled.
+
+The four first-class workflow states are `pending`, `in_progress`, `successful`, and `failed`. Pending uses a neutral clock, `in_progress` is presented as running with the signal-colored progress treatment, `successful` uses a green check, and `failed` uses a red X. A sprint aggregates the newest state for each task workflow plus the final feature-to-default-branch merge workflow. Failed wins over in progress, in progress wins over pending, and pending wins over successful, both for each step and for the overall badge.
+
+The red X identifies an actual provider/runtime or workflow failure, or explicit active **Human needed** intervention. Requested QA edits use the bright blue pencil treatment even when failed-check evidence is also present. A review blocker remains pending, and a merge conflict belongs to Merge rather than CI.
+
+These badges do not poll per card. Task feature-PR gates are persisted as `ci_gate_status` task-run events, final feature-to-default-branch gates as `main_merge_gate_status` sprint-run events, and unresolved CI repair attention remains active while its item is `open` or `claimed`. For each task or main-merge entity, the projection selects the newest matching event by creation time and then event ID; the sprint presentation aggregates those latest entity states. Persisted task merge metadata is used only as durable fallback evidence when no matching event is available.
+
+Because the evidence is persisted and rehydrated into project and Live snapshots, server restarts and browser reconnects reconstruct the same state before realtime updates continue; cards do not need independent recovery timers. A newer recognized settled gate event supersedes an older failed or waiting event for the same entity, and resolved or dismissed attention no longer forces failure.
 
 Completion keeps one decimal when needed across sprint cards, ledger rows, active task streams, and sprint selectors: `7.5%` stays `7.5%`, while whole values such as `5.0%` display as `5%`. Progress bars and accessible values use the same completion number and remain bounded from `0%` to `100%`.
 
 Sprints can be **showcase-pinned** to surface them on the Overview page; toggle this from the cell menu or bulk actions.
 
 Each sprint row and showcase card has separate **Tasks** and **Live** actions. These are in-app router links carrying both `projectId` and `sprintId`, so opening a sprint switches the dashboard to that sprint's project before loading the task board or live view without reloading the dashboard shell.
+
+Idle sprint action menus also include **Update Branch**. Use it to fast-forward an unchanged sprint feature branch to the latest configured default-branch commit before work begins. Code UX refuses the update after any task has started or when the feature branch has diverged; it never merges, rebases, resets, or overwrites sprint work as part of this action.
 
 Selection is project-scoped even when requests overlap. If you choose a different project or sprint before an earlier selection finishes, the newer choice stays active and the earlier response cannot attach its sprint to the newly active project.
 

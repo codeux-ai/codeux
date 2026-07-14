@@ -781,6 +781,7 @@ export class PlanningAgentService {
         type: "planning",
         provider,
         model: effectiveModel,
+        thinkingMode: providerSettings.thinkingMode,
         apiKey: providerSettings.apiKey,
         maxConcurrentTasks: providerSettings.maxConcurrentTasks,
         qwenAuthMode: providerSettings.qwenAuthMode,

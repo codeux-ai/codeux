@@ -5,6 +5,12 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
         applied_at TEXT NOT NULL
       );
 
+CREATE TABLE IF NOT EXISTS maintenance_migration_state (
+        key TEXT PRIMARY KEY,
+        cursor_rowid INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL
+      );
+
 CREATE TABLE IF NOT EXISTS app_settings (
         key TEXT PRIMARY KEY,
         payload TEXT NOT NULL,
@@ -50,6 +56,11 @@ CREATE TABLE IF NOT EXISTS sprints (
         end_date TEXT,
         feature_branch TEXT,
         base_commit_sha TEXT,
+        kind TEXT NOT NULL DEFAULT 'standard',
+        rollback_source_sprint_id TEXT,
+        rollback_mode TEXT,
+        rollback_instructions TEXT,
+        rollback_safety_reason TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
@@ -778,6 +789,7 @@ CREATE TABLE IF NOT EXISTS node_flow_node_runs (
         flow_id TEXT NOT NULL,
         project_id TEXT NOT NULL,
         node_id TEXT NOT NULL,
+        logical_item TEXT NOT NULL DEFAULT 'default',
         status TEXT NOT NULL,
         execution_invocation_id TEXT,
         input_json TEXT,
@@ -1007,6 +1019,14 @@ CREATE TABLE IF NOT EXISTS scheduler_entries (
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
       );
 
+`;
+
+/**
+ * Read-performance indexes are deliberately separate from table creation. Existing databases can
+ * defer missing indexes until after service startup; unique correctness indexes remain owned by
+ * runMigrations and are always installed synchronously.
+ */
+export const APP_DB_SCHEMA_READ_INDEXES = `
 CREATE INDEX IF NOT EXISTS idx_provider_invocations_provider_status ON provider_invocations (provider, status);
 CREATE INDEX IF NOT EXISTS idx_provider_invocations_started ON provider_invocations (started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_provider_invocations_updated ON provider_invocations (updated_at DESC);
@@ -1029,7 +1049,6 @@ CREATE INDEX IF NOT EXISTS idx_task_runs_session_name_owner ON task_runs (sessio
 CREATE INDEX IF NOT EXISTS idx_task_runs_pr_url_owner ON task_runs (pr_url, project_id, sprint_id, task_id);
 CREATE INDEX IF NOT EXISTS idx_task_runs_project_sprint_lookup ON task_runs (project_id, sprint_id, sprint_run_id, id);
 CREATE INDEX IF NOT EXISTS idx_task_runs_project_sprint_run_lookup ON task_runs (project_id, sprint_run_id, id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_task_self_reflection_ratings_task_run ON task_self_reflection_ratings (source_task_run_id);
 CREATE INDEX IF NOT EXISTS idx_task_self_reflection_ratings_task_latest ON task_self_reflection_ratings (task_id, captured_at DESC, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_task_self_reflection_ratings_project_task_latest ON task_self_reflection_ratings (project_id, task_id, captured_at DESC);
 CREATE INDEX IF NOT EXISTS idx_task_run_events_project_created ON task_run_events (project_id, created_at DESC, id DESC);
@@ -1069,7 +1088,5 @@ CREATE INDEX IF NOT EXISTS idx_chat_provider_connections_kind ON chat_provider_c
 CREATE INDEX IF NOT EXISTS idx_chat_provider_connections_enabled ON chat_provider_connections (enabled, status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_chat_provider_channel_bindings_project ON chat_provider_channel_bindings (project_id, enabled, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_chat_provider_channel_bindings_provider_channel ON chat_provider_channel_bindings (provider_connection_id, external_channel_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_provider_message_deliveries_inbound_dedupe ON chat_provider_message_deliveries (provider_connection_id, external_message_id) WHERE direction = 'inbound' AND external_message_id IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_provider_message_deliveries_outbound_message ON chat_provider_message_deliveries (provider_connection_id, conversation_message_id) WHERE direction = 'outbound' AND conversation_message_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_chat_provider_message_deliveries_pending_outbound ON chat_provider_message_deliveries (status, updated_at ASC) WHERE direction = 'outbound' AND status IN ('pending', 'sending', 'retryable_failure');
 `;

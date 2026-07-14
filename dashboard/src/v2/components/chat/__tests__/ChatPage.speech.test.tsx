@@ -16,8 +16,50 @@ const speechButtonMock = vi.hoisted(() => ({
 }));
 
 const synthesisMock = vi.hoisted(() => ({
-  synthesizeSpeech: vi.fn<() => Promise<Blob>>(),
+  synthesizeSpeech: vi.fn<(
+    text: string,
+    projectId?: string | null,
+    voice?: string | null,
+    signal?: AbortSignal,
+  ) => Promise<Blob>>(),
 }));
+
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+}
+
+const deferred = <T,>(): Deferred<T> => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+};
+
+class FakeAudio {
+  static instances: FakeAudio[] = [];
+
+  onended: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  readonly pause = vi.fn();
+  readonly play = vi.fn(() => Promise.resolve());
+
+  constructor(readonly src: string) {
+    FakeAudio.instances.push(this);
+  }
+
+  end(): void {
+    this.onended?.();
+  }
+}
+
+const speechBlobLabels = new WeakMap<Blob, string>();
+const speechBlob = (label: string): Blob => {
+  const blob = new Blob([label], { type: "audio/wav" });
+  speechBlobLabels.set(blob, label);
+  return blob;
+};
 
 const mocks = vi.hoisted(() => {
   const thread = {
@@ -159,6 +201,15 @@ describe("ChatPage speech input", () => {
     window.localStorage.clear();
     synthesisMock.synthesizeSpeech.mockReset();
     synthesisMock.synthesizeSpeech.mockReturnValue(new Promise(() => {}));
+    FakeAudio.instances = [];
+    vi.stubGlobal("Audio", FakeAudio);
+    const NativeUrl = globalThis.URL;
+    class UrlWithObjectUrls extends NativeUrl {}
+    Object.assign(UrlWithObjectUrls, {
+      createObjectURL: vi.fn((blob: Blob) => `blob:${speechBlobLabels.get(blob) ?? "unknown"}`),
+      revokeObjectURL: vi.fn(),
+    });
+    vi.stubGlobal("URL", UrlWithObjectUrls);
     mocks.data = {
       ...mocks.baseData,
       setChatMode: vi.fn(),
@@ -171,6 +222,7 @@ describe("ChatPage speech input", () => {
 
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
   });
 
   it("inserts a transcript into an empty thread composer", () => {
@@ -329,7 +381,12 @@ describe("ChatPage speech input", () => {
     );
 
     await waitFor(() => expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledTimes(1));
-    expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledWith("Fresh agent reply", "p1");
+    expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledWith(
+      "Fresh agent reply",
+      "p1",
+      undefined,
+      expect.any(AbortSignal),
+    );
   });
 
   it("replays the staged agent message only after its explicit replay control is clicked", async () => {
@@ -354,7 +411,12 @@ describe("ChatPage speech input", () => {
     expect(synthesisMock.synthesizeSpeech).not.toHaveBeenCalled();
     fireEvent.click(replay);
 
-    await waitFor(() => expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledWith("Replay this reply", "p1"));
+    await waitFor(() => expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledWith(
+      "Replay this reply",
+      "p1",
+      undefined,
+      expect.any(AbortSignal),
+    ));
   });
 
   it("reports a 3D voice synthesis failure instead of silently discarding it", async () => {
@@ -381,6 +443,33 @@ describe("ChatPage speech input", () => {
     expect(await screen.findByRole("status")).toHaveTextContent(
       "Voice error: Configured voice is unavailable.",
     );
+  });
+
+  it("reports thread replay failures through the existing composer status without hiding the transcript", async () => {
+    synthesisMock.synthesizeSpeech.mockRejectedValueOnce(new Error("Speech provider timed out."));
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "threads",
+      messages: [{
+        id: "thread-replay-error",
+        threadId: "thread1",
+        direction: "connection_to_dashboard",
+        authorType: "connection",
+        authorConnectionId: "connection-1",
+        bodyMarkdown: "The transcript remains visible.",
+        deliveryStatus: "delivered",
+        createdAt: "2026-03-10T12:00:00.000Z",
+        metadata: null,
+      }],
+    };
+
+    renderChatPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Replay message from Assistant" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Voice playback failed: Speech provider timed out. The transcript is still available.",
+    );
+    expect(screen.getByText("The transcript remains visible.")).toBeInTheDocument();
   });
 
   it("auto-plays the first reply after sending in a brand-new empty 3D thread", async () => {
@@ -439,7 +528,157 @@ describe("ChatPage speech input", () => {
     );
 
     await waitFor(() => expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledTimes(1));
-    expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledWith("First answer", "p1");
+    expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledWith(
+      "First answer",
+      "p1",
+      undefined,
+      expect.any(AbortSignal),
+    );
+  });
+
+  it("streams a long 3D reply in order, cancels stale playback, and keeps thread replay explicit", async () => {
+    const firstSentence = `${"First ".repeat(700)}starts quickly.`;
+    const secondSentence = `${"Second ".repeat(700)}continues in order.`;
+    const thirdSentence = `${"Third ".repeat(700)}finishes completely.`;
+    const longReplyMarkdown = `${firstSentence} ${secondSentence} ${thirdSentence}`;
+    const initialChunks = [deferred<Blob>(), deferred<Blob>(), deferred<Blob>()];
+    const staleChunks = [deferred<Blob>(), deferred<Blob>(), deferred<Blob>()];
+    const replacementSynthesis = deferred<Blob>();
+    const threadReplaySynthesis = deferred<Blob>();
+    let phase: "initial" | "stale" | "replacement" | "thread" = "initial";
+    let phaseCallIndex = 0;
+    synthesisMock.synthesizeSpeech.mockImplementation((text) => {
+      if (phase === "initial") return initialChunks[phaseCallIndex++].promise;
+      if (phase === "stale") return staleChunks[phaseCallIndex++].promise;
+      if (phase === "replacement") return replacementSynthesis.promise;
+      expect(text).toBe("Thread replay stays explicit.");
+      return threadReplaySynthesis.promise;
+    });
+
+    const historicalReply = {
+      id: "reply-historical-streaming",
+      threadId: "thread1",
+      direction: "connection_to_dashboard",
+      authorType: "connection",
+      authorConnectionId: "connection-1",
+      bodyMarkdown: "Historical reply remains silent.",
+      deliveryStatus: "delivered",
+      createdAt: "2026-03-10T12:00:00.000Z",
+      metadata: null,
+    };
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "stage",
+      messages: [historicalReply],
+    };
+
+    const view = renderChatPage();
+    await screen.findByRole("button", { name: "Mute project manager" });
+    expect(synthesisMock.synthesizeSpeech).not.toHaveBeenCalled();
+
+    const longReply = {
+      ...historicalReply,
+      id: "reply-long-streaming",
+      bodyMarkdown: longReplyMarkdown,
+      createdAt: "2026-03-10T12:01:00.000Z",
+    };
+    mocks.data = { ...mocks.data, messages: [historicalReply, longReply] };
+    view.rerender(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: mocks.data.selectedProject } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>,
+    );
+
+    await waitFor(() => expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledTimes(1));
+    expect(synthesisMock.synthesizeSpeech.mock.calls[0]?.[0]).toBe(firstSentence);
+
+    initialChunks[0].resolve(speechBlob("initial-first"));
+    await waitFor(() => {
+      expect(FakeAudio.instances.map((audio) => audio.src)).toEqual(["blob:initial-first"]);
+      expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledTimes(3);
+    });
+    expect(FakeAudio.instances[0]?.play).toHaveBeenCalledTimes(1);
+
+    initialChunks[2].resolve(speechBlob("initial-third"));
+    FakeAudio.instances[0]?.end();
+    await Promise.resolve();
+    expect(FakeAudio.instances.map((audio) => audio.src)).toEqual(["blob:initial-first"]);
+
+    initialChunks[1].resolve(speechBlob("initial-second"));
+    await waitFor(() => expect(FakeAudio.instances.map((audio) => audio.src)).toEqual([
+      "blob:initial-first",
+      "blob:initial-second",
+    ]));
+    FakeAudio.instances[1]?.end();
+    await waitFor(() => expect(FakeAudio.instances.map((audio) => audio.src)).toEqual([
+      "blob:initial-first",
+      "blob:initial-second",
+      "blob:initial-third",
+    ]));
+    FakeAudio.instances[2]?.end();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Replay message from Project Manager" })).not.toBeDisabled());
+
+    phase = "stale";
+    phaseCallIndex = 0;
+    fireEvent.click(screen.getByRole("button", { name: "Replay message from Project Manager" }));
+    await waitFor(() => expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledTimes(4));
+    staleChunks[0].resolve(speechBlob("stale-first"));
+    await waitFor(() => {
+      expect(FakeAudio.instances.map((audio) => audio.src)).toEqual([
+        "blob:initial-first",
+        "blob:initial-second",
+        "blob:initial-third",
+        "blob:stale-first",
+      ]);
+      expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledTimes(6);
+    });
+    const staleSignals = synthesisMock.synthesizeSpeech.mock.calls.slice(3, 6).map((call) => call[3] as AbortSignal);
+
+    phase = "replacement";
+    phaseCallIndex = 0;
+    const replacementReply = {
+      ...historicalReply,
+      id: "reply-replacement",
+      bodyMarkdown: "Replacement playback wins.",
+      createdAt: "2026-03-10T12:02:00.000Z",
+    };
+    mocks.data = { ...mocks.data, messages: [historicalReply, longReply, replacementReply] };
+    view.rerender(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: mocks.data.selectedProject } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>,
+    );
+
+    await waitFor(() => expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledTimes(7));
+    expect(staleSignals.every((signal) => signal.aborted)).toBe(true);
+    expect(FakeAudio.instances[3]?.pause).toHaveBeenCalledTimes(1);
+    replacementSynthesis.resolve(speechBlob("replacement"));
+    await waitFor(() => expect(FakeAudio.instances.at(-1)?.src).toBe("blob:replacement"));
+    FakeAudio.instances.at(-1)?.end();
+
+    phase = "thread";
+    const synthesisCountBeforeThreadMode = synthesisMock.synthesizeSpeech.mock.calls.length;
+    const threadReply = {
+      ...historicalReply,
+      id: "reply-thread-explicit",
+      bodyMarkdown: "Thread replay stays explicit.",
+      createdAt: "2026-03-10T12:03:00.000Z",
+    };
+    mocks.data = {
+      ...mocks.data,
+      chatMode: "threads",
+      messages: [threadReply],
+    };
+    view.rerender(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: mocks.data.selectedProject } as any}>
+        <ChatPage />
+      </ProjectDataContext.Provider>,
+    );
+
+    const threadReplay = await screen.findByRole("button", { name: "Replay message from Assistant" });
+    expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledTimes(synthesisCountBeforeThreadMode);
+    fireEvent.click(threadReplay);
+    await waitFor(() => expect(synthesisMock.synthesizeSpeech).toHaveBeenCalledTimes(synthesisCountBeforeThreadMode + 1));
   });
 
   it("keeps loaded thread and invocation transcripts silent until replay is requested", async () => {
@@ -496,5 +735,12 @@ describe("ChatPage speech input", () => {
 
     expect(await screen.findByRole("button", { name: "Replay message from Assistant" })).toBeInTheDocument();
     expect(synthesisMock.synthesizeSpeech).not.toHaveBeenCalled();
+
+    synthesisMock.synthesizeSpeech.mockRejectedValueOnce(new Error("Invocation replay failed."));
+    fireEvent.click(screen.getByRole("button", { name: "Replay message from Assistant" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Voice playback failed: Invocation replay failed. The transcript is still available.",
+    );
+    expect(screen.getByText("Loaded invocation reply")).toBeInTheDocument();
   });
 });

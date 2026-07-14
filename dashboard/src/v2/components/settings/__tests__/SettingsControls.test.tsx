@@ -807,6 +807,10 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
     );
 
     const toggle = screen.getByRole("switch", { name: "Review completed tasks" });
+    const row = toggle.closest("div.rounded-\\[1rem\\]");
+    expect(row).toHaveClass("sm:items-start");
+    expect(row).not.toHaveClass("sm:items-center");
+    expect(row?.lastElementChild).toHaveClass("self-start");
     expect(toggle).toHaveAccessibleDescription("Runs QA after task completion.");
     await user.click(toggle);
     expect(onToggle).toHaveBeenCalledWith(true);
@@ -886,6 +890,26 @@ describe("SettingsControls Accessibility", () => {
     expect(screen.queryByRole("heading", { name: "Secondary Area" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Back to category overview" }));
     expect(screen.getByRole("button", { name: "Configure Secondary Area" })).toBeInTheDocument();
+  });
+
+  it("SettingsDetailWorkspaceProvider clears a stale restored section", async () => {
+    const Harness = () => {
+      const [activeSection, setActiveSection] = useState<string | null>("Removed Area");
+      return (
+        <SettingsDetailWorkspaceProvider
+          activeSection={activeSection}
+          onActiveSectionChange={setActiveSection}
+        >
+          <SectionCard title="Current Area">
+            <button type="button">Current control</button>
+          </SectionCard>
+        </SettingsDetailWorkspaceProvider>
+      );
+    };
+
+    render(<Harness />);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Configure Current Area" })).toBeInTheDocument());
   });
 
   it("BranchNameSchemeEditor passes aria-label and aria-description", () => {
