@@ -720,11 +720,17 @@ export class ProviderExecutionService {
       if (invocation && this.deps.executionRepository) {
         const finishedAt = new Date().toISOString();
         const durationMs = Date.now() - startedMs;
+        // A successful runner result is authoritative even if shutdown began while
+        // the result was being returned. Preserve `running` for startup recovery only
+        // when shutdown interrupts without a terminal result; otherwise a completed
+        // repair can be published while its provider audit row remains stuck running.
         const shouldPersistTerminalUsage = this.isProviderWorkStillRunning(invocation.id, execInvocationId)
-          && !isServerShutdownAbort(args.signal);
+          && (result.ok || !isServerShutdownAbort(args.signal));
         if (shouldPersistTerminalUsage) {
           this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
-            status: (args.signal?.aborted || isRuntimeShutdownInProgress()) ? "cancelled" : (result.ok ? "completed" : "failed"),
+            status: result.ok
+              ? "completed"
+              : (args.signal?.aborted || isRuntimeShutdownInProgress()) ? "cancelled" : "failed",
             model: effectiveModel,
             nativeSessionId: result.nativeSessionId
               ? args.redactTextForPersistence?.(result.nativeSessionId) ?? result.nativeSessionId
@@ -827,7 +833,7 @@ export class ProviderExecutionService {
       }
 
       if (providerResult.ok) {
-        if (execInvocationId && this.isExecutionInvocationStillRunning(execInvocationId) && !isRuntimeShutdownInProgress()) {
+        if (execInvocationId && this.isExecutionInvocationStillRunning(execInvocationId)) {
           if (args.finalizeExecutionInvocation !== false) {
             this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
               status: "completed",

@@ -36,10 +36,10 @@ When `restartSprintPolicy = continue` and `restartInvocationPolicy = continue`, 
 - records the original worker-branch baseline before invoking a QA coding follow-up and reuses it after restart, so provider commits made before host-branch publication are still exported and published instead of being mistaken for an empty follow-up
 - reconciles the recovered coding task-run and dispatch after a successful handoff, preventing an earlier transient failure marker from incorrectly failing the sprint during terminal evaluation
 - requeues interrupted worker-owned CI-fix and merge-conflict attention, clearing ownership left by the stopped virtual worker
-- closes the stopped repair attempt's provider-usage row before requeueing it, so a hard restart cannot leave a stale invocation occupying the provider concurrency limit
+- closes the stopped repair attempt's provider-usage row before requeueing it, so a hard restart cannot leave a stale invocation occupying the provider concurrency limit. A durable `workspace_finalized`, `host_publishing`, or `host_published` checkpoint proves that the provider returned successfully, so recovery records that attempt as completed; an attempt interrupted before that boundary is recorded as cancelled.
 - resumes those repair workers with the same logical session, native provider session when available, and preserved workspace, so uncommitted repair progress survives the process boundary
 
-Recovery closes the interrupted invocation row for auditability and creates a correlated continuation invocation. That terminal audit row does not mean the logical work was abandoned.
+Recovery creates a correlated continuation invocation only when provider work was interrupted. When provider work already completed, recovery continues publication or attention finalization from the durable checkpoint without calling the provider again. A cancelled audit attempt therefore does not mean the logical work was abandoned, while a completed attempt remains visible as completed across the restart.
 
 ## Recommended Configuration
 

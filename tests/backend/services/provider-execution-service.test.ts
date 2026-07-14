@@ -11,6 +11,7 @@ import type { ProviderInvocationPurpose } from "../../../src/contracts/execution
 import type { AppendExecutionInvocationMessageInput } from "../../../src/contracts/invocation-types.js";
 import { MAX_TOOL_PAYLOAD_CHARS } from "../../../src/services/invocation-message-limits.js";
 import { SERVER_SHUTDOWN_STOP_REASON } from "../../../src/services/active-dispatch-registry.js";
+import { beginRuntimeShutdown, resetRuntimeShutdownForTests } from "../../../src/services/shutdown-state.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import { GOOGLE_DRIVE_PROMPT_SECTION_MARKER } from "../../../src/services/google-drive-mount-service.js";
 import * as fs from "node:fs/promises";
@@ -128,6 +129,7 @@ describe("ProviderExecutionService", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    resetRuntimeShutdownForTests();
   });
 
   it("Happy path: returns ok: true, creates invocation and usage", async () => {
@@ -810,6 +812,34 @@ describe("ProviderExecutionService", () => {
     expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalledWith(
       "prov-inv-1",
       expect.objectContaining({ status: "failed" }),
+    );
+  });
+
+  it("records successful provider completion when shutdown races with the terminal result", async () => {
+    const controller = new AbortController();
+    providerRunner.runProvider.mockImplementation(async () => {
+      beginRuntimeShutdown();
+      controller.abort(SERVER_SHUTDOWN_STOP_REASON);
+      return mockResult;
+    });
+
+    const result = await service.executeProvider({
+      ...defaultArgs,
+      signal: controller.signal,
+      workflowSettings: {
+        ...defaultArgs.workflowSettings,
+        executionMode: "DOCKER",
+      },
+    });
+
+    expect(result).toBe(mockResult);
+    expect(executionRepository.updateProviderInvocationUsage).toHaveBeenCalledWith(
+      "prov-inv-1",
+      expect.objectContaining({ status: "completed" }),
+    );
+    expect(executionRepository.updateExecutionInvocation).toHaveBeenCalledWith(
+      "exec-inv-1",
+      expect.objectContaining({ status: "completed" }),
     );
   });
 

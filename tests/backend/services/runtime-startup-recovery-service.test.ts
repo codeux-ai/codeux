@@ -282,6 +282,129 @@ describe("RuntimeStartupRecoveryService", () => {
     });
   });
 
+  it.each([
+    { attentionType: "ci_fix_required" as const, purpose: "ci_fix" as const, publicationPhase: "workspace_finalized" },
+    { attentionType: "ci_fix_required" as const, purpose: "ci_fix" as const, publicationPhase: "host_publishing" },
+    { attentionType: "ci_fix_required" as const, purpose: "ci_fix" as const, publicationPhase: "host_published" },
+    { attentionType: "merge_conflict" as const, purpose: "merge_conflict" as const, publicationPhase: "workspace_finalized" },
+    { attentionType: "merge_conflict" as const, purpose: "merge_conflict" as const, publicationPhase: "host_publishing" },
+    { attentionType: "merge_conflict" as const, purpose: "merge_conflict" as const, publicationPhase: "host_published" },
+  ])("finalizes $purpose provider audit as completed from a durable $publicationPhase checkpoint", async ({
+    attentionType,
+    purpose,
+    publicationPhase,
+  }) => {
+    const {
+      projectRepository,
+      executionRepository,
+      projectAttentionService,
+      workerEndpointRepository,
+      service,
+    } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Completed Repair Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/completed-repair-recovery",
+    });
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: `virtual:completed-repair-${purpose}-${publicationPhase}`,
+      displayName: "Virtual completed repair worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+    const sessionId = `virtual-${purpose}-${publicationPhase}`;
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType,
+      severity: "high",
+      ownerType: "worker",
+      title: "Finish checkpointed repair",
+      summaryMarkdown: "Recover provider completion and finish publication.",
+      payload: {
+        repoPath: "/workspace/completed-repair-recovery",
+        repairRuntime: {
+          purpose,
+          sessionId,
+          workspaceSessionId: `${sessionId}-workspace`,
+          provider: "codex",
+          providerConfigId: "codex",
+          model: "codex-model",
+          nativeSessionId: "native-completed-repair",
+          activeAttemptId: "completed-attempt",
+          attemptRecorded: true,
+          phase: "provider_running",
+          workspaceBaselineHead: "baseline-head",
+          workspaceRepairHead: "repair-head",
+          publicationPhase,
+          publishedHeadSha: publicationPhase === "host_published" ? "published-head" : null,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    });
+    projectAttentionService.claimItem(item.id, endpoint.id, "virtual_worker_test");
+    const providerInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      attentionItemId: item.id,
+      sessionId,
+      provider: "codex",
+      purpose,
+      status: "running",
+      startedAt: "2026-07-14T10:00:00.000Z",
+    });
+    const executionInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      attentionItemId: item.id,
+      providerInvocationId: providerInvocation.id,
+      type: purpose,
+      provider: "codex",
+      status: "running",
+      startedAt: "2026-07-14T10:00:00.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledInterruptedRepairProviderInvocationIds).toEqual([providerInvocation.id]);
+    expect(result.requeuedInterruptedRepairAttentionItemIds).toEqual([item.id]);
+    expect(executionRepository.getProviderInvocationUsage(providerInvocation.id)).toMatchObject({
+      status: "completed",
+      finishedAt: expect.any(String),
+    });
+    expect(executionRepository.getExecutionInvocation(executionInvocation.id)).toMatchObject({
+      status: "completed",
+      finishedAt: expect.any(String),
+      errorMessage: null,
+    });
+    expect(executionRepository.listExecutionInvocationMessages(executionInvocation.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "system",
+          contentMarkdown: expect.stringContaining(`durable ${publicationPhase} checkpoint`),
+          metadata: expect.objectContaining({
+            recovery: "startup_completed_virtual_repair_provider",
+            providerInvocationId: providerInvocation.id,
+            sessionId,
+          }),
+        }),
+      ]),
+    );
+    expect(executionRepository.listRunningProviderInvocationUsages(["codex"])).toEqual([]);
+    expect(projectAttentionService.getItem(item.id)).toMatchObject({
+      status: "open",
+      assignedWorkerEndpointId: null,
+      payload: expect.objectContaining({
+        repairRuntime: expect.objectContaining({
+          sessionId,
+          nativeSessionId: "native-completed-repair",
+          workspaceSessionId: `${sessionId}-workspace`,
+          workspaceBaselineHead: "baseline-head",
+          workspaceRepairHead: "repair-head",
+          publicationPhase,
+        }),
+      }),
+    });
+  });
+
   it("demotes premature virtual merge-conflict human escalations back to automatic worker attention", async () => {
     const {
       projectRepository,

@@ -48,13 +48,29 @@ export function cancelStaleProviderInvocation(
   );
 }
 
+export function completeStaleProviderInvocation(
+  executionRepository: ExecutionRepository,
+  providerInvocation: ProviderInvocationUsageRecord,
+  linkedInvocations: ExecutionInvocationRecord[],
+  context: ProviderInvocationRecoveryContext
+): void {
+  finalizeStaleProviderInvocation(
+    executionRepository,
+    providerInvocation,
+    linkedInvocations,
+    context,
+    "completed",
+    "completed",
+  );
+}
+
 function finalizeStaleProviderInvocation(
   executionRepository: ExecutionRepository,
   providerInvocation: ProviderInvocationUsageRecord,
   linkedInvocations: ExecutionInvocationRecord[],
   context: ProviderInvocationRecoveryContext,
-  providerStatus: Extract<ProviderInvocationStatus, "failed" | "cancelled">,
-  executionStatus: Extract<ExecutionInvocationStatus, "failed" | "cancelled">,
+  providerStatus: Extract<ProviderInvocationStatus, "completed" | "failed" | "cancelled">,
+  executionStatus: Extract<ExecutionInvocationStatus, "completed" | "failed" | "cancelled">,
 ): void {
   const durationMs = calculateInvocationDurationMs(providerInvocation, context.reconciledAt);
 
