@@ -984,7 +984,7 @@ export const ChatPage: FunctionComponent = () => {
         value: (
           <span className={`flex items-center gap-1.5 ${headerStatus.text}`}>
             <span className={`inline-block h-1.5 w-1.5 rounded-full ${headerStatus.dot}`} />
-            <span className="capitalize">{inv.status}</span>
+            <span className="capitalize">{translate(chatMessages, inv.status)}</span>
           </span>
         ),
       });
