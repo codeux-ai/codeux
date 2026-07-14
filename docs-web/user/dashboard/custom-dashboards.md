@@ -15,6 +15,12 @@ Custom dashboards are project-scoped dashboard apps generated and revised by age
 
 If validation fails, use the report and logs to create a new revision. Code UX rejects failed, queued, running, cancelled, missing, or mismatched validation sessions before publication state changes. When a dashboard is already published, validating later drafts keeps the active published dashboard open, and validation sessions for the active published revision do not replace its published validation snapshot.
 
+## Language and Generated Content
+
+The workspace management interface follows the dashboard's English or German language setting. Editor labels, validation stages, publication controls, confirmations, states, and accessibility labels are translated.
+
+Your dashboard data and generated assets are not translated or changed. Names, descriptions, manifests, filenames, code, HTML, source graphs, styleguides, revision IDs, validation logs, preview output, API errors, runtime errors, and build diagnostics remain verbatim. Only recognized Code UX validation explanations with stable issue codes receive translated wording.
+
 ## Data Sources
 
 Custom dashboards declare a `sourceNodeGraph` with nodes, edges, and optional metadata. Nodes have `id`, `type`, `title`, and optional JSON `config`.

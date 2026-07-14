@@ -1,4 +1,12 @@
+import type { DashboardLocale } from "../i18n/locales.js";
+import { translateSettingsOperationsMessage } from "../i18n/messages/settings-operations.js";
+
 export type OpenSourceSoftwareUsageArea = "Dashboard" | "Packaged app" | "Runtime";
+
+export const getOpenSourceSoftwareUsageAreaLabel = (
+  usageArea: OpenSourceSoftwareUsageArea,
+  locale: DashboardLocale,
+): string => translateSettingsOperationsMessage(locale, usageArea);
 
 export type OpenSourceSoftwareEntry = Readonly<{
   id: string;

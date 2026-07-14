@@ -4,6 +4,7 @@ import type { ProviderId, OnboardingProviderCredentialStatus, SystemSettings } f
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { getSystemProvidersByType } from "../../lib/onboarding-settings-draft.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useOnboardingMessages } from "../../i18n/messages/onboarding.js";
 
 const providerLabels: Record<ProviderId, string> = {
   jules: "Jules",
@@ -32,6 +33,7 @@ export const OnboardingProvidersStep: FunctionComponent<OnboardingProvidersStepP
   settings,
 }) => {
   const tokens = useInteractionTokens();
+  const { t, tp } = useOnboardingMessages();
 
   return (
     <div className="space-y-4">
@@ -39,10 +41,9 @@ export const OnboardingProvidersStep: FunctionComponent<OnboardingProvidersStepP
         <div className="flex items-start gap-3">
           <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
           <div>
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Provider Tools</h3>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{t("providerTools")}</h3>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Select which AI provider CLIs you want to use. We have detected credentials on your system for some of these tools.
-              You can use local auth-copy, API keys, or both. The next step lets you add multiple named instances for each provider.
+              {t("providerToolsBody")}
             </p>
           </div>
         </div>
@@ -58,7 +59,7 @@ export const OnboardingProvidersStep: FunctionComponent<OnboardingProvidersStepP
               key={providerId}
               type="button"
               aria-pressed={selected}
-              aria-label={`${selected ? "Deselect" : "Select"} ${providerLabels[providerId]} provider`}
+              aria-label={t(selected ? "deselectProvider" : "selectProvider", { provider: providerLabels[providerId] })}
               onClick={() => toggleProvider(providerId)}
               className={`group relative overflow-hidden rounded-3xl border p-4 text-left shadow-[0_14px_34px_rgba(15,23,42,0.04)] transition-[border-color,background-color,transform,box-shadow] hover:-translate-y-1 ${selected ? "border-signal-500/30 bg-signal-500/10 shadow-[0_18px_46px_rgba(0,224,160,0.08)]" : "border-black/[0.06] bg-white/75 hover:border-black/[0.12] dark:border-white/[0.06] dark:bg-white/[0.04]"}`}
               style={{ transitionDuration: tokens.selectionMovement.duration, transitionTimingFunction: tokens.selectionMovement.ease }}
@@ -69,11 +70,11 @@ export const OnboardingProvidersStep: FunctionComponent<OnboardingProvidersStepP
                   <ProviderBrandIcon id={providerId} />
                   <div>
                     <div className="font-black text-slate-900 dark:text-white">{providerLabels[providerId]}</div>
-                    <div className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{instanceCount || 1} instance{(instanceCount || 1) === 1 ? "" : "s"}</div>
+                    <div className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{tp("instanceCount", instanceCount || 1)}</div>
                   </div>
                 </div>
                 <span className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${provider?.available ? "bg-signal-500/10 text-signal-700 dark:text-signal-300" : selected ? "bg-ember-500/10 text-ember-600 dark:text-ember-400" : "bg-slate-500/10 text-slate-500"}`}>
-                  {providerId === "jules" ? "API key" : provider?.available ? "Detected" : selected ? "Configure" : "Optional"}
+                  {providerId === "jules" ? t("apiKey") : provider?.available ? t("detected") : selected ? t("configure") : t("optional")}
                 </span>
               </div>
             </button>

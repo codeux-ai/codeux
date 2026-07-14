@@ -2,10 +2,11 @@
 /// <reference types="@testing-library/jest-dom" />
 import { h } from "preact";
 import { describe, expect, afterEach, vi, it } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { AgentPresetEditorPanel } from "../AgentPresetEditorPanel.js";
+import { renderWithI18n, renderWithI18n as render } from "./render-with-i18n.js";
 import { DEFAULT_AGENT_MEMORY_CONFIG, type AgentMemoryConfig } from "../../../memory-types.js";
 import type { AgentPreset } from "../../../types.js";
 import * as knowledgeApi from "../../../lib/knowledge-api.js";
@@ -302,6 +303,30 @@ describe("AgentPresetEditorPanel", () => {
     expect(nameInput).toHaveFocus();
   });
 
+  it("localizes German validation while preserving authored instructions", async () => {
+    const instructionMarkdown = "# Preserve me\n\nReturn provider output verbatim.";
+    renderWithI18n(
+      <AgentPresetEditorPanel
+        preset={makePreset({
+          instructionMarkdown,
+          memoryConfig: { ...DEFAULT_AGENT_MEMORY_CONFIG, minStrength: 0.25 },
+        })}
+        saving={false}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+      "de",
+    );
+
+    expect(screen.getByLabelText("agent-instructions")).toHaveValue(instructionMarkdown);
+    expect(screen.getByRole("button", { name: "Agent speichern" })).toBeInTheDocument();
+    expect(screen.getByText(/min\. 0,25/)).toBeInTheDocument();
+    const nameInput = screen.getByLabelText(/Agentenname/);
+    fireEvent.input(nameInput, { target: { value: "" } });
+    fireEvent.submit(screen.getByRole("form"));
+    expect(await screen.findByText("Name ist erforderlich")).toBeInTheDocument();
+  });
+
   it("shows stable pending feedback when saving changed preset fields", async () => {
     const onSave = vi.fn();
     render(<AgentPresetEditorPanel preset={makePreset()} saving={false} onSave={onSave} onCancel={vi.fn()} />);
@@ -342,7 +367,7 @@ describe("AgentPresetEditorPanel", () => {
     const longTermButton = await screen.findByRole("button", { name: "Long Term" });
     fireEvent.click(longTermButton);
 
-    expect(screen.getByText("Long term · All categories")).toBeInTheDocument();
+    expect(screen.getByText("Long Term · All categories")).toBeInTheDocument();
 
     const saveButton = screen.getByRole("button", { name: "Save Agent" });
     expect(saveButton).toBeEnabled();
@@ -450,7 +475,7 @@ describe("AgentPresetEditorPanel", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Code UX\s+Disabled/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Code UX.*Disabled/i }));
 
     expect(await screen.findByText("Review Code UX MCP and scheduler access before enabling it for the dashboard reply agent.")).toBeInTheDocument();
     expect(await screen.findByTestId("mcp-manage-panel")).toHaveTextContent("Dashboard reply Code UX scheduler access");

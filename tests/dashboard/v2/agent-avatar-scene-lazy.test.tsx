@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 /** @jsx h */
 import { h } from "preact";
-import { cleanup, render, screen, waitFor } from "@testing-library/preact";
+import { cleanup, render as baseRender, screen, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -26,6 +26,16 @@ vi.mock("../../../dashboard/src/v2/components/agents/AgentAvatarScene.js", () =>
 });
 
 import { LazyAgentAvatarScene } from "../../../dashboard/src/v2/components/agents/LazyAgentAvatarScene.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
+
+const render: typeof baseRender = (ui, options) => baseRender(ui, {
+  ...options,
+  wrapper: ({ children }) => (
+    <DashboardI18nProvider initialLocale="en" storage={null}>
+      {children}
+    </DashboardI18nProvider>
+  ),
+});
 
 type IntersectionHandler = IntersectionObserverCallback;
 

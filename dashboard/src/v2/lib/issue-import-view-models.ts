@@ -1,3 +1,11 @@
+import { createDashboardFormatters } from "../i18n/formatters.js";
+import {
+  translateDashboardMessage,
+  translateDashboardPlural,
+  type DashboardLocale,
+} from "../i18n/locales.js";
+import { sprintsMessages } from "../i18n/messages/sprints.js";
+
 export type IssueImportProvider =
   | "github"
   | "gitlab"
@@ -256,25 +264,20 @@ const PROVIDER_METADATA: Record<IssueImportProvider, IssueImportProviderMetadata
   },
 };
 
-const DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
-
 const normalizeText = (value: string | null | undefined): string | null => {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
 };
 
-const normalizeSummaryScalar = (value: string | number | boolean | null | undefined): string | null => {
+const normalizeSummaryScalar = (value: string | number | boolean | null | undefined, locale: DashboardLocale = "en"): string | null => {
   if (typeof value === "string") {
     return normalizeText(value);
   }
   if (typeof value === "number") {
-    return Number.isFinite(value) ? String(value) : null;
+    return Number.isFinite(value) ? createDashboardFormatters(locale).formatNumber(value) : null;
   }
   if (typeof value === "boolean") {
-    return value ? "Yes" : "No";
+    return translateDashboardMessage(sprintsMessages, locale, value ? "yes" : "no");
   }
   return null;
 };
@@ -283,17 +286,17 @@ const isSummaryArray = (value: IssueImportFilterSummaryValue): value is IssueImp
   Array.isArray(value)
 );
 
-const normalizeSummaryValue = (value: IssueImportFilterSummaryValue): string | null => {
+const normalizeSummaryValue = (value: IssueImportFilterSummaryValue, locale: DashboardLocale = "en"): string | null => {
   if (isSummaryArray(value)) {
     const normalized = value
-      .map((item) => normalizeSummaryScalar(item))
+      .map((item) => normalizeSummaryScalar(item, locale))
       .filter((item): item is string => item !== null);
     return normalized.length > 0 ? normalized.join(", ") : null;
   }
-  return normalizeSummaryScalar(value);
+  return normalizeSummaryScalar(value, locale);
 };
 
-const formatDateTime = (value: string | null | undefined): string | null => {
+const formatDateTime = (value: string | null | undefined, locale: DashboardLocale = "en"): string | null => {
   const normalized = normalizeText(value);
   if (!normalized) {
     return null;
@@ -302,13 +305,13 @@ const formatDateTime = (value: string | null | undefined): string | null => {
   if (Number.isNaN(parsed.getTime())) {
     return normalized;
   }
-  return DATE_FORMATTER.format(parsed);
+  return createDashboardFormatters(locale).formatDate(parsed, { dateStyle: "medium", timeStyle: "short" });
 };
 
-const formatState = (value: string | null | undefined): string => {
+const formatState = (value: string | null | undefined, locale: DashboardLocale = "en"): string => {
   const normalized = normalizeText(value);
   if (!normalized) {
-    return "Unknown";
+    return translateDashboardMessage(sprintsMessages, locale, "unknown");
   }
   return normalized.replace(/[_-]+/g, " ");
 };
@@ -328,6 +331,7 @@ const addMetadataRow = (
 export const getIssueImportProviderMetadata = (
   provider: IssueImportProvider | string | null | undefined,
   accentOverride?: Partial<IssueImportProviderAccent>,
+  locale: DashboardLocale = "en",
 ): IssueImportProviderMetadata => {
   const metadata = provider === "gitlab"
     || provider === "jira"
@@ -343,6 +347,18 @@ export const getIssueImportProviderMetadata = (
     : PROVIDER_METADATA.github;
   return {
     ...metadata,
+    importLabel: translateDashboardMessage(sprintsMessages, locale, ({
+      github: "githubIssueImport",
+      gitlab: "gitlabIssueImport",
+      jira: "jiraIssueImport",
+      notion: "notionScopeImport",
+      asana: "asanaTaskImport",
+      linear: "linearIssueImport",
+      miro: "miroCanvasImport",
+      lucid: "lucidDocumentImport",
+      figma: "figmaImport",
+      mural: "muralCanvasImport",
+    } as const)[metadata.provider]),
     accent: {
       ...metadata.accent,
       ...accentOverride,
@@ -352,19 +368,21 @@ export const getIssueImportProviderMetadata = (
 
 export const getIssueImportActiveFilterCount = (
   filters: ReadonlyArray<IssueImportFilterSummaryInput>,
+  locale: DashboardLocale = "en",
 ): number => filters.reduce((count, filter) => {
-  const value = normalizeSummaryValue(filter.value);
-  const defaultValue = normalizeSummaryValue(filter.defaultValue);
+  const value = normalizeSummaryValue(filter.value, locale);
+  const defaultValue = normalizeSummaryValue(filter.defaultValue, locale);
   const active = value !== null && value !== defaultValue;
   return active ? count + 1 : count;
 }, 0);
 
 export const buildIssueImportFilterSummaryChips = (
   filters: ReadonlyArray<IssueImportFilterSummaryInput>,
+  locale: DashboardLocale = "en",
 ): IssueImportFilterSummaryChip[] => filters
   .map((filter, index) => {
-    const value = normalizeSummaryValue(filter.value);
-    const defaultValue = normalizeSummaryValue(filter.defaultValue);
+    const value = normalizeSummaryValue(filter.value, locale);
+    const defaultValue = normalizeSummaryValue(filter.defaultValue, locale);
     const active = value !== null && value !== defaultValue;
     const displayValue = normalizeText(filter.valueLabel ?? undefined)
       ?? value
@@ -378,7 +396,7 @@ export const buildIssueImportFilterSummaryChips = (
     return {
       chip: {
         id: normalizeText(filter.id) ?? `${filter.label}-${index}`,
-        label: normalizeText(filter.label) ?? "Filter",
+        label: normalizeText(filter.label) ?? translateDashboardMessage(sprintsMessages, locale, "filter"),
         value: displayValue,
         active,
       },
@@ -390,11 +408,13 @@ export const buildIssueImportFilterSummaryChips = (
   .sort((left, right) => left.priority - right.priority || left.index - right.index)
   .map((entry) => entry.chip);
 
-export const getIssueImportActiveFilterCountLabel = (activeFilterCount: number): string => {
+export const getIssueImportActiveFilterCountLabel = (activeFilterCount: number, locale: DashboardLocale = "en"): string => {
   if (activeFilterCount <= 0) {
-    return "No active filters";
+    return translateDashboardMessage(sprintsMessages, locale, "activeFiltersNone");
   }
-  return `${activeFilterCount} active filter${activeFilterCount === 1 ? "" : "s"}`;
+  return translateDashboardPlural(sprintsMessages, locale, "activeFilters", activeFilterCount, {
+    count: createDashboardFormatters(locale).formatNumber(activeFilterCount),
+  });
 };
 
 export const getIssueImportDefaultSortLabel = (
@@ -402,14 +422,19 @@ export const getIssueImportDefaultSortLabel = (
   sortDirection?: string | null,
   sortFieldOptions: ReadonlyArray<{ value: string; label: string }> = [],
   sortDirectionOptions: ReadonlyArray<{ value: string; label: string }> = [],
+  locale: DashboardLocale = "en",
 ): string => {
   const normalizedField = normalizeText(sortField ?? undefined);
   const normalizedDirection = normalizeText(sortDirection ?? undefined);
   const fieldLabel = sortFieldOptions.find((option) => option.value === normalizedField)?.label
     ?? normalizedField
-    ?? "Default";
+    ?? translateDashboardMessage(sprintsMessages, locale, "default");
   const directionLabel = sortDirectionOptions.find((option) => option.value === normalizedDirection)?.label
-    ?? (normalizedDirection === "desc" ? "Newest first" : normalizedDirection === "asc" ? "Oldest first" : null);
+    ?? (normalizedDirection === "desc"
+      ? translateDashboardMessage(sprintsMessages, locale, "newestFirst")
+      : normalizedDirection === "asc"
+        ? translateDashboardMessage(sprintsMessages, locale, "oldestFirst")
+        : null);
 
   return directionLabel ? `${fieldLabel}, ${directionLabel}` : fieldLabel;
 };
@@ -420,19 +445,21 @@ export const getIssueImportSelectedResultCountLabel = (
   totalCount?: number,
   resultNounSingular = "issue",
   resultNounPlural = "issues",
+  locale: DashboardLocale = "en",
 ): string => {
   const selected = Math.max(0, Math.trunc(selectedCount));
   const visible = typeof visibleCount === "number" ? Math.max(0, Math.trunc(visibleCount)) : null;
   const total = typeof totalCount === "number" ? Math.max(0, Math.trunc(totalCount)) : null;
   const issueNoun = selected === 1 ? resultNounSingular : resultNounPlural;
 
+  const formatNumber = createDashboardFormatters(locale).formatNumber;
   if (visible !== null && total !== null && total !== visible) {
-    return `${selected} selected ${issueNoun} across ${visible} visible of ${total} results.`;
+    return translateDashboardMessage(sprintsMessages, locale, "selectedResultsWindowed", { selected: formatNumber(selected), noun: issueNoun, visible: formatNumber(visible), total: formatNumber(total) });
   }
   if (visible !== null) {
-    return `${selected} selected ${issueNoun} across ${visible} visible results.`;
+    return translateDashboardMessage(sprintsMessages, locale, "selectedResultsVisible", { selected: formatNumber(selected), noun: issueNoun, visible: formatNumber(visible) });
   }
-  return `${selected} selected ${issueNoun}.`;
+  return translateDashboardMessage(sprintsMessages, locale, "selectedResults", { selected: formatNumber(selected), noun: issueNoun });
 };
 
 export const buildIssueImportCompactState = ({
@@ -446,20 +473,21 @@ export const buildIssueImportCompactState = ({
   sortDirectionOptions,
   resultNounSingular,
   resultNounPlural,
-}: IssueImportCompactStateInput): IssueImportCompactState => {
-  const chips = buildIssueImportFilterSummaryChips(filters);
-  const activeFilterCount = getIssueImportActiveFilterCount(filters);
+}: IssueImportCompactStateInput, locale: DashboardLocale = "en"): IssueImportCompactState => {
+  const chips = buildIssueImportFilterSummaryChips(filters, locale);
+  const activeFilterCount = getIssueImportActiveFilterCount(filters, locale);
   return {
     chips,
     activeFilterCount,
-    activeFilterCountLabel: getIssueImportActiveFilterCountLabel(activeFilterCount),
-    sortLabel: getIssueImportDefaultSortLabel(sortField, sortDirection, sortFieldOptions, sortDirectionOptions),
+    activeFilterCountLabel: getIssueImportActiveFilterCountLabel(activeFilterCount, locale),
+    sortLabel: getIssueImportDefaultSortLabel(sortField, sortDirection, sortFieldOptions, sortDirectionOptions, locale),
     selectedCountLabel: getIssueImportSelectedResultCountLabel(
       selectedCount,
       visibleCount,
       totalCount,
       resultNounSingular,
       resultNounPlural,
+      locale,
     ),
   };
 };
@@ -468,67 +496,71 @@ export const getSelectedIssueCountLabel = (
   selectedCount: number,
   linkedCount?: number,
   specialTaskCount?: number,
+  locale: DashboardLocale = "en",
 ): string => {
   if (selectedCount <= 0) {
-    return "No issues selected.";
+    return translateDashboardMessage(sprintsMessages, locale, "noIssuesSelected");
   }
 
-  const issueNoun = selectedCount === 1 ? "issue" : "issues";
+  const issueNoun = translateDashboardMessage(sprintsMessages, locale, selectedCount === 1 ? "issueSingular" : "issuePlural");
+  const formatNumber = createDashboardFormatters(locale).formatNumber;
   if (linkedCount === undefined && specialTaskCount === undefined) {
-    return `${selectedCount} selected ${issueNoun} will be imported.`;
+    return translateDashboardMessage(sprintsMessages, locale, "selectedIssuesImport", { count: formatNumber(selectedCount), noun: issueNoun });
   }
 
   const linked = Math.max(0, linkedCount ?? selectedCount - (specialTaskCount ?? 0));
   const special = Math.max(0, specialTaskCount ?? selectedCount - linked);
-  const specialNoun = special === 1 ? "task" : "tasks";
-  return `${selectedCount} selected ${issueNoun} will be imported. ${linked} linked, ${special} special ${specialNoun}.`;
+  const specialNoun = translateDashboardMessage(sprintsMessages, locale, special === 1 ? "taskSingular" : "taskPlural");
+  return translateDashboardMessage(sprintsMessages, locale, "selectedIssuesBreakdown", {
+    count: formatNumber(selectedCount), noun: issueNoun, linked: formatNumber(linked), special: formatNumber(special), taskNoun: specialNoun,
+  });
 };
 
-export const buildIssueImportMetadataRows = (source: IssueImportMetadataSource): IssueImportMetadataRow[] => {
+export const buildIssueImportMetadataRows = (source: IssueImportMetadataSource, locale: DashboardLocale = "en"): IssueImportMetadataRow[] => {
   const rows: IssueImportMetadataRow[] = [];
-  const provider = getIssueImportProviderMetadata(source.provider);
+  const provider = getIssueImportProviderMetadata(source.provider, undefined, locale);
   const issueRef = normalizeText(source.issueKey) ?? (source.issueNumber ? `#${source.issueNumber}` : null);
   const sourceLabel = source.provider === "jira"
-    ? "Project"
+    ? translateDashboardMessage(sprintsMessages, locale, "project")
     : source.provider === "notion"
-      ? "Source"
+      ? translateDashboardMessage(sprintsMessages, locale, "source")
       : source.provider === "asana"
-        ? "Workspace"
-        : source.provider === "linear"
-          ? "Team"
+        ? translateDashboardMessage(sprintsMessages, locale, "workspace")
+      : source.provider === "linear"
+          ? translateDashboardMessage(sprintsMessages, locale, "team")
           : source.provider === "miro"
-            ? "Board"
+            ? translateDashboardMessage(sprintsMessages, locale, "board")
             : source.provider === "lucid"
-              ? "Documents"
+              ? translateDashboardMessage(sprintsMessages, locale, "documents")
               : source.provider === "figma"
-                ? "Files"
+                ? translateDashboardMessage(sprintsMessages, locale, "files")
                 : source.provider === "mural"
-                  ? "Workspace"
-          : "Repository";
+                  ? translateDashboardMessage(sprintsMessages, locale, "workspace")
+          : translateDashboardMessage(sprintsMessages, locale, "repository");
 
-  addMetadataRow(rows, "provider", "Provider", provider.label);
-  addMetadataRow(rows, "sourceKind", "Kind", formatSourceKind(source.provider, source.sourceKind));
-  addMetadataRow(rows, "externalId", "External ID", source.externalId);
+  addMetadataRow(rows, "provider", translateDashboardMessage(sprintsMessages, locale, "provider"), provider.label);
+  addMetadataRow(rows, "sourceKind", translateDashboardMessage(sprintsMessages, locale, "kind"), formatSourceKind(source.provider, source.sourceKind, locale));
+  addMetadataRow(rows, "externalId", translateDashboardMessage(sprintsMessages, locale, "externalId"), source.externalId);
   addMetadataRow(rows, "repository", sourceLabel, normalizeText(source.teamKey) ?? normalizeText(source.projectKey) ?? source.repository);
-  addMetadataRow(rows, "workspace", "Workspace", source.workspaceId);
-  addMetadataRow(rows, "teamId", "Team ID", source.teamId);
-  addMetadataRow(rows, "database", "Database", source.databaseId);
-  addMetadataRow(rows, "issue", "Issue", issueRef);
-  addMetadataRow(rows, "state", "State", formatState(source.state));
-  addMetadataRow(rows, "type", "Type", source.issueType);
-  addMetadataRow(rows, "priority", "Priority", source.priority);
-  addMetadataRow(rows, "author", "Author", source.issueAuthor);
-  addMetadataRow(rows, "reporter", "Reporter", source.issueReporter);
-  addMetadataRow(rows, "milestone", "Milestone", source.issueMilestone);
+  addMetadataRow(rows, "workspace", translateDashboardMessage(sprintsMessages, locale, "workspace"), source.workspaceId);
+  addMetadataRow(rows, "teamId", translateDashboardMessage(sprintsMessages, locale, "teamId"), source.teamId);
+  addMetadataRow(rows, "database", translateDashboardMessage(sprintsMessages, locale, "database"), source.databaseId);
+  addMetadataRow(rows, "issue", translateDashboardMessage(sprintsMessages, locale, "issue"), issueRef);
+  addMetadataRow(rows, "state", translateDashboardMessage(sprintsMessages, locale, "state"), formatState(source.state, locale));
+  addMetadataRow(rows, "type", translateDashboardMessage(sprintsMessages, locale, "type"), source.issueType);
+  addMetadataRow(rows, "priority", translateDashboardMessage(sprintsMessages, locale, "priority"), source.priority);
+  addMetadataRow(rows, "author", translateDashboardMessage(sprintsMessages, locale, "author"), source.issueAuthor);
+  addMetadataRow(rows, "reporter", translateDashboardMessage(sprintsMessages, locale, "reporter"), source.issueReporter);
+  addMetadataRow(rows, "milestone", translateDashboardMessage(sprintsMessages, locale, "milestone"), source.issueMilestone);
   if (typeof source.issueCommentCount === "number") {
     rows.push({
       id: "comments",
-      label: "Comments",
-      value: String(Math.max(0, source.issueCommentCount)),
+      label: translateDashboardMessage(sprintsMessages, locale, "comments"),
+      value: createDashboardFormatters(locale).formatNumber(Math.max(0, source.issueCommentCount)),
     });
   }
-  addMetadataRow(rows, "created", "Created", formatDateTime(source.createdAt));
-  addMetadataRow(rows, "updated", "Updated", formatDateTime(source.updatedAt));
+  addMetadataRow(rows, "created", translateDashboardMessage(sprintsMessages, locale, "created"), formatDateTime(source.createdAt, locale));
+  addMetadataRow(rows, "updated", translateDashboardMessage(sprintsMessages, locale, "updated"), formatDateTime(source.updatedAt, locale));
 
   return rows;
 };
@@ -536,6 +568,7 @@ export const buildIssueImportMetadataRows = (source: IssueImportMetadataSource):
 export const truncateIssueImportList = (
   values: ReadonlyArray<string | null | undefined>,
   maxVisible = 6,
+  locale: DashboardLocale = "en",
 ): IssueImportTruncatedList => {
   const uniqueValues = values.reduce<string[]>((items, value) => {
     const normalized = normalizeText(value);
@@ -551,86 +584,98 @@ export const truncateIssueImportList = (
   return {
     visible,
     overflowCount,
-    overflowLabel: overflowCount > 0 ? `+${overflowCount} more` : null,
+    overflowLabel: overflowCount > 0
+      ? translateDashboardMessage(sprintsMessages, locale, "more", { count: createDashboardFormatters(locale).formatNumber(overflowCount) })
+      : null,
   };
 };
 
 export const truncateIssueImportLabels = (
   labels: ReadonlyArray<string | null | undefined>,
   maxVisible = 6,
-): IssueImportTruncatedList => truncateIssueImportList(labels, maxVisible);
+  locale: DashboardLocale = "en",
+): IssueImportTruncatedList => truncateIssueImportList(labels, maxVisible, locale);
 
 export const truncateIssueImportAssignees = (
   assignees: ReadonlyArray<string | null | undefined>,
   maxVisible = 4,
-): IssueImportTruncatedList => truncateIssueImportList(assignees, maxVisible);
+  locale: DashboardLocale = "en",
+): IssueImportTruncatedList => truncateIssueImportList(assignees, maxVisible, locale);
 
 export const getIssueImportEmptyStateCopy = (
   provider: IssueImportProvider,
   hasSearched: boolean,
+  locale: DashboardLocale = "en",
 ): IssueImportEmptyStateCopy => {
-  const providerLabel = getIssueImportProviderMetadata(provider).label;
-  const noun = provider === "notion"
-    ? "items"
+  const providerLabel = getIssueImportProviderMetadata(provider, undefined, locale).label;
+  const nounKey = provider === "notion"
+    ? "nounItems"
     : provider === "asana"
-      ? "tasks"
+      ? "nounTasks"
       : provider === "miro"
-        ? "boards or canvas items"
+        ? "nounBoardsCanvas"
         : provider === "lucid"
-          ? "documents"
+          ? "nounDocuments"
           : provider === "figma"
-            ? "files"
+            ? "nounFiles"
             : provider === "mural"
-              ? "murals"
-      : "issues";
+              ? "nounMurals"
+      : "nounIssues";
+  const noun = translateDashboardMessage(sprintsMessages, locale, nounKey);
   if (!hasSearched) {
     return {
-      title: `Search ${providerLabel} ${noun}`,
+      title: translateDashboardMessage(sprintsMessages, locale, "searchProviderNoun", { provider: providerLabel, noun }),
       description: provider === "figma"
-        ? "Paste a Figma file key or explicit file keys to preview read-only importable context."
+        ? translateDashboardMessage(sprintsMessages, locale, "emptyFigmaDescription")
         : provider === "mural"
-          ? "Paste a workspace ID or mural ID to preview metadata and readable content available to the token."
-          : "Choose filters and run a search to preview importable sprint context.",
+          ? translateDashboardMessage(sprintsMessages, locale, "emptyMuralDescription")
+          : translateDashboardMessage(sprintsMessages, locale, "emptySearchDescription"),
     };
   }
   return {
-    title: `No ${providerLabel} ${noun} found`,
+    title: translateDashboardMessage(sprintsMessages, locale, "noProviderNounFound", { provider: providerLabel, noun }),
     description: provider === "miro" || provider === "lucid" || provider === "figma" || provider === "mural"
-      ? "Check the pasted identifier, broaden search text, or use exact external IDs for readable canvas scope."
-      : "Adjust the filters, broaden the repository scope, or search for an exact issue key.",
+      ? translateDashboardMessage(sprintsMessages, locale, "noCanvasResultsDescription")
+      : translateDashboardMessage(sprintsMessages, locale, "noIssueResultsDescription"),
   };
 };
 
 export const getIssueImportErrorCopy = (
   error: unknown,
-  fallbackMessage = "The issue search could not be completed. Check the filters and try again.",
+  fallbackMessage?: string,
+  locale: DashboardLocale = "en",
 ): IssueImportErrorCopy => {
-  const message = error instanceof Error ? error.message : typeof error === "string" ? error : fallbackMessage;
+  const localizedFallback = fallbackMessage ?? translateDashboardMessage(sprintsMessages, locale, "issueSearchFallback");
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : localizedFallback;
   return {
-    title: "Issue import failed",
-    message: normalizeText(message) ?? fallbackMessage,
+    title: translateDashboardMessage(sprintsMessages, locale, "issueImportFailed"),
+    message: normalizeText(message) ?? localizedFallback,
   };
 };
 
-function formatSourceKind(provider: IssueImportProvider, sourceKind: string | null | undefined): string | null {
+function formatSourceKind(
+  provider: IssueImportProvider,
+  sourceKind: string | null | undefined,
+  locale: DashboardLocale,
+): string | null {
   const normalized = normalizeText(sourceKind);
   if (!normalized) {
     return null;
   }
   if (provider === "miro" && normalized === "board") {
-    return "Board";
+    return translateDashboardMessage(sprintsMessages, locale, "board");
   }
   if (provider === "miro" && normalized === "canvas") {
-    return "Canvas item";
+    return translateDashboardMessage(sprintsMessages, locale, "canvasItem");
   }
   if (provider === "lucid" && normalized === "document") {
-    return "Document";
+    return translateDashboardMessage(sprintsMessages, locale, "document");
   }
   if (provider === "figma" && normalized === "file") {
-    return "File";
+    return translateDashboardMessage(sprintsMessages, locale, "file");
   }
   if (provider === "mural" && normalized === "canvas") {
-    return "Canvas";
+    return translateDashboardMessage(sprintsMessages, locale, "canvas");
   }
   return normalized.replace(/[_-]+/g, " ");
 }

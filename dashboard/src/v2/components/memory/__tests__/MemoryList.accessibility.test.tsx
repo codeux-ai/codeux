@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 import { h } from "preact";
-import { act, fireEvent, render, waitFor } from "@testing-library/preact";
+import { act, fireEvent, waitFor } from "@testing-library/preact";
+import { renderWithDashboardI18n as render } from "../../../../../../tests/dashboard/helpers/dashboard-i18n-test-utils.js";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { expect, test, describe, vi, afterEach } from "vitest";
 import { MemoryList } from "../MemoryList.js";
@@ -60,7 +61,7 @@ describe("MemoryList", () => {
             <MemoryList nodes={[]} onSelectNode={vi.fn()} />
         );
         const announcement = getAllByText("No memories exist")
-            .map((element) => element.closest(".sr-only"))
+            .map((element: Element) => element.closest(".sr-only"))
             .find(Boolean);
         expect(announcement).toBeInTheDocument();
         expect(announcement).toHaveClass("sr-only");
@@ -86,13 +87,33 @@ describe("MemoryList", () => {
         expect(getByText("2 memories shown")).toHaveClass("sr-only");
     });
 
+    test("matches German category searches while preserving stored content", () => {
+        searchQuerySignal.value = "architektur";
+        const { getByRole, getByText, queryByText } = render(
+            <MemoryList
+                nodes={[
+                    buildNode({ id: "memory-1", content: "Stored English API boundary", category: "architecture" }),
+                    buildNode({ id: "memory-2", content: "Stored context evidence", category: "context" }),
+                ]}
+                onSelectNode={vi.fn()}
+            />,
+            "de",
+        );
+
+        expect(getByRole("listbox", { name: "Erinnerungsliste" })).toBeInTheDocument();
+        expect(getByText("Stored English API boundary")).toBeInTheDocument();
+        expect(queryByText("Stored context evidence")).toBeNull();
+        expect(getByText("Architektur")).toBeInTheDocument();
+        expect(getByText(/1 von 2 Erinnerungen werden angezeigt/)).toBeInTheDocument();
+    });
+
     test("renders true empty state when no alive memories exist", () => {
         const { getAllByText } = render(
             <MemoryList nodes={[buildNode({ alive: false })]} onSelectNode={vi.fn()} />
         );
 
         const announcement = getAllByText("No memories exist")
-            .map((element) => element.closest(".sr-only"))
+            .map((element: Element) => element.closest(".sr-only"))
             .find(Boolean);
         expect(announcement).toBeInTheDocument();
         expect(announcement).toHaveClass("sr-only");

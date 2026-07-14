@@ -10,6 +10,7 @@ import {
   searchProjectIssues,
 } from "../../../../../dashboard/src/v2/lib/project-api";
 import { fetchProjectEffectiveSettings } from "../../../../../dashboard/src/v2/lib/settings-api";
+import { renderWithI18n } from "../../../render-with-i18n.js";
 
 expect.extend(matchers);
 
@@ -68,7 +69,7 @@ const providerResult = (provider: CanvasImportProvider, overrides: Record<string
   };
 };
 
-const renderModal = (provider: CanvasImportProvider, onImport = vi.fn()) => {
+const renderModal = (provider: CanvasImportProvider, onImport = vi.fn(), locale: "en" | "de" = "en") => {
   vi.mocked(fetchProjectEffectiveSettings).mockResolvedValue({
     settings: {
       [provider]: blankImporterSettings,
@@ -76,13 +77,15 @@ const renderModal = (provider: CanvasImportProvider, onImport = vi.fn()) => {
   } as any);
   return {
     onImport,
-    ...render(
+    ...renderWithI18n(
       <SprintCanvasImportModal
         projectId="proj-1"
         provider={provider}
         onClose={vi.fn()}
         onImport={onImport}
       />,
+      {},
+      locale,
     ),
   };
 };
@@ -95,19 +98,19 @@ describe("SprintCanvasImportModal", () => {
     vi.mocked(fetchProjectIssuePromptContexts).mockImplementation(async (_projectId, issues) => issues as any);
   });
 
-  it("validates provider-required identifiers before search", async () => {
-    renderModal("figma");
+  it("validates provider-required identifiers in German before search", async () => {
+    renderModal("figma", vi.fn(), "de");
 
-    fireEvent.click(await screen.findByRole("button", { name: /search figma/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /figma.*durchsuchen/i }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Paste a Figma or FigJam file key before searching.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Fügen Sie vor der Suche einen Figma- oder FigJam-Dateischlüssel ein.");
     expect(searchProjectIssues).not.toHaveBeenCalled();
   });
 
   it.each([
     ["miro", "Miro board ID", "board-123", { boardId: "board-123", limit: 25 }],
     ["lucid", "Lucid document ID", "doc-123", { documentId: "doc-123", limit: 25 }],
-    ["figma", "Figma file key", "file-123", { fileKey: "file-123", includeConversation: false, limit: 25 }],
+    ["figma", "Figma / FigJam file key", "file-123", { fileKey: "file-123", includeConversation: false, limit: 25 }],
     ["mural", "Mural workspace ID", "workspace-123", { workspaceId: "workspace-123", limit: 25 }],
   ] as const)("sends %s search payloads with canvas fields", async (provider, label, value, expected) => {
     renderModal(provider);
@@ -157,7 +160,7 @@ describe("SprintCanvasImportModal", () => {
     vi.mocked(searchProjectIssues).mockResolvedValue([result] as any);
     renderModal("figma");
 
-    fireEvent.input(await screen.findByLabelText("Figma file key"), { target: { value: "file-123" } });
+    fireEvent.input(await screen.findByLabelText("Figma / FigJam file key"), { target: { value: "file-123" } });
     fireEvent.click(screen.getByRole("button", { name: /advanced figma/i }));
     const searchCommentToggle = screen.getByLabelText("Append comments while searching Figma files");
     fireEvent.click(searchCommentToggle);
@@ -190,7 +193,7 @@ describe("SprintCanvasImportModal", () => {
   it.each([
     ["miro", "Miro board ID", "board-123", "Miro backend error"],
     ["lucid", "Lucid document ID", "doc-123", "Lucid backend error"],
-    ["figma", "Figma file key", "file-123", "Figma backend error"],
+    ["figma", "Figma / FigJam file key", "file-123", "Figma backend error"],
     ["mural", "Mural workspace ID", "workspace-123", "Mural backend error"],
   ] as const)("displays backend errors for %s", async (provider, label, value, message) => {
     vi.mocked(searchProjectIssues).mockRejectedValueOnce(new Error(message));

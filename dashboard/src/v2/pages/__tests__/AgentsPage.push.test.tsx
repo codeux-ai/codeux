@@ -4,8 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { createContext } from "preact";
+import { createContext, type ComponentChildren } from "preact";
 import { AgentsPage } from "../../AgentsPage.js";
+import { DashboardI18nProvider } from "../../i18n/index.js";
 import { useProjectData } from "../../context/project-data.js";
 import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
 import { fetchAgentPresets, pushAgentPresetsToRepository } from "../../lib/agent-preset-api.js";
@@ -122,7 +123,13 @@ describe("AgentsPage push flow", () => {
       } as any,
     ]);
 
-    render(<AgentsPage />);
+    render(<AgentsPage />, {
+      wrapper: ({ children }: { children: ComponentChildren }) => (
+        <DashboardI18nProvider initialLocale="en" storage={null}>
+          {children}
+        </DashboardI18nProvider>
+      ),
+    });
 
     await screen.findByRole("button", { name: "Push Agents" });
 
@@ -130,7 +137,7 @@ describe("AgentsPage push flow", () => {
     expect(screen.getByRole("dialog", { name: "Push Agents" })).toBeInTheDocument();
 
     mockedPushAgentPresetsToRepository.mockResolvedValueOnce({ committed: false });
-    await user.click(screen.getByLabelText("Commit locally"));
+    await user.click(screen.getByRole("radio", { name: /Commit locally/ }));
     await user.click(screen.getByRole("button", { name: "Push" }));
 
     await waitFor(() => {
@@ -142,7 +149,7 @@ describe("AgentsPage push flow", () => {
     expect(await screen.findByText("No agent preset changes were available to commit.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Push Agents" }));
-    await user.click(screen.getByLabelText("Push to branch"));
+    await user.click(screen.getByRole("radio", { name: /Push to branch/ }));
     await user.clear(screen.getByLabelText("Branch name"));
     await user.type(screen.getByLabelText("Branch name"), "feature/agents");
     mockedPushAgentPresetsToRepository.mockResolvedValueOnce({
@@ -160,7 +167,7 @@ describe("AgentsPage push flow", () => {
     expect(await screen.findByText("Pushed agent presets to feature/agents.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Push Agents" }));
-    await user.click(screen.getByLabelText("Open pull request"));
+    await user.click(screen.getByRole("radio", { name: /Open pull request/ }));
     await user.clear(screen.getByLabelText("Branch name"));
     await user.type(screen.getByLabelText("Branch name"), "feature/agents-pr");
     mockedPushAgentPresetsToRepository.mockResolvedValueOnce({
@@ -179,7 +186,7 @@ describe("AgentsPage push flow", () => {
     expect(await screen.findByRole("link", { name: "https://example.com/acme/repo/pull/7" })).toHaveAttribute("href", "https://example.com/acme/repo/pull/7");
 
     await user.click(screen.getByRole("button", { name: "Push Agents" }));
-    await user.click(screen.getByLabelText("Push to branch"));
+    await user.click(screen.getByRole("radio", { name: /Push to branch/ }));
     mockedPushAgentPresetsToRepository.mockResolvedValueOnce({ committed: true });
     await user.click(screen.getByRole("button", { name: "Push" }));
 

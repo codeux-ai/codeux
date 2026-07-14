@@ -1,5 +1,5 @@
 /** @vitest-environment happy-dom */
-import { h, Fragment } from "preact";
+import { h, Fragment, type ComponentChildren } from "preact";
 /** @jsx h */
 /** @jsxFrag Fragment */
 vi.mock("gsap", () => ({
@@ -13,7 +13,7 @@ vi.mock("gsap", () => ({
   }
 }));
 import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
-import { act, fireEvent, render, screen, cleanup, waitFor } from "@testing-library/preact";
+import { act, fireEvent, render as testingRender, screen, cleanup, waitFor } from "@testing-library/preact";
 import { within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 
@@ -24,12 +24,16 @@ afterEach(() => {
 });
 
 import { LiveSessionPage } from "../../../dashboard/src/v2/LiveSessionPage.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
 import { useDashboardRuntimeData } from "../../../dashboard/src/hooks/use-dashboard-runtime-data.js";
 import { useSprints } from "../../../dashboard/src/hooks/useSprints.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
 import { useProjectGitStatus } from "../../../dashboard/src/v2/hooks/use-project-git-status.js";
 import { useLiveSessionActions } from "../../../dashboard/src/v2/hooks/use-live-session-actions.js";
-import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+
+const render = (children: ComponentChildren) => testingRender(
+  <DashboardI18nProvider initialLocale="en" storage={null}>{children}</DashboardI18nProvider>,
+);
 const liveSessionActionMocks = vi.hoisted(() => ({
   rerunningIds: new Set<string>(),
   pendingActionIds: new Set<string>(),

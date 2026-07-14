@@ -18,6 +18,8 @@ import {
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import type { Sprint } from "../../types.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import { sprintsMessages } from "../../i18n/messages/sprints.js";
 
 export interface SprintActionMenuProps {
   sprint: Sprint;
@@ -81,6 +83,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
   role,
   buttonClassName = "flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-medium leading-snug text-slate-600 no-underline decoration-transparent transition-colors hover:bg-black/[0.04] hover:text-slate-900 hover:no-underline focus:no-underline dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 [&>span]:min-w-0 [&>span]:break-words",
 }) => {
+  const { translate } = useDashboardI18n();
   const actionConfirm = useConfirmDialog();
   const handleDeleteClassName = buttonClassName.replace(
     /text-slate-600 transition-colors hover:bg-black\/\[0\.04\] hover:text-slate-900/,
@@ -138,9 +141,9 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
               onClick={() => {
                 if (isRunning) {
                   void confirmMenuAction({
-                    title: "Stop Sprint",
-                    body: `Stop sprint "${sprint.name}"? Active task dispatches may be interrupted.`,
-                    confirmLabel: "Stop Sprint",
+                    title: translate(sprintsMessages, "stopSprint"),
+                    body: translate(sprintsMessages, "stopSprintBody", { name: sprint.name }),
+                    confirmLabel: translate(sprintsMessages, "stopSprint"),
                     destructive: true,
                   }, onPrimaryAction);
                   return;
@@ -149,7 +152,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
                 onPrimaryAction();
               }}
               disabled={primaryBusy}
-              title={primaryBusy ? "Sprint action in progress" : undefined}
+              title={primaryBusy ? translate(sprintsMessages, "sprintActionProgress") : undefined}
               aria-busy={primaryBusy}
               aria-disabled={primaryBusy}
               className={disabledClassName}
@@ -161,7 +164,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
               ) : (
                 <Play className="h-3.5 w-3.5" fill="currentColor" strokeWidth={2.1} />
               )}
-              {isRunning ? "Stop Sprint" : "Start Sprint"}
+              {translate(sprintsMessages, isRunning ? "stopSprint" : "startSprint")}
             </button>
           )}
           {canPauseResume && (
@@ -175,14 +178,14 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
                   return;
                 }
                 void confirmMenuAction({
-                  title: "Pause Sprint",
-                  body: `Pause sprint "${sprint.name}"? Running work will stop accepting new sprint actions until it is resumed.`,
-                  confirmLabel: "Pause",
+                  title: translate(sprintsMessages, "pauseSprint"),
+                  body: translate(sprintsMessages, "pauseSprintBody", { name: sprint.name }),
+                  confirmLabel: translate(sprintsMessages, "pause"),
                   tone: "warning",
                 }, onPauseResume);
               }}
               disabled={pauseResumeBusy}
-              title={pauseResumeBusy ? "Sprint pause or resume action in progress" : undefined}
+              title={pauseResumeBusy ? translate(sprintsMessages, "sprintPauseResumeProgress") : undefined}
               aria-busy={pauseResumeBusy}
               aria-disabled={pauseResumeBusy}
               className={disabledClassName}
@@ -194,7 +197,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
               ) : (
                 <Pause className="h-3.5 w-3.5" fill="currentColor" strokeWidth={2.1} />
               )}
-              {isPaused ? "Resume" : "Pause"}
+              {translate(sprintsMessages, isPaused ? "resume" : "pause")}
             </button>
           )}
           {viewTasksHref && (
@@ -202,11 +205,11 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
               href={viewTasksHref}
               role={role}
               onClick={() => onClose?.()}
-              aria-label={`View tasks for sprint ${sprint.name}`}
+              aria-label={translate(sprintsMessages, "viewTasksFor", { name: sprint.name })}
               className={buttonClassName}
             >
               <Maximize2 className="h-3.5 w-3.5" strokeWidth={2.1} />
-              View Tasks
+              {translate(sprintsMessages, "viewTasks")}
             </a>
           )}
           {onAddTasks && (
@@ -220,7 +223,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
               className={buttonClassName}
             >
               <ListTodo className="h-3.5 w-3.5" strokeWidth={2.1} />
-              Add Tasks
+              {translate(sprintsMessages, "addTasks")}
             </button>
           )}
           <SectionSeparator />
@@ -234,11 +237,11 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
           onClose?.();
           onEdit?.();
         }}
-        aria-label={`Edit sprint ${sprint.name}`}
+        aria-label={translate(sprintsMessages, "editSprint", { name: sprint.name })}
         className={buttonClassName}
       >
         <Pencil className="h-3.5 w-3.5" strokeWidth={2.1} />
-        Edit
+        {translate(sprintsMessages, "edit")}
       </button>
       <button
         type="button"
@@ -247,11 +250,11 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
           onClose?.();
           onExport?.();
         }}
-        aria-label={`Export sprint ${sprint.name}`}
+        aria-label={translate(sprintsMessages, "exportSprint", { name: sprint.name })}
         className={buttonClassName}
       >
         <Download className="h-3.5 w-3.5" strokeWidth={2.1} />
-        Export
+        {translate(sprintsMessages, "export")}
       </button>
       <button
         type="button"
@@ -260,11 +263,11 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
           onClose?.();
           onOverrides?.();
         }}
-        aria-label={`Configure overrides for sprint ${sprint.name}`}
+        aria-label={translate(sprintsMessages, "configureOverrides", { name: sprint.name })}
         className={buttonClassName}
       >
         <Sparkles className="h-3.5 w-3.5" strokeWidth={2.1} />
-        Overrides
+        {translate(sprintsMessages, "overrides")}
       </button>
       <button
         type="button"
@@ -274,7 +277,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
           onToggleShowcase?.();
         }}
         disabled={showcaseBusy}
-        title={showcaseBusy ? "Showcase update in progress" : undefined}
+        title={showcaseBusy ? translate(sprintsMessages, "showcaseUpdateProgress") : undefined}
         aria-busy={showcaseBusy}
         aria-disabled={showcaseBusy}
         className={disabledClassName}
@@ -284,7 +287,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
         ) : (
           <Heart className="h-3.5 w-3.5" fill={sprint.showcasePinned ? "currentColor" : "none"} strokeWidth={2.1} />
         )}
-        {showcaseBusy ? "Updating" : sprint.showcasePinned ? "Remove" : "Add"}
+        {translate(sprintsMessages, showcaseBusy ? "updating" : sprint.showcasePinned ? "remove" : "add")}
       </button>
 
       <SectionSeparator />
@@ -298,8 +301,8 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
             onMarkCompleted?.();
           }}
           disabled={markCompletedDisabled}
-          title={markCompletedDisabled ? "Mark complete is disabled while another sprint action is in progress" : undefined}
-          aria-label={`Mark sprint ${sprint.name} as completed`}
+          title={markCompletedDisabled ? translate(sprintsMessages, "markCompleteDisabled") : undefined}
+          aria-label={translate(sprintsMessages, "markCompletedAria", { name: sprint.name })}
           aria-disabled={markCompletedDisabled}
           className={disabledClassName}
         >
@@ -308,7 +311,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
           ) : (
             <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2.1} />
           )}
-          Mark Completed
+          {translate(sprintsMessages, "markCompleted")}
         </button>
       )}
       {onMarkQaPassed && !isQaPassed && (
@@ -320,13 +323,13 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
             onMarkQaPassed();
           }}
           disabled={markQaPassedDisabled}
-          title={markQaPassedDisabled ? "Mark QA pass is unavailable while QA or another sprint action is in progress" : undefined}
-          aria-label={`Mark QA as passed for sprint ${sprint.name}`}
+          title={markQaPassedDisabled ? translate(sprintsMessages, "markQaDisabled") : undefined}
+          aria-label={translate(sprintsMessages, "markQaPassAria", { name: sprint.name })}
           aria-disabled={markQaPassedDisabled}
           className={disabledClassName}
         >
           <CheckCircle2 className="h-3.5 w-3.5 text-signal-600 dark:text-signal-300" strokeWidth={2.1} />
-          Mark QA Pass
+          {translate(sprintsMessages, "markQaPass")}
         </button>
       )}
       {isCompleted && sprint.kind !== "rollback" && onRollback && (
@@ -340,7 +343,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
           className={`${buttonClassName} text-orange-600 hover:bg-orange-500/10 dark:text-orange-300`}
         >
           <RotateCcw className="h-3.5 w-3.5" strokeWidth={2.1} />
-          Rollback Sprint
+          {translate(sprintsMessages, "rollbackSprint")}
         </button>
       )}
       <button
@@ -353,8 +356,8 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
         disabled={deleteBusy}
         aria-busy={deleteBusy}
         aria-disabled={deleteBusy}
-        aria-label={deleteBusy ? `Deleting sprint ${sprint.name}` : `Delete sprint ${sprint.name}`}
-        title={deleteBusy ? "Delete action in progress" : undefined}
+        aria-label={translate(sprintsMessages, deleteBusy ? "deletingSprint" : "deleteSprintNamed", { name: sprint.name })}
+        title={deleteBusy ? translate(sprintsMessages, "deleteProgress") : undefined}
         className={deleteBusy ? `${handleDeleteClassName} disabled:cursor-not-allowed disabled:opacity-40` : handleDeleteClassName}
       >
         {deleteBusy ? (
@@ -362,7 +365,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
         ) : (
           <XCircle className="h-3.5 w-3.5" strokeWidth={2.1} />
         )}
-        {deleteBusy ? "Deleting" : "Delete"}
+        {translate(sprintsMessages, deleteBusy ? "deleting" : "delete")}
       </button>
     </>
   );

@@ -1,9 +1,14 @@
 /** @vitest-environment happy-dom */
 import "@testing-library/jest-dom/vitest";
-import { render, screen, cleanup } from "@testing-library/preact";
+import { render as testingRender, screen, cleanup } from "@testing-library/preact";
 import { expect, test, vi, afterEach } from "vitest";
 import { LaunchContainerPanel } from "../../../../src/v2/components/browser/LaunchContainerPanel.js";
 import { PreviewSessionSlider } from "../../../../src/v2/components/browser/PreviewSessionSlider.js";
+import { DashboardI18nProvider } from "../../../../src/v2/i18n/context.js";
+
+const render = (ui: Parameters<typeof testingRender>[0]) => testingRender(ui, {
+  wrapper: ({ children }) => <DashboardI18nProvider initialLocale="en" storage={null}>{children}</DashboardI18nProvider>,
+});
 
 afterEach(() => {
   cleanup();
@@ -89,7 +94,7 @@ test("PreviewSessionSlider handles states correctly", () => {
     />
   );
 
-  expect(screen.getByText("starting")).toBeInTheDocument();
+  expect(screen.getByText("Starting")).toBeInTheDocument();
   expect(screen.getByText("port pending")).toBeInTheDocument();
-  expect(screen.getByText("waiting for routed port")).toBeInTheDocument();
+  expect(screen.getByText("starting and waiting for routed port")).toBeInTheDocument();
 });

@@ -8,6 +8,8 @@ import type {
 } from "../../lib/nodes-canvas-state.js";
 import { validateNodeCanvasGraph } from "../../lib/nodes-canvas-state.js";
 import { Button } from "../ui/Button.js";
+import type { DashboardLocale } from "../../i18n/locales.js";
+import { translateNodesMessage, useNodesI18n } from "../../i18n/messages/nodes.js";
 
 interface NodeValidationPanelProps {
   graph: NodeCanvasGraph;
@@ -26,12 +28,13 @@ interface ValidationGroup {
   issues: NodeCanvasValidationIssue[];
 }
 
-const issueSeverityLabel = (_issue: NodeCanvasValidationIssue): string => "Error";
+const issueSeverityLabel = (_issue: NodeCanvasValidationIssue, locale: DashboardLocale): string => translateNodesMessage(locale, "error");
 
 const groupValidationIssues = (
   issues: readonly NodeCanvasValidationIssue[],
   nodesById: ReadonlyMap<string, NodeCanvasNode>,
   edgesById: ReadonlyMap<string, NodeCanvasEdge>,
+  locale: DashboardLocale,
 ): ValidationGroup[] => {
   const groups = new Map<string, ValidationGroup>();
 
@@ -41,10 +44,10 @@ const groupValidationIssues = (
     const entityType: ValidationEntityType = node ? "node" : edge ? "edge" : "graph";
     const key = `${entityType}:${issue.entityId}`;
     const title = node
-      ? `Node: ${node.label || node.id}`
+      ? translateNodesMessage(locale, "validationNode", { label: node.label || node.id })
       : edge
-        ? `Edge: ${edge.label || edge.id}`
-        : `Graph: ${issue.entityId}`;
+        ? translateNodesMessage(locale, "validationEdge", { label: edge.label || edge.id })
+        : translateNodesMessage(locale, "validationGraph", { id: issue.entityId });
     const current = groups.get(key) ?? { id: issue.entityId, entityType, title, issues: [] };
     current.issues.push(issue);
     groups.set(key, current);
@@ -66,10 +69,11 @@ export const NodeValidationPanel: FunctionComponent<NodeValidationPanelProps> = 
   onSelectEdge,
   onSelectNode,
 }) => {
-  const issues = validateNodeCanvasGraph(graph);
+  const { locale, t, tp } = useNodesI18n();
+  const issues = validateNodeCanvasGraph(graph, locale);
   const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
   const edgesById = new Map(graph.edges.map((edge) => [edge.id, edge]));
-  const groups = groupValidationIssues(issues, nodesById, edgesById);
+  const groups = groupValidationIssues(issues, nodesById, edgesById, locale);
 
   return (
     <aside
@@ -78,9 +82,9 @@ export const NodeValidationPanel: FunctionComponent<NodeValidationPanelProps> = 
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Validation</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">{t("validation")}</p>
           <h2 id="node-validation-heading" className="text-base font-bold text-slate-900 dark:text-white">
-            {issues.length === 0 ? "Ready to wire" : `${issues.length} issue${issues.length === 1 ? "" : "s"}`}
+            {issues.length === 0 ? t("readyToWire") : tp("issueCount", issues.length)}
           </h2>
         </div>
         {issues.length === 0 ? (
@@ -91,10 +95,10 @@ export const NodeValidationPanel: FunctionComponent<NodeValidationPanelProps> = 
       </div>
       {issues.length === 0 ? (
         <p role="status" className="rounded-[var(--radius-ui)] border border-status-green/20 bg-status-green/[0.06] px-3 py-2 text-sm text-slate-600 dark:text-slate-300">
-          No structural validation issues.
+          {t("noStructuralIssues")}
         </p>
       ) : (
-        <div className="flex flex-col gap-3" role="list" aria-label="Node canvas validation issues">
+        <div className="flex flex-col gap-3" role="list" aria-label={t("validationIssuesLabel")}>
           {groups.map((group) => (
             <section
               key={`${group.entityType}-${group.id}`}
@@ -106,7 +110,7 @@ export const NodeValidationPanel: FunctionComponent<NodeValidationPanelProps> = 
                   {group.title}
                 </h3>
                 <span className="rounded-full bg-status-red/[0.08] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-status-red">
-                  {issueSeverityLabel(group.issues[0]!)}
+                  {issueSeverityLabel(group.issues[0]!, locale)}
                 </span>
               </div>
               <ul className="mt-2 flex flex-col gap-2">
@@ -126,7 +130,7 @@ export const NodeValidationPanel: FunctionComponent<NodeValidationPanelProps> = 
                     onClick={() => group.entityType === "node" ? onSelectNode?.(group.id) : onSelectEdge?.(group.id)}
                     disabled={group.entityType === "node" ? !onSelectNode : !onSelectEdge}
                   >
-                    Select
+                    {t("select")}
                   </Button>
                   <Button
                     type="button"
@@ -136,7 +140,7 @@ export const NodeValidationPanel: FunctionComponent<NodeValidationPanelProps> = 
                     onClick={() => group.entityType === "node" ? onFocusNode?.(group.id) : onFocusEdge?.(group.id)}
                     disabled={group.entityType === "node" ? !onFocusNode : !onFocusEdge}
                   >
-                    Focus
+                    {t("focus")}
                   </Button>
                 </div>
               ) : null}
