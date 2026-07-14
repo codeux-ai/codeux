@@ -11,6 +11,18 @@ import type { IWorkspaceManager } from "./workspace-manager.js";
 
 const TEMP_EXPORT_PATHSPEC = ":(exclude).code-ux-export-*";
 
+const workspaceExportPathspecs = (): string[] => [
+  ".",
+  `:(exclude)${LEARNINGS_FILENAME}`,
+  TEMP_EXPORT_PATHSPEC,
+  ":(exclude).code-ux-home",
+  ":(exclude).code-ux-home/**",
+  ":(exclude).pnpm-store",
+  ":(exclude).pnpm-store/**",
+  ":(exclude,glob)**/logs/openai/**",
+  ":(exclude,glob)logs/openai/**",
+];
+
 export interface AppliedWorkspacePatchResult {
   hasChanges: boolean;
   commitSha?: string;
@@ -106,17 +118,7 @@ export class WorkspaceArtifactService {
     // against the base. Git still owns discovery of new, modified, and deleted
     // files, including ignore handling, while Code UX avoids passing a large
     // changed-path list through Docker argv.
-    const excludePathspecs = [
-      `:(exclude)${LEARNINGS_FILENAME}`,
-      TEMP_EXPORT_PATHSPEC,
-      ":(exclude).code-ux-home",
-      ":(exclude).code-ux-home/**",
-      ":(exclude).pnpm-store",
-      ":(exclude).pnpm-store/**",
-      ":(exclude,glob)**/logs/openai/**",
-      ":(exclude,glob)logs/openai/**",
-    ];
-    const pathspecs = [".", ...excludePathspecs];
+    const pathspecs = workspaceExportPathspecs();
     const tempIndexFilename = `.code-ux-export-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.index`;
     if (workspaceRef.startsWith("docker-volume://")) {
       return await this.exportDockerVolumeBinaryPatch(
@@ -164,6 +166,83 @@ export class WorkspaceArtifactService {
         { env: tempIndexEnv, trimOutput: false },
       );
       return result.stdout;
+    } finally {
+      await fs.rm(tempPathListPath, { force: true }).catch(() => undefined);
+      const hostTempIndexPath = path.isAbsolute(tempIndexPath)
+        ? tempIndexPath
+        : path.join(workspaceRef, tempIndexPath);
+      await fs.rm(hostTempIndexPath, { force: true }).catch(() => undefined);
+    }
+  }
+
+  async resolveWorkspaceTree(workspaceRef: string): Promise<string> {
+    const pathspecs = workspaceExportPathspecs();
+    const tempIndexFilename = `.code-ux-export-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.index`;
+    if (workspaceRef.startsWith("docker-volume://")) {
+      const tempPathListFilename = tempIndexFilename.replace(/\.index$/, ".paths");
+      const script = [
+        "index_file=$1",
+        "path_file=$2",
+        "shift 2",
+        "trap 'rm -f \"$index_file\" \"$path_file\"' EXIT",
+        "export GIT_INDEX_FILE=$index_file",
+        "git read-tree HEAD",
+        "git ls-files --modified --deleted --others --exclude-standard -z -- \"$@\" > \"$path_file\"",
+        "if [ -s \"$path_file\" ]; then",
+        "  git add -A --pathspec-from-file=- --pathspec-file-nul < \"$path_file\"",
+        "fi",
+        "git write-tree",
+      ].join("\n");
+      return (await this.workspaceManager.runWorkspaceCommand(
+        workspaceRef,
+        "sh",
+        [
+          "-ceu",
+          script,
+          "code-ux-tree",
+          tempIndexFilename,
+          tempPathListFilename,
+          ...pathspecs,
+        ],
+      )).stdout.trim();
+    }
+
+    const tempIndexPath = !path.isAbsolute(workspaceRef)
+      ? tempIndexFilename
+      : path.join(workspaceRef, tempIndexFilename);
+    const tempIndexEnv = {
+      ...process.env,
+      GIT_INDEX_FILE: tempIndexPath,
+    };
+    const tempPathListPath = path.join(os.tmpdir(), `code-ux-export-paths-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.paths`);
+    try {
+      await this.workspaceManager.runWorkspaceCommand(
+        workspaceRef,
+        "git",
+        ["read-tree", "HEAD"],
+        { env: tempIndexEnv },
+      );
+      const changedPaths = await this.workspaceManager.runWorkspaceCommand(
+        workspaceRef,
+        "git",
+        ["ls-files", "--modified", "--deleted", "--others", "--exclude-standard", "-z", "--", ...pathspecs],
+        { env: tempIndexEnv, trimOutput: false },
+      );
+      if (changedPaths.stdout.length > 0) {
+        await fs.writeFile(tempPathListPath, changedPaths.stdout, "utf8");
+        await this.workspaceManager.runWorkspaceCommand(
+          workspaceRef,
+          "git",
+          ["add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul"],
+          { env: tempIndexEnv, stdinFile: tempPathListPath },
+        );
+      }
+      return (await this.workspaceManager.runWorkspaceCommand(
+        workspaceRef,
+        "git",
+        ["write-tree"],
+        { env: tempIndexEnv },
+      )).stdout.trim();
     } finally {
       await fs.rm(tempPathListPath, { force: true }).catch(() => undefined);
       const hostTempIndexPath = path.isAbsolute(tempIndexPath)

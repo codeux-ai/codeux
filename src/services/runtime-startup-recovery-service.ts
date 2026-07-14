@@ -74,6 +74,7 @@ export interface RuntimeStartupRecoveryResult {
   restartPolicySyncedPausedSprintIds: string[];
   restartPolicySyncedOrphanedSprintIds: string[];
   reconciledDuplicateDispatchIds: string[];
+  requeuedInterruptedRepairAttentionItemIds: string[];
 }
 
 interface RuntimeStartupRecoveryServiceDeps {
@@ -82,7 +83,7 @@ interface RuntimeStartupRecoveryServiceDeps {
   sprintRunLifecycleService: SprintRunLifecycleService;
   qaReviewRepository?: QaReviewRepository;
   projectManagementRepository: ProjectManagementRepository;
-  projectAttentionService?: Pick<ProjectAttentionService, "listActiveProjectItems" | "openItem" | "resolveItem">;
+  projectAttentionService?: Pick<ProjectAttentionService, "listActiveProjectItems" | "openItem" | "resolveItem" | "requeueInterruptedVirtualRepairItems">;
   guardrailService?: Pick<GuardrailService, "evaluate">;
   sprintOrchestrator: SprintOrchestrator;
   dockerService?: Pick<{ listContainers: () => Promise<DockerContainer[]>; removeContainers: (containerIds: string[], options?: { removeVolumes?: boolean }) => Promise<void> }, "listContainers"> & {
@@ -104,6 +105,7 @@ export class RuntimeStartupRecoveryService {
     const qaReviewRecovery = new QaReviewRecoveryService({
       executionRepository: this.deps.executionRepository,
       qaReviewRepository: this.deps.qaReviewRepository,
+      dockerService: this.deps.dockerService,
     });
     const invocationRecovery = new InvocationRecoveryService({
       executionRepository: this.deps.executionRepository,
@@ -144,6 +146,10 @@ export class RuntimeStartupRecoveryService {
     const reconciledDuplicateDispatchIds = this.reconcileDuplicateActiveTaskDispatches();
     const reconciledTaskRunIds = this.reconcileInterruptedTaskRuns();
     const reconciledPausedSprintRunIds = this.reconcileStalePausedSprintRuns();
+    const requeuedInterruptedRepairAttentionItemIds = restartPolicies.sprintPolicy === "continue"
+      && restartPolicies.invocationPolicy === "continue"
+      ? await this.requeueInterruptedVirtualRepairAttention()
+      : [];
     const { resumedSprintRunIds, supersededSprintRunIds } = restartPolicies.sprintPolicy === "continue"
       ? this.resumeRecoverableSprintRuns()
       : { resumedSprintRunIds: [], supersededSprintRunIds: [] };
@@ -163,6 +169,7 @@ export class RuntimeStartupRecoveryService {
       || reconciledTerminalProviderDispatchIds.length > 0
       || reconciledTerminalDispatchIds.length > 0
       || reconciledDuplicateDispatchIds.length > 0
+      || requeuedInterruptedRepairAttentionItemIds.length > 0
       || rehydratedSprintRunIds.length > 0
       || reconciledTaskRunIds.length > 0
       || reconciledPausedSprintRunIds.length > 0
@@ -188,6 +195,7 @@ export class RuntimeStartupRecoveryService {
         reconciledTerminalProviderDispatches: reconciledTerminalProviderDispatchIds.length,
         reconciledTerminalDispatches: reconciledTerminalDispatchIds.length,
         reconciledDuplicateDispatches: reconciledDuplicateDispatchIds.length,
+        requeuedInterruptedRepairAttentionItems: requeuedInterruptedRepairAttentionItemIds.length,
         rehydratedSprintRuns: rehydratedSprintRunIds.length,
         reconciledTaskRuns: reconciledTaskRunIds.length,
         reconciledPausedSprintRuns: reconciledPausedSprintRunIds.length,
@@ -220,11 +228,42 @@ export class RuntimeStartupRecoveryService {
       restartPolicySyncedPausedSprintIds,
       restartPolicySyncedOrphanedSprintIds,
       reconciledDuplicateDispatchIds,
+      requeuedInterruptedRepairAttentionItemIds,
       restartPolicyPausedSprintRunIds: restartPolicyResult.pausedSprintRunIds,
       restartPolicyCancelledSprintRunIds: restartPolicyResult.cancelledSprintRunIds,
       resumedSprintRunIds,
       supersededSprintRunIds,
     };
+  }
+
+  private async requeueInterruptedVirtualRepairAttention(): Promise<string[]> {
+    const projectAttentionService = this.deps.projectAttentionService;
+    if (!projectAttentionService) {
+      return [];
+    }
+    const sessionIds = new Set<string>();
+    for (const project of this.deps.projectManagementRepository.listProjects().projects) {
+      for (const item of projectAttentionService.listActiveProjectItems(project.id)) {
+        if (
+          item.status !== "claimed"
+          || (item.attentionType !== "ci_fix_required" && item.attentionType !== "merge_conflict")
+        ) {
+          continue;
+        }
+        const runtime = item.payload?.repairRuntime;
+        if (runtime && typeof runtime === "object") {
+          const sessionId = (runtime as Record<string, unknown>).sessionId;
+          if (typeof sessionId === "string" && sessionId.trim()) {
+            sessionIds.add(sessionId.trim());
+          }
+        }
+      }
+    }
+    // The old process may have died while Docker kept the provider alive. Stop that
+    // container without deleting its workspace volume before scheduling continuation,
+    // otherwise two providers could mutate the same repair workspace concurrently.
+    await this.removeContainersForSessions(sessionIds);
+    return projectAttentionService.requeueInterruptedVirtualRepairItems().map((item) => item.id);
   }
 
   private async demotePrematureMergeConflictEscalations(): Promise<string[]> {

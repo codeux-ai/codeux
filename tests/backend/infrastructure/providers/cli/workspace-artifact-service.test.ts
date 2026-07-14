@@ -125,13 +125,54 @@ describe("WorkspaceArtifactService", () => {
       },
     } as IWorkspaceManager;
 
-    const patchText = await new WorkspaceArtifactService(workspaceManager)
-      .exportBinaryPatch("docker-volume://workspace", baseRef);
+    const service = new WorkspaceArtifactService(workspaceManager);
+    const patchText = await service.exportBinaryPatch("docker-volume://workspace", baseRef);
+    const workspaceTree = await service.resolveWorkspaceTree("docker-volume://workspace");
 
-    expect(calls).toHaveLength(1);
+    expect(calls).toHaveLength(2);
     expect(calls[0]).toMatchObject({ command: "sh", options: { trimOutput: false } });
+    expect(calls[1]).toMatchObject({ command: "sh" });
     expect(patchText).toContain("diff --git a/new.txt b/new.txt");
     expect(patchText).toContain("diff --git a/tracked.txt b/tracked.txt");
+    await runGit(repoPath, ["add", "tracked.txt", "new.txt"]);
+    expect(workspaceTree).toBe((await runGit(repoPath, ["write-tree"])).trim());
+    expect(workspaceTree).not.toBe((await runGit(repoPath, ["rev-parse", `${baseRef}^{tree}`])).trim());
+    expect((await fs.readdir(repoPath)).some((entry) => entry.startsWith(".code-ux-export-"))).toBe(false);
+  });
+
+  it("resolves the effective host workspace tree from uncommitted tracked and untracked edits", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-artifact-tree-"));
+    cleanupPaths.push(repoPath);
+    await runGit(repoPath, ["init"]);
+    await runGit(repoPath, ["config", "user.name", "Code UX Test"]);
+    await runGit(repoPath, ["config", "user.email", "code-ux@example.com"]);
+    await fs.writeFile(path.join(repoPath, "tracked.txt"), "base\n", "utf8");
+    await runGit(repoPath, ["add", "tracked.txt"]);
+    await runGit(repoPath, ["commit", "-m", "base"]);
+    const baselineTree = (await runGit(repoPath, ["rev-parse", "HEAD^{tree}"])).trim();
+    await fs.writeFile(path.join(repoPath, "tracked.txt"), "updated\n", "utf8");
+    await fs.writeFile(path.join(repoPath, "untracked.txt"), "new\n", "utf8");
+
+    const workspaceManager = {
+      runWorkspaceCommand: async (
+        _worktreePath: string,
+        command: string,
+        args: string[],
+        options: WorkspaceCommandOptions = {},
+      ) => await runCommandStrict(command, args, repoPath, options.env ?? process.env, {
+        trimOutput: options.trimOutput,
+        signal: options.signal,
+        stdinFile: options.stdinFile,
+      }),
+    } as IWorkspaceManager;
+
+    const workspaceTree = await new WorkspaceArtifactService(workspaceManager)
+      .resolveWorkspaceTree(repoPath);
+    await runGit(repoPath, ["add", "tracked.txt", "untracked.txt"]);
+    const expectedTree = (await runGit(repoPath, ["write-tree"])).trim();
+
+    expect(workspaceTree).toBe(expectedTree);
+    expect(workspaceTree).not.toBe(baselineTree);
     expect((await fs.readdir(repoPath)).some((entry) => entry.startsWith(".code-ux-export-"))).toBe(false);
   });
 

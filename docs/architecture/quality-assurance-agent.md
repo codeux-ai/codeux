@@ -165,6 +165,10 @@ Provider/infrastructure failures in sprint-completion QA are also retryable with
 Recovery guarantees:
 
 - task QA no longer depends only on catching a single in-cycle transition edge; if a task is already code-complete and still has no successful QA run, Code UX will enqueue the missing review on the next orchestration cycle instead of leaving the task parked in `QA_PENDING`
+- every task- and sprint-completion reviewer row records the exact review execution invocation, logical reviewer session, isolated workspace session, reviewer preset, and continuation provenance. Under the restart `continue` policy, a retry reuses that reviewer workspace and continues the provider's native session when available instead of starting the review again without its prior investigation context.
+- a `changes_requested` result persists its coding-handoff state before Code UX invokes the target coding session. If the runtime stops after saving the verdict but before finishing that handoff, the next cycle resumes the pending handoff. If the same-session coding follow-up already completed, recovery settles the handoff from that execution evidence and schedules verification rather than invoking the coding provider again. This closes the post-verdict crash window that could otherwise leave a task parked indefinitely at `QA_PENDING`.
+- a transient provider exit during that coding handoff preserves the original target session/workspace, restores the task to `CODING_COMPLETED` with `QA_PENDING`, and leaves the handoff retryable. Successful and execution-reconciled handoffs also remain `CODING_COMPLETED`/`QA_PENDING` until verification is scheduled, so a restart cannot mistake the crash window for ordinary task work. Continuation failures are capped by `QA_INFRA_FAILURE_GRACE`; exhausting the cap records no-progress evidence so the normal QA exhaustion policy settles or escalates the task.
+- when a later same-session handoff succeeds, Code UX also reconciles the original task-run and dispatch back to completed before sprint terminal evaluation. An earlier failed continuation therefore cannot leave stale runtime evidence that falsely fails an otherwise healthy sprint.
 - if a QA run row is left behind in `running` state after its backing execution invocation has already finished, Code UX now automatically converts that stale row into a retryable failed run so the gate can recover instead of blocking indefinitely
 - before task QA starts, Code UX polls feature PR status with any task-level PR URLs already recorded by Jules. This lets orchestration recover the PR head branch even when the Jules PR base branch has drifted from the currently configured sprint feature branch.
 - if a prior task QA run requested changes, Code UX sends fix instructions back to the same task session when possible and tracks that work as same-session follow-up instead of creating a new task branch.
@@ -244,12 +248,19 @@ Behavior:
 
 ## Session Continuation
 
-QA does not open an isolated side-channel for fixes.
+QA review and QA-requested fixes use two related but distinct session tracks:
 
-Instead:
+- the reviewer runs in an isolated review workspace and owns its own durable logical/provider session
+- any requested implementation fix returns to the target task's coding session and worktree
+
+For the reviewer track, Code UX persists the exact execution invocation and workspace binding on the reviewer-specific QA row before dispatch. A runtime restart under the `continue` invocation policy closes the interrupted audit invocation, preserves the snapshot workspace, and starts a correlated continuation with the same logical session. When the CLI provider supplied a native session id, Code UX passes it to the resumed invocation so the reviewer retains conversation context as well as filesystem state. Multi-reviewer cycles recover each preset independently; timestamp proximity is only a compatibility fallback for older rows that predate exact invocation correlation.
+
+For the fix track, QA does not open an isolated side-channel. Instead:
 
 - Jules tasks receive a follow-up message on the existing Jules session
 - CLI tasks resume the existing worker session/worktree when possible
+
+The QA row records a pending continuation before that follow-up begins. Completion updates that same handoff record, which lets startup and later watch cycles distinguish work that still needs dispatch from a follow-up that already finished before the final QA payload write.
 
 For CLI follow-up runs, Code UX:
 

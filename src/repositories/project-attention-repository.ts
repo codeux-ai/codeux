@@ -666,6 +666,30 @@ export class ProjectAttentionRepository {
     return this.requireAndNotifyItem(itemId, current.projectId, true);
   }
 
+  requeueInterruptedVirtualRepairItems(): ProjectAttentionItemRecord[] {
+    const rows = this.db.prepare(`
+      SELECT attention.*
+      FROM project_attention_items attention
+      LEFT JOIN worker_endpoints endpoint
+        ON endpoint.id = attention.assigned_worker_endpoint_id
+      WHERE attention.owner_type = 'worker'
+        AND attention.status = 'claimed'
+        AND attention.attention_type IN ('ci_fix_required', 'merge_conflict')
+        AND (
+          attention.assigned_worker_endpoint_id IS NULL
+          OR endpoint.endpoint_type = 'virtual_cli'
+          OR json_extract(attention.payload_json, '$.repairRuntime.sessionId') IS NOT NULL
+        )
+      ORDER BY attention.opened_at ASC, attention.id ASC
+    `).all() as unknown as ProjectAttentionItemRow[];
+
+    return rows.map((row) => this.requeueAttentionItem(row.id, {
+      recoveredByStartup: true,
+      repairRecoveryReason: "startup_interrupted_virtual_repair",
+      repairRecoveredAt: new Date().toISOString(),
+    }));
+  }
+
   private requireAndNotifyItem(itemId: string, projectId: string, includeOverview: boolean): ProjectAttentionItemRecord {
     const item = this.mapRow(requireRecord(this.db.prepare('SELECT * FROM project_attention_items WHERE id = ?').get(itemId) as any, "Project attention item", itemId));
     this.notifyProjectRefresh(projectId, includeOverview);

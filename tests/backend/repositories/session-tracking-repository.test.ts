@@ -102,6 +102,31 @@ describe("SessionTrackingRepository", () => {
     expect(repo.getSession("cli-codex-running")?.state).toBe("CANCELLED");
   });
 
+  it("tracks and recovers virtual repair sessions without a cli id prefix", async () => {
+    const repo = await createRepo();
+    repo.createSession({
+      id: "virtual-cifix-codex-repair-1",
+      provider: "codex",
+      state: "RUNNING",
+      prompt: "repair CI",
+      title: "CI repair",
+      workerBranch: "fix/ci",
+      repoPath: "/tmp/repo-repair",
+    });
+
+    expect(repo.listTrackedCliSessions()).toEqual([
+      expect.objectContaining({ id: "virtual-cifix-codex-repair-1", state: "RUNNING" }),
+    ]);
+    expect(repo.findLatestCliSessionForBranch({
+      repoPath: "/tmp/repo-repair",
+      workerBranch: "fix/ci",
+      providers: ["codex"],
+    })).toEqual(expect.objectContaining({ sessionId: "virtual-cifix-codex-repair-1" }));
+
+    expect(repo.recoverInterruptedCliSessions().sessionIds).toEqual(["virtual-cifix-codex-repair-1"]);
+    expect(repo.getSession("virtual-cifix-codex-repair-1")?.state).toBe("CANCELLED");
+  });
+
   it("finds latest failed cli session for task resume target", async () => {
     const repo = await createRepo();
 

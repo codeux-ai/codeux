@@ -1680,6 +1680,8 @@ describe("VirtualWorkerService", () => {
       hasWorkerBranchCommitsAgainstFeature: vi.fn().mockResolvedValue(true),
     };
     const runCommandSpy = vi.spyOn(cliProcessRunner, "runCommandStrict")
+      .mockResolvedValueOnce({ ok: true, stdout: "initial-head\n", stderr: "", code: 0 })
+      .mockResolvedValueOnce({ ok: true, stdout: "repair-head\n", stderr: "", code: 0 })
       .mockResolvedValueOnce({ ok: true, stdout: "", stderr: "", code: 0 })
       .mockResolvedValueOnce({ ok: true, stdout: "cafebabe\n", stderr: "", code: 0 });
 
@@ -2127,7 +2129,7 @@ describe("VirtualWorkerService", () => {
       "/tmp/wt",
       "src",
       "tgt",
-      undefined,
+      expect.stringMatching(/^virtual-merge-codex-/),
       expect.anything(),
       { remoteOnly: true },
     );
@@ -2805,19 +2807,750 @@ describe("VirtualWorkerService", () => {
     vi.spyOn((virtualWorkerService as any), "isMergeConflictResolvedOnRemote").mockResolvedValue(false);
     vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree")
       .mockRejectedValue(new Error("Command spawner host exited (code=null, signal=SIGHUP)"));
-    vi.spyOn((virtualWorkerService as any).workspaceManager, "removeWorktree").mockResolvedValue(undefined);
+    const removeWorktree = vi.spyOn((virtualWorkerService as any).workspaceManager, "removeWorktree").mockResolvedValue(undefined);
 
     await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
 
     const updatedItem = projectAttentionService.getItem(item.id);
-    expect(updatedItem?.status).toBe("claimed");
+    expect(updatedItem?.status).toBe("open");
+    expect(updatedItem?.assignedWorkerEndpointId).toBeNull();
     expect(updatedItem?.payload?.workerOutcome).toBeUndefined();
+    expect(updatedItem?.payload?.repairRuntime).toEqual(expect.objectContaining({
+      purpose: "merge_conflict",
+      sessionId: expect.stringMatching(/^virtual-merge-codex-/),
+      workspaceSessionId: expect.stringMatching(/^virtual-merge-codex-/),
+      activeAttemptId: expect.any(String),
+      attemptRecorded: true,
+      phase: "interrupted",
+    }));
+    expect(removeWorktree).not.toHaveBeenCalled();
 
     const activeItems = projectAttentionService.listActiveProjectItems(project.id);
     expect(activeItems.some(i => i.attentionType === "human_escalation_required")).toBe(false);
 
     const sessions = sessionTracking.listSessions(10).sessions;
     expect(sessions.find(session => session.id.startsWith("virtual-merge-codex-"))?.state).toBe("CANCELLED");
+  });
+
+  it("continues a checkpointed worker-owned CI fix without charging the interrupted attempt twice", async () => {
+    const {
+      virtualWorkerService,
+      projectAttentionService,
+      project,
+      workerEndpointRepository,
+      settingsRepository,
+    } = await setupServiceWithProject();
+    settingsRepository.saveProjectSettings(project.id, {
+      aiProvider: {
+        providers: {
+          codex: { model: "gpt-current-after-restart" },
+        },
+      },
+    } as any);
+    const evaluate = vi.fn(() => ({
+      allowed: true,
+      count: 1,
+      cap: 5,
+      action: "BLOCK_AND_ESCALATE" as const,
+    }));
+    const record = vi.fn();
+    (virtualWorkerService as any).deps.guardrailService = {
+      evaluate,
+      record,
+      reset: vi.fn(),
+      getCounts: vi.fn(() => ({})),
+    };
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:continued-ci-fix",
+      displayName: "Virtual Worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType: "ci_fix_required",
+      severity: "high",
+      ownerType: "worker",
+      title: "CI Fix",
+      summaryMarkdown: "Continue the interrupted repair",
+      payload: {
+        repoPath: "/test",
+        branchName: "fix/checkpointed-ci",
+        repairRuntime: {
+          purpose: "ci_fix",
+          sessionId: "virtual-cifix-codex-stable",
+          workspaceSessionId: "virtual-cifix-codex-workspace",
+          provider: "codex",
+          providerConfigId: "codex",
+          model: "gpt-saved-ci-model",
+          nativeSessionId: "native-ci-stable",
+          activeAttemptId: "ci-attempt-stable",
+          attemptRecorded: true,
+          phase: "provider_running",
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    });
+    vi.spyOn((virtualWorkerService as any).dockerService, "isAvailable").mockResolvedValue(true);
+    const buildWorkspaceRef = vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorkspaceRef")
+      .mockReturnValue("/tmp/continued-ci-fix");
+    const prepareWorktree = vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree")
+      .mockResolvedValue({ worktreePath: "/tmp/continued-ci-fix", resumed: true });
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("guidance");
+    vi.spyOn((virtualWorkerService as any), "runWorkspaceCommand").mockResolvedValue({
+      ok: true,
+      stdout: "initial-head\n",
+      stderr: "",
+      code: 0,
+    });
+    const runProvider = vi.spyOn((virtualWorkerService as any), "runProviderWithRetry")
+      .mockRejectedValue(new Error("Command spawner host exited (code=null, signal=SIGHUP)"));
+
+    await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+
+    expect(evaluate).toHaveBeenCalledWith(
+      { projectId: project.id, sprintId: null },
+      `main-merge-ci-fix:${item.id}`,
+      "ci_fix",
+    );
+    expect(record).not.toHaveBeenCalled();
+    expect(buildWorkspaceRef).toHaveBeenCalledWith(
+      "/test",
+      "virtual-cifix-codex-workspace",
+      expect.anything(),
+    );
+    expect(prepareWorktree.mock.calls[0]?.[4]).toBe("virtual-cifix-codex-workspace");
+    expect(runProvider).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "codex",
+      sessionId: "virtual-cifix-codex-stable",
+      continueSessionId: "native-ci-stable",
+      model: "gpt-saved-ci-model",
+    }));
+    expect(projectAttentionService.getItem(item.id)).toMatchObject({
+      status: "open",
+      assignedWorkerEndpointId: null,
+      payload: {
+        repairRuntime: expect.objectContaining({
+          purpose: "ci_fix",
+          sessionId: "virtual-cifix-codex-stable",
+          workspaceSessionId: "virtual-cifix-codex-workspace",
+          provider: "codex",
+          providerConfigId: "codex",
+          model: "gpt-saved-ci-model",
+          nativeSessionId: "native-ci-stable",
+          activeAttemptId: "ci-attempt-stable",
+          attemptRecorded: true,
+          phase: "interrupted",
+        }),
+      },
+    });
+  });
+
+  it("publishes a checkpointed CI-fix workspace from its original baseline without rerunning the provider", async () => {
+    const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository } = await setupServiceWithProject();
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:publish-checkpointed-ci-fix",
+      displayName: "Virtual Worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType: "ci_fix_required",
+      severity: "high",
+      ownerType: "worker",
+      title: "CI Fix",
+      summaryMarkdown: "Publish the completed repair",
+      payload: {
+        repoPath: "/test",
+        branchName: "fix/checkpointed-publication",
+        repairRuntime: {
+          purpose: "ci_fix",
+          sessionId: "virtual-cifix-codex-publish",
+          workspaceSessionId: "virtual-cifix-codex-publish-workspace",
+          provider: "codex",
+          providerConfigId: "codex",
+          model: "gpt-5",
+          nativeSessionId: "native-ci-publish",
+          activeAttemptId: "ci-publish-attempt",
+          attemptRecorded: true,
+          phase: "interrupted",
+          workspaceBaselineHead: "ci-original-head",
+          workspaceRepairHead: "ci-repair-head",
+          publicationPhase: "workspace_finalized",
+          publishedHeadSha: null,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    });
+    vi.spyOn((virtualWorkerService as any).dockerService, "isAvailable").mockResolvedValue(true);
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorkspaceRef")
+      .mockReturnValue("/tmp/checkpointed-ci-publication");
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree")
+      .mockResolvedValue({ worktreePath: "/tmp/checkpointed-ci-publication", resumed: true });
+    vi.spyOn((virtualWorkerService as any), "runWorkspaceCommand").mockResolvedValue({
+      ok: true,
+      stdout: "ci-repair-head\n",
+      stderr: "",
+      code: 0,
+    });
+    const runProvider = vi.spyOn((virtualWorkerService as any), "runProviderWithRetry");
+    const exportBinaryPatch = vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "exportBinaryPatch")
+      .mockResolvedValue("ci patch");
+    const applyPatchToBranch = vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "applyPatchToBranch")
+      .mockResolvedValue({ hasChanges: true, commitSha: "ci-host-head" });
+
+    await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+
+    expect(runProvider).not.toHaveBeenCalled();
+    expect(exportBinaryPatch).toHaveBeenCalledWith(
+      "/tmp/checkpointed-ci-publication",
+      "ci-original-head",
+    );
+    expect(applyPatchToBranch).toHaveBeenCalledWith(expect.objectContaining({
+      baseRef: "ci-original-head",
+      workerBranch: "fix/checkpointed-publication",
+      commitMessage: expect.stringContaining("Code-UX-Repair-Head: ci-repair-head"),
+    }));
+    expect(projectAttentionService.getItem(item.id)).toMatchObject({
+      status: "resolved",
+      payload: {
+        repairRuntime: expect.objectContaining({
+          workspaceBaselineHead: "ci-original-head",
+          workspaceRepairHead: "ci-repair-head",
+          publicationPhase: "host_published",
+          publishedHeadSha: "ci-host-head",
+        }),
+      },
+    });
+  });
+
+  it("settles a CI-fix restart from host_publishing when the marked repair commit already exists", async () => {
+    const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository } = await setupServiceWithProject();
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:ci-host-publishing",
+      displayName: "Virtual Worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType: "ci_fix_required",
+      severity: "high",
+      ownerType: "worker",
+      title: "CI Fix",
+      summaryMarkdown: "Settle the published repair",
+      payload: {
+        repoPath: "/test",
+        branchName: "fix/already-published-ci",
+        repairRuntime: {
+          purpose: "ci_fix",
+          sessionId: "virtual-cifix-host-publishing",
+          workspaceSessionId: "virtual-cifix-host-publishing-workspace",
+          provider: "codex",
+          providerConfigId: "codex",
+          model: "gpt-5",
+          nativeSessionId: "native-ci-host-publishing",
+          activeAttemptId: "ci-host-publishing-attempt",
+          attemptRecorded: true,
+          phase: "interrupted",
+          workspaceBaselineHead: "ci-host-publishing-base",
+          workspaceRepairHead: "ci-host-publishing-repair",
+          publicationPhase: "host_publishing",
+          publishedHeadSha: null,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    });
+    vi.spyOn((virtualWorkerService as any).dockerService, "isAvailable").mockResolvedValue(true);
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorkspaceRef")
+      .mockReturnValue("/tmp/ci-host-publishing");
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree")
+      .mockResolvedValue({ worktreePath: "/tmp/ci-host-publishing", resumed: true });
+    vi.spyOn((virtualWorkerService as any), "runWorkspaceCommand").mockResolvedValue({
+      ok: true,
+      stdout: "ci-host-publishing-repair\n",
+      stderr: "",
+      code: 0,
+    });
+    const findPublishedRepairCommit = vi.spyOn((virtualWorkerService as any), "findPublishedRepairCommit")
+      .mockResolvedValue("ci-already-published-head");
+    const runProvider = vi.spyOn((virtualWorkerService as any), "runProviderWithRetry");
+    const exportBinaryPatch = vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "exportBinaryPatch");
+    const applyPatchToBranch = vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "applyPatchToBranch");
+
+    await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+
+    expect(findPublishedRepairCommit).toHaveBeenCalledWith(expect.objectContaining({
+      workerBranch: "fix/already-published-ci",
+      workspaceRepairHead: "ci-host-publishing-repair",
+    }));
+    expect(runProvider).not.toHaveBeenCalled();
+    expect(exportBinaryPatch).not.toHaveBeenCalled();
+    expect(applyPatchToBranch).not.toHaveBeenCalled();
+    expect(projectAttentionService.getItem(item.id)).toMatchObject({
+      status: "resolved",
+      payload: {
+        repairRuntime: expect.objectContaining({
+          publicationPhase: "host_published",
+          publishedHeadSha: "ci-already-published-head",
+        }),
+      },
+    });
+  });
+
+  it("settles a legacy unmarked equal-head CI publication after the host branch advances", async () => {
+    const {
+      virtualWorkerService,
+      projectAttentionService,
+      project,
+      workerEndpointRepository,
+      settingsRepository,
+    } = await setupServiceWithProject();
+    settingsRepository.saveProjectSettings(project.id, {
+      git: { githubMode: "LOCAL" },
+    } as any);
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:legacy-ci-host-publishing",
+      displayName: "Virtual Worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType: "ci_fix_required",
+      severity: "high",
+      ownerType: "worker",
+      title: "CI Fix",
+      summaryMarkdown: "Settle the legacy publication",
+      payload: {
+        repoPath: "/test",
+        branchName: "fix/legacy-published-ci",
+        repairRuntime: {
+          purpose: "ci_fix",
+          sessionId: "virtual-cifix-legacy-host-publishing",
+          workspaceSessionId: "virtual-cifix-legacy-host-publishing-workspace",
+          provider: "codex",
+          providerConfigId: "codex",
+          model: "gpt-5",
+          nativeSessionId: "native-ci-legacy-host-publishing",
+          activeAttemptId: "ci-legacy-host-publishing-attempt",
+          attemptRecorded: true,
+          phase: "interrupted",
+          workspaceBaselineHead: "ci-legacy-base",
+          workspaceRepairHead: "ci-legacy-base",
+          publicationPhase: "host_publishing",
+          publishedHeadSha: null,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    });
+    vi.spyOn((virtualWorkerService as any).dockerService, "isAvailable").mockResolvedValue(true);
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorkspaceRef")
+      .mockReturnValue("/tmp/ci-legacy-host-publishing");
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree")
+      .mockResolvedValue({ worktreePath: "/tmp/ci-legacy-host-publishing", resumed: true });
+    vi.spyOn((virtualWorkerService as any), "runWorkspaceCommand").mockImplementation(
+      async (_path: string, _command: string, args: string[]) => ({
+        ok: true,
+        stdout: args[1]?.endsWith("^{tree}") ? "ci-baseline-tree\n" : "ci-legacy-base\n",
+        stderr: "",
+        code: 0,
+      }),
+    );
+    vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "resolveWorkspaceTree")
+      .mockResolvedValue("ci-repair-tree");
+    vi.spyOn((virtualWorkerService as any), "findPublishedRepairCommit").mockResolvedValue(null);
+    const runCommandSpy = vi.spyOn(cliProcessRunner, "runCommandStrict").mockImplementation(
+      async (_command: string, args: string[]) => {
+        if (args[0] === "log") {
+          return {
+            ok: true,
+            stdout: [
+              "ci-newer-host-head\tci-newer-host-tree\tchore: advance branch",
+              "ci-unsafe-old-head\tci-repair-tree\tfix(ci): resolve failing checks on fix/legacy-published-ci",
+              "ci-legacy-host-head\tci-repair-tree\tfix(ci): resolve failing checks on fix/legacy-published-ci",
+            ].join("\n"),
+            stderr: "",
+            code: 0,
+          };
+        }
+        if (args[0] === "merge-base") {
+          if (args[3] === "ci-unsafe-old-head") {
+            throw new Error("candidate predates the saved baseline");
+          }
+          return { ok: true, stdout: "", stderr: "", code: 0 };
+        }
+        throw new Error(`Unexpected Git command: ${args.join(" ")}`);
+      },
+    );
+    const runProvider = vi.spyOn((virtualWorkerService as any), "runProviderWithRetry");
+    const exportBinaryPatch = vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "exportBinaryPatch");
+    const applyPatchToBranch = vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "applyPatchToBranch");
+
+    await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+    runCommandSpy.mockRestore();
+
+    expect(runProvider).not.toHaveBeenCalled();
+    expect(exportBinaryPatch).not.toHaveBeenCalled();
+    expect(applyPatchToBranch).not.toHaveBeenCalled();
+    expect(projectAttentionService.getItem(item.id)).toMatchObject({
+      status: "resolved",
+      payload: {
+        repairRuntime: expect.objectContaining({
+          publicationPhase: "host_published",
+          publishedHeadSha: "ci-legacy-host-head",
+        }),
+      },
+    });
+  });
+
+  it("continues a checkpointed merge repair without charging another attempt", async () => {
+    const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository } = await setupServiceWithProject();
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:continued-merge",
+      displayName: "Virtual Worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType: "merge_conflict",
+      severity: "high",
+      ownerType: "worker",
+      title: "Merge Conflict",
+      summaryMarkdown: "Continue it",
+      payload: {
+        repoPath: "/test",
+        conflictingBranches: { source: "src", target: "tgt" },
+        mergeConflictResolutionAttempts: 1,
+        repairRuntime: {
+          purpose: "merge_conflict",
+          sessionId: "virtual-merge-codex-stable",
+          workspaceSessionId: "virtual-merge-codex-workspace",
+          provider: "codex",
+          providerConfigId: "codex",
+          model: "gpt-5",
+          nativeSessionId: "native-merge-stable",
+          activeAttemptId: "attempt-stable",
+          attemptRecorded: true,
+          phase: "provider_running",
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    });
+    vi.spyOn((virtualWorkerService as any).dockerService, "isAvailable").mockResolvedValue(true);
+    vi.spyOn((virtualWorkerService as any), "isMergeConflictResolvedOnRemote").mockResolvedValue(false);
+    const prepareWorktree = vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree")
+      .mockResolvedValue({ worktreePath: "/tmp/continued-merge", resumed: true });
+    vi.spyOn((virtualWorkerService as any), "workspaceHasMergeInProgress").mockResolvedValue(false);
+    vi.spyOn((virtualWorkerService as any), "runMergeIntoSource").mockResolvedValue(true);
+    vi.spyOn((virtualWorkerService as any), "runWorkspaceCommand").mockResolvedValue({
+      ok: true, stdout: "initial-head\n", stderr: "", code: 0,
+    });
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("guidance");
+    const runProvider = vi.spyOn((virtualWorkerService as any), "runProviderWithRetry")
+      .mockRejectedValue(new Error("Command spawner host exited (code=null, signal=SIGHUP)"));
+
+    await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+
+    expect(projectAttentionService.getItem(item.id)?.payload?.mergeConflictResolutionAttempts).toBe(1);
+    expect(prepareWorktree.mock.calls[0]?.[4]).toBe("virtual-merge-codex-workspace");
+    expect(runProvider).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: "virtual-merge-codex-stable",
+      continueSessionId: "native-merge-stable",
+      model: "gpt-5",
+    }));
+    expect(projectAttentionService.getItem(item.id)?.payload?.repairRuntime).toEqual(expect.objectContaining({
+      sessionId: "virtual-merge-codex-stable",
+      workspaceSessionId: "virtual-merge-codex-workspace",
+      nativeSessionId: "native-merge-stable",
+      activeAttemptId: "attempt-stable",
+      attemptRecorded: true,
+    }));
+  });
+
+  it("detects and publishes a merge commit created before restart from the original workspace baseline", async () => {
+    const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository } = await setupServiceWithProject();
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:publish-checkpointed-merge",
+      displayName: "Virtual Worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType: "merge_conflict",
+      severity: "high",
+      ownerType: "worker",
+      title: "Merge Conflict",
+      summaryMarkdown: "Publish the completed merge",
+      payload: {
+        repoPath: "/test",
+        conflictingBranches: { source: "fix/merge-publication", target: "dev" },
+        mergeConflictResolutionAttempts: 1,
+        repairRuntime: {
+          purpose: "merge_conflict",
+          sessionId: "virtual-merge-codex-publish",
+          workspaceSessionId: "virtual-merge-codex-publish-workspace",
+          provider: "codex",
+          providerConfigId: "codex",
+          model: "gpt-5",
+          nativeSessionId: "native-merge-publish",
+          activeAttemptId: "merge-publish-attempt",
+          attemptRecorded: true,
+          phase: "provider_running",
+          workspaceBaselineHead: "merge-original-head",
+          workspaceRepairHead: null,
+          publicationPhase: "pending",
+          publishedHeadSha: null,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    });
+    vi.spyOn((virtualWorkerService as any).dockerService, "isAvailable").mockResolvedValue(true);
+    vi.spyOn((virtualWorkerService as any), "isMergeConflictResolvedOnRemote").mockResolvedValue(false);
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree")
+      .mockResolvedValue({ worktreePath: "/tmp/checkpointed-merge-publication", resumed: true });
+    vi.spyOn((virtualWorkerService as any), "runWorkspaceCommand").mockResolvedValue({
+      ok: true,
+      stdout: "merge-repair-head\n",
+      stderr: "",
+      code: 0,
+    });
+    vi.spyOn((virtualWorkerService as any), "workspaceHasMergeInProgress").mockResolvedValue(false);
+    const ensureTargetMergedIntoSource = vi.spyOn((virtualWorkerService as any), "ensureTargetMergedIntoSource")
+      .mockResolvedValue(undefined);
+    const runMergeIntoSource = vi.spyOn((virtualWorkerService as any), "runMergeIntoSource");
+    const runProvider = vi.spyOn((virtualWorkerService as any), "runProviderWithRetry");
+    const finalizeMergeCommit = vi.spyOn((virtualWorkerService as any), "finalizeMergeCommit");
+    const exportBinaryPatch = vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "exportBinaryPatch")
+      .mockResolvedValue("merge patch");
+    const applyPatchToBranch = vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "applyPatchToBranch")
+      .mockResolvedValue({ hasChanges: true, commitSha: "merge-host-head" });
+
+    await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+
+    expect(runMergeIntoSource).not.toHaveBeenCalled();
+    expect(runProvider).not.toHaveBeenCalled();
+    expect(finalizeMergeCommit).not.toHaveBeenCalled();
+    expect(ensureTargetMergedIntoSource).toHaveBeenCalledWith(
+      "/tmp/checkpointed-merge-publication",
+      "origin/dev",
+    );
+    expect(exportBinaryPatch).toHaveBeenCalledWith(
+      "/tmp/checkpointed-merge-publication",
+      "merge-original-head",
+    );
+    expect(applyPatchToBranch).toHaveBeenCalledWith(expect.objectContaining({
+      baseRef: "merge-original-head",
+      workerBranch: "fix/merge-publication",
+      forceMergeCommit: true,
+      commitMessage: expect.stringContaining("Code-UX-Repair-Head: merge-repair-head"),
+    }));
+    expect(projectAttentionService.getItem(item.id)).toMatchObject({
+      status: "resolved",
+      payload: {
+        repairRuntime: expect.objectContaining({
+          workspaceBaselineHead: "merge-original-head",
+          workspaceRepairHead: "merge-repair-head",
+          publicationPhase: "host_published",
+          publishedHeadSha: "merge-host-head",
+        }),
+      },
+    });
+  });
+
+  it("settles a merge restart from host_publishing when the marked repair commit already exists", async () => {
+    const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository } = await setupServiceWithProject();
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:merge-host-publishing",
+      displayName: "Virtual Worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType: "merge_conflict",
+      severity: "high",
+      ownerType: "worker",
+      title: "Merge Conflict",
+      summaryMarkdown: "Settle the published merge repair",
+      payload: {
+        repoPath: "/test",
+        conflictingBranches: { source: "fix/already-published-merge", target: "dev" },
+        mergeConflictResolutionAttempts: 1,
+        repairRuntime: {
+          purpose: "merge_conflict",
+          sessionId: "virtual-merge-host-publishing",
+          workspaceSessionId: "virtual-merge-host-publishing-workspace",
+          provider: "codex",
+          providerConfigId: "codex",
+          model: "gpt-5",
+          nativeSessionId: "native-merge-host-publishing",
+          activeAttemptId: "merge-host-publishing-attempt",
+          attemptRecorded: true,
+          phase: "interrupted",
+          workspaceBaselineHead: "merge-host-publishing-base",
+          workspaceRepairHead: "merge-host-publishing-repair",
+          publicationPhase: "host_publishing",
+          publishedHeadSha: null,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    });
+    vi.spyOn((virtualWorkerService as any).dockerService, "isAvailable").mockResolvedValue(true);
+    vi.spyOn((virtualWorkerService as any), "isMergeConflictResolvedOnRemote").mockResolvedValue(false);
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree")
+      .mockResolvedValue({ worktreePath: "/tmp/merge-host-publishing", resumed: true });
+    vi.spyOn((virtualWorkerService as any), "runWorkspaceCommand").mockResolvedValue({
+      ok: true,
+      stdout: "merge-host-publishing-repair\n",
+      stderr: "",
+      code: 0,
+    });
+    const findPublishedRepairCommit = vi.spyOn((virtualWorkerService as any), "findPublishedRepairCommit")
+      .mockResolvedValue("merge-already-published-head");
+    const runMergeIntoSource = vi.spyOn((virtualWorkerService as any), "runMergeIntoSource");
+    const runProvider = vi.spyOn((virtualWorkerService as any), "runProviderWithRetry");
+    const finalizeMergeCommit = vi.spyOn((virtualWorkerService as any), "finalizeMergeCommit");
+    const exportBinaryPatch = vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "exportBinaryPatch");
+    const applyPatchToBranch = vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "applyPatchToBranch");
+
+    await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+
+    expect(findPublishedRepairCommit).toHaveBeenCalledWith(expect.objectContaining({
+      workerBranch: "fix/already-published-merge",
+      workspaceRepairHead: "merge-host-publishing-repair",
+    }));
+    expect(runMergeIntoSource).not.toHaveBeenCalled();
+    expect(runProvider).not.toHaveBeenCalled();
+    expect(finalizeMergeCommit).not.toHaveBeenCalled();
+    expect(exportBinaryPatch).not.toHaveBeenCalled();
+    expect(applyPatchToBranch).not.toHaveBeenCalled();
+    expect(projectAttentionService.getItem(item.id)).toMatchObject({
+      status: "resolved",
+      payload: {
+        repairRuntime: expect.objectContaining({
+          publicationPhase: "host_published",
+          publishedHeadSha: "merge-already-published-head",
+        }),
+      },
+    });
+  });
+
+  it("settles a legacy unmarked merge publication only when its tree and merge parent match", async () => {
+    const {
+      virtualWorkerService,
+      projectAttentionService,
+      project,
+      workerEndpointRepository,
+      settingsRepository,
+    } = await setupServiceWithProject();
+    settingsRepository.saveProjectSettings(project.id, {
+      git: { githubMode: "LOCAL" },
+    } as any);
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:legacy-merge-host-publishing",
+      displayName: "Virtual Worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType: "merge_conflict",
+      severity: "high",
+      ownerType: "worker",
+      title: "Merge Conflict",
+      summaryMarkdown: "Settle the legacy merge publication",
+      payload: {
+        repoPath: "/test",
+        conflictingBranches: { source: "fix/legacy-published-merge", target: "dev" },
+        mergeConflictResolutionAttempts: 1,
+        repairRuntime: {
+          purpose: "merge_conflict",
+          sessionId: "virtual-merge-legacy-host-publishing",
+          workspaceSessionId: "virtual-merge-legacy-host-publishing-workspace",
+          provider: "codex",
+          providerConfigId: "codex",
+          model: "gpt-5",
+          nativeSessionId: "native-merge-legacy-host-publishing",
+          activeAttemptId: "merge-legacy-host-publishing-attempt",
+          attemptRecorded: true,
+          phase: "interrupted",
+          workspaceBaselineHead: "merge-legacy-base",
+          workspaceRepairHead: "merge-legacy-repair",
+          publicationPhase: "host_publishing",
+          publishedHeadSha: null,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    });
+    vi.spyOn((virtualWorkerService as any).dockerService, "isAvailable").mockResolvedValue(true);
+    vi.spyOn((virtualWorkerService as any), "isMergeConflictResolvedOnRemote").mockResolvedValue(false);
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree")
+      .mockResolvedValue({ worktreePath: "/tmp/merge-legacy-host-publishing", resumed: true });
+    vi.spyOn((virtualWorkerService as any), "runWorkspaceCommand").mockImplementation(
+      async (_path: string, _command: string, args: string[]) => ({
+        ok: true,
+        stdout: args[1]?.endsWith("^{tree}") ? "merge-baseline-tree\n" : "merge-legacy-repair\n",
+        stderr: "",
+        code: 0,
+      }),
+    );
+    vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "resolveWorkspaceTree")
+      .mockResolvedValue("merge-repair-tree");
+    vi.spyOn((virtualWorkerService as any), "findPublishedRepairCommit").mockResolvedValue(null);
+    const runCommandSpy = vi.spyOn(cliProcessRunner, "runCommandStrict").mockImplementation(
+      async (_command: string, args: string[]) => {
+        if (args[0] === "log") {
+          return {
+            ok: true,
+            stdout: "merge-legacy-host-head\tmerge-repair-tree\tfix(merge): resolve dev into fix/legacy-published-merge\n",
+            stderr: "",
+            code: 0,
+          };
+        }
+        if (args[0] === "merge-base") {
+          if (args[2] === "fix/legacy-published-merge") {
+            throw new Error("source is not yet contained in target");
+          }
+          return { ok: true, stdout: "", stderr: "", code: 0 };
+        }
+        throw new Error(`Unexpected Git command: ${args.join(" ")}`);
+      },
+    );
+    const runMergeIntoSource = vi.spyOn((virtualWorkerService as any), "runMergeIntoSource");
+    const runProvider = vi.spyOn((virtualWorkerService as any), "runProviderWithRetry");
+    const finalizeMergeCommit = vi.spyOn((virtualWorkerService as any), "finalizeMergeCommit");
+    const exportBinaryPatch = vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "exportBinaryPatch");
+    const applyPatchToBranch = vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "applyPatchToBranch");
+
+    await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+    runCommandSpy.mockRestore();
+
+    expect(runMergeIntoSource).not.toHaveBeenCalled();
+    expect(runProvider).not.toHaveBeenCalled();
+    expect(finalizeMergeCommit).not.toHaveBeenCalled();
+    expect(exportBinaryPatch).not.toHaveBeenCalled();
+    expect(applyPatchToBranch).not.toHaveBeenCalled();
+    expect(projectAttentionService.getItem(item.id)).toMatchObject({
+      status: "resolved",
+      payload: {
+        repairRuntime: expect.objectContaining({
+          publicationPhase: "host_published",
+          publishedHeadSha: "merge-legacy-host-head",
+        }),
+      },
+    });
   });
 
   it("resolveActionRequiredAttention covers auto-approve plan path", async () => {

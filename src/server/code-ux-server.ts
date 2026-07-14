@@ -1349,6 +1349,10 @@ export class CodeUxServer {
     } catch (error) {
       this.logger.error("Failed to recover runtime state on startup", { error });
     } finally {
+      // Repair attention can retain a claimed virtual endpoint and a live Docker
+      // container across a process boundary. Reconcile and stop that stale owner
+      // before virtual workers are allowed to claim the preserved workspace.
+      this.virtualWorkerService.start();
       this.startupRecoveryCompleted = true;
     }
   }
@@ -1610,7 +1614,6 @@ export class CodeUxServer {
     this.startSprintPreviewLoop();
     this.startLiveSnapshotLoop();
     this.startWalCheckpointLoop();
-    this.virtualWorkerService.start();
     this.scheduleBackgroundStartupTasks();
   }
 }

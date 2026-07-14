@@ -8,6 +8,7 @@ import { ExecutionRepository } from "../../../src/repositories/execution-reposit
 import { GuardrailRepository } from "../../../src/repositories/guardrail-repository.js";
 import { ProjectAttentionRepository } from "../../../src/repositories/project-attention-repository.js";
 import { ProjectWorkerAssignmentRepository } from "../../../src/repositories/project-worker-assignment-repository.js";
+import { WorkerEndpointRepository } from "../../../src/repositories/worker-endpoint-repository.js";
 import { QaReviewRepository } from "../../../src/repositories/qa-review-repository.js";
 import { SessionTrackingRepository } from "../../../src/repositories/session-tracking-repository.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
@@ -44,6 +45,7 @@ async function createFixture(options?: {
   const guardrailRepository = new GuardrailRepository(storage);
   const projectAttentionRepository = new ProjectAttentionRepository(storage);
   const projectWorkerAssignmentRepository = new ProjectWorkerAssignmentRepository(storage);
+  const workerEndpointRepository = new WorkerEndpointRepository(storage);
   const projectAttentionService = new ProjectAttentionService(
     projectAttentionRepository,
     projectWorkerAssignmentRepository,
@@ -84,6 +86,7 @@ async function createFixture(options?: {
     guardrailRepository,
     projectAttentionRepository,
     projectAttentionService,
+    workerEndpointRepository,
     guardrailService,
     qaReviewRepository,
     sessionTracking,
@@ -124,6 +127,79 @@ describe("RuntimeStartupRecoveryService", () => {
     expect(terminalProviderOrder).toBeLessThan(structOrder);
     expect(structOrder).toBeLessThan(taskCodingOrder);
     expect(taskCodingOrder).toBeLessThan(providerOrder);
+  });
+
+  it("stops and requeues interrupted virtual repair attention while preserving its checkpoint", async () => {
+    const removeContainers = vi.fn().mockResolvedValue(undefined);
+    const {
+      projectRepository,
+      projectAttentionService,
+      workerEndpointRepository,
+      service,
+    } = await createFixture({
+      dockerService: {
+        listContainers: vi.fn().mockResolvedValue([{
+          id: "repair-container",
+          labels: { "code-ux.session-id": "virtual-merge-codex-repair-1" },
+        }]),
+        removeContainers,
+      },
+    });
+    const project = projectRepository.createProject({
+      name: "Repair Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/repair-recovery",
+    });
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:repair-recovery",
+      displayName: "Virtual repair worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType: "merge_conflict",
+      severity: "high",
+      ownerType: "worker",
+      title: "Repair conflict",
+      summaryMarkdown: "Continue the interrupted repair.",
+      payload: {
+        repoPath: "/workspace/repair-recovery",
+        repairRuntime: {
+          purpose: "merge_conflict",
+          sessionId: "virtual-merge-codex-repair-1",
+          workspaceSessionId: "virtual-merge-codex-repair-1",
+          provider: "codex",
+          providerConfigId: "codex",
+          model: "codex-model",
+          nativeSessionId: "native-repair-1",
+          activeAttemptId: "attempt-1",
+          attemptRecorded: true,
+          phase: "provider_running",
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    });
+    projectAttentionService.claimItem(item.id, endpoint.id, "virtual_worker_test");
+
+    const result = await service.recover();
+
+    expect(removeContainers).toHaveBeenCalledWith(["repair-container"], { removeVolumes: false });
+    expect(result.requeuedInterruptedRepairAttentionItemIds).toEqual([item.id]);
+    expect(projectAttentionService.getItem(item.id)).toMatchObject({
+      status: "open",
+      assignedWorkerEndpointId: null,
+      payload: expect.objectContaining({
+        repairRuntime: expect.objectContaining({
+          sessionId: "virtual-merge-codex-repair-1",
+          nativeSessionId: "native-repair-1",
+          activeAttemptId: "attempt-1",
+          attemptRecorded: true,
+        }),
+        repairRecoveryReason: "startup_interrupted_virtual_repair",
+      }),
+    });
   });
 
   it("demotes premature virtual merge-conflict human escalations back to automatic worker attention", async () => {

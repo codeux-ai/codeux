@@ -122,6 +122,8 @@ If a QA agent preset is wired to `qa_review` in routing, completed tasks pass th
 
 Provider or infrastructure errors do not immediately create this handoff. Recovered failed, cancelled, and errored attempts retry within a bounded infrastructure grace, and every terminal attempt counts toward the hard ceiling. A CLI QA fix that produces no new patch is escalated as no progress instead of starting another QA cycle; existing branch commits do not renew the cycle. A coding run that produces no changes must explicitly confirm completion or it is blocked for attention. The sprint watch loop stays alive while worker or human attention is active.
 
+QA review has its own durable session, separate from the coding session that receives fixes. With the restart invocation policy set to `continue`, Code UX resumes an interrupted reviewer in the same isolated review workspace and continues the provider conversation when the provider supports native session resumption. A requested-fix verdict is saved before its coding handoff starts. If restart lands in that gap, the next watch cycle resumes the pending handoff; if the coding follow-up already completed, Code UX advances to verification without repeating it. An abruptly failed coding handoff returns to the saved QA checkpoint and retries the same coding session/workspace up to the bounded continuation limit before applying the configured QA exhaustion policy.
+
 Task and sprint summary badges select one reviewer from the newest QA cycle. Within that cycle, running reviews appear first, followed by requested changes, provider failures (`failed`, `cancelled`, or `errored`), passes, and other states. This keeps a passing reviewer from hiding another reviewer that is still active, has blocked the work, or did not return a usable verdict.
 
 ## Attention items: who handles them
@@ -136,6 +138,8 @@ The eligible attention items per provider:
 - Plan approval and clarification reply are handled by the configured automation, not virtual workers.
 
 Humans can claim and resolve items at any time from the dashboard.
+
+Under the restart `continue` policy, an interrupted Code UX-owned CI-fix or merge-conflict item is released from the stopped virtual worker and returned to the worker queue. Its replacement invocation reuses the prior logical session and repair workspace, and resumes the provider-native conversation when available. This preserves partial edits and provider reasoning across a normal runtime restart instead of spending a new guardrail attempt on the same interrupted work.
 
 ## Recommended settings recipes
 
