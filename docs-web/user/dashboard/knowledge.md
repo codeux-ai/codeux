@@ -26,6 +26,11 @@ status:
 Documents are labelled by type (PDF, Word, code, pasted note, repo path, imported) so the list stays
 scannable.
 
+The route interface follows the dashboard's English or German locale. Counts, file sizes, update
+dates, and search-match percentages use locale-aware formatting. The locale changes presentation
+only: document titles and contents, repository paths, agent and model names, identifiers, search
+excerpts, partial-ingestion diagnostics, and API errors are always shown unchanged.
+
 ## Searching
 
 The search box runs a **semantic search** across all ready documents in the project and returns the

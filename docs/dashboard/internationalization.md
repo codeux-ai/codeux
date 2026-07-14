@@ -51,6 +51,8 @@ The initial application bundle translates only root-owned shell copy: the skip l
 
 Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged.
 
+The Knowledge route follows this boundary with its feature-owned `messages/knowledge.ts` catalog. Headers, controls, document states, ingestion dialogs, search feedback, confirmations, and accessibility announcements switch between English and German. Document titles and contents, paths, agent and model names, identifiers, search excerpts, ingestion diagnostics, and API errors remain verbatim. Counts, file sizes, update dates, and search-match percentages use the active locale's `Intl` formatting.
+
 ## Verification
 
 Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization.
