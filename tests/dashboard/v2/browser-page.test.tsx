@@ -474,6 +474,28 @@ describe("BrowserPage", () => {
     expect(((disabledStatus as HTMLElement).compareDocumentPosition(firstSliderLink) & Node.DOCUMENT_POSITION_FOLLOWING)).not.toBe(0);
   });
 
+  it("fully localizes disabled Browser Preview guidance in German", () => {
+    effectiveSettingsMock.value = {
+      data: {
+        settings: {
+          sprintPreview: {
+            enabled: false,
+            showInAppBrowser: true,
+          },
+        },
+      },
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    };
+
+    renderGerman(<BrowserPage />);
+
+    expect(screen.getByText("Die Vorschau-Laufzeit ist deaktiviert.")).toBeInTheDocument();
+    expect(screen.getByText(/Aktiviere „Vorschau-Laufzeit aktiviert“/)).toBeInTheDocument();
+    expect(screen.queryByText(/Preview runtime enabled/)).not.toBeInTheDocument();
+  });
+
   afterEach(() => {
     mockStartPreviewSession.mockClear();
     mockRemovePreviewSession.mockClear();

@@ -57,6 +57,8 @@ The pane is an iframe-like container with toolbar buttons:
 
 The URL bar is read-only; it shows the host URL the container is exposing.
 
+When the dashboard locale is German, the Browser page, browser chrome, session controls, environment editors, status labels, and announcements are shown in German. Runtime data stays unchanged: preview URLs and paths, port numbers, commands and scripts, environment names and values, container logs and IDs, project and sprint names, and server diagnostics are displayed exactly as supplied. Counts and pending port/session summaries follow the active locale without changing routing order or numeric ports.
+
 The right sidebar keeps **Launch Container** expanded so new previews are always immediately available. **Docker Access**, **Selected Sprint**, **Environment**, **Runtime notes**, and **Container logs** are collapsed by default; the Selected Sprint header still shows the active port mapping, or `port pending` until a running preview has a routed port.
 
 ## Preview session cards
