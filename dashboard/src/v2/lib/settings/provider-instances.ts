@@ -314,6 +314,7 @@ export const getProviderInstanceAuthLabel = (
   providerConfigId: ProviderConfigId,
   systemSettings: SystemSettings | null,
   dockerExecutionEnabled: boolean,
+  locale: DashboardLocale = "en",
 ): string | null => {
   const providerConfig = getSystemIntegrationProviders(systemSettings)[providerConfigId];
   const providerType = providerConfig?.provider;
@@ -324,20 +325,28 @@ export const getProviderInstanceAuthLabel = (
   const hasMountedAuth = providerType !== "jules" && providerConfig.mountAuth;
 
   if (providerType === "jules") {
-    return hasApiKey ? "API key" : null;
+    return hasApiKey ? translateDashboardMessage(settingsIntegrationsMessages, locale, "apiKey") : null;
   }
 
   if (providerConfig.authType === "dashboardAuth") {
-    return "Dashboard login";
+    return translateDashboardMessage(settingsIntegrationsMessages, locale, "dashboardLoginMode");
   }
 
   if (hasMountedAuth && hasApiKey) {
-    return dockerExecutionEnabled ? "Auth mount + API key" : "Mount config + API key";
+    return translateDashboardMessage(
+      settingsIntegrationsMessages,
+      locale,
+      dockerExecutionEnabled ? "authMountApiKey" : "mountConfigApiKey",
+    );
   }
   if (hasMountedAuth) {
-    return dockerExecutionEnabled ? "Auth mount enabled" : "Mount config enabled";
+    return translateDashboardMessage(
+      settingsIntegrationsMessages,
+      locale,
+      dockerExecutionEnabled ? "authMountEnabled" : "mountConfigEnabled",
+    );
   }
-  return hasApiKey ? "API key" : null;
+  return hasApiKey ? translateDashboardMessage(settingsIntegrationsMessages, locale, "apiKey") : null;
 };
 
 export const getProviderAuthLabel = (
@@ -345,17 +354,22 @@ export const getProviderAuthLabel = (
   systemSettings: SystemSettings | null,
   hints: ExternalSettingsHints | null,
   dockerExecutionEnabled: boolean,
+  locale: DashboardLocale = "en",
 ): string | null => {
   const systemProviders = getSystemProvidersByType(systemSettings, providerId);
   if (systemProviders.length > 0) {
     const labels = systemProviders
-      .map(([providerConfigId]) => getProviderInstanceAuthLabel(providerConfigId, systemSettings, dockerExecutionEnabled))
+      .map(([providerConfigId]) => getProviderInstanceAuthLabel(providerConfigId, systemSettings, dockerExecutionEnabled, locale))
       .filter((label): label is string => Boolean(label));
     if (labels.length > 0) {
-      return labels.length === 1 ? labels[0] : `${labels.length} credentials`;
+      return labels.length === 1
+        ? labels[0]
+        : `${labels.length} ${translateDashboardMessage(settingsIntegrationsMessages, locale, "credentialsCount")}`;
     }
   }
-  return hasAnyProviderApiKey(providerId, systemSettings, hints) ? "API key" : null;
+  return hasAnyProviderApiKey(providerId, systemSettings, hints)
+    ? translateDashboardMessage(settingsIntegrationsMessages, locale, "apiKey")
+    : null;
 };
 
 export const getEligibleProviders = (

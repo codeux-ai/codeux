@@ -40,6 +40,9 @@ import {
   createDefaultSetupForBridge,
   findBridgeSchema,
   getBridgeModeLabel,
+  getChatProviderBridgeSetupLabel,
+  getChatProviderDescription,
+  getChatProviderFieldLabel,
   getChatProviderSetupNotes,
   isChatProviderKind,
 } from "../../../lib/chat-provider-view-models.js";
@@ -52,6 +55,7 @@ import { LocalFilePickerField } from "../LocalFilePickerField.js";
 import { AutomationCredentialManager } from "../AutomationCredentialManager.js";
 import { useDashboardI18n } from "../../../i18n/context.js";
 import { settingsIntegrationsMessages } from "../../../i18n/messages/settings-integrations.js";
+import type { DashboardTextMessageKey } from "../../../i18n/locales.js";
 
 type PublicProviderId = Exclude<ProviderId, "mockup-cli">;
 
@@ -100,8 +104,8 @@ const isImporterIntegrationId = (value: unknown): value is ImporterIntegrationId
 
 interface ImporterFieldDefinition {
   key: ImporterTextField;
-  label: string;
-  description: string;
+  labelKey: DashboardTextMessageKey<typeof settingsIntegrationsMessages>;
+  descriptionKey: DashboardTextMessageKey<typeof settingsIntegrationsMessages>;
   placeholder?: string;
   secret?: boolean;
 }
@@ -121,8 +125,8 @@ const IMPORTER_DEFINITIONS: Record<ImporterIntegrationId, ImporterDefinition> = 
     accentClassName: "border-[#000000]/12 bg-black/[0.06] text-slate-900 dark:border-white/[0.16] dark:bg-white/[0.08] dark:text-white",
     requiredFields: ["apiToken", "databaseId"],
     fields: [
-      { key: "workspaceId", label: "Workspace ID", description: "Default Notion workspace used for guided imports.", placeholder: "workspace-id" },
-      { key: "databaseId", label: "Database ID", description: "Default Notion database searched by sprint imports.", placeholder: "database-id" },
+      { key: "workspaceId", labelKey: "workspaceId", descriptionKey: "notionWorkspaceDescription", placeholder: "workspace-id" },
+      { key: "databaseId", labelKey: "databaseId", descriptionKey: "notionDatabaseDescription", placeholder: "database-id" },
     ],
   },
   asana: {
@@ -131,9 +135,9 @@ const IMPORTER_DEFINITIONS: Record<ImporterIntegrationId, ImporterDefinition> = 
     accentClassName: "border-[#F06A6A]/20 bg-[#F06A6A]/10 text-[#B83A3A] dark:border-[#F06A6A]/24 dark:bg-[#F06A6A]/12 dark:text-[#FFB0B0]",
     requiredFields: ["apiToken", "workspaceId"],
     fields: [
-      { key: "workspaceId", label: "Workspace GID", description: "Default Asana workspace for task searches.", placeholder: "workspace-gid" },
-      { key: "teamId", label: "Team GID", description: "Optional team used to narrow Asana imports.", placeholder: "team-gid" },
-      { key: "projectId", label: "Project GID", description: "Default Asana project for issue import searches.", placeholder: "project-gid" },
+      { key: "workspaceId", labelKey: "workspaceGid", descriptionKey: "asanaWorkspaceDescription", placeholder: "workspace-gid" },
+      { key: "teamId", labelKey: "teamGid", descriptionKey: "asanaTeamDescription", placeholder: "team-gid" },
+      { key: "projectId", labelKey: "projectGid", descriptionKey: "asanaProjectDescription", placeholder: "project-gid" },
     ],
   },
   linear: {
@@ -142,9 +146,9 @@ const IMPORTER_DEFINITIONS: Record<ImporterIntegrationId, ImporterDefinition> = 
     accentClassName: "border-[#5E6AD2]/22 bg-[#5E6AD2]/10 text-[#4B55B8] dark:border-[#9EA5FF]/22 dark:bg-[#9EA5FF]/12 dark:text-[#C7CBFF]",
     requiredFields: ["apiToken", "teamKey"],
     fields: [
-      { key: "workspaceId", label: "Workspace URL key", description: "Linear workspace slug or identifier for imports.", placeholder: "company" },
-      { key: "teamKey", label: "Team key", description: "Default Linear team key used in guided searches.", placeholder: "ENG" },
-      { key: "projectId", label: "Project ID", description: "Optional default Linear project identifier.", placeholder: "project-id" },
+      { key: "workspaceId", labelKey: "workspaceUrlKey", descriptionKey: "linearWorkspaceDescription", placeholder: "company" },
+      { key: "teamKey", labelKey: "teamKey", descriptionKey: "linearTeamDescription", placeholder: "ENG" },
+      { key: "projectId", labelKey: "projectIdField", descriptionKey: "linearProjectDescription", placeholder: "project-id" },
     ],
   },
   miro: {
@@ -153,8 +157,8 @@ const IMPORTER_DEFINITIONS: Record<ImporterIntegrationId, ImporterDefinition> = 
     accentClassName: "border-[#FFD02F]/28 bg-[#FFD02F]/16 text-[#7A5B00] dark:border-[#FFD02F]/28 dark:bg-[#FFD02F]/14 dark:text-[#FFE58A]",
     requiredFields: ["apiToken", "boardId"],
     fields: [
-      { key: "teamId", label: "Team ID", description: "Default Miro team used to scope board imports.", placeholder: "team-id" },
-      { key: "boardId", label: "Board ID", description: "Default Miro board for read-only import.", placeholder: "board-id" },
+      { key: "teamId", labelKey: "teamId", descriptionKey: "miroTeamDescription", placeholder: "team-id" },
+      { key: "boardId", labelKey: "boardId", descriptionKey: "miroBoardDescription", placeholder: "board-id" },
     ],
   },
   lucid: {
@@ -163,8 +167,8 @@ const IMPORTER_DEFINITIONS: Record<ImporterIntegrationId, ImporterDefinition> = 
     accentClassName: "border-[#FF7A00]/22 bg-[#FF7A00]/10 text-[#A64C00] dark:border-[#FFB36B]/24 dark:bg-[#FFB36B]/12 dark:text-[#FFD2AA]",
     requiredFields: ["apiToken", "documentId"],
     fields: [
-      { key: "workspaceId", label: "Workspace ID", description: "Optional Lucid workspace identifier.", placeholder: "workspace-id" },
-      { key: "documentId", label: "Document ID", description: "Default Lucid or Lucidspark document to import.", placeholder: "document-id" },
+      { key: "workspaceId", labelKey: "workspaceId", descriptionKey: "lucidWorkspaceDescription", placeholder: "workspace-id" },
+      { key: "documentId", labelKey: "documentId", descriptionKey: "lucidDocumentDescription", placeholder: "document-id" },
     ],
   },
   figma: {
@@ -173,9 +177,9 @@ const IMPORTER_DEFINITIONS: Record<ImporterIntegrationId, ImporterDefinition> = 
     accentClassName: "border-[#A259FF]/22 bg-[#A259FF]/10 text-[#7A35C5] dark:border-[#C9A4FF]/24 dark:bg-[#C9A4FF]/12 dark:text-[#E0C7FF]",
     requiredFields: ["apiToken", "fileKey"],
     fields: [
-      { key: "teamId", label: "Team ID", description: "Optional Figma team used for import searches.", placeholder: "team-id" },
-      { key: "projectId", label: "Project ID", description: "Optional Figma project for default file discovery.", placeholder: "project-id" },
-      { key: "fileKey", label: "File key", description: "Default Figma or FigJam file key.", placeholder: "file-key" },
+      { key: "teamId", labelKey: "teamId", descriptionKey: "figmaTeamDescription", placeholder: "team-id" },
+      { key: "projectId", labelKey: "projectIdField", descriptionKey: "figmaProjectDescription", placeholder: "project-id" },
+      { key: "fileKey", labelKey: "fileKey", descriptionKey: "figmaFileDescription", placeholder: "file-key" },
     ],
   },
   mural: {
@@ -184,10 +188,31 @@ const IMPORTER_DEFINITIONS: Record<ImporterIntegrationId, ImporterDefinition> = 
     accentClassName: "border-[#FF4F8B]/22 bg-[#FF4F8B]/10 text-[#B82D5D] dark:border-[#FF9ABC]/24 dark:bg-[#FF9ABC]/12 dark:text-[#FFC6D8]",
     requiredFields: ["apiToken", "boardId"],
     fields: [
-      { key: "workspaceId", label: "Workspace ID", description: "Default Mural workspace for imports.", placeholder: "workspace-id" },
-      { key: "boardId", label: "Mural ID", description: "Default mural used by read-only imports.", placeholder: "mural-id" },
+      { key: "workspaceId", labelKey: "workspaceId", descriptionKey: "muralWorkspaceDescription", placeholder: "workspace-id" },
+      { key: "boardId", labelKey: "muralId", descriptionKey: "muralBoardDescription", placeholder: "mural-id" },
     ],
   },
+};
+
+const INTEGRATION_DESCRIPTION_KEYS: Partial<Record<IntegrationId, DashboardTextMessageKey<typeof settingsIntegrationsMessages>>> = {
+  jules: "julesDescription",
+  gemini: "geminiDescription",
+  antigravity: "antigravityDescription",
+  codex: "codexDescription",
+  "claude-code": "claudeCodeDescription",
+  "qwen-code": "qwenCodeDescription",
+  opencode: "openCodeDescription",
+  github: "githubDescription",
+  gitlab: "gitlabDescription",
+  "google-drive": "googleDriveDescription",
+  jira: "jiraDescription",
+  notion: "notionDescription",
+  asana: "asanaDescription",
+  linear: "linearDescription",
+  miro: "miroDescription",
+  lucid: "lucidDescription",
+  figma: "figmaDescription",
+  mural: "muralDescription",
 };
 
 const getImporterWatermark = (providerId: ImporterIntegrationId): string => IMPORTER_DEFINITIONS[providerId].mark;
@@ -495,6 +520,14 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
 
   const getBadge = (...prefixes: string[]) => getBadgeHelper(activeScope, projectSources, ...prefixes);
   const getFieldBadge = (path: string) => getFieldBadgeHelper(activeScope, projectSources, path);
+  const getIntegrationDescription = (integration: { id: IntegrationId; description: string }): string => {
+    const key = INTEGRATION_DESCRIPTION_KEYS[integration.id];
+    return key ? t(settingsIntegrationsMessages, key) : integration.description;
+  };
+  const getSecretAccessibility = (label: string): { showLabel: string; hideLabel: string } => ({
+    showLabel: t(settingsIntegrationsMessages, "showSecretPrefix") + label,
+    hideLabel: t(settingsIntegrationsMessages, "hideSecretPrefix") + label,
+  });
 
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -832,10 +865,11 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     definition: DashboardChatProviderSetupDefinition,
     draft: ChatProviderConnectionDraft,
   ) => {
+    const fieldLabel = getChatProviderFieldLabel(field.label, locale);
     if (field.type === "boolean") {
       return (
         <Toggle
-          aria-label={`${connection.displayName} ${field.label}`}
+          aria-label={`${connection.displayName} ${fieldLabel}`}
           value={getBooleanSetupValue(draft.setup, field.key)}
           onChange={() => updateConnectionDraft(connection, definition, (current) => ({
             ...current,
@@ -856,7 +890,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
             setup: { ...current.setup, [field.key]: value },
           }))}
           options={(field.options ?? []).map((option) => ({ value: option, label: option }))}
-          aria-label={`${connection.displayName} ${field.label}`}
+          aria-label={`${connection.displayName} ${fieldLabel}`}
         />
       );
     }
@@ -869,7 +903,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
         }))}
         placeholder={t(settingsIntegrationsMessages, field.required ? "required" : "optional")}
         mono={field.type === "url" || field.type === "command"}
-        aria-label={`${connection.displayName} ${field.label}`}
+        aria-label={`${connection.displayName} ${fieldLabel}`}
       />
     );
   };
@@ -897,23 +931,23 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
         <div className="grid gap-3 lg:grid-cols-2">
           <label className="flex min-w-0 flex-col gap-1.5">
             <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t(settingsIntegrationsMessages, "channelName")}</span>
-            <TextInput value={draft.externalChannelName} onChange={(value) => updateBindingDraft(binding, (current) => ({ ...current, externalChannelName: value }))} aria-label={`${binding.externalChannelId} channel name`} />
+            <TextInput value={draft.externalChannelName} onChange={(value) => updateBindingDraft(binding, (current) => ({ ...current, externalChannelName: value }))} aria-label={`${binding.externalChannelId} ${t(settingsIntegrationsMessages, "channelName")}`} />
           </label>
           <label className="flex min-w-0 flex-col gap-1.5">
             <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t(settingsIntegrationsMessages, "project")}</span>
-            <SelectInput value={draft.projectId} onChange={(value) => updateBindingDraft(binding, (current) => ({ ...current, projectId: value }))} options={projectOptions} aria-label={`${binding.externalChannelId} bound project`} />
+            <SelectInput value={draft.projectId} onChange={(value) => updateBindingDraft(binding, (current) => ({ ...current, projectId: value }))} options={projectOptions} aria-label={`${binding.externalChannelId} ${t(settingsIntegrationsMessages, "project")}`} />
           </label>
           <label className="flex min-w-0 flex-col gap-1.5">
             <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t(settingsIntegrationsMessages, "projectManagerPreset")}</span>
-            <SelectInput value={draft.agentPresetId} onChange={(value) => updateBindingDraft(binding, (current) => ({ ...current, agentPresetId: value }))} options={agentPresetOptions} aria-label={`${binding.externalChannelId} project-manager preset`} />
+            <SelectInput value={draft.agentPresetId} onChange={(value) => updateBindingDraft(binding, (current) => ({ ...current, agentPresetId: value }))} options={agentPresetOptions} aria-label={`${binding.externalChannelId} ${t(settingsIntegrationsMessages, "projectManagerPreset")}`} />
           </label>
           <label className="flex min-w-0 flex-col gap-1.5">
             <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t(settingsIntegrationsMessages, "projectSelectorPrefix")}</span>
-            <TextInput value={draft.projectSelectorPrefix} onChange={(value) => updateBindingDraft(binding, (current) => ({ ...current, projectSelectorPrefix: value }))} placeholder="/project" mono aria-label={`${binding.externalChannelId} project selector prefix`} />
+            <TextInput value={draft.projectSelectorPrefix} onChange={(value) => updateBindingDraft(binding, (current) => ({ ...current, projectSelectorPrefix: value }))} placeholder="/project" mono aria-label={`${binding.externalChannelId} ${t(settingsIntegrationsMessages, "projectSelectorPrefix")}`} />
           </label>
           <label className="flex min-w-0 flex-col gap-1.5 lg:col-span-2">
             <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t(settingsIntegrationsMessages, "routingHint")}</span>
-            <TextInput value={draft.projectSelector} onChange={(value) => updateBindingDraft(binding, (current) => ({ ...current, projectSelector: value }))} placeholder="payments, mobile, infra" aria-label={`${binding.externalChannelId} routing hint`} />
+            <TextInput value={draft.projectSelector} onChange={(value) => updateBindingDraft(binding, (current) => ({ ...current, projectSelector: value }))} placeholder="payments, mobile, infra" aria-label={`${binding.externalChannelId} ${t(settingsIntegrationsMessages, "routingHint")}`} />
           </label>
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -963,7 +997,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
               onChange={(value) => setNewBindingDrafts((current) => ({ ...current, [connection.id]: { ...draft, externalChannelId: value } }))}
               placeholder="C0123456789 or chat-id"
               mono
-              aria-label={`${connection.displayName} new binding channel id`}
+              aria-label={`${connection.displayName} ${t(settingsIntegrationsMessages, "addChannelBinding")} ${t(settingsIntegrationsMessages, "externalChannelId")}`}
             />
           </label>
           <label className="flex min-w-0 flex-col gap-1.5">
@@ -971,8 +1005,8 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
             <TextInput
               value={draft.externalChannelName}
               onChange={(value) => setNewBindingDrafts((current) => ({ ...current, [connection.id]: { ...draft, externalChannelName: value } }))}
-              placeholder="Team channel"
-              aria-label={`${connection.displayName} new binding channel name`}
+              placeholder={t(settingsIntegrationsMessages, "teamChannelPlaceholder")}
+              aria-label={`${connection.displayName} ${t(settingsIntegrationsMessages, "addChannelBinding")} ${t(settingsIntegrationsMessages, "channelName")}`}
             />
           </label>
           <label className="flex min-w-0 flex-col gap-1.5">
@@ -982,7 +1016,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
               onChange={(value) => setNewBindingDrafts((current) => ({ ...current, [connection.id]: { ...draft, projectId: value } }))}
               options={projectOptions}
               disabled={projectOptions.length === 0}
-              aria-label={`${connection.displayName} new binding project`}
+              aria-label={`${connection.displayName} ${t(settingsIntegrationsMessages, "addChannelBinding")} ${t(settingsIntegrationsMessages, "project")}`}
             />
           </label>
           <label className="flex min-w-0 flex-col gap-1.5">
@@ -991,7 +1025,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
               value={draft.agentPresetId}
               onChange={(value) => setNewBindingDrafts((current) => ({ ...current, [connection.id]: { ...draft, agentPresetId: value } }))}
               options={agentPresetOptions}
-              aria-label={`${connection.displayName} new binding project-manager preset`}
+              aria-label={`${connection.displayName} ${t(settingsIntegrationsMessages, "addChannelBinding")} ${t(settingsIntegrationsMessages, "projectManagerPreset")}`}
             />
           </label>
           <label className="flex min-w-0 flex-col gap-1.5">
@@ -1001,7 +1035,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
               onChange={(value) => setNewBindingDrafts((current) => ({ ...current, [connection.id]: { ...draft, projectSelectorPrefix: value } }))}
               placeholder="/project"
               mono
-              aria-label={`${connection.displayName} new binding selector prefix`}
+              aria-label={`${connection.displayName} ${t(settingsIntegrationsMessages, "addChannelBinding")} ${t(settingsIntegrationsMessages, "projectSelectorPrefix")}`}
             />
           </label>
           <label className="flex min-w-0 flex-col gap-1.5">
@@ -1010,7 +1044,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
               value={draft.projectSelector}
               onChange={(value) => setNewBindingDrafts((current) => ({ ...current, [connection.id]: { ...draft, projectSelector: value } }))}
               placeholder="mobile"
-              aria-label={`${connection.displayName} new binding routing hint`}
+              aria-label={`${connection.displayName} ${t(settingsIntegrationsMessages, "addChannelBinding")} ${t(settingsIntegrationsMessages, "routingHint")}`}
             />
           </label>
         </div>
@@ -1023,7 +1057,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
           ] as const).map(([key, label]) => (
             <div key={key} className="flex items-center justify-between gap-3 rounded-xl border border-black/[0.05] bg-white/60 px-3 py-2 dark:border-white/[0.06] dark:bg-void-900/40">
               <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">{label}</span>
-              <Toggle aria-label={`${connection.displayName} new binding ${label}`} value={draft[key]} onChange={() => setNewBindingDrafts((current) => ({ ...current, [connection.id]: { ...draft, [key]: !draft[key] } }))} />
+              <Toggle aria-label={`${connection.displayName} ${t(settingsIntegrationsMessages, "addChannelBinding")} ${label}`} value={draft[key]} onChange={() => setNewBindingDrafts((current) => ({ ...current, [connection.id]: { ...draft, [key]: !draft[key] } }))} />
             </div>
           ))}
         </div>
@@ -1061,7 +1095,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                 <IntegrationPill label={connectionVm?.authStatusLabel ?? t(settingsIntegrationsMessages, "credentialStateUnknown")} />
               </div>
               <div className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                {bridge.label}. {t(settingsIntegrationsMessages, "connectionSecretsDescription")}
+                {getChatProviderBridgeSetupLabel(definition, draft.bridgeMode, locale)}. {t(settingsIntegrationsMessages, "connectionSecretsDescription")}
               </div>
             </div>
           </div>
@@ -1076,7 +1110,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
             <div className="grid gap-3 lg:grid-cols-2">
               <label className="flex min-w-0 flex-col gap-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t(settingsIntegrationsMessages, "displayName")}</span>
-                <TextInput value={draft.displayName} onChange={(value) => updateConnectionDraft(connection, definition, (current) => ({ ...current, displayName: value }))} aria-label={`${connection.displayName} display name`} />
+                <TextInput value={draft.displayName} onChange={(value) => updateConnectionDraft(connection, definition, (current) => ({ ...current, displayName: value }))} aria-label={`${connection.displayName} ${t(settingsIntegrationsMessages, "displayNameAria")}`} />
               </label>
               <label className="flex min-w-0 flex-col gap-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t(settingsIntegrationsMessages, "connectionStatus")}</span>
@@ -1084,7 +1118,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                   value={draft.status}
                   onChange={(value) => updateConnectionDraft(connection, definition, (current) => ({ ...current, status: value as ChatProviderConnectionStatus }))}
                   options={["draft", "active", "disabled", "error"].map((status) => ({ value: status, label: t(settingsIntegrationsMessages, status === "draft" ? "statusDraft" : status === "active" ? "active" : status === "disabled" ? "disabled" : "statusError") }))}
-                  aria-label={`${connection.displayName} connection status`}
+                  aria-label={`${connection.displayName} ${t(settingsIntegrationsMessages, "connectionStatus")}`}
                 />
               </label>
             </div>
@@ -1097,15 +1131,15 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                   setup: createDefaultSetupForBridge(definition, value as ChatProviderBridgeMode),
                   secrets: {},
                 }))}
-                options={definition.bridgeModes.map((mode) => ({ value: mode.mode, label: getBridgeModeLabel(mode.mode, locale), hint: mode.label }))}
-                aria-label={`${connection.displayName} bridge mode`}
+                options={definition.bridgeModes.map((mode) => ({ value: mode.mode, label: getBridgeModeLabel(mode.mode, locale), hint: getChatProviderBridgeSetupLabel(definition, mode.mode, locale) }))}
+                aria-label={`${connection.displayName} ${t(settingsIntegrationsMessages, "bridgeMode")}`}
               />
             </Row>
             <Row label={t(settingsIntegrationsMessages, "enabled")} description={t(settingsIntegrationsMessages, "enabledConnectionDescription")}>
-              <Toggle aria-label={`${connection.displayName} enabled`} value={draft.enabled} onChange={() => updateConnectionDraft(connection, definition, (current) => ({ ...current, enabled: !current.enabled }))} />
+              <Toggle aria-label={`${connection.displayName} ${t(settingsIntegrationsMessages, "enabled")}`} value={draft.enabled} onChange={() => updateConnectionDraft(connection, definition, (current) => ({ ...current, enabled: !current.enabled }))} />
             </Row>
             <Row label={t(settingsIntegrationsMessages, "ingressUrl")} description={t(settingsIntegrationsMessages, "ingressUrlDescription")}>
-              <TextInput value={connection.ingressUrl} onChange={() => undefined} disabled mono aria-label={`${connection.displayName} ingress URL`} />
+              <TextInput value={connection.ingressUrl} onChange={() => undefined} disabled mono aria-label={`${connection.displayName} ${t(settingsIntegrationsMessages, "ingressUrl")}`} />
             </Row>
 
             <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.02] p-4 dark:border-white/[0.06] dark:bg-white/[0.025]">
@@ -1116,7 +1150,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
               <div className="grid gap-3 lg:grid-cols-2">
                 {bridge.setupFields.map((field) => (
                   <label key={field.key} className="flex min-w-0 flex-col gap-1.5">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{field.label}{field.required ? " *" : ""}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{getChatProviderFieldLabel(field.label, locale)}{field.required ? " *" : ""}</span>
                     {renderSetupField(field, connection, definition, draft)}
                   </label>
                 ))}
@@ -1133,14 +1167,15 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                   const credential = connection.credentials.find((entry) => entry.key === field.key);
                   return (
                     <label key={field.key} className="flex min-w-0 flex-col gap-1.5">
-                      <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{field.label}{field.required ? " *" : ""}</span>
+                      <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{getChatProviderFieldLabel(field.label, locale)}{field.required ? " *" : ""}</span>
                       <SecretInput
                         value={draft.secrets[field.key] ?? ""}
                         onChange={(value) => updateConnectionDraft(connection, definition, (current) => ({ ...current, secrets: { ...current.secrets, [field.key]: value } }))}
                         placeholder={t(settingsIntegrationsMessages, credential?.configured ? "storedSecretUnchanged" : "pasteSecret")}
                         helperText={credential?.configured ? (credential.redactedValue ?? t(settingsIntegrationsMessages, "storedSecret")) + " " + t(settingsIntegrationsMessages, "configuredReplaceSecret") : t(settingsIntegrationsMessages, "redactedSecretHelp")}
                         mono
-                        aria-label={`${connection.displayName} ${field.label}`}
+                        aria-label={`${connection.displayName} ${getChatProviderFieldLabel(field.label, locale)}`}
+                        {...getSecretAccessibility(`${connection.displayName} ${getChatProviderFieldLabel(field.label, locale)}`)}
                       />
                     </label>
                   );
@@ -1257,10 +1292,10 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     const localGitMode = editableSettings.git.githubMode === "LOCAL";
 
     return (
-      <SectionCard title="Jules Automation" watermark="JLS" icon={<Settings2 strokeWidth={2.4} />} badge={getBadge("automationInterventions", "ciIntelligence")}>
-        <Row label="Auto-answer clarifications" description="Answer routine clarification requests automatically when the configured template is sufficient." badge={getFieldBadge("automationInterventions.autoAnswerClarification")}>
+      <SectionCard title={t(settingsIntegrationsMessages, "julesAutomation")} watermark="JLS" icon={<Settings2 strokeWidth={2.4} />} badge={getBadge("automationInterventions", "ciIntelligence")}>
+        <Row label={t(settingsIntegrationsMessages, "autoAnswerClarifications")} description={t(settingsIntegrationsMessages, "autoAnswerClarificationsDescription")} badge={getFieldBadge("automationInterventions.autoAnswerClarification")}>
           <Toggle
-            aria-label="Toggle setting"
+            aria-label={t(settingsIntegrationsMessages, "toggleSetting")}
             value={editableSettings.automationInterventions.autoAnswerClarification}
             onChange={() => updateEditableSettings((current) => ({
               ...current,
@@ -1272,7 +1307,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
           />
         </Row>
         {editableSettings.automationInterventions.autoAnswerClarification ? (
-          <Row label="Clarification answer mode" description="Choose whether to use a static template or let a worker generate a contextual answer." badge={getFieldBadge("automationInterventions.autoAnswerClarificationMode")}>
+          <Row label={t(settingsIntegrationsMessages, "clarificationAnswerMode")} description={t(settingsIntegrationsMessages, "clarificationAnswerModeDescription")} badge={getFieldBadge("automationInterventions.autoAnswerClarificationMode")}>
             <PillChoiceGroup
               value={editableSettings.automationInterventions.autoAnswerClarificationMode}
               onChange={(value) => updateEditableSettings((current) => ({
@@ -1283,14 +1318,14 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                 },
               }))}
               options={[
-                { value: "TEMPLATE", label: "Template", hint: "Fast static reply." },
-                { value: "WORKER", label: "Worker", hint: "Contextual provider-generated reply." },
+                { value: "TEMPLATE", label: t(settingsIntegrationsMessages, "template"), hint: t(settingsIntegrationsMessages, "templateHint") },
+                { value: "WORKER", label: t(settingsIntegrationsMessages, "worker"), hint: t(settingsIntegrationsMessages, "workerHint") },
               ]}
             />
           </Row>
         ) : null}
         {(!editableSettings.automationInterventions.autoAnswerClarification || editableSettings.automationInterventions.autoAnswerClarificationMode === "TEMPLATE") ? (
-          <Row label="Clarification answer template" description="Template used when Jules asks for routine clarification and template mode is active." badge={getFieldBadge("automationInterventions.clarificationAnswerTemplate")}>
+          <Row label={t(settingsIntegrationsMessages, "clarificationAnswerTemplate")} description={t(settingsIntegrationsMessages, "clarificationAnswerTemplateDescription")} badge={getFieldBadge("automationInterventions.clarificationAnswerTemplate")}>
             <TextInput
               value={editableSettings.automationInterventions.clarificationAnswerTemplate}
               onChange={(value) => updateEditableSettings((current) => ({
@@ -1300,13 +1335,13 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                   clarificationAnswerTemplate: value,
                 },
               }))}
-              placeholder="Respond with the usual clarification template..."
+              placeholder={t(settingsIntegrationsMessages, "clarificationTemplatePlaceholder")}
             />
           </Row>
         ) : null}
-        <Row label="Jules CI autofix" description={localGitMode ? "Allow Jules to attempt CI autofixes before escalating to a worker. (Disabled in Local mode)" : "Allow Jules to attempt CI autofixes before escalating to a worker."} badge={getFieldBadge("ciIntelligence.waitForJulesCiAutofix")}>
+        <Row label={t(settingsIntegrationsMessages, "julesCiAutofix")} description={t(settingsIntegrationsMessages, localGitMode ? "julesCiAutofixDisabledDescription" : "julesCiAutofixDescription")} badge={getFieldBadge("ciIntelligence.waitForJulesCiAutofix")}>
           <Toggle
-            aria-label="Toggle setting"
+            aria-label={t(settingsIntegrationsMessages, "toggleSetting")}
             value={localGitMode ? false : editableSettings.ciIntelligence.waitForJulesCiAutofix}
             disabled={localGitMode}
             onChange={() => updateEditableSettings((current) => ({
@@ -1318,7 +1353,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
             }))}
           />
         </Row>
-        <Row label="Jules CI autofix max retries" description={localGitMode ? "Maximum Jules CI autofix attempts before guardrail escalation. (Disabled in Local mode)" : "Maximum Jules CI autofix attempts before guardrail escalation."} badge={getFieldBadge("ciIntelligence.julesCiAutofixMaxRetries")} last>
+        <Row label={t(settingsIntegrationsMessages, "julesCiRetries")} description={t(settingsIntegrationsMessages, localGitMode ? "julesCiRetriesDisabledDescription" : "julesCiRetriesDescription")} badge={getFieldBadge("ciIntelligence.julesCiAutofixMaxRetries")} last>
           <NumberInput
             value={editableSettings.ciIntelligence.julesCiAutofixMaxRetries}
             min={0}
@@ -1359,24 +1394,24 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
         <>
           {backButton}
           <SectionCard
-            title="Google Drive Configuration"
+            title={t(settingsIntegrationsMessages, "googleDriveConfiguration")}
             watermark="DRV"
             icon={<FolderOpen strokeWidth={2.4} />}
             badge={getBadge("googleDrive.enabled", "googleDrive.hostPath", "googleDrive.accessMode")}
             helpId="integrations"
           >
-            <NoticePanel tone="neutral" title="Docker-only linked directory">
-              Google Drive must already be linked and synced on this host. Code UX mounts the selected directory at the fixed <code>/mnt/code-ux/google-drive</code> container path for Docker runs only; no Google credentials are stored.
+            <NoticePanel tone="neutral" title={t(settingsIntegrationsMessages, "dockerOnlyLinkedDirectory")}>
+              {t(settingsIntegrationsMessages, "googleDriveMountDescription")} <code>/mnt/code-ux/google-drive</code>
             </NoticePanel>
             <Row
-              label="Enable Google Drive mount"
+              label={t(settingsIntegrationsMessages, "enableGoogleDriveMount")}
               description={hasLinkedDirectory
-                ? "Make the linked directory available to Docker-backed provider workspaces."
-                : "Choose a linked directory before this mount can become active."}
+                ? t(settingsIntegrationsMessages, "linkedDirectoryAvailableDescription")
+                : t(settingsIntegrationsMessages, "chooseLinkedDirectoryDescription")}
               badge={getFieldBadge("googleDrive.enabled")}
             >
               <Toggle
-                aria-label="Enable Google Drive mount"
+                aria-label={t(settingsIntegrationsMessages, "enableGoogleDriveMount")}
                 value={googleDrive.enabled}
                 onChange={() => updateEditableSettings((current) => ({
                   ...current,
@@ -1388,8 +1423,8 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
               />
             </Row>
             <Row
-              label="Linked Drive directory"
-              description="Select the host directory maintained by Google Drive for desktop. The host path is used only to create the Docker mount."
+              label={t(settingsIntegrationsMessages, "linkedDriveDirectory")}
+              description={t(settingsIntegrationsMessages, "linkedDriveDirectoryDescription")}
               badge={getFieldBadge("googleDrive.hostPath")}
             >
               <LocalFilePickerField
@@ -1401,16 +1436,16 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                     hostPath,
                   },
                 }))}
-                label="Linked Drive directory"
-                placeholder="Select a linked Google Drive directory"
+                label={t(settingsIntegrationsMessages, "linkedDriveDirectory")}
+                placeholder={t(settingsIntegrationsMessages, "selectLinkedDriveDirectory")}
                 helperText={hasLinkedDirectory
-                  ? "This host path stays inside the editable control and mounts at /mnt/code-ux/google-drive."
-                  : "No directory linked. Browse or enter the local Google Drive directory to configure the mount."}
+                  ? `${t(settingsIntegrationsMessages, "linkedDrivePathDescription")} /mnt/code-ux/google-drive`
+                  : t(settingsIntegrationsMessages, "noLinkedDriveDescription")}
               />
             </Row>
             <Row
-              label="Access mode"
-              description="Read-only is the recommended default. Read-write lets containerized agents modify synced Drive files."
+              label={t(settingsIntegrationsMessages, "accessMode")}
+              description={t(settingsIntegrationsMessages, "accessModeDescription")}
               badge={getFieldBadge("googleDrive.accessMode")}
               last
             >
@@ -1424,10 +1459,10 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                   },
                 }))}
                 options={[
-                  { value: "read-only", label: "Read-only (recommended)" },
-                  { value: "read-write", label: "Read-write" },
+                  { value: "read-only", label: t(settingsIntegrationsMessages, "readOnlyRecommended") },
+                  { value: "read-write", label: t(settingsIntegrationsMessages, "readWrite") },
                 ]}
-                aria-label="Google Drive access mode"
+                aria-label={t(settingsIntegrationsMessages, "googleDriveAccessMode")}
               />
             </Row>
           </SectionCard>
@@ -1442,12 +1477,12 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
       return (
         <>
           {backButton}
-          <SectionCard title={`${hostLabel} Configuration`} watermark={isGitLab ? "GLB" : "GIT"} icon={<Settings2 strokeWidth={2.4} />}>
+          <SectionCard title={`${hostLabel} ${t(settingsIntegrationsMessages, "configuration")}`} watermark={isGitLab ? "GLB" : "GIT"} icon={<Settings2 strokeWidth={2.4} />}>
             <Row
-              label={`${hostLabel} token`}
+              label={`${hostLabel} ${t(settingsIntegrationsMessages, "token")}`}
               description={activeScope === "system"
-                ? `System token used for ${hostLabel} repository, ${isGitLab ? "merge request" : "pull request"}, and CI integration. Projects inherit this unless they override it.`
-                : `Override the ${hostLabel} token for this scope. Leave blank to inherit the system token.`}
+                ? t(settingsIntegrationsMessages, "systemGitTokenDescriptionPrefix") + hostLabel + t(settingsIntegrationsMessages, "systemGitTokenDescriptionRepository") + t(settingsIntegrationsMessages, isGitLab ? "mergeRequest" : "pullRequest") + t(settingsIntegrationsMessages, "systemGitTokenDescriptionSuffix")
+                : t(settingsIntegrationsMessages, "overrideGitTokenPrefix") + hostLabel + t(settingsIntegrationsMessages, "overrideGitTokenSuffix")}
               badge={activeScope === "system" ? undefined : getFieldBadge(`git.${tokenKey}`)}
             >
               <SecretInput
@@ -1469,13 +1504,15 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                       [tokenKey]: value,
                     },
                   }))}
+                aria-label={`${hostLabel} ${t(settingsIntegrationsMessages, "token")}`}
+                {...getSecretAccessibility(`${hostLabel} ${t(settingsIntegrationsMessages, "token")}`)}
                 mono
               />
             </Row>
             {isGitLab ? null : (
               <>
-                <Row label="Mount GitHub auth" description="Copy the host `gh` credential directory into Docker for this scope." badge={getFieldBadge("cliWorkflow.containerMountGithubAuth")}>
-                  <Toggle aria-label="Toggle setting"                     value={editableSettings.cliWorkflow.containerMountGithubAuth}
+                <Row label={t(settingsIntegrationsMessages, "mountGithubAuth")} description={t(settingsIntegrationsMessages, "mountGithubAuthDescription")} badge={getFieldBadge("cliWorkflow.containerMountGithubAuth")}>
+                  <Toggle aria-label={t(settingsIntegrationsMessages, "toggleSetting")} value={editableSettings.cliWorkflow.containerMountGithubAuth}
                     onChange={() => updateEditableSettings((current) => ({
                       ...current,
                       cliWorkflow: {
@@ -1485,7 +1522,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                     }))}
                   />
                 </Row>
-                <Row label="GitHub auth path" description="Host path copied into the Docker runtime for GitHub CLI auth." badge={getFieldBadge("cliWorkflow.containerGithubAuthPath")}>
+                <Row label={t(settingsIntegrationsMessages, "githubAuthPath")} description={t(settingsIntegrationsMessages, "githubAuthPathDescription")} badge={getFieldBadge("cliWorkflow.containerGithubAuthPath")}>
                   <TextInput
                     value={editableSettings.cliWorkflow.containerGithubAuthPath}
                     onChange={(value) => updateEditableSettings((current) => ({
@@ -1501,8 +1538,8 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                 </Row>
               </>
             )}
-            <Row label="Copy local git config" description="Use host `.gitconfig` in Docker instead of the configured Code UX git identity." badge={getFieldBadge("cliWorkflow.containerMountGitConfig")} last={editableSettings.cliWorkflow.containerMountGitConfig}>
-              <Toggle aria-label="Toggle setting"                 value={editableSettings.cliWorkflow.containerMountGitConfig}
+                <Row label={t(settingsIntegrationsMessages, "copyLocalGitConfig")} description={t(settingsIntegrationsMessages, "copyLocalGitConfigDescription")} badge={getFieldBadge("cliWorkflow.containerMountGitConfig")} last={editableSettings.cliWorkflow.containerMountGitConfig}>
+              <Toggle aria-label={t(settingsIntegrationsMessages, "toggleSetting")} value={editableSettings.cliWorkflow.containerMountGitConfig}
                 onChange={() => updateEditableSettings((current) => ({
                   ...current,
                   cliWorkflow: {
@@ -1514,7 +1551,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
             </Row>
             {!editableSettings.cliWorkflow.containerMountGitConfig ? (
               <>
-                <Row label="Git user name" description="Git author name configured inside provider containers." badge={getFieldBadge("cliWorkflow.containerGitUserName")}>
+                <Row label={t(settingsIntegrationsMessages, "gitUserName")} description={t(settingsIntegrationsMessages, "gitUserNameDescription")} badge={getFieldBadge("cliWorkflow.containerGitUserName")}>
                   <TextInput
                     value={editableSettings.cliWorkflow.containerGitUserName}
                     onChange={(value) => updateEditableSettings((current) => ({
@@ -1527,7 +1564,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                     placeholder="Code UX"
                   />
                 </Row>
-                <Row label="Git email" description="Git author email configured inside provider containers." badge={getFieldBadge("cliWorkflow.containerGitUserEmail")} last>
+                <Row label={t(settingsIntegrationsMessages, "gitEmail")} description={t(settingsIntegrationsMessages, "gitEmailDescription")} badge={getFieldBadge("cliWorkflow.containerGitUserEmail")} last>
                   <TextInput
                     value={editableSettings.cliWorkflow.containerGitUserEmail}
                     onChange={(value) => updateEditableSettings((current) => ({
@@ -1578,39 +1615,45 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
       return (
         <>
           {backButton}
-          <SectionCard title="Jira Configuration" watermark="JRA" icon={<Settings2 strokeWidth={2.4} />}>
+          <SectionCard title={t(settingsIntegrationsMessages, "jiraConfiguration")} watermark="JRA" icon={<Settings2 strokeWidth={2.4} />}>
             {activeScope === "system" ? null : (
-              <NoticePanel title="Project-scope Jira override">
-                These fields override the system Jira connection for this scope. Cleared fields fall back to the system values.
+              <NoticePanel title={t(settingsIntegrationsMessages, "projectJiraOverride")}>
+                {t(settingsIntegrationsMessages, "projectJiraOverrideDescription")}
               </NoticePanel>
             )}
-            <Row label="Jira site URL" description="Base URL for Jira Cloud or Data Center, for example `https://company.atlassian.net`." badge={activeScope === "system" ? undefined : getFieldBadge("jira.host")}>
+            <Row label={t(settingsIntegrationsMessages, "jiraSiteUrl")} description={t(settingsIntegrationsMessages, "jiraSiteUrlDescription")} badge={activeScope === "system" ? undefined : getFieldBadge("jira.host")}>
               <TextInput value={jiraSettings.host} onChange={(value) => updateJira({ host: value })} mono />
             </Row>
-            <Row label="Account email" description="Email used with Jira Cloud API tokens. Leave empty for bearer-token Jira deployments." badge={activeScope === "system" ? undefined : getFieldBadge("jira.email")}>
+            <Row label={t(settingsIntegrationsMessages, "accountEmail")} description={t(settingsIntegrationsMessages, "accountEmailDescription")} badge={activeScope === "system" ? undefined : getFieldBadge("jira.email")}>
               <TextInput value={jiraSettings.email} onChange={(value) => updateJira({ email: value })} mono />
             </Row>
-            <Row label="API token" description="Jira API token used for issue search, issue context loading, and transitions." badge={activeScope === "system" ? undefined : getFieldBadge("jira.apiToken")}>
-              <SecretInput value={jiraSettings.apiToken} onChange={(value) => updateJira({ apiToken: value })} mono />
+            <Row label={t(settingsIntegrationsMessages, "apiToken")} description={t(settingsIntegrationsMessages, "jiraApiTokenDescription")} badge={activeScope === "system" ? undefined : getFieldBadge("jira.apiToken")}>
+              <SecretInput
+                value={jiraSettings.apiToken}
+                onChange={(value) => updateJira({ apiToken: value })}
+                aria-label={t(settingsIntegrationsMessages, "apiToken")}
+                {...getSecretAccessibility(t(settingsIntegrationsMessages, "apiToken"))}
+                mono
+              />
             </Row>
-            <Row label="Default project" description="Project key used to prefill the Jira import JQL." badge={activeScope === "system" ? undefined : getFieldBadge("jira.defaultProject")}>
+            <Row label={t(settingsIntegrationsMessages, "defaultProject")} description={t(settingsIntegrationsMessages, "defaultProjectDescription")} badge={activeScope === "system" ? undefined : getFieldBadge("jira.defaultProject")}>
               <TextInput value={jiraSettings.defaultProject} onChange={(value) => updateJira({ defaultProject: value.toUpperCase() })} mono />
             </Row>
-            <Row label="Import transition" description="Transition name used when linked Jira issues are imported into a sprint. The default moves issues to In Work." badge={activeScope === "system" ? undefined : getFieldBadge("jira.importTransitionName")}>
+            <Row label={t(settingsIntegrationsMessages, "importTransition")} description={t(settingsIntegrationsMessages, "importTransitionDescription")} badge={activeScope === "system" ? undefined : getFieldBadge("jira.importTransitionName")}>
               <TextInput value={jiraSettings.importTransitionName} onChange={(value) => updateJira({ importTransitionName: value })} />
             </Row>
-            <Row label="Move Jira issues on import" description="Move linked Jira issues through the import transition as they are attached to a sprint." badge={activeScope === "system" ? undefined : getFieldBadge("jira.autoTransitionLinkedIssuesOnImport")}>
+            <Row label={t(settingsIntegrationsMessages, "moveJiraIssuesOnImport")} description={t(settingsIntegrationsMessages, "moveJiraIssuesOnImportDescription")} badge={activeScope === "system" ? undefined : getFieldBadge("jira.autoTransitionLinkedIssuesOnImport")}>
               <Toggle
-                aria-label="Toggle setting"
+                aria-label={t(settingsIntegrationsMessages, "toggleSetting")}
                 value={jiraSettings.autoTransitionLinkedIssuesOnImport}
                 onChange={() => updateJira({ autoTransitionLinkedIssuesOnImport: !jiraSettings.autoTransitionLinkedIssuesOnImport })}
               />
             </Row>
-            <Row label="Close transition" description="Transition name used when auto-closing linked Jira issues after sprint completion." badge={activeScope === "system" ? undefined : getFieldBadge("jira.closeTransitionName")}>
+            <Row label={t(settingsIntegrationsMessages, "closeTransition")} description={t(settingsIntegrationsMessages, "closeTransitionDescription")} badge={activeScope === "system" ? undefined : getFieldBadge("jira.closeTransitionName")}>
               <TextInput value={jiraSettings.closeTransitionName} onChange={(value) => updateJira({ closeTransitionName: value })} />
             </Row>
-            <Row label="Auto-close Jira issues" description="Move linked Jira issues through the configured transition after the sprint completes." badge={activeScope === "system" ? undefined : getFieldBadge("jira.autoCloseLinkedIssues")} last>
-              <Toggle aria-label="Toggle setting"                 value={jiraSettings.autoCloseLinkedIssues}
+            <Row label={t(settingsIntegrationsMessages, "autoCloseJiraIssues")} description={t(settingsIntegrationsMessages, "autoCloseJiraIssuesDescription")} badge={activeScope === "system" ? undefined : getFieldBadge("jira.autoCloseLinkedIssues")} last>
+              <Toggle aria-label={t(settingsIntegrationsMessages, "toggleSetting")} value={jiraSettings.autoCloseLinkedIssues}
                 onChange={() => updateJira({ autoCloseLinkedIssues: !jiraSettings.autoCloseLinkedIssues })}
               />
             </Row>
@@ -1689,7 +1732,8 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
               <SecretInput
                 value={importerSettings.apiToken}
                 onChange={(value) => updateImporter({ apiToken: value })}
-                aria-label={`${definition.label} API token`}
+                aria-label={`${definition.label} ${t(settingsIntegrationsMessages, "apiToken")}`}
+                {...getSecretAccessibility(`${definition.label} ${t(settingsIntegrationsMessages, "apiToken")}`)}
                 mono
               />
             </Row>
@@ -1697,7 +1741,8 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
               <SecretInput
                 value={importerSettings.apiSecret}
                 onChange={(value) => updateImporter({ apiSecret: value })}
-                aria-label={`${definition.label} API secret`}
+                aria-label={`${definition.label} ${t(settingsIntegrationsMessages, "apiSecret")}`}
+                {...getSecretAccessibility(`${definition.label} ${t(settingsIntegrationsMessages, "apiSecret")}`)}
                 mono
               />
             </Row>
@@ -1710,13 +1755,14 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
               />
             </Row>
             {definition.fields.map((field) => (
-              <Row key={field.key} label={field.label} description={field.description} badge={fieldBadge(field.key)}>
+              <Row key={field.key} label={t(settingsIntegrationsMessages, field.labelKey)} description={t(settingsIntegrationsMessages, field.descriptionKey)} badge={fieldBadge(field.key)}>
                 {field.secret ? (
                   <SecretInput
                     value={importerSettings[field.key]}
                     onChange={(value) => updateImporter({ [field.key]: value })}
                     placeholder={field.placeholder}
-                    aria-label={`${definition.label} ${field.label}`}
+                    aria-label={`${definition.label} ${t(settingsIntegrationsMessages, field.labelKey)}`}
+                    {...getSecretAccessibility(`${definition.label} ${t(settingsIntegrationsMessages, field.labelKey)}`)}
                     mono
                   />
                 ) : (
@@ -1724,7 +1770,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                     value={importerSettings[field.key]}
                     onChange={(value) => updateImporter({ [field.key]: value })}
                     placeholder={field.placeholder}
-                    aria-label={`${definition.label} ${field.label}`}
+                    aria-label={`${definition.label} ${t(settingsIntegrationsMessages, field.labelKey)}`}
                     mono
                   />
                 )}
@@ -1774,7 +1820,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
         {providerId === "jules" ? renderJulesAutomationSettings() : null}
         <SectionCard title={getProviderTypeLabel(providerId) + t(settingsIntegrationsMessages, "credentialsSuffix")} watermark={getProviderWatermark(providerId)} icon={<Key strokeWidth={2.4} />}>
           {isDeprecatedProvider(providerId) ? (
-            <NoticePanel title="Deprecated provider">
+            <NoticePanel title={t(settingsIntegrationsMessages, "providerDeprecated")}>
               {getProviderLifecycleMessage(providerId, locale)} {t(settingsIntegrationsMessages, "migrationPeriod")}
             </NoticePanel>
           ) : null}
@@ -1820,7 +1866,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
           )}
 
           <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
-            Routing uses named provider instances exactly as configured on the AI Models page. If Docker mode is active, a provider instance marked with local auth will copy only that instance’s configured auth path into the runtime.
+            {t(settingsIntegrationsMessages, "routingProviderInstancesDescription")}
           </div>
         </SectionCard>
       </>
@@ -1879,7 +1925,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                                 <div className="text-sm font-semibold text-slate-900 dark:text-white">{integration.label}</div>
                                 {active ? <IntegrationPill label={t(settingsIntegrationsMessages, "active")} tone="active" /> : null}
                               </div>
-                              <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{providerCard?.description ?? integration.description}</div>
+                              <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{providerCard?.description ?? getChatProviderDescription(providerKind, locale)}</div>
                             </div>
                           </div>
                           <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pl-14">
@@ -1922,7 +1968,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                                 <div className="text-sm font-semibold text-slate-900 dark:text-white">{integration.label}</div>
                                 {isJira && jiraConfigured ? <IntegrationPill label={t(settingsIntegrationsMessages, "active")} tone="active" /> : null}
                               </div>
-                              <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{integration.description}</div>
+                              <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{getIntegrationDescription(integration)}</div>
                             </div>
                           </div>
                           <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pl-14">
@@ -1965,7 +2011,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                                 <div className="text-sm font-semibold text-slate-900 dark:text-white">{integration.label}</div>
                                 {active ? <IntegrationPill label={t(settingsIntegrationsMessages, "active")} tone="active" /> : null}
                               </div>
-                              <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{integration.description}</div>
+                              <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{getIntegrationDescription(integration)}</div>
                             </div>
                           </div>
                           <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pl-14">
@@ -2002,7 +2048,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                                 <div className="text-sm font-semibold text-slate-900 dark:text-white">{integration.label}</div>
                                 {active ? <IntegrationPill label={t(settingsIntegrationsMessages, "active")} tone="active" /> : null}
                               </div>
-                              <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{integration.description}</div>
+                              <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{getIntegrationDescription(integration)}</div>
                             </div>
                           </div>
                           <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pl-14">
@@ -2024,7 +2070,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                   const providerId = integration.id;
                   const connectedCount = countConnectedProviders(providerId, systemSettings, externalHints);
                   const active = isProviderAvailable(providerId, systemSettings, externalHints);
-                  const authLabel = getProviderAuthLabel(providerId, systemSettings, externalHints, dockerExecutionEnabled);
+                  const authLabel = getProviderAuthLabel(providerId, systemSettings, externalHints, dockerExecutionEnabled, locale);
 
                   return (
                     <div key={integration.id} className={`group relative min-h-[156px] overflow-hidden rounded-[1.35rem] border p-5 shadow-[0_12px_30px_rgba(15,23,42,0.035)] transition-[border-color,background-color,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_42px_rgba(15,23,42,0.07)] ${
@@ -2042,7 +2088,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                               <div className="text-sm font-semibold text-slate-900 dark:text-white">{integration.label}</div>
                               {active ? <IntegrationPill label={t(settingsIntegrationsMessages, "active")} tone="active" /> : null}
                             </div>
-                            <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{integration.description}</div>
+                            <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{getIntegrationDescription(integration)}</div>
                           </div>
                         </div>
                         <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pl-14">

@@ -304,9 +304,12 @@ describe("ProviderInstanceCard", () => {
     const onRemove = vi.fn();
     render(<ProviderInstanceCard providerConfigId="codex-berlin" provider={provider} providerModel="gpt-5.5" dockerExecutionEnabled={false} onUpdate={vi.fn()} onRemove={onRemove} />, "de");
 
+    expect(screen.getByRole("button", { name: "Anzeigen: Codex Berlin API-Schlüssel" })).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Entfernen: Codex Berlin" }));
     expect(screen.getByRole("group", { name: "Entfernen bestätigen: Codex Berlin" })).toBeDefined();
     expect(screen.getByRole("status").textContent).toContain("Entfernen wurde vorbereitet für Codex Berlin");
+    expect(screen.getByRole("radiogroup", { name: "Codex Berlin Anbieterkonfiguration" })).toBeDefined();
+    expect(screen.getByText("~/.codex/config.toml")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Entfernen bestätigen: Codex Berlin" }));
     expect(onRemove).toHaveBeenCalledTimes(1);
   });
@@ -334,7 +337,7 @@ describe("ProviderInstanceCard", () => {
       />
     );
 
-    const configModeGroup = screen.getByRole("radiogroup", { name: "Codex Config provider config mode" });
+    const configModeGroup = screen.getByRole("radiogroup", { name: "Codex Config Provider Config" });
     expect(configModeGroup).toBeDefined();
     expect(within(configModeGroup).getByRole("radio", { name: /Copy Host/i }).getAttribute("aria-checked")).toBe("true");
     expect(screen.getByText("~/.codex/config.toml")).toBeDefined();
@@ -388,7 +391,7 @@ describe("ProviderInstanceCard", () => {
       />
     );
 
-    const input = screen.getByLabelText("Codex File Config provider config file");
+    const input = screen.getByLabelText("Codex File Config Config file");
     expect(input.getAttribute("placeholder")).toBe("~/.codex/config.toml");
     expect(screen.getByText("Select the Codex config.toml file to copy into the provider runtime.")).toBeDefined();
 
@@ -505,7 +508,7 @@ describe("ProviderInstanceCard", () => {
       />
     );
 
-    expect(screen.getByRole("region", { name: "OpenCode Preview generated OpenCode config preview" })).toBeDefined();
+    expect(screen.getByRole("region", { name: "OpenCode Preview OpenCode Generated config preview" })).toBeDefined();
   });
 
   it("lets the user type a custom model slug into the models.dev-backed combobox for a gateway model field", async () => {

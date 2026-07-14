@@ -15,6 +15,7 @@ export const AutomationCredentialManager: FunctionComponent<{ projectId: string 
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
     setError(null);
@@ -38,12 +39,14 @@ export const AutomationCredentialManager: FunctionComponent<{ projectId: string 
     if (busy) return;
     setBusy(true);
     setError(null);
+    setMessage(null);
     try {
       await createAutomationCredential(projectId, { name, kind, value, scope: "project", capabilities: ["read"] });
       setName("");
       setKind("");
       setValue("");
       await load();
+      setMessage(t(settingsIntegrationsMessages, "credentialStored"));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -51,13 +54,15 @@ export const AutomationCredentialManager: FunctionComponent<{ projectId: string 
     }
   };
 
-  const runCredentialAction = async (action: () => Promise<unknown>): Promise<void> => {
+  const runCredentialAction = async (action: () => Promise<unknown>, successMessage: string): Promise<void> => {
     if (busy) return;
     setBusy(true);
     setError(null);
+    setMessage(null);
     try {
       await action();
       await load();
+      setMessage(successMessage);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -86,6 +91,7 @@ export const AutomationCredentialManager: FunctionComponent<{ projectId: string 
         </div>
       ) : null}
       {error ? <div role="alert" className="mt-3 text-xs font-semibold text-red-600 dark:text-red-300">{error}</div> : null}
+      {message ? <div role="status" aria-live="polite" className="mt-3 text-xs font-semibold text-signal-700 dark:text-signal-200">{message}</div> : null}
       <div className="mt-4 grid gap-3 md:grid-cols-3">
         <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
           {t(settingsIntegrationsMessages, "name")}
@@ -100,7 +106,7 @@ export const AutomationCredentialManager: FunctionComponent<{ projectId: string 
           <input aria-label={t(settingsIntegrationsMessages, "secretValue")} type="password" autoComplete="new-password" value={value} onInput={(event) => setValue(event.currentTarget.value)} className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2 dark:border-white/10 dark:bg-void-900" />
         </label>
       </div>
-      <button type="button" disabled={busy || !health?.available || !name || !kind || !value} onClick={() => void create()} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-signal-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500">
+      <button type="button" aria-busy={busy ? "true" : undefined} disabled={busy || !health?.available || !name || !kind || !value} onClick={() => void create()} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-signal-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500">
         <Plus aria-hidden="true" className="h-4 w-4" />
         {t(settingsIntegrationsMessages, "storeCredential")}
       </button>
@@ -112,8 +118,8 @@ export const AutomationCredentialManager: FunctionComponent<{ projectId: string 
               <div className="text-[11px] text-slate-500">{credential.kind} · {credential.scope} · {credential.status} · v{credential.version}</div>
             </div>
             <div className="flex gap-2">
-              <button type="button" disabled={busy} onClick={() => void runCredentialAction(() => testAutomationCredential(projectId, credential.id))} className="rounded-lg border border-black/10 px-3 py-1.5 text-xs font-bold disabled:opacity-40 dark:border-white/10">{t(settingsIntegrationsMessages, "test")}</button>
-              <button type="button" disabled={busy || credential.status === "revoked"} onClick={() => void runCredentialAction(() => revokeAutomationCredential(projectId, credential.id))} className="rounded-lg border border-red-500/30 px-3 py-1.5 text-xs font-bold text-red-600 disabled:opacity-40">{t(settingsIntegrationsMessages, "revoke")}</button>
+              <button type="button" disabled={busy} onClick={() => void runCredentialAction(() => testAutomationCredential(projectId, credential.id), t(settingsIntegrationsMessages, "credentialTestCompleted"))} className="rounded-lg border border-black/10 px-3 py-1.5 text-xs font-bold disabled:opacity-40 dark:border-white/10">{t(settingsIntegrationsMessages, "test")}</button>
+              <button type="button" disabled={busy || credential.status === "revoked"} onClick={() => void runCredentialAction(() => revokeAutomationCredential(projectId, credential.id), t(settingsIntegrationsMessages, "credentialRevoked"))} className="rounded-lg border border-red-500/30 px-3 py-1.5 text-xs font-bold text-red-600 disabled:opacity-40">{t(settingsIntegrationsMessages, "revoke")}</button>
             </div>
           </li>
         ))}

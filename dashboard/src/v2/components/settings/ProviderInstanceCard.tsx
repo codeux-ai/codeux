@@ -28,22 +28,29 @@ import { getProviderLifecycleMessage, isDeprecatedProvider } from "../../lib/pro
 import { useDashboardI18n } from "../../i18n/context.js";
 import { settingsIntegrationsMessages } from "../../i18n/messages/settings-integrations.js";
 
-const getProviderConfigHelperText = (providerType: SystemProviderConfig["provider"]): string => {
+const getProviderConfigHelperTextKey = (providerType: SystemProviderConfig["provider"]):
+  | "selectCodexConfig"
+  | "selectGeminiConfig"
+  | "selectClaudeConfig"
+  | "selectQwenConfig"
+  | "selectOpenCodeConfig"
+  | "selectAntigravityConfig"
+  | "selectProviderConfig" => {
   switch (providerType) {
     case "codex":
-      return "Select the Codex config.toml file to copy into the provider runtime.";
+      return "selectCodexConfig";
     case "gemini":
-      return "Select the Gemini settings.json file to copy into the provider runtime.";
+      return "selectGeminiConfig";
     case "claude-code":
-      return "Select the Claude Code JSON config file to copy into the provider runtime.";
+      return "selectClaudeConfig";
     case "qwen-code":
-      return "Select the Qwen Code settings.json file to copy into the provider runtime.";
+      return "selectQwenConfig";
     case "opencode":
-      return "Select the OpenCode opencode.json file to copy into the provider runtime.";
+      return "selectOpenCodeConfig";
     case "antigravity":
-      return "Select the Antigravity MCP config file to copy into the provider runtime.";
+      return "selectAntigravityConfig";
     default:
-      return "Select the provider config file to copy into the provider runtime.";
+      return "selectProviderConfig";
   }
 };
 
@@ -369,7 +376,7 @@ export const ProviderInstanceCard: FunctionComponent<{
         <>
           <Row label={t(settingsIntegrationsMessages, "providerConfig")} description={t(settingsIntegrationsMessages, "providerConfigDescription")}>
             <PillChoiceGroup
-              aria-label={`${providerInstanceLabel} provider config mode`}
+              aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "providerConfig")}`}
               value={currentProviderConfigMode}
               onChange={updateProviderConfigMode}
               options={[
@@ -393,8 +400,8 @@ export const ProviderInstanceCard: FunctionComponent<{
               <LocalFilePickerField
                 value={normalizedProviderConfig.providerConfigPath}
                 onChange={updateProviderConfigPath}
-                label={`${providerInstanceLabel} provider config file`}
-                helperText={getProviderConfigHelperText(provider.provider)}
+                label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "configFile")}`}
+                helperText={t(settingsIntegrationsMessages, getProviderConfigHelperTextKey(provider.provider))}
                 placeholder={standardProviderConfigPath}
               />
             </Row>
@@ -405,7 +412,15 @@ export const ProviderInstanceCard: FunctionComponent<{
       {/* API Key Panel */}
       {currentAuthType === "apiKey" && (
         <Row label={t(settingsIntegrationsMessages, "apiKey")} description={t(settingsIntegrationsMessages, "apiKeyDescription")}>
-          <SecretInput value={provider.apiKey} onChange={(value) => applySanitizedUpdate({ apiKey: value }, providerInstanceLabel + t(settingsIntegrationsMessages, "apiKeyChanged"))} aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "apiKey")}`} aria-describedby={feedback ? feedbackId : undefined} mono />
+          <SecretInput
+            value={provider.apiKey}
+            onChange={(value) => applySanitizedUpdate({ apiKey: value }, providerInstanceLabel + t(settingsIntegrationsMessages, "apiKeyChanged"))}
+            aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "apiKey")}`}
+            aria-describedby={feedback ? feedbackId : undefined}
+            showLabel={t(settingsIntegrationsMessages, "showSecretPrefix") + providerInstanceLabel + " " + t(settingsIntegrationsMessages, "apiKey")}
+            hideLabel={t(settingsIntegrationsMessages, "hideSecretPrefix") + providerInstanceLabel + " " + t(settingsIntegrationsMessages, "apiKey")}
+            mono
+          />
         </Row>
       )}
 
@@ -416,7 +431,7 @@ export const ProviderInstanceCard: FunctionComponent<{
             <button
               type="button"
               onClick={() => setShowLoginModal(true)}
-              aria-label={`Connect and log in to ${providerInstanceLabel}`}
+              aria-label={t(settingsIntegrationsMessages, "connectLoginAriaPrefix") + providerInstanceLabel}
               aria-haspopup="dialog"
               aria-expanded={showLoginModal}
               aria-busy={showLoginModal}
@@ -440,7 +455,7 @@ export const ProviderInstanceCard: FunctionComponent<{
             <>
               <Row label={t(settingsIntegrationsMessages, "authenticationSubMode")} description={t(settingsIntegrationsMessages, "qwenAuthSubModeDescription")}>
                   <PillChoiceGroup
-                    aria-label={`${providerInstanceLabel} Qwen authentication sub-mode`}
+                    aria-label={`${providerInstanceLabel} Qwen Code ${t(settingsIntegrationsMessages, "authenticationSubMode")}`}
                     value={provider.qwenAuthMode || "MODEL_PROVIDER"}
                   onChange={(value) => {
                     const updates: Partial<SystemProviderConfig> = {
@@ -464,7 +479,7 @@ export const ProviderInstanceCard: FunctionComponent<{
                   <Row label={t(settingsIntegrationsMessages, "codingPlanRegion")} description={t(settingsIntegrationsMessages, "codingPlanRegionDescription")}>
                       <SelectInput
                         value={provider.qwenRegion || "international"}
-                        aria-label={`${providerInstanceLabel} Coding Plan region`}
+                        aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "codingPlanRegion")}`}
                       onChange={(value) => onUpdate({
                         qwenRegion: value as "china" | "international",
                         qwenBaseUrl: getQwenEndpointForRegion(value),
@@ -475,7 +490,7 @@ export const ProviderInstanceCard: FunctionComponent<{
                     />
                   </Row>
                   <Row label={t(settingsIntegrationsMessages, "codingPlanEndpoint")} description={t(settingsIntegrationsMessages, "codingPlanEndpointDescription")}>
-                      <TextInput value={getQwenEndpointForRegion(provider.qwenRegion)} onChange={() => undefined} aria-label={`${providerInstanceLabel} Coding Plan endpoint`} disabled mono />
+                      <TextInput value={getQwenEndpointForRegion(provider.qwenRegion)} onChange={() => undefined} aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "codingPlanEndpoint")}`} disabled mono />
                   </Row>
                 </>
               )}
@@ -485,7 +500,7 @@ export const ProviderInstanceCard: FunctionComponent<{
                   <Row label={t(settingsIntegrationsMessages, "apiProvider")} description={t(settingsIntegrationsMessages, "apiProviderDescription")}>
                       <ProviderCombobox
                         value={provider.qwenApiProviderId || ""}
-                        aria-label={`${providerInstanceLabel} API provider`}
+                        aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "apiProvider")}`}
                       onChange={(value, apiBaseUrl) => onUpdate({
                         qwenApiProviderId: value || undefined,
                         ...(apiBaseUrl ? { qwenBaseUrl: apiBaseUrl } : {}),
@@ -495,24 +510,24 @@ export const ProviderInstanceCard: FunctionComponent<{
                   <Row label={t(settingsIntegrationsMessages, "providerProtocol")} description={t(settingsIntegrationsMessages, "providerProtocolDescription")}>
                       <SelectInput
                         value={provider.qwenProtocol || "openai"}
-                        aria-label={`${providerInstanceLabel} provider protocol`}
+                        aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "providerProtocol")}`}
                       onChange={(value) => onUpdate({ qwenProtocol: value as "openai" | "anthropic" | "gemini" })}
                       options={getQwenProtocolOptions(locale)}
                     />
                   </Row>
                   <Row label={t(settingsIntegrationsMessages, "environmentKey")} description={t(settingsIntegrationsMessages, "qwenEnvironmentKeyDescription")}>
-                      <TextInput value={provider.qwenEnvKey || "OLLAMA_API_KEY"} onChange={(value) => onUpdate({ qwenEnvKey: value })} aria-label={`${providerInstanceLabel} environment key`} mono />
+                      <TextInput value={provider.qwenEnvKey || "OLLAMA_API_KEY"} onChange={(value) => onUpdate({ qwenEnvKey: value })} aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "environmentKey")}`} mono />
                   </Row>
                   <Row label={t(settingsIntegrationsMessages, "modelId")} description={t(settingsIntegrationsMessages, "qwenModelIdDescription")}>
                       <ModelCombobox
                         value={provider.qwenModelId || providerModel || "glm-4.7-flash"}
                         onChange={(value) => onUpdate({ qwenModelId: value })}
                         providerId={provider.qwenApiProviderId}
-                        aria-label={`${providerInstanceLabel} model id`}
+                        aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "modelId")}`}
                       />
                   </Row>
                   <Row label={t(settingsIntegrationsMessages, "baseUrl")} description={t(settingsIntegrationsMessages, "qwenBaseUrlDescription")}>
-                      <TextInput value={provider.qwenBaseUrl || "http://127.0.0.1:11434/v1"} onChange={(value) => onUpdate({ qwenBaseUrl: value })} aria-label={`${providerInstanceLabel} base URL`} mono />
+                      <TextInput value={provider.qwenBaseUrl || "http://127.0.0.1:11434/v1"} onChange={(value) => onUpdate({ qwenBaseUrl: value })} aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "baseUrl")}`} mono />
                   </Row>
                 </>
               )}
@@ -521,12 +536,12 @@ export const ProviderInstanceCard: FunctionComponent<{
 
           {currentAuthType === "localAuth" && (
             <Row label={t(settingsIntegrationsMessages, "qwenAuthPath")} description={t(settingsIntegrationsMessages, "qwenAuthPathDescription")}>
-                <TextInput value={provider.authPath} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, authPath: value }))} aria-label={`${providerInstanceLabel} Qwen auth path`} mono />
+                <TextInput value={provider.authPath} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, authPath: value }))} aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "qwenAuthPath")}`} mono />
             </Row>
           )}
 
           <Row label={t(settingsIntegrationsMessages, "generatedSettingsPreview")} description={t(settingsIntegrationsMessages, "generatedQwenSettingsDescription")} last={isLast}>
-              <pre role="region" aria-label={`${providerInstanceLabel} generated Qwen settings preview`} className="max-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-[1rem] border border-black/[0.06] bg-black/[0.04] p-3 text-left font-mono text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
+              <pre role="region" aria-label={`${providerInstanceLabel} Qwen Code ${t(settingsIntegrationsMessages, "generatedSettingsPreview")}`} className="max-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-[1rem] border border-black/[0.06] bg-black/[0.04] p-3 text-left font-mono text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
               {buildQwenSettingsPreview(provider, providerModel, dockerExecutionEnabled)}
             </pre>
           </Row>
@@ -540,7 +555,7 @@ export const ProviderInstanceCard: FunctionComponent<{
             <>
               <Row label={t(settingsIntegrationsMessages, "authenticationSubMode")} description={t(settingsIntegrationsMessages, "openCodeAuthSubModeDescription")}>
                   <PillChoiceGroup
-                    aria-label={`${providerInstanceLabel} OpenCode authentication sub-mode`}
+                    aria-label={`${providerInstanceLabel} OpenCode ${t(settingsIntegrationsMessages, "authenticationSubMode")}`}
                     value={provider.openCodeAuthMode || "ENV_KEY"}
                   onChange={(value) => {
                     const updates: Partial<SystemProviderConfig> = {
@@ -565,7 +580,7 @@ export const ProviderInstanceCard: FunctionComponent<{
                   <Row label={t(settingsIntegrationsMessages, "providerId")} description={t(settingsIntegrationsMessages, "openCodeProviderIdDescription")}>
                       <ProviderCombobox
                         value={provider.openCodeProviderId || splitOpenCodeModel(providerModel).providerId}
-                        aria-label={`${providerInstanceLabel} provider id`}
+                        aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "providerId")}`}
                       onChange={(value, apiBaseUrl) => onUpdate({
                         openCodeProviderId: value,
                         ...(apiBaseUrl ? { openCodeBaseUrl: apiBaseUrl } : {}),
@@ -573,7 +588,7 @@ export const ProviderInstanceCard: FunctionComponent<{
                     />
                   </Row>
                   <Row label={t(settingsIntegrationsMessages, "environmentKey")} description={t(settingsIntegrationsMessages, "openCodeEnvironmentKeyDescription")}>
-                      <TextInput value={provider.openCodeEnvKey || "OLLAMA_API_KEY"} onChange={(value) => onUpdate({ openCodeEnvKey: value })} aria-label={`${providerInstanceLabel} environment key`} mono />
+                      <TextInput value={provider.openCodeEnvKey || "OLLAMA_API_KEY"} onChange={(value) => onUpdate({ openCodeEnvKey: value })} aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "environmentKey")}`} mono />
                   </Row>
                 </>
               )}
@@ -585,14 +600,14 @@ export const ProviderInstanceCard: FunctionComponent<{
                         value={provider.openCodeModelId || splitOpenCodeModel(providerModel).modelId}
                         onChange={(value) => onUpdate({ openCodeModelId: value })}
                         providerId={provider.openCodeProviderId || splitOpenCodeModel(providerModel).providerId}
-                        aria-label={`${providerInstanceLabel} model id`}
+                        aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "modelId")}`}
                       />
                   </Row>
                   <Row label={t(settingsIntegrationsMessages, "providerPackage")} description={t(settingsIntegrationsMessages, "providerPackageDescription")}>
-                      <TextInput value={provider.openCodePackage || "@ai-sdk/openai-compatible"} onChange={(value) => onUpdate({ openCodePackage: value })} aria-label={`${providerInstanceLabel} provider package`} mono />
+                      <TextInput value={provider.openCodePackage || "@ai-sdk/openai-compatible"} onChange={(value) => onUpdate({ openCodePackage: value })} aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "providerPackage")}`} mono />
                   </Row>
                   <Row label={t(settingsIntegrationsMessages, "baseUrl")} description={t(settingsIntegrationsMessages, "openCodeBaseUrlDescription")}>
-                      <TextInput value={provider.openCodeBaseUrl || "http://127.0.0.1:11434/v1"} onChange={(value) => onUpdate({ openCodeBaseUrl: value })} aria-label={`${providerInstanceLabel} base URL`} mono />
+                      <TextInput value={provider.openCodeBaseUrl || "http://127.0.0.1:11434/v1"} onChange={(value) => onUpdate({ openCodeBaseUrl: value })} aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "baseUrl")}`} mono />
                   </Row>
                 </>
               )}
@@ -601,12 +616,12 @@ export const ProviderInstanceCard: FunctionComponent<{
 
           {currentAuthType === "localAuth" && (
             <Row label={t(settingsIntegrationsMessages, "openCodeAuthPath")} description={t(settingsIntegrationsMessages, "openCodeAuthPathDescription")}>
-                <TextInput value={provider.authPath} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, authPath: value }))} aria-label={`${providerInstanceLabel} OpenCode auth path`} mono />
+                <TextInput value={provider.authPath} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, authPath: value }))} aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "openCodeAuthPath")}`} mono />
             </Row>
           )}
 
           <Row label={t(settingsIntegrationsMessages, "generatedConfigPreview")} description={t(settingsIntegrationsMessages, "generatedOpenCodeConfigDescription")} last={isLast}>
-              <pre role="region" aria-label={`${providerInstanceLabel} generated OpenCode config preview`} className="max-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-[1rem] border border-black/[0.06] bg-black/[0.04] p-3 text-left font-mono text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
+              <pre role="region" aria-label={`${providerInstanceLabel} OpenCode ${t(settingsIntegrationsMessages, "generatedConfigPreview")}`} className="max-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-[1rem] border border-black/[0.06] bg-black/[0.04] p-3 text-left font-mono text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
               {buildOpenCodeConfigPreview(provider, providerModel, dockerExecutionEnabled)}
             </pre>
           </Row>
@@ -623,16 +638,16 @@ export const ProviderInstanceCard: FunctionComponent<{
           ) : null}
           {currentAuthType === "localAuth" && (
             <Row label={t(settingsIntegrationsMessages, "authPath")} description={t(settingsIntegrationsMessages, "instanceAuthPathDescription")}>
-                <TextInput value={provider.authPath} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, authPath: value }))} aria-label={`${providerInstanceLabel} auth path`} mono />
+                <TextInput value={provider.authPath} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, authPath: value }))} aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "authPath")}`} mono />
             </Row>
           )}
           <Row
             label={t(settingsIntegrationsMessages, "apiProvider")}
-            description="Search the catalogue or type a custom provider name (self-hosted gateway, private proxy, etc.). Picking a known provider fills in the base URL below."
+            description={t(settingsIntegrationsMessages, "apiProviderGenericDescription")}
           >
               <ProviderCombobox
                 value={provider.customProviderId || ""}
-                aria-label={`${providerInstanceLabel} API provider`}
+                aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "apiProvider")}`}
               aria-describedby={customEndpointDisabled ? customEndpointDisabledReasonId : undefined}
               onChange={(value, apiBaseUrl) => onUpdate({
                 customProviderId: value || undefined,
@@ -646,14 +661,14 @@ export const ProviderInstanceCard: FunctionComponent<{
             label={t(settingsIntegrationsMessages, provider.provider === "claude-code" ? "anthropicBaseUrl" : "openAiBaseUrl")}
             description={
               provider.provider === "claude-code"
-                ? "Override ANTHROPIC_BASE_URL. Claude Code speaks the Anthropic Messages API and appends /v1/messages itself, so use an Anthropic-compatible endpoint WITHOUT a /v1 suffix — for OpenRouter that is https://openrouter.ai/api (not .../api/v1, which is the OpenAI URL used by Codex/Qwen). The API key is sent as a Bearer token. Leave empty to use the default Anthropic API. Type a custom URL/IP or pick a provider above."
-                : "Override OPENAI_BASE_URL. Route Codex through a custom OpenAI-compatible endpoint, e.g. https://openrouter.ai/api/v1. Leave empty to use the default OpenAI API. Type a custom URL/IP or pick a provider above."
+                ? t(settingsIntegrationsMessages, "claudeBaseUrlDescription")
+                : t(settingsIntegrationsMessages, "codexBaseUrlDescription")
             }
           >
               <TextInput
                 value={provider.customBaseUrl || ""}
                 onChange={(value) => onUpdate({ customBaseUrl: value || undefined })}
-                aria-label={`${providerInstanceLabel} custom base URL`}
+                aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "baseUrl")}`}
                 aria-describedby={customEndpointDisabled ? customEndpointDisabledReasonId : undefined}
                 disabled={customEndpointDisabled}
                 helperText={customEndpointDisabled ? t(settingsIntegrationsMessages, "switchToApiKey") : undefined}
@@ -664,8 +679,8 @@ export const ProviderInstanceCard: FunctionComponent<{
             label={t(settingsIntegrationsMessages, "customModel")}
             description={
               provider.provider === "claude-code"
-                ? "Bare model slug sent to the gateway (e.g. claude-sonnet-4-5, no provider prefix — the provider above already determines the endpoint). Applied to every Claude Code tier so background calls hit the same model. Leave empty to use the agent's selected model. Search the catalogue or type a custom slug."
-                : "Bare model slug sent to the gateway (e.g. gpt-5-codex, no provider prefix — the provider above already determines the endpoint). Overrides the agent's selected model. Leave empty to use the agent's selected model. Search the catalogue or type a custom slug."
+                ? t(settingsIntegrationsMessages, "claudeCustomModelDescription")
+                : t(settingsIntegrationsMessages, "codexCustomModelDescription")
             }
             last={isLast}
           >
@@ -673,9 +688,9 @@ export const ProviderInstanceCard: FunctionComponent<{
               value={provider.customModel || ""}
               onChange={(value) => onUpdate({ customModel: value || undefined })}
               disabled={customEndpointDisabled}
-                placeholder="Leave empty to use the agent's selected model"
+                placeholder={t(settingsIntegrationsMessages, "selectedModelPlaceholder")}
                 providerId={provider.customProviderId}
-                aria-label={`${providerInstanceLabel} custom model`}
+                aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "customModel")}`}
                 aria-describedby={customEndpointDisabled ? customEndpointDisabledReasonId : undefined}
               />
           </Row>
@@ -685,7 +700,7 @@ export const ProviderInstanceCard: FunctionComponent<{
       {/* Standard Local Auth Option for Generic CLI Providers */}
       {provider.provider !== "jules" && provider.provider !== "qwen-code" && provider.provider !== "opencode" && provider.provider !== "claude-code" && provider.provider !== "codex" && currentAuthType === "localAuth" && (
         <Row label={t(settingsIntegrationsMessages, "authPath")} description={t(settingsIntegrationsMessages, "instanceAuthPathDescription")} last={isLast}>
-            <TextInput value={provider.authPath} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, authPath: value }))} aria-label={`${providerInstanceLabel} auth path`} mono />
+            <TextInput value={provider.authPath} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, authPath: value }))} aria-label={`${providerInstanceLabel} ${t(settingsIntegrationsMessages, "authPath")}`} mono />
         </Row>
       )}
 

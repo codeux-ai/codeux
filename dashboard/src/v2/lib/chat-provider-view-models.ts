@@ -108,6 +108,48 @@ export const getBridgeModeLabel = (bridgeMode: ChatProviderBridgeMode, locale: D
   }
 };
 
+const CHAT_PROVIDER_FIELD_LABEL_KEYS = {
+  "Plugin name": "pluginName",
+  "Connector workspace": "connectorWorkspace",
+  "Bridge API key": "bridgeApiKey",
+  "Webhook URL": "webhookUrl",
+  "Verify token name": "verifyTokenName",
+  "Webhook signing secret": "webhookSigningSecret",
+  "Verify token": "verifyToken",
+  "Device label": "deviceLabel",
+  "Bridge command": "bridgeCommand",
+  "Working directory": "workingDirectory",
+  "Bridge token": "bridgeToken",
+  "Bot username": "botUsername",
+  "Bot token": "botToken",
+  "Webhook secret token": "webhookSecretToken",
+  "Events webhook URL": "eventsWebhookUrl",
+  "Slack app ID": "slackAppId",
+  "Signing secret": "signingSecret",
+  "Tenant ID": "tenantId",
+  "Bot endpoint URL": "botEndpointUrl",
+  "Bot app password": "botAppPassword",
+  "Gateway URL": "gatewayUrl",
+  "Application ID": "applicationId",
+} as const satisfies Record<string, DashboardTextMessageKey<typeof settingsIntegrationsMessages>>;
+
+export const getChatProviderFieldLabel = (
+  fieldLabel: string,
+  locale: DashboardLocale = "en",
+): string => {
+  const key = CHAT_PROVIDER_FIELD_LABEL_KEYS[fieldLabel as keyof typeof CHAT_PROVIDER_FIELD_LABEL_KEYS];
+  return key ? localized(locale, key) : fieldLabel;
+};
+
+export const getChatProviderBridgeSetupLabel = (
+  definition: DashboardChatProviderSetupDefinition,
+  bridgeMode: ChatProviderBridgeMode,
+  locale: DashboardLocale = "en",
+): string => {
+  const bridge = findBridgeSchema(definition, bridgeMode);
+  return locale === "en" ? bridge.label : `${definition.label}: ${getBridgeModeLabel(bridgeMode, locale)}`;
+};
+
 export const findBridgeSchema = (
   definition: DashboardChatProviderSetupDefinition,
   bridgeMode: ChatProviderBridgeMode,

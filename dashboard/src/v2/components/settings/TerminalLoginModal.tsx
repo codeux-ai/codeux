@@ -76,6 +76,18 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
   const triggerRef = useRef<HTMLElement | null>(null);
   const dialogTitleId = `terminal-login-title-${providerConfigId.replace(/\W/g, "-")}`;
   const terminalRegionLabel = providerName + t(settingsIntegrationsMessages, "terminalOutputMiddle") + providerConfigId;
+  const containerBuildCopy = {
+    cached: t(settingsIntegrationsMessages, "containerImageCached"),
+    fallback: t(settingsIntegrationsMessages, "containerBuildFellBack"),
+    waiting: t(settingsIntegrationsMessages, "waitingForContainerBuild"),
+    building: t(settingsIntegrationsMessages, "buildingContainerImage"),
+    setupCacheImage: t(settingsIntegrationsMessages, "setupCacheImage"),
+    loginBaseImage: t(settingsIntegrationsMessages, "loginBaseImage"),
+    description: t(settingsIntegrationsMessages, "containerBuildDescription"),
+    progressSuffix: t(settingsIntegrationsMessages, "buildProgressSuffix"),
+    percentCompleteSuffix: t(settingsIntegrationsMessages, "percentCompleteSuffix"),
+    progressUnavailable: t(settingsIntegrationsMessages, "progressNotAvailable"),
+  };
 
   // Close context menu on any global click
   useEffect(() => {
@@ -325,7 +337,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
 
         {/* Modal Content - The Terminal Screen */}
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-void-950 p-4 font-mono text-sm leading-relaxed text-white sm:p-6">
-          <ContainerBuildStatusInfobox progress={containerBuildProgress} className="mb-4 shrink-0" />
+          <ContainerBuildStatusInfobox progress={containerBuildProgress} copy={containerBuildCopy} className="mb-4 shrink-0" />
 
           {status === "connecting" && (
             <div role="status" aria-live="polite" className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-void-950/80 p-6">
@@ -337,7 +349,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
                 </p>
               </div>
               {containerBuildProgress && (
-                <ContainerBuildStatusInfobox progress={containerBuildProgress} className="w-full max-w-xl text-left" />
+                <ContainerBuildStatusInfobox progress={containerBuildProgress} copy={containerBuildCopy} className="w-full max-w-xl text-left" />
               )}
             </div>
           )}

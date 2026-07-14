@@ -223,8 +223,8 @@ const LocalHttpSetup: FunctionComponent = () => {
           ))}
         </div>
 
-        {message ? <div className="text-xs font-medium text-signal-700 dark:text-signal-200">{message}</div> : null}
-        {error ? <div className="text-xs font-medium text-status-red">{error}</div> : null}
+        {message ? <div role="status" aria-live="polite" className="text-xs font-medium text-signal-700 dark:text-signal-200">{message}</div> : null}
+        {error ? <div role="alert" aria-live="assertive" className="text-xs font-medium text-status-red">{error}</div> : null}
       </div>
     </div>
   );
@@ -541,7 +541,7 @@ const JsonMapEditor: FunctionComponent<{
   return (
     <div className="flex w-full flex-col gap-1.5">
       <TextAreaInput value={text} onChange={handle} rows={5} placeholder={placeholder} aria-label={ariaLabel} />
-      {error ? <span className="text-[11px] font-medium text-status-red">{error}</span> : null}
+      {error ? <span role="alert" className="text-[11px] font-medium text-status-red">{error}</span> : null}
     </div>
   );
 };
@@ -609,9 +609,9 @@ const CustomServerDetail: FunctionComponent<{
         <div className="flex flex-col gap-1.5">
           <TextInput value={server.name} onChange={(value) => onChange({ name: value })} placeholder="playwright" mono />
           {!nameValid && server.name.length > 0 ? (
-            <span className="text-[11px] font-medium text-status-red">{t(settingsIntegrationsMessages, "invalidServerKey")}</span>
+            <span role="alert" className="text-[11px] font-medium text-status-red">{t(settingsIntegrationsMessages, "invalidServerKey")}</span>
           ) : null}
-          {duplicateName ? <span className="text-[11px] font-medium text-status-red">{t(settingsIntegrationsMessages, "duplicateServerName")}</span> : null}
+          {duplicateName ? <span role="alert" className="text-[11px] font-medium text-status-red">{t(settingsIntegrationsMessages, "duplicateServerName")}</span> : null}
         </div>
       </Row>
       <Row label={t(settingsIntegrationsMessages, "transport")} description={t(settingsIntegrationsMessages, "transportDescription")}>
@@ -620,7 +620,7 @@ const CustomServerDetail: FunctionComponent<{
           onChange={(value) => onChange({ transport: value as CustomMcpTransport })}
           options={transportOptions}
         />
-        {!transportValid ? <span className="text-[11px] font-medium text-status-red">{t(settingsIntegrationsMessages, "invalidTransport")}</span> : null}
+        {!transportValid ? <span role="alert" className="text-[11px] font-medium text-status-red">{t(settingsIntegrationsMessages, "invalidTransport")}</span> : null}
       </Row>
 
       {isStdio ? (
@@ -639,7 +639,7 @@ const CustomServerDetail: FunctionComponent<{
         <>
           <Row label={t(settingsIntegrationsMessages, "serverUrl")} description={t(settingsIntegrationsMessages, "serverUrlDescription")}>
             <TextInput value={server.url ?? ""} onChange={(value) => onChange({ url: value })} placeholder="https://example.com/mcp" mono aria-label={t(settingsIntegrationsMessages, "serverUrl")} />
-            {!urlValid ? <span className="text-[11px] font-medium text-status-red">{t(settingsIntegrationsMessages, "invalidServerUrl")}</span> : null}
+            {!urlValid ? <span role="alert" className="text-[11px] font-medium text-status-red">{t(settingsIntegrationsMessages, "invalidServerUrl")}</span> : null}
           </Row>
           <Row label={t(settingsIntegrationsMessages, "authHeadersJson")} description={t(settingsIntegrationsMessages, "authHeadersJsonDescription")}>
             <JsonMapEditor resetKey={server.id} value={server.headers} placeholder={'{\n  "Authorization": "Bearer ..."\n}'} aria-label={t(settingsIntegrationsMessages, "authHeadersJsonAria")} onChange={(headers) => onChange({ headers })} />
@@ -648,7 +648,7 @@ const CustomServerDetail: FunctionComponent<{
       )}
 
       <Row label={t(settingsIntegrationsMessages, "description")} description={t(settingsIntegrationsMessages, "optionalCardNote")}>
-        <TextInput value={server.description ?? ""} onChange={(value) => onChange({ description: value })} placeholder="Browser automation tools" />
+        <TextInput value={server.description ?? ""} onChange={(value) => onChange({ description: value })} placeholder={t(settingsIntegrationsMessages, "browserAutomationTools")} />
       </Row>
       <Row label={t(settingsIntegrationsMessages, "restrictClis")} description={t(settingsIntegrationsMessages, "restrictClisDescription")}>
         <div className="flex flex-wrap gap-2">
