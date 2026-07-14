@@ -213,6 +213,88 @@ describe("WorkspaceManager", () => {
     }
   });
 
+  it("reuses a snapshot workspace only when it has a valid Git HEAD", async () => {
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo/project\n", stderr: "" } as any;
+      }
+      if (command === "docker" && args[0] === "volume" && args[1] === "inspect") {
+        return { ok: true, stdout: "[]", stderr: "" } as any;
+      }
+      if (command === "docker" && args[0] === "image" && args[1] === "inspect") {
+        return { ok: true, stdout: "[]", stderr: "" } as any;
+      }
+      return { ok: true, stdout: "existing-head\n", stderr: "" } as any;
+    });
+
+    const workspace = await manager.createOrReuseSnapshotWorkspace("/repo/project", "session-1", {
+      branch: "feature/task-1",
+    });
+
+    expect(workspace).toMatch(/^docker-volume:\/\/code-ux-project-[a-f0-9]{12}-session-1-snapshot$/);
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      expect.arrayContaining(["git", "rev-parse", "--verify", "HEAD"]),
+      expect.any(String),
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(runCommandStrict).not.toHaveBeenCalledWith(
+      "docker",
+      expect.arrayContaining(["volume", "create", "--label", "code-ux.workspace=true"]),
+      expect.any(String),
+    );
+  });
+
+  it("rebuilds an interrupted snapshot volume that has no Git HEAD", async () => {
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo/project\n", stderr: "" } as any;
+      }
+      if (command === "docker" && args[0] === "volume" && args[1] === "inspect") {
+        if (args.includes("--format")) {
+          return { ok: true, stdout: "true\n", stderr: "" } as any;
+        }
+        return { ok: true, stdout: "[]", stderr: "" } as any;
+      }
+      if (command === "docker" && args[0] === "image" && args[1] === "inspect") {
+        return { ok: true, stdout: "[]", stderr: "" } as any;
+      }
+      if (
+        command === "docker"
+        && args.includes("git")
+        && args.includes("rev-parse")
+        && args.includes("--verify")
+        && args.includes("HEAD")
+      ) {
+        throw new Error("fatal: Needed a single revision");
+      }
+      if (command === "git" && args[0] === "remote") {
+        return { ok: true, stdout: "git@github.com:example/repo.git\n", stderr: "" } as any;
+      }
+      return { ok: true, stdout: "", stderr: "" } as any;
+    });
+
+    const workspace = await manager.createOrReuseSnapshotWorkspace("/repo/project", "session-1");
+    const volumeName = workspace.replace("docker-volume://", "");
+
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      ["volume", "rm", "-f", volumeName],
+      process.cwd(),
+    );
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      expect.arrayContaining(["volume", "create", "--label", "code-ux.workspace=true"]),
+      expect.any(String),
+    );
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "git",
+      ["bundle", "create", path.join("/tmp/code-ux-bundle-123", "repo.bundle"), "--all"],
+      "/repo/project",
+    );
+  });
+
   it("uses a durable owner marker and skips repeated runtime-volume ownership helpers", async () => {
     vi.mocked(runCommandStrict).mockResolvedValue({ ok: true, stdout: "", stderr: "", code: 0, signal: null } as any);
 
