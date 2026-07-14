@@ -12,7 +12,7 @@ import { SprintKeyEditor } from "../SprintKeyEditor";
 import { TextInput, SecretInput, NumberInput, TextAreaInput, PillChoiceGroup, SelectInput, OptionCardChoiceGroup, ToggleLinkedControlRow } from "../SettingsFormFields";
 
 
-import { SettingsCategoryRail, CATEGORIES } from "../SettingsCategoryRail";
+import { SettingsCategoryRail, CATEGORIES, getLocalizedSettingsCategories } from "../SettingsCategoryRail";
 import { SettingsCategoryPicker } from "../SettingsCategoryPicker";
 import { SettingsScopeControls } from "../SettingsScopeControls";
 import { ActionButton, NoticePanel } from "../SettingsSurface";
@@ -76,7 +76,37 @@ const renderSettingsSmartFindSearch = (overrides: Partial<Parameters<typeof Sett
 afterEach(() => {
   vi.restoreAllMocks();
   Object.defineProperty(window, "innerHeight", { configurable: true, value: defaultInnerHeight });
+  document.documentElement.lang = "en";
   cleanup();
+});
+
+describe("localized Settings shell controls", () => {
+  it("keeps mobile category navigation keyboard-accessible with longer German copy", async () => {
+    document.documentElement.lang = "de";
+    const categories = getLocalizedSettingsCategories("de");
+    const user = userEvent.setup();
+    render(
+      <SettingsCategoryPicker
+        filteredCategories={categories}
+        activeCategory="appearance"
+        activeCategoryConfig={categories.find((category) => category.id === "appearance")!}
+        settingsSearch=""
+        settingsSearchMatches={{}}
+        onSwitchCategory={vi.fn()}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: /Einstellungskategorie wechseln/ });
+    await user.click(trigger);
+    expect(screen.getByRole("heading", { name: "Kategorie auswählen" })).toBeInTheDocument();
+    const navigation = screen.getByRole("navigation", { name: "Einstellungskategorien" });
+    expect(screen.getAllByText("Dashboard-Layout und Design-Einstellungen").length).toBeGreaterThan(0);
+
+    const appearanceButton = within(navigation).getByRole("button", { name: /Darstellung/ });
+    appearanceButton.focus();
+    fireEvent.keyDown(appearanceButton, { key: "ArrowDown" });
+    expect(document.activeElement).toHaveTextContent("KI-Modelle");
+  });
 });
 
 vi.mock("../panels/SettingsGeneralPanel", () => ({
@@ -1475,11 +1505,11 @@ describe("SettingsControls Accessibility", () => {
     expect(commandStatusBarSource).toContain("flex min-w-0 max-w-full flex-wrap");
     expect(commandStatusBarSource).toContain("<SettingsCategoryPicker");
     expect(commandStatusBarSource).toContain("activeCategoryConfig.description");
-    expect(commandStatusBarSource).toContain("Active category");
+    expect(commandStatusBarSource).toContain('t("activeCategory")');
     expect(commandStatusBarSource).toContain("<SettingsScopeControls");
     expect(commandStatusBarSource).toContain("ml-auto");
-    expect(commandStatusBarSource).toContain("Save Changes");
-    expect(commandStatusBarSource).toContain("Reset Project");
+    expect(commandStatusBarSource).toContain('t("saveChanges")');
+    expect(commandStatusBarSource).toContain('t("resetProject")');
     expect(commandStatusBarSource).toContain("rounded-[1.75rem]");
     expect(commandStatusBarSource).toContain('background: "var(--settings-command-surface)"');
     expect(commandStatusBarSource).toContain("shadow-[var(--settings-command-shadow)]");

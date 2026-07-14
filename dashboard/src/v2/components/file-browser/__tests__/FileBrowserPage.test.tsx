@@ -5,8 +5,6 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import type { FileBrowserTreeNode } from "../../../../types.js";
-import { DashboardI18nProvider } from "../../../i18n/context.js";
-import type { DashboardLocale } from "../../../i18n/locales.js";
 
 expect.extend(matchers);
 
@@ -96,7 +94,6 @@ const makeSession = () => ({
 });
 
 vi.mock("../../../context/project-data.js", () => ({
-  ProjectDataContext: {},
   useProjectData: () => ({ selectedProject: { id: "p1", name: "Project 1" } }),
 }));
 
@@ -184,10 +181,6 @@ vi.mock("../../../components/file-browser/FileTree.js", async () => {
 
 const { FileBrowserPage } = await import("../../../FileBrowserPage.js");
 
-const renderPage = (locale: DashboardLocale = "en") => render(
-  <DashboardI18nProvider initialLocale={locale} storage={null}><FileBrowserPage /></DashboardI18nProvider>,
-);
-
 beforeEach(() => {
   sessionLastBuildAt = "2026-06-01T00:00:00.000Z";
   sessionStatus = "running";
@@ -224,14 +217,14 @@ afterEach(() => {
 });
 
 test("keeps cached tree content visible during a background tree refresh", async () => {
-  const { rerender } = renderPage();
+  const { rerender } = render(<FileBrowserPage />);
 
   expect(await screen.findByRole("treeitem", { name: "src/App.tsx" })).toBeInTheDocument();
 
   const refreshTree = createDeferred<typeof treeResponse>();
   apiMocks.fetchFileBrowserTree.mockReturnValueOnce(refreshTree.promise);
   sessionLastBuildAt = "2026-06-01T00:01:00.000Z";
-  rerender(<DashboardI18nProvider initialLocale="en" storage={null}><FileBrowserPage /></DashboardI18nProvider>);
+  rerender(<FileBrowserPage />);
 
   expect(screen.getByRole("treeitem", { name: "src/App.tsx" })).toBeInTheDocument();
   expect(screen.getByText("Refreshing file tree")).toBeInTheDocument();
@@ -241,7 +234,7 @@ test("keeps cached tree content visible during a background tree refresh", async
 });
 
 test("retains selected file state while the file tree refreshes", async () => {
-  const { rerender } = renderPage();
+  const { rerender } = render(<FileBrowserPage />);
 
   fireEvent.click(await screen.findByRole("treeitem", { name: "src/App.tsx" }));
   expect(await screen.findByText("export const App = () => 'cached';")).toBeInTheDocument();
@@ -249,7 +242,7 @@ test("retains selected file state while the file tree refreshes", async () => {
   const refreshTree = createDeferred<typeof treeResponse>();
   apiMocks.fetchFileBrowserTree.mockReturnValueOnce(refreshTree.promise);
   sessionLastBuildAt = "2026-06-01T00:02:00.000Z";
-  rerender(<DashboardI18nProvider initialLocale="en" storage={null}><FileBrowserPage /></DashboardI18nProvider>);
+  rerender(<FileBrowserPage />);
 
   expect(screen.getByText("Selected src/App.tsx")).toBeInTheDocument();
   expect(screen.getByRole("treeitem", { name: "src/App.tsx" })).toHaveAttribute("aria-selected", "true");
@@ -270,7 +263,7 @@ test("marks the selected file row busy while file contents load", async () => {
   }>();
   apiMocks.fetchFileBrowserFile.mockReturnValueOnce(fileLoad.promise);
 
-  renderPage();
+  render(<FileBrowserPage />);
 
   fireEvent.click(await screen.findByRole("treeitem", { name: "src/App.tsx" }));
 
@@ -292,7 +285,7 @@ test("marks the selected file row busy while file contents load", async () => {
 });
 
 test("announces search results and mode-switch change counts with selected state", async () => {
-  renderPage();
+  render(<FileBrowserPage />);
 
   fireEvent.click(await screen.findByRole("treeitem", { name: "src/App.tsx" }));
   fireEvent.input(screen.getByLabelText("Filter files"), { target: { value: "readme" } });
@@ -307,14 +300,14 @@ test("announces search results and mode-switch change counts with selected state
 });
 
 test("keeps cached changes visible and shows recovery messaging after a refresh error", async () => {
-  const { rerender } = renderPage();
+  const { rerender } = render(<FileBrowserPage />);
 
   fireEvent.click(await screen.findByRole("tab", { name: "Changes" }));
   expect(await screen.findByRole("option", { name: /Modified file src\/App\.tsx/i })).toBeInTheDocument();
 
   apiMocks.fetchFileBrowserChanges.mockRejectedValueOnce(new Error("git diff failed"));
   sessionLastBuildAt = "2026-06-01T00:03:00.000Z";
-  rerender(<DashboardI18nProvider initialLocale="en" storage={null}><FileBrowserPage /></DashboardI18nProvider>);
+  rerender(<FileBrowserPage />);
 
   await waitFor(() => expect(screen.getByText(/Failed to refresh changed files\. Showing cached list\./)).toBeInTheDocument());
   expect(screen.getByRole("option", { name: /Modified file src\/App\.tsx/i })).toBeInTheDocument();
@@ -323,7 +316,7 @@ test("keeps cached changes visible and shows recovery messaging after a refresh 
 test("suppresses duplicate stop activation and explains disabled state while pending", async () => {
   const stopDeferred = createDeferred<void>();
   apiMocks.stopFileBrowserSession.mockReturnValueOnce(stopDeferred.promise);
-  renderPage();
+  render(<FileBrowserPage />);
 
   await screen.findByRole("treeitem", { name: "src/App.tsx" });
   const stopButton = screen.getByRole("button", { name: "Stop file browser container" });

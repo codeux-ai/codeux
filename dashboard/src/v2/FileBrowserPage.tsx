@@ -41,8 +41,6 @@ import { FileTree } from "./components/file-browser/FileTree.js";
 import { FileViewer } from "./components/file-browser/FileViewer.js";
 import { ChangesList } from "./components/file-browser/ChangesList.js";
 import { DiffViewer } from "./components/file-browser/DiffViewer.js";
-import { useDashboardI18n } from "./i18n/context.js";
-import { fileBrowserMessages } from "./i18n/messages/file-browser.js";
 
 type BrowserMode = "files" | "changes";
 type FileBrowserAction = "rebuild" | "stop";
@@ -60,15 +58,14 @@ const countTreeEntries = (nodes: FileBrowserTreeType["root"], searchTerm: string
   return count;
 };
 
-const STATUS_PILL: Record<FileBrowserSession["status"], { labelKey: "statusRunning" | "statusStarting" | "statusStopped" | "statusError"; dot: string; text: string }> = {
-  running: { labelKey: "statusRunning", dot: "bg-status-green shadow-[0_0_8px_rgba(34,197,94,0.7)]", text: "text-status-green" },
-  starting: { labelKey: "statusStarting", dot: "bg-ember-500 animate-pulse", text: "text-ember-500" },
-  stopped: { labelKey: "statusStopped", dot: "bg-slate-400", text: "text-slate-400" },
-  error: { labelKey: "statusError", dot: "bg-status-red", text: "text-status-red" },
+const STATUS_PILL: Record<FileBrowserSession["status"], { label: string; dot: string; text: string }> = {
+  running: { label: "Running", dot: "bg-status-green shadow-[0_0_8px_rgba(34,197,94,0.7)]", text: "text-status-green" },
+  starting: { label: "Starting", dot: "bg-ember-500 animate-pulse", text: "text-ember-500" },
+  stopped: { label: "Stopped", dot: "bg-slate-400", text: "text-slate-400" },
+  error: { label: "Error", dot: "bg-status-red", text: "text-status-red" },
 };
 
 export const FileBrowserPage: FunctionComponent = () => {
-  const { formatDate, formatNumber, translate, translatePlural } = useDashboardI18n();
   const { selectedProject } = useProjectData();
   const { data: sprints, selectedSprint, selectedSprintId } = useSprints(selectedProject?.id || null);
   const isDark = useIsDark();
@@ -269,14 +266,14 @@ export const FileBrowserPage: FunctionComponent = () => {
     if (!selectedProject || !sprintId || launching) return;
     setLaunching(true);
     setError(null);
-    setActionFeedback({ tone: "pending", message: translate(fileBrowserMessages, "startingFeedback") });
+    setActionFeedback({ tone: "pending", message: "Starting file browser container…" });
     try {
       const session = await startFileBrowserSession(selectedProject.id, sprintId);
       setActiveSessionId(session.id);
       await refresh(true);
-      setActionFeedback({ tone: "success", message: translate(fileBrowserMessages, "startedFeedback") });
+      setActionFeedback({ tone: "success", message: "File browser container started." });
     } catch (err) {
-      setError(translate(fileBrowserMessages, "startFailed", { error: err instanceof Error ? err.message : String(err) }));
+      setError(`Failed to start file browser: ${err instanceof Error ? err.message : String(err)}`);
       setActionFeedback(null);
     } finally {
       setLaunching(false);
@@ -287,13 +284,13 @@ export const FileBrowserPage: FunctionComponent = () => {
     if (!selectedSession || actionPending) return;
     setActionPending("rebuild");
     setError(null);
-    setActionFeedback({ tone: "pending", message: translate(fileBrowserMessages, "rebuildingFeedback") });
+    setActionFeedback({ tone: "pending", message: "Rebuilding file browser container…" });
     try {
       await rebuildFileBrowserSession(selectedSession.id);
       await refresh(true);
-      setActionFeedback({ tone: "success", message: translate(fileBrowserMessages, "rebuiltFeedback") });
+      setActionFeedback({ tone: "success", message: "File browser container rebuilt." });
     } catch (err) {
-      setError(translate(fileBrowserMessages, "rebuildFailed", { error: err instanceof Error ? err.message : String(err) }));
+      setError(`Failed to rebuild: ${err instanceof Error ? err.message : String(err)}`);
       setActionFeedback(null);
     } finally {
       setActionPending(null);
@@ -304,7 +301,7 @@ export const FileBrowserPage: FunctionComponent = () => {
     if (!runningSession || actionPending) return;
     setActionPending("stop");
     setError(null);
-    setActionFeedback({ tone: "pending", message: translate(fileBrowserMessages, "stoppingFeedback") });
+    setActionFeedback({ tone: "pending", message: "Stopping file browser container…" });
     try {
       await stopFileBrowserSession(runningSession.id);
       await removeFileBrowserSession(runningSession.id).catch(() => undefined);
@@ -314,9 +311,9 @@ export const FileBrowserPage: FunctionComponent = () => {
       setTree(null);
       setChanges(null);
       await refresh(true);
-      setActionFeedback({ tone: "success", message: translate(fileBrowserMessages, "stoppedFeedback") });
+      setActionFeedback({ tone: "success", message: "File browser container stopped. Use Open file browser to start it again." });
     } catch (err) {
-      setError(translate(fileBrowserMessages, "stopFailed", { error: err instanceof Error ? err.message : String(err) }));
+      setError(`Failed to stop: ${err instanceof Error ? err.message : String(err)}`);
       setActionFeedback(null);
     } finally {
       setActionPending(null);
@@ -325,9 +322,9 @@ export const FileBrowserPage: FunctionComponent = () => {
 
   if (!selectedProject) {
     return (
-      <PageContainer aria-label={translate(fileBrowserMessages, "pageLabel")} padding="workbench">
+      <PageContainer aria-label="File Browser" padding="workbench">
         <div class="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-8 text-sm text-slate-600 shadow-[0_16px_44px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.07] dark:bg-void-900/45 dark:text-slate-300">
-          {translate(fileBrowserMessages, "noProject")}
+          Select a project to open the sprint file browser. The workspace launches one containerized snapshot of the selected sprint branch.
         </div>
       </PageContainer>
     );
@@ -340,71 +337,56 @@ export const FileBrowserPage: FunctionComponent = () => {
   const treeResultCount = tree ? countTreeEntries(tree.root, treeSearch) : 0;
   const treeResultLabel = tree
     ? treeSearch.trim()
-      ? translatePlural(fileBrowserMessages, "matchingEntries", treeResultCount, { formattedCount: formatNumber(treeResultCount) })
-      : translatePlural(fileBrowserMessages, "snapshotFiles", tree.fileCount, { formattedCount: formatNumber(tree.fileCount) })
-    : translate(fileBrowserMessages, "noTreeLoaded");
-  const changedFilesLabel = translatePlural(fileBrowserMessages, "changedFilesCount", changeCount, { formattedCount: formatNumber(changeCount) });
-  const selectedFileAnnouncement = selectedFilePath
-    ? translate(fileBrowserMessages, "selectedFileAnnouncement", { path: selectedFilePath })
-    : translate(fileBrowserMessages, "noFileSelectedAnnouncement");
-  const selectedChangeAnnouncement = selectedChangePath
-    ? translate(fileBrowserMessages, "selectedChangeAnnouncement", { path: selectedChangePath })
-    : translate(fileBrowserMessages, "noChangeSelectedAnnouncement");
+      ? `${treeResultCount} matching ${treeResultCount === 1 ? "entry" : "entries"}`
+      : `${tree.fileCount} ${tree.fileCount === 1 ? "file" : "files"} in snapshot`
+    : "No file tree loaded";
   const modeAnnouncement = mode === "files"
-    ? translate(fileBrowserMessages, "filesMode", { summary: `${treeResultLabel}.`, selection: selectedFileAnnouncement })
-    : translate(fileBrowserMessages, "changesMode", { summary: `${changedFilesLabel}.`, selection: selectedChangeAnnouncement });
+    ? `Files mode. ${treeResultLabel}. ${selectedFilePath ? `Selected file ${selectedFilePath}.` : "No file selected."}`
+    : `Changes mode. ${changeCount} changed ${changeCount === 1 ? "file" : "files"}. ${selectedChangePath ? `Selected change ${selectedChangePath}.` : "No change selected."}`;
   const rebuildDisabledReason = actionPending
     ? actionPending === "rebuild"
-      ? translate(fileBrowserMessages, "rebuildAlreadyPending")
-      : translate(fileBrowserMessages, "stopBeforeRebuild")
+      ? "A rebuild is already pending. Wait for the rebuild to complete before starting another action."
+      : "A stop is already pending. Wait for the container to stop before rebuilding."
     : !selectedSession
-      ? translate(fileBrowserMessages, "selectSessionBeforeRebuild")
+      ? "Select or start a file browser session before rebuilding."
       : null;
   const stopDisabledReason = actionPending
     ? actionPending === "stop"
-      ? translate(fileBrowserMessages, "stopAlreadyPending")
-      : translate(fileBrowserMessages, "rebuildBeforeStop")
+      ? "A stop is already pending. Wait for the container to stop before starting another action."
+      : "A rebuild is already pending. Wait for the rebuild to complete before stopping."
     : !runningSession
       ? selectedSession
-        ? translate(fileBrowserMessages, "selectedSessionNotRunning")
-        : translate(fileBrowserMessages, "selectRunningSessionBeforeStop")
+        ? "The selected file browser session is not running."
+        : "Start or select a running file browser session before stopping."
       : null;
   const workspaceStatusMessage = selectedSession
     ? selectedSession.status === "running"
-      ? translate(fileBrowserMessages, "workspaceRunning")
+      ? "File browser container is running."
       : selectedSession.status === "starting"
-        ? translate(fileBrowserMessages, "workspaceStarting")
+        ? "File browser container is starting."
         : selectedSession.status === "error"
-          ? selectedSession.lastError
-            ? translate(fileBrowserMessages, "workspaceErrorDetail", { error: selectedSession.lastError })
-            : translate(fileBrowserMessages, "workspaceError")
-          : translate(fileBrowserMessages, "workspaceStopped")
-    : translate(fileBrowserMessages, "noSessionSelected");
-  const lastBuildDate = selectedSession?.lastBuildAt ? new Date(selectedSession.lastBuildAt) : null;
-  const snapshotUpdatedLabel = lastBuildDate && !Number.isNaN(lastBuildDate.getTime())
-    ? translate(fileBrowserMessages, "snapshotUpdated", {
-      date: formatDate(lastBuildDate, { dateStyle: "medium", timeStyle: "short" }),
-    })
-    : null;
+          ? `File browser container has an error${selectedSession.lastError ? `: ${selectedSession.lastError}` : "."}`
+          : "File browser container is stopped."
+    : "No file browser session is selected.";
 
   return (
-    <PageContainer aria-label={translate(fileBrowserMessages, "pageLabel")} padding="workbench" className="min-h-full" data-testid="file-browser-page-root">
+    <PageContainer aria-label="File Browser" padding="workbench" className="min-h-full" data-testid="file-browser-page-root">
       <PageHeader
         data-testid="file-browser-page-header"
         className="mb-6"
         icon={FolderTree}
-        eyebrow={translate(fileBrowserMessages, "eyebrow")}
-        title={translate(fileBrowserMessages, "title")}
-        subtitle={translate(fileBrowserMessages, "subtitle")}
+        eyebrow="Sprint File Browser"
+        title="Browse & Diff the Sprint Branch"
+        subtitle="A single containerized snapshot of the active sprint rebuilds automatically as tasks merge. Inspect every file and review what changed versus the default branch — all without leaving the dashboard."
         actions={
           <button
             type="button"
             onClick={() => void refresh()}
-            aria-label={translate(fileBrowserMessages, "refreshSessions")}
+            aria-label="Refresh file browser sessions"
             class="inline-flex h-11 items-center gap-2 rounded-2xl border border-black/[0.08] bg-white/78 px-4 text-sm font-semibold text-slate-700 shadow-[0_10px_24px_rgba(15,23,42,0.05)] backdrop-blur-md transition hover:-translate-y-px hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
           >
             <RefreshCw class={`h-4 w-4 ${loading ? "animate-spin" : ""}`} strokeWidth={2} />
-            {translate(fileBrowserMessages, "refresh")}
+            Refresh
           </button>
         }
       />
@@ -429,29 +411,29 @@ export const FileBrowserPage: FunctionComponent = () => {
       )}
 
       {/* Control bar */}
-      <div class="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-[1.5rem] border border-black/[0.06] bg-white/74 px-4 py-3 shadow-[0_12px_30px_rgba(15,23,42,0.05)] backdrop-blur-md dark:border-white/[0.07] dark:bg-void-900/42" role="region" aria-label={translate(fileBrowserMessages, "controls")}>
+      <div class="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-[1.5rem] border border-black/[0.06] bg-white/74 px-4 py-3 shadow-[0_12px_30px_rgba(15,23,42,0.05)] backdrop-blur-md dark:border-white/[0.07] dark:bg-void-900/42" role="region" aria-label="File browser controls">
         <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
           {workspaceStatusMessage}
           {" "}
           {modeAnnouncement}
-          {treeLoading ? ` ${translate(fileBrowserMessages, "loadingTreeAnnouncement")}` : ""}
-          {fileLoading ? ` ${translate(fileBrowserMessages, "loadingFileAnnouncement")}` : ""}
-          {changesLoading ? ` ${translate(fileBrowserMessages, "loadingChangesAnnouncement")}` : ""}
-          {diffLoading ? ` ${translate(fileBrowserMessages, "loadingDiffAnnouncement")}` : ""}
-          {actionPending === "rebuild" ? ` ${translate(fileBrowserMessages, "rebuildPendingAnnouncement")}` : ""}
-          {actionPending === "stop" ? ` ${translate(fileBrowserMessages, "stopPendingAnnouncement")}` : ""}
-          {launching ? ` ${translate(fileBrowserMessages, "launchingAnnouncement")}` : ""}
+          {treeLoading ? " Loading file tree." : ""}
+          {fileLoading ? " Loading selected file." : ""}
+          {changesLoading ? " Loading changed files." : ""}
+          {diffLoading ? " Loading selected diff." : ""}
+          {actionPending === "rebuild" ? " File browser rebuild is pending." : ""}
+          {actionPending === "stop" ? " File browser stop is pending." : ""}
+          {launching ? " Launching file browser container." : ""}
         </div>
         <div class="flex flex-wrap items-center gap-3">
           {statusPill && (
             <span class="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-black/[0.02] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] dark:border-white/[0.08] dark:bg-white/[0.03]">
               <span class={`h-2 w-2 rounded-full ${statusPill.dot}`} />
-              <span class={statusPill.text}>{translate(fileBrowserMessages, statusPill.labelKey)}</span>
+              <span class={statusPill.text}>{statusPill.label}</span>
             </span>
           )}
             <span class="min-w-0 flex-1 inline-flex items-center gap-1.5 text-[12px] font-medium text-slate-500 dark:text-slate-400">
             <Server class="shrink-0 h-3.5 w-3.5" strokeWidth={2} />
-            <span class="break-words">{sessionSprintName || selectedSprint?.name || translate(fileBrowserMessages, "noSprint")}</span>
+            <span class="break-words">{sessionSprintName || selectedSprint?.name || "No sprint"}</span>
           </span>
           {selectedSession?.featureBranch && (
             <span class="min-w-0 flex-1 inline-flex items-center gap-1.5 rounded-lg border border-black/[0.06] bg-white/75 px-2 py-1 font-mono text-[11px] text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300">
@@ -459,14 +441,11 @@ export const FileBrowserPage: FunctionComponent = () => {
               <span class="break-words">{selectedSession.featureBranch}</span>
             </span>
           )}
-          {snapshotUpdatedLabel && (
-            <span class="text-[11px] font-medium text-slate-400 dark:text-slate-500">{snapshotUpdatedLabel}</span>
-          )}
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
           {/* Mode toggle */}
-          <div class="flex items-center rounded-xl border border-black/[0.08] bg-black/[0.02] p-0.5 dark:border-white/[0.08] dark:bg-white/[0.03]" role="tablist" aria-label={translate(fileBrowserMessages, "mode")}>
+          <div class="flex items-center rounded-xl border border-black/[0.08] bg-black/[0.02] p-0.5 dark:border-white/[0.08] dark:bg-white/[0.03]" role="tablist" aria-label="File browser mode">
             <button
               type="button"
               onClick={() => setMode("files")}
@@ -479,7 +458,7 @@ export const FileBrowserPage: FunctionComponent = () => {
               }`}
             >
               <FolderTree class="h-3.5 w-3.5" strokeWidth={2} />
-              {translate(fileBrowserMessages, "files")}
+              Files
             </button>
             <button
               type="button"
@@ -493,10 +472,10 @@ export const FileBrowserPage: FunctionComponent = () => {
               }`}
             >
               <GitCompare class="h-3.5 w-3.5" strokeWidth={2} />
-              {translate(fileBrowserMessages, "changes")}
+              Changes
               {changeCount > 0 && (
                 <span class="ml-0.5 rounded-full bg-signal-500/20 px-1.5 text-[10px] font-bold text-signal-700 dark:text-signal-200">
-                  {formatNumber(changeCount)}
+                  {changeCount}
                 </span>
               )}
             </button>
@@ -509,12 +488,12 @@ export const FileBrowserPage: FunctionComponent = () => {
             aria-disabled={Boolean(rebuildDisabledReason)}
             aria-busy={actionPending === "rebuild"}
             aria-describedby={rebuildDisabledReason ? "file-browser-rebuild-disabled-reason" : undefined}
-            aria-label={translate(fileBrowserMessages, "rebuildContainer")}
-            title={rebuildDisabledReason ?? translate(fileBrowserMessages, "rebuildContainer")}
+            aria-label="Rebuild file browser container"
+            title={rebuildDisabledReason ?? "Rebuild file browser container"}
             class="inline-flex h-9 items-center gap-2 rounded-xl border border-black/[0.08] bg-white/75 px-3 text-xs font-semibold text-slate-700 transition hover:-translate-y-px hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-black/[0.06] disabled:bg-black/[0.03] disabled:text-slate-400 disabled:opacity-100 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:bg-white/[0.02] dark:disabled:text-slate-500"
           >
             <RotateCcw class={`h-3.5 w-3.5 ${actionPending === "rebuild" ? "animate-spin" : ""}`} strokeWidth={2} />
-            {translate(fileBrowserMessages, actionPending === "rebuild" ? "rebuilding" : "rebuild")}
+            {actionPending === "rebuild" ? "Rebuilding..." : "Rebuild"}
           </button>
           {rebuildDisabledReason && <span id="file-browser-rebuild-disabled-reason" class="sr-only">{rebuildDisabledReason}</span>}
           <button
@@ -524,12 +503,12 @@ export const FileBrowserPage: FunctionComponent = () => {
             aria-disabled={Boolean(stopDisabledReason)}
             aria-busy={actionPending === "stop"}
             aria-describedby={stopDisabledReason ? "file-browser-stop-disabled-reason" : undefined}
-            aria-label={translate(fileBrowserMessages, "stopContainer")}
-            title={stopDisabledReason ?? translate(fileBrowserMessages, "stopContainer")}
+            aria-label="Stop file browser container"
+            title={stopDisabledReason ?? "Stop file browser container"}
             class="inline-flex h-9 items-center gap-2 rounded-xl border border-black/[0.08] bg-white/75 px-3 text-xs font-semibold text-slate-700 transition hover:-translate-y-px hover:border-status-red/35 hover:text-status-red disabled:cursor-not-allowed disabled:border-black/[0.06] disabled:bg-black/[0.03] disabled:text-slate-400 disabled:opacity-100 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200 dark:disabled:bg-white/[0.02] dark:disabled:text-slate-500"
           >
             <Square class="h-3.5 w-3.5" strokeWidth={2} />
-            {translate(fileBrowserMessages, actionPending === "stop" ? "stopping" : "stop")}
+            {actionPending === "stop" ? "Stopping..." : "Stop"}
           </button>
           {stopDisabledReason && <span id="file-browser-stop-disabled-reason" class="sr-only">{stopDisabledReason}</span>}
         </div>
@@ -553,43 +532,43 @@ export const FileBrowserPage: FunctionComponent = () => {
                 <div class="border-b border-black/[0.05] p-3 dark:border-white/[0.05]">
                   <div class="flex items-center gap-2 rounded-xl border border-black/[0.08] bg-black/[0.02] px-3 dark:border-white/[0.08] dark:bg-white/[0.03]">
                     <Search class="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
-                      <label class="sr-only" htmlFor="file-tree-filter">{translate(fileBrowserMessages, "filterFiles")}</label>
+                      <label class="sr-only" htmlFor="file-tree-filter">Filter files</label>
                       <input
                         id="file-tree-filter"
                         type="text"
                       value={treeSearch}
                       onInput={(event) => setTreeSearch((event.currentTarget as HTMLInputElement).value)}
-                      placeholder={translate(fileBrowserMessages, "filterFilesPlaceholder")}
+                      placeholder="Filter files…"
                       class="h-9 flex-1 bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200"
                     />
                   </div>
                   <div class="mt-2 flex min-h-4 items-center justify-between gap-2 text-[11px] font-medium text-slate-500 dark:text-slate-400" role="status" aria-live="polite" aria-atomic="true">
                     <span>{treeResultLabel}</span>
-                    {selectedFilePath && <span class="min-w-0 truncate font-mono">{translate(fileBrowserMessages, "selectedFile", { path: selectedFilePath })}</span>}
+                    {selectedFilePath && <span class="min-w-0 truncate font-mono">Selected {selectedFilePath}</span>}
                   </div>
                 </div>
                 <div class="relative min-h-0 flex-1 p-2" aria-busy={treeLoading}>
                   {treeError && tree && (
                     <div class="mb-2 rounded-xl border border-status-red/25 bg-status-red/[0.10] px-3 py-2 text-xs text-status-red" role="alert">
-                      {translate(fileBrowserMessages, "refreshTreeFailedCached", { error: treeError })}
+                      Failed to refresh file tree. Showing cached tree. {treeError}
                     </div>
                   )}
                   {treeLoading && tree && (
                     <div class="mb-2 inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-3 py-1.5 text-[11px] font-semibold text-signal-700 dark:text-signal-300" role="status" aria-live="polite">
                       <Loader2 class="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
-                      {translate(fileBrowserMessages, "refreshingTree")}
+                      Refreshing file tree
                     </div>
                   )}
                   {treeLoading && !tree ? (
                     <div class="flex h-full items-center justify-center gap-2 text-sm text-slate-500" role="status" aria-live="polite" aria-busy="true">
                       <Loader2 class="h-4 w-4 animate-spin text-signal-500" strokeWidth={2} />
-                      {translate(fileBrowserMessages, "indexingFiles")}
+                      Indexing files…
                     </div>
                   ) : treeError && !tree ? (
                     <div class="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-status-red" role="alert">
-                      <span class="font-semibold">{translate(fileBrowserMessages, "loadTreeFailed")}</span>
+                      <span class="font-semibold">Failed to load file tree.</span>
                       <span class="text-xs text-status-red/80">{treeError}</span>
-                      <span class="text-xs text-status-red/80">{translate(fileBrowserMessages, "retryTree")}</span>
+                      <span class="text-xs text-status-red/80">Use Refresh or Rebuild to try again.</span>
                     </div>
                   ) : tree && tree.root.length > 0 ? (
                     <FileTree
@@ -601,13 +580,13 @@ export const FileBrowserPage: FunctionComponent = () => {
                     />
                   ) : (
                     <div class="flex h-full items-center justify-center p-6 text-center text-sm text-slate-500" role="status">
-                      {translate(fileBrowserMessages, "noFiles")}
+                      No files found in this snapshot.
                     </div>
                   )}
                 </div>
                 {tree?.truncated && (
                   <div class="border-t border-black/[0.05] px-3 py-2 text-[11px] text-ember-500 dark:border-white/[0.05]">
-                    {translate(fileBrowserMessages, "treeTruncated")}
+                    Large workspace — file tree was truncated.
                   </div>
                 )}
               </>
@@ -615,28 +594,28 @@ export const FileBrowserPage: FunctionComponent = () => {
               <>
                 <div class="flex items-center justify-between border-b border-black/[0.05] px-4 py-3 dark:border-white/[0.05]">
                   <div class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                    {translate(fileBrowserMessages, "changedFiles")}
+                    Changed files
                   </div>
                   <div class="inline-flex items-center gap-2 text-[11px] font-medium text-slate-500 dark:text-slate-400" role="status" aria-live="polite" aria-atomic="true">
                     {changesLoading && <Loader2 class="h-3.5 w-3.5 animate-spin text-signal-500" strokeWidth={2} />}
-                    <span>{changesLoading && changes ? translate(fileBrowserMessages, "refreshingChanges") : changedFilesLabel}</span>
+                    <span>{changesLoading && changes ? "Refreshing changes" : `${changeCount} changed ${changeCount === 1 ? "file" : "files"}`}</span>
                   </div>
                 </div>
                 <div class="min-h-0 flex-1" aria-busy={changesLoading}>
                   {changesError && changes && (
                     <div class="m-2 rounded-xl border border-status-red/25 bg-status-red/[0.10] px-3 py-2 text-xs text-status-red" role="alert">
-                      {translate(fileBrowserMessages, "refreshChangesFailedCached", { error: changesError })}
+                      Failed to refresh changed files. Showing cached list. {changesError}
                     </div>
                   )}
                   {changesError && !changes ? (
                     <div class="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-status-red" role="alert">
-                      <span class="font-semibold">{translate(fileBrowserMessages, "loadChangesFailed")}</span>
+                      <span class="font-semibold">Failed to load changed files.</span>
                       <span class="text-xs text-status-red/80">{changesError}</span>
-                      <span class="text-xs text-status-red/80">{translate(fileBrowserMessages, "retryChanges")}</span>
+                      <span class="text-xs text-status-red/80">Switch modes or refresh the workbench to try again.</span>
                     </div>
                   ) : changes && !changes.available ? (
                     <div class="flex h-full items-center justify-center p-6 text-center text-sm text-slate-500" role="status">
-                      {changes.reason || translate(fileBrowserMessages, "diffUnavailable")}
+                      {changes.reason || "Diff unavailable for this sprint."}
                     </div>
                   ) : (
                     <ChangesList
@@ -661,19 +640,19 @@ export const FileBrowserPage: FunctionComponent = () => {
             <div class="flex items-center justify-between gap-3 border-b border-black/[0.05] px-4 py-2.5 dark:border-white/[0.06]">
               <div class="min-w-0 flex-1 break-words font-mono text-[12px] text-slate-500 dark:text-slate-400">
                 {mode === "files"
-                  ? selectedFilePath || translate(fileBrowserMessages, "noFileSelected")
-                  : selectedChangePath || translate(fileBrowserMessages, "noFileSelected")}
+                  ? selectedFilePath || "No file selected"
+                  : selectedChangePath || "No file selected"}
               </div>
               {mode === "changes" && (
                 <button
                   type="button"
                   onClick={() => setSideBySide((value) => !value)}
-                  aria-label={translate(fileBrowserMessages, sideBySide ? "switchInline" : "switchSideBySide")}
+                  aria-label={sideBySide ? "Switch to inline diff" : "Switch to side-by-side diff"}
                   class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-black/[0.08] bg-white/75 px-2.5 text-[11px] font-semibold text-slate-600 transition hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
-                  title={translate(fileBrowserMessages, sideBySide ? "switchInline" : "switchSideBySide")}
+                  title={sideBySide ? "Switch to inline diff" : "Switch to side-by-side diff"}
                 >
                   {sideBySide ? <Columns2 class="h-3.5 w-3.5" strokeWidth={2} /> : <Rows2 class="h-3.5 w-3.5" strokeWidth={2} />}
-                  {translate(fileBrowserMessages, sideBySide ? "split" : "inline")}
+                  {sideBySide ? "Split" : "Inline"}
                 </button>
               )}
             </div>
@@ -708,13 +687,12 @@ const LaunchPanel: FunctionComponent<LaunchPanelProps> = ({
   onLaunch,
   lastError,
 }) => {
-  const { translate } = useDashboardI18n();
   const launchDisabledReason = launching
-    ? translate(fileBrowserMessages, "launchStartingDisabled")
+    ? "The file browser container is starting."
     : !launchSprintId
-      ? translate(fileBrowserMessages, "launchSelectSprintDisabled")
+      ? "Select a sprint to launch the file browser."
       : sprints.length === 0
-        ? translate(fileBrowserMessages, "launchNoSprintsDisabled")
+        ? "No sprints are available to launch."
         : null;
 
   return (
@@ -724,14 +702,14 @@ const LaunchPanel: FunctionComponent<LaunchPanelProps> = ({
         {launching ? <Loader2 class="h-7 w-7 animate-spin motion-reduce:animate-none" strokeWidth={2} /> : <FolderTree class="h-7 w-7" strokeWidth={1.8} />}
       </div>
       <div>
-        <div class="text-[10px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-400">{translate(fileBrowserMessages, "workspaceSnapshot")}</div>
+        <div class="text-[10px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-400">Workspace Snapshot</div>
         <h2 id="file-browser-launch-title" class="mt-2 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
-          {translate(fileBrowserMessages, launching ? "startingFileBrowser" : "launchFileBrowser")}
+          {launching ? "Starting file browser…" : "Launch the file browser"}
         </h2>
         <p class="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
           {launching
-            ? translate(fileBrowserMessages, "exportingSnapshot")
-            : translate(fileBrowserMessages, "launchDescription")}
+            ? "Exporting the feature branch snapshot into a containerized workspace."
+            : "Spin up a single containerized snapshot of the selected sprint to browse files and review diffs."}
         </p>
       </div>
 
@@ -742,22 +720,22 @@ const LaunchPanel: FunctionComponent<LaunchPanelProps> = ({
       )}
       <div id="file-browser-launch-status" class="min-h-5 text-xs font-medium text-slate-500 dark:text-slate-400" role="status" aria-live="polite">
         {launching
-          ? translate(fileBrowserMessages, "launchStatusStarting")
-          : launchDisabledReason ?? translate(fileBrowserMessages, "launchStatusReady")}
+          ? "Starting file browser container. The selected sprint remains visible while the workspace is prepared."
+          : launchDisabledReason ?? "File browser can be launched for the selected sprint."}
       </div>
 
       <div class="flex w-full flex-col items-stretch gap-2 sm:flex-row">
-        <label class="sr-only" htmlFor="file-browser-launch-sprint">{translate(fileBrowserMessages, "sprintToBrowse")}</label>
+        <label class="sr-only" htmlFor="file-browser-launch-sprint">Sprint to browse</label>
         <select
           id="file-browser-launch-sprint"
           value={launchSprintId}
           onChange={(event) => onLaunchSprintChange((event.currentTarget as HTMLSelectElement).value)}
           disabled={launching}
           aria-describedby={launchDisabledReason ? "file-browser-launch-status" : undefined}
-          title={launching ? translate(fileBrowserMessages, "launchStartingDisabled") : translate(fileBrowserMessages, "chooseSprint")}
+          title={launching ? "The file browser container is starting." : "Choose the sprint to browse"}
           class="h-11 flex-1 rounded-2xl border border-black/[0.08] bg-white/85 px-4 text-sm font-medium text-slate-700 outline-none transition focus:border-signal-500/40 disabled:cursor-not-allowed disabled:border-black/[0.06] disabled:bg-black/[0.03] disabled:text-slate-400 disabled:opacity-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-200 dark:disabled:bg-white/[0.02] dark:disabled:text-slate-500"
         >
-          {sprints.length === 0 && <option value="">{translate(fileBrowserMessages, "noSprintsAvailable")}</option>}
+          {sprints.length === 0 && <option value="">No sprints available</option>}
           {sprints.map((sprint) => (
             <option key={sprint.id} value={sprint.id}>
               {sprint.name}
@@ -771,12 +749,12 @@ const LaunchPanel: FunctionComponent<LaunchPanelProps> = ({
           aria-disabled={launching || !launchSprintId}
           aria-busy={launching}
           aria-describedby={launchDisabledReason ? "file-browser-launch-status" : undefined}
-          aria-label={translate(fileBrowserMessages, launching ? "startingContainer" : "openFileBrowser")}
-          title={launchDisabledReason ?? translate(fileBrowserMessages, "openSelectedSprint")}
+          aria-label={launching ? "Starting file browser container" : "Open file browser"}
+          title={launchDisabledReason ?? "Open file browser for the selected sprint"}
           class="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-signal-500 px-6 text-sm font-bold text-white dark:text-void-950 shadow-[0_12px_30px_rgba(0,224,160,0.22)] transition hover:-translate-y-px hover:bg-signal-400 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600 disabled:shadow-none disabled:opacity-100 dark:disabled:bg-slate-700 dark:disabled:text-slate-300"
         >
           {launching ? <Loader2 class="h-4 w-4 animate-spin motion-reduce:animate-none" strokeWidth={2.4} /> : <Play class="h-4 w-4" strokeWidth={2.4} />}
-          {translate(fileBrowserMessages, launching ? "starting" : "openFileBrowser")}
+          {launching ? "Starting..." : "Open file browser"}
         </button>
       </div>
     </div>

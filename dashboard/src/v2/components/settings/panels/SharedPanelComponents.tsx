@@ -6,6 +6,16 @@ import { getSettingsSubcategoryDoc, toHelpSections, type SettingsSubcategoryId }
 import { getFieldSourceLabel } from "../../../lib/settings-view-models.js";
 import { InfoIconPopover } from "../../ui/InfoIconPopover.js";
 import type { SettingsDomainAccent } from "../../../lib/settings-domain-accents.js";
+import { getDocumentDashboardLocale, settingsShellText } from "../../../i18n/messages/settings-shell.js";
+
+const localizeSourceBadge = (label: string | undefined): string | undefined => {
+  if (!label) return undefined;
+  if (label === "Inherited") return settingsShellText("inherited");
+  if (label === "Project override") return settingsShellText("projectOverride");
+  if (label === "Sprint override") return settingsShellText("sprintOverride");
+  if (label === "Mixed sources") return settingsShellText("mixedSources");
+  return label;
+};
 
 interface SettingsDetailWorkspaceContextValue {
   enabled: boolean;
@@ -124,7 +134,7 @@ export const SectionCard: FunctionComponent<{
   overview,
   highlights = [],
   drilldown,
-  configureLabel = "Configure",
+  configureLabel,
   sectionId,
   featured = false,
   accent,
@@ -133,11 +143,15 @@ export const SectionCard: FunctionComponent<{
   const detailsId = useId();
   const configureButtonRef = useRef<HTMLButtonElement>(null);
   const helpDoc = getSettingsSubcategoryDoc(helpId || title);
+  const locale = getDocumentDashboardLocale();
+  const resolvedTitle = locale === "de" ? helpDoc?.title ?? title : title;
+  const resolvedConfigureLabel = configureLabel || settingsShellText("configure");
   const detailWorkspace = useContext(SettingsDetailWorkspaceContext);
   const resolvedSectionId = sectionId || String(helpId || title);
   const usesDrilldown = drilldown ?? detailWorkspace.enabled;
   const isFocusedDetail = usesDrilldown && detailWorkspace.activeSection === resolvedSectionId;
-  const description = summary || helpDoc?.summary || `Configure ${title.toLowerCase()} when the defaults need to change.`;
+  const description = (locale === "de" ? helpDoc?.summary : summary || helpDoc?.summary)
+    || settingsShellText("configureDefaults", { title: resolvedTitle.toLocaleLowerCase(locale) });
 
   if (detailWorkspace.enabled && detailWorkspace.activeSection && !isFocusedDetail) {
     return null;
@@ -167,9 +181,9 @@ export const SectionCard: FunctionComponent<{
               ) : null}
               <div className="min-w-0">
                 <div className={`font-mono text-[10px] font-bold uppercase tracking-[0.16em] ${danger ? "text-status-red/70" : "text-slate-400 dark:text-slate-500"}`}>
-                  {watermark || "SET"} · Configuration area
+                  {watermark || "SET"} · {settingsShellText("configurationArea")}
                 </div>
-                <h3 id={titleId} className={`mt-1 font-display text-[1.05rem] font-semibold tracking-tight ${danger ? "text-status-red" : "text-slate-900 dark:text-white"}`}>{title}</h3>
+                <h3 id={titleId} className={`mt-1 font-display text-[1.05rem] font-semibold tracking-tight ${danger ? "text-status-red" : "text-slate-900 dark:text-white"}`}>{resolvedTitle}</h3>
               </div>
             </div>
             <p className="mt-3 max-w-3xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">{description}</p>
@@ -179,12 +193,12 @@ export const SectionCard: FunctionComponent<{
               <>
                 <InfoIconPopover
                   className="h-8 w-8 items-center justify-center rounded-full border border-black/[0.06] bg-black/[0.02] text-slate-500 transition-colors hover:border-signal-500/24 hover:bg-signal-500/[0.08] focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300"
-                  title={`${helpDoc.title} settings`}
+                  title={settingsShellText("settingsSuffix", { title: helpDoc.title })}
                   summary={helpDoc.summary}
                   sections={toHelpSections(helpDoc)}
-                  label={`Show help for ${title}`}
+                  label={settingsShellText("showHelp", { title: resolvedTitle })}
                 />
-                <a href={helpDoc.docsHref} aria-label={`Open documentation for ${title}`} title={`Open documentation for ${title}`} className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-black/[0.06] bg-black/[0.02] text-slate-500 transition-colors hover:border-signal-500/24 hover:bg-signal-500/[0.08] hover:text-signal-600 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300">
+                <a href={helpDoc.docsHref} aria-label={settingsShellText("openDocumentation", { title: resolvedTitle })} title={settingsShellText("openDocumentation", { title: resolvedTitle })} className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-black/[0.06] bg-black/[0.02] text-slate-500 transition-colors hover:border-signal-500/24 hover:bg-signal-500/[0.08] hover:text-signal-600 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300">
                   <BookOpenText className="h-4 w-4" strokeWidth={1.8} aria-hidden />
                 </a>
               </>
@@ -212,10 +226,10 @@ export const SectionCard: FunctionComponent<{
             type="button"
             onClick={() => detailWorkspace.openSection(resolvedSectionId)}
             aria-controls={detailsId}
-            aria-label={`${configureLabel} ${title}`}
+            aria-label={settingsShellText("configureTitle", { action: resolvedConfigureLabel, title: resolvedTitle })}
             className={`inline-flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border px-4 py-2.5 text-left text-xs font-bold transition-[background-color,border-color,color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-focus-ring)] sm:min-h-10 sm:w-auto sm:min-w-[10rem] ${danger ? "border-status-red/20 bg-status-red/[0.06] text-status-red hover:bg-status-red/[0.1]" : "border-[color:var(--border-hairline)] bg-[var(--settings-inset-surface)] text-slate-700 hover:border-[rgb(var(--settings-accent-rgb)/0.28)] hover:bg-[rgb(var(--settings-accent-rgb)/0.07)] dark:text-slate-200"}`}
           >
-            <span>{configureLabel}</span>
+            <span>{resolvedConfigureLabel}</span>
             <ArrowRight className="h-4 w-4 text-[var(--settings-accent-text)] transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none" strokeWidth={2.2} aria-hidden />
           </button>
         </div>
@@ -241,7 +255,7 @@ export const SectionCard: FunctionComponent<{
         className="mb-5 inline-flex min-h-9 items-center gap-2 rounded-xl border border-[color:var(--border-hairline)] bg-black/[0.025] px-3.5 py-2 text-xs font-bold text-slate-600 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] dark:bg-white/[0.035] dark:text-slate-300"
       >
         <ArrowLeft className="h-4 w-4" strokeWidth={2.2} aria-hidden />
-        Back to category overview
+        {settingsShellText("backToOverview")}
       </button>
     ) : null}
 
@@ -249,8 +263,8 @@ export const SectionCard: FunctionComponent<{
       <div className={`flex gap-2 ${isFocusedDetail ? "items-center" : "items-center text-[10px] font-bold uppercase tracking-[0.2em]"} ${danger ? "text-status-red/80" : "text-slate-500 dark:text-slate-300"}`}>
         {icon ? <span className={`inline-flex items-center justify-center ${isFocusedDetail ? "h-9 w-9 rounded-xl border border-[rgb(var(--settings-accent-rgb)/0.2)] bg-[rgb(var(--settings-accent-rgb)/0.1)] text-[var(--settings-accent-text)] [&_svg]:h-4.5 [&_svg]:w-4.5" : "h-3.5 w-3.5 [&_svg]:h-3.5 [&_svg]:w-3.5"}`} aria-hidden>{icon}</span> : null}
         <div>
-          {isFocusedDetail ? <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--settings-accent-text)]">Focused settings</div> : null}
-          <h3 id={titleId} className={isFocusedDetail ? "mt-1 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white" : undefined}>{title}</h3>
+          {isFocusedDetail ? <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--settings-accent-text)]">{settingsShellText("focusedSettings")}</div> : null}
+          <h3 id={titleId} className={isFocusedDetail ? "mt-1 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white" : undefined}>{resolvedTitle}</h3>
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2">
@@ -259,15 +273,15 @@ export const SectionCard: FunctionComponent<{
           <>
             <InfoIconPopover
               className="h-8 w-8 items-center justify-center rounded-full border border-black/[0.06] bg-black/[0.02] text-slate-500 transition-colors hover:border-signal-500/24 hover:bg-signal-500/[0.08] focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-signal-300/24 dark:hover:bg-signal-300/[0.08]"
-              title={`${helpDoc.title} settings`}
+              title={settingsShellText("settingsSuffix", { title: helpDoc.title })}
               summary={helpDoc.summary}
               sections={toHelpSections(helpDoc)}
-              label={`Show help for ${title}`}
+              label={settingsShellText("showHelp", { title: resolvedTitle })}
             />
             <a
               href={helpDoc.docsHref}
-              aria-label={`Open documentation for ${title}`}
-              title={`Open documentation for ${title}`}
+              aria-label={settingsShellText("openDocumentation", { title: resolvedTitle })}
+              title={settingsShellText("openDocumentation", { title: resolvedTitle })}
               className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-black/[0.06] bg-black/[0.02] text-slate-500 transition-colors hover:border-signal-500/24 hover:bg-signal-500/[0.08] hover:text-signal-600 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-signal-300/24 dark:hover:bg-signal-300/[0.08] dark:hover:text-signal-200"
             >
               <BookOpenText className="h-4 w-4" strokeWidth={1.8} aria-hidden />
@@ -312,7 +326,7 @@ export const IntegrationConfigRow: FunctionComponent<{
         <div className="text-sm font-bold text-slate-800 dark:text-slate-100">{label}</div>
         {active ? (
           <span className="rounded-full border border-signal-500/25 bg-signal-500/10 px-2.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.16em] text-signal-600 dark:border-signal-400/25 dark:bg-signal-400/10 dark:text-signal-300">
-            Active
+            {settingsShellText("active")}
           </span>
         ) : null}
       </div>
@@ -324,7 +338,7 @@ export const IntegrationConfigRow: FunctionComponent<{
       {connected ? (
         <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-500">
           <div className="h-1.5 w-1.5 rounded-full bg-signal-500" />
-          Connected
+          {settingsShellText("connected")}
         </div>
       ) : null}
       <button
@@ -336,7 +350,7 @@ export const IntegrationConfigRow: FunctionComponent<{
             : "border-black/[0.06] bg-white/80 text-slate-600 hover:bg-white dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08]"
         }`}
       >
-        {connected ? "Configure" : "Connect"}
+        {connected ? settingsShellText("configure") : settingsShellText("connect")}
       </button>
     </div>
   </div>
@@ -353,7 +367,7 @@ export const getBadge = (activeScope: string, projectSources: Record<string, Set
     }
     return undefined;
   };
-  return sourceLabel(getCombinedSource(projectSources, prefixes));
+  return localizeSourceBadge(sourceLabel(getCombinedSource(projectSources, prefixes)));
 };
 
 export const getFieldBadge = (activeScope: string, projectSources: Record<string, SettingsValueSource>, path: string): string | undefined => {
@@ -361,7 +375,7 @@ export const getFieldBadge = (activeScope: string, projectSources: Record<string
     return undefined;
   }
   const source = projectSources[path];
-  return getFieldSourceLabel(source, "project") ?? undefined;
+  return localizeSourceBadge(getFieldSourceLabel(source, "project") ?? undefined);
 };
 
 export const Card: FunctionComponent<{ title: string; description: string; badge?: string; children: ComponentChildren }> = ({
@@ -404,7 +418,7 @@ export const Card: FunctionComponent<{ title: string; description: string; badge
             <span className={`h-1.5 w-1.5 rounded-full ${
               isOverridden ? "bg-amber-500 dark:bg-amber-400" : isMixed ? "bg-sky-500 dark:bg-sky-400" : "bg-slate-400 dark:bg-slate-500"
             }`} />
-            {badge}
+            {localizeSourceBadge(badge)}
           </span>
         ) : null}
       </div>
@@ -416,7 +430,7 @@ export const Card: FunctionComponent<{ title: string; description: string; badge
 export const OverrideBadge: FunctionComponent<{ label: string; contextLabel?: string; onReset?: () => void }> = ({ label, contextLabel, onReset }) => (
   <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
     <span className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-300" />
-    {label}
+    {localizeSourceBadge(label)}
     {onReset && label === "Project override" ? (
       <button
         type="button"
@@ -424,8 +438,8 @@ export const OverrideBadge: FunctionComponent<{ label: string; contextLabel?: st
           e.stopPropagation();
           onReset();
         }}
-        title="Delete project override (revert to system default)"
-        aria-label={`Delete project override for ${contextLabel || "setting"}`}
+        title={settingsShellText("deleteProjectOverride")}
+        aria-label={settingsShellText("deleteProjectOverrideFor", { contextLabel: contextLabel || settingsShellText("settingSingular"), setting: contextLabel || settingsShellText("settingSingular") })}
         className="ml-1 rounded-full p-0.5 text-amber-600 hover:bg-amber-500/20 hover:text-amber-800 dark:text-amber-300 dark:hover:bg-amber-300/25 dark:hover:text-amber-100 transition-colors duration-150 cursor-pointer"
       >
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" className="h-2.5 w-2.5">
