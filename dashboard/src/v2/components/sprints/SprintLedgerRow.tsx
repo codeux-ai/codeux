@@ -22,9 +22,8 @@ import {
 } from "lucide-preact";
 import { useState, useRef, useEffect } from "preact/hooks";
 import { HumanInterventionBadge } from "../ui/HumanInterventionBadge.js";
-import { CiStatusBadge } from "../ui/CiStatusBadge.js";
+import { WorkflowStatusBadge } from "../ui/WorkflowStatusBadge.js";
 import type { CiStatusPresentation } from "../../lib/ci-status-presentation.js";
-import { SprintReviewBadge } from "./SprintReviewBadge.js";
 import { SprintActionMenu } from "./SprintActionMenu.js";
 import {
   resolveSprintAttentionIndicatorState,
@@ -395,9 +394,6 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
               {pendingLabel}
             </span>
           ) : null}
-          {sprint.latestReview && (
-            <SprintReviewBadge summary={sprint.latestReview} compact align="left" />
-          )}
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-mono text-slate-400">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.05] bg-black/[0.025] px-2 py-1 dark:border-white/[0.06] dark:bg-white/[0.03]">
@@ -431,7 +427,14 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           <span className={`inline-flex rounded-full border px-4 py-1.5 text-[11px] font-bold ${badgeTone}`}>
             {badgeLabel}
           </span>
-          <CiStatusBadge presentation={ciStatus} compact />
+          <WorkflowStatusBadge
+            scope="sprint"
+            status={sprint.status}
+            review={sprint.latestReview}
+            ciPresentation={ciStatus}
+            compact
+            align="left"
+          />
           {isDeletePending ? (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-status-red/25 bg-status-red/10 px-3 py-1.5 text-[11px] font-bold text-status-red">
               <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" strokeWidth={2.2} /> Deleting

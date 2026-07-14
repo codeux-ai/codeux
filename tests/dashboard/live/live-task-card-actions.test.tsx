@@ -245,7 +245,7 @@ describe("live task card actions", () => {
     fireEvent.click(buttons[0]!);
     await holdForceCompleteConfirmation();
     expect(await screen.findByText("force complete failed")).toBeInTheDocument();
-    expect(within(card).getByText("Running")).toBeInTheDocument();
+    expect(within(card).getByText("Coding in progress")).toBeInTheDocument();
     expect(within(card).queryByText(/Marking this task complete/)).not.toBeInTheDocument();
   });
 });

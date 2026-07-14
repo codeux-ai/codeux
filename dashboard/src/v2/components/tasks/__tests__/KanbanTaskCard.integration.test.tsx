@@ -573,6 +573,8 @@ describe("KanbanTaskCard Integration", () => {
     await user.tab();
     expect(card).toHaveFocus();
     await user.tab();
+    expect(getByRole("button", { name: /CI status: Coding in progress/i })).toHaveFocus();
+    await user.tab();
     expect(actionTrigger).toHaveFocus();
 
     await user.keyboard("{ArrowDown}");

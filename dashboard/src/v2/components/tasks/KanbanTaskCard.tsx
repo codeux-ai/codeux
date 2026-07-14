@@ -18,8 +18,7 @@ import type { AgentAvatarConfig } from "../../types.js";
 import './kanban-task-card.css';
 import { getSafeUrl } from "../../lib/safe-url.js";
 import { SelfReflectionRatingBadge } from "./SelfReflectionRatingBadge.js";
-import { SprintReviewBadge } from "../sprints/SprintReviewBadge.js";
-import { CiStatusBadge } from "../ui/CiStatusBadge.js";
+import { WorkflowStatusBadge } from "../ui/WorkflowStatusBadge.js";
 import { TaskCardActionMenu } from "./TaskCardActionMenu.js";
 
 export const KanbanTaskCard: FunctionComponent<{
@@ -40,7 +39,6 @@ export const KanbanTaskCard: FunctionComponent<{
   const interactionTokens = useInteractionTokens();
   const blockerCount = dependencyIndicators.filter((dep) => dep.isBlocking ?? dep.status !== "completed").length;
   const dependencyActionLabel = viewModel.dependencyActionLabel ?? (blockerCount > 0 ? `${blockerCount} dependency ${blockerCount === 1 ? "blocker" : "blockers"}` : "Dependencies clear");
-  const qaNoReviewLabel = viewModel.qaReviewLabel ?? "QA no review";
   const dragStateLabel = viewModel.dragStateLabel ?? "Pointer drag only; keyboard reordering is not supported";
   const shouldShowExecutorLabel = viewModel.executorLabel !== "Auto";
   const hasPullRequestMetadata = viewModel.hasPullRequestMetadata ?? true;
@@ -197,19 +195,13 @@ export const KanbanTaskCard: FunctionComponent<{
           <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 font-mono min-w-0 break-all max-w-full"><span className="sr-only">Session ID: </span>{sessionId}
           </span>
         )}
-        {task.latestReview ? (
-          <SprintReviewBadge summary={task.latestReview} compact showCompactLabel align="right" />
-        ) : (
-          <span
-            className="min-w-0 max-w-full truncate rounded-full border border-slate-400/20 bg-slate-400/[0.08] px-2.5 py-1 text-slate-500 dark:text-slate-300"
-            aria-label="QA review state: no review recorded."
-          >
-            {qaNoReviewLabel}
-          </span>
-        )}
-        <CiStatusBadge
-          presentation={ciStatusPresentation ?? null}
+        <WorkflowStatusBadge
+          scope="task"
+          status={task.status}
+          review={task.latestReview}
+          ciPresentation={ciStatusPresentation ?? null}
           compact
+          align="right"
           className="min-w-0 max-w-full"
         />
         {dependencyIndicators.length > 0 && (
