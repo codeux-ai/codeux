@@ -965,7 +965,7 @@ export const useSettingsPageState = (
       await loadChatProviders();
       return created;
     } catch (createError) {
-      setChatProvidersError(createError instanceof Error ? createError.message : String(createError));
+      setChatProvidersError(redactChatProviderError(createError instanceof Error ? createError.message : String(createError)));
       return null;
     } finally {
       setChatProvidersSavingId(null);
@@ -982,7 +982,7 @@ export const useSettingsPageState = (
       await loadChatProviders();
       return updated;
     } catch (updateError) {
-      setChatProvidersError(updateError instanceof Error ? updateError.message : String(updateError));
+      setChatProvidersError(redactChatProviderError(updateError instanceof Error ? updateError.message : String(updateError)));
       return null;
     } finally {
       setChatProvidersSavingId(null);
@@ -996,7 +996,7 @@ export const useSettingsPageState = (
       await loadChatProviders();
       return true;
     } catch (deleteError) {
-      setChatProvidersError(deleteError instanceof Error ? deleteError.message : String(deleteError));
+      setChatProvidersError(redactChatProviderError(deleteError instanceof Error ? deleteError.message : String(deleteError)));
       return false;
     } finally {
       setChatProvidersSavingId(null);
@@ -1012,7 +1012,7 @@ export const useSettingsPageState = (
       await loadChatProviders();
       return created;
     } catch (createError) {
-      setChatProvidersError(createError instanceof Error ? createError.message : String(createError));
+      setChatProvidersError(redactChatProviderError(createError instanceof Error ? createError.message : String(createError)));
       return null;
     } finally {
       setChatProvidersSavingId(null);
@@ -1029,7 +1029,7 @@ export const useSettingsPageState = (
       await loadChatProviders();
       return updated;
     } catch (updateError) {
-      setChatProvidersError(updateError instanceof Error ? updateError.message : String(updateError));
+      setChatProvidersError(redactChatProviderError(updateError instanceof Error ? updateError.message : String(updateError)));
       return null;
     } finally {
       setChatProvidersSavingId(null);
@@ -1043,7 +1043,7 @@ export const useSettingsPageState = (
       await loadChatProviders();
       return true;
     } catch (deleteError) {
-      setChatProvidersError(deleteError instanceof Error ? deleteError.message : String(deleteError));
+      setChatProvidersError(redactChatProviderError(deleteError instanceof Error ? deleteError.message : String(deleteError)));
       return false;
     } finally {
       setChatProvidersSavingId(null);

@@ -127,7 +127,7 @@ Changing a mode, endpoint, bridge command, setup value, or credential makes the 
 
 Channel bindings map provider-specific channel or conversation identifiers to a project and optional conversation thread. They also select an agent preset, inbound/outbound behavior, and rich-widget suppression. For shared channels, configure a project selector prefix or routing hint; if routing remains ambiguous, Code UX requests clarification instead of guessing. Long replies are split to provider-safe lengths while retaining thread identifiers when supported.
 
-Delivery history shows outbound status, attempt count, next retry, and terminal, retryable, or ambiguous failure state. Diagnostics are redacted; payload bodies, signed URLs, and token-shaped values are never displayed. Retry and cancellation require confirmation because they may change provider-side state. If delivery history cannot refresh, the dashboard keeps the last successful history visible and reports the error rather than replacing it with an empty list.
+Delivery history shows outbound status, attempt count, next retry, and terminal, retryable, or ambiguous failure state. Diagnostics are redacted; payload bodies, signed URLs, and token-shaped values are never displayed. Connection and binding save or deletion errors are also redacted before their persistent alert is shown. Retry and cancellation require confirmation because they may change provider-side state. If delivery history cannot refresh, the dashboard keeps the last successful history visible and reports the error rather than replacing it with an empty list.
 
 ## Provider config files
 
