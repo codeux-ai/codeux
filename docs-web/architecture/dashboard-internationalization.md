@@ -39,4 +39,10 @@ Keep each catalog with its owning feature and import it only where the feature i
 
 The Knowledge route is a concrete feature catalog: its headers, document controls and states, ingestion dialogs, search feedback, confirmations, and accessible announcements support English and German. Counts, sizes, dates, and similarity percentages follow the active locale, while document data, paths, names, identifiers, search excerpts, partial-failure diagnostics, and API errors remain verbatim.
 
+## Settings localization boundaries
+
+The Agents, Techstacks, and Guidance settings surfaces use `messages/settings-agents-guidance.ts`. Component copy follows the provider's active locale, while locale-explicit presentation helpers accept `en` or `de` for tests and non-component consumers.
+
+Localization stops at the persistence boundary: agent and stack ids, preset and storage names, package labels, application-kind values, reflection criteria, memory/instruction markdown, and custom guidance remain byte-for-byte as authored. Persistent-skill storage creation, editing, deletion, and agent attachments still mutate immediately; changing locale does not move those operations into the Settings draft or bypass pending, confirmation, recovery, and focus-restoration behavior.
+
 For onboarding specifically, provider and dependency names, detected paths, model IDs, command snippets and installation output, and API-returned readiness diagnostics stay verbatim. The locale changes only dashboard-owned framing and accessible names; submitted provider IDs, enums, credentials, and settings drafts are unchanged.
