@@ -5,10 +5,8 @@
 }
 
 .coverageNotice {
-  border-left: 3px solid var(--stats-accent-signal);
-  background: var(--stats-selection-fill);
+  border-left-width: 3px;
   padding: 0.75rem 1rem;
-  color: var(--stats-detail-color);
   font-size: 0.8125rem;
   line-height: 1.5;
 }
@@ -78,7 +76,6 @@
   height: 0.5rem;
   overflow: hidden;
   border-radius: 999px;
-  background: var(--stats-quiet-track);
 }
 
 .spendSegment {
@@ -111,12 +108,6 @@
   border-bottom: 1px solid var(--stats-border-hairline);
   padding: 0.7rem 0;
   outline: none;
-}
-
-.legendRow:focus-visible,
-.dimensionRow:focus-visible {
-  border-radius: var(--stats-control-radius);
-  box-shadow: 0 0 0 2px var(--stats-focus-ring);
 }
 
 .swatch {

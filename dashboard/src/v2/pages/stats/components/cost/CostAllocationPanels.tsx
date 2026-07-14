@@ -10,9 +10,13 @@ import type {
 import { formatAdaptiveCurrency } from "../../cost-insights.js";
 import { NUMBER_FORMATTER } from "../../stats-utils.js";
 import {
+  CHIP_CLASS,
+  CONTROL_FOCUS_CLASS,
   DASHED_EMPTY_CLASS,
   PANEL_CLASS,
+  STATUS_TONE_CLASS,
   SUBPANEL_CLASS,
+  TRACK_CLASS,
   TokenFlowBar,
 } from "../stats-ui-primitives.js";
 import styles from "./CostAllocationPanels.module.css";
@@ -142,6 +146,19 @@ function coverageMessage(totalSpend: CostAmount, totalTokens: number): string {
   return `Complete cost coverage — all ${NUMBER_FORMATTER.format(provenance.invocationCount)} calls have a usable cost source.`;
 }
 
+function coverageTone(
+  totalSpend: CostAmount,
+  totalTokens: number,
+): keyof typeof STATUS_TONE_CLASS {
+  if (totalSpend.provenance.invocationCount === 0 && totalTokens === 0) return "neutral";
+  if (totalSpend.provenance.state === "unpriced" || totalSpend.provenance.state === "partial") {
+    return "warning";
+  }
+  if (totalSpend.provenance.state === "unknown") return "cyan";
+  if (totalSpend.provenance.state === "unavailable") return "neutral";
+  return totalSpend.usd === 0 ? "positive" : "signal";
+}
+
 function AllocationHeading({ id, eyebrow, title, description }: {
   id: string;
   eyebrow: string;
@@ -192,7 +209,11 @@ const TokenAllocation: FunctionComponent<{
       )}
       <ul className={styles.legend} aria-label="Exact token allocation values">
         {segments.map((segment) => (
-          <li key={segment.id} className={styles.legendRow} tabIndex={0}>
+          <li
+            key={segment.id}
+            className={`${styles.legendRow} ${CONTROL_FOCUS_CLASS}`}
+            tabIndex={0}
+          >
             <span className={`${styles.swatch} ${styles[`segment_${segment.id}`]}`} aria-hidden="true" />
             <span className={styles.legendLabel}>{segment.label}</span>
             <strong className={styles.legendValue}>{formatExactTokens(segment.tokens)}</strong>
@@ -213,9 +234,9 @@ const SpendAllocation: FunctionComponent<{
   const leadingSegment = segments.reduce<CostSpendSegment | null>((leader, segment) => (
     leader === null || segment.share > leader.share ? segment : leader
   ), null);
-  const chartLabel = hasVisualSpend
-    ? `Spend allocation. ${segments.map((segment) => `${segment.label}: ${formatAdaptiveCurrency(segment.amount)}, ${formatShare(segment.share)}`).join("; ")}. Total: ${formatAdaptiveCurrency(totalSpend)}.`
-    : `Spend allocation unavailable. Total: ${formatAdaptiveCurrency(totalSpend)}.`;
+  const chartLabel = `Spend allocation. ${segments.map((segment) => (
+    `${segment.label}: ${formatAdaptiveCurrency(segment.amount)}, ${formatShare(segment.share)}`
+  )).join("; ")}. Total: ${formatAdaptiveCurrency(totalSpend)}.${hasVisualSpend ? "" : " No positive spend lanes."}`;
 
   return (
     <article className={`${PANEL_CLASS} ${styles.allocationPanel}`} aria-labelledby="cost-spend-allocation-title">
@@ -229,7 +250,7 @@ const SpendAllocation: FunctionComponent<{
         <span>Total recorded spend</span>
         <strong>{formatAdaptiveCurrency(totalSpend)}</strong>
       </div>
-      <div className={styles.spendBar} role="img" aria-label={chartLabel}>
+      <div className={`${styles.spendBar} ${TRACK_CLASS}`} role="img" aria-label={chartLabel}>
         {hasVisualSpend ? segments.map((segment) => (
           segment.share > 0 ? (
             <span
@@ -250,7 +271,11 @@ const SpendAllocation: FunctionComponent<{
       </p>
       <ul className={styles.legend} aria-label="Exact spend allocation values">
         {segments.map((segment) => (
-          <li key={segment.id} className={styles.legendRow} tabIndex={0}>
+          <li
+            key={segment.id}
+            className={`${styles.legendRow} ${CONTROL_FOCUS_CLASS}`}
+            tabIndex={0}
+          >
             <span className={`${styles.swatch} ${styles[`segment_${segment.id}`]}`} aria-hidden="true" />
             <span className={styles.legendLabel}>{segment.label}</span>
             <strong className={styles.legendValue}>{formatAdaptiveCurrency(segment.amount)}</strong>
@@ -302,7 +327,11 @@ const DimensionRow: FunctionComponent<{
 
   if (!row.groupedRows) {
     return (
-      <li className={`${SUBPANEL_CLASS} ${styles.dimensionRow}`} tabIndex={0} aria-label={`${title} ranked ${rank}`}>
+      <li
+        className={`${SUBPANEL_CLASS} ${styles.dimensionRow} ${CONTROL_FOCUS_CLASS}`}
+        tabIndex={0}
+        aria-label={`${title} ranked ${rank}`}
+      >
         {content}
       </li>
     );
@@ -310,7 +339,7 @@ const DimensionRow: FunctionComponent<{
 
   return (
     <li
-      className={`${SUBPANEL_CLASS} ${styles.dimensionRow}`}
+      className={`${SUBPANEL_CLASS} ${styles.dimensionRow} ${CONTROL_FOCUS_CLASS}`}
       tabIndex={0}
       aria-label={`Other ${kind} entries, ${row.groupedRows.length} rows, ranked ${rank}`}
     >
@@ -355,7 +384,10 @@ export const CostAllocationPanels: FunctionComponent<CostAllocationPanelsProps> 
   purposes,
 }) => (
   <section className={styles.root} aria-label="Cost allocation">
-    <div className={styles.coverageNotice} role="status">
+    <div
+      className={`${CHIP_CLASS} ${STATUS_TONE_CLASS[coverageTone(totalSpend, totalTokens)]} ${styles.coverageNotice}`}
+      role="status"
+    >
       {coverageMessage(totalSpend, totalTokens)}
     </div>
     <div className={styles.allocationGrid}>

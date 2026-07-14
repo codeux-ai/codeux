@@ -217,6 +217,43 @@ describe("CostAllocationPanels", () => {
     expect(screen.getByText("$5.00+", { selector: "strong" })).toBeInTheDocument();
   });
 
+  it("does not announce unknown or unavailable coverage as zero spend", () => {
+    const { rerender } = renderPanels({
+      totalSpend: amount(0, "unknown", 3),
+      spendSegments: spendSegments("unknown").map((segment) => ({
+        ...segment,
+        amount: amount(0, "unknown", 3),
+        share: 0,
+      })),
+    });
+
+    expect(screen.getByText("Coverage unknown — 3 of 3 calls lack cost-source metadata.")).toBeInTheDocument();
+    expect(screen.getByRole("img", {
+      name: /Spend allocation.*Input: Coverage unknown, 0\.0%.*Total: Coverage unknown\. No positive spend lanes\./i,
+    })).toBeInTheDocument();
+    expect(screen.queryByText("$0.00")).not.toBeInTheDocument();
+
+    rerender(
+      <CostAllocationPanels
+        totalSpend={amount(null, "unavailable", 3)}
+        totalTokens={100}
+        tokenSegments={tokenSegments}
+        spendSegments={spendSegments("unavailable").map((segment) => ({
+          ...segment,
+          amount: amount(null, "unavailable", 3),
+          share: 0,
+        }))}
+        models={[]}
+        purposes={[]}
+      />,
+    );
+
+    expect(screen.getByText("Spend unavailable — this window does not contain enough cost data to price usage.")).toBeInTheDocument();
+    expect(screen.getByRole("img", {
+      name: /Spend allocation.*Provider reported: Unavailable, 0\.0%.*Total: Unavailable\. No positive spend lanes\./i,
+    })).toBeInTheDocument();
+  });
+
   it("identifies a covered zero total as configured free usage", () => {
     renderPanels({
       totalSpend: amount(0, "complete", 3),
@@ -229,6 +266,9 @@ describe("CostAllocationPanels", () => {
 
     expect(screen.getByText("Configured free usage — covered calls reconcile to $0.00 and are not unpriced.")).toBeInTheDocument();
     expect(screen.getAllByText("$0.00").length).toBeGreaterThan(0);
+    expect(screen.getByRole("img", {
+      name: /Spend allocation.*Provider reported: \$0\.00, 0\.0%.*Total: \$0\.00\. No positive spend lanes\./i,
+    })).toBeInTheDocument();
     expect(screen.queryByText("Unpriced")).not.toBeInTheDocument();
   });
 });
