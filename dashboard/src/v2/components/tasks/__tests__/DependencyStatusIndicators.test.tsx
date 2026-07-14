@@ -25,32 +25,28 @@ describe("DependencyStatusIndicators", () => {
       />
     );
 
-    // Verify visual text exists (aria-hidden)
     const task1Elements = container.querySelectorAll('span[aria-hidden="true"]');
     expect(Array.from(task1Elements).some(el => el.textContent === "TASK-1")).toBeTruthy();
 
     expect(getByText("Blocked: 5 dependencies need completion")).toBeTruthy();
 
-    // Verify explicit accessible text
     expect(getByText("Depends on task TASK-1, resolved. Resolved dependency. Dependency completed. Status: completed. Title: Test task 1")).toBeTruthy();
 
-    // Verify sr-only accessible text
     const srText = getByText((content, element) => {
         return element?.tagName.toLowerCase() === 'span' && element?.className.includes('sr-only') && content.includes('Depends on task TASK-1');
     });
     expect(srText).toBeTruthy();
 
-    // Check specific styling classes for visual feedback states
     const completedIndicator = getByTitle(/Depends on Test task 1 \(Resolved; completed\)/);
     expect(completedIndicator.className).toContain("text-status-green");
     expect(completedIndicator).toHaveAttribute("data-dependency-state", "resolved");
-    expect(completedIndicator).toHaveTextContent("Clear");
+    expect(Array.from(completedIndicator.querySelectorAll(':scope > span[aria-hidden="true"]')).map((element) => element.textContent)).toEqual(["TASK-1", "Resolved"]);
 
     const pendingIndicator = getByTitle(/Depends on Test task 2 \(Blocked; pending\)/);
     expect(pendingIndicator.className).toContain("text-status-amber");
     expect(pendingIndicator.className).not.toContain("border-dashed");
     expect(pendingIndicator).toHaveAttribute("data-dependency-state", "blocked");
-    expect(pendingIndicator).toHaveTextContent("Blocking");
+    expect(Array.from(pendingIndicator.querySelectorAll(':scope > span[aria-hidden="true"]')).map((element) => element.textContent)).toEqual(["TASK-2", "Blocked"]);
 
     const blockedIndicator = getByTitle(/Depends on Test task 3 \(QA failed; QA REVIEW FAILED\)/i);
     expect(blockedIndicator.className).toContain("text-status-red");
@@ -64,7 +60,7 @@ describe("DependencyStatusIndicators", () => {
     const codingCompleteIndicator = getByTitle(/Depends on Test task 4B \(Ready for QA; coding completed\)/i);
     expect(codingCompleteIndicator.className).toContain("text-cyan-700");
     expect(getByText("Ready for QA")).toBeTruthy();
-    expect(codingCompleteIndicator).toHaveTextContent("Blocking");
+    expect(Array.from(codingCompleteIndicator.querySelectorAll(':scope > span[aria-hidden="true"]')).map((element) => element.textContent)).toEqual(["TASK-4B", "Ready for QA"]);
 
     const unknownIndicator = getByTitle(/Depends on Unknown Task \(missing\) \(Unknown; pending\)/i);
     expect(unknownIndicator.className).toContain("border-dashed");
@@ -72,6 +68,7 @@ describe("DependencyStatusIndicators", () => {
     expect(unknownIndicator).toHaveAttribute("data-blocking", "true");
     expect(getByText("Unknown")).toBeTruthy();
     expect(container.querySelector('[role="list"]')).toHaveAccessibleName("Blocked: 5 dependencies need completion. Task dependencies");
+    expect(container.querySelectorAll('[role="list"] > [role="listitem"]')).toHaveLength(6);
     expect(container.querySelector('[data-motion-control="controlFeedback"]')).toBeTruthy();
     expect(container.querySelector('[data-motion-list-reorder="listReorder"]')).toBeTruthy();
   });

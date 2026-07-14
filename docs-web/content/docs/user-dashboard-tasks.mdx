@@ -84,13 +84,13 @@ Validation keeps the current draft visible. If a required field is missing, the 
 
 ## Dependencies
 
-Dependencies determine whether a task is ready to run. A task with incomplete dependencies remains blocked until those dependencies move to a completed state. Cards show dependency blockers and downstream dependent tasks so you can see both what a task waits on and what it unblocks.
+Dependencies determine whether a task is ready to run. A task with incomplete dependencies remains blocked until those dependencies move to a completed state. Cards keep the blocker count visible and render each dependency row with only its task identifier and normalized current status, including distinct ready-for-QA, QA-failed, and unknown states. The complete dependency title and blocker context remain available to assistive technology and in the row tooltip.
 
 The editor prevents invalid dependency selections such as dependency cycles. When a dependency cannot be selected, the reason is shown in the editor rather than silently hiding the option.
 
 ## Task actions
 
-Task cards expose actions for the work that is available in the current state:
+Every task card keeps a visible, task-labelled **Actions** trigger in its footer. Activating it opens a grouped menu for execution and navigation, task management, and destructive actions:
 
 - **Edit** opens the full task editor for content, dependencies, executor mode, and worker-agent selection.
 - **Rerun** starts a fresh execution attempt for the task when rerun is available.
@@ -98,7 +98,9 @@ Task cards expose actions for the work that is available in the current state:
 - **Live** opens live task context when runtime details are available.
 - **Delete** removes the task after confirmation.
 
-Unavailable actions stay visible with a reason so the board layout remains stable and keyboard users can understand why an action cannot run.
+The menu opens with click, Enter, Space, Arrow Up, or Arrow Down. Arrow keys move between enabled actions, Home and End jump to the first and last enabled actions, and Escape or clicking outside closes it and restores focus to the trigger. Deleting still requires confirmation, and cancelling returns focus to the task's Actions trigger.
+
+Unavailable and optimistic actions stay visible but inert, with a reason directly beneath the action label so users can understand why an action cannot run. Enabled external destinations open safely in a new tab. The trigger remains available while a card is saving so these reasons are still discoverable, while duplicate task mutations remain suppressed.
 
 ## Status legend
 

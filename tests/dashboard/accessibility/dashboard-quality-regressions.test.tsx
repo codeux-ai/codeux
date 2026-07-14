@@ -594,7 +594,7 @@ describe("dashboard accessibility quality regressions", () => {
     expect(screen.getByRole("region", { name: provider.name })).toBeInTheDocument();
     expect(screen.getByRole("radiogroup", { name: `${provider.name} authentication mode` })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: `Remove ${provider.name}` })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Delete task TASK-LONG:/ })).toHaveAccessibleName(/Very long task title/);
+    expect(screen.getByRole("button", { name: /Open task actions for task TASK-LONG:/ })).toHaveAccessibleName(/Very long task title/);
     expect(container.querySelector(".kanban-card h4")).toHaveClass("break-words");
     expect(screen.getByRole("list", { name: "1 preview sessions" })).toHaveClass("overflow-x-auto");
     expect(screen.getByRole("button", { name: `Select preview session ${previewSession.sprintName}` })).toHaveAccessibleName(
@@ -644,6 +644,10 @@ describe("dashboard accessibility quality regressions", () => {
     const tokenStyles = readSource("dashboard/src/v2/styles/tokens.css");
     expect(tokenStyles).toMatch(/:root\[data-reduced-motion="true"\]/);
     expect(tokenStyles).toMatch(/:root\[data-reduced-motion="REDUCE"\]/);
+
+    const taskCardStyles = readSource("dashboard/src/v2/components/tasks/kanban-task-card.css");
+    expect(taskCardStyles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.kanban-card__action-trigger[\s\S]*transition: none;[\s\S]*transform: none;/);
+    expect(taskCardStyles).toMatch(/\.kanban-card-reduced-motion \.kanban-card__action-trigger,[\s\S]*transition: none;[\s\S]*transform: none;/);
   });
 
   it("guards refined interaction surfaces against hardcoded motion timing", () => {
@@ -742,8 +746,13 @@ describe("dashboard accessibility quality regressions", () => {
     expect(settingsRail).toMatch(/Disabled/);
 
     const taskCard = readSource("dashboard/src/v2/components/tasks/KanbanTaskCard.tsx");
-    expect(taskCard).toMatch(/Edit task \$\{task\.id\}/);
-    expect(taskCard).toMatch(/Delete task \$\{task\.id\}/);
+    const taskActionMenu = readSource("dashboard/src/v2/components/tasks/TaskCardActionMenu.tsx");
+    expect(taskActionMenu).toMatch(/Open task actions for task \$\{task\.id\}/);
+    expect(taskActionMenu).toMatch(/Edit task \$\{task\.id\}/);
+    expect(taskActionMenu).toMatch(/Delete task \$\{task\.id\}/);
+    expect(taskActionMenu).toMatch(/aria-describedby=\{task\.isOptimistic \? editReasonId : undefined\}/);
+    expect(taskActionMenu).toMatch(/aria-describedby=\{task\.isOptimistic \? deleteReasonId : undefined\}/);
     expect(taskCard).not.toMatch(/group-hover:opacity-100/);
+    expect(taskActionMenu).not.toMatch(/group-hover:opacity-100/);
   });
 });

@@ -2,7 +2,7 @@
 /// <reference types="@testing-library/jest-dom" />
 import { readFileSync } from "node:fs";
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, cleanup, fireEvent, waitFor, within } from "@testing-library/preact";
+import { render, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import userEvent from "@testing-library/user-event";
 import gsap from "gsap";
@@ -286,8 +286,7 @@ describe("KanbanTaskCard Integration", () => {
 
     await user.keyboard("{Escape}");
     expect(trigger).toHaveFocus();
-    expect(getByRole("button", { name: /Edit task TASK-123/i })).toBeInTheDocument();
-    expect(getByRole("button", { name: /Delete task TASK-123/i })).toBeInTheDocument();
+    expect(getByRole("button", { name: /Open task actions for task TASK-123/i })).toBeInTheDocument();
   });
 
   it("uses the shared provider-failure treatment without disabling task actions", () => {
@@ -314,8 +313,7 @@ describe("KanbanTaskCard Integration", () => {
     expect(trigger).toHaveClass("text-status-red");
     expect(container.querySelector('[data-qa-state="failed"]')).toBeTruthy();
     expect(container.querySelector('[data-qa-icon="failed"]')).toBeTruthy();
-    expect(getByRole("button", { name: /Edit task TASK-123/i })).toBeInTheDocument();
-    expect(getByRole("button", { name: /Delete task TASK-123/i })).toBeInTheDocument();
+    expect(getByRole("button", { name: /Open task actions for task TASK-123/i })).toBeInTheDocument();
   });
 
   it.each([
@@ -349,8 +347,7 @@ describe("KanbanTaskCard Integration", () => {
 
     await user.click(badge);
     expect(getByRole("region", { name: "CI workflow details" })).toBeInTheDocument();
-    expect(getByRole("button", { name: /Edit task TASK-123/i })).toBeInTheDocument();
-    expect(getByRole("button", { name: /Delete task TASK-123/i })).toBeInTheDocument();
+    expect(getByRole("button", { name: /Open task actions for task TASK-123/i })).toBeInTheDocument();
 
     if (card) fireEvent.dragStart(card);
     expect(onDragStart).toHaveBeenCalledTimes(1);
@@ -467,7 +464,8 @@ describe("KanbanTaskCard Integration", () => {
     ],
   };
 
-  it("renders correctly with live execution fields", () => {
+  it("renders correctly with live execution fields", async () => {
+    const user = userEvent.setup();
     const { getByRole, getByText } = render(
       <KanbanTaskCard
         viewModel={mockLiveViewModel}
@@ -480,7 +478,11 @@ describe("KanbanTaskCard Integration", () => {
     expect(getByText("ACTIVE")).toBeInTheDocument();
     expect(getByText("4m 12s")).toBeInTheDocument();
 
-    expect(getByRole("link", { name: /Open live runtime for task TASK-123: Implement new feature/i })).toHaveTextContent("Live");
+    await user.click(getByRole("button", { name: /Open task actions for task TASK-123/i }));
+    const menu = await screen.findByRole("menu", { name: /Actions for task TASK-123/i });
+    expect(within(menu).getByRole("menuitem", { name: /Open live runtime for task TASK-123: Implement new feature/i })).toHaveTextContent("Live");
+    expect(within(menu).getByRole("menuitem", { name: /Open pull request for task TASK-123: Implement new feature/i })).toHaveAttribute("target", "_blank");
+    expect(within(menu).getByRole("menuitem", { name: /Open pull request for task TASK-123: Implement new feature/i })).toHaveAttribute("rel", "noopener noreferrer");
 
     // Test that the PR link anchor tag exists by checking for "PR ready"
     const prLink = getByText("PR ready").closest('a');
@@ -490,7 +492,7 @@ describe("KanbanTaskCard Integration", () => {
 
   it("provides accessible interaction targets and structure", async () => {
     const user = userEvent.setup();
-    const { getByRole, getByTitle, container, getByText } = render(
+    const { getByRole, getByTitle, container } = render(
       <KanbanTaskCard
         viewModel={mockViewModel}
         onEdit={onEdit}
@@ -498,15 +500,6 @@ describe("KanbanTaskCard Integration", () => {
       />
     );
 
-    // Ensure buttons have accessible titles/labels
-    const editBtn = getByTitle(/Edit task/i);
-    const deleteBtn = getByTitle(/Delete task/i);
-    expect(editBtn).toBeInTheDocument();
-    expect(deleteBtn).toBeInTheDocument();
-    expect(editBtn).toHaveAccessibleName("Edit task TASK-123: Implement new feature");
-    expect(deleteBtn).toHaveAccessibleName("Delete task TASK-123: Implement new feature");
-
-    // Check indicator labels are accessible via their status titles
     const dependencyIndicator = getByTitle(/Depends on Backend API \(Resolved; completed\)/i);
     expect(dependencyIndicator).toBeInTheDocument();
 
@@ -514,21 +507,29 @@ describe("KanbanTaskCard Integration", () => {
     const card = container.querySelector(".kanban-card");
     expect(card).toHaveAttribute("tabIndex", "0");
 
-    // Simulate focus to verify visibility/interaction
     if (card) {
       await user.click(card);
       expect(card).toHaveFocus();
     }
 
-    const actionsContainer = editBtn.parentElement;
-    expect(actionsContainer).toHaveClass("kanban-card__actions");
-    expect(actionsContainer).toHaveAttribute("aria-label", "Actions for task TASK-123");
-    expect(getByText("Rerun")).toBeInTheDocument();
-    expect(getByText("Preview")).toBeInTheDocument();
-    expect(getByRole("button", { name: /Open pull request for task TASK-123: Implement new feature/i })).toHaveTextContent("PR pending");
-    expect(getByRole("button", { name: /Open live runtime for task TASK-123: Implement new feature/i })).toHaveTextContent("Live idle");
+    const actionTrigger = getByRole("button", { name: /Open task actions for task TASK-123: Implement new feature/i });
+    expect(actionTrigger).toHaveAttribute("aria-haspopup", "menu");
+    expect(actionTrigger).toHaveAttribute("aria-expanded", "false");
+    expect(actionTrigger).toHaveClass("kanban-card__action-trigger");
 
-    // Simulate delete click to ensure confirm dialog is requested
+    await user.click(actionTrigger);
+    const menu = await screen.findByRole("menu", { name: /Actions for task TASK-123: Implement new feature/i });
+    expect(actionTrigger).toHaveAttribute("aria-expanded", "true");
+    expect(within(menu).getByRole("group", { name: "Execution and navigation actions" })).toBeInTheDocument();
+    expect(within(menu).getByRole("group", { name: "Task management actions" })).toBeInTheDocument();
+    expect(within(menu).getByRole("group", { name: "Destructive task actions" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: /Rerun task TASK-123/i })).toHaveAccessibleDescription("Open Live to rerun task TASK-123.");
+    expect(within(menu).getByRole("menuitem", { name: /Open sprint preview for task TASK-123/i })).toHaveAttribute("href", "/browser?sprintId=sprint-1");
+    const editBtn = within(menu).getByRole("menuitem", { name: /Edit task TASK-123/i });
+    const deleteBtn = within(menu).getByRole("menuitem", { name: /Delete task TASK-123/i });
+    expect(editBtn).toHaveAccessibleName("Edit task TASK-123: Implement new feature");
+    expect(deleteBtn).toHaveAccessibleName("Delete task TASK-123: Implement new feature");
+
     await user.click(deleteBtn);
     expect(mockRequestConfirm).toHaveBeenCalledWith(expect.objectContaining({
       destructive: true,
@@ -536,35 +537,58 @@ describe("KanbanTaskCard Integration", () => {
     }));
   });
 
-  it("keeps quick actions mounted at the card bottom and keyboard reachable without hover", async () => {
+  it("keeps the action trigger persistent and supports complete menu keyboard traversal", async () => {
     const user = userEvent.setup();
+    const onDragStart = vi.fn();
     const { container, getByRole } = render(
       <KanbanTaskCard
         viewModel={mockViewModel}
         onEdit={onEdit}
         onDelete={onDelete}
+        onDragStart={onDragStart}
       />
     );
 
     const card = container.querySelector(".kanban-card");
-    const actionsContainer = container.querySelector(".kanban-card__actions");
+    const actionTrigger = getByRole("button", { name: /Open task actions for task TASK-123: Implement new feature/i });
     expect(card).toHaveAttribute("tabIndex", "0");
-    expect(actionsContainer).toHaveClass("kanban-card__actions");
-    expect(actionsContainer).toHaveAttribute("aria-label", "Actions for task TASK-123");
-    expect(getByRole("button", { name: /Edit task TASK-123: Implement new feature/i })).toBeInTheDocument();
-    expect(getByRole("button", { name: /Delete task TASK-123: Implement new feature/i })).toBeInTheDocument();
-    expect(actionsContainer).not.toHaveClass("absolute");
-    expect(actionsContainer?.previousElementSibling).toHaveClass("sm:flex-row");
+    expect(actionTrigger).toBeVisible();
+    expect(actionTrigger).toHaveClass("kanban-card__action-trigger");
+    fireEvent.dragStart(actionTrigger);
+    expect(onDragStart).not.toHaveBeenCalled();
 
     await user.tab();
     expect(card).toHaveFocus();
     await user.tab();
-    expect(getByRole("button", { name: /Rerun task TASK-123: Implement new feature/i })).toHaveFocus();
+    expect(actionTrigger).toHaveFocus();
 
-    expect(taskCardCss).toContain("@media (any-pointer: fine) and (hover: hover)");
-    expect(taskCardCss).toMatch(/\.kanban-card__actions\s*\{[\s\S]*opacity:\s*1;[\s\S]*pointer-events:\s*auto;[\s\S]*transform:\s*translateY\(0\);/);
-    expect(taskCardCss).toMatch(/@media \(any-pointer: fine\) and \(hover: hover\)\s*\{[\s\S]*\.kanban-card__actions\s*\{[\s\S]*opacity:\s*0;[\s\S]*pointer-events:\s*none;[\s\S]*transform:\s*translateY\(0\.375rem\);/);
-    expect(taskCardCss).toMatch(/\.kanban-card:hover \.kanban-card__actions,[\s\S]*\.kanban-card:focus \.kanban-card__actions,[\s\S]*\.kanban-card:focus-visible \.kanban-card__actions,[\s\S]*\.kanban-card:focus-within \.kanban-card__actions\s*\{[\s\S]*opacity:\s*1;[\s\S]*pointer-events:\s*auto;[\s\S]*transform:\s*translateY\(0\);/);
+    await user.keyboard("{ArrowDown}");
+    const menu = await screen.findByRole("menu", { name: /Actions for task TASK-123/i });
+    await waitFor(() => expect(within(menu).getByRole("menuitem", { name: /Open sprint preview/i })).toHaveFocus());
+    await user.keyboard("{End}");
+    expect(within(menu).getByRole("menuitem", { name: /Delete task TASK-123/i })).toHaveFocus();
+    await user.keyboard("{Home}");
+    expect(within(menu).getByRole("menuitem", { name: /Open sprint preview/i })).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(within(menu).getByRole("menuitem", { name: /Edit task TASK-123/i })).toHaveFocus();
+    await user.keyboard("{ArrowUp}{Escape}");
+    await waitFor(() => expect(actionTrigger).toHaveFocus());
+    expect(actionTrigger).toHaveAttribute("aria-expanded", "false");
+
+    await user.keyboard(" ");
+    await screen.findByRole("menu", { name: /Actions for task TASK-123/i });
+    fireEvent.mouseDown(document.body);
+    await waitFor(() => expect(actionTrigger).toHaveAttribute("aria-expanded", "false"));
+    await waitFor(() => expect(actionTrigger).toHaveFocus());
+
+    await user.keyboard("{Enter}");
+    await screen.findByRole("menu", { name: /Actions for task TASK-123/i });
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(actionTrigger).toHaveFocus());
+
+    expect(taskCardCss).toContain(".kanban-card__action-trigger");
+    expect(taskCardCss).toContain("@media (any-pointer: coarse)");
+    expect(taskCardCss).not.toContain(".kanban-card__actions");
   });
 
   it("renders status transition clearly when a task status updates", async () => {
@@ -698,7 +722,7 @@ describe("KanbanTaskCard Integration", () => {
     const user = userEvent.setup();
     mockRequestConfirm.mockImplementationOnce(async () => false);
 
-    const { getByTitle } = render(
+    const { getByRole } = render(
       <KanbanTaskCard
         viewModel={mockViewModel}
         onEdit={onEdit}
@@ -706,15 +730,15 @@ describe("KanbanTaskCard Integration", () => {
       />
     );
 
-    const deleteBtn = getByTitle(/Delete task/i);
-    deleteBtn.focus();
-    expect(deleteBtn).toHaveFocus();
-
+    const actionTrigger = getByRole("button", { name: /Open task actions for task TASK-123/i });
+    await user.click(actionTrigger);
+    const menu = await screen.findByRole("menu", { name: /Actions for task TASK-123/i });
+    const deleteBtn = within(menu).getByRole("menuitem", { name: /Delete task TASK-123/i });
     await user.click(deleteBtn);
 
     expect(mockRequestConfirm).toHaveBeenCalled();
     expect(onDelete).not.toHaveBeenCalled();
-    expect(deleteBtn).toHaveFocus();
+    expect(actionTrigger).toHaveFocus();
   });
 
   it("provides accurate drag-and-drop screen-reader guidance", async () => {
@@ -737,19 +761,25 @@ describe("KanbanTaskCard Integration", () => {
     expect(card).toHaveFocus();
   });
 
-  it("provides task titles in action button accessible labels", () => {
+  it("provides task titles in action button accessible labels", async () => {
+    const user = userEvent.setup();
     const { getByRole } = render(<KanbanTaskCard viewModel={mockViewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
-    expect(getByRole('button', { name: /Edit task TASK-123: Implement new feature/i })).toBeInTheDocument();
-    expect(getByRole('button', { name: /Delete task TASK-123: Implement new feature/i })).toBeInTheDocument();
+    await user.click(getByRole("button", { name: /Open task actions for task TASK-123: Implement new feature/i }));
+    const menu = await screen.findByRole("menu", { name: /Actions for task TASK-123/i });
+    expect(within(menu).getByRole('menuitem', { name: /Edit task TASK-123: Implement new feature/i })).toBeInTheDocument();
+    expect(within(menu).getByRole('menuitem', { name: /Delete task TASK-123: Implement new feature/i })).toBeInTheDocument();
   });
 
-  it("keeps unavailable task actions keyboard reachable with explanatory labels", () => {
+  it("keeps unavailable task actions discoverable with explanatory labels", async () => {
+    const user = userEvent.setup();
     const { getByRole, getByText } = render(<KanbanTaskCard viewModel={mockViewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
 
-    expect(getByRole("button", { name: /Rerun task TASK-123: Implement new feature/i })).toHaveAccessibleDescription("Open Live to rerun task TASK-123.");
-    expect(getByRole("button", { name: /Open pull request for task TASK-123: Implement new feature/i })).toHaveAccessibleDescription("No pull request is available for task TASK-123 yet.");
-    expect(getByRole("button", { name: /Open live runtime for task TASK-123: Implement new feature/i })).toHaveAccessibleDescription("Live runtime has not started for task TASK-123.");
-    expect(getByText("Unavailable: Rerun, PR pending, Live idle.")).toBeVisible();
+    await user.click(getByRole("button", { name: /Open task actions for task TASK-123/i }));
+    const menu = await screen.findByRole("menu", { name: /Actions for task TASK-123/i });
+    expect(within(menu).getByRole("menuitem", { name: /Rerun task TASK-123: Implement new feature/i })).toHaveAccessibleDescription("Open Live to rerun task TASK-123.");
+    expect(within(menu).getByRole("menuitem", { name: /Open pull request for task TASK-123: Implement new feature/i })).toHaveAccessibleDescription("No pull request is available for task TASK-123 yet.");
+    expect(within(menu).getByRole("menuitem", { name: /Open live runtime for task TASK-123: Implement new feature/i })).toHaveAccessibleDescription("Live runtime has not started for task TASK-123.");
+    expect(within(menu).getByText("Open Live to rerun task TASK-123.")).toBeVisible();
     expect(getByText("1 dependency blocker")).toBeInTheDocument();
     expect(getByText("QA no review")).toBeInTheDocument();
   });
@@ -765,20 +795,34 @@ describe("KanbanTaskCard Integration", () => {
     expect(getByText(/Pull request available. Live runtime 4m 12s, session ACTIVE./i)).toHaveClass("sr-only");
   });
 
-  it("marks optimistic quick actions busy and suppresses link activation while saving", () => {
+  it("marks optimistic menu actions busy and suppresses link activation while saving", async () => {
+    const user = userEvent.setup();
+    const optimisticOnEdit = vi.fn();
+    const optimisticOnDelete = vi.fn();
     const optimisticViewModel: TaskCardViewModel = {
       ...mockLiveViewModel,
       task: { ...mockLiveViewModel.task, isOptimistic: true },
       optimisticSavingLabel: "Saving task changes",
     };
 
-    const { getByRole, getByText } = render(<KanbanTaskCard viewModel={optimisticViewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    const { getByRole, getByText } = render(<KanbanTaskCard viewModel={optimisticViewModel} onEdit={optimisticOnEdit} onDelete={optimisticOnDelete} />);
 
-    const liveAction = getByRole("button", { name: /Open live runtime for task TASK-123: Implement new feature/i });
+    const actionTrigger = getByRole("button", { name: /Open task actions for task TASK-123/i });
+    expect(actionTrigger).toHaveAttribute("aria-busy", "true");
+    await user.click(actionTrigger);
+    const menu = await screen.findByRole("menu", { name: /Actions for task TASK-123/i });
+    const liveAction = within(menu).getByRole("menuitem", { name: /Open live runtime for task TASK-123: Implement new feature/i });
     expect(liveAction).toHaveAttribute("aria-disabled", "true");
     expect(liveAction).toHaveAttribute("aria-busy", "true");
     expect(liveAction).toHaveAccessibleDescription("Saving task TASK-123; Live is temporarily unavailable.");
-    expect(getByText("Saving task TASK-123; actions are paused.")).toBeVisible();
+    expect(within(menu).getByRole("menuitem", { name: /Edit task TASK-123/i })).toHaveAccessibleDescription("Saving task TASK-123; edit is temporarily unavailable.");
+    expect(within(menu).getByRole("menuitem", { name: /Delete task TASK-123/i })).toHaveAccessibleDescription("Saving task TASK-123; delete is temporarily unavailable.");
+    await user.click(within(menu).getByRole("menuitem", { name: /Edit task TASK-123/i }));
+    await user.click(within(menu).getByRole("menuitem", { name: /Delete task TASK-123/i }));
+    expect(optimisticOnEdit).not.toHaveBeenCalled();
+    expect(optimisticOnDelete).not.toHaveBeenCalled();
+    expect(mockRequestConfirm).not.toHaveBeenCalled();
+    expect(getByText("Saving task changes")).toBeVisible();
   });
 
   it("prevents long metadata strings from overflowing the card horizontally", () => {
@@ -810,10 +854,10 @@ describe("KanbanTaskCard Integration", () => {
     const sourceSpan = container.querySelector('.font-mono.truncate');
     expect(sourceSpan).toHaveClass('min-w-0');
 
-    const actionsContainer = container.querySelector('.kanban-card__actions');
-    expect(actionsContainer).toHaveClass('kanban-card__actions');
-    expect(actionsContainer).not.toHaveClass('absolute');
-    expect(actionsContainer).toHaveAttribute("aria-label", "Actions for task TASK-123");
+    const actionTrigger = container.querySelector('.kanban-card__action-trigger');
+    expect(actionTrigger).toHaveClass('kanban-card__action-trigger');
+    expect(actionTrigger).not.toHaveClass('absolute');
+    expect(actionTrigger).toHaveAccessibleName("Open task actions for task TASK-123: A very long task title that could potentially blow out the card width if not wrapped correctly with pr-12 or break-words");
   });
 
 });
