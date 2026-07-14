@@ -161,7 +161,7 @@ Stats copy and visuals should teach operators how trustworthy a number is withou
 
 Cost values come from snapshot cost fields and should only be presented when configured data makes them meaningful. Do not imply a free run from a zero cost when pricing may be unavailable.
 
-Cost displays use two fractional digits for scanability, rounding values such as `$55.4093` to `$55.41`.
+Cost displays use two fractional digits for ordinary values and adaptive precision for sub-cent values. Focused chart buckets and the screen-reader data table preserve the exact normalized USD value so scan-friendly headlines never remove recoverable detail.
 
 CLI task-coding analytics distinguish workflow visibility from provider usage. A running execution invocation may appear while Code UX is preparing a cancellable workspace or waiting to claim provider capacity. Provider `started_at`, duration, concurrency, token, and cost telemetry begin only after the provider claim/run starts; preparation failure or pre-claim cancellation therefore leaves an auditable execution row without fabricated provider usage.
 
@@ -190,6 +190,8 @@ Dense analytics layouts should stay calm: restrained contrast, low-opacity fills
 The `StatsPage` uses the `useStatsPageData` hook to coordinate visual modes. The hook manages and exposes state including `activeQuery`, `visualMode`, `chartState`, `providerSegments`, `sourceSegments`, `tokenSegments`, and `planningUsage`, ensuring seamless transitions across Trend, Composition, Models, Providers, Ledgers, and System views.
 
 `cost-insights.ts` is the pure frontend boundary for Cost calculations and display state. Cost components consume its normalized totals, rates, averages, reconciled spend/token segments, deterministic dimension rows, and task/canonical-sprint details instead of re-deriving values in JSX. Every monetary amount carries coverage provenance so complete zero-price usage, partial pricing, unpriced telemetry, legacy unknown coverage, and empty data remain distinct.
+
+`CostOverviewPanel` renders the Cost executive metrics and spend-over-time surface directly from that view model. Its SVG is presentation-only: every bucket is also a keyboard-focusable value with exact focused detail and a screen-reader table, while peak, selection, and missing-price states use shape or text cues in addition to color. The panel keeps no-usage, fully unpriced, partial, covered-zero, and single-bucket states explicit and page-overflow safe.
 
 Task and canonical sprint averages use distinct rows that contain provider invocations. Covered zero-cost rows remain in the denominator, while an empty collection produces an unavailable amount. Canonical sprint rows come from `costAnalytics.sprints`; legacy snapshots fall back to the run-oriented `sprints` ledger only when the additive projection is absent.
 
