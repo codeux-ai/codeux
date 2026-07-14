@@ -61,6 +61,10 @@ describe("chat provider dashboard routes", () => {
       expect.objectContaining({ kind: "discord" }),
     ]));
     const slack = body.providers.find((provider: any) => provider.kind === "slack");
+    expect(slack.officialDocumentation).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: "Slack Events API", url: expect.stringMatching(/^https:\/\//) }),
+    ]));
+    expect(slack.limitations).toEqual(expect.any(Array));
     expect(slack.bridgeModes[0].setupHints).toMatchObject({
       integration: "managed_plugin",
       requiredSetupFields: ["pluginName"],

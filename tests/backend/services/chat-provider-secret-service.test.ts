@@ -47,6 +47,12 @@ describe("ChatProviderSecretService", () => {
     const rotated = await service.updateConnection(created.id, { secrets: { signingSecret: "rotated-secret" } });
     expect(rotated).toMatchObject({ verificationStatus: "unverified", verificationDetails: null, secretVersion: 2 });
     expect((await service.resolveConnection(created.id)).secrets).toEqual({ signingSecret: "rotated-secret" });
+
+    const partiallyRotated = await service.updateConnection(created.id, { secrets: { botToken: "new-bot-token" } });
+    expect((await service.resolveConnection(created.id)).secrets).toEqual({
+      signingSecret: "rotated-secret",
+      botToken: "new-bot-token",
+    });
   });
 
   it("leaves legacy plaintext intact while key custody is unavailable", async () => {

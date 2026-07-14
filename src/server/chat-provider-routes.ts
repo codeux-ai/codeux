@@ -351,7 +351,10 @@ function parseDeliveryLimit(value: unknown): number | undefined {
 function decorateSetupDefinition(req: Request, schema: ChatProviderSetupSchema): ChatProviderSetupSchema & {
   ingressUrlTemplate: string;
   bridgeModes: Array<ChatProviderSetupSchema["bridgeModes"][number] & { setupHints: ChatProviderSetupHints }>;
+  officialDocumentation: Array<{ label: string; url: string }>;
+  limitations: string[];
 } {
+  const profile = CHAT_CONNECTOR_REGISTRY.get(schema.kind);
   return {
     ...schema,
     ingressUrlTemplate: `${getRequestOrigin(req)}/api/chat-providers/ingress/{connectionId}`,
@@ -359,6 +362,11 @@ function decorateSetupDefinition(req: Request, schema: ChatProviderSetupSchema):
       ...bridgeMode,
       setupHints: buildSetupHints(schema.kind, bridgeMode.mode),
     })),
+    officialDocumentation: [...profile.officialDocumentation],
+    limitations: [
+      ...profile.session.requirements,
+      ...(profile.liveTest.reason ? [profile.liveTest.reason] : []),
+    ],
   };
 }
 

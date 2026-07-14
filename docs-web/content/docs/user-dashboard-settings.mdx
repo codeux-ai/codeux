@@ -117,6 +117,18 @@ Settings > Integrations includes Google Drive under **Storage & Mounts**. It lin
 
 The mount is available to scoped Docker-backed provider workspaces at the fixed `/mnt/code-ux/google-drive` container path. It is shared by Project Manager replies, planning, setup, task coding, QA, CI repair, and merge repair; host-mode and unscoped runs do not receive it. **Read-only** is the safe default. Choose **Read-write** only when agents must modify synced Drive files, because edits and deletions can propagate through Google Drive. A card is **Configured** only after a linked directory is set and **Active** only when that configured mount is also enabled. The host path appears only inside the editable linked-directory control.
 
+## Chat connectors
+
+Open **Settings -> Integrations -> Chat Connectors** to connect Discord, WhatsApp, iMessage, Telegram, Slack, or Microsoft Teams. Discord is the prominent starting point. Each provider card shows verified active connections, channel bindings, outbound reply state, and delivery failures. A connection is not shown as healthy merely because it is enabled: required configuration and write-only credentials must be saved, then **Test connection** must succeed.
+
+Connection modes are labeled by their operational shape: **Provider-native API**, **Managed bridge**, **Custom webhook**, or **Native bridge**. The provider workspace links to official documentation and shows backend-supplied limitations. Provider traffic remains server-side; the dashboard calls only Code UX REST endpoints. Ingress URLs can be copied into the provider or bridge configuration, while saved credentials are represented only by configured/redacted metadata and are never filled back into the browser. When reduced motion is enabled, navigation between the connector catalog and provider details changes immediately without an animated transition.
+
+Changing a mode, endpoint, bridge command, setup value, or credential makes the prior verification stale. Save the draft and test it again before activation. Blank secret fields preserve the stored credentials. Replacing a credential or changing an endpoint/command opens a confirmation dialog, as does deleting a connection or binding.
+
+Channel bindings map provider-specific channel or conversation identifiers to a project and optional conversation thread. They also select an agent preset, inbound/outbound behavior, and rich-widget suppression. For shared channels, configure a project selector prefix or routing hint; if routing remains ambiguous, Code UX requests clarification instead of guessing. Long replies are split to provider-safe lengths while retaining thread identifiers when supported.
+
+Delivery history shows outbound status, attempt count, next retry, and terminal, retryable, or ambiguous failure state. Diagnostics are redacted; payload bodies, signed URLs, and token-shaped values are never displayed. Connection and binding save or deletion errors and failed verification issue details are also redacted before their persistent alert is shown. Retry and cancellation require confirmation because they may change provider-side state. If delivery history cannot refresh, the dashboard keeps the last successful history visible and reports the error rather than replacing it with an empty list.
+
 ## Provider config files
 
 Each CLI provider instance in **AI providers** includes a **Provider Config** choice that controls only provider config-file copying. It is separate from API Key, Local Copy, and Dashboard Login authentication modes.

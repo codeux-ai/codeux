@@ -14,14 +14,20 @@ import { clearProjectMemories, clearSystemMemories, type MemoryClearTier } from 
 import {
   createChatProviderChannelBinding,
   createChatProviderConnection,
+  cancelChatProviderDelivery,
   deleteChatProviderChannelBinding,
   deleteChatProviderConnection,
   fetchChatProviderChannelBindings,
   fetchChatProviderConnectionDeliveries,
+  fetchChatProviderConnection,
   fetchChatProviderConnections,
+  fetchChatProviderDelivery,
+  fetchChatProviderHealth,
   fetchChatProviderSetupDefinitions,
+  retryChatProviderDelivery,
   updateChatProviderChannelBinding,
   updateChatProviderConnection,
+  verifyChatProviderConnection,
   type DashboardChatProviderConnectionRecord,
   type DashboardChatProviderSetupDefinition,
 } from "../lib/chat-provider-api.js";
@@ -55,7 +61,9 @@ import type {
   ProviderConfigId,
   ChatProviderChannelBindingRecord,
   ChatProviderKind,
-  ChatProviderMessageDeliveryRecord,
+  ChatProviderConnectorHealth,
+  ChatProviderPublicDeliveryRecord,
+  ChatProviderVerificationOutcome,
   CreateChatProviderChannelBindingInput,
   CreateChatProviderConnectionInput,
   ProjectSettings,
@@ -64,6 +72,7 @@ import type {
   UpdateChatProviderChannelBindingInput,
   UpdateChatProviderConnectionInput,
 } from "../../types.js";
+import { redactChatProviderError } from "../lib/chat-provider-view-models.js";
 import type { AgentAvatarConfig, AgentPreset } from "../types.js";
 import type { SettingsDomainAccent } from "../lib/settings-domain-accents.js";
 import { AlertTriangle, Bot, BrainCircuit, Cpu, Plug, Settings, SlidersHorizontal, Target } from "lucide-preact";
@@ -150,12 +159,12 @@ const INTEGRATIONS: IntegrationDefinition[] = [
   { id: "gitlab", label: "GitLab", description: "GitLab repository, merge request, and CI token integration" },
   { id: "google-drive", label: "Google Drive", description: "Mount an already linked local Drive directory into Docker workspaces" },
   { id: "jira", label: "Jira", description: "Atlassian Jira issue search, sprint linking, and completion transitions" },
+  { id: "discord", label: "Discord", description: "Discord bot or gateway connection for project chat" },
   { id: "whatsapp", label: "WhatsApp", description: "Managed or webhook bridge for WhatsApp groups and business conversations" },
   { id: "imessage", label: "iMessage", description: "Managed or native macOS bridge for iMessage routing" },
   { id: "telegram", label: "Telegram", description: "Telegram bot or managed bridge for channel ingress and replies" },
   { id: "slack", label: "Slack", description: "Slack Events or managed bridge with signed webhooks" },
   { id: "microsoft-teams", label: "Microsoft Teams", description: "Teams bot or managed bridge for tenant channels" },
-  { id: "discord", label: "Discord", description: "Discord bot or gateway connection for project chat" },
   { id: "notion", label: "Notion", description: "Read-only import from Notion workspace pages and databases" },
   { id: "asana", label: "Asana", description: "Read-only import from Asana workspaces, teams, and projects" },
   { id: "linear", label: "Linear", description: "Read-only import from Linear teams, projects, and issues" },
@@ -285,10 +294,21 @@ export const useSettingsPageState = (
   const [chatProviderDefinitions, setChatProviderDefinitions] = useState<DashboardChatProviderSetupDefinition[]>([]);
   const [chatProviderConnections, setChatProviderConnections] = useState<DashboardChatProviderConnectionRecord[]>([]);
   const [chatProviderBindings, setChatProviderBindings] = useState<ChatProviderChannelBindingRecord[]>([]);
-  const [chatProviderDeliveriesByConnection, setChatProviderDeliveriesByConnection] = useState<Record<string, ChatProviderMessageDeliveryRecord[]>>({});
+  const [chatProviderDeliveriesByConnection, setChatProviderDeliveriesByConnection] = useState<Record<string, ChatProviderPublicDeliveryRecord[]>>({});
+  const [chatProviderDeliveryErrors, setChatProviderDeliveryErrors] = useState<Record<string, string>>({});
+  const [chatProviderVerificationOutcomes, setChatProviderVerificationOutcomes] = useState<Record<string, ChatProviderVerificationOutcome>>({});
+  const [chatProviderHealth, setChatProviderHealth] = useState<ChatProviderConnectorHealth | null>(null);
   const [chatProvidersLoading, setChatProvidersLoading] = useState(false);
+  const [chatProviderHealthPending, setChatProviderHealthPending] = useState(false);
   const [chatProvidersSavingId, setChatProvidersSavingId] = useState<string | null>(null);
+  const [chatProviderPendingConnections, setChatProviderPendingConnections] = useState<Record<string, string>>({});
+  const [chatProviderPendingDeliveries, setChatProviderPendingDeliveries] = useState<Record<string, string>>({});
   const [chatProvidersError, setChatProvidersError] = useState<string | null>(null);
+  const [chatProvidersStatusMessage, setChatProvidersStatusMessage] = useState<string | null>(null);
+  const chatProviderLoadRequestRef = useRef(0);
+  const chatProviderConnectionRequestRef = useRef<Record<string, number>>({});
+  const chatProviderDeliveryRequestRef = useRef<Record<string, number>>({});
+  const chatProviderHealthRequestRef = useRef(0);
   const previousCategoryRef = useRef<CategoryId>("general");
   const scopePersistenceRequestRef = useRef(0);
 
@@ -372,6 +392,7 @@ export const useSettingsPageState = (
   }, [loadSettings]);
 
   const loadChatProviders = useCallback(async (): Promise<void> => {
+    const requestId = ++chatProviderLoadRequestRef.current;
     setChatProvidersLoading(true);
     try {
       const [definitions, connections, bindings] = await Promise.all([
@@ -379,22 +400,48 @@ export const useSettingsPageState = (
         fetchChatProviderConnections(),
         fetchChatProviderChannelBindings(),
       ]);
-      const deliveryEntries = await Promise.all(
-        connections.map(async (connection) => [
-          connection.id,
-          await fetchChatProviderConnectionDeliveries(connection.id, 25).catch(() => []),
-        ] as const),
+      const deliveryResults = await Promise.allSettled(
+        connections.map(async (connection) => ({
+          connectionId: connection.id,
+          deliveries: await fetchChatProviderConnectionDeliveries(connection.id, 25),
+        })),
       );
+
+      if (requestId !== chatProviderLoadRequestRef.current) return;
+
+      const nextDeliveryErrors: Record<string, string> = {};
+      const successfulDeliveryEntries: Array<readonly [string, ChatProviderPublicDeliveryRecord[]]> = [];
+      deliveryResults.forEach((result, index) => {
+        const connectionId = connections[index]?.id;
+        if (!connectionId) return;
+        if (result.status === "fulfilled") {
+          successfulDeliveryEntries.push([connectionId, result.value.deliveries]);
+        } else {
+          nextDeliveryErrors[connectionId] = redactChatProviderError(
+            result.reason instanceof Error ? result.reason.message : String(result.reason),
+          );
+        }
+      });
 
       setChatProviderDefinitions(definitions);
       setChatProviderConnections(connections);
       setChatProviderBindings(bindings);
-      setChatProviderDeliveriesByConnection(Object.fromEntries(deliveryEntries));
-      setChatProvidersError(null);
+      setChatProviderDeliveriesByConnection((current) => ({
+        ...Object.fromEntries(Object.keys(current)
+          .filter((connectionId) => connections.some((connection) => connection.id === connectionId))
+          .map((connectionId) => [connectionId, current[connectionId]])),
+        ...Object.fromEntries(successfulDeliveryEntries),
+      }));
+      setChatProviderDeliveryErrors(nextDeliveryErrors);
+      const failedDeliveryLoads = Object.keys(nextDeliveryErrors).length;
+      setChatProvidersError(failedDeliveryLoads > 0
+        ? `Delivery history could not be refreshed for ${failedDeliveryLoads} connection${failedDeliveryLoads === 1 ? "" : "s"}. Existing history remains visible.`
+        : null);
     } catch (loadError) {
-      setChatProvidersError(loadError instanceof Error ? loadError.message : String(loadError));
+      if (requestId !== chatProviderLoadRequestRef.current) return;
+      setChatProvidersError(redactChatProviderError(loadError instanceof Error ? loadError.message : String(loadError)));
     } finally {
-      setChatProvidersLoading(false);
+      if (requestId === chatProviderLoadRequestRef.current) setChatProvidersLoading(false);
     }
   }, []);
 
@@ -774,6 +821,143 @@ export const useSettingsPageState = (
     }
   }, [selectedProject]);
 
+  const refreshChatProviderHealth = useCallback(async (): Promise<ChatProviderConnectorHealth | null> => {
+    const requestId = ++chatProviderHealthRequestRef.current;
+    setChatProviderHealthPending(true);
+    try {
+      const health = await fetchChatProviderHealth();
+      if (requestId !== chatProviderHealthRequestRef.current) return null;
+      setChatProviderHealth(health);
+      setChatProvidersStatusMessage("Chat connector health refreshed.");
+      return health;
+    } catch (healthError) {
+      if (requestId === chatProviderHealthRequestRef.current) {
+        setChatProvidersError(redactChatProviderError(healthError instanceof Error ? healthError.message : String(healthError)));
+      }
+      return null;
+    } finally {
+      if (requestId === chatProviderHealthRequestRef.current) setChatProviderHealthPending(false);
+    }
+  }, []);
+
+  const verifyChatProviderConnectionRecord = useCallback(async (
+    connectionId: string,
+  ): Promise<ChatProviderVerificationOutcome | null> => {
+    const requestId = (chatProviderConnectionRequestRef.current[connectionId] ?? 0) + 1;
+    chatProviderConnectionRequestRef.current[connectionId] = requestId;
+    setChatProviderPendingConnections((current) => ({ ...current, [connectionId]: "verify" }));
+    setChatProvidersError(null);
+    setChatProvidersStatusMessage(`Testing chat connector ${connectionId}.`);
+    try {
+      const outcome = await verifyChatProviderConnection(connectionId);
+      const connection = await fetchChatProviderConnection(connectionId);
+      if (chatProviderConnectionRequestRef.current[connectionId] !== requestId) return outcome;
+      setChatProviderVerificationOutcomes((current) => ({ ...current, [connectionId]: outcome }));
+      setChatProviderConnections((current) => current.map((entry) => entry.id === connectionId ? connection : entry));
+      if (outcome.status === "verified") {
+        setChatProvidersStatusMessage("Connection verified. Activation is now available.");
+      } else {
+        setChatProvidersError(outcome.issues.length > 0
+          ? outcome.issues.map(redactChatProviderError).join(" ")
+          : "Connection verification failed.");
+      }
+      return outcome;
+    } catch (verificationError) {
+      if (chatProviderConnectionRequestRef.current[connectionId] === requestId) {
+        setChatProvidersError(redactChatProviderError(
+          verificationError instanceof Error ? verificationError.message : String(verificationError),
+        ));
+      }
+      return null;
+    } finally {
+      if (chatProviderConnectionRequestRef.current[connectionId] === requestId) {
+        setChatProviderPendingConnections((current) => {
+          const next = { ...current };
+          delete next[connectionId];
+          return next;
+        });
+      }
+    }
+  }, []);
+
+  const inspectChatProviderDelivery = useCallback(async (
+    deliveryId: string,
+  ): Promise<ChatProviderPublicDeliveryRecord | null> => {
+    const requestId = (chatProviderDeliveryRequestRef.current[deliveryId] ?? 0) + 1;
+    chatProviderDeliveryRequestRef.current[deliveryId] = requestId;
+    setChatProviderPendingDeliveries((current) => ({ ...current, [deliveryId]: "inspect" }));
+    try {
+      const delivery = await fetchChatProviderDelivery(deliveryId);
+      if (chatProviderDeliveryRequestRef.current[deliveryId] !== requestId) return delivery;
+      setChatProviderDeliveriesByConnection((current) => ({
+        ...current,
+        [delivery.providerConnectionId]: (current[delivery.providerConnectionId] ?? [])
+          .map((entry) => entry.id === delivery.id ? delivery : entry),
+      }));
+      setChatProvidersStatusMessage("Delivery diagnostics refreshed.");
+      return delivery;
+    } catch (deliveryError) {
+      if (chatProviderDeliveryRequestRef.current[deliveryId] === requestId) {
+        setChatProvidersError(redactChatProviderError(deliveryError instanceof Error ? deliveryError.message : String(deliveryError)));
+      }
+      return null;
+    } finally {
+      if (chatProviderDeliveryRequestRef.current[deliveryId] === requestId) {
+        setChatProviderPendingDeliveries((current) => {
+          const next = { ...current };
+          delete next[deliveryId];
+          return next;
+        });
+      }
+    }
+  }, []);
+
+  const controlChatProviderDelivery = useCallback(async (
+    deliveryId: string,
+    action: "retry" | "cancel",
+  ): Promise<ChatProviderPublicDeliveryRecord | null> => {
+    const requestId = (chatProviderDeliveryRequestRef.current[deliveryId] ?? 0) + 1;
+    chatProviderDeliveryRequestRef.current[deliveryId] = requestId;
+    setChatProviderPendingDeliveries((current) => ({ ...current, [deliveryId]: action }));
+    setChatProvidersError(null);
+    try {
+      const delivery = action === "retry"
+        ? await retryChatProviderDelivery(deliveryId)
+        : await cancelChatProviderDelivery(deliveryId);
+      if (chatProviderDeliveryRequestRef.current[deliveryId] !== requestId) return delivery;
+      setChatProviderDeliveriesByConnection((current) => ({
+        ...current,
+        [delivery.providerConnectionId]: (current[delivery.providerConnectionId] ?? [])
+          .map((entry) => entry.id === delivery.id ? delivery : entry),
+      }));
+      setChatProvidersStatusMessage(action === "retry" ? "Delivery retry completed." : "Delivery cancelled.");
+      return delivery;
+    } catch (deliveryError) {
+      if (chatProviderDeliveryRequestRef.current[deliveryId] === requestId) {
+        setChatProvidersError(redactChatProviderError(deliveryError instanceof Error ? deliveryError.message : String(deliveryError)));
+      }
+      return null;
+    } finally {
+      if (chatProviderDeliveryRequestRef.current[deliveryId] === requestId) {
+        setChatProviderPendingDeliveries((current) => {
+          const next = { ...current };
+          delete next[deliveryId];
+          return next;
+        });
+      }
+    }
+  }, []);
+
+  const retryChatProviderDeliveryRecord = useCallback((deliveryId: string) => (
+    controlChatProviderDelivery(deliveryId, "retry")
+  ), [controlChatProviderDelivery]);
+
+  const cancelChatProviderDeliveryRecord = useCallback((deliveryId: string) => (
+    controlChatProviderDelivery(deliveryId, "cancel")
+  ), [controlChatProviderDelivery]);
+
+  const clearChatProviderError = useCallback((): void => setChatProvidersError(null), []);
+
   const createChatProviderConnectionRecord = useCallback(async (
     input: CreateChatProviderConnectionInput,
   ): Promise<DashboardChatProviderConnectionRecord | null> => {
@@ -783,7 +967,7 @@ export const useSettingsPageState = (
       await loadChatProviders();
       return created;
     } catch (createError) {
-      setChatProvidersError(createError instanceof Error ? createError.message : String(createError));
+      setChatProvidersError(redactChatProviderError(createError instanceof Error ? createError.message : String(createError)));
       return null;
     } finally {
       setChatProvidersSavingId(null);
@@ -800,7 +984,7 @@ export const useSettingsPageState = (
       await loadChatProviders();
       return updated;
     } catch (updateError) {
-      setChatProvidersError(updateError instanceof Error ? updateError.message : String(updateError));
+      setChatProvidersError(redactChatProviderError(updateError instanceof Error ? updateError.message : String(updateError)));
       return null;
     } finally {
       setChatProvidersSavingId(null);
@@ -814,7 +998,7 @@ export const useSettingsPageState = (
       await loadChatProviders();
       return true;
     } catch (deleteError) {
-      setChatProvidersError(deleteError instanceof Error ? deleteError.message : String(deleteError));
+      setChatProvidersError(redactChatProviderError(deleteError instanceof Error ? deleteError.message : String(deleteError)));
       return false;
     } finally {
       setChatProvidersSavingId(null);
@@ -830,7 +1014,7 @@ export const useSettingsPageState = (
       await loadChatProviders();
       return created;
     } catch (createError) {
-      setChatProvidersError(createError instanceof Error ? createError.message : String(createError));
+      setChatProvidersError(redactChatProviderError(createError instanceof Error ? createError.message : String(createError)));
       return null;
     } finally {
       setChatProvidersSavingId(null);
@@ -847,7 +1031,7 @@ export const useSettingsPageState = (
       await loadChatProviders();
       return updated;
     } catch (updateError) {
-      setChatProvidersError(updateError instanceof Error ? updateError.message : String(updateError));
+      setChatProvidersError(redactChatProviderError(updateError instanceof Error ? updateError.message : String(updateError)));
       return null;
     } finally {
       setChatProvidersSavingId(null);
@@ -861,7 +1045,7 @@ export const useSettingsPageState = (
       await loadChatProviders();
       return true;
     } catch (deleteError) {
-      setChatProvidersError(deleteError instanceof Error ? deleteError.message : String(deleteError));
+      setChatProvidersError(redactChatProviderError(deleteError instanceof Error ? deleteError.message : String(deleteError)));
       return false;
     } finally {
       setChatProvidersSavingId(null);
@@ -1020,10 +1204,23 @@ export const useSettingsPageState = (
       connections: chatProviderConnections,
       bindings: chatProviderBindings,
       deliveriesByConnection: chatProviderDeliveriesByConnection,
+      deliveryErrorsByConnection: chatProviderDeliveryErrors,
+      verificationOutcomes: chatProviderVerificationOutcomes,
+      health: chatProviderHealth,
       loading: chatProvidersLoading,
+      healthPending: chatProviderHealthPending,
       savingId: chatProvidersSavingId,
+      pendingConnections: chatProviderPendingConnections,
+      pendingDeliveries: chatProviderPendingDeliveries,
       error: chatProvidersError,
+      statusMessage: chatProvidersStatusMessage,
+      clearError: clearChatProviderError,
       load: loadChatProviders,
+      refreshHealth: refreshChatProviderHealth,
+      verifyConnection: verifyChatProviderConnectionRecord,
+      inspectDelivery: inspectChatProviderDelivery,
+      retryDelivery: retryChatProviderDeliveryRecord,
+      cancelDelivery: cancelChatProviderDeliveryRecord,
       createConnection: createChatProviderConnectionRecord,
       updateConnection: updateChatProviderConnectionRecord,
       deleteConnection: deleteChatProviderConnectionRecord,
