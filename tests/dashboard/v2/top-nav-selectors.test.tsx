@@ -432,8 +432,8 @@ describe("TopNav guidance and sprint selectors", () => {
     const user = userEvent.setup();
     renderTopNav({}, "de");
 
-    await user.click(screen.getByRole("button", { name: /Project selector, selected project: Alpha/i }));
-    await user.click(screen.getByRole("button", { name: "Add Project" }));
+    await user.click(screen.getByRole("button", { name: /Projektauswahl, ausgewähltes Projekt: Alpha/i }));
+    await user.click(screen.getByRole("button", { name: "Projekt hinzufügen" }));
 
     expect(await screen.findByRole("dialog", { name: /Projekt hinzufügen/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/Projektname/i)).toBeInTheDocument();
