@@ -1,3 +1,5 @@
+import { readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type {
   DashboardMessage,
@@ -46,6 +48,42 @@ const bundles = {
   tasks: taskMessages,
 } as const satisfies Readonly<Record<string, DashboardMessageBundle>>;
 
+const requiredCatalogNames = [
+  "agents",
+  "app",
+  "browser-preview",
+  "chat",
+  "custom-dashboards",
+  "file-browser",
+  "knowledge",
+  "live",
+  "memory",
+  "nodes",
+  "onboarding",
+  "overview",
+  "projects",
+  "scheduler",
+  "settings-agents-guidance",
+  "settings-integrations",
+  "settings-models",
+  "settings-operations",
+  "settings-shell",
+  "shell",
+  "sprint-authoring",
+  "sprints",
+  "stats",
+  "tasks",
+] as const;
+
+const catalogDirectory = fileURLToPath(new URL(
+  "../../../dashboard/src/v2/i18n/messages/",
+  import.meta.url,
+));
+const discoveredCatalogNames = readdirSync(catalogDirectory)
+  .filter((fileName) => fileName.endsWith(".ts"))
+  .map((fileName) => fileName.slice(0, -3))
+  .sort();
+
 const placeholderPattern = /\{([A-Za-z][A-Za-z0-9_]*)\}/g;
 const htmlPattern = /<\/?(?:script|style|iframe|object|embed|link|meta|[a-z][a-z0-9-]*)\b[^>]*>/i;
 const intentionalEmptyAffixes = new Map([
@@ -67,6 +105,14 @@ function messageForms(value: DashboardMessage): Readonly<Record<string, string>>
 }
 
 describe("dashboard i18n catalog parity", () => {
+  it("contains every required feature catalog", () => {
+    expect(discoveredCatalogNames).toEqual([...requiredCatalogNames].sort());
+  });
+
+  it("imports every discovered feature catalog into the parity suite", () => {
+    expect(Object.keys(bundles).sort()).toEqual(discoveredCatalogNames);
+  });
+
   for (const [bundleName, bundle] of Object.entries(bundles)) {
     it(`${bundleName} has complete, safe English and German messages`, () => {
       const englishKeys = Object.keys(bundle.en).sort();

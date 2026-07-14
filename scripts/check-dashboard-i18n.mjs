@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -38,7 +37,7 @@ const userFacingMetadataKeys = new Set([
   "title",
 ]);
 const metadataContainerPattern = /(?:ACTION|CATEGORY|COLUMN|CONTROL|FILTER|ITEM|MENU|NAVIGATION|OPTION|SECTION|STEP|TAB|TOOLTIP)/i;
-const technicalTextPattern = /^(?:\d+(?:\.\d+)?%?|--|\.\.\.|[A-Z][A-Z0-9_-]{1,8}|(?:Ctrl|Cmd|Alt|Shift|Enter|Esc|Tab|Space|Home|End|UTC|JSON|HTML|CSS|JS|TS|TSX|JSX|MCP|API|CLI|CI|PR|URL|HTTP|HTTPS|SSE|stdio|Docker|Git|GitHub|GitLab|Code UX|CodeUX|Jules|Gemini|Codex|Claude|OpenCode|Qwen|Antigravity|Notion|Jira|Slack|Teams|Figma|Monaco|MIT))$/;
+const technicalTextPattern = /^(?:\d+(?:\.\d+)?%?|--|\.\.\.|[A-Z][A-Z0-9_-]{1,8}|(?:Ctrl|Cmd|Alt|Shift|Enter|Esc|Tab|Space|Home|End|UTC|JSON|HTML|CSS|JS|TS|TSX|JSX|MCP|API|CLI|CI|PR|URL|HTTP|HTTPS|SSE|stdio|Docker|Git|GitHub|GitLab|Code UX|CodeUX|Jules|Gemini|Codex|Claude|Claude Code|OpenCode|Qwen|Antigravity|Notion|Jira|Slack|Teams|Figma|FigJam|Figma \/ FigJam|Google Drive|Monaco|MIT))$/;
 
 function toRelative(filePath) {
   return path.relative(root, filePath).split(path.sep).join("/");
@@ -74,8 +73,7 @@ function isUserFacingText(value) {
   const normalized = normalizeText(value);
   return normalized.length > 1
     && /[A-Za-zÄÖÜäöüß]/.test(normalized)
-    && !technicalTextPattern.test(normalized)
-    && !/^[-+./:#@_a-z0-9]+$/i.test(normalized);
+    && !technicalTextPattern.test(normalized);
 }
 
 function getLine(sourceFile, node) {
@@ -119,7 +117,7 @@ function getJsxOpeningElement(node) {
   return null;
 }
 
-function inspectSource(filePath, source) {
+export function inspectDashboardI18nSource(filePath, source) {
   const sourceFile = ts.createSourceFile(
     filePath,
     source,
@@ -172,58 +170,29 @@ function validateAllowlist(value) {
     throw new Error("dashboard i18n allowlist must contain { version: 1, entries: [] }");
   }
   return value.entries.map((entry, index) => {
-    const exactEntry = typeof entry?.kind === "string" && typeof entry?.text === "string";
-    const fileSnapshotEntry = typeof entry?.fingerprint === "string"
-      && Number.isInteger(entry?.candidateCount)
-      && entry.candidateCount > 0;
-    if (!entry || typeof entry.path !== "string" || (!exactEntry && !fileSnapshotEntry)
+    if (!entry || typeof entry.path !== "string"
+      || !Number.isInteger(entry.line) || entry.line < 1
+      || typeof entry.kind !== "string" || typeof entry.text !== "string"
       || typeof entry.rationale !== "string" || entry.rationale.trim().length < 12) {
-      throw new Error(`dashboard i18n allowlist entry ${index + 1} must include path, a reviewable rationale, and either exact kind/text or a candidate fingerprint`);
+      throw new Error(`dashboard i18n allowlist entry ${index + 1} must include exact path, line, kind, text, and a reviewable rationale`);
     }
     return entry;
   });
 }
 
-function fingerprintViolations(violations) {
-  return createHash("sha256")
-    .update(violations.map(({ kind, text }) => `${kind}\0${text}`).sort().join("\n"))
-    .digest("hex");
-}
-
 function applyAllowlist(violations, entries) {
   const unused = new Set(entries);
-  const exactEntries = entries.filter((entry) => typeof entry.kind === "string");
-  const snapshotEntries = entries.filter((entry) => typeof entry.fingerprint === "string");
-  const candidatesByPath = Map.groupBy(violations, (violation) => violation.path);
-  const snapshottedPaths = new Set();
-  const snapshotMismatches = [];
-
-  for (const entry of snapshotEntries) {
-    const candidates = candidatesByPath.get(entry.path) ?? [];
-    const fingerprint = fingerprintViolations(candidates);
-    if (candidates.length === entry.candidateCount && fingerprint === entry.fingerprint) {
-      unused.delete(entry);
-      snapshottedPaths.add(entry.path);
-    } else {
-      snapshotMismatches.push({
-        path: entry.path,
-        expectedCount: entry.candidateCount,
-        actualCount: candidates.length,
-        expectedFingerprint: entry.fingerprint,
-        actualFingerprint: fingerprint,
-      });
-    }
-  }
-
   const blocking = violations.filter((violation) => {
-    if (snapshottedPaths.has(violation.path)) return false;
-    const entry = exactEntries.find((candidate) => (
-      candidate.path === violation.path && candidate.kind === violation.kind && candidate.text === violation.text
+    const entry = entries.find((candidate) => (
+      candidate.path === violation.path
+        && candidate.line === violation.line
+        && candidate.kind === violation.kind
+        && candidate.text === violation.text
     ));
     if (entry) unused.delete(entry);
     return !entry;
   });
-  return { blocking, snapshotMismatches, unused: [...unused] };
+  return { blocking, unused: [...unused] };
 }
 
 export async function checkDashboardI18n() {
@@ -236,7 +205,7 @@ export async function checkDashboardI18n() {
   const violations = sources.flatMap(({ filePath, source }) => {
     const relativePath = toRelative(filePath);
     if (relativePath.startsWith("dashboard/src/v2/i18n/messages/")) return [];
-    return inspectSource(filePath, source);
+    return inspectDashboardI18nSource(filePath, source);
   });
   const result = applyAllowlist(violations, allowlist);
   return { ...result, scannedFiles: files.length, candidateCount: violations.length, allowlistCount: allowlist.length };
@@ -247,13 +216,7 @@ export async function runDashboardI18nCheck({ log = console } = {}) {
   log.log(`Dashboard i18n: scanned ${result.scannedFiles} production TS/TSX files and ${result.candidateCount} static copy candidates.`);
   if (result.unused.length > 0) {
     log.error("Unused dashboard i18n allowlist entries must be removed:");
-    for (const entry of result.unused) log.error(`  - ${entry.path} [${entry.kind ?? "candidate-fingerprint"}] ${JSON.stringify(entry.text ?? entry.fingerprint)}`);
-  }
-  if (result.snapshotMismatches.length > 0) {
-    log.error("Dashboard i18n candidate fingerprints changed; review the copy and update only intentional exemptions:");
-    for (const mismatch of result.snapshotMismatches) {
-      log.error(`  - ${mismatch.path}: expected ${mismatch.expectedCount} candidates (${mismatch.expectedFingerprint}), found ${mismatch.actualCount} (${mismatch.actualFingerprint})`);
-    }
+    for (const entry of result.unused) log.error(`  - ${entry.path}:${entry.line} [${entry.kind}] ${JSON.stringify(entry.text)}`);
   }
   if (result.blocking.length > 0) {
     log.error("Untranslated dashboard-authored copy found outside message bundles:");
@@ -262,7 +225,7 @@ export async function runDashboardI18nCheck({ log = console } = {}) {
     }
     if (result.blocking.length > 50) log.error(`  ... ${result.blocking.length - 50} more`);
   }
-  if (result.blocking.length === 0 && result.snapshotMismatches.length === 0 && result.unused.length === 0) {
+  if (result.blocking.length === 0 && result.unused.length === 0) {
     log.log(`Dashboard i18n: passed with ${result.allowlistCount} exact, rationale-bearing exemptions.`);
     return true;
   }

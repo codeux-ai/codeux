@@ -2,490 +2,732 @@
   "version": 1,
   "entries": [
     {
-      "path": "dashboard/src/v2/AgentsPage.tsx",
-      "candidateCount": 19,
-      "fingerprint": "3586169a520077755aae22bf9af57e67678a6e2d1c290b71d32d6f1767b56d4b",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/agents/AgentAvatarCustomizer.tsx",
-      "candidateCount": 4,
-      "fingerprint": "2da604e68f0b27b7b103ae7ae8082f2bb950a5a0748e1060de470ac7465cc012",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/agents/AgentAvatarStage.tsx",
-      "candidateCount": 3,
-      "fingerprint": "affa8c34b67fa1b5ace331e20f26e9c2420eeab75ca6d0f8c7c1e084c808d717",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/agents/AgentKnowledgePanel.tsx",
-      "candidateCount": 9,
-      "fingerprint": "93c50e598e848c433ebe0496a933326f5b2bd7197788d942f458c502c55045e7",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/agents/AgentMcpManageModal.tsx",
-      "candidateCount": 12,
-      "fingerprint": "1a734ab0fa1c13a0b26679b6fca3510624fbd29cedf9d07460f4e5c2bb151b31",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/agents/AgentMemoryConfigPanel.tsx",
-      "candidateCount": 19,
-      "fingerprint": "3bb4ff1fecc31a4b46682b3bda229c7f6f68f91260199a3e993f26441798ca7a",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/agents/AgentPresetDetailPanel.tsx",
-      "candidateCount": 22,
-      "fingerprint": "34a1c471d62ca7f9c78469c7e35217f3c6b88cb1c92fba971b553f345efda728",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/agents/AgentPresetEditorPanel.tsx",
-      "candidateCount": 48,
-      "fingerprint": "c604e40a1f977f29577369b7c7460e5a3f63fd1c8da85ae87e3ec305bd719f3f",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/agents/AgentsHero.tsx",
-      "candidateCount": 4,
-      "fingerprint": "d979d4b8fa2be886704c60df8f99924c8695364b636320ce05541da68397523f",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/agents/BaseAgentUpdateNotice.tsx",
-      "candidateCount": 2,
-      "fingerprint": "8e27ce6016ba2dd4b9898d7d372f4991f62da5d5b1282e12021f1f280b0f09f6",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/agents/InstructionFileEditorPanel.tsx",
-      "candidateCount": 6,
-      "fingerprint": "6611fe11124a03e17d8094a48e6e4b59cc44727d53e2a524b975311a799e937d",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/agents/PersistentSkillStorageChip.tsx",
-      "candidateCount": 8,
-      "fingerprint": "7b3aa8b9a5c91e8af9dd8d2d762617866c5c55630ac540142df0acffeb83968d",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/file-browser/ChangesList.tsx",
-      "candidateCount": 3,
-      "fingerprint": "f2d83af04a89903dc1f4c6f2c9b8709072324f0b1d0b50f9113d012c4fea12f9",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/file-browser/DiffViewer.tsx",
-      "candidateCount": 10,
-      "fingerprint": "7d2656dad7e06932c62f2f63cc09a672db56c7379fa7e606d6a0b0fee53c49b0",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/file-browser/FileTree.tsx",
-      "candidateCount": 1,
-      "fingerprint": "9f7b3a3a4d7e9778704897951b1b5f5878bb8b2529c0973d68dc68f162123cd9",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/file-browser/FileViewer.tsx",
-      "candidateCount": 10,
-      "fingerprint": "19691767c4e18c9fe2c50de9b76399e160ba57178328d2d085c870f991e00f64",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/HeaderStats.tsx",
-      "candidateCount": 11,
-      "fingerprint": "7e7a0fd49d19b12d8b769f900ff413759777a715ed01b4626a6f2a187f75d069",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "path": "dashboard/src/v2/components/memory/ModelBrowser.tsx",
+      "line": 671,
+      "kind": "attribute:placeholder",
+      "text": "owner/repo or https://huggingface.co/owner/repo",
+      "rationale": "This is an example of user-supplied repository or license metadata and remains verbatim."
     },
     {
       "path": "dashboard/src/v2/components/memory/ModelBrowser.tsx",
-      "candidateCount": 2,
-      "fingerprint": "c1a4d7eeb6f1cb38c51db149f69bbec18b047f0ecfeda96967f73872ecd0a031",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "line": 695,
+      "kind": "attribute:placeholder",
+      "text": "MIT or Apache-2.0",
+      "rationale": "This is an example of user-supplied repository or license metadata and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/memory/ModelBrowser.tsx",
+      "line": 699,
+      "kind": "attribute:placeholder",
+      "text": "https://...",
+      "rationale": "This is an example of user-supplied repository or license metadata and remains verbatim."
     },
     {
       "path": "dashboard/src/v2/components/nodes/NodeFlowInspector.tsx",
-      "candidateCount": 1,
-      "fingerprint": "afdafc0b88c0e4faf6836328a771b6e6be288e8c9ccc4067a0538c04ba4cd27f",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "line": 100,
+      "kind": "jsx-text",
+      "text": "· v",
+      "rationale": "This fragment prefixes a runtime version number and is technical data rather than interface copy."
     },
     {
       "path": "dashboard/src/v2/components/nodes/NodeRunDebugger.tsx",
-      "candidateCount": 1,
-      "fingerprint": "afdafc0b88c0e4faf6836328a771b6e6be288e8c9ccc4067a0538c04ba4cd27f",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "line": 16,
+      "kind": "jsx-text",
+      "text": "· v",
+      "rationale": "This fragment prefixes a runtime version number and is technical data rather than interface copy."
     },
     {
       "path": "dashboard/src/v2/components/onboarding/OnboardingIntroductionStep.tsx",
-      "candidateCount": 1,
-      "fingerprint": "231ec1f99ac239d856692f4be519dd06bcc7f563c7c06d46ebc7f4a4c2675cbf",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/OverviewTelemetry.tsx",
-      "candidateCount": 11,
-      "fingerprint": "29f3daf973e262df173b28b4328bec40ff84e174aa2b68a8ff91f611e3f08025",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "line": 89,
+      "kind": "jsx-expression",
+      "text": "MIT License Copyright (c) 2026 Pierre Voss Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the \"Software\"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
+      "rationale": "The verbatim MIT license is English legal documentation and must not be translated."
     },
     {
       "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
-      "candidateCount": 1,
-      "fingerprint": "afdafc0b88c0e4faf6836328a771b6e6be288e8c9ccc4067a0538c04ba4cd27f",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "line": 118,
+      "kind": "jsx-text",
+      "text": "· v",
+      "rationale": "This fragment prefixes a runtime version number and is technical data rather than interface copy."
     },
     {
       "path": "dashboard/src/v2/components/settings/BranchNameSchemeEditor.tsx",
-      "candidateCount": 2,
-      "fingerprint": "54a57f9428024f9bc88cb5ace4e8dd86e409c955924104951ee9396377bb6430",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "line": 64,
+      "kind": "attribute:placeholder",
+      "text": "e.g. feature/sprint{sprint_id}-implementation",
+      "rationale": "This is a technical naming-template example whose protocol tokens must remain unchanged."
     },
     {
-      "path": "dashboard/src/v2/components/settings/panels/ProviderPanel.tsx",
-      "candidateCount": 1,
-      "fingerprint": "80b58a1c65e51a99439cb1ee1ef4b7f6b3ace4cf0d38df7ed54d5e5e1c0325ef",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/settings/panels/SettingsAgentAuthoringPanel.tsx",
-      "candidateCount": 7,
-      "fingerprint": "7428061c98798eca746a88eac49d1b965d0ddef3acd1cd61e3c789e3525263b2",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/settings/panels/SettingsAgentPersistentSkillsPanel.tsx",
-      "candidateCount": 12,
-      "fingerprint": "f04b89dd5fd3e8b698d347f3e55511202ba13c5b9c6ac9ae590707f3d8fb15ea",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/settings/panels/SettingsAgentReflectionPanel.tsx",
-      "candidateCount": 4,
-      "fingerprint": "7ccbddddc18b36d69acda1d52edf5215edf426b9a1818fca331093d5d995aef8",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/settings/panels/SettingsAgentRoutingPanel.tsx",
-      "candidateCount": 10,
-      "fingerprint": "c96e4c9e7e110110e3bbd4a19157a8a80887f341831acd9e9d659b45f5c3ad2b",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "path": "dashboard/src/v2/components/settings/BranchNameSchemeEditor.tsx",
+      "line": 82,
+      "kind": "attribute:placeholder",
+      "text": "e.g. ({sprint_tag}) {task_title}",
+      "rationale": "This is a technical naming-template example whose protocol tokens must remain unchanged."
     },
     {
       "path": "dashboard/src/v2/components/settings/panels/SettingsBrowserPanel.tsx",
-      "candidateCount": 1,
-      "fingerprint": "6e85fd26f2eb06c0c7a5d9bd5d1e7852eb373cdb0b4e74fd5b37e6e482aae2ee",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/settings/panels/SettingsGuidancePanel.tsx",
-      "candidateCount": 14,
-      "fingerprint": "2ce55fddbd00b1f8f231c096fc20164a0ad58fa6f2f1efd8cf76e090f23ed107",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "line": 200,
+      "kind": "attribute:placeholder",
+      "text": "pnpm dev --host 0.0.0.0",
+      "rationale": "This is an executable command example and must remain verbatim."
     },
     {
       "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
-      "candidateCount": 3,
-      "fingerprint": "86a1187bfe7158f1aaf273f213475e00f1fac8f27cb145df04cd3394157d509f",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "line": 946,
+      "kind": "attribute:placeholder",
+      "text": "/project",
+      "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
+      "line": 950,
+      "kind": "attribute:placeholder",
+      "text": "payments, mobile, infra",
+      "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
+      "line": 998,
+      "kind": "attribute:placeholder",
+      "text": "C0123456789 or chat-id",
+      "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
+      "line": 1036,
+      "kind": "attribute:placeholder",
+      "text": "/project",
+      "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
+      "line": 1046,
+      "kind": "attribute:placeholder",
+      "text": "mobile",
+      "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
+      "line": 1577,
+      "kind": "attribute:placeholder",
+      "text": "agents@codeux.ai",
+      "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
+      "line": 1753,
+      "kind": "attribute:placeholder",
+      "text": "https://api.example.com",
+      "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
     },
     {
       "path": "dashboard/src/v2/components/settings/panels/SettingsMcpPanel.tsx",
-      "candidateCount": 5,
-      "fingerprint": "623e1984a3519fc45e630958bbab2f19030da0d49a2ae76597980f22a7467dbf",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "line": 635,
+      "kind": "attribute:placeholder",
+      "text": "{ \"API_KEY\": \"...\" }",
+      "rationale": "This is a JSON configuration example and must remain verbatim."
     },
     {
-      "path": "dashboard/src/v2/components/settings/panels/SettingsTechstacksPanel.tsx",
-      "candidateCount": 24,
-      "fingerprint": "73e7935afbc807118e36fef4ecf048557f225f535857052a845b5aadac7ab2cc",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "path": "dashboard/src/v2/components/settings/panels/SettingsMcpPanel.tsx",
+      "line": 635,
+      "kind": "jsx-expression",
+      "text": "{ \"API_KEY\": \"...\" }",
+      "rationale": "This is a JSON configuration example and must remain verbatim."
     },
     {
-      "path": "dashboard/src/v2/components/settings/PersistentSkillStorageManager.tsx",
-      "candidateCount": 16,
-      "fingerprint": "63f83ab352803a492d0b977803e3179c45271c1d86334ac9b2acee5c09452302",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "path": "dashboard/src/v2/components/settings/panels/SettingsMcpPanel.tsx",
+      "line": 645,
+      "kind": "attribute:placeholder",
+      "text": "{ \"Authorization\": \"Bearer ...\" }",
+      "rationale": "This is a JSON configuration example and must remain verbatim."
     },
     {
-      "path": "dashboard/src/v2/components/settings/ProjectSettingsEditor.tsx",
-      "candidateCount": 73,
-      "fingerprint": "4fe6a9a7506ef8a4b57ca8ede7443feaf621e3fd6240e08c2074d513c85ee513",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "path": "dashboard/src/v2/components/settings/panels/SettingsMcpPanel.tsx",
+      "line": 645,
+      "kind": "jsx-expression",
+      "text": "{ \"Authorization\": \"Bearer ...\" }",
+      "rationale": "This is a JSON configuration example and must remain verbatim."
     },
     {
       "path": "dashboard/src/v2/components/settings/ProviderInstanceCard.tsx",
-      "candidateCount": 1,
-      "fingerprint": "c66f0a1a0a0715cce41e344d8cd4b6522d1ac3901364ab30e31b9e148196a707",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/settings/SettingsCategoryRail.tsx",
-      "candidateCount": 1,
-      "fingerprint": "0d4d0b44a15a70d4b6691dba6a4e23c987e7d92108231984e12383ac167a297e",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/components/SourcesGrid.tsx",
-      "candidateCount": 1,
-      "fingerprint": "cdeb8c7657489ebc114904aa75b3ac872a28cfe4c66e43312a7088ac09b85e38",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "line": 445,
+      "kind": "jsx-text",
+      "text": "~/.code-ux/credentials/",
+      "rationale": "This is a filesystem path and must remain verbatim."
     },
     {
       "path": "dashboard/src/v2/components/sprints/SprintCanvasImportModal.tsx",
-      "candidateCount": 1,
-      "fingerprint": "c85ebc1607b548bbf810ceb10ccbc5eb80e8504771a5185f9e1a5670be7fb246",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "line": 478,
+      "kind": "attribute:placeholder",
+      "text": "miro-board-id",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
     },
     {
-      "path": "dashboard/src/v2/components/sprints/SprintImportMenu.tsx",
-      "candidateCount": 1,
-      "fingerprint": "28a7306307605abcd2a5a903a2f761af1c86d7ce1ca3ac5bc2fddb899f27f6d7",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "path": "dashboard/src/v2/components/sprints/SprintCanvasImportModal.tsx",
+      "line": 489,
+      "kind": "attribute:placeholder",
+      "text": "lucid-document-id",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintCanvasImportModal.tsx",
+      "line": 500,
+      "kind": "attribute:placeholder",
+      "text": "figma-file-key",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintCanvasImportModal.tsx",
+      "line": 511,
+      "kind": "attribute:placeholder",
+      "text": "mural-workspace-id",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintCanvasImportModal.tsx",
+      "line": 522,
+      "kind": "attribute:placeholder",
+      "text": "mural-id",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintCanvasImportModal.tsx",
+      "line": 572,
+      "kind": "attribute:placeholder",
+      "text": "sticky_note, text",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
     },
     {
       "path": "dashboard/src/v2/components/sprints/SprintIssueImportModal.tsx",
-      "candidateCount": 3,
-      "fingerprint": "659a164898c1e56b03b1433d148cc58b4538d9f92e6b456aa6004b672bf4769d",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "line": 637,
+      "kind": "attribute:placeholder",
+      "text": "owner/repository",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintIssueImportModal.tsx",
+      "line": 744,
+      "kind": "attribute:placeholder",
+      "text": "bug, security",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintIssueImportModal.tsx",
+      "line": 752,
+      "kind": "attribute:placeholder",
+      "text": "me or alice",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintIssueImportModal.tsx",
+      "line": 761,
+      "kind": "attribute:placeholder",
+      "text": "octocat",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintIssueImportModal.tsx",
+      "line": 770,
+      "kind": "attribute:placeholder",
+      "text": "v1.2",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
     },
     {
       "path": "dashboard/src/v2/components/sprints/SprintJiraImportModal.tsx",
-      "candidateCount": 4,
-      "fingerprint": "76a697fc36efd1a8aadcbe102492be84e9fb33eb3f47e16fae82b1a910016a61",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "line": 799,
+      "kind": "attribute:placeholder",
+      "text": "me",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintJiraImportModal.tsx",
+      "line": 814,
+      "kind": "attribute:placeholder",
+      "text": "currentUser()",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintJiraImportModal.tsx",
+      "line": 836,
+      "kind": "attribute:placeholder",
+      "text": "Bug, Story, Epic",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintJiraImportModal.tsx",
+      "line": 851,
+      "kind": "attribute:placeholder",
+      "text": "High, Critical, Medium",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintJiraImportModal.tsx",
+      "line": 912,
+      "kind": "attribute:placeholder",
+      "text": "project = OPS AND labels in (security)",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
     },
     {
       "path": "dashboard/src/v2/components/sprints/SprintProjectManagementImportModal.tsx",
-      "candidateCount": 2,
-      "fingerprint": "c9b2e582516e25990c97c6dc768fe849c3d282df88ebe55d923000f400000d3f",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "line": 503,
+      "kind": "attribute:placeholder",
+      "text": "database-id",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
     },
     {
-      "path": "dashboard/src/v2/components/stats/StatsMetricCard.tsx",
-      "candidateCount": 1,
-      "fingerprint": "046f36bd917c00e8f7a828f97a32c82024d2e7a490b6b5117a7777e4adabafaa",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "path": "dashboard/src/v2/components/sprints/SprintProjectManagementImportModal.tsx",
+      "line": 514,
+      "kind": "attribute:placeholder",
+      "text": "workspace-gid",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
     },
     {
-      "path": "dashboard/src/v2/components/stats/TopCardsModeRenderer.tsx",
-      "candidateCount": 26,
-      "fingerprint": "c75946ea44dc82b9a55b15993be09cc6f82d5a26f54f30149f5f2c147aa1812a",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "path": "dashboard/src/v2/components/sprints/SprintProjectManagementImportModal.tsx",
+      "line": 537,
+      "kind": "attribute:placeholder",
+      "text": "team-id",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
     },
     {
-      "path": "dashboard/src/v2/components/TasksList.tsx",
-      "candidateCount": 6,
-      "fingerprint": "16af07ea2bf57dd13ebf88dde838562bdaf9a80b719408ae22ec3f8f7260231e",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "path": "dashboard/src/v2/components/sprints/SprintProjectManagementImportModal.tsx",
+      "line": 558,
+      "kind": "attribute:placeholder",
+      "text": "In Progress",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
     },
     {
-      "path": "dashboard/src/v2/components/ui/MarkdownEditorField.tsx",
-      "candidateCount": 2,
-      "fingerprint": "ffb2618d66a02f4e1e055a80f5e8f3c087915479fa07c556681372c90616a91d",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/DashboardV2.tsx",
-      "candidateCount": 6,
-      "fingerprint": "34d456ecdddc6e14ae951046329dcde947e5a9c591b08cf45611158991d3d75c",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/FileBrowserPage.tsx",
-      "candidateCount": 25,
-      "fingerprint": "ca03cfd84d278ffc3ab29e75e58bd855df0ccb84d8e9639c6289ba8007cfc403",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "candidateCount": 36,
-      "fingerprint": "2fd85600e732427a9ea0bae9dcdf81dae86f97532d799360b75950f1666a014e",
-      "rationale": "Exact baseline for stable presentation metadata or runtime identifiers resolved by an owning UI boundary; any candidate change requires review."
-    },
-    {
-      "path": "dashboard/src/v2/lib/agent-avatar.ts",
-      "candidateCount": 21,
-      "fingerprint": "ad964acc13d26ca2debc6ebff71706f2b0ea888c75772df1aea1305a6271406e",
-      "rationale": "Exact baseline for stable presentation metadata or runtime identifiers resolved by an owning UI boundary; any candidate change requires review."
-    },
-    {
-      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
-      "candidateCount": 8,
-      "fingerprint": "0e8acc47dca7b249e8e6a386ae35ab9b9675cb5b8a1e740cec26d647a2665819",
-      "rationale": "Exact baseline for stable presentation metadata or runtime identifiers resolved by an owning UI boundary; any candidate change requires review."
-    },
-    {
-      "path": "dashboard/src/v2/lib/experience-mode.ts",
-      "candidateCount": 3,
-      "fingerprint": "a506653efa978247b729ef36325b0afda20c66ab2c7398f15de2815122cb5b0a",
-      "rationale": "Exact baseline for stable presentation metadata or runtime identifiers resolved by an owning UI boundary; any candidate change requires review."
-    },
-    {
-      "path": "dashboard/src/v2/lib/navigation-items.ts",
-      "candidateCount": 1,
-      "fingerprint": "d730caa5e55f8a4e36725b7402c8005f23fb123b98cb825a9ca1acfa98773395",
-      "rationale": "Exact baseline for stable presentation metadata or runtime identifiers resolved by an owning UI boundary; any candidate change requires review."
-    },
-    {
-      "path": "dashboard/src/v2/lib/no-project-chat-assistant.ts",
-      "candidateCount": 11,
-      "fingerprint": "a45175aab949ee81f47ef14ac1b4779f31d0cda6e53256250faa5d70a62f34ef",
-      "rationale": "Exact baseline for stable presentation metadata or runtime identifiers resolved by an owning UI boundary; any candidate change requires review."
+      "path": "dashboard/src/v2/components/sprints/SprintProjectManagementImportModal.tsx",
+      "line": 578,
+      "kind": "attribute:placeholder",
+      "text": "triage, backend",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
     },
     {
       "path": "dashboard/src/v2/lib/provider-runtime-preview.ts",
-      "candidateCount": 6,
-      "fingerprint": "9e6fd31c97e22cc937907816127ac79e961982016b36b787e066f296ad07537f",
-      "rationale": "Exact baseline for stable presentation metadata or runtime identifiers resolved by an owning UI boundary; any candidate change requires review."
+      "line": 127,
+      "kind": "metadata:label",
+      "text": "Local auth",
+      "rationale": "This is compatibility metadata for provider authentication protocol values; localized option builders own presentation."
+    },
+    {
+      "path": "dashboard/src/v2/lib/provider-runtime-preview.ts",
+      "line": 128,
+      "kind": "metadata:label",
+      "text": "Coding Plan",
+      "rationale": "This is compatibility metadata for provider authentication protocol values; localized option builders own presentation."
+    },
+    {
+      "path": "dashboard/src/v2/lib/provider-runtime-preview.ts",
+      "line": 129,
+      "kind": "metadata:label",
+      "text": "Custom endpoint",
+      "rationale": "This is compatibility metadata for provider authentication protocol values; localized option builders own presentation."
+    },
+    {
+      "path": "dashboard/src/v2/lib/provider-runtime-preview.ts",
+      "line": 133,
+      "kind": "metadata:label",
+      "text": "OpenAI-compatible",
+      "rationale": "This is compatibility metadata for provider authentication protocol values; localized option builders own presentation."
+    },
+    {
+      "path": "dashboard/src/v2/lib/provider-runtime-preview.ts",
+      "line": 134,
+      "kind": "metadata:label",
+      "text": "Anthropic",
+      "rationale": "This is compatibility metadata for provider authentication protocol values; localized option builders own presentation."
+    },
+    {
+      "path": "dashboard/src/v2/lib/provider-runtime-preview.ts",
+      "line": 139,
+      "kind": "metadata:label",
+      "text": "International",
+      "rationale": "This is compatibility metadata for provider authentication protocol values; localized option builders own presentation."
+    },
+    {
+      "path": "dashboard/src/v2/lib/provider-runtime-preview.ts",
+      "line": 140,
+      "kind": "metadata:label",
+      "text": "China",
+      "rationale": "This is compatibility metadata for provider authentication protocol values; localized option builders own presentation."
+    },
+    {
+      "path": "dashboard/src/v2/lib/provider-runtime-preview.ts",
+      "line": 144,
+      "kind": "metadata:label",
+      "text": "Local auth",
+      "rationale": "This is compatibility metadata for provider authentication protocol values; localized option builders own presentation."
+    },
+    {
+      "path": "dashboard/src/v2/lib/provider-runtime-preview.ts",
+      "line": 145,
+      "kind": "metadata:label",
+      "text": "Provider key",
+      "rationale": "This is compatibility metadata for provider authentication protocol values; localized option builders own presentation."
+    },
+    {
+      "path": "dashboard/src/v2/lib/provider-runtime-preview.ts",
+      "line": 146,
+      "kind": "metadata:label",
+      "text": "Custom endpoint",
+      "rationale": "This is compatibility metadata for provider authentication protocol values; localized option builders own presentation."
     },
     {
       "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
-      "candidateCount": 38,
-      "fingerprint": "41cfc5c1a978d01cf8a706d510450dddc8b967f77810baa2a423f0cca2855170",
-      "rationale": "Exact baseline for stable presentation metadata or runtime identifiers resolved by an owning UI boundary; any candidate change requires review."
+      "line": 28,
+      "kind": "metadata:title",
+      "text": "Project Context",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
     },
     {
-      "path": "dashboard/src/v2/pages/stats/components/AnalysisStudioSection.tsx",
-      "candidateCount": 3,
-      "fingerprint": "fd10b42198006b2946d6727fca758a924d09f859c230ade4a0e5d28835d033bd",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 38,
+      "kind": "metadata:title",
+      "text": "Automation",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
     },
     {
-      "path": "dashboard/src/v2/pages/stats/components/CompositionStudio.tsx",
-      "candidateCount": 26,
-      "fingerprint": "2f10b692eb38c7d69d4e516cd605d12662de72e0d734a0d1c92bc089d2b6ca70",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 48,
+      "kind": "metadata:title",
+      "text": "Docker Runtime",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 58,
+      "kind": "metadata:title",
+      "text": "System Runtime",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 68,
+      "kind": "metadata:title",
+      "text": "Restart Behavior",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 78,
+      "kind": "metadata:title",
+      "text": "Database Settings",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 88,
+      "kind": "metadata:title",
+      "text": "Onboarding",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 98,
+      "kind": "metadata:title",
+      "text": "Display Settings",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 108,
+      "kind": "metadata:title",
+      "text": "Background",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 118,
+      "kind": "metadata:title",
+      "text": "Default Routing Anchors",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 128,
+      "kind": "metadata:title",
+      "text": "Base Provider Configuration",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 138,
+      "kind": "metadata:title",
+      "text": "Route Mapping",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 148,
+      "kind": "metadata:title",
+      "text": "Model Pricing",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 158,
+      "kind": "metadata:title",
+      "text": "Git Flow",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 168,
+      "kind": "metadata:title",
+      "text": "Merge Gates & Autofix",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 179,
+      "kind": "metadata:title",
+      "text": "Quality Assurance",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 189,
+      "kind": "metadata:title",
+      "text": "Guardrails",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 199,
+      "kind": "metadata:title",
+      "text": "Rate Limit",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 209,
+      "kind": "metadata:title",
+      "text": "Watch Loop",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 219,
+      "kind": "metadata:title",
+      "text": "Workspace Hygiene",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 229,
+      "kind": "metadata:title",
+      "text": "Workspace Visibility",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 239,
+      "kind": "metadata:title",
+      "text": "Runtime Limits",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 249,
+      "kind": "metadata:title",
+      "text": "Techstacks",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 260,
+      "kind": "metadata:title",
+      "text": "Guidance",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 271,
+      "kind": "metadata:title",
+      "text": "Project Markdown Mirror",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 281,
+      "kind": "metadata:title",
+      "text": "Agent Routing",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 291,
+      "kind": "metadata:title",
+      "text": "Memory System",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 301,
+      "kind": "metadata:title",
+      "text": "Long-Term Remediation Schedule",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 311,
+      "kind": "metadata:title",
+      "text": "Limits",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 321,
+      "kind": "metadata:title",
+      "text": "Embedding Provider",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 331,
+      "kind": "metadata:title",
+      "text": "Worker Learnings Instruction",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 341,
+      "kind": "metadata:title",
+      "text": "Integrations",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 351,
+      "kind": "metadata:title",
+      "text": "Jules Automation",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 361,
+      "kind": "metadata:title",
+      "text": "Git Host Configuration",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 372,
+      "kind": "metadata:title",
+      "text": "Jira Configuration",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 382,
+      "kind": "metadata:title",
+      "text": "Importer Configuration",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 393,
+      "kind": "metadata:title",
+      "text": "Provider Integration",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 404,
+      "kind": "metadata:title",
+      "text": "Provider Credentials",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 415,
+      "kind": "metadata:title",
+      "text": "MCP Servers",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 425,
+      "kind": "metadata:title",
+      "text": "Built-in MCP (Code UX)",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 435,
+      "kind": "metadata:title",
+      "text": "MCP Tool Category",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 445,
+      "kind": "metadata:title",
+      "text": "Custom MCP Server",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 456,
+      "kind": "metadata:title",
+      "text": "Danger Zone",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 466,
+      "kind": "metadata:title",
+      "text": "Project Memory",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 476,
+      "kind": "metadata:title",
+      "text": "System Memory",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
+    },
+    {
+      "path": "dashboard/src/v2/lib/settings-subcategory-docs.ts",
+      "line": 486,
+      "kind": "metadata:title",
+      "text": "System Database",
+      "rationale": "English documentation titles are stable lookup aliases; localized dashboard presentation is derived separately."
     },
     {
       "path": "dashboard/src/v2/pages/stats/components/GitTelemetryTab.tsx",
-      "candidateCount": 48,
-      "fingerprint": "1e73c99a0a4d244f663b60e2314f955eeab59b38a9cba4a1eaddf78016fa6542",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "line": 394,
+      "kind": "jsx-text",
+      "text": "PRs ·",
+      "rationale": "This is a compact Git or pricing unit used alongside runtime measurements."
     },
     {
-      "path": "dashboard/src/v2/pages/stats/components/InteractiveUsageChart.tsx",
-      "candidateCount": 16,
-      "fingerprint": "1bf0bad589c9da92549e6ba773288409464129171a2622b098ee10432c4f10b3",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "path": "dashboard/src/v2/pages/stats/components/GitTelemetryTab.tsx",
+      "line": 426,
+      "kind": "jsx-text",
+      "text": "PRs ·",
+      "rationale": "This is a compact Git or pricing unit used alongside runtime measurements."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/GitTelemetryTab.tsx",
+      "line": 435,
+      "kind": "jsx-text",
+      "text": "PRs ·",
+      "rationale": "This is a compact Git or pricing unit used alongside runtime measurements."
     },
     {
       "path": "dashboard/src/v2/pages/stats/components/ModelsStudio.tsx",
-      "candidateCount": 28,
-      "fingerprint": "7484647ae248eec6ece09612e93f6daffd2d06697bf22a5ba8bdd0ea9752abe7",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "line": 216,
+      "kind": "attribute:label",
+      "text": "$ / 1M Tok",
+      "rationale": "This is a compact Git or pricing unit used alongside runtime measurements."
     },
     {
       "path": "dashboard/src/v2/pages/stats/components/ReliabilityStudio.tsx",
-      "candidateCount": 34,
-      "fingerprint": "94b0adb4dd169e09219ccee4758b6b58da838bbcdbbfbbf841ea7a7795f859eb",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/pages/stats/components/stats-ui-primitives.tsx",
-      "candidateCount": 5,
-      "fingerprint": "21bb6ed86dd99af1826fa9ffedd4f628e50dcd10f2c2484087acd8cf757e4cf7",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/pages/stats/components/StatsPageHero.tsx",
-      "candidateCount": 12,
-      "fingerprint": "431b3c2865c2bc4af22e702b1d8cfc3164cdeb636463e4b36e844df7cca5b568",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/pages/stats/components/system/InvocationMessagesPanel.tsx",
-      "candidateCount": 9,
-      "fingerprint": "f2fc427a975f08835ae2236eddc5ca03d86a2e1b4f41ece84a30e15cedcc3094",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/pages/stats/components/system/InvocationsTable.tsx",
-      "candidateCount": 8,
-      "fingerprint": "28137ce93dc33b1b98e55c2ea5048edca0ab873b175e64217cd81a98c4729010",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/pages/stats/components/system/SystemFilterBar.tsx",
-      "candidateCount": 7,
-      "fingerprint": "74ce1ef8d86fab6a077f74696f6bfdc36b3161e91fd518def1ab3df4331d45e6",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/pages/stats/components/system/SystemStudio.tsx",
-      "candidateCount": 25,
-      "fingerprint": "2d83138c73a8b961f0c47e650d70ee89de6dafdd1a4c7d35032c2d71a545e3d5",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/pages/stats/components/TelemetryLedger.tsx",
-      "candidateCount": 26,
-      "fingerprint": "e2cf35dcc517e14e7cf9606ae9a17cd5c3d68a47f6decd0ec6d6edf26116e557",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/pages/stats/components/TelemetryLedgerTabs.tsx",
-      "candidateCount": 3,
-      "fingerprint": "b2d3bd2b68daf2eccdbf9ec614ccc3ef635096f31a2fef2bd2e2964f6c085597",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/pages/stats/components/TelemetrySectionsSection.tsx",
-      "candidateCount": 3,
-      "fingerprint": "62294003cf3543dd4bd6ffbbe229a7a5545e09a9242c603b4b3c4088fd1c1c1f",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/pages/stats/components/TrendStudio.tsx",
-      "candidateCount": 4,
-      "fingerprint": "f4ef2d1e1829e93b50bb000f72c180083a6ab0f4c736f9c482ff67ea3bc77cc4",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/pages/stats/components/UsageChartMinimap.tsx",
-      "candidateCount": 4,
-      "fingerprint": "2ede448735d0003be85f4a65833fdd3e1103461fab44cbf60b2e5e4f52b7ba6e",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/pages/stats/components/UsageFilterMenu.tsx",
-      "candidateCount": 8,
-      "fingerprint": "944866785582ffbb5258847ab0f344f50bf8e18d0e275b3693718c2958b4c414",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/pages/stats/components/UsageGraphHeader.tsx",
-      "candidateCount": 6,
-      "fingerprint": "4b93619ab3e7844d1f6664cb72ef704d9b5f6ef6f9b40b4f6d4e96fad06270f3",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/pages/stats/components/UsageGraphLegend.tsx",
-      "candidateCount": 2,
-      "fingerprint": "f08d619e51f4abd409348421beb8abde620bf544506f3e0b3aaf8c09cf230c78",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/pages/stats/components/UsageGraphTooltip.tsx",
-      "candidateCount": 2,
-      "fingerprint": "2160d72ebeee994a11b1a21ac9f7c419470407aec6f54c71a64c6ea67ac800e7",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/pages/stats/components/UsageSeriesSidebar.tsx",
-      "candidateCount": 2,
-      "fingerprint": "dee326752eadd4938990c77e50fec30caaf15de630d46edce64068852e2053cc",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
-    },
-    {
-      "path": "dashboard/src/v2/pages/stats/StatsPage.tsx",
-      "candidateCount": 5,
-      "fingerprint": "06bf700a3a39d5544abf9bd39d6d239741f805d7c73c2a57549cfebe3bcdb4ce",
-      "rationale": "Exact integration baseline for pre-existing component copy; any added, removed, or changed candidate requires an explicit catalog-boundary review."
+      "line": 456,
+      "kind": "attribute:label",
+      "text": "$ / 1M Tok",
+      "rationale": "This is a compact Git or pricing unit used alongside runtime measurements."
     }
   ]
 }
