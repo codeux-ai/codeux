@@ -1,9 +1,11 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/preact";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { afterEach, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   CostAmount,
   CostAnalyticsViewModel,
@@ -15,8 +17,11 @@ import { CostOverviewPanel } from "../components/cost/CostOverviewPanel.js";
 
 expect.extend(matchers);
 
+const originalMatchMedia = window.matchMedia;
+
 afterEach(() => {
   cleanup();
+  window.matchMedia = originalMatchMedia;
 });
 
 function provenance(state: CostCoverageState, overrides: Partial<CostProvenance> = {}): CostProvenance {
@@ -104,9 +109,10 @@ describe("CostOverviewPanel", () => {
     expect(bucketButtons[0]).toHaveAccessibleName(/Jul 1, 12 AM: \$0\.00000042/);
     expect(bucketButtons[1]).toHaveAccessibleName(/Jul 1, 1 AM: \$0\.00639958/);
 
-    bucketButtons[0]?.focus();
+    act(() => bucketButtons[0]?.focus());
     expect(bucketButtons[0]).toHaveFocus();
-    expect(screen.getAllByText("$0.00000042").length).toBeGreaterThan(0);
+    expect(bucketButtons[0]).toHaveAttribute("aria-pressed", "true");
+    expect(within(screen.getByRole("status")).getByText("$0.00000042")).toBeInTheDocument();
 
     fireEvent.keyDown(bucketButtons[0] as HTMLButtonElement, { key: "ArrowRight" });
     expect(bucketButtons[1]).toHaveFocus();
@@ -117,6 +123,48 @@ describe("CostOverviewPanel", () => {
     expect(within(dataTable).getAllByRole("row")).toHaveLength(3);
     expect(within(dataTable).getByRole("rowheader", { name: "Jul 1, 12 AM" })).toBeInTheDocument();
     expect(screen.getByText(/Peak: Jul 1, 1 AM, \$0\.00639958/)).toBeInTheDocument();
+  });
+
+  it("preserves static chart detail and bucket selection when reduced motion is preferred", () => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(prefers-reduced-motion: reduce)",
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    const componentCss = readFileSync(resolve(
+      process.cwd(),
+      "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.module.css",
+    ), "utf8");
+    expect(componentCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.bucketTarget[\s\S]*transition: none;/,
+    );
+
+    const { container } = render(<CostOverviewPanel viewModel={viewModel()} />);
+    const chartPath = container.querySelector("svg path");
+    const staticPath = chartPath?.getAttribute("d");
+    const bucketButtons = within(screen.getByLabelText("Spend buckets")).getAllByRole("button");
+
+    expect(staticPath).toBeTruthy();
+    act(() => bucketButtons[0]?.focus());
+    expect(bucketButtons[0]).toHaveFocus();
+    expect(bucketButtons[0]).toHaveAttribute("aria-pressed", "true");
+    expect(within(screen.getByRole("status")).getByText("$0.00000042")).toBeInTheDocument();
+
+    fireEvent.click(bucketButtons[1] as HTMLButtonElement);
+    expect(bucketButtons[1]).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Jul 1, 1 AM · Peak")).toBeInTheDocument();
+    expect(screen.getAllByText("$0.00639958").length).toBeGreaterThan(0);
+    expect(chartPath).toHaveAttribute("d", staticPath);
+
+    const dataTable = screen.getByRole("table", { name: "Spend over time data" });
+    expect(within(dataTable).getByText("$0.00000042")).toBeInTheDocument();
+    expect(within(dataTable).getByText("$0.00639958")).toBeInTheDocument();
   });
 
   it("renders a no-usage state without presenting missing cost as zero", () => {
