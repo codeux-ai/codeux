@@ -192,7 +192,7 @@ export const AgentKnowledgePanel: FunctionComponent<{
               </div>
               <span className={`shrink-0 text-[10px] font-bold ${isReady ? "text-slate-400" : "text-amber-500"}`}>
                 {isReady
-                  ? translatePlural(agentsMessages, "chunkCount", doc.chunkCount)
+                  ? translatePlural(agentsMessages, "chunkCount", doc.chunkCount, { count: formatNumber(doc.chunkCount) })
                   : translate(agentsMessages, doc.status === "error" ? "errorStatus" : "embedding")}
               </span>
             </button>

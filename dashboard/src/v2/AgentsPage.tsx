@@ -42,7 +42,7 @@ import { agentsMessages } from "./i18n/messages/agents.js";
 /* ── Roster summary stat ── */
 type RosterStatProps = {
   label: string;
-  value: number;
+  value: string;
   accent: "signal" | "amber" | "rose" | "slate";
   icon: typeof Bot;
 };
@@ -839,10 +839,10 @@ export const AgentsPage: FunctionComponent = () => {
       {/* Roster summary strip — only when project is loaded */}
       {selectedProject && presets.length > 0 && (
         <section aria-label={t("rosterSummary")} className="grid w-full grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-4">
-          <RosterStat label={t("totalAgents")} value={rosterStats.total} accent="signal" icon={Bot} />
-          <RosterStat label={t("synced")} value={rosterStats.synced} accent="signal" icon={ShieldCheck} />
-          <RosterStat label={t("drift")} value={rosterStats.drift} accent={rosterStats.drift > 0 ? "amber" : "slate"} icon={AlertTriangle} />
-          <RosterStat label={t("databaseOnly")} value={rosterStats.local} accent="slate" icon={Database} />
+          <RosterStat label={t("totalAgents")} value={formatNumber(rosterStats.total)} accent="signal" icon={Bot} />
+          <RosterStat label={t("synced")} value={formatNumber(rosterStats.synced)} accent="signal" icon={ShieldCheck} />
+          <RosterStat label={t("drift")} value={formatNumber(rosterStats.drift)} accent={rosterStats.drift > 0 ? "amber" : "slate"} icon={AlertTriangle} />
+          <RosterStat label={t("databaseOnly")} value={formatNumber(rosterStats.local)} accent="slate" icon={Database} />
         </section>
       )}
 

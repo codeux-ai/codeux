@@ -307,7 +307,10 @@ describe("AgentPresetEditorPanel", () => {
     const instructionMarkdown = "# Preserve me\n\nReturn provider output verbatim.";
     renderWithI18n(
       <AgentPresetEditorPanel
-        preset={makePreset({ instructionMarkdown })}
+        preset={makePreset({
+          instructionMarkdown,
+          memoryConfig: { ...DEFAULT_AGENT_MEMORY_CONFIG, minStrength: 0.25 },
+        })}
         saving={false}
         onSave={vi.fn()}
         onCancel={vi.fn()}
@@ -317,6 +320,7 @@ describe("AgentPresetEditorPanel", () => {
 
     expect(screen.getByLabelText("agent-instructions")).toHaveValue(instructionMarkdown);
     expect(screen.getByRole("button", { name: "Agent speichern" })).toBeInTheDocument();
+    expect(screen.getByText(/min\. 0,25/)).toBeInTheDocument();
     const nameInput = screen.getByLabelText(/Agentenname/);
     fireEvent.input(nameInput, { target: { value: "" } });
     fireEvent.submit(screen.getByRole("form"));

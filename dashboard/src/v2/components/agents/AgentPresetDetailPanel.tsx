@@ -373,7 +373,9 @@ export const AgentPresetDetailPanel: FunctionComponent<{
               />
               <StatTile
                 label={translate(agentsMessages, "connectedMcps")}
-                value={mcpTags.length === 0 ? translate(agentsMessages, "none") : translatePlural(agentsMessages, "serverCount", mcpTags.length)}
+                value={mcpTags.length === 0
+                  ? translate(agentsMessages, "none")
+                  : translatePlural(agentsMessages, "serverCount", mcpTags.length, { count: formatNumber(mcpTags.length) })}
                 iconNode={<Server className="h-4 w-4" strokeWidth={2.2} />}
                 accent={mcpTags.length > 0}
               />
@@ -385,7 +387,9 @@ export const AgentPresetDetailPanel: FunctionComponent<{
               />
               <StatTile
                 label={translate(agentsMessages, "systemPrompt")}
-                value={preset.instructionMarkdown ? `~${formatTokenCount(instructionTokens, locale)} tok` : translate(agentsMessages, "empty")}
+                value={preset.instructionMarkdown
+                  ? `~${formatTokenCount(instructionTokens, locale)} ${translate(agentsMessages, "tokens")}`
+                  : translate(agentsMessages, "empty")}
                 iconNode={<FileText className="h-4 w-4" strokeWidth={2.2} />}
               />
               <StatTile
@@ -431,7 +435,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
               </span>
             ))}
             {hiddenMcpTagCount > 0 && (
-              <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">+{hiddenMcpTagCount}</span>
+              <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">+{formatNumber(hiddenMcpTagCount)}</span>
             )}
             {mcpTags.length === 0 && (
               <span className="inline-flex items-center rounded-full border border-black/[0.06] bg-white/50 px-2.5 py-1 text-[11px] font-bold text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-500">

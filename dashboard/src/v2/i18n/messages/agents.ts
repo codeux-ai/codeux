@@ -507,7 +507,7 @@ export const agentsMessages = defineDashboardMessages({
     manage: "Verwalten",
     mcpActiveSummary: "Zum Verknüpfen oder Trennen auswählen. {count} aktiv. Mit Verwalten konfigurieren Sie Code-UX-Tools.",
     mcpItemChanged: "{name} für diesen Agenten {state}. Speichern Sie den Agenten, um den MCP-Zugriff zu übernehmen.",
-    reviewDashboardMcp: "Prüfen Sie den Code-UX-MCP- und Zeitplanungszugriff, bevor Sie ihn f��r den Dashboard-Antwortagenten aktivieren.",
+    reviewDashboardMcp: "Prüfen Sie den Code-UX-MCP- und Zeitplanungszugriff, bevor Sie ihn für den Dashboard-Antwortagenten aktivieren.",
     reviewRiskMcp: "Code-UX-Zugriff ist für Nicht-Chat-Agenten risikobegrenzt. Prüfen Sie vor der Aktivierung die Warnung in der MCP-Verwaltung.",
     moreCount: "+{count} weitere",
     createdAt: "Erstellt am {date}",

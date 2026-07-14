@@ -101,7 +101,7 @@ export const AgentsHero: FunctionComponent<{
         <div className="flex flex-wrap items-center gap-2" data-hero-anim>
           <span className="inline-flex items-center gap-2 rounded-full border border-signal-500/30 bg-signal-500/10 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 shadow-sm dark:border-signal-500/25 dark:bg-signal-500/15 dark:text-signal-400">
             <span className="flex h-4 w-4 items-center justify-center rounded-full bg-signal-500 font-mono text-[9px] font-black text-white dark:text-void-900">
-              {total}
+              {formatNumber(total)}
             </span>
             {translate(agentsMessages, "active")}
           </span>

@@ -208,16 +208,11 @@ const SectionCard: FunctionComponent<{
   </section>
 );
 
-const formatMemoryStrength = (value: number): string => {
-  if (value === 0) return "0";
-  return value.toFixed(2).replace(/\.?0+$/, "");
-};
-
 const formatMemoryConfigSummary = (
   config: AgentMemoryConfig,
   localize: (key: DashboardTextMessageKey<typeof agentsMessages>, variables?: DashboardMessageVariables) => string,
   pluralize: (key: "categoryCount", count: number) => string,
-  formatNumber: (value: number) => string,
+  formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string,
 ): string => {
   const tierLabel =
     config.tier === "both"
@@ -234,7 +229,9 @@ const formatMemoryConfigSummary = (
   const parts = [tierLabel, categoryLabel];
 
   if (config.minStrength > 0) {
-    parts.push(localize("minStrengthSummary", { value: formatMemoryStrength(config.minStrength) }));
+    parts.push(localize("minStrengthSummary", {
+      value: formatNumber(config.minStrength, { maximumFractionDigits: 2 }),
+    }));
   }
 
   if (config.maxShortTerm > 0) {
@@ -486,7 +483,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const memoryConfigSummary = useMemo(() => formatMemoryConfigSummary(
     memoryConfig,
     t,
-    (_key, count) => translatePlural(agentsMessages, "categoryCount", count),
+    (_key, count) => translatePlural(agentsMessages, "categoryCount", count, { count: formatNumber(count) }),
     (value) => formatNumber(value),
   ), [memoryConfig, t, translatePlural, formatNumber]);
 
