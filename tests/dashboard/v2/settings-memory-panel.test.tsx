@@ -38,7 +38,7 @@ describe("SettingsMemoryPanel internationalization", () => {
     expect(screen.getByText("Speichersystem")).toBeInTheDocument();
     expect(screen.getByText("max. 1.234")).toBeInTheDocument();
     expect(screen.getByText("Zeitplan für langfristige Bereinigung")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Konfigurieren Speichersystem" }));
+    await userEvent.click(screen.getByRole("button", { name: "Speichersystem Konfigurieren" }));
     expect(screen.getAllByText("KI-Bereinigung").length).toBeGreaterThan(0);
   });
 });
