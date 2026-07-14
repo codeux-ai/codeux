@@ -7,6 +7,8 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { SHARED_INTERACTION_CLASSES } from "./Button.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 export interface SelectOption {
   value: string;
@@ -83,7 +85,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   onChange,
   options,
   disabled = false,
-  placeholder = "Select\u2026",
+  placeholder,
   variant = "default",
   className = "",
   searchable = false,
@@ -98,6 +100,8 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   "aria-required": ariaRequired,
   onBlur,
 }) => {
+  const { translate } = useOptionalDashboardI18n();
+  const resolvedPlaceholder = placeholder ?? translate(shellMessages, "selectPlaceholder");
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
   const [isRendered, setIsRendered] = useState(false);
@@ -297,8 +301,8 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
     if (!allowCustomValue) return matches;
     const hasExactMatch = options.some(o => o.value.toLowerCase() === lowerFilter || o.label.toLowerCase() === lowerFilter);
     if (hasExactMatch) return matches;
-    return [...matches, { value: trimmed, label: `Use "${trimmed}"` }];
-  }, [options, searchable, allowCustomValue, filter, maxVisibleOptions]);
+    return [...matches, { value: trimmed, label: translate(shellMessages, "selectUseValue", { value: trimmed }) }];
+  }, [options, searchable, allowCustomValue, filter, maxVisibleOptions, translate]);
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (!open) return;
@@ -415,7 +419,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
               <div className="px-2 pt-1 pb-1.5 sticky -top-1.5 bg-white/[0.97] dark:bg-void-800/[0.97] z-20">
                 <input
                   type="text"
-                  placeholder="Search..."
+                  placeholder={translate(shellMessages, "selectSearchPlaceholder")}
                   value={filter}
                   onInput={(e) => {
                     setFilter(e.currentTarget.value);
@@ -461,7 +465,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
               );
             })}
             {filteredOptions.length === 0 && (
-              <div className="px-3.5 py-4 text-xs font-medium text-slate-400">No options available.</div>
+              <div className="px-3.5 py-4 text-xs font-medium text-slate-400">{translate(shellMessages, "noOptionsAvailable")}</div>
             )}
           </div>
         </div>,
@@ -500,7 +504,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
         aria-required={ariaRequired}
       >
         {selected?.icon ? <span className="flex-shrink-0">{renderOptionIcon(selected.icon)}</span> : null}
-        <span className="truncate">{selected?.label || placeholder}</span>
+        <span className="truncate">{selected?.label || resolvedPlaceholder}</span>
         <ChevronDown
           style={{ transitionProperty: "transform", transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
           className={`h-3.5 w-3.5 flex-shrink-0 text-slate-400 transition-transform  ${open ? "rotate-180" : ""}`}

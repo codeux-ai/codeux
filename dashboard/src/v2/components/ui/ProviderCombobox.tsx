@@ -4,6 +4,8 @@ import { AvantgardeSelect, type SelectOption } from "./AvantgardeSelect.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { modelsDevLogoUrl } from "./ModelCombobox.js";
 import type { ModelCatalogProviderSummary } from "../../../../../src/domain/model-catalog/model-catalog-types.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 let providersPromise: Promise<ModelCatalogProviderSummary[]> | null = null;
 
@@ -46,7 +48,8 @@ export const ProviderCombobox: FunctionComponent<{
   placeholder?: string;
   "aria-label"?: string;
   "aria-describedby"?: string;
-}> = ({ value, onChange, disabled = false, placeholder = "Search providers…", "aria-label": ariaLabel, "aria-describedby": ariaDescribedby }) => {
+}> = ({ value, onChange, disabled = false, placeholder, "aria-label": ariaLabel, "aria-describedby": ariaDescribedby }) => {
+  const { translate } = useOptionalDashboardI18n();
   const providers = useProviderCatalog();
 
   const options = useMemo<SelectOption[]>(() => {
@@ -80,7 +83,7 @@ export const ProviderCombobox: FunctionComponent<{
         }}
         options={options}
         disabled={disabled}
-        placeholder={placeholder}
+        placeholder={placeholder ?? translate(shellMessages, "searchProviders")}
         searchable
         allowCustomValue
         aria-label={ariaLabel}

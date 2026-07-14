@@ -42,6 +42,22 @@ const baseRecord = (overrides: Partial<DashboardNotification> = {}): DashboardNo
 });
 
 describe("notification view models", () => {
+  it("translates dashboard chrome while preserving server-authored notification copy", () => {
+    const result = toNotificationViewModel(baseRecord(), new Date("2026-07-11T09:35:00.000Z").getTime(), "de");
+
+    expect(result).toMatchObject({
+      title: "T02 execution failed",
+      actionLabel: "Aufgabe prüfen",
+      time: "vor 5 Min.",
+    });
+    expect(result.body).toContain("The provider exited before producing a result.");
+    expect(result.details).toEqual(expect.arrayContaining([
+      { kind: "summary", label: "Was schiefgelaufen ist", value: "The provider exited before producing a result." },
+      { kind: "reason", label: "Warum dies Aufmerksamkeit erfordert", value: "Provider process exited." },
+      { kind: "instructions", label: "Empfohlene nächste Schritte", value: "Review the task and retry it." },
+    ]));
+  });
+
   it("maps task failures to critical task actions with encoded direct links", () => {
     const result = toNotificationViewModel(baseRecord(), new Date("2026-07-11T09:35:00.000Z").getTime());
 
@@ -55,14 +71,14 @@ describe("notification view models", () => {
       actionHref: "/tasks?projectId=project%20%2F%20one&sprintId=sprint%20%2F%20one&taskId=task%20%2F%20two",
     });
     expect(result.details).toEqual([
-      { label: "Project", value: "Project One" },
-      { label: "Sprint", value: "SPR-12 (Hardening)" },
-      { label: "Task", value: "T02 (Harden retries)" },
-      { label: "What went wrong", value: "The provider exited before producing a result." },
-      { label: "Why this needs attention", value: "Provider process exited." },
-      { label: "Recommended next steps", value: "Review the task and retry it." },
-      { label: "Timestamp", value: "2026-07-11T09:30:00.000Z" },
-      { label: "Source context", value: "Task dispatch · dispatch failed · Source dispatch-1" },
+      { kind: "project", label: "Project", value: "Project One" },
+      { kind: "sprint", label: "Sprint", value: "SPR-12 (Hardening)" },
+      { kind: "task", label: "Task", value: "T02 (Harden retries)" },
+      { kind: "summary", label: "What went wrong", value: "The provider exited before producing a result." },
+      { kind: "reason", label: "Why this needs attention", value: "Provider process exited." },
+      { kind: "instructions", label: "Recommended next steps", value: "Review the task and retry it." },
+      { kind: "timestamp", label: "Timestamp", value: "2026-07-11T09:30:00.000Z" },
+      { kind: "source", label: "Source context", value: "Task dispatch · dispatch failed · Source dispatch-1" },
     ]);
   });
 

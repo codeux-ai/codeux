@@ -219,6 +219,64 @@ describe("WorkspaceArtifactService", () => {
       .toBe("ci fix\n");
   });
 
+  it("merges a stale local patch when its identical first-pass file already exists on the worker tip", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-artifact-service-"));
+    cleanupPaths.push(tempRoot);
+
+    const hostRepoPath = path.join(tempRoot, "host-repo");
+    const workspaceRepoPath = path.join(tempRoot, "workspace-repo");
+
+    await runCommandStrict("git", ["init", hostRepoPath], tempRoot);
+    await runGit(hostRepoPath, ["config", "user.name", "Code UX Test"]);
+    await runGit(hostRepoPath, ["config", "user.email", "code-ux@example.com"]);
+    await runGit(hostRepoPath, ["checkout", "-b", "feature/test"]);
+    await fs.writeFile(path.join(hostRepoPath, "base.txt"), "base\n", "utf8");
+    await runGit(hostRepoPath, ["add", "base.txt"]);
+    await runGit(hostRepoPath, ["commit", "-m", "base"]);
+    const baseRef = (await runGit(hostRepoPath, ["rev-parse", "HEAD"])).trim();
+
+    await runCommandStrict("git", ["clone", hostRepoPath, workspaceRepoPath], tempRoot);
+    await runGit(workspaceRepoPath, ["checkout", "feature/test"]);
+    await fs.writeFile(path.join(workspaceRepoPath, "first-pass.txt"), "first pass\n", "utf8");
+    await fs.writeFile(path.join(workspaceRepoPath, "qa-follow-up.txt"), "follow up\n", "utf8");
+
+    await fs.writeFile(path.join(hostRepoPath, "first-pass.txt"), "first pass\n", "utf8");
+    await runGit(hostRepoPath, ["add", "first-pass.txt"]);
+    await runGit(hostRepoPath, ["commit", "-m", "first pass"]);
+    const workerTip = (await runGit(hostRepoPath, ["rev-parse", "HEAD"])).trim();
+
+    const workspaceManager = {
+      runWorkspaceCommand: async (
+        _worktreePath: string,
+        command: string,
+        args: string[],
+        options: WorkspaceCommandOptions = {},
+      ) => await runCommandStrict(command, args, workspaceRepoPath, options.env ?? process.env, {
+        trimOutput: options.trimOutput,
+        signal: options.signal,
+        stdinFile: options.stdinFile,
+      }),
+    } as IWorkspaceManager;
+
+    const service = new WorkspaceArtifactService(workspaceManager);
+    const patchText = await service.exportBinaryPatch("workspace", baseRef);
+    const result = await service.applyPatchToBranch({
+      repoPath: hostRepoPath,
+      baseRef,
+      workerBranch: "feature/test",
+      patchText,
+      commitMessage: "apply qa follow-up",
+      githubMode: "LOCAL",
+    });
+
+    expect(result.hasChanges).toBe(true);
+    expect((await runGit(hostRepoPath, ["show", "-s", "--format=%P", result.commitSha!])).trim()).toBe(workerTip);
+    expect(await runGit(hostRepoPath, ["show", "refs/heads/feature/test:first-pass.txt"], { trimOutput: false }))
+      .toBe("first pass\n");
+    expect(await runGit(hostRepoPath, ["show", "refs/heads/feature/test:qa-follow-up.txt"], { trimOutput: false }))
+      .toBe("follow up\n");
+  });
+
   it("keeps a checked-out worker branch clean after materializing a patch", async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-artifact-service-"));
     cleanupPaths.push(tempRoot);

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useState } from "preact/hooks";
 import {
   DashboardI18nProvider,
   DASHBOARD_LOCALE_STORAGE_KEY,
@@ -15,6 +16,7 @@ import {
   type DashboardLocaleStorage,
 } from "../../../dashboard/src/v2/i18n/index.js";
 import { appMessages } from "../../../dashboard/src/v2/i18n/messages/app.js";
+import { AvantgardeSelect } from "../../../dashboard/src/v2/components/ui/AvantgardeSelect.js";
 
 const featureMessages = defineDashboardMessages({
   en: {
@@ -46,6 +48,19 @@ const I18nHarness = () => {
       </output>
       <button type="button" onClick={() => i18n.setLocale("de")}>Deutsch</button>
       <button type="button" onClick={() => i18n.setLocale("en")}>English</button>
+    </div>
+  );
+};
+
+const ShellControlHarness = () => {
+  const i18n = useDashboardI18n();
+  const [count, setCount] = useState(0);
+  return (
+    <div>
+      <output aria-label="local state">{count}</output>
+      <button type="button" onClick={() => setCount((value) => value + 1)}>Increment</button>
+      <button type="button" onClick={() => i18n.setLocale("de")}>Switch shell locale</button>
+      <AvantgardeSelect value="" onChange={() => undefined} options={[]} aria-label="Example" />
     </div>
   );
 };
@@ -106,6 +121,17 @@ describe("dashboard i18n foundation", () => {
     );
     expect(window.localStorage.getItem(DASHBOARD_LOCALE_STORAGE_KEY)).toBe("de");
     expect(document.documentElement.lang).toBe("de");
+  });
+
+  it("updates reusable control defaults without remounting local application state", () => {
+    render(<DashboardI18nProvider><ShellControlHarness /></DashboardI18nProvider>);
+
+    expect(screen.getByRole("button", { name: "Example" }).textContent).toContain("Select…");
+    fireEvent.click(screen.getByRole("button", { name: "Increment" }));
+    fireEvent.click(screen.getByRole("button", { name: "Switch shell locale" }));
+
+    expect(screen.getByLabelText("local state").textContent).toBe("1");
+    expect(screen.getByRole("button", { name: "Example" }).textContent).toContain("Auswählen…");
   });
 
   it("falls back to English for invalid persisted values", () => {
