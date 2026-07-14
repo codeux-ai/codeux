@@ -16,6 +16,7 @@ import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ChatProviderRepository } from "../../../src/repositories/chat-provider-repository.js";
 import { ConnectionChatRepository } from "../../../src/repositories/connection-chat-repository.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
+import { registerChatProviderIngressRoutes } from "../../../src/server/chat-provider-ingress-routes.js";
 import { registerChatProviderRoutes } from "../../../src/server/chat-provider-routes.js";
 import {
   ChatProviderOutboundAdapterError,
@@ -86,6 +87,8 @@ describe("chat connector fan-in acceptance", () => {
   });
 
   it("routes, replies, and exposes the same redacted six-provider state through REST and MCP", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-14T12:00:00.000Z"));
     const context = await createHarness();
     const project = context.projectRepository.createProject({
       name: "Approved local connector test project",
@@ -117,8 +120,8 @@ describe("chat connector fan-in acceptance", () => {
       chatProviderRepository: context.providerRepository,
       chatProviderSecretService: context.secretService,
     });
-    const security = new ChatProviderIngressSecurity(5 * 60_000, context.providerRepository);
     const acceptance: Array<{ provider: string; source: string; connectionId: string }> = [];
+    const rest = await startRestBoundary(context, verification, outbound, ingress);
 
     for (const fixture of chatConnectorProviderFixtures) {
       const connection = await context.secretService.createConnection({
@@ -138,11 +141,32 @@ describe("chat connector fan-in acceptance", () => {
       });
       expect(await verification.verifyConnection(connection.id)).toMatchObject({ status: "verified" });
       const resolved = await context.secretService.resolveConnection(connection.id);
-      authenticateFixture(security, resolved, fixture.secrets, `${fixture.kind}-nonce`);
+      const rawBody = JSON.stringify(fixture.inbound);
+      const callsBeforeRejectedAuthentication = postMessage.mock.calls.length;
+      const rejected = await postFixtureIngress(rest, connection.id, rawBody, invalidFixtureAuthHeaders(resolved));
+      expect(rejected.status).toBe(401);
+      expect(postMessage).toHaveBeenCalledTimes(callsBeforeRejectedAuthentication);
 
+      const [firstResponse, duplicateResponse] = await Promise.all([
+        postFixtureIngress(rest, connection.id, rawBody, validFixtureAuthHeaders(
+          resolved,
+          fixture.secrets,
+          rawBody,
+          `${fixture.kind}-request-1`,
+          0,
+        )),
+        postFixtureIngress(rest, connection.id, rawBody, validFixtureAuthHeaders(
+          resolved,
+          fixture.secrets,
+          rawBody,
+          `${fixture.kind}-request-2`,
+          1,
+        )),
+      ]);
+      expect([firstResponse.status, duplicateResponse.status].sort()).toEqual([200, 202]);
       const [first, duplicate] = await Promise.all([
-        ingress.processInbound({ providerConnectionId: connection.id, payload: fixture.inbound }),
-        ingress.processInbound({ providerConnectionId: connection.id, payload: fixture.inbound }),
+        firstResponse.json() as Promise<Awaited<ReturnType<ChatProviderIngressService["processInbound"]>>>,
+        duplicateResponse.json() as Promise<Awaited<ReturnType<ChatProviderIngressService["processInbound"]>>>,
       ]);
       const accepted = first.status === "accepted" ? first : duplicate;
       expect([first.status, duplicate.status].sort()).toEqual(["accepted", "duplicate"]);
@@ -169,23 +193,65 @@ describe("chat connector fan-in acceptance", () => {
       source: fixture.acceptanceSource,
     }))));
 
-    const rest = await startRestBoundary(context, verification, outbound);
-    const restResponse = await fetch(`${rest}/api/chat-providers/connections`);
-    expect(restResponse.status).toBe(200);
-    const restBody = await restResponse.json() as { connections: Array<Record<string, unknown>> };
     const mcp = new ChatProviderActions(context.providerRepository, context.secretService, {
       chatProviderVerificationService: verification,
       chatProviderOutboundService: outbound,
       authorizeProject: (projectId) => projectId === project.id,
     });
+    const redactedVerificationState: Array<Record<string, unknown>> = [];
+    for (const evidence of acceptance) {
+      const restVerificationResponse = await fetch(`${rest}/api/chat-providers/connections/${evidence.connectionId}/verify`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      expect(restVerificationResponse.status).toBe(200);
+      const restVerification = await restVerificationResponse.json() as Record<string, unknown>;
+      const mcpVerificationEnvelope = await mcp.handleChatProviderAction({
+        domain: "chat_providers",
+        action: "verify_connection",
+        payload: { providerConnectionId: evidence.connectionId },
+      });
+      const mcpVerification = (mcpVerificationEnvelope.result as { verification: Record<string, unknown> }).verification;
+      expect(restVerification).toEqual(mcpVerification);
+      redactedVerificationState.push(restVerification, mcpVerification);
+    }
+
+    const restResponse = await fetch(`${rest}/api/chat-providers/connections`);
+    expect(restResponse.status).toBe(200);
+    const restBody = await restResponse.json() as { connections: Array<Record<string, unknown>> };
     const mcpEnvelope = await mcp.handleChatProviderAction({
       domain: "chat_providers",
       action: "list_connections",
       payload: {},
     });
     const mcpConnections = (mcpEnvelope.result as { connections: Array<Record<string, unknown>> }).connections;
-    expect(restBody.connections.map(({ id }) => id).sort()).toEqual(mcpConnections.map(({ id }) => id).sort());
-    const publicState = JSON.stringify({ rest: restBody, mcp: mcpEnvelope });
+    expect(canonicalConnections(restBody.connections)).toEqual(canonicalConnections(mcpConnections));
+
+    const restDeliveriesResponse = await fetch(`${rest}/api/chat-providers/deliveries?direction=outbound&limit=500`);
+    expect(restDeliveriesResponse.status).toBe(200);
+    const restDeliveries = (await restDeliveriesResponse.json() as { deliveries: Array<Record<string, unknown>> }).deliveries;
+    const mcpDeliveriesEnvelope = await mcp.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "list_deliveries",
+      payload: { direction: "outbound", limit: 500 },
+    });
+    const mcpDeliveries = (mcpDeliveriesEnvelope.result as { deliveries: Array<Record<string, unknown>> }).deliveries;
+    expect(sortRecordsById(restDeliveries)).toEqual(sortRecordsById(mcpDeliveries));
+    expect(restDeliveries).toHaveLength(chatConnectorProviderFixtures.length);
+    expect(restDeliveries).toEqual(expect.arrayContaining(chatConnectorProviderFixtures.map((fixture) => expect.objectContaining({
+      providerKind: fixture.kind,
+      status: "delivered",
+      externalMessageId: `${fixture.kind}-fixture-outbound`,
+    }))));
+
+    const publicState = JSON.stringify({
+      restConnections: restBody.connections,
+      mcpConnections,
+      redactedVerificationState,
+      restDeliveries,
+      mcpDeliveries,
+    });
     for (const fixture of chatConnectorProviderFixtures) {
       for (const secret of Object.values(fixture.secrets)) {
         if (typeof secret === "string") expect(publicState).not.toContain(secret);
@@ -341,20 +407,54 @@ async function createHarness(): Promise<{
   };
 }
 
-function authenticateFixture(
-  security: ChatProviderIngressSecurity,
+function invalidFixtureAuthHeaders(
+  connection: ChatProviderConnectionInternalRecord,
+): Record<string, string> {
+  if (connection.bridgeMode === "webhook") {
+    return {
+      "x-code-ux-timestamp": String(Date.now()),
+      "x-code-ux-signature": "sha256=invalid-fixture-signature",
+    };
+  }
+  return {
+    authorization: "Bearer incorrect-fixture-credential",
+    "x-code-ux-timestamp": String(Date.now()),
+  };
+}
+
+function validFixtureAuthHeaders(
   connection: ChatProviderConnectionInternalRecord,
   secrets: Record<string, unknown>,
-  nonce: string,
-): void {
+  rawBody: string,
+  requestId: string,
+  timestampOffsetMs: number,
+): Record<string, string> {
+  const timestamp = String(Date.now() + timestampOffsetMs);
   if (connection.bridgeMode === "webhook") {
-    authenticateHmac(security, connection, secrets.webhookSecret as string, new Date(), nonce);
-    return;
+    const secret = String(secrets.webhookSecret);
+    return {
+      "x-code-ux-timestamp": timestamp,
+      "x-code-ux-signature": `sha256=${createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex")}`,
+    };
   }
-  expect(security.verify(connection, {
-    headers: { authorization: `Bearer ${String(secrets.bridgeApiKey)}`, "x-code-ux-timestamp": String(Date.now()), "x-code-ux-nonce": nonce },
-    rawBody: "{}",
-  })).toEqual({ authenticated: true, method: "bearer" });
+  return {
+    authorization: `Bearer ${String(secrets.bridgeApiKey)}`,
+    "x-code-ux-timestamp": timestamp,
+    "x-code-ux-nonce": requestId,
+  };
+}
+
+function postFixtureIngress(
+  baseUrl: string,
+  connectionId: string,
+  rawBody: string,
+  headers: Record<string, string>,
+): Promise<Response> {
+  return fetch(`${baseUrl}/api/chat-providers/ingress/${connectionId}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: rawBody,
+  });
 }
 
 function authenticateHmac(
@@ -377,14 +477,24 @@ async function startRestBoundary(
   context: Awaited<ReturnType<typeof createHarness>>,
   verification: ChatProviderVerificationService,
   outbound: ChatProviderOutboundService,
+  ingress: ChatProviderIngressService,
 ): Promise<string> {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({
+    verify: (req, _res, buffer) => {
+      (req as typeof req & { rawBody?: string }).rawBody = buffer.toString("utf8");
+    },
+  }));
   registerChatProviderRoutes(app, {
     chatProviderRepository: context.providerRepository,
     chatProviderSecretService: context.secretService,
     chatProviderVerificationService: verification,
     chatProviderOutboundService: outbound,
+  } as DashboardDependencies);
+  registerChatProviderIngressRoutes(app, {
+    chatProviderRepository: context.providerRepository,
+    chatProviderSecretService: context.secretService,
+    chatProviderIngressService: ingress,
   } as DashboardDependencies);
   const server = await new Promise<Server>((resolve) => {
     const listening = app.listen(0, "127.0.0.1", () => resolve(listening));
@@ -393,4 +503,22 @@ async function startRestBoundary(
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("REST acceptance boundary failed to listen.");
   return `http://127.0.0.1:${address.port}`;
+}
+
+function canonicalConnections(records: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  return records.map((record) => {
+    const canonical = { ...record };
+    delete canonical.ingressUrl;
+    delete canonical.ingressUrls;
+    delete canonical.setupHints;
+    return canonical;
+  }).sort(compareRecordIds);
+}
+
+function sortRecordsById(records: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  return records.map((record) => ({ ...record })).sort(compareRecordIds);
+}
+
+function compareRecordIds(left: Record<string, unknown>, right: Record<string, unknown>): number {
+  return String(left.id).localeCompare(String(right.id));
 }

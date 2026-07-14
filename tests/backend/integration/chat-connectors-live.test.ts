@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 type LiveProvider = "whatsapp" | "telegram" | "slack" | "discord";
 
@@ -37,20 +37,35 @@ describe("chat connector live harness safety", () => {
     await expect(safeProviderFetch("https://slack.com/api/auth.test", "slack", { method: "POST" }, redirectFetch))
       .rejects.toThrow("redirect");
   });
+
+  it("rejects fixture-like Meta access tokens before lookup or send network requests", async () => {
+    const fetchImplementation = vi.fn<typeof fetch>();
+
+    await expect(requestMetaPhoneNumberResource({
+      accessToken: "fixture-meta-access-token",
+      graphApiVersion: "v23.0",
+      phoneNumberId: "109876543210987",
+    }, fetchImplementation)).rejects.toThrow("deterministic fixture value");
+    await expect(requestMetaTestMessage({
+      accessToken: "example-meta-access-token",
+      graphApiVersion: "v23.0",
+      testPhoneNumberId: "109876543210987",
+      testRecipient: "15550000101",
+    }, fetchImplementation)).rejects.toThrow("deterministic fixture value");
+
+    expect(fetchImplementation).not.toHaveBeenCalled();
+  });
 });
 
 describe("credential-gated official chat connector evidence", () => {
   it.skipIf(!LIVE_ENABLED || !META_TOKEN || !META_VERSION || !META_PHONE_NUMBER_ID)(
     liveTitle("WhatsApp phone-number resource", Boolean(META_TOKEN && META_VERSION && META_PHONE_NUMBER_ID)),
     async () => {
-      if (!/^v\d{1,3}\.\d{1,2}$/.test(META_VERSION!) || !/^\d+$/.test(META_PHONE_NUMBER_ID!)) {
-        throw new Error("Meta live fixture version and phone-number id must use provider-shaped test values.");
-      }
-      const url = `https://graph.facebook.com/${META_VERSION}/${META_PHONE_NUMBER_ID}?fields=id,display_phone_number,verified_name,quality_rating`;
       const endpoint = "https://graph.facebook.com/{version}/{phone-number-id}";
-      const response = await requestOfficialEndpoint("whatsapp", url, endpoint, {
-        method: "GET",
-        headers: { authorization: `Bearer ${META_TOKEN}` },
+      const response = await requestMetaPhoneNumberResource({
+        accessToken: META_TOKEN!,
+        graphApiVersion: META_VERSION!,
+        phoneNumberId: META_PHONE_NUMBER_ID!,
       });
       await recordOfficialOutcome("whatsapp", endpoint, response, async () => {
         const body = await response.json() as { id?: unknown };
@@ -118,21 +133,12 @@ describe("credential-gated official chat connector evidence", () => {
       WHATSAPP_SEND_ENABLED && META_TOKEN && META_VERSION && META_TEST_PHONE_NUMBER_ID && META_TEST_RECIPIENT,
     )),
     async () => {
-      if (!/^v\d{1,3}\.\d{1,2}$/.test(META_VERSION!) || !/^\d+$/.test(META_TEST_PHONE_NUMBER_ID!) || !/^\d{5,20}$/.test(META_TEST_RECIPIENT!)) {
-        throw new Error("WhatsApp sends require numeric Meta test-number and test-recipient variables.");
-      }
-      const url = `https://graph.facebook.com/${META_VERSION}/${META_TEST_PHONE_NUMBER_ID}/messages`;
       const endpoint = "https://graph.facebook.com/{version}/{test-phone-number-id}/messages";
-      const response = await requestOfficialEndpoint("whatsapp", url, endpoint, {
-        method: "POST",
-        headers: { authorization: `Bearer ${META_TOKEN}`, "content-type": "application/json" },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          recipient_type: "individual",
-          to: META_TEST_RECIPIENT,
-          type: "text",
-          text: { preview_url: false, body: "Code UX connector test-number acceptance check" },
-        }),
+      const response = await requestMetaTestMessage({
+        accessToken: META_TOKEN!,
+        graphApiVersion: META_VERSION!,
+        testPhoneNumberId: META_TEST_PHONE_NUMBER_ID!,
+        testRecipient: META_TEST_RECIPIENT!,
       });
       await recordOfficialOutcome("whatsapp", endpoint, response, async () => {
         const body = await response.json() as { messages?: Array<{ id?: unknown }> };
@@ -193,13 +199,66 @@ async function requestOfficialEndpoint(
   url: string,
   endpoint: string,
   init: RequestInit,
+  fetchImplementation: typeof fetch = globalThis.fetch,
 ): Promise<Response> {
   try {
-    return await safeProviderFetch(url, provider, init);
+    return await safeProviderFetch(url, provider, init, fetchImplementation);
   } catch (error) {
     recordAcceptanceResult({ provider, source: "official-endpoint", endpoint, outcome: "failed" });
     throw error;
   }
+}
+
+async function requestMetaPhoneNumberResource(
+  input: {
+    accessToken: string;
+    graphApiVersion: string;
+    phoneNumberId: string;
+  },
+  fetchImplementation: typeof fetch = globalThis.fetch,
+): Promise<Response> {
+  assertOpaqueCredential(input.accessToken);
+  if (!/^v\d{1,3}\.\d{1,2}$/.test(input.graphApiVersion) || !/^\d+$/.test(input.phoneNumberId)) {
+    throw new Error("Meta live fixture version and phone-number id must use provider-shaped test values.");
+  }
+  const endpoint = "https://graph.facebook.com/{version}/{phone-number-id}";
+  const url = `https://graph.facebook.com/${input.graphApiVersion}/${input.phoneNumberId}?fields=id,display_phone_number,verified_name,quality_rating`;
+  return requestOfficialEndpoint("whatsapp", url, endpoint, {
+    method: "GET",
+    headers: { authorization: `Bearer ${input.accessToken}` },
+  }, fetchImplementation);
+}
+
+async function requestMetaTestMessage(
+  input: {
+    accessToken: string;
+    graphApiVersion: string;
+    testPhoneNumberId: string;
+    testRecipient: string;
+  },
+  fetchImplementation: typeof fetch = globalThis.fetch,
+): Promise<Response> {
+  assertOpaqueCredential(input.accessToken);
+  if (
+    !/^v\d{1,3}\.\d{1,2}$/.test(input.graphApiVersion)
+    || !/^\d+$/.test(input.testPhoneNumberId)
+    || !/^\d{5,20}$/.test(input.testRecipient)
+  ) {
+    throw new Error("WhatsApp sends require numeric Meta test-number and test-recipient variables.");
+  }
+  const endpoint = "https://graph.facebook.com/{version}/{test-phone-number-id}/messages";
+  const url = `https://graph.facebook.com/${input.graphApiVersion}/${input.testPhoneNumberId}/messages`;
+  return requestOfficialEndpoint("whatsapp", url, endpoint, {
+    method: "POST",
+    headers: { authorization: `Bearer ${input.accessToken}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: input.testRecipient,
+      type: "text",
+      text: { preview_url: false, body: "Code UX connector test-number acceptance check" },
+    }),
+  }, fetchImplementation);
 }
 
 async function recordOfficialOutcome(
