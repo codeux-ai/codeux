@@ -20,7 +20,7 @@ The Request URL must preserve the raw request body. Official ingress accepts onl
 
 ## Events and acknowledgement
 
-Code UX returns a signed `url_verification` challenge synchronously. Event callbacks receive HTTP 200 before model execution, project routing, or outbound delivery begins. Slack requires a 2xx response within three seconds and recommends queueing work after acknowledgement; a slow model or Slack reply therefore cannot hold the Events API request open. See the [Events API response guidance](https://api.slack.com/apis/connections/events-api).
+Code UX returns an authenticated `url_verification` challenge synchronously. For message callbacks that enter chat, Code UX authenticates the exact request, normalizes the message and thread identity, performs project and channel-binding resolution, and durably inserts the inbound delivery before returning HTTP 200. Model processing and outbound delivery start asynchronously after that acknowledgement. Slack requires a 2xx response within three seconds and recommends queueing slow work after acknowledgement; a slow model or Slack reply therefore cannot hold the Events API request open. See the [Events API response guidance](https://api.slack.com/apis/connections/events-api).
 
 For message callbacks, Code UX uses outer `event_id` as the inbound idempotency key and normalizes the channel, user, message `ts`, and parent `thread_ts`. Replies use the parent timestamp so an existing Slack thread remains intact. The connector acknowledges but does not dispatch:
 

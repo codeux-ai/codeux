@@ -6,7 +6,7 @@ Slack implements `managed_bridge`, explicit custom `webhook`, and direct `offici
 
 Official Events API requests accept only Slack's timestamp and signature headers. The shared security facade computes HMAC-SHA256 over the exact `v0:<timestamp>:<raw-body>` base, enforces Slack's five-minute freshness window, compares in constant time, and replay-checks authenticated requests. See Slack's [request verification](https://api.slack.com/docs/verifying-requests-from-slack) and [Events API](https://api.slack.com/apis/connections/events-api) documentation.
 
-The profile declares synchronous `url_verification` challenge handling and immediate HTTP 200 acknowledgement for event callbacks. Processing is scheduled only after the response is sent, so model execution and outbound delivery cannot consume Slack's three-second response window.
+The profile handles authenticated `url_verification` challenges synchronously. For message callbacks that enter chat, Code UX authenticates the exact request, normalizes the message and thread identity, performs project and channel-binding resolution, and durably inserts the inbound delivery before returning HTTP 200. Model processing and outbound delivery start asynchronously after that acknowledgement, so they cannot consume Slack's three-second response window.
 
 Message callbacks normalize outer `event_id`, channel, user, message `ts`, and parent `thread_ts`. Bot-authored callbacks, Code UX-marked connector messages, and message changes without usable text are acknowledged without dispatch. The outer event ID remains the persisted deduplication boundary.
 
