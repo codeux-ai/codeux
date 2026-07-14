@@ -15,8 +15,6 @@ Use it when you are configuring a new project, auditing inherited settings, or d
 
 The mirror toggle writes companion files under `.code-ux/agents` for selected project agents.
 
-The dashboard localizes the mirror controls and status copy, but it never translates agent instructions or generated markdown content. Locale changes therefore affect presentation only and do not create markdown diffs.
-
 | Control Surface | Runtime Effect | Review Before Saving |
 | --- | --- | --- |
 | Settings card fields | Updates the active Settings scope after you save the page. | Confirm whether you are editing System or Project scope. |

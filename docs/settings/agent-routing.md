@@ -15,8 +15,6 @@ Use it when you are configuring a new project, auditing inherited settings, or d
 
 Coding can be manual or orchestrator-selected; each route can use a project preset or built-in fallback.
 
-The dashboard translates routing controls, built-in fallback descriptions, status summaries, and accessible names into the active dashboard locale. Project preset names and ids remain exactly as stored and are never translated before routing settings are saved.
-
 | Control Surface | Runtime Effect | Review Before Saving |
 | --- | --- | --- |
 | Settings card fields | Updates the active Settings scope after you save the page. | Confirm whether you are editing System or Project scope. |

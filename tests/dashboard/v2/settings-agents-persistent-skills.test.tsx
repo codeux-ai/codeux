@@ -2,13 +2,11 @@
 /** @jsx h */
 /** @jsxFrag Fragment */
 import { h, Fragment } from "preact";
-import { useState } from "preact/hooks";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { DEFAULT_DASHBOARD_SETTINGS, cloneDefaultSettings } from "../../../dashboard/src/lib/settings.js";
 import { SettingsAgentsPanel } from "../../../dashboard/src/v2/components/settings/panels/SettingsAgentsPanel.js";
-import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
 import type { AgentPreset } from "../../../dashboard/src/v2/types.js";
 import type { ProjectSettings } from "../../../dashboard/src/types.js";
 import {
@@ -58,45 +56,6 @@ const makeProjectSettings = (): ProjectSettings => ({
 });
 
 describe("SettingsAgentsPanel persistent skills and self-reflection", () => {
-  it("localizes reflection controls while keeping criterion labels and prompts verbatim", async () => {
-    vi.mocked(fetchSkillStorages).mockResolvedValue([]);
-    let latest = makeProjectSettings();
-    const authoredPrompt = latest.agents.selfReflection.planning.criteria[0]!.prompt;
-    const Harness = () => {
-      const [projectSettings, setProjectSettings] = useState(latest);
-      latest = projectSettings;
-      return (
-        <SettingsAgentsPanel
-          state={{
-            activeScope: "project",
-            setActiveScope: vi.fn(),
-            selectedProject: { id: "project-settings", name: "Generic Settings Project" },
-            editableSettings: projectSettings,
-            projectSettings,
-            projectSources: { "agents.selfReflection.planning.enabled": "project" },
-            projectAgentPresets: [],
-            projectAgentPresetOptions: [],
-            updateProject: (recipe: (current: ProjectSettings) => ProjectSettings) => setProjectSettings(recipe),
-            updateEditableSettings: vi.fn(),
-          } as never}
-        />
-      );
-    };
-
-    render(<DashboardI18nProvider initialLocale="de" storage={null}><Harness /></DashboardI18nProvider>);
-    expect(screen.getByText("Selbstreflexion")).toBeInTheDocument();
-    expect(screen.getByText("Projektüberschreibung")).toBeInTheDocument();
-    expect(screen.getByDisplayValue(authoredPrompt)).toBeInTheDocument();
-
-    fireEvent.input(screen.getByDisplayValue("Planning contract"), {
-      target: { value: "Planungskriterium authored exactly" },
-    });
-    await waitFor(() => expect(latest.agents.selfReflection.planning.criteria[0]?.label).toBe(
-      "Planungskriterium authored exactly",
-    ));
-    expect(latest.agents.selfReflection.planning.criteria[0]?.prompt).toBe(authoredPrompt);
-  });
-
   it("preserves storage attachment edits and reflection criteria in generated save payloads", async () => {
     vi.mocked(fetchSkillStorages).mockResolvedValue([
       {
@@ -168,7 +127,7 @@ describe("SettingsAgentsPanel persistent skills and self-reflection", () => {
         } as never}
       />
     );
-    const view = render(<DashboardI18nProvider storage={null}>{renderPanel()}</DashboardI18nProvider>);
+    const view = render(renderPanel());
 
     await waitFor(() => {
       expect(screen.getAllByText("Shared Skills").length).toBeGreaterThan(0);
@@ -201,11 +160,11 @@ describe("SettingsAgentsPanel persistent skills and self-reflection", () => {
     fireEvent.input(screen.getByDisplayValue("Planning contract"), {
       target: { value: "Planning contract improved" },
     });
-    view.rerender(<DashboardI18nProvider storage={null}>{renderPanel()}</DashboardI18nProvider>);
+    view.rerender(renderPanel());
     fireEvent.input(screen.getByDisplayValue("The plan covers the persistent skills contract."), {
       target: { value: "The plan covers storage sharing, runtime injection, and MCP retrieval." },
     });
-    view.rerender(<DashboardI18nProvider storage={null}>{renderPanel()}</DashboardI18nProvider>);
+    view.rerender(renderPanel());
     fireEvent.input(screen.getByLabelText("Planning contract improved threshold"), {
       target: { value: "0.9" },
     });
@@ -265,7 +224,7 @@ describe("SettingsAgentsPanel persistent skills and self-reflection", () => {
     }];
 
     render(
-      <DashboardI18nProvider storage={null}><SettingsAgentsPanel
+      <SettingsAgentsPanel
         state={{
           activeScope: "project",
           setActiveScope: vi.fn(),
@@ -278,7 +237,7 @@ describe("SettingsAgentsPanel persistent skills and self-reflection", () => {
           updateProject: vi.fn(),
           updateEditableSettings: vi.fn(),
         } as never}
-      /></DashboardI18nProvider>,
+      />,
     );
 
     expect(await screen.findByText("Enabled")).toBeInTheDocument();

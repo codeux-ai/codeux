@@ -6,13 +6,19 @@ import { fileURLToPath } from "node:url";
 import { h } from "preact";
 import { useRef, useState } from "preact/hooks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { act, cleanup, fireEvent, render as testingRender, screen, waitFor, within } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import { renderWithI18n } from "../render-with-i18n.js";
 import type { ExecutionInvocationRecord, SprintPreviewSession } from "../../../dashboard/src/types.js";
 import type { SystemSort } from "../../../dashboard/src/v2/pages/stats/hooks/use-system-view-data.js";
 import type { TaskCardViewModel } from "../../../dashboard/src/v2/lib/tasks/task-card-view-model.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+
+const render = (ui: Parameters<typeof testingRender>[0], options?: Parameters<typeof testingRender>[1]) => testingRender(ui, {
+  ...options,
+  wrapper: ({ children }) => <DashboardI18nProvider initialLocale="en" storage={null}>{children}</DashboardI18nProvider>,
+});
 
 import {
   collectHorizontalOverflowWithoutBoundary,
@@ -597,7 +603,7 @@ describe("dashboard accessibility quality regressions", () => {
     expect(screen.getByRole("button", { name: `Remove ${provider.name}` })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Delete task TASK-LONG:/ })).toHaveAccessibleName(/Very long task title/);
     expect(container.querySelector(".kanban-card h4")).toHaveClass("break-words");
-    expect(screen.getByRole("list", { name: "1 preview sessions" })).toHaveClass("overflow-x-auto");
+    expect(screen.getByRole("list", { name: "1 preview session" })).toHaveClass("overflow-x-auto");
     expect(screen.getByRole("button", { name: `Select preview session ${previewSession.sprintName}` })).toHaveAccessibleName(
       new RegExp(previewSession.sprintName),
     );

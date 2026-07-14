@@ -5,8 +5,6 @@ import {
   getDefaultDesignGuidanceTechStacks,
   isValidDesignGuidanceId,
 } from "../../../../../src/domain/settings/design-guidance-catalog.js";
-import { settingsAgentsGuidanceMessages } from "../../i18n/messages/settings-agents-guidance.js";
-import { translateDashboardMessage, type DashboardLocale } from "../../i18n/locales.js";
 
 export type DesignGuidanceEntryKind = "techStack" | "styleguide";
 
@@ -88,20 +86,11 @@ export function getDesignGuidanceSelectedId(
 export function getDesignGuidanceActiveLabel(
   settings: DesignGuidanceSettings,
   kind: DesignGuidanceEntryKind,
-  locale: DashboardLocale = "en",
 ): string {
   const selectedId = getDesignGuidanceSelectedId(settings, kind);
-  if (selectedId === DESIGN_GUIDANCE_NONE_ID) {
-    return translateDashboardMessage(settingsAgentsGuidanceMessages, locale, "guidanceNone");
-  }
   const entry = getAllDesignGuidanceEntries(settings, kind)
     .find((candidate) => candidate.id === selectedId);
-  return entry?.name ?? translateDashboardMessage(
-    settingsAgentsGuidanceMessages,
-    locale,
-    "guidanceUnknown",
-    { id: selectedId },
-  );
+  return entry?.name ?? `Unknown (${selectedId})`;
 }
 
 export function isSelectedDefaultStyleguideHidden(settings: DesignGuidanceSettings): boolean {
@@ -118,7 +107,6 @@ export function validateDesignGuidanceCustomEntry(
   customEntries: DesignGuidanceEntrySettings[],
   kind: DesignGuidanceEntryKind,
   entryIndex: number,
-  locale: DashboardLocale = "en",
 ): DesignGuidanceEntryValidation {
   const labels = KIND_LABELS[kind];
   const trimmedId = entry.id.trim();
@@ -135,50 +123,31 @@ export function validateDesignGuidanceCustomEntry(
   ));
 
   const validation: DesignGuidanceEntryValidation = { hasError: false };
-  const localizedKind = translateDashboardMessage(
-    settingsAgentsGuidanceMessages,
-    locale,
-    kind === "techStack" ? "guidanceTechStackLower" : "guidanceStyleguideLower",
-  );
-  const translateValidation = (
-    key:
-      | "guidanceIdRequired"
-      | "guidanceIdPattern"
-      | "guidanceIdBuiltIn"
-      | "guidanceIdUnique"
-      | "guidanceNameRequired"
-      | "guidanceNameBuiltIn"
-      | "guidanceNameUnique"
-      | "guidanceSummaryRequired"
-      | "guidanceInstructionRequired",
-  ): string => translateDashboardMessage(settingsAgentsGuidanceMessages, locale, key, {
-    kind: localizedKind,
-  });
 
   if (!trimmedId) {
-    validation.id = translateValidation("guidanceIdRequired");
+    validation.id = `${labels.singular} id is required.`;
   } else if (!isValidDesignGuidanceId(trimmedId)) {
-    validation.id = translateValidation("guidanceIdPattern");
+    validation.id = "Use letters, numbers, underscores, or hyphens, up to 80 characters.";
   } else if (defaultIds.has(trimmedId)) {
-    validation.id = translateValidation("guidanceIdBuiltIn");
+    validation.id = `Use a custom id that does not match a built-in ${labels.singular}.`;
   } else if (duplicateCustomId) {
-    validation.id = translateValidation("guidanceIdUnique");
+    validation.id = `${labels.singular} id must be unique.`;
   }
 
   if (!trimmedName) {
-    validation.name = translateValidation("guidanceNameRequired");
+    validation.name = `${labels.singular} name is required.`;
   } else if (defaultNames.has(normalizeName(trimmedName))) {
-    validation.name = translateValidation("guidanceNameBuiltIn");
+    validation.name = `Use a custom name that does not match a built-in ${labels.singular}.`;
   } else if (duplicateCustomName) {
-    validation.name = translateValidation("guidanceNameUnique");
+    validation.name = `${labels.singular} name must be unique.`;
   }
 
   if (!entry.summary.trim()) {
-    validation.summary = translateValidation("guidanceSummaryRequired");
+    validation.summary = "Summary is required.";
   }
 
   if (!entry.instructionMarkdown.trim()) {
-    validation.instructionMarkdown = translateValidation("guidanceInstructionRequired");
+    validation.instructionMarkdown = "Instruction markdown is required.";
   }
 
   validation.hasError = Boolean(
@@ -193,11 +162,10 @@ export function validateDesignGuidanceCustomEntry(
 export function hasDesignGuidanceValidationErrors(
   settings: DesignGuidanceSettings,
   kind: DesignGuidanceEntryKind,
-  locale: DashboardLocale = "en",
 ): boolean {
   const entries = getCustomDesignGuidanceEntries(settings, kind);
   return entries.some((entry, index) => (
-    validateDesignGuidanceCustomEntry(entry, entries, kind, index, locale).hasError
+    validateDesignGuidanceCustomEntry(entry, entries, kind, index).hasError
   ));
 }
 

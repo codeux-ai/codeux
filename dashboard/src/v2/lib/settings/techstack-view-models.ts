@@ -1,7 +1,5 @@
 import type { TechstackCatalogSettings, TechstackSelectionSettings } from "../../../types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../lib/settings.js";
-import { settingsAgentsGuidanceMessages } from "../../i18n/messages/settings-agents-guidance.js";
-import { translateDashboardMessage, type DashboardLocale } from "../../i18n/locales.js";
 
 export type TechstackSelectorOptionKind = "unassigned" | "catalog";
 
@@ -40,7 +38,6 @@ const normalizeCatalog = (catalog: TechstackCatalogSettings | null | undefined):
 export const buildTechstackSelectorViewModel = (
   selection: TechstackSelectionSettings | null | undefined,
   catalog: TechstackCatalogSettings | null | undefined,
-  locale: DashboardLocale = "en",
 ): TechstackSelectorViewModel => {
   const normalizedCatalog = normalizeCatalog(catalog);
   const defaultEntry = normalizedCatalog.entries.find((entry) => entry.id === normalizedCatalog.defaultTechstackId)
@@ -55,7 +52,7 @@ export const buildTechstackSelectorViewModel = (
   ];
 
   return {
-    activeLabel: activeEntry?.label ?? translateDashboardMessage(settingsAgentsGuidanceMessages, locale, "techNone"),
+    activeLabel: activeEntry?.label ?? "None",
     activeTechstackId: activeEntry?.id ?? "",
     selectedTechstackId,
     isUnassigned: selectedTechstackId === null,
@@ -63,15 +60,13 @@ export const buildTechstackSelectorViewModel = (
     options: [
       {
         id: UNASSIGNED_OPTION_ID,
-        label: translateDashboardMessage(settingsAgentsGuidanceMessages, locale, "techNone"),
+        label: "None",
         kind: "unassigned",
         techstackId: null,
       },
       ...orderedEntries.map((entry) => ({
         id: entry.id,
-        label: entry.id === defaultEntry.id
-          ? translateDashboardMessage(settingsAgentsGuidanceMessages, locale, "techDefaultSuffix", { label: entry.label })
-          : entry.label,
+        label: entry.id === defaultEntry.id ? `${entry.label} (default)` : entry.label,
         kind: "catalog" as const,
         techstackId: entry.id,
       })),

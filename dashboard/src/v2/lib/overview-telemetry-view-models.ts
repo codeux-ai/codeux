@@ -5,6 +5,20 @@ export interface EventStyle {
   toneClass: string;
 }
 
+export interface OverviewEventLabels {
+  taskState: (state: string) => string;
+  sprintState: (state: string) => string;
+  sprintPaused: string;
+  states: Readonly<Record<string, string>>;
+}
+
+const DEFAULT_EVENT_LABELS: OverviewEventLabels = {
+  taskState: (state) => `task ${state}`,
+  sprintState: (state) => `sprint ${state}`,
+  sprintPaused: "sprint paused",
+  states: {},
+};
+
 export function buildProjectLookup(telemetry: OverviewTelemetrySnapshot): Map<string, string> {
   const lookup = new Map<string, string>();
   for (const project of telemetry?.activeProjects || []) {
@@ -16,7 +30,10 @@ export function buildProjectLookup(telemetry: OverviewTelemetrySnapshot): Map<st
   return lookup;
 }
 
-export function getEventStyle(event: ExecutionRuntimeEventSummary): EventStyle {
+export function getEventStyle(
+  event: ExecutionRuntimeEventSummary,
+  labels: OverviewEventLabels = DEFAULT_EVENT_LABELS,
+): EventStyle {
   const type = event.eventType;
   const status = event.sprintRunStatus;
   const state = event.taskRunState;
@@ -24,11 +41,16 @@ export function getEventStyle(event: ExecutionRuntimeEventSummary): EventStyle {
   // Use state/status to enrich the label if applicable, else fallback to event type
   let baseLabel = type.replace(/_/g, " ");
   if (type === "run_running" && state) {
-    baseLabel = `task ${state}`;
+    baseLabel = labels.taskState(labels.states[state] ?? state);
   } else if (type === "sprint_paused") {
-    baseLabel = "sprint paused";
+    baseLabel = labels.sprintPaused;
   } else if (type.includes("sprint_") && status) {
-    baseLabel = `sprint ${status}`;
+    baseLabel = labels.sprintState(labels.states[status] ?? status);
+  } else {
+    baseLabel = baseLabel
+      .split(" ")
+      .map((term) => labels.states[term] ?? term)
+      .join(" ");
   }
 
   if (type.includes("failed") || type.includes("error")) {
@@ -47,11 +69,14 @@ export function getEventStyle(event: ExecutionRuntimeEventSummary): EventStyle {
   return { label: baseLabel, toneClass: "text-slate-500" };
 }
 
-export function getInterventionContent(project: OverviewTelemetryProjectSummary): { title: string } | null {
+export function getInterventionContent(
+  project: OverviewTelemetryProjectSummary,
+  fallbackTitle = "Human intervention required",
+): { title: string } | null {
   if (!project.humanIntervention) {
     return null;
   }
   return {
-    title: project.humanIntervention.title || "Human intervention required",
+    title: project.humanIntervention.title || fallbackTitle,
   };
 }

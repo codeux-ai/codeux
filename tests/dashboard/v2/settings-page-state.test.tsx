@@ -13,7 +13,6 @@ import * as agentPresetApi from "../../../dashboard/src/v2/lib/agent-preset-api.
 import * as dashboardApi from "../../../dashboard/src/lib/api/dashboard-api.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import { SETTINGS_NAVIGATION_SESSION_KEY } from "../../../dashboard/src/v2/lib/settings-navigation-state.js";
-import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
 
 import * as navigationBlocker from "../../../dashboard/src/v2/router/navigation-blocker.js";
 
@@ -47,12 +46,6 @@ let mockFetchAgentPresets;
 let mockFetchSkillStorages;
 
 const cloneDashboardSettings = () => JSON.parse(JSON.stringify(DEFAULT_DASHBOARD_SETTINGS));
-
-const renderSettingsPage = () => render(
-  <DashboardI18nProvider initialLocale="en" storage={null}>
-    <SettingsPage />
-  </DashboardI18nProvider>,
-);
 
 const buildSystemRuntimeSettings = (overrides: Record<string, unknown> = {}) => ({
   dashboardPort: 4444,
@@ -371,7 +364,7 @@ describe("useSettingsPageState", () => {
   it("renders settings loading state as a busy category region", () => {
     mockFetchSystem.mockReturnValueOnce(new Promise(() => {}));
 
-    renderSettingsPage();
+    render(<SettingsPage />);
 
     expect(screen.getByRole("region", { name: "Settings category panel" })).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("status", { name: "Loading settings" })).toHaveTextContent("Loading settings.");
@@ -380,7 +373,7 @@ describe("useSettingsPageState", () => {
   it("renders settings load failures as alerts while preserving the shell", async () => {
     mockFetchSystem.mockRejectedValueOnce(new Error("settings exploded"));
 
-    renderSettingsPage();
+    render(<SettingsPage />);
 
     await waitFor(() => {
       expect(screen.getAllByRole("alert").some((alert) => alert.textContent?.includes("settings exploded"))).toBe(true);
@@ -389,7 +382,7 @@ describe("useSettingsPageState", () => {
   });
 
   it("announces empty settings search results and recovers when the query clears", async () => {
-    renderSettingsPage();
+    render(<SettingsPage />);
 
     await waitFor(() => {
       expect(screen.getByRole("region", { name: "Settings category panel" })).not.toHaveAttribute("aria-busy");
@@ -451,7 +444,7 @@ describe("useSettingsPageState", () => {
   });
 
   it("renders self-reflection controls default off and supports criteria add/remove", async () => {
-    renderSettingsPage();
+    render(<SettingsPage />);
 
     await waitFor(() => {
       expect(screen.getByRole("region", { name: "Settings category panel" })).not.toHaveAttribute("aria-busy");

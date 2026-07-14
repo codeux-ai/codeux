@@ -15,6 +15,8 @@ interface CellActionsProps {
     onPrimaryAction?: () => void | Promise<any>;
     onSprintsClick?: () => void | Promise<void>;
     onSettingsClick?: () => void | Promise<void>;
+    primaryLabel?: string;
+    settingsLabel?: string;
 }
 
 /**
@@ -29,6 +31,8 @@ export const CellActions: FunctionComponent<CellActionsProps> = ({
     onPrimaryAction,
     onSprintsClick,
     onSettingsClick,
+    primaryLabel,
+    settingsLabel = "Settings",
 }) => {
     const { feedback: primaryFeedback, setPending: setPrimaryPending, setSuccess: setPrimarySuccess, setError: setPrimaryError } = useActionFeedback(1500);
     const tokens = useInteractionTokens();
@@ -60,7 +64,7 @@ export const CellActions: FunctionComponent<CellActionsProps> = ({
             <button
                 style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
                 className={`flex items-center justify-center w-9 h-9 rounded-full text-slate-800 dark:text-white bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 relative overflow-hidden ${SHARED_INTERACTION_CLASSES}`}
-                aria-label={isRunning ? "Stop" : "Play"}
+                aria-label={primaryLabel ?? (isRunning ? "Stop" : "Play")}
                 aria-busy={isPrimaryPending}
                 disabled={!onPrimaryAction || isPrimaryPending}
                 onClick={handlePrimaryClick as any}
@@ -104,7 +108,7 @@ export const CellActions: FunctionComponent<CellActionsProps> = ({
                     void onSettingsClick?.();
                 }}
                 className={`flex items-center justify-center w-11 h-11 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 rounded-full text-slate-800 dark:text-white ${SHARED_INTERACTION_CLASSES}`}
-                aria-label="Settings"
+                aria-label={settingsLabel}
             >
                 <button
                     type="button"
