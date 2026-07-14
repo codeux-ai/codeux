@@ -39,6 +39,32 @@ Keep each catalog with its owning feature and import it only where the feature i
 
 The Knowledge route is a concrete feature catalog: its headers, document controls and states, ingestion dialogs, search feedback, confirmations, and accessible announcements support English and German. Counts, sizes, dates, and similarity percentages follow the active locale, while document data, paths, names, identifiers, search excerpts, partial-failure diagnostics, and API errors remain verbatim.
 
+The operational Settings catalog covers General, Sprint, QA, Automation, Worker, Browser, and Danger controls and their related dialogs. Localized option captions continue to save the existing enum values, while branch tokens, paths, command examples, default instruction templates, dependency metadata, API errors, and runtime diagnostics are displayed unchanged.
+
+## File Browser boundary
+
+The File Browser has a route-owned catalog for page and session controls, tree and change summaries, file and diff viewer chrome, Monaco loading states, recovery actions, and accessible names. Counts and the snapshot timestamp use the locale-bound `Intl` helpers.
+
+Repository and runtime values remain exact: paths, filenames, source and diff content, syntax language IDs, Git refs, project and sprint names, binary metadata, response reasons, and backend error details are never translated. Localized sentences can frame those values, but interpolation inserts them verbatim and does not alter Git status ordering or diff line calculations.
+
+## Nodes route
+
+The feature-gated Nodes route imports its own `messages/nodes.ts` catalog. English and German cover its library, palettes, canvas and minimap controls, inspectors, governance review, validation summaries, run debugger, scheduling entry point, empty/error states, and accessible names. Locale-explicit helpers serve the pure node view models and dashboard-generated canvas and agent-command validation explanations.
+
+This boundary is presentation-only: graph serialization, ids and types, schema keys, command names, configuration values, migration markers, skill names, API errors, policy/provider diagnostics, run logs, and execution payloads remain unchanged. Known status values are mapped to localized display text without changing the underlying contract value.
+
+## Memory route boundary
+
+The Memory route has a feature-owned English and German catalog covering map controls, tier and scope filters, search, cards, the inspector, add/delete and batch actions, accessible announcements, and the embedding-model catalog and custom-model form. Locale-aware `Intl` formatting handles counts, plurals, percentages, dates, strengths, and file sizes without changing numeric values or filter/sort behavior. Localized category labels can be searched while the persisted category keys remain stable.
+
+The localization boundary deliberately excludes memory titles and content, claims, evidence, tags, agent names, model IDs, catalog descriptions, languages, licenses, URLs, filenames, and server/API diagnostics. Those values are rendered exactly as supplied.
+
+## Agents route boundary
+
+The lazy `/agents` route imports its own `messages/agents.ts` catalog. English and German cover the roster, preset detail/editor, validation, avatar customization, instruction files, memory and MCP configuration, repository push feedback, compatibility updates, loading and empty states, and accessibility labels. Dates, counts, token estimates, byte sizes, and plural messages use the active locale.
+
+Agent-authored and runtime data stays byte-for-byte outside translation: preset names and labels, system instructions, memory templates, Markdown files, MCP server/tool names, storage names, provider/model names, repository and invocation output, and API errors. Persisted identifiers and configuration values are likewise unchanged; the route translates only their presentation.
+
 ## Settings localization boundaries
 
 The Agents, Techstacks, and Guidance settings surfaces use `messages/settings-agents-guidance.ts`. Component copy follows the provider's active locale, while locale-explicit presentation helpers accept `en` or `de` for tests and non-component consumers.
