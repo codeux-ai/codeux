@@ -1,13 +1,18 @@
 /** @jsx h */
 // @vitest-environment happy-dom
-import { h } from "preact";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { h, type ComponentChildren } from "preact";
+import { act, cleanup, fireEvent, render as testingRender, screen, waitFor, within } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { LiveSessionPage } from "../../../dashboard/src/v2/LiveSessionPage.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
 
 expect.extend(matchers);
+
+const render = (children: ComponentChildren) => testingRender(
+  <DashboardI18nProvider initialLocale="en" storage={null}>{children}</DashboardI18nProvider>,
+);
 
 const forceCompleteLiveTaskMock = vi.fn();
 

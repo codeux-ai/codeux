@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import { Plus, Trash2, Workflow } from "lucide-preact";
 import type { NodeFlowRecord } from "../../types.js";
 import { summarizeNodeFlow } from "../../lib/node-flow-view-models.js";
+import { useNodesI18n } from "../../i18n/messages/nodes.js";
 
 interface NodeFlowLibraryProps {
   flows: NodeFlowRecord[];
@@ -20,11 +21,12 @@ export const NodeFlowLibrary: FunctionComponent<NodeFlowLibraryProps> = ({
   onCreate,
   onDelete,
 }) => {
+  const { locale, t, tp } = useNodesI18n();
   return (
     <aside className="flex min-w-0 flex-col gap-3 xl:w-[320px] xl:shrink-0">
       <div className="flex items-center justify-between gap-3 px-1">
         <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
-          {flows.length} Flow{flows.length === 1 ? "" : "s"}
+          {tp("flowCount", flows.length)}
         </span>
         <button
           type="button"
@@ -32,12 +34,12 @@ export const NodeFlowLibrary: FunctionComponent<NodeFlowLibraryProps> = ({
           className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 dark:text-void-900"
         >
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-          New
+          {t("new")}
         </button>
       </div>
       {loading ? (
         <div role="status" aria-live="polite" className="rounded-2xl border border-black/[0.06] bg-white/60 p-4 text-sm text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04]">
-          Loading flows…
+          {t("loadingFlows")}
         </div>
       ) : flows.length === 0 ? (
         <button
@@ -46,13 +48,13 @@ export const NodeFlowLibrary: FunctionComponent<NodeFlowLibraryProps> = ({
           className="flex min-h-48 flex-col items-center justify-center gap-3 rounded-[1.6rem] border border-dashed border-black/[0.08] bg-white/45 p-6 text-center transition hover:border-signal-500/40 hover:bg-signal-500/[0.05] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.03]"
         >
           <Workflow className="h-9 w-9 text-signal-500" strokeWidth={1.6} aria-hidden="true" />
-          <span className="text-sm font-bold text-slate-800 dark:text-slate-100">Create Node Flow</span>
-          <span className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">Project workflow drafts appear here.</span>
+          <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{t("createNodeFlow")}</span>
+          <span className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t("flowLibraryEmpty")}</span>
         </button>
       ) : (
         <div className="flex flex-col gap-2.5">
           {flows.map((flow) => {
-            const summary = summarizeNodeFlow(flow);
+            const summary = summarizeNodeFlow(flow, locale);
             const selected = flow.id === selectedFlowId;
             return (
               <div
@@ -72,14 +74,14 @@ export const NodeFlowLibrary: FunctionComponent<NodeFlowLibraryProps> = ({
                   <span className="block truncate text-sm font-bold text-slate-900 dark:text-white">{summary.title}</span>
                   <span className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{summary.description}</span>
                   <span className="mt-3 flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                    <span>{summary.nodeCount} nodes</span>
-                    <span>{summary.edgeCount} edges</span>
+                    <span>{tp("nodeCount", summary.nodeCount)}</span>
+                    <span>{tp("edgeCount", summary.edgeCount)}</span>
                     <span>{summary.versionLabel}</span>
                   </span>
                 </button>
                 <button
                   type="button"
-                  aria-label={`Delete node flow ${flow.title}`}
+                  aria-label={t("deleteNodeFlow", { title: flow.title })}
                   onClick={() => onDelete(flow.id)}
                   className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 transition hover:bg-status-red/[0.08] hover:text-status-red focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40"
                 >

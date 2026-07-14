@@ -5,6 +5,7 @@ import type {
 } from "../../../dashboard/src/v2/types.js";
 import {
   buildPublishedCustomDashboardLink,
+  buildCustomDashboardFrameDocument,
   resolveCustomDashboardRuntimeSource,
   resolvePublishedCustomDashboardRuntime,
 } from "../../../dashboard/src/v2/lib/custom-dashboard-runtime.js";
@@ -118,5 +119,27 @@ describe("custom dashboard runtime", () => {
     expect(buildPublishedCustomDashboardLink("dashboard 1", "http://localhost:4444")).toBe(
       "http://localhost:4444/custom-dashboards?dashboard=dashboard+1&mode=viewer",
     );
+  });
+
+  it("localizes dashboard-owned German runtime presentation without mutating revision assets", () => {
+    const blocked = resolvePublishedCustomDashboardRuntime(
+      { ...dashboard, status: "draft", publishedRevisionId: null },
+      [revision],
+      "de",
+    );
+    expect(blocked.status === "blocked" ? blocked.reason : "").toContain("Nur veröffentlichte");
+
+    const source = "window.generatedLabel = 'Custom dashboard source stays verbatim';";
+    const javascriptRevision: CustomDashboardRevisionRecord = {
+      ...revision,
+      manifest: { ...revision.manifest, entryFile: "assets/dashboard.js", filePaths: ["assets/dashboard.js"] },
+      fileBundle: { files: [{ path: "assets/dashboard.js", content: source, contentType: "text/javascript" }] },
+    };
+    const document = buildCustomDashboardFrameDocument(dashboard, javascriptRevision, "de");
+
+    expect(document).toContain('<html lang="de">');
+    expect(document).toContain('aria-label="Veröffentlichtes benutzerdefiniertes Dashboard"');
+    expect(document).toContain(source);
+    expect(javascriptRevision.fileBundle.files[0]?.content).toBe(source);
   });
 });

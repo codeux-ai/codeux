@@ -8,27 +8,35 @@ import { buildPreviewUrl, formatPreviewPortMappingsSummary, getPrimaryPreviewPor
 import type { SprintPreviewSession } from "../../../types.js";
 import { getSafeUrl } from "../../lib/safe-url.js";
 import { buildInteractionTransition } from "../../lib/motion/tokens.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import {
+    browserPreviewMessages,
+    type BrowserPreviewMessageKey,
+    type BrowserPreviewMessageVariables,
+} from "../../i18n/messages/browser-preview.js";
 
 type InteractionState = 'closed' | 'open';
-
-const statusLabel: Record<SprintPreviewSession["status"], string> = {
-    starting: "Starting",
-    running: "Running",
-    stopped: "Stopped",
-    error: "Error",
-};
-
-const healthLabel: Record<SprintPreviewSession["healthStatus"], string> = {
-    healthy: "Healthy",
-    unreachable: "Unreachable",
-    unknown: "Health unknown",
-};
 
 const menuTransition = buildInteractionTransition("listReorder");
 const menuRevealTransition = buildInteractionTransition("listReveal", "opacity, transform");
 const controlTransition = buildInteractionTransition("controlFeedback");
 
 export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ enabled = true }) => {
+    const { formatNumber, locale, translate } = useDashboardI18n();
+    const t = useCallback((key: BrowserPreviewMessageKey, variables?: BrowserPreviewMessageVariables) => (
+        translate(browserPreviewMessages, key, variables)
+    ), [translate]);
+    const statusLabel: Record<SprintPreviewSession["status"], string> = {
+        starting: t("statusStarting"),
+        running: t("statusRunning"),
+        stopped: t("statusStopped"),
+        error: t("statusError"),
+    };
+    const healthLabel: Record<SprintPreviewSession["healthStatus"], string> = {
+        healthy: t("healthHealthy"),
+        unreachable: t("healthUnreachable"),
+        unknown: t("healthUnknown"),
+    };
     const { selectedProject } = useProjectData();
     const [sessions, setSessions] = useState<SprintPreviewSession[]>([]);
     const [loading, setLoading] = useState(false);
@@ -80,11 +88,11 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
             setLoadError(null);
         } catch (error) {
             console.error("Failed to fetch browser sessions:", error);
-            setLoadError(error instanceof Error ? error.message : "Failed to fetch browser sessions.");
+            setLoadError(error instanceof Error ? error.message : t("couldNotLoadSessions"));
         } finally {
             setLoading(false);
         }
-    }, [selectedProject?.id]);
+    }, [selectedProject?.id, t]);
 
     useEffect(() => {
         if (isMenuVisible) {
@@ -221,7 +229,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                 aria-haspopup="menu"
                 aria-expanded={isMenuVisible}
                 aria-controls={isMenuVisible ? menuId : undefined}
-                aria-label={`Browser Sessions: ${sessions.length} active`}
+                aria-label={t("browserSessionsCount", { count: formatNumber(sessions.length) })}
                 className={`relative w-11 h-11 flex items-center justify-center rounded-xl transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
                     isMenuVisible
                     ? "bg-signal-500/8 dark:bg-signal-400/10"
@@ -236,19 +244,19 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                 <div
                     role="menu"
                     id={menuId}
-                    aria-label="Active Browser Sessions"
+                    aria-label={t("activeBrowserSessions")}
                     aria-busy={loading}
                     className="fixed inset-x-4 top-[72px] md:inset-auto md:absolute md:top-full md:right-0 mt-2 w-72 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50 flex flex-col"
                     style={{ transition: menuRevealTransition }}
                 >
                     <div className="px-3 py-2 flex justify-between items-center shrink-0 border-b border-black/[0.06] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02]">
-                        <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Active Sessions</span>
+                        <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("activeSessions")}</span>
                         <Link
                             to="/browser"
                             onClick={() => closeMenu()}
                             className="text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 hover:text-signal-700 dark:text-signal-500 dark:hover:text-signal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-md px-1"
                         >
-                            Open App
+                            {t("openApp")}
                         </Link>
                     </div>
                     <div className="flex-1 min-h-0 overflow-y-auto pb-1 flex flex-col" onKeyDown={handleMenuKeyDown as any}>
@@ -263,26 +271,26 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                 aria-live="polite"
                                 aria-atomic="true"
                             >
-                                {loadError
-                                    ? `Could not refresh sessions. Showing last loaded sessions. ${loadError}`
-                                    : "Refreshing sessions. Current sessions remain available."}
+                                {loadError ? (
+                                    <>{t("refreshSessionsCachedFailedPrefix")} {loadError}</>
+                                ) : t("refreshingSessionsCached")}
                             </div>
                         )}
                         {loading && sessions.length === 0 ? (
                             <div className="px-4 py-8 text-center flex flex-col items-center justify-center gap-3" role="status" aria-live="polite" aria-busy={loading}>
                                 <Loader2 className="w-5 h-5 text-signal-500 animate-spin motion-reduce:animate-none" />
-                                <p className="text-xs text-slate-500 font-medium">Discovering active sessions...</p>
+                                <p className="text-xs text-slate-500 font-medium">{t("discoveringSessions")}</p>
                             </div>
                         ) : sessions.length > 0 ? (
                             sessions.map((session, index) => {
-                                const sprintName = session.sprintName || "Unknown Sprint";
+                                const sprintName = session.sprintName || t("unknownSprint");
                                 const primaryMapping = getPrimaryPreviewPortMapping(session);
                                 const canOpen = Boolean(primaryMapping?.hostPort) && session.status === "running";
                                 const unavailableReason = session.status === "stopped"
-                                    ? "Preview link unavailable because the container is stopped."
+                                    ? t("linkStoppedShort")
                                     : session.status === "error"
-                                        ? "Preview link unavailable because the container has an error."
-                                        : "Preview link unavailable until a host port is routed.";
+                                        ? t("linkErrorShort")
+                                        : t("linkWaitingPort");
                                 const unavailableReasonId = `browser-menu-session-${session.id}-unavailable`;
                                 const firstEnabledIndex = sessions.findIndex((candidate) => Boolean(getPrimaryPreviewPortMapping(candidate)?.hostPort) && candidate.status === "running");
                                 const menuItemClassName = `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex flex-col gap-1.5 px-3 py-3 text-left transition-colors group border-b border-black/[0.04] dark:border-white/[0.04] last:border-0 ${
@@ -306,7 +314,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                             <ExternalLink aria-hidden="true" className="w-3.5 h-3.5 shrink-0 text-slate-400 group-hover:text-signal-500 transition-colors" />
                                         ) : (
                                             <span className="rounded-full border border-slate-400/25 bg-slate-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-slate-500 dark:border-slate-500/40 dark:bg-slate-500/15 dark:text-slate-400">
-                                                Link unavailable
+                                                {t("linkUnavailableShort")}
                                             </span>
                                         )}
                                     </div>
@@ -315,7 +323,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                             {healthLabel[session.healthStatus]}
                                         </span>
                                         <span className="break-words text-[10px] font-mono text-slate-500 dark:text-slate-400">
-                                            {formatPreviewPortMappingsSummary(session)}
+                                            {formatPreviewPortMappingsSummary(session, locale)}
                                         </span>
                                     </div>
                                     {!canOpen && (
@@ -332,7 +340,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                             key={session.id}
                                             role="menuitem"
                                             aria-disabled="true"
-                                            aria-label={`Preview link unavailable for ${sprintName}`}
+                                            aria-label={t("previewLinkUnavailableFor", { name: sprintName })}
                                             aria-describedby={unavailableReasonId}
                                             tabIndex={-1}
                                             className={menuItemClassName}
@@ -350,7 +358,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         role="menuitem"
-                                        aria-label={`Open preview session ${sprintName} in a new tab`}
+                                        aria-label={t("openPreviewNewTab", { name: sprintName })}
                                         onClick={() => closeMenu()}
                                         tabIndex={index === firstEnabledIndex ? 0 : -1}
                                         className={menuItemClassName}
@@ -366,8 +374,8 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                     <FolderArchive className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">No project selected</p>
-                                    <p className="text-xs text-slate-500 mt-1">Select a project to view its active sessions</p>
+                                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{t("noProjectSelected")}</p>
+                                    <p className="text-xs text-slate-500 mt-1">{t("selectProjectForSessions")}</p>
                                 </div>
                             </div>
                         ) : loadError ? (
@@ -376,7 +384,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                     <AlertCircle className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <p className="text-sm font-semibold text-status-red">Could not load sessions</p>
+                                    <p className="text-sm font-semibold text-status-red">{t("couldNotLoadSessions")}</p>
                                     <p className="text-xs text-slate-500 mt-1">{loadError}</p>
                                 </div>
                             </div>
@@ -386,8 +394,8 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                     <ServerOff className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">No active sessions</p>
-                                    <p className="text-xs text-slate-500 mt-1">Launch a session from the browser or sprint page</p>
+                                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{t("noActiveSessions")}</p>
+                                    <p className="text-xs text-slate-500 mt-1">{t("launchSessionHint")}</p>
                                 </div>
                             </div>
                         )}

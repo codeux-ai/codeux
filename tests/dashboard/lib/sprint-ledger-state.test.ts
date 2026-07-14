@@ -425,7 +425,17 @@ describe("sprint-ledger-state", () => {
 
     it("formats affected sprint names for destructive bulk confirmation", () => {
       expect(formatSelectedSprintNamesForConfirmation([sprints[0]])).toBe('Affected sprints: "Alpha Sprint".');
-      expect(formatSelectedSprintNamesForConfirmation(sprints.slice(0, 4), 2)).toBe('Affected sprints: "Alpha Sprint", "Beta Sprint", and 2 more sprints.');
+      expect(formatSelectedSprintNamesForConfirmation(sprints.slice(0, 4), 2)).toBe('Affected sprints: "Alpha Sprint" and "Beta Sprint", and 2 more sprints.');
+    });
+
+    it("filters localized German status labels and formats German ledger summaries", () => {
+      expect(filterSprints(sprints, { ...DEFAULT_LEDGER_FILTERS, query: "läuft" }, "SPR", "de").map(({ id }) => id)).toEqual(["a"]);
+      expect(getLedgerOutcomeMessage("Filter aktualisiert.", 1, { totalCount: 4, selectedCount: 1 }, "de")).toBe(
+        "Filter aktualisiert. Anzeige: 1 von 4 Sprints. 1 ausgewählt.",
+      );
+      expect(formatSelectedSprintNamesForConfirmation(sprints.slice(0, 2), 2, "de")).toBe(
+        'Betroffene Sprints: "Alpha Sprint" und "Beta Sprint".',
+      );
     });
 
     it("keeps pending bulk button labels readable without motion", () => {

@@ -6,12 +6,19 @@ import { fileURLToPath } from "node:url";
 import { h } from "preact";
 import { useRef, useState } from "preact/hooks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { act, cleanup, fireEvent, render as testingRender, screen, waitFor, within } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
+import { renderWithI18n } from "../render-with-i18n.js";
 import type { ExecutionInvocationRecord, SprintPreviewSession } from "../../../dashboard/src/types.js";
 import type { SystemSort } from "../../../dashboard/src/v2/pages/stats/hooks/use-system-view-data.js";
 import type { TaskCardViewModel } from "../../../dashboard/src/v2/lib/tasks/task-card-view-model.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+
+const render = (ui: Parameters<typeof testingRender>[0], options?: Parameters<typeof testingRender>[1]) => testingRender(ui, {
+  ...options,
+  wrapper: ({ children }) => <DashboardI18nProvider initialLocale="en" storage={null}>{children}</DashboardI18nProvider>,
+});
 
 import {
   collectHorizontalOverflowWithoutBoundary,
@@ -93,8 +100,6 @@ import { FileViewer } from "../../../dashboard/src/v2/components/file-browser/Fi
 import { DiffViewer } from "../../../dashboard/src/v2/components/file-browser/DiffViewer.js";
 import { InvocationsTable } from "../../../dashboard/src/v2/pages/stats/components/system/InvocationsTable.js";
 import { WaveFluid } from "../../../dashboard/src/v2/components/ui/WaveFluid.js";
-import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
-
 const mockedUseReducedMotion = vi.mocked(useReducedMotion);
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -247,7 +252,7 @@ describe("dashboard accessibility quality regressions", () => {
   });
 
   it("provides reusable DOM checks for unnamed icon controls and unbounded horizontal overflow", () => {
-    const { container } = render(
+    const { container } = renderWithI18n(
       <div>
         <button type="button" aria-label="Named icon"><span aria-hidden="true">x</span></button>
         <button type="button"><svg aria-hidden="true" /></button>
@@ -264,7 +269,7 @@ describe("dashboard accessibility quality regressions", () => {
 
   it("supports shell listbox keyboard navigation and restores focus to the trigger", async () => {
     const user = userEvent.setup();
-    render(<ShellListboxHarness />);
+    renderWithI18n(<ShellListboxHarness />);
 
     const trigger = screen.getByRole("button", { name: "Project selector" });
     trigger.focus();
@@ -290,7 +295,7 @@ describe("dashboard accessibility quality regressions", () => {
     const onConfirm = vi.fn();
     const onCancel = vi.fn();
 
-    render(
+    renderWithI18n(
       <div>
         <button type="button">Before dialog</button>
         <ConfirmDialog
@@ -333,7 +338,7 @@ describe("dashboard accessibility quality regressions", () => {
     vi.useFakeTimers();
     const onConfirm = vi.fn();
 
-    render(
+    renderWithI18n(
       <ConfirmDialog
         isOpen
         options={{
@@ -370,7 +375,7 @@ describe("dashboard accessibility quality regressions", () => {
     }));
     const onCancel = vi.fn();
 
-    render(
+    renderWithI18n(
       <ConfirmDialog
         isOpen
         options={{
@@ -408,7 +413,7 @@ describe("dashboard accessibility quality regressions", () => {
 
   it("closes Popover on Escape and restores focus to the trigger", async () => {
     const user = userEvent.setup();
-    render(<PopoverHarness />);
+    renderWithI18n(<PopoverHarness />);
 
     const trigger = screen.getByRole("button", { name: "Open popover" });
     trigger.focus();
@@ -430,7 +435,7 @@ describe("dashboard accessibility quality regressions", () => {
   it("supports tablist roving focus and sortable invocation headers", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(
+    renderWithI18n(
       <div>
         <FilterStrip
           ariaLabel="Task stream filters"
@@ -460,7 +465,7 @@ describe("dashboard accessibility quality regressions", () => {
   });
 
   it("announces async states across live, feedback, file, diff, and stats surfaces", () => {
-    const { rerender } = render(
+    const { rerender } = renderWithI18n(
       <LiveTransportBanner
         transportState="reconnecting"
         isRecovering={false}
@@ -482,7 +487,7 @@ describe("dashboard accessibility quality regressions", () => {
     expectLiveRegion(screen.getByRole("alert"), { role: "alert", live: "assertive" });
     cleanup();
 
-    const feedback = render(<ActionFeedbackRegion status="pending" message="Saving settings" progress={35} />);
+    const feedback = renderWithI18n(<ActionFeedbackRegion status="pending" message="Saving settings" progress={35} />);
     const pending = screen.getByRole("status");
     expectLiveRegion(pending, { role: "status", live: "polite" });
     expect(pending).toHaveAttribute("aria-busy", "true");
@@ -492,7 +497,7 @@ describe("dashboard accessibility quality regressions", () => {
     expectLiveRegion(screen.getByRole("alert"), { role: "alert", live: "assertive" });
     cleanup();
 
-    const file = render(<FileViewer file={null} loading error={null} isDark={false} />);
+    const file = renderWithI18n(<FileViewer file={null} loading error={null} isDark={false} />);
     expectLiveRegion(screen.getByRole("status"), { role: "status", live: "polite" });
     file.rerender(<FileViewer file={null} loading={false} error={null} isDark={false} />);
     expect(screen.getByRole("status")).toHaveTextContent("No file selected");
@@ -500,7 +505,7 @@ describe("dashboard accessibility quality regressions", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("read failed");
     cleanup();
 
-    const diff = render(<DiffViewer diff={null} loading error={null} isDark={false} sideBySide={false} />);
+    const diff = renderWithI18n(<DiffViewer diff={null} loading error={null} isDark={false} sideBySide={false} />);
     expectLiveRegion(screen.getByRole("status"), { role: "status", live: "polite" });
     diff.rerender(<DiffViewer diff={null} loading={false} error={null} isDark={false} sideBySide={false} />);
     expect(screen.getByRole("status")).toHaveTextContent("No change selected");
@@ -508,7 +513,7 @@ describe("dashboard accessibility quality regressions", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("diff failed");
     cleanup();
 
-    const table = render(
+    const table = renderWithI18n(
       <InvocationsTable invocations={[]} sort={{ key: "startedAt", dir: "desc" }} onSortChange={vi.fn()} expandedId={null} onRowExpand={vi.fn()} loading />,
     );
     expect(screen.getByRole("status", { name: "Loading invocation records" })).toHaveTextContent("Loading invocation records");
@@ -552,8 +557,8 @@ describe("dashboard accessibility quality regressions", () => {
       sessionId: "session-with-a-long-runtime-identifier",
     };
 
-    const { container } = render(
-      <DashboardI18nProvider initialLocale="de" storage={null}><div>
+    const { container } = renderWithI18n(
+      <div>
         <ProviderInstanceCard
           providerConfigId="opencode-long"
           provider={provider}
@@ -589,7 +594,9 @@ describe("dashboard accessibility quality regressions", () => {
           expandedId={null}
           onRowExpand={vi.fn()}
         />
-      </div></DashboardI18nProvider>,
+      </div>,
+      {},
+      "de",
     );
 
     expect(screen.getByRole("region", { name: provider.name })).toBeInTheDocument();
@@ -598,12 +605,12 @@ describe("dashboard accessibility quality regressions", () => {
     expect(screen.getByRole("button", { name: `Entfernen: ${provider.name}` })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Delete task TASK-LONG:/ })).toHaveAccessibleName(/Very long task title/);
     expect(container.querySelector(".kanban-card h4")).toHaveClass("break-words");
-    expect(screen.getByRole("list", { name: "1 preview sessions" })).toHaveClass("overflow-x-auto");
-    expect(screen.getByRole("button", { name: `Select preview session ${previewSession.sprintName}` })).toHaveAccessibleName(
+    expect(screen.getByRole("list", { name: "1 Vorschau-Sitzung" })).toHaveClass("overflow-x-auto");
+    expect(screen.getByRole("button", { name: `Vorschau-Sitzung ${previewSession.sprintName} auswählen` })).toHaveAccessibleName(
       new RegExp(previewSession.sprintName),
     );
-    expect(screen.getByLabelText("Close preview window")).toBeInTheDocument();
-    expect(screen.getByLabelText(`Preview address for ${previewSession.sprintName}`)).toBeInTheDocument();
+    expect(screen.getByLabelText("Vorschaufenster schließen")).toBeInTheDocument();
+    expect(screen.getByLabelText(`Vorschau-Adresse für ${previewSession.sprintName}`)).toBeInTheDocument();
 
     const caption = screen.getByText(/Invocation ledger with sortable time/i);
     expect(caption.tagName.toLowerCase()).toBe("caption");
@@ -618,7 +625,7 @@ describe("dashboard accessibility quality regressions", () => {
   it("uses static reduced-motion primitives instead of animated-only state", () => {
     mockedUseReducedMotion.mockReturnValue(true);
 
-    const { container } = render(<WaveFluid accentHex="#00e0a0" isActive />);
+    const { container } = renderWithI18n(<WaveFluid accentHex="#00e0a0" isActive />);
     const waveRoot = container.firstElementChild as HTMLElement;
     expect(waveRoot).toHaveAttribute("data-active", "true");
     expect(waveRoot).toHaveClass("opacity-[0.65]");
@@ -631,7 +638,7 @@ describe("dashboard accessibility quality regressions", () => {
       executorLabel: "Codex",
       dependencyIndicators: [],
     };
-    render(<KanbanTaskCard viewModel={viewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    renderWithI18n(<KanbanTaskCard viewModel={viewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
     const card = screen.getByLabelText(/Task TASK-REDUCED:/);
     expect(card).toHaveClass("kanban-card-reduced-motion");
     expect(card).not.toHaveAttribute("draggable", "true");
@@ -730,7 +737,7 @@ describe("dashboard accessibility quality regressions", () => {
     const sprintRow = readSource("dashboard/src/v2/components/sprints/SprintLedgerRow.tsx");
     expect(sprintRow).toMatch(/title=\{selectionDisabledTitle\}/);
     expect(sprintRow).toMatch(/title=\{pinDisabledTitle\}/);
-    expect(sprintRow).toMatch(/while a bulk action is in progress/);
+    expect(sprintRow).toMatch(/controlsDisabledBulk/);
     expect(sprintRow).not.toMatch(/group-hover:opacity-100/);
 
     const bulkActions = readSource("dashboard/src/v2/components/sprints/SprintLedgerBulkActions.tsx");

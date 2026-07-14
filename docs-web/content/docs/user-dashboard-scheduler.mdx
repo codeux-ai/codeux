@@ -10,6 +10,8 @@ planning prompts.
 - **Calendar** — a month view of upcoming occurrences.
 - **Day** — a focused list of what runs on a given day.
 
+The Scheduler follows the dashboard's active English or German locale. Headers, controls, recurrence summaries, validation, confirmations, schedule statuses, sprint statuses in dependent-schedule choices, and announcements are translated, while dates and times use locale-aware formatting. Scheduled-entry details are formatted in the schedule's saved timezone and display its timezone ID unchanged. If a saved timezone ID is invalid or unsupported by the host, the page falls back to safe locale formatting and keeps the saved ID visible without changing it. Changing the dashboard language never changes saved timestamps, recurrence rules, sprint or target enums, payloads, names, prompts, messages, execution output, or server errors.
+
 ## Schedule targets
 
 Each scheduler entry has a **target** — the thing that runs when it fires:

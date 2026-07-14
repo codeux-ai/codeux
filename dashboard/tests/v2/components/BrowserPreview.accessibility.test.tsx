@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
-import { render, screen, waitFor, fireEvent } from "@testing-library/preact";
+import { render as testingRender, screen, waitFor, fireEvent } from "@testing-library/preact";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
@@ -10,6 +10,11 @@ import { BrowserSessionsMenu } from "../../../src/v2/components/browser/BrowserS
 import { PreviewSessionSlider } from "../../../src/v2/components/browser/PreviewSessionSlider";
 import { BrowserPage } from "../../../src/v2/BrowserPage";
 import { ProjectDataProvider } from "../../../src/v2/context/project-data";
+import { DashboardI18nProvider } from "../../../src/v2/i18n/context.js";
+
+const render = (ui: Parameters<typeof testingRender>[0]) => testingRender(ui, {
+  wrapper: ({ children }) => <DashboardI18nProvider initialLocale="en" storage={null}>{children}</DashboardI18nProvider>,
+});
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => vi.fn(),
@@ -122,7 +127,7 @@ describe("Browser Preview Accessibility", () => {
         <BrowserPage />
       </ProjectDataProvider>
     );
-    vi.runAllTimers(); // clear up async effects
+    vi.runOnlyPendingTimers(); // clear immediate async effects without exhausting polling intervals
 
     // We can interact with slider to force selection which triggers the UI rendering
     const sessionButtons = screen.queryAllByRole("button");
@@ -130,7 +135,7 @@ describe("Browser Preview Accessibility", () => {
     if (testSessionButton) {
       fireEvent.click(testSessionButton);
     }
-    vi.runAllTimers();
+    vi.runOnlyPendingTimers();
 
     const liveRegion = container.querySelector('[aria-live="polite"]');
     expect(liveRegion).toBeInTheDocument();
@@ -142,7 +147,7 @@ describe("Browser Preview Accessibility", () => {
         <BrowserPage />
       </ProjectDataProvider>
     );
-    vi.runAllTimers();
+    vi.runOnlyPendingTimers();
 
     // We can interact with slider to force selection
     const sessionButtons = screen.queryAllByRole("button");
@@ -150,7 +155,7 @@ describe("Browser Preview Accessibility", () => {
     if (testSessionButton) {
       fireEvent.click(testSessionButton);
     }
-    vi.runAllTimers();
+    vi.runOnlyPendingTimers();
 
     await waitFor(() => {
         expect(screen.getAllByLabelText("Rebuild preview container").length).toBeGreaterThan(0);
@@ -164,14 +169,14 @@ describe("Browser Preview Accessibility", () => {
         <BrowserPage />
       </ProjectDataProvider>
     );
-    vi.runAllTimers();
+    vi.runOnlyPendingTimers();
 
     const sessionButtons = screen.queryAllByRole("button");
     const testSessionButton = sessionButtons.find(b => b.textContent?.includes("Test Sprint 1"));
     if (testSessionButton) {
       fireEvent.click(testSessionButton);
     }
-    vi.runAllTimers(); // clear state after click
+    vi.runOnlyPendingTimers(); // clear state after click
 
     // Check if the title explicitly shows in the component we rendered
     await waitFor(() => {
@@ -259,7 +264,7 @@ describe("Browser Preview Accessibility", () => {
     expect(trigger).toHaveAttribute("aria-haspopup", "menu");
 
     fireEvent.click(trigger);
-    vi.runAllTimers();
+    vi.runOnlyPendingTimers();
 
     await waitFor(() => {
         expect(screen.getByRole("menu")).toBeInTheDocument();

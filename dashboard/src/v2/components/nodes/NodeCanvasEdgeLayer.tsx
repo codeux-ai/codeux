@@ -10,6 +10,7 @@ import {
   NODE_CANVAS_NODE_HEIGHT,
   NODE_CANVAS_NODE_WIDTH,
 } from "./NodeCanvasNodeCard.js";
+import { useNodesI18n } from "../../i18n/messages/nodes.js";
 
 interface NodeCanvasEdgeLayerProps {
   graph: NodeCanvasGraph;
@@ -26,13 +27,14 @@ export const NodeCanvasEdgeLayer: FunctionComponent<NodeCanvasEdgeLayerProps> = 
   validationIssues,
   onSelectEdge,
 }) => {
+  const { t } = useNodesI18n();
   const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
   const selectedEdgeIds = new Set(graph.selection.edgeIds);
   const invalidEdgeIds = new Set(validationIssues.map((issue) => issue.entityId));
 
   return (
     <svg
-      aria-label="Node canvas edges"
+      aria-label={t("nodeCanvasEdges")}
       className="absolute inset-0 h-full w-full overflow-visible"
       width={width}
       height={height}
@@ -54,14 +56,14 @@ export const NodeCanvasEdgeLayer: FunctionComponent<NodeCanvasEdgeLayerProps> = 
         }
         const selected = selectedEdgeIds.has(edge.id);
         const invalid = invalidEdgeIds.has(edge.id);
-        const label = edge.label ?? `${edge.source.nodeId} to ${edge.target.nodeId}`;
+        const label = edge.label ?? t("edgeBetween", { source: edge.source.nodeId, target: edge.target.nodeId });
         return (
           <g
             key={edge.id}
             role="button"
             tabIndex={0}
             data-node-canvas-interactive="true"
-            aria-label={`Select edge ${label}`}
+            aria-label={t("selectEdge", { label })}
             aria-pressed={selected}
             onClick={(event: JSX.TargetedMouseEvent<SVGGElement>) => {
               event.stopPropagation();

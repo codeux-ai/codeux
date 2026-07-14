@@ -14,6 +14,7 @@ import {
 import { NodeInspector } from "../../../dashboard/src/v2/components/nodes/NodeInspector.js";
 import { NodePalette } from "../../../dashboard/src/v2/components/nodes/NodePalette.js";
 import { NodeValidationPanel } from "../../../dashboard/src/v2/components/nodes/NodeValidationPanel.js";
+import { DashboardI18nProvider, type DashboardLocale } from "../../../dashboard/src/v2/i18n/index.js";
 
 expect.extend(matchers);
 
@@ -29,20 +30,20 @@ const findNode = (graph: NodeCanvasGraph, nodeId: string): NodeCanvasNode => {
   return node;
 };
 
-const renderInspector = (node: NodeCanvasNode | null, graph = createInitialNodeCanvasGraph()) => {
+const renderInspector = (node: NodeCanvasNode | null, graph = createInitialNodeCanvasGraph(), locale: DashboardLocale = "en") => {
   const onNodeChange = vi.fn();
   const onNodeConfigChange = vi.fn();
   const onNodeEnabledChange = vi.fn();
   render(
-    <NodeInspector
+    <DashboardI18nProvider initialLocale={locale} storage={null}><NodeInspector
       graph={graph}
       selectedNode={node}
       selectedNodeEnabled={true}
-      validationIssues={validateNodeCanvasGraph(graph)}
+      validationIssues={validateNodeCanvasGraph(graph, locale)}
       onNodeChange={onNodeChange}
       onNodeConfigChange={onNodeConfigChange}
       onNodeEnabledChange={onNodeEnabledChange}
-    />,
+    /></DashboardI18nProvider>,
   );
 
   return { onNodeChange, onNodeConfigChange, onNodeEnabledChange };
@@ -54,7 +55,7 @@ describe("nodes inspector panels", () => {
     const onCreateNode = vi.fn();
 
     const definitions = [{ type: "output", version: 1, executable: true, executionKind: "local" as const, label: "Output", description: "Return output", category: "Core", credentials: [], capabilities: [], sideEffect: "none" as const, ports: [] }];
-    render(<NodePalette definitions={definitions} onCreateNode={onCreateNode} />);
+    render(<DashboardI18nProvider storage={null}><NodePalette definitions={definitions} onCreateNode={onCreateNode} /></DashboardI18nProvider>);
 
     await user.click(screen.getByRole("button", { name: "Add Output node" }));
 
@@ -119,14 +120,14 @@ describe("nodes inspector panels", () => {
     }
 
     render(
-      <NodeInspector
+      <DashboardI18nProvider storage={null}><NodeInspector
         graph={graph}
         selectedEdge={edge}
         onNodeChange={vi.fn()}
         onNodeConfigChange={vi.fn()}
         onSelectEdge={onSelectEdge}
         onSelectNode={onSelectNode}
-      />,
+      /></DashboardI18nProvider>,
     );
 
     expect(screen.getByRole("heading", { name: "Selected edge" })).toBeInTheDocument();
@@ -156,11 +157,11 @@ describe("nodes inspector panels", () => {
     const onFocusEdge = vi.fn();
 
     render(
-      <NodeValidationPanel
+      <DashboardI18nProvider storage={null}><NodeValidationPanel
         graph={graph}
         onSelectEdge={onSelectEdge}
         onFocusEdge={onFocusEdge}
-      />,
+      /></DashboardI18nProvider>,
     );
 
     expect(screen.getByRole("heading", { name: "1 issue" })).toBeInTheDocument();
@@ -173,5 +174,35 @@ describe("nodes inspector panels", () => {
 
     expect(onSelectEdge).toHaveBeenCalledWith("edge-missing-target");
     expect(onFocusEdge).toHaveBeenCalledWith("edge-missing-target");
+  });
+
+  it("localizes German inspector and invalid-graph explanations without changing stable field values", async () => {
+    const user = userEvent.setup();
+    const graph = nodesCanvasReducer(createInitialNodeCanvasGraph(), {
+      type: "update_node_label",
+      nodeId: "task-1",
+      label: "",
+    });
+    const task = findNode(graph, "task-1");
+    const { onNodeChange } = renderInspector(task, graph, "de");
+
+    expect(screen.getByLabelText("Bezeichnung")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText("Eine Node-Bezeichnung ist erforderlich.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Aufgabenabsicht")).toHaveValue("feature");
+
+    await user.selectOptions(screen.getByLabelText("Aufgabenabsicht"), "test");
+    expect(onNodeChange).toHaveBeenCalledWith("task-1", {
+      metadata: { taskIntent: "test" },
+    });
+
+    cleanup();
+    render(
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <NodeValidationPanel graph={graph} />
+      </DashboardI18nProvider>,
+    );
+    expect(screen.getByRole("heading", { name: "1 Problem" })).toBeInTheDocument();
+    expect(screen.getByText("Node: task-1")).toBeInTheDocument();
+    expect(screen.getByText("Fehler")).toBeInTheDocument();
   });
 });
