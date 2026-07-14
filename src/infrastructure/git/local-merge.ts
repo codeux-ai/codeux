@@ -525,6 +525,52 @@ export async function workerBranchHasMergeWork(args: {
 }
 
 /**
+ * Returns true when the recorded worker branch still exists and every commit on
+ * it is already reachable from the feature branch. This lets restart recovery
+ * distinguish an interrupted post-merge persistence step from a missing or
+ * genuinely no-output worker branch.
+ */
+export async function workerBranchIsMergedIntoFeature(args: {
+  repoPath: string;
+  featureBranch: string;
+  workerBranch: string;
+  runner?: LocalMergeRunner;
+}): Promise<boolean> {
+  const runner = args.runner ?? defaultRunner;
+  const branch = args.workerBranch.trim();
+  if (!branch) return false;
+
+  const sourceRefs = [
+    `refs/heads/${branch}`,
+    `refs/remotes/origin/${branch}`,
+  ];
+  const baseRefs = [
+    `refs/remotes/origin/${args.featureBranch}`,
+    `refs/heads/${args.featureBranch}`,
+  ];
+
+  for (const sourceRef of sourceRefs) {
+    if (!(await gitRefExists(args.repoPath, sourceRef, runner))) continue;
+    const sourceCommit = await gitResolveCommit(args.repoPath, sourceRef, runner);
+    if (!sourceCommit) continue;
+
+    for (const baseRef of baseRefs) {
+      if (!(await gitRefExists(args.repoPath, baseRef, runner))) continue;
+      const baseCommit = await gitResolveCommit(args.repoPath, baseRef, runner);
+      if (!baseCommit) continue;
+      try {
+        const result = await runner("git", ["rev-list", "--count", `${baseCommit}..${sourceCommit}`], args.repoPath);
+        if (Number.parseInt(result.stdout.trim(), 10) === 0) return true;
+      } catch {
+        // Try the next local/remote ref pair before treating the merge as unproven.
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
  * Deletes a local branch after its work has been merged. Never deletes the branch that is currently
  * checked out (git refuses anyway) and swallows errors — branch cleanup is best-effort and must
  * never fail a merge. Returns true when the branch was removed.

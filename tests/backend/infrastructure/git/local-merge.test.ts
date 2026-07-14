@@ -13,6 +13,7 @@ import {
   mergeBranchLocallyInTemporaryWorktree,
   findRecoverableWorkerBranch,
   workerBranchHasMergeWork,
+  workerBranchIsMergedIntoFeature,
   deleteBranchLocally,
 } from "../../../../src/infrastructure/git/local-merge.js";
 
@@ -905,5 +906,52 @@ describe("workerBranchHasMergeWork", () => {
     })).resolves.toBe(true);
 
     expect(revListRanges).toEqual(["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa..bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]);
+  });
+});
+
+describe("workerBranchIsMergedIntoFeature", () => {
+  let repo: string;
+
+  beforeEach(async () => {
+    repo = await mkdtemp(path.join(tmpdir(), "worker-merged-evidence-"));
+    await git(repo, "init", "-b", "main");
+    await git(repo, "config", "user.email", "test@example.com");
+    await git(repo, "config", "user.name", "Test");
+    await commitFile(repo, "base.txt", "base\n", "Initial commit");
+    await git(repo, "branch", "feature");
+  });
+
+  afterEach(async () => {
+    await rm(repo, { recursive: true, force: true });
+  });
+
+  it("recognizes a worker branch already integrated into the feature branch", async () => {
+    await git(repo, "checkout", "-b", "task/merged", "feature");
+    await commitFile(repo, "work.txt", "work\n", "feat: work");
+    await git(repo, "checkout", "feature");
+    await git(repo, "merge", "--no-ff", "task/merged", "-m", "Merge worker");
+
+    await expect(workerBranchIsMergedIntoFeature({
+      repoPath: repo,
+      featureBranch: "feature",
+      workerBranch: "task/merged",
+    })).resolves.toBe(true);
+  });
+
+  it("does not treat unmerged or missing worker branches as merged", async () => {
+    await git(repo, "checkout", "-b", "task/unmerged", "feature");
+    await commitFile(repo, "work.txt", "work\n", "feat: work");
+    await git(repo, "checkout", "main");
+
+    await expect(workerBranchIsMergedIntoFeature({
+      repoPath: repo,
+      featureBranch: "feature",
+      workerBranch: "task/unmerged",
+    })).resolves.toBe(false);
+    await expect(workerBranchIsMergedIntoFeature({
+      repoPath: repo,
+      featureBranch: "feature",
+      workerBranch: "task/missing",
+    })).resolves.toBe(false);
   });
 });

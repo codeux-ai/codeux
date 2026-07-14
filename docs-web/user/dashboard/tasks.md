@@ -1,6 +1,6 @@
 # Tasks
 
-The **Tasks** page (`/tasks`) is a Kanban-style task board for the active project. It organizes tasks into **Queued**, **In Progress**, and **Completed** lanes, with sprint scope, status, priority, and search controls above the board.
+The **Tasks** page (`/tasks`) is a Kanban-style task board for the active project. It organizes tasks into **Queued**, **In Progress**, and **Completed** lanes, with sprint scope, status, priority, and visible-card controls above the board.
 
 Use it when you want to review planned work, create or edit a task, check dependency blockers, or choose how a specific task should be executed.
 
@@ -14,16 +14,24 @@ If project or sprint selection requests overlap, only the newest response may up
 
 ## Board workflow
 
-The board keeps the current sprint scope and filters visible while you work:
+The page header keeps project and sprint context beside the primary **New Task** command. Immediately below it, the board uses two compact operational surfaces:
+
+- **Task board controls** keeps sprint scope, status, priority, and visible-card count together. It stacks on phones, wraps into two columns on tablets, and becomes one rail on wide screens. Long sprint names stay inside the selector instead of widening the page.
+- **Task board overview** shows the filtered total plus running, completed, and critical counts. When a sprint is selected, it also shows the sprint date, percentage complete, an accessible completed-task progress bar, and the queued/running/completed distribution.
+
+The controls keep the current sprint scope and filters visible while you work:
 
 - **Sprint scope** narrows the board to all tasks or one sprint.
 - **Status and priority filters** refine the visible cards without losing the current board context.
-- **Search** matches task titles and task text.
 - **Visible count controls** limit how many cards render in each lane for larger projects.
 
 ## Columns
 
-Task cards show the task title, status, priority, dependency state, downstream dependents, executor metadata, recent activity context, optional self-reflection ratings, and available actions. Dragging a card to another lane changes its status when that transition is available.
+Each lane is a named region whose accessible name includes its count, such as **In Progress lane, 2 tasks**. The board uses one column on phones, two columns when lanes remain readable, and three columns on wide screens. Lane frames and drop surfaces keep a stable height while filters settle, data loads, or a lane is empty, so adjacent work does not collapse or jump. Loading lanes use card-shaped skeletons; empty lanes explain whether the result comes from filters, the selected sprint, or project-wide scope; refresh failures appear as an assertive board update message without removing the current board context.
+
+Reduced-motion mode removes board, card, selector, progress, menu, and drop-target movement and disables pointer dragging. Static labels, borders, focus rings, progress values, lane counts, empty states, action availability reasons, and drag-disabled guidance remain available.
+
+Each task card shows its task identifier, title, status, and priority first. Compact metadata can then show a non-default executor or worker agent, session state and identifier, QA and CI state, dependency blocker count, optimistic saving state, source and assignee, runtime duration, pull-request state, creation or live-start time, and an optional self-reflection rating. The footer always keeps the task-labelled **Actions** trigger visible. Dragging a card to another lane changes its status when that transition is available.
 
 When a worker reports a task-run self-reflection rating, the shared rating badge appears in the compact card metadata near the task id, status, and priority. It shows the overall `overallRating` as a numeric score with a compact 5-star meter. Hovering the badge, or focusing it with the keyboard, opens a viewport-positioned details panel with each section from `sections`: the section label, matching stars, numeric rating, and any note captured by the worker. Tasks without a captured rating, including older tasks that never produced one, do not render an empty badge slot.
 
@@ -84,21 +92,29 @@ Validation keeps the current draft visible. If a required field is missing, the 
 
 ## Dependencies
 
-Dependencies determine whether a task is ready to run. A task with incomplete dependencies remains blocked until those dependencies move to a completed state. Cards show dependency blockers and downstream dependent tasks so you can see both what a task waits on and what it unblocks.
+Dependencies determine whether a task is ready to run. A task with any dependency that is not completed remains blocked, including one whose dependency is **Ready for QA**. Cards use an amber blocker summary when work is blocked and a green clear summary when every dependency is completed. Each compact dependency row visibly contains only its task identifier and one normalized status: **Resolved**, **Ready for QA**, **In progress**, **QA failed**, **Blocked**, or **Unknown**. The complete dependency title, raw status, and blocking or resolved meaning remain available to assistive technology and in the row tooltip.
 
 The editor prevents invalid dependency selections such as dependency cycles. When a dependency cannot be selected, the reason is shown in the editor rather than silently hiding the option.
 
 ## Task actions
 
-Task cards expose actions for the work that is available in the current state:
+Every task card keeps a visible, task-labelled **Actions** trigger in its footer. Activating it opens three groups:
 
-- **Edit** opens the full task editor for content, dependencies, executor mode, and worker-agent selection.
-- **Rerun** starts a fresh execution attempt for the task when rerun is available.
-- **Preview** opens the task's available runtime preview when one exists.
-- **Live** opens live task context when runtime details are available.
-- **Delete** removes the task after confirmation.
+- **Execution & navigation** contains **Rerun**, **Preview**, the eligible **PR** or **PR pending** entry, and **Live** or **Live idle**. Rerun is an informational disabled item that directs you to Live; it does not dispatch a run from the Tasks page. Preview opens the sprint preview when the task belongs to a sprint. PR opens an existing pull request in a new tab, while PR pending explains that no pull request is available yet. Live opens the runtime page only after runtime context exists.
+- **Task management** contains **Edit**, which opens the full inline task editor for content, dependencies, executor mode, and worker-agent selection.
+- **Danger zone** contains **Delete**.
 
-Unavailable actions stay visible with a reason so the board layout remains stable and keyboard users can understand why an action cannot run.
+The menu opens with click, Enter, Space, Arrow Up, or Arrow Down. Opening focuses the first enabled action; Arrow Up opens at the last enabled action. Arrow keys wrap between enabled actions, Home and End jump to the first and last enabled actions, and Enter or Space activates the focused action. Escape or clicking outside closes the menu and restores focus to the trigger.
+
+Unavailable actions included by the current task and project settings stay visible but inert, with the reason directly beneath the action label. For example, Preview explains when a task has no sprint, Live explains when runtime has not started, and every action explains when an optimistic save temporarily makes it unavailable. The trigger remains available while a card is saving so these reasons are still discoverable, while duplicate mutations remain suppressed. When project settings disable task pull requests and the task has no existing PR, the menu omits the PR entry instead of showing a misleading pending action.
+
+Edit does not ask for confirmation: it opens the editor with the current task values, and Cancel closes the editor without saving. Save keeps the selected sprint scope and active filters in place. Delete closes the menu and opens a **Delete Task** confirmation that names the task, states that removal cannot be undone, and requires holding the destructive button until confirmation completes. Cancelling or pressing Escape leaves the task in place and returns focus to that card's **Actions** trigger.
+
+## Responsive and keyboard behavior
+
+On wide screens, the three lanes share one row when space permits. On phones, they stack vertically and card titles, dependency identifiers, and action menus remain within the page width without creating document-level horizontal scrolling. Menus are positioned inside the current viewport even when their card is near an edge.
+
+The board keeps accessible lane counts and status announcements during loading, filtering, optimistic saves, realtime refreshes, and empty or error states. Opening a task menu with the keyboard moves focus to its first enabled action; `Escape` returns focus to the same task-labelled trigger. Cancelling deletion also returns focus to that trigger, and reduced-motion mode preserves the same status text and focus treatment while disabling drag movement.
 
 ## Status legend
 
