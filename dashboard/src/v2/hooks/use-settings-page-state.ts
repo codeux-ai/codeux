@@ -857,7 +857,9 @@ export const useSettingsPageState = (
       if (outcome.status === "verified") {
         setChatProvidersStatusMessage("Connection verified. Activation is now available.");
       } else {
-        setChatProvidersError(outcome.issues.length > 0 ? outcome.issues.join(" ") : "Connection verification failed.");
+        setChatProvidersError(outcome.issues.length > 0
+          ? outcome.issues.map(redactChatProviderError).join(" ")
+          : "Connection verification failed.");
       }
       return outcome;
     } catch (verificationError) {

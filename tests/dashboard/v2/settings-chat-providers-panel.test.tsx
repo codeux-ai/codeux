@@ -4,6 +4,7 @@
 import { h, Fragment } from "preact";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import gsap from "gsap";
 import { SettingsIntegrationsPanel } from "../../../dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.js";
 import type {
   ChatProviderChannelBindingRecord,
@@ -14,6 +15,13 @@ import type {
   DashboardChatProviderConnectionRecord,
   DashboardChatProviderSetupDefinition,
 } from "../../../dashboard/src/v2/lib/chat-provider-api.js";
+
+const reducedMotionPreference = vi.hoisted(() => ({ enabled: false }));
+
+vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
+  useReducedMotion: () => reducedMotionPreference.enabled,
+  useResolvedMotionDuration: (duration: number | string) => duration,
+}));
 
 vi.mock("gsap", () => {
   const applyStyles = (target: unknown, props: Record<string, unknown>) => {
@@ -235,7 +243,28 @@ const createState = (selectedIntegration: string | null) => ({
 
 describe("SettingsIntegrationsPanel chat connectors", () => {
   afterEach(() => {
+    reducedMotionPreference.enabled = false;
     cleanup();
+  });
+
+  it("settles integration transitions without a GSAP timeline when reduced motion is enabled", async () => {
+    reducedMotionPreference.enabled = true;
+    const state = createState(null);
+    const view = render(<SettingsIntegrationsPanel state={state as any} />);
+    vi.mocked(gsap.timeline).mockClear();
+
+    state.selectedIntegration = "slack";
+    view.rerender(<SettingsIntegrationsPanel state={state as any} />);
+
+    expect(await screen.findByText("Slack Connector")).not.toBeNull();
+    expect(gsap.timeline).not.toHaveBeenCalled();
+
+    state.selectedIntegration = null;
+    view.rerender(<SettingsIntegrationsPanel state={state as any} />);
+
+    await waitFor(() => expect(screen.queryByText("Slack Connector")).toBeNull());
+    expect(screen.getByText("CHAT CONNECTORS")).not.toBeNull();
+    expect(gsap.timeline).not.toHaveBeenCalled();
   });
 
   it("surfaces all chat connectors in the Chat Connectors integration group", async () => {

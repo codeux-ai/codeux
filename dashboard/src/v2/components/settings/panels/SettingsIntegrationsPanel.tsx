@@ -45,6 +45,7 @@ import { AutomationCredentialManager } from "../AutomationCredentialManager.js";
 import { ActionFeedbackRegion } from "../../ui/ActionFeedbackRegion.js";
 import { ChatConnectorCatalogCard } from "../chat-connectors/ChatConnectorCatalogCard.js";
 import { ChatConnectorConnectionEditor } from "../chat-connectors/ChatConnectorConnectionEditor.js";
+import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
 
 type PublicProviderId = Exclude<ProviderId, "mockup-cli">;
 
@@ -385,6 +386,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
+  const reducedMotion = useReducedMotion();
   const [activeIntegrationDetail, setActiveIntegrationDetail] = useState<IntegrationId | null>(selectedIntegration);
   const isInitialMount = useRef(true);
   const chatProviders = { ...EMPTY_CHAT_PROVIDER_STATE, ...(state.chatProviders ?? {}) };
@@ -432,6 +434,19 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     }
 
     const enteringDetail = selectedIntegration !== null;
+    if (reducedMotion) {
+      setActiveIntegrationDetail(enteringDetail ? selectedIntegration : null);
+      if (enteringDetail) {
+        gsap.set(listRef.current, { display: "none", position: "relative", top: "auto", left: "auto", x: "-100%", opacity: 0 });
+        gsap.set(detailRef.current, { display: "block", position: "relative", top: "auto", left: "auto", x: "0%", opacity: 1 });
+      } else {
+        gsap.set(listRef.current, { display: "block", position: "relative", top: "auto", left: "auto", x: "0%", opacity: 1 });
+        gsap.set(detailRef.current, { display: "none", position: "absolute", top: 0, left: 0, x: "100%", opacity: 0 });
+      }
+      gsap.set(containerRef.current, { height: "auto" });
+      return;
+    }
+
     const tl = gsap.timeline();
 
     if (enteringDetail) {
@@ -475,7 +490,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
         },
       }, 0);
     }
-  }, [selectedIntegration]);
+  }, [reducedMotion, selectedIntegration]);
 
   if (!editableSettings || !systemSettings) {
     return null;

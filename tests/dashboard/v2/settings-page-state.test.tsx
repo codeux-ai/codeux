@@ -15,6 +15,8 @@ import * as chatProviderApi from "../../../dashboard/src/v2/lib/chat-provider-ap
 import * as dashboardApi from "../../../dashboard/src/lib/api/dashboard-api.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import { SETTINGS_NAVIGATION_SESSION_KEY } from "../../../dashboard/src/v2/lib/settings-navigation-state.js";
+import type { ChatProviderVerificationOutcome } from "../../../dashboard/src/v2/types.js";
+import type { DashboardChatProviderConnectionRecord } from "../../../dashboard/src/v2/lib/chat-provider-api.js";
 
 import * as navigationBlocker from "../../../dashboard/src/v2/router/navigation-blocker.js";
 
@@ -108,6 +110,7 @@ const ChatProviderMutationErrorHarness = () => {
         projectId: "proj-1",
       })}>Update binding</button>
       <button type="button" onClick={() => void chatProviders.deleteBinding("binding-1")}>Delete binding</button>
+      <button type="button" onClick={() => void chatProviders.verifyConnection("connection-1")}>Verify connection</button>
       <ActionFeedbackRegion
         status={chatProviders.error ? "error" : "idle"}
         message={chatProviders.error}
@@ -163,6 +166,63 @@ afterEach(() => {
 });
 
 describe("useSettingsPageState", () => {
+  it("redacts verification issue details before rendering the persistent alert", async () => {
+    const rawToken = "xoxb-12345678901234567890123456789012";
+    const rawUrl = "https://hooks.example.test/services/T000/B000/secret";
+    const outcome: ChatProviderVerificationOutcome = {
+      providerConnectionId: "connection-1",
+      providerKind: "slack",
+      status: "failed",
+      verifiedAt: null,
+      capabilities: [],
+      providerErrorCode: null,
+      retryable: false,
+      issues: [`Verification token=${rawToken} rejected by ${rawUrl}`],
+      diagnostics: null,
+      setupGuidance: {
+        providerKind: "slack",
+        bridgeMode: "managed_bridge",
+        requiredSetupFields: [],
+        requiredSecretFields: [],
+        capabilities: [],
+        liveVerificationAvailable: false,
+      },
+    };
+    const connection: DashboardChatProviderConnectionRecord = {
+      id: "connection-1",
+      providerKind: "slack",
+      displayName: "Slack test",
+      bridgeMode: "managed_bridge",
+      status: "error",
+      enabled: false,
+      setup: {},
+      credentials: [],
+      verificationStatus: "failed",
+      verificationDetails: null,
+      verifiedAt: null,
+      secretVersion: 1,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      ingressUrl: "http://localhost/api/chat-providers/ingress/connection-1",
+      setupHints: {
+        bridgeModeLabel: "Managed bridge",
+        integration: "managed_core",
+        requiredSetupFields: [],
+        requiredSecretFields: [],
+      },
+    };
+    vi.spyOn(chatProviderApi, "verifyChatProviderConnection").mockResolvedValue(outcome);
+    vi.spyOn(chatProviderApi, "fetchChatProviderConnection").mockResolvedValue(connection);
+
+    render(<ChatProviderMutationErrorHarness />);
+    fireEvent.click(screen.getByRole("button", { name: "Verify connection" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Verification token=[redacted] rejected by [redacted URL]");
+    expect(alert).not.toHaveTextContent(rawToken);
+    expect(alert).not.toHaveTextContent(rawUrl);
+  });
+
   it("redacts sensitive details from every rendered chat-provider mutation error", async () => {
     const rawToken = "xoxb-12345678901234567890123456789012";
     const rawUrl = "https://hooks.example.test/services/T000/B000/secret";
