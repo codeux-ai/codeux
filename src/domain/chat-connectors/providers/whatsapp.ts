@@ -532,7 +532,7 @@ export const whatsappChatConnectorProfile: WhatsAppChatConnectorProfile = {
         };
       },
     },
-    acknowledgement: { statusCode: 200, headers: { "content-type": "application/json" }, body: null },
+    acknowledgement: { statusCode: 200, headers: { "content-type": "application/json" }, body: null, deadlineMs: 2_500 },
     classify: (body) => normalizeWhatsAppWebhook(body).kind === "status" ? "ignored" : "message",
     normalize: (body) => {
       const normalized = normalizeWhatsAppWebhook(body);

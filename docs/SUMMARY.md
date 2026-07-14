@@ -55,6 +55,7 @@
 - [MCP Worker Dispatch Executor](./architecture/mcp-worker-dispatch-executor.md)
 - [External MCP Worker Client](./architecture/external-mcp-worker-client.md)
 - [External Chat Provider Foundation](./architecture/external-chat-providers.md)
+- [Chat Connector Runtime Reliability](./architecture/chat-connector-runtime-reliability.md)
 - [Virtual Workers](./architecture/virtual-workers.md)
 - [Chat Thread Runtime](./architecture/chat-thread-runtime.md)
 - [MCP Tools and Contracts](./mcp/tools-and-contracts.md)

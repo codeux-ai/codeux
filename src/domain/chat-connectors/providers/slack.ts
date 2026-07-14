@@ -105,6 +105,7 @@ export const slackChatConnectorProfile: ChatConnectorProfile = {
       statusCode: 200,
       headers: { "content-type": "application/json" },
       body: null,
+      deadlineMs: 2_500,
       immediateModes: ["official_api"],
     },
     ignore: getSlackIgnoredEventReason,
@@ -144,6 +145,7 @@ export const slackChatConnectorProfile: ChatConnectorProfile = {
       ? parseSlackPostMessageResponse(responseBody, context)
       : parseLegacyOutboundResponse(responseBody),
     isRetryableStatus: isLegacyRetryableHttpStatus,
+    ambiguousTransportFailureModes: ["official_api"],
   },
   verification: {
     strategy: "configuration_and_live",

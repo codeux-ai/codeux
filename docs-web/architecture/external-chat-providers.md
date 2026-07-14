@@ -141,11 +141,13 @@ Provider cards and connection detail views surface enabled state, bridge mode, i
 
 The ingress endpoint supports Managed, webhook, and native bridge payloads for WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, and Discord. Managed and native bridges authenticate with bearer tokens resolved ephemerally from the encrypted envelope. Webhook bridges require a configured signing secret and a valid HMAC signature; they do not accept bearer-only fallback. All ingress requests require a fresh timestamp, and signed requests or requests with explicit nonces are atomically replay-checked through expiring SQLite receipts before processing.
 
-Inbound messages normalize to provider connection id, provider kind, external channel id/name, external sender id/name, text, external message id, timestamp, and redacted raw metadata. The repository idempotency lookup runs before chat posting; duplicate external messages return the existing delivery record without creating another conversation message.
+Inbound messages normalize to provider connection id, provider kind, external channel id/name, external sender id/name, text, external message id, timestamp, and redacted raw metadata. The repository atomically inserts the inbound delivery before chat posting; concurrent duplicates return the same delivery and only the insertion winner can create a conversation message. Profile-declared immediate callbacks are acknowledged after persistence and processed asynchronously.
 
 Channel resolution only considers enabled bindings with inbound enabled for the provider connection and external channel. If multiple projects share a channel, routing hints such as `projectSelectorPrefix`, `projectSelector`, `projectAlias`, `aliases`, or payload-level project selectors are applied first. If no hint selects exactly one binding, the runtime records a `disambiguation_needed` inbound delivery state and returns a conflict response instead of guessing a project.
 
-Routed inbound text is posted through `ChatThreadRuntimeService.postMessage` with metadata marking `source: "chat_provider"`, provider kind, external channel id, external sender, inbound delivery id, and `suppressRichWidgets: true`.
+Routed inbound text carries provider connection/binding identity, provider conversation/thread keys, the binding's selected agent preset, and its `suppressRichWidgets` value. These overrides apply only to the external turn.
+
+See [Chat connector runtime reliability](./chat-connector-runtime-reliability.md) for acknowledgement, lease, retry, session recovery, cancellation, and shutdown behavior.
 
 Chat-provider-sourced prompts omit the dashboard `codeux:*` rich widget instruction block. If a provider reply still contains a dashboard-only widget fence, outbound delivery strips or downgrades it to readable markdown before sending externally. Approval prompts and management-action result summaries remain plain markdown and continue to be delivered to the external channel.
 

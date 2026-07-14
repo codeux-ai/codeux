@@ -26,6 +26,7 @@ import { ExecutionInvocationControlService } from "../../services/execution-invo
 import { createLateBoundDependency } from "../../shared/late-bound-dependency.js";
 import { ChatProviderIngressService } from "../../services/chat-provider-ingress-service.js";
 import { ChatProviderOutboundService } from "../../services/chat-provider-outbound-service.js";
+import { ChatProviderSessionRuntimeService } from "../../services/chat-provider-session-runtime-service.js";
 import { SpeechTranscriptionService } from "../../services/speech-transcription-service.js";
 import { SpeechSynthesisService } from "../../services/speech-synthesis-service.js";
 import { SpeechModelManager } from "../../services/speech-model-manager.js";
@@ -58,6 +59,7 @@ export interface DashboardDependencies {
   chatProviderSecretService: CoreDependencies["chatProviderSecretService"];
   chatProviderIngressService: ChatProviderIngressService;
   chatProviderOutboundService: ChatProviderOutboundService;
+  chatProviderSessionRuntimeService: ChatProviderSessionRuntimeService;
   speechTranscriptionService: SpeechTranscriptionService;
   speechSynthesisService: SpeechSynthesisService;
   speechModelManager: SpeechModelManager;
@@ -213,6 +215,11 @@ export function createDashboardDependencies(
     chatProviderRepository,
     chatProviderSecretService,
     logger: logger.child({ component: "chat-provider-outbound-service" }),
+  });
+  const chatProviderSessionRuntimeService = new ChatProviderSessionRuntimeService({
+    chatProviderRepository,
+    chatProviderSecretService,
+    logger: logger.child({ component: "chat-provider-session-runtime-service" }),
   });
 
   const chatThreadRuntimeService = new ChatThreadRuntimeService({
@@ -637,6 +644,7 @@ export function createDashboardDependencies(
     chatThreadRuntimeService,
     chatProviderIngressService,
     chatProviderOutboundService,
+    chatProviderSessionRuntimeService,
     speechTranscriptionService,
     speechSynthesisService,
     speechModelManager,

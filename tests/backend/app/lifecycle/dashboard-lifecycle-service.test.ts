@@ -241,9 +241,17 @@ describe("dashboard-lifecycle-service", () => {
       memoryRepository: {} as any,
       knowledgeService: {} as any,
       credentialBroker: { health: vi.fn() } as any,
+      chatProviderIngressService: {
+        start: vi.fn().mockResolvedValue(undefined),
+        stop: vi.fn().mockResolvedValue(undefined),
+      } as any,
       chatProviderOutboundService: {
-        start: vi.fn(),
-        stop: vi.fn(),
+        start: vi.fn().mockResolvedValue(undefined),
+        stop: vi.fn().mockResolvedValue(undefined),
+      } as any,
+      chatProviderSessionRuntimeService: {
+        start: vi.fn().mockResolvedValue(undefined),
+        stop: vi.fn().mockResolvedValue(undefined),
       } as any,
     };
 
@@ -294,6 +302,8 @@ describe("dashboard-lifecycle-service", () => {
       expect(mockDeps.dashboardRealtimeService.setSnapshotLoaders).toHaveBeenCalled();
       expect(mockDeps.runtimeContext.dashboardRuntimePort).toBe(3000);
       expect(mockDeps.chatProviderOutboundService?.start).toHaveBeenCalled();
+      expect(mockDeps.chatProviderIngressService.start).toHaveBeenCalled();
+      expect(mockDeps.chatProviderSessionRuntimeService?.start).toHaveBeenCalled();
     });
 
     it("stops chat provider outbound retries before closing the dashboard server", async () => {
@@ -304,10 +314,28 @@ describe("dashboard-lifecycle-service", () => {
       await handle.close?.();
 
       expect(mockDeps.chatProviderOutboundService?.stop).toHaveBeenCalledTimes(1);
+      expect(mockDeps.chatProviderIngressService.stop).toHaveBeenCalledTimes(1);
+      expect(mockDeps.chatProviderSessionRuntimeService?.stop).toHaveBeenCalledTimes(1);
       expect(close).toHaveBeenCalledTimes(1);
       expect(
         vi.mocked(mockDeps.chatProviderOutboundService!.stop).mock.invocationCallOrder[0],
       ).toBeLessThan(close.mock.invocationCallOrder[0]);
+      expect(
+        vi.mocked(mockDeps.chatProviderSessionRuntimeService!.stop).mock.invocationCallOrder[0],
+      ).toBeLessThan(close.mock.invocationCallOrder[0]);
+    });
+
+    it("does not block dashboard startup when optional connector recovery fails", async () => {
+      vi.mocked(mockDeps.chatProviderSessionRuntimeService!.start).mockRejectedValueOnce(new Error("optional connector unavailable"));
+
+      const handle = await bootDashboard(mockDeps);
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(handle.port).toBe(3000);
+      expect(mockDeps.logger.warn).toHaveBeenCalledWith(
+        "Chat provider session recovery failed without blocking dashboard startup",
+        { providerErrorCode: "Error" },
+      );
     });
 
     it("checks for updates once at startup and logs when a newer version exists", async () => {

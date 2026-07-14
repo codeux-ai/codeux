@@ -211,6 +211,8 @@ export class CodeUxServer {
   private nodeFlowService: import("../services/node-flow-service.js").NodeFlowService;
   private chatThreadRuntimeService: import("../services/chat-thread-runtime-service.js").ChatThreadRuntimeService;
   private chatProviderIngressService: ChatProviderIngressService;
+  private chatProviderOutboundService: import("../services/chat-provider-outbound-service.js").ChatProviderOutboundService;
+  private chatProviderSessionRuntimeService: import("../services/chat-provider-session-runtime-service.js").ChatProviderSessionRuntimeService;
   private speechTranscriptionService: import("../services/speech-transcription-service.js").SpeechTranscriptionService;
   private speechSynthesisService: import("../services/speech-synthesis-service.js").SpeechSynthesisService;
   private speechModelManager: import("../services/speech-model-manager.js").SpeechModelManager;
@@ -315,6 +317,8 @@ export class CodeUxServer {
     this.nodeFlowService = deps.nodeFlowService;
     this.chatThreadRuntimeService = deps.chatThreadRuntimeService;
     this.chatProviderIngressService = deps.chatProviderIngressService;
+    this.chatProviderOutboundService = deps.chatProviderOutboundService;
+    this.chatProviderSessionRuntimeService = deps.chatProviderSessionRuntimeService;
     this.speechTranscriptionService = deps.speechTranscriptionService;
     this.speechSynthesisService = deps.speechSynthesisService;
     this.speechModelManager = deps.speechModelManager;
@@ -1467,6 +1471,8 @@ export class CodeUxServer {
         skillService: this.skillService,
         chatThreadRuntimeService: this.chatThreadRuntimeService,
         chatProviderIngressService: this.chatProviderIngressService,
+        chatProviderOutboundService: this.chatProviderOutboundService,
+        chatProviderSessionRuntimeService: this.chatProviderSessionRuntimeService,
         speechTranscriptionService: this.speechTranscriptionService,
         speechSynthesisService: this.speechSynthesisService,
         speechModelManager: this.speechModelManager,

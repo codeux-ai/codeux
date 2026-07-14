@@ -210,6 +210,7 @@ describe("ChatProviderOutboundService", () => {
       adapter,
       initialBackoffMs: 1_000,
       now: () => now,
+      random: () => 0.5,
     });
 
     const retryable = await service.deliverReply(fixture);
@@ -237,7 +238,7 @@ describe("ChatProviderOutboundService", () => {
     });
   });
 
-  it("uses a provider Retry-After delay when it exceeds exponential backoff", async () => {
+  it("uses the provider Retry-After delay instead of exponential backoff", async () => {
     const now = new Date("2026-07-07T00:00:00.000Z");
     const context = await createContext();
     const fixture = await createOutboundFixture(context, {
@@ -314,6 +315,172 @@ describe("ChatProviderOutboundService", () => {
       externalMessageId: "discord-single-flight",
     });
     expect(secondResult[0].id).toBe(firstResult[0].id);
+  });
+
+  it("allows only one service instance to hold the delivery lease", async () => {
+    let now = new Date("2026-07-07T00:00:00.000Z");
+    const context = await createContext();
+    const fixture = await createOutboundFixture(context, {
+      bridgeMode: "webhook",
+      providerKind: "discord",
+      setup: { gatewayUrl: "https://bridge.example.test/send" },
+      secrets: { botToken: "bot-secret" },
+    });
+    const initial = new ChatProviderOutboundService({
+      chatProviderRepository: context.providerRepository,
+      chatProviderSecretService: context.secretService,
+      adapter: { send: vi.fn().mockRejectedValue(new ChatProviderOutboundAdapterError("retry", true)) },
+      initialBackoffMs: 1_000,
+      random: () => 0.5,
+      now: () => now,
+    });
+    await initial.deliverReply(fixture);
+    now = new Date("2026-07-07T00:00:02.000Z");
+
+    let resolveSend: ((value: { externalMessageId: string }) => void) | null = null;
+    const send = new Promise<{ externalMessageId: string }>((resolve) => { resolveSend = resolve; });
+    const firstAdapter: ChatProviderOutboundAdapter = { send: vi.fn().mockReturnValue(send) };
+    const secondAdapter: ChatProviderOutboundAdapter = {
+      send: vi.fn().mockResolvedValue({ externalMessageId: "should-not-send" }),
+    };
+    const first = new ChatProviderOutboundService({
+      chatProviderRepository: context.providerRepository,
+      chatProviderSecretService: context.secretService,
+      adapter: firstAdapter,
+      now: () => now,
+    });
+    const second = new ChatProviderOutboundService({
+      chatProviderRepository: context.providerRepository,
+      chatProviderSecretService: context.secretService,
+      adapter: secondAdapter,
+      now: () => now,
+    });
+
+    const firstPoll = first.processDueRetries();
+    await vi.waitFor(() => expect(firstAdapter.send).toHaveBeenCalledTimes(1));
+    expect(await second.processDueRetries()).toEqual([]);
+    resolveSend?.({ externalMessageId: "leased-once" });
+
+    await expect(firstPoll).resolves.toEqual([
+      expect.objectContaining({ status: "delivered", externalMessageId: "leased-once" }),
+    ]);
+    expect(secondAdapter.send).not.toHaveBeenCalled();
+  });
+
+  it("makes manual cancellation terminal during an in-flight send", async () => {
+    const context = await createContext();
+    const fixture = await createOutboundFixture(context, {
+      bridgeMode: "webhook",
+      providerKind: "discord",
+      setup: { gatewayUrl: "https://bridge.example.test/send" },
+      secrets: { botToken: "bot-secret" },
+    });
+    let started: (() => void) | null = null;
+    const sendStarted = new Promise<void>((resolve) => { started = resolve; });
+    const adapter: ChatProviderOutboundAdapter = {
+      send: vi.fn((sendContext) => new Promise((_resolve, reject) => {
+        started?.();
+        sendContext.signal?.addEventListener("abort", () => reject(
+          new ChatProviderOutboundAdapterError("cancelled", false, undefined, undefined, "cancelled"),
+        ), { once: true });
+      })),
+    };
+    const service = new ChatProviderOutboundService({
+      chatProviderRepository: context.providerRepository,
+      chatProviderSecretService: context.secretService,
+      adapter,
+    });
+
+    const deliveryPromise = service.deliverReply(fixture);
+    await sendStarted;
+    const sending = context.providerRepository.listOutboundDeliveries()[0];
+    const cancelled = await service.cancelDelivery(sending.id);
+    const settled = await deliveryPromise;
+
+    expect(cancelled).toMatchObject({ status: "cancelled", leaseOwner: null, nextAttemptAt: null });
+    expect(settled).toMatchObject({ id: sending.id, status: "cancelled" });
+    expect(await service.processDueRetries()).toEqual([]);
+  });
+
+  it("recovers one stale sending lease on startup and starts only once", async () => {
+    let now = new Date("2026-07-07T00:00:00.000Z");
+    const context = await createContext();
+    const fixture = await createOutboundFixture(context, {
+      bridgeMode: "webhook",
+      providerKind: "discord",
+      setup: { gatewayUrl: "https://bridge.example.test/send" },
+      secrets: { botToken: "bot-secret" },
+    });
+    const initial = new ChatProviderOutboundService({
+      chatProviderRepository: context.providerRepository,
+      chatProviderSecretService: context.secretService,
+      adapter: { send: vi.fn().mockRejectedValue(new ChatProviderOutboundAdapterError("retry", true)) },
+      initialBackoffMs: 1_000,
+      random: () => 0.5,
+      now: () => now,
+    });
+    const retryable = await initial.deliverReply(fixture);
+    now = new Date("2026-07-07T00:00:02.000Z");
+    expect(context.providerRepository.claimOutboundDelivery(retryable!.id, {
+      leaseOwner: "stale-worker",
+      leaseDurationMs: 1_000,
+      now,
+    })).toMatchObject({ status: "sending", leaseOwner: "stale-worker" });
+
+    now = new Date("2026-07-07T00:00:04.000Z");
+    const adapter: ChatProviderOutboundAdapter = {
+      send: vi.fn().mockResolvedValue({ externalMessageId: "recovered-once" }),
+    };
+    const recovered = new ChatProviderOutboundService({
+      chatProviderRepository: context.providerRepository,
+      chatProviderSecretService: context.secretService,
+      adapter,
+      pollIntervalMs: 60_000,
+      now: () => now,
+    });
+
+    await recovered.start();
+    await recovered.start();
+
+    expect(adapter.send).toHaveBeenCalledTimes(1);
+    expect(context.providerRepository.getDelivery(retryable!.id)).toMatchObject({
+      status: "delivered",
+      leaseOwner: null,
+      externalMessageId: "recovered-once",
+    });
+    await recovered.stop();
+  });
+
+  it("aborts in-flight work on shutdown and releases its lease", async () => {
+    const context = await createContext();
+    const fixture = await createOutboundFixture(context, {
+      bridgeMode: "webhook",
+      providerKind: "discord",
+      setup: { gatewayUrl: "https://bridge.example.test/send" },
+      secrets: { botToken: "bot-secret" },
+    });
+    let started: (() => void) | null = null;
+    const sendStarted = new Promise<void>((resolve) => { started = resolve; });
+    const adapter: ChatProviderOutboundAdapter = {
+      send: vi.fn((sendContext) => new Promise((_resolve, reject) => {
+        started?.();
+        sendContext.signal?.addEventListener("abort", () => reject(
+          new ChatProviderOutboundAdapterError("shutdown", false, undefined, undefined, "cancelled"),
+        ), { once: true });
+      })),
+    };
+    const service = new ChatProviderOutboundService({
+      chatProviderRepository: context.providerRepository,
+      chatProviderSecretService: context.secretService,
+      adapter,
+    });
+
+    const deliveryPromise = service.deliverReply(fixture);
+    await sendStarted;
+    await service.stop();
+    const delivery = await deliveryPromise;
+
+    expect(delivery).toMatchObject({ status: "retryable_failure", leaseOwner: null });
   });
 });
 

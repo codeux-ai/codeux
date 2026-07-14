@@ -45,7 +45,7 @@ export const discordChatConnectorProfile: ChatConnectorProfile = {
       },
     },
     handshake: { type: "none" },
-    acknowledgement: { statusCode: 200, headers: { "content-type": "application/json" }, body: null },
+    acknowledgement: { statusCode: 200, headers: { "content-type": "application/json" }, body: null, deadlineMs: 2_500 },
     normalize: (body) => {
       const channel = readRecord(body.channel);
       const author = readRecord(body.author) ?? readRecord(body.member);

@@ -9,8 +9,11 @@ import type { ChatProviderRepository } from "../repositories/chat-provider-repos
 import type { ChatThreadRuntimeService } from "./chat-thread-runtime-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { getCorrelationId } from "../shared/logging/correlation-id.js";
-import { redactMetadata } from "../shared/security/redaction.js";
-import { getChatConnectorProfileForMode } from "../domain/chat-connectors/registry.js";
+import { redactMetadata, redactText } from "../shared/security/redaction.js";
+import {
+  CHAT_CONNECTOR_REGISTRY,
+  type ChatConnectorRegistry,
+} from "../domain/chat-connectors/registry.js";
 import type { PartialNormalizedChatConnectorInbound } from "../domain/chat-connectors/types.js";
 import type { ChatProviderSecretService } from "./chat-provider-secret-service.js";
 
@@ -29,6 +32,8 @@ export interface NormalizedChatProviderInboundMessage {
   textBody: string;
   externalMessageId: string;
   timestamp: string;
+  providerConversationId: string | null;
+  providerThreadId: string | null;
   rawMetadata: Record<string, unknown>;
 }
 
@@ -55,6 +60,7 @@ interface ChatProviderIngressServiceDependencies {
   chatProviderSecretService?: ChatProviderSecretService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
   logger?: Logger;
+  connectorRegistry?: ChatConnectorRegistry;
 }
 
 interface RoutingResolution {
@@ -77,9 +83,43 @@ const SECRETISH_KEYS = new Set([
 ]);
 
 export class ChatProviderIngressService {
-  constructor(private readonly deps: ChatProviderIngressServiceDependencies) {}
+  private readonly registry: ChatConnectorRegistry;
+  private readonly processing = new Map<string, Promise<ChatProviderIngressResult>>();
+  private readonly controllers = new Map<string, AbortController>();
+  private started = false;
+  private stopping = false;
+
+  constructor(private readonly deps: ChatProviderIngressServiceDependencies) {
+    this.registry = deps.connectorRegistry ?? CHAT_CONNECTOR_REGISTRY;
+  }
 
   async processInbound(input: ChatProviderIngressPayload): Promise<ChatProviderIngressResult> {
+    const accepted = await this.acceptInbound(input);
+    if (accepted.status !== "accepted" || !accepted.delivery || accepted.delivery.status !== "pending") {
+      return accepted;
+    }
+    return this.processAccepted(accepted.delivery.id);
+  }
+
+  async start(): Promise<void> {
+    if (this.started) return;
+    this.started = true;
+    this.stopping = false;
+    const pending = this.deps.chatProviderRepository.listDeliveries({ direction: "inbound", limit: 500 })
+      .filter((delivery) => delivery.status === "pending" && readString(delivery.payload?.state) === "accepted");
+    await Promise.allSettled(pending.map((delivery) => this.processAccepted(delivery.id)));
+  }
+
+  async stop(): Promise<void> {
+    this.started = false;
+    this.stopping = true;
+    for (const controller of this.controllers.values()) {
+      controller.abort(new Error("Chat provider ingress service is stopping."));
+    }
+    await Promise.allSettled([...this.processing.values()]);
+  }
+
+  async acceptInbound(input: ChatProviderIngressPayload): Promise<ChatProviderIngressResult> {
     const connection = this.deps.chatProviderSecretService
       ? await this.deps.chatProviderSecretService.resolveConnection(input.providerConnectionId).catch(() => null)
       : this.deps.chatProviderRepository.getConnectionInternal(input.providerConnectionId);
@@ -96,9 +136,9 @@ export class ChatProviderIngressService {
     }
 
     const body = requireRecord(input.payload, "payload");
-    const profile = getChatConnectorProfileForMode(connection.providerKind, connection.bridgeMode);
+    const profile = this.registry.getForMode(connection.providerKind, connection.bridgeMode);
     const ignoreResult = connection.bridgeMode === "official_api"
-      ? profile.ingress.ignore?.(body, connection.bridgeMode)
+      ? profile.ingress.ignore?.(body, connection.bridgeMode) ?? null
       : null;
     const ignored = typeof ignoreResult === "string"
       ? ignoreResult
@@ -119,24 +159,7 @@ export class ChatProviderIngressService {
       };
     }
 
-    const normalized = normalizeInboundPayload(connection, body);
-    const existing = this.deps.chatProviderRepository.findInboundDelivery(connection.id, normalized.externalMessageId);
-    if (existing) {
-      this.log("info", "Duplicate chat provider ingress ignored", {
-        providerConnectionId: connection.id,
-        providerKind: connection.providerKind,
-        externalChannelId: normalized.externalChannelId,
-        externalMessageId: normalized.externalMessageId,
-        deliveryId: existing.id,
-      });
-      return {
-        status: "duplicate",
-        message: "Duplicate inbound message. Returning existing delivery.",
-        providerConnectionId: connection.id,
-        providerKind: connection.providerKind,
-        delivery: existing,
-      };
-    }
+    const normalized = normalizeInboundPayload(connection, body, this.registry);
 
     const routing = this.resolveRouting(normalized);
     if (!routing.binding) {
@@ -152,84 +175,191 @@ export class ChatProviderIngressService {
       return result;
     }
 
-    const pendingDelivery = this.deps.chatProviderRepository.recordInboundMessage({
+    const internalThreadId = this.resolveInternalThreadId(routing.binding, normalized);
+    const recorded = this.deps.chatProviderRepository.recordInboundMessage({
       providerConnectionId: normalized.providerConnectionId,
       channelBindingId: routing.binding.id,
       externalChannelId: normalized.externalChannelId,
       externalMessageId: normalized.externalMessageId,
       status: "pending",
       payload: buildDeliveryPayload(normalized, {
-        state: "posting",
+        state: "accepted",
         projectId: routing.binding.projectId,
         channelBindingId: routing.binding.id,
+        bodyMarkdown: routing.bodyMarkdown,
+        internalThreadId,
       }),
-    }).delivery;
+    });
+    if (recorded.duplicate) {
+      this.log("info", "Duplicate chat provider ingress ignored", {
+        providerConnectionId: connection.id,
+        providerKind: connection.providerKind,
+        externalChannelId: normalized.externalChannelId,
+        externalMessageId: normalized.externalMessageId,
+        deliveryId: recorded.delivery.id,
+        outcome: "duplicate",
+      });
+      return {
+        status: "duplicate",
+        message: "Duplicate inbound message. Returning existing delivery.",
+        providerConnectionId: connection.id,
+        providerKind: connection.providerKind,
+        delivery: recorded.delivery,
+      };
+    }
+
+    this.log("info", "Persisted accepted chat provider ingress", {
+      providerConnectionId: normalized.providerConnectionId,
+      providerKind: normalized.providerKind,
+      channelBindingId: routing.binding.id,
+      deliveryId: recorded.delivery.id,
+      outcome: "accepted",
+    });
+    return {
+      status: "accepted",
+      message: "Inbound chat provider message accepted for processing.",
+      providerConnectionId: normalized.providerConnectionId,
+      providerKind: normalized.providerKind,
+      delivery: recorded.delivery,
+    };
+  }
+
+  async processAccepted(deliveryId: string): Promise<ChatProviderIngressResult> {
+    const existing = this.processing.get(deliveryId);
+    if (existing) return existing;
+    let processingPromise: Promise<ChatProviderIngressResult>;
+    processingPromise = this.processAcceptedOnce(deliveryId).finally(() => {
+      if (this.processing.get(deliveryId) === processingPromise) this.processing.delete(deliveryId);
+      this.controllers.delete(deliveryId);
+    });
+    this.processing.set(deliveryId, processingPromise);
+    return processingPromise;
+  }
+
+  private async processAcceptedOnce(deliveryId: string): Promise<ChatProviderIngressResult> {
+    const pendingDelivery = this.deps.chatProviderRepository.getDelivery(deliveryId);
+    if (!pendingDelivery || pendingDelivery.direction !== "inbound") {
+      throw new Error(`Inbound chat provider delivery not found: ${deliveryId}`);
+    }
+    if (pendingDelivery.status !== "pending") return resultFromSettledDelivery(pendingDelivery);
+    const payload = pendingDelivery.payload ?? {};
+    const bindingId = readString(payload.channelBindingId) ?? pendingDelivery.channelBindingId;
+    const binding = bindingId ? this.deps.chatProviderRepository.getChannelBinding(bindingId) : null;
+    const projectId = readString(payload.projectId);
+    const bodyMarkdown = readString(payload.bodyMarkdown);
+    if (!binding || !projectId || !bodyMarkdown) {
+      const failed = this.deps.chatProviderRepository.updateDeliveryState(deliveryId, {
+        status: "failed",
+        lastError: "Accepted inbound delivery is missing durable routing data.",
+      });
+      return resultFromSettledDelivery(failed);
+    }
+    const controller = new AbortController();
+    this.controllers.set(deliveryId, controller);
+    const startedAt = Date.now();
+    const externalSender = readRecord(payload.externalSender);
 
     try {
-      const conversationMessage = await this.deps.chatThreadRuntimeService.postMessage(routing.binding.projectId, {
-        threadId: resolveThreadId(routing.binding.routingHints, normalized.rawMetadata),
-        bodyMarkdown: routing.bodyMarkdown,
+      const conversationMessage = await this.deps.chatThreadRuntimeService.postMessage(projectId, {
+        threadId: readString(payload.internalThreadId) ?? undefined,
+        bodyMarkdown,
         metadata: {
           source: "chat_provider",
-          providerKind: normalized.providerKind,
-          externalChannelId: normalized.externalChannelId,
-          externalSender: {
-            id: normalized.externalSenderId,
-            name: normalized.externalSenderName,
-          },
+          providerKind: pendingDelivery.providerKind,
+          providerConnectionId: pendingDelivery.providerConnectionId,
+          channelBindingId: binding.id,
+          externalChannelId: pendingDelivery.externalChannelId,
+          externalSender: externalSender ? {
+            id: readString(externalSender.id) ?? "unknown",
+            name: readString(externalSender.name) ?? "unknown",
+          } : null,
+          providerConversationId: readString(payload.providerConversationId),
+          providerThreadId: readString(payload.providerThreadId),
           inboundDeliveryId: pendingDelivery.id,
-          suppressRichWidgets: true,
+          agentPresetId: binding.agentPresetId,
+          suppressRichWidgets: binding.suppressRichWidgets,
         },
-      });
+      }, { signal: controller.signal });
+      if (conversationMessage.deliveryStatus === "failed") {
+        throw new Error("Chat thread processing failed after the connector message was accepted.");
+      }
       const delivery = this.deps.chatProviderRepository.updateDeliveryState(pendingDelivery.id, {
         conversationThreadId: conversationMessage.threadId,
         conversationMessageId: conversationMessage.id,
         status: "processed",
-        payload: buildDeliveryPayload(normalized, {
+        payload: {
+          ...payload,
           state: "processed",
-          projectId: routing.binding.projectId,
-          channelBindingId: routing.binding.id,
-        }),
+          projectId,
+          channelBindingId: binding.id,
+        },
       });
 
       this.log("info", "Accepted chat provider ingress", {
-        providerConnectionId: normalized.providerConnectionId,
-        providerKind: normalized.providerKind,
-        externalChannelId: normalized.externalChannelId,
-        externalMessageId: normalized.externalMessageId,
-        channelBindingId: routing.binding.id,
-        projectId: routing.binding.projectId,
+        providerConnectionId: pendingDelivery.providerConnectionId,
+        providerKind: pendingDelivery.providerKind,
+        channelBindingId: binding.id,
+        projectId,
         deliveryId: delivery.id,
         conversationThreadId: conversationMessage.threadId,
         conversationMessageId: conversationMessage.id,
+        latencyMs: Math.max(0, Date.now() - startedAt),
+        outcome: "processed",
       });
       return {
         status: "accepted",
         message: "Inbound chat provider message accepted.",
-        providerConnectionId: normalized.providerConnectionId,
-        providerKind: normalized.providerKind,
+        providerConnectionId: pendingDelivery.providerConnectionId,
+        providerKind: pendingDelivery.providerKind,
         delivery,
         conversationMessage,
       };
     } catch (error) {
-      this.deps.chatProviderRepository.updateDeliveryState(pendingDelivery.id, {
+      const failed = this.deps.chatProviderRepository.updateDeliveryState(pendingDelivery.id, {
         status: "failed",
-        lastError: error instanceof Error ? error.message : String(error),
-        payload: buildDeliveryPayload(normalized, {
+        lastError: redactError(error),
+        payload: {
+          ...payload,
           state: "failed",
-          projectId: routing.binding.projectId,
-          channelBindingId: routing.binding.id,
-        }),
+          projectId,
+          channelBindingId: binding.id,
+        },
       });
       this.log("error", "Failed to process chat provider ingress", {
-        providerConnectionId: normalized.providerConnectionId,
-        providerKind: normalized.providerKind,
-        externalChannelId: normalized.externalChannelId,
-        externalMessageId: normalized.externalMessageId,
-        error: error instanceof Error ? error.message : String(error),
+        providerConnectionId: pendingDelivery.providerConnectionId,
+        providerKind: pendingDelivery.providerKind,
+        channelBindingId: binding.id,
+        deliveryId,
+        latencyMs: Math.max(0, Date.now() - startedAt),
+        outcome: controller.signal.aborted ? "cancelled" : "failed",
+        providerErrorCode: controller.signal.aborted ? "shutdown_abort" : "chat_processing_error",
       });
-      throw error;
+      return {
+        status: "accepted",
+        message: "Inbound chat provider message was accepted, but asynchronous chat processing failed.",
+        providerConnectionId: pendingDelivery.providerConnectionId,
+        providerKind: pendingDelivery.providerKind,
+        delivery: failed,
+      };
     }
+  }
+
+  private resolveInternalThreadId(
+    binding: ChatProviderChannelBindingRecord,
+    normalized: NormalizedChatProviderInboundMessage,
+  ): string | null {
+    const configured = readString(binding.routingHints?.conversationThreadId, binding.routingHints?.threadId);
+    if (configured) return configured;
+    if (!normalized.providerConversationId && !normalized.providerThreadId) return null;
+    const previous = this.deps.chatProviderRepository.listDeliveries({
+      providerConnectionId: normalized.providerConnectionId,
+      direction: "inbound",
+      limit: 500,
+    }).find((delivery) => delivery.channelBindingId === binding.id
+      && delivery.conversationThreadId
+      && delivery.payload?.providerConversationId === normalized.providerConversationId
+      && delivery.payload?.providerThreadId === normalized.providerThreadId);
+    return previous?.conversationThreadId ?? null;
   }
 
   private resolveRouting(normalized: NormalizedChatProviderInboundMessage): RoutingResolution {
@@ -259,7 +389,7 @@ export class ChatProviderIngressService {
     ambiguousBindings: ChatProviderChannelBindingRecord[],
   ): ChatProviderIngressResult {
     const ambiguous = ambiguousBindings.length > 1;
-    const delivery = this.deps.chatProviderRepository.recordInboundMessage({
+    const recorded = this.deps.chatProviderRepository.recordInboundMessage({
       providerConnectionId: normalized.providerConnectionId,
       externalChannelId: normalized.externalChannelId,
       externalMessageId: normalized.externalMessageId,
@@ -269,7 +399,17 @@ export class ChatProviderIngressService {
         candidateProjectIds: ambiguousBindings.map((binding) => binding.projectId),
         candidateBindingIds: ambiguousBindings.map((binding) => binding.id),
       }),
-    }).delivery;
+    });
+    if (recorded.duplicate) {
+      return {
+        status: "duplicate",
+        message: "Duplicate inbound message. Returning existing delivery.",
+        providerConnectionId: normalized.providerConnectionId,
+        providerKind: normalized.providerKind,
+        delivery: recorded.delivery,
+      };
+    }
+    const delivery = recorded.delivery;
 
     return {
       status: ambiguous ? "ambiguous" : "unbound",
@@ -295,14 +435,16 @@ export class ChatProviderIngressService {
 export function normalizeInboundPayload(
   connection: ChatProviderConnectionInternalRecord,
   payload: unknown,
+  registry: ChatConnectorRegistry = CHAT_CONNECTOR_REGISTRY,
 ): NormalizedChatProviderInboundMessage {
   const body = requireRecord(payload, "payload");
   const providerKind = connection.providerKind;
-  const profile = getChatConnectorProfileForMode(providerKind, connection.bridgeMode);
+  const profile = registry.getForMode(providerKind, connection.bridgeMode);
   const normalized = {
-    ...profile.ingress.normalize(body, connection.bridgeMode),
     ...definedInboundFields(normalizeGeneric(body)),
+    ...definedInboundFields(profile.ingress.normalize(body, connection.bridgeMode)),
   };
+  const identity = profile.identity.resolve(normalized, body, connection.bridgeMode);
   const timestamp = parseTimestamp(normalized.timestamp) ?? new Date().toISOString();
   const externalChannelId = requireNonEmpty(normalized.externalChannelId, "external channel id");
   const externalSenderId = requireNonEmpty(normalized.externalSenderId, "external sender id");
@@ -316,6 +458,8 @@ export function normalizeInboundPayload(
     textBody: requireNonEmpty(normalized.textBody, "message text"),
     externalMessageId: requireNonEmpty(normalized.externalMessageId, "external message id"),
     timestamp,
+    providerConversationId: identity.conversationId,
+    providerThreadId: identity.threadId,
     rawMetadata: stripSecrets(body),
   };
 }
@@ -402,18 +546,6 @@ function stripSelectorPrefix(text: string, selector: string): string | null {
   return null;
 }
 
-function resolveThreadId(
-  routingHints: Record<string, unknown> | null,
-  rawMetadata: Record<string, unknown>,
-): string | undefined {
-  return readString(
-    rawMetadata.threadId,
-    rawMetadata.conversationThreadId,
-    routingHints?.threadId,
-    routingHints?.conversationThreadId,
-  );
-}
-
 function buildDeliveryPayload(
   normalized: NormalizedChatProviderInboundMessage,
   state: Record<string, unknown>,
@@ -426,6 +558,8 @@ function buildDeliveryPayload(
     },
     externalChannelName: normalized.externalChannelName,
     timestamp: normalized.timestamp,
+    providerConversationId: normalized.providerConversationId,
+    providerThreadId: normalized.providerThreadId,
     rawMetadata: normalized.rawMetadata,
   };
 }
@@ -507,4 +641,21 @@ function definedInboundFields(
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function redactError(error: unknown): string {
+  const value = error instanceof Error ? error.message : String(error);
+  return redactText(value);
+}
+
+function resultFromSettledDelivery(delivery: ChatProviderMessageDeliveryRecord): ChatProviderIngressResult {
+  return {
+    status: delivery.status === "duplicate" ? "duplicate" : "accepted",
+    message: delivery.status === "failed"
+      ? "Inbound chat provider message was accepted, but asynchronous chat processing failed."
+      : "Inbound chat provider message has already been processed.",
+    providerConnectionId: delivery.providerConnectionId,
+    providerKind: delivery.providerKind,
+    delivery,
+  };
 }

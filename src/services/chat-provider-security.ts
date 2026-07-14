@@ -1,6 +1,9 @@
 import { createHash, createHmac, timingSafeEqual } from "crypto";
 import type { ChatProviderConnectionInternalRecord, ChatProviderSecretConfig } from "../contracts/chat-provider-types.js";
-import { getChatConnectorProfileForMode } from "../domain/chat-connectors/registry.js";
+import {
+  CHAT_CONNECTOR_REGISTRY,
+  type ChatConnectorRegistry,
+} from "../domain/chat-connectors/registry.js";
 import type { ChatConnectorHmacAuthentication } from "../domain/chat-connectors/types.js";
 
 export interface ChatProviderIngressSecurityRequest {
@@ -37,6 +40,7 @@ export class ChatProviderIngressSecurity {
   constructor(
     private readonly timestampToleranceMs = DEFAULT_TIMESTAMP_TOLERANCE_MS,
     private readonly replayReceiptStore?: ChatProviderReplayReceiptStore,
+    private readonly registry: ChatConnectorRegistry = CHAT_CONNECTOR_REGISTRY,
   ) {}
 
   verify(
@@ -47,7 +51,7 @@ export class ChatProviderIngressSecurity {
       throw new ChatProviderIngressSecurityError("connection_disabled", "Chat provider connection is not enabled.", 403);
     }
 
-    const profile = getChatConnectorProfileForMode(connection.providerKind, connection.bridgeMode);
+    const profile = this.registry.getForMode(connection.providerKind, connection.bridgeMode);
     const authentication = profile.ingress.authentication[connection.bridgeMode];
     if (!authentication) {
       throw new ChatProviderIngressSecurityError("unsupported_authentication", "Unsupported chat provider authentication mode.", 403);

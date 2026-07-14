@@ -61,7 +61,7 @@ export const microsoftTeamsChatConnectorProfile: ChatConnectorProfile = {
       },
     },
     handshake: { type: "none" },
-    acknowledgement: { statusCode: 200, headers: { "content-type": "application/json" }, body: null },
+    acknowledgement: { statusCode: 200, headers: { "content-type": "application/json" }, body: null, deadlineMs: 2_500 },
     normalize: (body) => {
       const conversation = readRecord(body.conversation);
       const sender = readRecord(body.from);

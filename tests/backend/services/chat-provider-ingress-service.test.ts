@@ -79,17 +79,22 @@ describe("ChatProviderIngressService", () => {
       conversationThreadId: thread.id,
       conversationMessageId: result.conversationMessage?.id,
     });
-    expect(context.postMessage).toHaveBeenCalledWith(projectA.id, expect.objectContaining({
-      threadId: thread.id,
-      bodyMarkdown: "Fix the failing release workflow",
-      metadata: expect.objectContaining({
-        source: "chat_provider",
-        providerKind: "slack",
-        externalChannelId: "C-shared",
-        inboundDeliveryId: result.delivery?.id,
-        suppressRichWidgets: true,
+    expect(context.postMessage).toHaveBeenCalledWith(
+      projectA.id,
+      expect.objectContaining({
+        threadId: thread.id,
+        bodyMarkdown: "Fix the failing release workflow",
+        metadata: expect.objectContaining({
+          source: "chat_provider",
+          providerKind: "slack",
+          externalChannelId: "C-shared",
+          inboundDeliveryId: result.delivery?.id,
+          providerConversationId: "C-shared",
+          suppressRichWidgets: true,
+        }),
       }),
-    }));
+      { signal: expect.any(AbortSignal) },
+    );
     expect(context.conversationRepository.listMessages(thread.id)[0]).toMatchObject({
       bodyMarkdown: "Fix the failing release workflow",
       metadata: expect.objectContaining({
@@ -135,6 +140,92 @@ describe("ChatProviderIngressService", () => {
       delivery: expect.objectContaining({ id: first.delivery?.id }),
     });
     expect(context.postMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("atomically accepts concurrent duplicates and creates one conversation message", async () => {
+    const context = await createContext();
+    const project = context.projectRepository.createProject({
+      name: "Concurrent duplicate project",
+      sourceType: "local",
+      sourceRef: path.join(context.tempDir, "concurrent-project"),
+    });
+    const connection = context.providerRepository.createConnection({
+      providerKind: "discord",
+      displayName: "Concurrent Discord ingress",
+      bridgeMode: "webhook",
+      status: "active",
+    });
+    context.providerRepository.createChannelBinding({
+      providerConnectionId: connection.id,
+      externalChannelId: "concurrent-channel",
+      externalChannelName: "triage",
+      projectId: project.id,
+      suppressRichWidgets: false,
+    });
+    const payload = {
+      id: "concurrent-message",
+      channel_id: "concurrent-channel",
+      content: "Handle this exactly once",
+      author: { id: "user-1", username: "alex" },
+    };
+
+    const results = await Promise.all(Array.from({ length: 8 }, () => context.service.processInbound({
+      providerConnectionId: connection.id,
+      payload,
+    })));
+
+    expect(results.filter((result) => result.status === "accepted")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "duplicate")).toHaveLength(7);
+    expect(context.postMessage).toHaveBeenCalledTimes(1);
+    expect(context.postMessage).toHaveBeenCalledWith(
+      project.id,
+      expect.objectContaining({ metadata: expect.objectContaining({ suppressRichWidgets: false }) }),
+      { signal: expect.any(AbortSignal) },
+    );
+  });
+
+  it("persists acceptance before chat work and records a later processing failure", async () => {
+    const context = await createContext();
+    const project = context.projectRepository.createProject({
+      name: "Deferred failure project",
+      sourceType: "local",
+      sourceRef: path.join(context.tempDir, "deferred-failure"),
+    });
+    const connection = context.providerRepository.createConnection({
+      providerKind: "telegram",
+      displayName: "Deferred Telegram ingress",
+      bridgeMode: "webhook",
+      status: "active",
+    });
+    context.providerRepository.createChannelBinding({
+      providerConnectionId: connection.id,
+      externalChannelId: "failure-channel",
+      externalChannelName: "failure",
+      projectId: project.id,
+    });
+    const accepted = await context.service.acceptInbound({
+      providerConnectionId: connection.id,
+      payload: {
+        message: {
+          message_id: 77,
+          text: "Persist before processing",
+          chat: { id: "failure-channel" },
+          from: { id: "sender-1" },
+        },
+      },
+    });
+
+    expect(accepted).toMatchObject({ status: "accepted", delivery: { status: "pending" } });
+    expect(context.postMessage).not.toHaveBeenCalled();
+    context.postMessage.mockRejectedValueOnce(new Error("model execution failed"));
+
+    const processed = await context.service.processAccepted(accepted.delivery!.id);
+
+    expect(processed).toMatchObject({ status: "accepted", delivery: { status: "failed" } });
+    expect(context.providerRepository.getDelivery(accepted.delivery!.id)).toMatchObject({
+      status: "failed",
+      lastError: "model execution failed",
+    });
   });
 
   it("records disambiguation-needed state when a shared external channel lacks a selector", async () => {

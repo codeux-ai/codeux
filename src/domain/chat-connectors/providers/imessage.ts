@@ -209,7 +209,7 @@ export const imessageChatConnectorProfile: ChatConnectorProfile = {
       },
     },
     handshake: { type: "none" },
-    acknowledgement: { statusCode: 200, headers: { "content-type": "application/json" }, body: null },
+    acknowledgement: { statusCode: 200, headers: { "content-type": "application/json" }, body: null, deadlineMs: 2_500 },
     normalize: (body) => {
       const message = readRecord(body.message);
       const chat = readRecord(body.chat);
@@ -256,12 +256,13 @@ export const imessageChatConnectorProfile: ChatConnectorProfile = {
       if (context.connection.bridgeMode === "native_bridge") {
         return {
           ...buildLegacyCommandOutboundRequest(context, ["bridgeToken", "botToken", "webhookSecret"]),
+          protocol: "imessage_bridge",
           body,
         };
       }
       throw new Error(`Unsupported bridge mode for imessage: ${context.connection.bridgeMode}`);
     },
-    parseResponse: (responseBody) => parseImessageBridgeResponse(responseBody),
+    parseResponse: (responseBody, context) => parseImessageBridgeResponse(responseBody, context?.correlationId),
     isRetryableStatus: isLegacyRetryableHttpStatus,
   },
   verification: {
