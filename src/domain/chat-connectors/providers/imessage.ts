@@ -261,7 +261,7 @@ export const imessageChatConnectorProfile: ChatConnectorProfile = {
       }
       throw new Error(`Unsupported bridge mode for imessage: ${context.connection.bridgeMode}`);
     },
-    parseResponse: parseImessageBridgeResponse,
+    parseResponse: (responseBody) => parseImessageBridgeResponse(responseBody),
     isRetryableStatus: isLegacyRetryableHttpStatus,
   },
   verification: {

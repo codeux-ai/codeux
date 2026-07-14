@@ -44,6 +44,12 @@ describe("chat connector registry", () => {
         modes: [
           { mode: "managed_bridge", integration: "managed_plugin", setup: ["pluginName", "workspaceId"], secrets: ["bridgeApiKey"] },
           { mode: "webhook", integration: "webhook", setup: ["webhookUrl", "verifyTokenName"], secrets: ["webhookSecret", "verifyToken"] },
+          {
+            mode: "official_api",
+            integration: "official_api",
+            setup: ["graphApiVersion", "phoneNumberId", "appId", "businessAccountId"],
+            secrets: ["accessToken", "appSecret", "webhookVerifyToken"],
+          },
         ],
       },
       imessage: {
@@ -58,6 +64,7 @@ describe("chat connector registry", () => {
         modes: [
           { mode: "managed_bridge", integration: "managed_core", setup: ["workspaceId", "botUsername"], secrets: ["bridgeApiKey"] },
           { mode: "webhook", integration: "webhook", setup: ["webhookUrl", "botUsername"], secrets: ["botToken", "webhookSecret"] },
+          { mode: "official_api", integration: "official_api", setup: ["botUsername"], secrets: ["botToken", "webhookSecret"] },
         ],
       },
       slack: {
@@ -65,6 +72,7 @@ describe("chat connector registry", () => {
         modes: [
           { mode: "managed_bridge", integration: "managed_plugin", setup: ["pluginName", "workspaceId"], secrets: ["bridgeApiKey"] },
           { mode: "webhook", integration: "webhook", setup: ["eventsUrl", "appId"], secrets: ["signingSecret", "botToken"] },
+          { mode: "official_api", integration: "official_api", setup: ["appId", "workspaceId", "workspaceName"], secrets: ["signingSecret", "botToken"] },
         ],
       },
       "microsoft-teams": {
@@ -92,7 +100,10 @@ describe("chat connector registry", () => {
     expect(() => getChatConnectorProfileForMode("discord", "managed_bridge")).toThrow(
       "Unsupported bridge mode for discord: managed_bridge",
     );
-    for (const kind of CHAT_CONNECTOR_KINDS) {
+    expect(getChatConnectorProfileForMode("telegram", "official_api").kind).toBe("telegram");
+    expect(getChatConnectorProfileForMode("whatsapp", "official_api").kind).toBe("whatsapp");
+    expect(getChatConnectorProfileForMode("slack", "official_api").kind).toBe("slack");
+    for (const kind of CHAT_CONNECTOR_KINDS.filter((candidate) => !["telegram", "whatsapp", "slack"].includes(candidate))) {
       expect(() => getChatConnectorProfileForMode(kind, "official_api" as ChatProviderBridgeMode)).toThrow(
         `Unsupported bridge mode for ${kind}: official_api`,
       );

@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHash, createHmac, timingSafeEqual } from "crypto";
 import type { ChatProviderConnectionInternalRecord, ChatProviderSecretConfig } from "../contracts/chat-provider-types.js";
 import { getChatConnectorProfileForMode } from "../domain/chat-connectors/registry.js";
 import type { ChatConnectorHmacAuthentication } from "../domain/chat-connectors/types.js";
@@ -11,7 +11,7 @@ export interface ChatProviderIngressSecurityRequest {
 
 export interface ChatProviderIngressSecurityResult {
   authenticated: true;
-  method: "bearer" | "hmac";
+  method: "bearer" | "header_secret" | "hmac";
 }
 
 export class ChatProviderIngressSecurityError extends Error {
@@ -45,8 +45,22 @@ export class ChatProviderIngressSecurity {
     if (!authentication) {
       throw new ChatProviderIngressSecurityError("unsupported_authentication", "Unsupported chat provider authentication mode.", 403);
     }
+    if (authentication.type === "header_secret") {
+      const expectedToken = firstConfiguredSecretExact(connection.secrets, authentication.secretKeys);
+      if (!expectedToken) {
+        throw new ChatProviderIngressSecurityError("missing_header_secret", "Webhook secret token is not configured.", 403);
+      }
+      const actualToken = firstHeaderExact(request.headers, authentication.tokenHeaders);
+      if (actualToken === undefined || !constantTimeEqualsExact(actualToken, expectedToken)) {
+        throw new ChatProviderIngressSecurityError("invalid_header_secret", "Invalid webhook secret token.", 401);
+      }
+      return { authenticated: true, method: "header_secret" };
+    }
+
     const nowMs = (request.now ?? new Date()).getTime();
-    const timestamp = this.requireFreshTimestamp(request.headers, authentication.timestampHeaders, nowMs);
+    const timestamp = authentication.timestampRequirement === "none"
+      ? null
+      : this.requireFreshTimestamp(request.headers, authentication.timestampHeaders, nowMs);
 
     if (authentication.type === "hmac_sha256") {
       const hmacSecret = firstConfiguredSecret(connection.secrets, authentication.secretKeys);
@@ -118,30 +132,32 @@ export class ChatProviderIngressSecurity {
   private verifyHmacSignature(input: {
     connectionId: string;
     signature: string;
-    timestamp: { raw: string; value: number };
+    timestamp: { raw: string; value: number } | null;
     rawBody: string;
     secret: string;
     nowMs: number;
     authentication: ChatConnectorHmacAuthentication;
   }): void {
-    const normalizedSignature = normalizeSignature(input.signature);
+    const normalizedSignature = normalizeSignature(input.signature, input.authentication.signaturePrefix);
     if (!normalizedSignature) {
       throw new ChatProviderIngressSecurityError("invalid_signature", "Invalid chat provider ingress signature.", 401);
     }
 
     const candidates = input.authentication
-      .signatureBases({ timestamp: input.timestamp.raw, rawBody: input.rawBody })
+      .signatureBases({ timestamp: input.timestamp?.raw ?? "", rawBody: input.rawBody })
       .map((base) => createHmac("sha256", input.secret).update(base).digest("hex"));
     const valid = candidates.some((candidate) => constantTimeEquals(candidate, normalizedSignature));
     if (!valid) {
       throw new ChatProviderIngressSecurityError("signature_mismatch", "Invalid chat provider ingress signature.", 401);
     }
 
-    this.preventReplay({
-      connectionId: input.connectionId,
-      key: `hmac:${input.timestamp.value}:${normalizedSignature}`,
-      nowMs: input.nowMs,
-    });
+    if (input.timestamp) {
+      this.preventReplay({
+        connectionId: input.connectionId,
+        key: `hmac:${input.timestamp.value}:${normalizedSignature}`,
+        nowMs: input.nowMs,
+      });
+    }
   }
 
   private preventReplay(input: { connectionId: string; key: string; nowMs: number }): void {
@@ -191,6 +207,16 @@ function firstConfiguredSecret(secrets: ChatProviderSecretConfig | null, keys: r
   return null;
 }
 
+function firstConfiguredSecretExact(secrets: ChatProviderSecretConfig | null, keys: readonly string[]): string | null {
+  for (const key of keys) {
+    const value = secrets?.[key];
+    if (typeof value === "string" && value.length > 0) {
+      return value;
+    }
+  }
+  return null;
+}
+
 function firstHeader(headers: Record<string, string | string[] | undefined>, names: readonly string[]): string | undefined {
   const normalized = new Map(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]));
   for (const name of names) {
@@ -203,8 +229,26 @@ function firstHeader(headers: Record<string, string | string[] | undefined>, nam
   return undefined;
 }
 
-function normalizeSignature(value: string): string | null {
+function firstHeaderExact(
+  headers: Record<string, string | string[] | undefined>,
+  names: readonly string[],
+): string | undefined {
+  const normalized = new Map(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]));
+  for (const name of names) {
+    const value = normalized.get(name.toLowerCase());
+    const candidate = Array.isArray(value) ? value[0] : value;
+    if (typeof candidate === "string") {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+function normalizeSignature(value: string, requiredPrefix?: string): string | null {
   const trimmed = value.trim();
+  if (requiredPrefix && !trimmed.toLowerCase().startsWith(requiredPrefix.toLowerCase())) {
+    return null;
+  }
   const match = trimmed.match(/^(?:sha256=|v0=)?([a-f0-9]{64})$/i);
   return match?.[1]?.toLowerCase() || null;
 }
@@ -216,4 +260,12 @@ function constantTimeEquals(left: string, right: string): boolean {
     return false;
   }
   return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function constantTimeEqualsExact(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  const leftDigest = createHash("sha256").update(leftBuffer).digest();
+  const rightDigest = createHash("sha256").update(rightBuffer).digest();
+  return timingSafeEqual(leftDigest, rightDigest) && leftBuffer.length === rightBuffer.length;
 }
