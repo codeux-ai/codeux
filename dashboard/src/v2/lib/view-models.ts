@@ -1,28 +1,6 @@
 import type { Source, Sprint, SprintRecord, Task, TaskRecord } from "../types.js";
-import { createDashboardFormatters } from "../i18n/formatters.js";
-import type { DashboardLocale } from "../i18n/locales.js";
 
-export interface SprintViewModelPresentation {
-  locale?: DashboardLocale;
-  scheduleTbd?: string;
-}
-
-export interface TaskViewModelFallbacks {
-  knownSourceNames: ReadonlySet<string>;
-  knownSprintNames: ReadonlySet<string>;
-  unassigned: string;
-  sprint: string;
-}
-
-export function localizeTaskViewModelFallbacks(task: Task, fallbacks: TaskViewModelFallbacks): Task {
-  const source = task.source === "Unassigned" && !fallbacks.knownSourceNames.has(task.source)
-    ? fallbacks.unassigned
-    : task.source;
-  const sprint = task.sprint === "Sprint" && !fallbacks.knownSprintNames.has(task.sprint)
-    ? fallbacks.sprint
-    : task.sprint;
-  return source === task.source && sprint === task.sprint ? task : { ...task, source, sprint };
-}
+const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
 
 export function toSprintViewModel(sprint: SprintRecord): Sprint {
   return {
@@ -163,22 +141,15 @@ function areSelfReflectionRatingsEqual(left: Task["selfReflectionRating"], right
     });
 }
 
-export function formatSprintDateRange(
-  startDate: string | null,
-  endDate: string | null,
-  presentation: SprintViewModelPresentation = {},
-): string {
-  const { formatDate } = createDashboardFormatters(presentation.locale ?? "en");
-  const format = (value: string): string => formatDate(new Date(value), { month: "short", day: "numeric" });
-  const scheduleTbd = presentation.scheduleTbd ?? "Schedule TBD";
+export function formatSprintDateRange(startDate: string | null, endDate: string | null): string {
   if (!startDate && !endDate) {
-    return scheduleTbd;
+    return "Schedule TBD";
   }
   if (startDate && endDate) {
-    return `${format(startDate)} - ${format(endDate)}`;
+    return `${DATE_FORMATTER.format(new Date(startDate))} - ${DATE_FORMATTER.format(new Date(endDate))}`;
   }
   const resolvedDate = startDate || endDate;
-  return resolvedDate ? format(resolvedDate) : scheduleTbd;
+  return resolvedDate ? DATE_FORMATTER.format(new Date(resolvedDate)) : "Schedule TBD";
 }
 
 function inferAssignee(task: TaskRecord): string {

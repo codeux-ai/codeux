@@ -2,12 +2,15 @@ import { useState, useMemo, type FunctionComponent } from "preact/compat";
 import { ChevronDown } from "lucide-preact";
 import { ChatAvatar } from "./ChatAvatar.js";
 import { renderMarkdown } from "../../../lib/markdown.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { chatMessages } from "../../i18n/messages/chat.js";
 
 export interface TruncatedSystemBubbleProps {
   content: string;
 }
 
 export const TruncatedSystemBubble: FunctionComponent<TruncatedSystemBubbleProps> = ({ content }) => {
+  const { translate } = useDashboardI18n();
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Memoize rendered HTML to prevent expensive re-parsing on expand/collapse toggles
@@ -26,7 +29,7 @@ export const TruncatedSystemBubble: FunctionComponent<TruncatedSystemBubbleProps
 
           <div className="flex items-center gap-3 mb-2 text-[11px] font-mono text-slate-400 justify-start">
             <span className="font-semibold text-slate-300 capitalize flex items-center gap-1.5">
-              system
+              {translate(chatMessages, "system")}
             </span>
           </div>
 
@@ -56,7 +59,7 @@ export const TruncatedSystemBubble: FunctionComponent<TruncatedSystemBubbleProps
               className="flex items-center gap-1.5 px-3 py-1 text-xs text-slate-500 hover:text-slate-300 transition-colors rounded-full hover:bg-slate-800"
               aria-expanded={isExpanded}
             >
-              <span>{isExpanded ? "Show less" : "Show full message"}</span>
+              <span>{translate(chatMessages, isExpanded ? "showLess" : "showFullMessage")}</span>
               <ChevronDown
                 className={`w-3.5 h-3.5 transition-transform duration-300 ${isExpanded ? "rotate-180" : ""}`}
               />
