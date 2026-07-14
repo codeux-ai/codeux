@@ -6,7 +6,6 @@ import { cleanup, fireEvent, render as testingLibraryRender, screen, waitFor } f
 import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { TopNav } from "../../../dashboard/src/v2/components/TopNav.js";
-import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
 import { useSprints } from "../../../dashboard/src/hooks/useSprints.js";
 import { useProjectEffectiveSettings, clearProjectEffectiveSettingsCache } from "../../../dashboard/src/v2/hooks/use-project-effective-settings.js";
