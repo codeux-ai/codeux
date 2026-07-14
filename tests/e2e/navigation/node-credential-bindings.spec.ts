@@ -89,9 +89,15 @@ test('replaces and removes a node credential, refreshes review, publishes, and e
   await expect(page.getByRole('status').filter({ hasText: 'Credential binding saved and draft review refreshed.' })).toBeVisible();
   await expect(picker).toBeFocused();
 
-  await picker.click();
-  await menu.getByText('Remove Replacement provider credential binding', { exact: true }).click();
+  await page.keyboard.press('Enter');
+  await expect(menu).toBeVisible();
+  const unbind = menu.getByRole('menuitem', { name: 'Remove Replacement provider credential binding' });
+  await page.keyboard.press('End');
+  await expect(unbind).toBeFocused();
+  await page.keyboard.press('Enter');
   await expect(page.getByRole('status').filter({ hasText: 'Credential binding removed and draft review refreshed.' })).toBeVisible();
+  await expect(picker).toContainText('Bind credential');
+  await expect(picker).toBeFocused();
   await picker.click();
   await menu.getByText('Primary provider credential', { exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Credential binding saved and draft review refreshed.' })).toBeVisible();
