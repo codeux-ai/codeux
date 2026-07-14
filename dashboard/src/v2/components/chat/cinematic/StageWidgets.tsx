@@ -17,6 +17,8 @@ import {
 } from "lucide-preact";
 import type { AgentResponseEffect } from "../../../../../../src/contracts/connection-chat-types.js";
 import { parseAgentResponseEffectJson } from "../../../lib/agent-response-effects.js";
+import { useDashboardI18n } from "../../../i18n/context.js";
+import { chatMessages, type ChatTextMessageKey } from "../../../i18n/messages/chat.js";
 
 /* ════════════════════════════════════════════════════════════════════════
  *  Stage widgets — the rich vocabulary agents embed in ordinary markdown.
@@ -105,12 +107,12 @@ export function parseBubbleSegments(markdown: string): BubbleSegment[] {
 
 type StateId = "ok" | "warn" | "error" | "running" | "todo";
 
-const STATE_META: Record<StateId, { icon: typeof Check; label: string; text: string; chip: string }> = {
-  ok: { icon: Check, label: "OK", text: "text-signal-600 dark:text-signal-400", chip: "border-signal-500/25 bg-signal-500/10" },
-  running: { icon: Loader2, label: "Running", text: "text-signal-600 dark:text-signal-400", chip: "border-signal-500/25 bg-signal-500/10" },
-  warn: { icon: AlertTriangle, label: "Warning", text: "text-status-amber", chip: "border-status-amber/25 bg-status-amber/10" },
-  error: { icon: XCircle, label: "Failed", text: "text-status-red", chip: "border-status-red/25 bg-status-red/10" },
-  todo: { icon: Circle, label: "Pending", text: "text-slate-500 dark:text-slate-400", chip: "border-black/[0.08] bg-black/[0.03] dark:border-white/10 dark:bg-white/[0.04]" },
+const STATE_META: Record<StateId, { icon: typeof Check; labelKey: ChatTextMessageKey; text: string; chip: string }> = {
+  ok: { icon: Check, labelKey: "ok", text: "text-signal-600 dark:text-signal-400", chip: "border-signal-500/25 bg-signal-500/10" },
+  running: { icon: Loader2, labelKey: "running", text: "text-signal-600 dark:text-signal-400", chip: "border-signal-500/25 bg-signal-500/10" },
+  warn: { icon: AlertTriangle, labelKey: "warning", text: "text-status-amber", chip: "border-status-amber/25 bg-status-amber/10" },
+  error: { icon: XCircle, labelKey: "failed", text: "text-status-red", chip: "border-status-red/25 bg-status-red/10" },
+  todo: { icon: Circle, labelKey: "pending", text: "text-slate-500 dark:text-slate-400", chip: "border-black/[0.08] bg-black/[0.03] dark:border-white/10 dark:bg-white/[0.04]" },
 };
 
 const toState = (value: unknown): StateId => {
@@ -127,17 +129,19 @@ const arr = (value: unknown): Record<string, unknown>[] =>
   Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object") : [];
 
 const StateBadge: FunctionComponent<{ state: StateId; label?: string }> = ({ state, label }) => {
+  const { translate } = useDashboardI18n();
   const meta = STATE_META[state];
   const Icon = meta.icon;
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${meta.chip} ${meta.text}`}>
       <Icon className={`h-3 w-3 ${state === "running" ? "animate-spin motion-reduce:animate-none" : ""}`} aria-hidden="true" />
-      {label || meta.label}
+      {label || translate(chatMessages, meta.labelKey)}
     </span>
   );
 };
 
 const ProgressBar: FunctionComponent<{ done: number; total: number }> = ({ done, total }) => {
+  const { formatNumber } = useDashboardI18n();
   const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
   return (
     <div className="flex items-center gap-3">
@@ -151,7 +155,7 @@ const ProgressBar: FunctionComponent<{ done: number; total: number }> = ({ done,
         <div className="h-full rounded-full bg-signal-500 transition-[width] duration-700" style={{ width: `${pct}%` }} />
       </div>
       <span className="font-mono text-[11px] font-semibold tabular-nums text-slate-600 dark:text-slate-300">
-        {done}/{total} · {pct}%
+        {formatNumber(done)}/{formatNumber(total)} · {formatNumber(pct)}%
       </span>
     </div>
   );
@@ -175,10 +179,11 @@ const WidgetTitle: FunctionComponent<{ icon: typeof Check; title: string; traili
 
 /* ── codeux:status — service/pipeline health card ── */
 const StatusWidget: FunctionComponent<{ data: Record<string, unknown> }> = ({ data }) => {
+  const { translate } = useDashboardI18n();
   const items = arr(data.items);
   return (
     <WidgetShell>
-      <WidgetTitle icon={CircleDot} title={str(data.title) || "Status"} trailing={<StateBadge state={toState(data.state)} />} />
+      <WidgetTitle icon={CircleDot} title={str(data.title) || translate(chatMessages, "status")} trailing={<StateBadge state={toState(data.state)} />} />
       {items.length > 0 && (
         <div className="grid gap-1.5 sm:grid-cols-2">
           {items.map((item, index) => {
@@ -190,7 +195,7 @@ const StatusWidget: FunctionComponent<{ data: Record<string, unknown> }> = ({ da
                 <span className="truncate text-[13px] font-medium text-slate-700 dark:text-slate-200">{str(item.label)}</span>
                 <span className={`inline-flex shrink-0 items-center gap-1.5 text-[11px] font-semibold ${meta.text}`}>
                   <Icon className={`h-3.5 w-3.5 ${state === "running" ? "animate-spin motion-reduce:animate-none" : ""}`} aria-hidden="true" />
-                  {str(item.value) || meta.label}
+                  {str(item.value) || translate(chatMessages, meta.labelKey)}
                 </span>
               </div>
             );
@@ -204,11 +209,12 @@ const StatusWidget: FunctionComponent<{ data: Record<string, unknown> }> = ({ da
 
 /* ── codeux:tasks — checklist with live progress ── */
 const TasksWidget: FunctionComponent<{ data: Record<string, unknown> }> = ({ data }) => {
+  const { translate } = useDashboardI18n();
   const items = arr(data.items);
   const done = items.filter((item) => toState(item.status) === "ok").length;
   return (
     <WidgetShell>
-      <WidgetTitle icon={Check} title={str(data.title) || "Tasks"} />
+      <WidgetTitle icon={Check} title={str(data.title) || translate(chatMessages, "tasks")} />
       <ProgressBar done={done} total={items.length} />
       <ul className="mt-3 space-y-1">
         {items.map((item, index) => {
@@ -221,7 +227,7 @@ const TasksWidget: FunctionComponent<{ data: Record<string, unknown> }> = ({ dat
               <span className={`min-w-0 flex-1 truncate text-[13.5px] ${state === "ok" ? "text-slate-400 line-through dark:text-slate-500" : "text-slate-800 dark:text-slate-100"}`}>
                 {str(item.title)}
               </span>
-              <span className="sr-only">{meta.label}</span>
+              <span className="sr-only">{translate(chatMessages, meta.labelKey)}</span>
               {str(item.meta) && (
                 <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.1em] text-slate-400 dark:text-slate-500">{str(item.meta)}</span>
               )}
@@ -235,17 +241,18 @@ const TasksWidget: FunctionComponent<{ data: Record<string, unknown> }> = ({ dat
 
 /* ── codeux:sprint — sprint hero card ── */
 const SprintWidget: FunctionComponent<{ data: Record<string, unknown> }> = ({ data }) => {
+  const { translate } = useDashboardI18n();
   const done = Number(data.done) || 0;
   const total = Number(data.total) || 0;
   return (
     <WidgetShell>
       <WidgetTitle
         icon={Rocket}
-        title={str(data.key) || "Sprint"}
+        title={str(data.key) || translate(chatMessages, "sprint")}
         trailing={<StateBadge state={toState(data.status)} label={str(data.status) || undefined} />}
       />
       <div className="font-display text-xl font-black tracking-tight text-slate-900 dark:text-white">
-        {str(data.name) || "Untitled sprint"}
+        {str(data.name) || translate(chatMessages, "untitledSprint")}
       </div>
       {total > 0 && <div className="mt-3"><ProgressBar done={done} total={total} /></div>}
       {(str(data.branch) || str(data.pr)) && (
@@ -298,22 +305,23 @@ const MetricsWidget: FunctionComponent<{ data: Record<string, unknown> }> = ({ d
 };
 
 /* ── codeux:memory — durable-learning confirmation ── */
-const MemoryWidget: FunctionComponent<{ data: Record<string, unknown> }> = ({ data }) => (
-  <WidgetShell>
+const MemoryWidget: FunctionComponent<{ data: Record<string, unknown> }> = ({ data }) => {
+  const { translate } = useDashboardI18n();
+  return <WidgetShell>
     <WidgetTitle
       icon={Brain}
-      title={str(data.title) || "Long-term memory"}
-      trailing={<StateBadge state={toState(data.status || "ok")} label="Remembered" />}
+      title={str(data.title) || translate(chatMessages, "longTermMemory")}
+      trailing={<StateBadge state={toState(data.status || "ok")} label={translate(chatMessages, "remembered")} />}
     />
     <blockquote className="rounded-xl border border-signal-500/15 bg-signal-500/[0.05] px-3.5 py-3 text-[13.5px] leading-6 text-slate-800 dark:text-slate-100">
-      {str(data.memory) || "Durable project knowledge stored."}
+      {str(data.memory) || translate(chatMessages, "durableKnowledgeStored")}
     </blockquote>
     <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-400 dark:text-slate-500">
       {str(data.category) && <span>{str(data.category)}</span>}
-      {str(data.claimId) && <span className="font-mono normal-case tracking-normal">Claim {str(data.claimId).slice(0, 8)}</span>}
+      {str(data.claimId) && <span className="font-mono normal-case tracking-normal">{translate(chatMessages, "claim")} {str(data.claimId).slice(0, 8)}</span>}
     </div>
-  </WidgetShell>
-);
+  </WidgetShell>;
+};
 
 /* ── codeux:actions — suggested next steps that dispatch immediately ── */
 const ActionsWidget: FunctionComponent<{ data: Record<string, unknown>; onAction?: (prompt: string) => void }> = ({ data, onAction }) => {

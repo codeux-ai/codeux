@@ -749,8 +749,8 @@ describe("dashboard accessibility quality regressions", () => {
     expect(settingsRail).toMatch(/Disabled/);
 
     const taskCard = readSource("dashboard/src/v2/components/tasks/KanbanTaskCard.tsx");
-    expect(taskCard).toMatch(/Edit task \$\{task\.id\}/);
-    expect(taskCard).toMatch(/Delete task \$\{task\.id\}/);
+    expect(taskCard).toMatch(/translate\(taskMessages, "editTaskTarget"/);
+    expect(taskCard).toMatch(/translate\(taskMessages, "deleteTaskTarget"/);
     expect(taskCard).not.toMatch(/group-hover:opacity-100/);
   });
 });

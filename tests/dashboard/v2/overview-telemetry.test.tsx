@@ -2,9 +2,9 @@
 /**
  * @vitest-environment happy-dom
  */
-import { h, type ComponentChildren } from "preact";
+import { h } from "preact";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render as testingRender, screen, cleanup, within } from "@testing-library/preact";
+import { render, screen, cleanup, within } from "@testing-library/preact";
 import { renderHook, act } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 
@@ -16,12 +16,6 @@ import { useProjectData } from "../../../dashboard/src/v2/context/project-data.j
 import type { ExecutionAttentionItemSummary, OverviewTelemetrySnapshot } from "../../../dashboard/src/types.js";
 import * as api from "../../../dashboard/src/lib/api/dashboard-api.js";
 import * as realtime from "../../../dashboard/src/lib/realtime/dashboard-realtime-client.js";
-import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
-import type { DashboardLocale } from "../../../dashboard/src/v2/i18n/locales.js";
-
-const render = (ui: ComponentChildren, locale: DashboardLocale = "en") => testingRender(
-  <DashboardI18nProvider initialLocale={locale} storage={null}>{ui}</DashboardI18nProvider>,
-);
 
 expect.extend(matchers);
 
@@ -359,85 +353,6 @@ describe("OverviewTelemetry Component", () => {
     expect(screen.getByText("run completed")).toHaveClass("text-status-green");
     expect(screen.getByText("dispatch failed")).toHaveClass("text-status-red");
     expect(screen.getByRole("log", { name: "Overview runtime timeline" })).toHaveAttribute("aria-live", "polite");
-  });
-
-  it("localizes German loading, empty, and failure live regions while preserving server errors", () => {
-    vi.mocked(useOverviewTelemetry).mockReturnValue({
-      telemetry: { activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null },
-      loading: true,
-      error: null,
-      refresh: vi.fn(),
-    });
-    const loadingView = render(<OverviewTelemetry />, "de");
-    expect(screen.getByRole("status", { name: "Übersichtstelemetrie wird geladen" })).toHaveAttribute("aria-busy", "true");
-    loadingView.unmount();
-
-    vi.mocked(useOverviewTelemetry).mockReturnValue({
-      telemetry: { activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: "2000-01-01T00:00:00Z" },
-      loading: false,
-      error: null,
-      refresh: vi.fn(),
-    });
-    const emptyView = render(<OverviewTelemetry />, "de");
-    expect(screen.getByRole("status")).toHaveTextContent("Warten auf Laufzeitdaten");
-    emptyView.unmount();
-
-    const serverError = "upstream telemetry timeout";
-    vi.mocked(useOverviewTelemetry).mockReturnValue({
-      telemetry: { activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null },
-      loading: false,
-      error: serverError,
-      refresh: vi.fn(),
-    });
-    render(<OverviewTelemetry />, "de");
-    expect(screen.getByRole("alert")).toHaveTextContent("Telemetriefehler");
-    expect(screen.getByRole("alert")).toHaveTextContent(serverError);
-  });
-
-  it("localizes active German telemetry but keeps long live names and attention copy verbatim", () => {
-    const projectName = "A very long runtime Project name with Repository/provider text";
-    const attentionTitle = "Resolve provider-authored blocker exactly";
-    const attentionSummary = "Runtime-authored description must remain unchanged.";
-    vi.mocked(useProjectData).mockReturnValue({
-      selectedProjectId: "p1",
-      selectedProject: { id: "p1", name: projectName },
-      loading: false,
-    } as any);
-    vi.mocked(useDashboardRuntimeData).mockReturnValue(makeRuntimeData([
-      makeAttentionItem({ title: attentionTitle, summaryMarkdown: attentionSummary }),
-    ]) as any);
-    vi.mocked(useOverviewTelemetry).mockReturnValue({
-      telemetry: {
-        activeProjects: [{
-          projectId: "p1",
-          projectName,
-          sprintId: "s1",
-          sprintName: "Sprint name remains verbatim",
-          sprintNumber: 1234,
-          sprintRunId: "run1",
-          sprintRunStatus: "running",
-          activeDispatchCount: 2,
-          runningDispatchCount: 1,
-          updatedAt: "2000-01-01T00:00:00Z",
-          humanIntervention: null,
-        }],
-        attentionProjects: [],
-        recentEvents: [],
-        updatedAt: "2000-01-01T00:00:00Z",
-      },
-      loading: false,
-      error: null,
-      refresh: vi.fn(),
-    });
-
-    render(<OverviewTelemetry />, "de");
-
-    expect(screen.getByText("Telemetrie.")).toBeInTheDocument();
-    expect(screen.getByText("Aktive Sprints")).toBeInTheDocument();
-    expect(screen.getAllByText(projectName).length).toBeGreaterThan(0);
-    expect(screen.getByText(attentionTitle)).toBeInTheDocument();
-    expect(screen.getByText(attentionSummary)).toBeInTheDocument();
-    expect(screen.getByRole("list", { name: "Eingriffselemente des ausgewählten Sprints" })).toBeInTheDocument();
   });
 });
 

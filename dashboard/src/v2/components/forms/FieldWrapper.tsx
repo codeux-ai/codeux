@@ -1,6 +1,8 @@
 import { h, ComponentChildren, VNode, cloneElement, isValidElement, toChildArray } from "preact";
 import { useEffect, useState, useId, useRef } from "preact/hooks";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 const getDurationMs = (duration: string): number => {
   const value = Number.parseFloat(duration);
@@ -24,6 +26,7 @@ export interface FieldWrapperProps {
 }
 
 export function FieldWrapper({ label, error, announceError = true, children, htmlFor, required, helperTextId, helperText, forceTouch, valid }: FieldWrapperProps) {
+  const { translate } = useOptionalDashboardI18n();
   const tokens = useInteractionTokens();
   const [shake, setShake] = useState(false);
   const [touched, setTouched] = useState(false);
@@ -176,7 +179,7 @@ export function FieldWrapper({ label, error, announceError = true, children, htm
       <label htmlFor={inputId} class="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 flex gap-1">
         {label}
         {required && <span class="text-status-red" aria-hidden="true">*</span>}
-        {required && <span class="sr-only">(Required)</span>}
+        {required && <span class="sr-only">{translate(shellMessages, "required")}</span>}
       </label>
       <div
         class={`

@@ -35,7 +35,9 @@ const { translate, translatePlural, formatNumber } = useDashboardI18n();
 
 English and German must declare exactly the same top-level keys. Interpolation treats replacement values as literal text, plural messages require an `other` form, and locale-aware formatting delegates to the browser's native `Intl` implementation.
 
-Keep each catalog with its owning feature and import it only where the feature is loaded. Translate dashboard-authored interface copy only. Never translate provider output, API responses, stored instructions, project data, runtime diagnostics, or user-authored content.
+ Keep each catalog with its owning feature and import it only where the feature is loaded. Translate dashboard-authored interface copy only. Never translate provider output, API responses, stored instructions, project data, runtime diagnostics, or user-authored content.
+
+The operational Settings catalog covers General, Sprint, QA, Automation, Worker, Browser, and Danger controls and their related dialogs. Localized option captions continue to save the existing enum values, while branch tokens, paths, command examples, default instruction templates, dependency metadata, API errors, and runtime diagnostics are displayed unchanged.
 
 The Settings feature localizes each `SectionCard` title and its purpose summary, controlled-functions guidance, recommendation, and risk notes. Stable subcategory ids, English lookup aliases, documentation routes, provider names, technical values, and backend-facing data remain locale-neutral, and the linked long-form documentation remains English.
 
@@ -63,14 +65,9 @@ The Agents, Techstacks, and Guidance settings surfaces use `messages/settings-ag
 
 Localization stops at the persistence boundary: agent and stack ids, preset and storage names, package labels, application-kind values, reflection criteria, memory/instruction markdown, and custom guidance remain byte-for-byte as authored. Persistent-skill storage creation, editing, deletion, and agent attachments still mutate immediately; changing locale does not move those operations into the Settings draft or bypass pending, confirmation, recovery, and focus-restoration behavior.
 
-## Overview route
+Chat uses the feature-owned `messages/chat.ts` catalog for its thread and invocation chrome, composers, quick actions, rich widgets, cinematic cues, speech controls, feedback, humor, and accessibility announcements. Pure Chat helpers accept an explicit locale, and mounted components bind to the provider locale. Time, relative-time, count, percentage, duration, token, and retry displays use native `Intl` formatting.
 
-The Overview route owns `messages/overview.ts`. Its headers, landmarks, metric and telemetry labels, source and task states, controls, plural counts, live-region announcements, and loading/empty/error fallbacks support English and German. Locale-bound formatters present counts, percentages, dates, costs, durations, and runtime times without changing timestamp interpretation, data ordering, polling, or realtime behavior.
-
-Live project, sprint, task, branch, repository, provider, and model values remain verbatim. Server errors, attention descriptions, and runtime-authored execution text are also outside the translation boundary.
-
-Active-stream task rows localize their status labels and announcements, but the duration field always renders the runtime-provided task duration unchanged for pending, active, review, and completed tasks.
-
+The boundary is intentionally strict: message bodies, prompts and quick-action request payloads, reasoning, tool names/arguments/output, invocation logs, scheduled instructions, provider errors, provider-authored runtime status values, entity names, and speech transcripts remain unchanged. Known dashboard-owned invocation status enums are localized in visible and accessible card text while unknown statuses retain their raw values; transcript headers localize structural role labels and preserve configured agent names. German tests assert both the translated frame and the verbatim payload.
 Browser Preview is the first route-wide catalog. Its components use the active locale for copy, pluralized session/environment counts, and pending port summaries, while URLs, paths, commands, environment data, logs, names, ports, container identifiers, and server diagnostics remain literal runtime values.
 
 For onboarding specifically, provider and dependency names, detected paths, model IDs, command snippets and installation output, and API-returned readiness diagnostics stay verbatim. The locale changes only dashboard-owned framing and accessible names; submitted provider IDs, enums, credentials, and settings drafts are unchanged.
@@ -82,3 +79,9 @@ The Projects route owns `i18n/messages/projects.ts`. Its catalog covers the gall
 The Sprints route owns its catalog in `dashboard/src/v2/i18n/messages/sprints.ts`. The page header, gallery, ledger, menus, bulk actions, importers, rollback flow, status summaries, empty/error states, and ARIA announcements follow the active locale. Sprint and task records, linked issue keys/titles/content, provider names, Git/PR details, review output, runtime events, importer warnings, and API error messages remain verbatim; locale-aware formatting does not change stored UTC timestamps or sort keys.
 
 The Settings shell owns `messages/settings-shell.ts`. Users choose **English** or **Deutsch** under **Settings → Appearance → Display Settings → Language**. The selection applies immediately in System and Project views, persists in browser-local storage, updates `<html lang>`, and does not participate in Settings dirty tracking or Save/Reset requests. It is dashboard-owned: runtime and API messages, stored instructions/configuration values, and the English documentation remain unchanged. Settings category ids and navigation persistence remain language-neutral so changing locale never invalidates the current category.
+
+## Shell catalog and content boundaries
+
+`messages/shell.ts` owns global navigation, title-bar controls, search, notification chrome, status presentations, documentation-viewer controls, and reusable control defaults. Navigation copy is keyed by stable item ID, allowing the sidebar, dock, top navigation, search, and experience-mode filtering to display the same locale-aware labels without changing paths or feature flags. Explicit component copy remains authoritative; translated defaults are used only when callers omit it.
+
+Notifications translate only dashboard-authored chrome, fallback actions, relative times, severity labels, and field names. Server-authored titles, bodies, reasons, instructions, recommended actions, context values, and errors remain verbatim. Documentation routes translate their headings, search, pagination, menus, landmarks, and result counts, but fetched titles, descriptions, sections, source paths, and rendered Markdown remain English.

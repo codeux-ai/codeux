@@ -9,10 +9,12 @@ import { openOnboarding } from "../../lib/onboarding-control.js";
 import {
   ASSISTANT_OPEN_ADD_PROJECT_EVENT,
   createNoProjectAssistantReply,
-  NO_PROJECT_ASSISTANT_PROMPTS,
+  getNoProjectAssistantPrompts,
   type NoProjectAssistantAction,
   type NoProjectAssistantPromptId,
 } from "../../lib/no-project-chat-assistant.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { chatMessages } from "../../i18n/messages/chat.js";
 
 type LocalTurn = {
   id: string;
@@ -66,25 +68,27 @@ export const NoProjectAssistantPanel: FunctionComponent<{
   onInitialDraftConsumed?: () => void;
   avatarConfig?: AgentAvatarConfig;
 }> = ({ initialDraft, onInitialDraftConsumed, avatarConfig = defaultAvatar }) => {
+  const { locale, translate } = useDashboardI18n();
+  const assistantPrompts = useMemo(() => getNoProjectAssistantPrompts(locale), [locale]);
   const [turns, setTurns] = useState<LocalTurn[]>(() => [{
     id: "assistant-welcome",
     role: "assistant",
-    body: "I can help you get Code UX ready before a project exists. Choose a quick prompt, then use the explicit buttons for project creation, settings, onboarding, or docs.",
-    actions: [NO_PROJECT_ASSISTANT_PROMPTS[0].actions[0], NO_PROJECT_ASSISTANT_PROMPTS[3].actions[0]],
+    body: translate(chatMessages, "noProjectWelcome"),
+    actions: [assistantPrompts[0].actions[0], assistantPrompts[3].actions[0]],
   }]);
-  const [announcement, setAnnouncement] = useState("No-project assistant ready.");
+  const [announcement, setAnnouncement] = useState(translate(chatMessages, "noProjectAssistantReady"));
   const consumedDraftRef = useRef<string | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
 
   const addLocalTurn = (body: string, promptId: NoProjectAssistantPromptId | null = null): void => {
-    const reply = createNoProjectAssistantReply(body);
+    const reply = createNoProjectAssistantReply(body, locale);
     const timestamp = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     setTurns((current) => [
       ...current,
       { id: `user-${promptId ?? "draft"}-${timestamp}`, role: "user", body },
       { id: `assistant-${reply.matchedPromptId ?? promptId ?? "draft"}-${timestamp}`, role: "assistant", body: reply.body, actions: reply.actions },
     ]);
-    setAnnouncement("Assistant reply added. Use the action buttons to continue.");
+    setAnnouncement(translate(chatMessages, "assistantReplyAdded"));
   };
 
   useEffect(() => {
@@ -102,7 +106,7 @@ export const NoProjectAssistantPanel: FunctionComponent<{
     logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [turns]);
 
-  const promptButtons = useMemo(() => NO_PROJECT_ASSISTANT_PROMPTS.map((prompt) => (
+  const promptButtons = useMemo(() => assistantPrompts.map((prompt) => (
     <button
       key={prompt.id}
       type="button"
@@ -114,7 +118,7 @@ export const NoProjectAssistantPanel: FunctionComponent<{
         <Sparkles aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-signal-500 opacity-70 transition group-hover:opacity-100" strokeWidth={2.2} />
       </span>
     </button>
-  )), []);
+  )), [assistantPrompts]);
 
   return (
     <section
@@ -126,12 +130,12 @@ export const NoProjectAssistantPanel: FunctionComponent<{
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_65%_at_50%_30%,rgba(0,224,160,0.12),transparent_66%)]" />
           <div className="relative z-10 flex h-full min-h-[24rem] flex-col">
             <div>
-              <div className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">No project selected</div>
+              <div className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">{translate(chatMessages, "noProjectSelected")}</div>
               <h2 id="no-project-assistant-title" className="mt-3 font-display text-3xl font-semibold leading-tight tracking-tight text-slate-950 dark:text-white">
-                Start with the assistant.
+                {translate(chatMessages, "startWithAssistant")}
               </h2>
               <p className="mt-3 max-w-md text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                This local onboarding chat does not create conversation threads or call project chat APIs.
+                {translate(chatMessages, "localOnboardingNotice")}
               </p>
             </div>
             <div className="mt-6 flex min-h-0 flex-1 items-center justify-center">
@@ -148,7 +152,7 @@ export const NoProjectAssistantPanel: FunctionComponent<{
           <div
             ref={logRef}
             role="log"
-            aria-label="No-project assistant replies"
+            aria-label={translate(chatMessages, "noProjectAssistantReplies")}
             aria-live="polite"
             aria-relevant="additions"
             className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5 sm:px-6"

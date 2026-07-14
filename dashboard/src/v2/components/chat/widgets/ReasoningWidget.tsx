@@ -6,6 +6,8 @@ import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
 import { INTERACTION_TOKENS } from "../../../lib/motion/tokens.js";
 import { formatTokenCount, type ParsedTurnTokens } from "../../../lib/chat-widget-view-models.js";
 import { selectAgentHumorMessage } from "../../../lib/agent-humor-messages.js";
+import { useDashboardI18n } from "../../../i18n/context.js";
+import { chatMessages } from "../../../i18n/messages/chat.js";
 
 export interface ReasoningWidgetProps {
   text: string;
@@ -53,8 +55,9 @@ export const ReasoningWidget: FunctionComponent<ReasoningWidgetProps> = ({
   modelLabel,
   tokens,
   createdAtLabel,
-  ariaLabel = "Reasoning turn",
+  ariaLabel,
 }) => {
+  const { locale, translate } = useDashboardI18n();
   const [expanded, setExpanded] = useState(false);
   const [hasAnimatedOnce, setHasAnimatedOnce] = useState(false);
   const contentRef = useRef<HTMLParagraphElement>(null);
@@ -68,6 +71,7 @@ export const ReasoningWidget: FunctionComponent<ReasoningWidgetProps> = ({
     category: "thinking",
     seed: `reasoning|${stableTextHash(trimmed)}|${providerLabel ?? ""}|${modelLabel ?? ""}`,
     nowMs: HUMOR_MESSAGE_NOW_MS,
+    locale,
   });
 
   useLayoutEffect(() => {
@@ -96,14 +100,14 @@ export const ReasoningWidget: FunctionComponent<ReasoningWidgetProps> = ({
   const headerTokens = [
     providerLabel,
     modelLabel,
-    tokenCount !== null ? `${formatTokenCount(tokenCount)} tok` : null,
+    tokenCount !== null ? translate(chatMessages, "tokenShort", { count: formatTokenCount(tokenCount, locale) }) : null,
     createdAtLabel,
   ].filter((value): value is string => Boolean(value));
 
   return (
     <div
       role="region"
-      aria-label={ariaLabel}
+      aria-label={ariaLabel ?? translate(chatMessages, "reasoningTurn")}
       class="overflow-hidden rounded-xl border border-black/[0.04] bg-slate-50/60 dark:border-white/[0.04] dark:bg-white/[0.02]"
     >
       <button
@@ -122,13 +126,13 @@ export const ReasoningWidget: FunctionComponent<ReasoningWidgetProps> = ({
 
         <span class="min-w-0 flex-1">
           <span class="flex flex-wrap items-center gap-1.5">
-            <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Reasoning</span>
+            <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{translate(chatMessages, "reasoning")}</span>
             {headerTokens.map((token) => (
               <span key={token} class={chipClassName}>{token}</span>
             ))}
           </span>
           <span class="mt-1 block text-[12.5px] leading-6 text-slate-600 dark:text-slate-300">
-            {isLong ? (expanded ? "Hide reasoning" : "Show reasoning") : "Reasoning"}
+            {translate(chatMessages, isLong ? (expanded ? "hideReasoning" : "showReasoning") : "reasoning")}
           </span>
           <span class="mt-0.5 block text-[11px] italic leading-4 text-slate-500 dark:text-slate-400">
             {humorMessage}
@@ -154,7 +158,7 @@ export const ReasoningWidget: FunctionComponent<ReasoningWidgetProps> = ({
             isLong && !expanded ? "max-h-[5.25rem] overflow-hidden" : ""
           }`}
         >
-          {isLong && !expanded ? preview : trimmed || "No reasoning text"}
+          {isLong && !expanded ? preview : trimmed || translate(chatMessages, "noReasoningText")}
         </p>
       </div>
     </div>

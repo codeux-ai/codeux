@@ -6,6 +6,8 @@ import { transcribeSpeechAudio } from "../../lib/speech-api.js";
 import type { SpeechRecordingSession, SpeechRecorderError } from "../../lib/speech-recorder.js";
 import { isSpeechRecordingSupported, startSpeechRecording } from "../../lib/speech-recorder.js";
 import { SHARED_INTERACTION_CLASSES } from "../ui/Button.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { chatMessages, type ChatTextMessageKey } from "../../i18n/messages/chat.js";
 
 export type SpeechInputButtonState =
   | "idle"
@@ -39,24 +41,12 @@ export interface SpeechInputButtonProps {
 
 const DEFAULT_MAX_DURATION_SECONDS = 60;
 
-const STATUS_LABELS: Record<SpeechInputButtonState, string> = {
-  idle: "Record",
-  requesting_permission: "Requesting",
-  recording: "Stop",
-  transcribing: "Transcribing",
-  success: "Added",
-  unsupported: "Unavailable",
-  error: "Retry",
+const STATUS_LABEL_KEYS: Record<SpeechInputButtonState, ChatTextMessageKey> = {
+  idle: "record", requesting_permission: "requesting", recording: "stop", transcribing: "transcribing", success: "added", unsupported: "unavailable", error: "retry",
 };
 
-const STATUS_ANNOUNCEMENTS: Record<SpeechInputButtonState, string> = {
-  idle: "Speech input ready.",
-  requesting_permission: "Requesting microphone permission.",
-  recording: "Recording speech.",
-  transcribing: "Transcribing speech.",
-  success: "Transcript added.",
-  unsupported: "Speech input is unavailable.",
-  error: "Speech input failed.",
+const STATUS_ANNOUNCEMENT_KEYS: Record<SpeechInputButtonState, ChatTextMessageKey> = {
+  idle: "speechInputReady", requesting_permission: "requestingMicrophone", recording: "recordingSpeech", transcribing: "transcribingSpeech", success: "transcriptAdded", unsupported: "speechInputUnavailable", error: "speechInputFailed",
 };
 
 const toTranscriptionError = (error: SpeechRecorderError): SpeechInputButtonError => ({
@@ -75,6 +65,7 @@ export const SpeechInputButton: FunctionComponent<SpeechInputButtonProps> = ({
   onTranscript,
   onError,
 }) => {
+  const { translate } = useDashboardI18n();
   const [state, setState] = useState<SpeechInputButtonState>(() => (
     isSpeechRecordingSupported() ? "idle" : "unsupported"
   ));
@@ -165,7 +156,7 @@ export const SpeechInputButton: FunctionComponent<SpeechInputButtonProps> = ({
     if (!transcript) {
       reportTranscriptionError({
         code: "client_error",
-        message: "No transcript text was returned.",
+        message: translate(chatMessages, "noTranscriptReturned"),
         retryable: false,
       });
       return;
@@ -183,7 +174,7 @@ export const SpeechInputButton: FunctionComponent<SpeechInputButtonProps> = ({
         source: "recorder",
         error: {
           code: "unsupported",
-          message: "Microphone recording is not supported in this browser.",
+          message: translate(chatMessages, "microphoneUnsupported"),
         },
       });
       return;
@@ -229,15 +220,15 @@ export const SpeechInputButton: FunctionComponent<SpeechInputButtonProps> = ({
 
   const isBusy = state === "requesting_permission" || state === "transcribing";
   const isDisabled = disabled || state === "unsupported" || isBusy;
-  const statusLabel = STATUS_LABELS[state];
-  const announcement = STATUS_ANNOUNCEMENTS[state];
+  const statusLabel = translate(chatMessages, STATUS_LABEL_KEYS[state]);
+  const announcement = translate(chatMessages, STATUS_ANNOUNCEMENT_KEYS[state]);
 
   return (
     <span className="inline-flex items-center gap-2">
       <button
         type="button"
         disabled={isDisabled}
-        aria-label={state === "recording" ? "Stop speech recording" : "Start speech recording"}
+        aria-label={translate(chatMessages, state === "recording" ? "stopSpeechRecording" : "startSpeechRecording")}
         aria-pressed={state === "recording" ? "true" : "false"}
         aria-busy={isBusy ? "true" : "false"}
         onClick={handleClick}

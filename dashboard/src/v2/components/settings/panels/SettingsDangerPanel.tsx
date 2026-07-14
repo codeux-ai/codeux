@@ -7,57 +7,66 @@ import { ConfirmDialog } from "../../ui/ConfirmDialog.js";
 import { Row } from "../SettingsFormFields.js";
 import { SectionCard } from "./SharedPanelComponents.js";
 import { AlertTriangle, Database, BrainCircuit } from "lucide-preact";
+import { useSettingsOperationsTranslations, type SettingsOperationsTranslate } from "../../../i18n/messages/settings-operations.js";
 
 interface MemoryClearOption {
   tier: MemoryClearTier;
   label: string;
+  rowLabel: string;
   description: string;
   confirmBody: string;
 }
 
-const PROJECT_MEMORY_OPTIONS = (projectName: string): MemoryClearOption[] => [
+const PROJECT_MEMORY_OPTIONS = (projectName: string, t: SettingsOperationsTranslate): MemoryClearOption[] => [
   {
     tier: "short_term",
-    label: "Clear Short-Term",
-    description: "Delete per-sprint, per-agent working memories. Long-term knowledge is kept.",
-    confirmBody: `Delete all short-term (sprint) memories for "${projectName}"? Long-term memories and claims are kept. This cannot be undone.`,
+    label: t("Clear Short-Term"),
+    rowLabel: t("Short-Term"),
+    description: t("Delete per-sprint, per-agent working memories. Long-term knowledge is kept."),
+    confirmBody: t("Delete all short-term (sprint) memories for \"{projectName}\"? Long-term memories and claims are kept. This cannot be undone.", { projectName }),
   },
   {
     tier: "long_term",
-    label: "Clear Long-Term",
-    description: "Delete promoted project memories plus all memory claims and evidence.",
-    confirmBody: `Delete all long-term (project) memories, claims, and evidence for "${projectName}"? Short-term memories are kept. This cannot be undone.`,
+    label: t("Clear Long-Term"),
+    rowLabel: t("Long-Term"),
+    description: t("Delete promoted project memories plus all memory claims and evidence."),
+    confirmBody: t("Delete all long-term (project) memories, claims, and evidence for \"{projectName}\"? Short-term memories are kept. This cannot be undone.", { projectName }),
   },
   {
     tier: "all",
-    label: "Clear All Memory",
-    description: "Delete every memory, claim, and evidence record for this project.",
-    confirmBody: `Delete the entire memory database for "${projectName}" — every memory, claim, and piece of evidence? This cannot be undone.`,
+    label: t("Clear All Memory"),
+    rowLabel: t("All Memory"),
+    description: t("Delete every memory, claim, and evidence record for this project."),
+    confirmBody: t("Delete the entire memory database for \"{projectName}\" — every memory, claim, and piece of evidence? This cannot be undone.", { projectName }),
   },
 ];
 
-const SYSTEM_MEMORY_OPTIONS: MemoryClearOption[] = [
+const getSystemMemoryOptions = (t: SettingsOperationsTranslate): MemoryClearOption[] => [
   {
     tier: "short_term",
-    label: "Clear Short-Term",
-    description: "Delete per-sprint, per-agent working memories across every project.",
-    confirmBody: "Delete all short-term (sprint) memories across every project? Long-term memories and claims are kept. This cannot be undone.",
+    label: t("Clear Short-Term"),
+    rowLabel: t("Short-Term"),
+    description: t("Delete per-sprint, per-agent working memories across every project."),
+    confirmBody: t("Delete all short-term (sprint) memories across every project? Long-term memories and claims are kept. This cannot be undone."),
   },
   {
     tier: "long_term",
-    label: "Clear Long-Term",
-    description: "Delete promoted project memories plus all claims and evidence across every project.",
-    confirmBody: "Delete all long-term (project) memories, claims, and evidence across every project? Short-term memories are kept. This cannot be undone.",
+    label: t("Clear Long-Term"),
+    rowLabel: t("Long-Term"),
+    description: t("Delete promoted project memories plus all claims and evidence across every project."),
+    confirmBody: t("Delete all long-term (project) memories, claims, and evidence across every project? Short-term memories are kept. This cannot be undone."),
   },
   {
     tier: "all",
-    label: "Clear All Memory",
-    description: "Delete every memory, claim, and evidence record across every project.",
-    confirmBody: "Delete the entire memory database — every memory, claim, and piece of evidence across every project? This cannot be undone.",
+    label: t("Clear All Memory"),
+    rowLabel: t("All Memory"),
+    description: t("Delete every memory, claim, and evidence record across every project."),
+    confirmBody: t("Delete the entire memory database — every memory, claim, and piece of evidence across every project? This cannot be undone."),
   },
 ];
 
 export const SettingsDangerPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
+  const { t } = useSettingsOperationsTranslations();
   const {
     activeScope,
     selectedProject,
@@ -95,25 +104,25 @@ export const SettingsDangerPanel: FunctionComponent<{ state: SettingsPageState }
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
       <SectionCard
-        title="Danger Zone"
+        title={t("Danger Zone")}
         watermark="DGR"
         danger
         icon={<AlertTriangle strokeWidth={2.4} />}
         highlights={[
-          { label: "Scope", value: activeScope === "project" ? "Selected project" : "System", tone: "warning" },
-          { label: "Project", value: selectedProject ? "Selected" : "None" },
-          { label: "Confirmation", value: "Always required" },
+          { label: t("Scope"), value: activeScope === "project" ? t("Selected project") : t("System"), tone: "warning" },
+          { label: t("Project"), value: selectedProject ? t("Selected") : t("None") },
+          { label: t("Confirmation"), value: t("Always required") },
         ]}
-        configureLabel="Review destructive actions"
+        configureLabel={t("Review destructive actions")}
       >
         {activeScope === "project" ? (
-          <Row label="Reset project overrides" description="Clear this project's saved settings overrides and inherit the current system defaults again. Project tasks, sprints, memories, and history are kept.">
+          <Row label={t("Reset project overrides")} description={t("Clear this project's saved settings overrides and inherit the current system defaults again. Project tasks, sprints, memories, and history are kept.")}>
             <ActionButton
-              label="Reset Project"
+              label={t("Reset Project")}
               onClick={() => resetProjectConfirm.requestConfirm({
-                title: "Reset Project Overrides",
-                body: `Clear saved settings overrides for "${selectedProject?.name}" and inherit system defaults again? Project tasks, sprints, memories, and history will be kept.`,
-                confirmLabel: "Reset Project",
+                title: t("Reset Project Overrides"),
+                body: t("Clear saved settings overrides for \"{projectName}\" and inherit system defaults again? Project tasks, sprints, memories, and history will be kept.", { projectName: selectedProject?.name ?? "" }),
+                confirmLabel: t("Reset Project"),
                 destructive: true
               }).then((confirmed) => {
                 if (confirmed) {
@@ -126,13 +135,13 @@ export const SettingsDangerPanel: FunctionComponent<{ state: SettingsPageState }
             />
           </Row>
         ) : null}
-        <Row label="Delete project" description="Permanently delete this project and all of its tasks, sprints, memories, and context history." last>
+        <Row label={t("Delete project")} description={t("Permanently delete this project and all of its tasks, sprints, memories, and context history.")} last>
           <ActionButton
-            label="Delete Project"
+            label={t("Delete Project")}
             onClick={() => projectConfirm.requestConfirm({
-              title: "Delete Project",
-              body: `Permanently delete "${selectedProject?.name}" and all of its tasks, sprints, memories, and context history? This action cannot be undone.`,
-              confirmLabel: "Delete Project",
+              title: t("Delete Project"),
+              body: t("Permanently delete \"{projectName}\" and all of its tasks, sprints, memories, and context history? This action cannot be undone.", { projectName: selectedProject?.name ?? "" }),
+              confirmLabel: t("Delete Project"),
               destructive: true
             }).then((confirmed) => {
               if (confirmed) {
@@ -147,12 +156,12 @@ export const SettingsDangerPanel: FunctionComponent<{ state: SettingsPageState }
       </SectionCard>
 
       {selectedProject ? (
-        <SectionCard title="Project Memory" watermark="MEM" danger icon={<BrainCircuit strokeWidth={2.4} />} highlights={[{ label: "Scope", value: "Project", tone: "warning" }, { label: "Tiers", value: "3 choices" }, { label: "Reversible", value: "No" }]} configureLabel="Review memory cleanup">
-          {PROJECT_MEMORY_OPTIONS(selectedProject.name).map((option, index, options) => (
-            <Row key={option.tier} label={option.label.replace(/^Clear /, "")} description={option.description} last={index === options.length - 1}>
+        <SectionCard title={t("Project Memory")} watermark="MEM" danger icon={<BrainCircuit strokeWidth={2.4} />} highlights={[{ label: t("Scope"), value: t("Project"), tone: "warning" }, { label: t("Tiers"), value: t("3 choices") }, { label: t("Reversible"), value: t("No") }]} configureLabel={t("Review memory cleanup")}>
+          {PROJECT_MEMORY_OPTIONS(selectedProject.name, t).map((option, index, options) => (
+            <Row key={option.tier} label={option.rowLabel} description={option.description} last={index === options.length - 1}>
               <ActionButton
                 label={option.label}
-                onClick={() => requestMemoryClear("project", option, "Clear Project Memory")}
+                onClick={() => requestMemoryClear("project", option, t("Clear Project Memory"))}
                 tone="danger"
                 busy={memoryClearBusy === `project:${option.tier}`}
                 disabled={memoryClearBusy !== null}
@@ -163,12 +172,12 @@ export const SettingsDangerPanel: FunctionComponent<{ state: SettingsPageState }
       ) : null}
 
       {activeScope === "system" ? (
-        <SectionCard title="System Memory" watermark="MEM" danger icon={<BrainCircuit strokeWidth={2.4} />} highlights={[{ label: "Scope", value: "All projects", tone: "warning" }, { label: "Tiers", value: "3 choices" }, { label: "Reversible", value: "No" }]} configureLabel="Review memory cleanup">
-          {SYSTEM_MEMORY_OPTIONS.map((option, index, options) => (
-            <Row key={option.tier} label={option.label.replace(/^Clear /, "")} description={option.description} last={index === options.length - 1}>
+        <SectionCard title={t("System Memory")} watermark="MEM" danger icon={<BrainCircuit strokeWidth={2.4} />} highlights={[{ label: t("Scope"), value: t("All projects"), tone: "warning" }, { label: t("Tiers"), value: t("3 choices") }, { label: t("Reversible"), value: t("No") }]} configureLabel={t("Review memory cleanup")}>
+          {getSystemMemoryOptions(t).map((option, index, options) => (
+            <Row key={option.tier} label={option.rowLabel} description={option.description} last={index === options.length - 1}>
               <ActionButton
                 label={option.label}
-                onClick={() => requestMemoryClear("system", option, "Clear System Memory")}
+                onClick={() => requestMemoryClear("system", option, t("Clear System Memory"))}
                 tone="danger"
                 busy={memoryClearBusy === `system:${option.tier}`}
                 disabled={memoryClearBusy !== null}
@@ -179,14 +188,14 @@ export const SettingsDangerPanel: FunctionComponent<{ state: SettingsPageState }
       ) : null}
 
       {activeScope === "system" ? (
-        <SectionCard title="System Database" watermark="SYS" danger icon={<Database strokeWidth={2.4} />} highlights={[{ label: "Impact", value: "All local state", tone: "warning" }, { label: "Rebuild", value: "On reload" }, { label: "Reversible", value: "No" }]} configureLabel="Review database reset">
-          <Row label="Hard reset database" description="Delete all projects, tasks, sprints, and system history. This will cleanly reconstruct the local DB on the next reload." last>
+        <SectionCard title={t("System Database")} watermark="SYS" danger icon={<Database strokeWidth={2.4} />} highlights={[{ label: t("Impact"), value: t("All local state"), tone: "warning" }, { label: t("Rebuild"), value: t("On reload") }, { label: t("Reversible"), value: t("No") }]} configureLabel={t("Review database reset")}>
+          <Row label={t("Hard reset database")} description={t("Delete all projects, tasks, sprints, and system history. This will cleanly reconstruct the local DB on the next reload.")} last>
             <ActionButton
-              label="Wipe Database"
+              label={t("Wipe Database")}
               onClick={() => dbConfirm.requestConfirm({
-                title: "Wipe System Database",
-                body: "Delete all projects, tasks, sprints, and system history? This action cannot be undone.",
-                confirmLabel: "Wipe Database",
+                title: t("Wipe System Database"),
+                body: t("Delete all projects, tasks, sprints, and system history? This action cannot be undone."),
+                confirmLabel: t("Wipe Database"),
                 destructive: true
               }).then((confirmed) => {
                 if (confirmed) {

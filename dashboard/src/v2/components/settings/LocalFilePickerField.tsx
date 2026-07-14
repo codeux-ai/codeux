@@ -4,6 +4,7 @@ import { AlertCircle, Check, ChevronUp, FileText, FolderOpen, Home, Loader2, Ref
 import type { LocalFileBrowserResponse } from "../../types.js";
 import { fetchLocalFiles } from "../../lib/project-api.js";
 import { TextInput } from "./SettingsFormFields.js";
+import { useSettingsOperationsTranslations } from "../../i18n/messages/settings-operations.js";
 
 export const LocalFilePickerField: FunctionComponent<{
   value: string;
@@ -12,6 +13,7 @@ export const LocalFilePickerField: FunctionComponent<{
   helperText?: string;
   placeholder?: string;
 }> = ({ value, onChange, label, helperText, placeholder }) => {
+  const { t } = useSettingsOperationsTranslations();
   const generatedId = useId();
   const pickerId = `${generatedId}-picker`;
   const [isOpen, setIsOpen] = useState(false);
@@ -60,7 +62,7 @@ export const LocalFilePickerField: FunctionComponent<{
           className="inline-flex shrink-0 items-center justify-center gap-2 rounded-[var(--radius-ui)] border border-[color:var(--border-hairline)] bg-void-900 px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] text-white transition-[background-color,border-color,color,box-shadow,transform] hover:-translate-y-px hover:bg-void-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-white active:scale-[0.98] dark:border-white/[0.08] dark:bg-white/[0.08] dark:text-white dark:hover:bg-white/[0.12] dark:focus-visible:ring-offset-void-900"
         >
           {isOpen ? <X aria-hidden="true" className="h-4 w-4" /> : <FolderOpen aria-hidden="true" className="h-4 w-4" />}
-          {isOpen ? "Close" : "Browse"}
+          {isOpen ? t("Close") : t("Browse")}
         </button>
       </div>
 
@@ -75,8 +77,8 @@ export const LocalFilePickerField: FunctionComponent<{
               onClick={() => listing?.parentPath && void loadFiles(listing.parentPath)}
               disabled={!listing?.parentPath || isLoading}
               className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-slate-500 shadow-sm transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white/[0.06] dark:text-slate-300 dark:hover:text-white"
-              aria-label={`${label}: go to parent directory`}
-              title="Go to parent directory"
+              aria-label={t("{label}: go to parent directory", { label })}
+              title={t("Go to parent directory")}
             >
               <ChevronUp aria-hidden="true" className="h-4 w-4" />
             </button>
@@ -85,8 +87,8 @@ export const LocalFilePickerField: FunctionComponent<{
               onClick={() => void loadFiles(listing?.homePath)}
               disabled={isLoading}
               className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-slate-500 shadow-sm transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white/[0.06] dark:text-slate-300 dark:hover:text-white"
-              aria-label={`${label}: go to home directory`}
-              title="Go to home directory"
+              aria-label={t("{label}: go to home directory", { label })}
+              title={t("Go to home directory")}
             >
               <Home aria-hidden="true" className="h-4 w-4" />
             </button>
@@ -96,14 +98,14 @@ export const LocalFilePickerField: FunctionComponent<{
               disabled={isLoading}
               aria-busy={isLoading}
               className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-slate-500 shadow-sm transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white/[0.06] dark:text-slate-300 dark:hover:text-white"
-              aria-label={`${label}: refresh current path`}
-              title="Refresh current path"
+              aria-label={t("{label}: refresh current path", { label })}
+              title={t("Refresh current path")}
             >
               <RefreshCw aria-hidden="true" className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-              {isLoading ? <span className="sr-only">Loading files</span> : null}
+              {isLoading ? <span className="sr-only">{t("Loading files")}</span> : null}
             </button>
             <div className="min-w-0 flex-1 truncate rounded-xl bg-white px-3 py-2 font-mono text-xs font-semibold text-slate-600 dark:bg-white/[0.055] dark:text-slate-300">
-              {listing?.currentPath || "Loading files..."}
+              {listing?.currentPath || t("Loading files...")}
             </div>
           </div>
 
@@ -117,7 +119,7 @@ export const LocalFilePickerField: FunctionComponent<{
               {isLoading && !listing ? (
                 <div className="flex items-center gap-2 px-2 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400">
                   <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
-                  Loading files
+                  {t("Loading files")}
                 </div>
               ) : listing ? (
                 <div className="grid gap-1">
@@ -146,13 +148,13 @@ export const LocalFilePickerField: FunctionComponent<{
                   ))}
                   {!listing.directories.length && !listing.files.length ? (
                     <div className="px-2 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                      No child directories or files
+                      {t("No child directories or files")}
                     </div>
                   ) : null}
                 </div>
               ) : (
                 <div className="px-2 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                  Open the picker to browse local files.
+                  {t("Open the picker to browse local files.")}
                 </div>
               )}
             </div>

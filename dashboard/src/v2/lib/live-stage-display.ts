@@ -1,5 +1,7 @@
 import type { LiveTaskStageKey } from "./live-stats.js";
 import { STATS_DECK_VISIBLE_STAGES } from "./live-stats.js";
+import type { DashboardLocale } from "../i18n/locales.js";
+import { translateChatMessage } from "../i18n/messages/chat.js";
 
 export { STATS_DECK_VISIBLE_STAGES };
 
@@ -29,10 +31,28 @@ export const STAGE_SHORT_LABELS: Record<LiveTaskStageKey, string> = {
   merge: "Merge",
 };
 
-export function getLiveStageLabel(stage: LiveTaskStageKey): string {
-  return STAGE_LABELS[stage];
+const STAGE_MESSAGE_KEYS = {
+  queued: "stageQueued",
+  coding: "stageCoding",
+  ci: "stageCi",
+  qa: "stageQa",
+  autofix: "stageAutofix",
+  merge: "stageMerge",
+} as const;
+
+const STAGE_SHORT_MESSAGE_KEYS = {
+  queued: "stageQueueShort",
+  coding: "stageCodeShort",
+  ci: "stageCiShort",
+  qa: "stageQaShort",
+  autofix: "stageFixShort",
+  merge: "stageMergeShort",
+} as const;
+
+export function getLiveStageLabel(stage: LiveTaskStageKey, locale: DashboardLocale = "en"): string {
+  return translateChatMessage(locale, STAGE_MESSAGE_KEYS[stage]);
 }
 
-export function getLiveStageShortLabel(stage: LiveTaskStageKey): string {
-  return STAGE_SHORT_LABELS[stage];
+export function getLiveStageShortLabel(stage: LiveTaskStageKey, locale: DashboardLocale = "en"): string {
+  return translateChatMessage(locale, STAGE_SHORT_MESSAGE_KEYS[stage]);
 }

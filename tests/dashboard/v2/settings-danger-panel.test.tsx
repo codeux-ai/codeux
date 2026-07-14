@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/pr
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsDangerPanel } from "../../../dashboard/src/v2/components/settings/panels/SettingsDangerPanel.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
 
 expect.extend(matchers);
 
@@ -88,5 +89,38 @@ describe("SettingsDangerPanel", () => {
     expect(clearShortTerm).toHaveAttribute("aria-busy", "true");
     expect(clearShortTerm).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByRole("button", { name: /^clear long-term$/i })).toBeDisabled();
+  });
+
+  it("keeps German destructive confirmations gated, suppresses duplicate actions, and restores focus", async () => {
+    const handleDeleteProject = vi.fn();
+    render(
+      <DashboardI18nProvider initialLocale="de">
+        <main>
+          <SettingsDangerPanel
+            state={makeState({
+              handleDeleteProject,
+              memoryClearBusy: "project:short_term",
+            }) as any}
+          />
+        </main>
+      </DashboardI18nProvider>,
+    );
+
+    expect(screen.getByRole("button", { name: "Langzeitspeicher löschen" })).toBeDisabled();
+    const trigger = screen.getByRole("button", { name: "Projekt löschen" });
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    expect(handleDeleteProject).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Projekt löschen" })).toHaveTextContent(
+      '"Approved local test project" und alle zugehörigen Aufgaben',
+    );
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Projekt löschen" })).not.toBeInTheDocument();
+      expect(trigger).toHaveFocus();
+    });
+    expect(handleDeleteProject).not.toHaveBeenCalled();
   });
 });

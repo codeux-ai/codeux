@@ -5,6 +5,8 @@ import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { gsap } from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { X } from "lucide-preact";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 export interface Option {
   value: string;
@@ -30,7 +32,7 @@ export const MultiSelect: FunctionComponent<MultiSelectProps> = ({
   options = [],
   value,
   onChange,
-  placeholder = "Add label...",
+  placeholder,
   className = "",
   "aria-describedby": ariaDescribedBy,
   "aria-invalid": ariaInvalid,
@@ -38,6 +40,8 @@ export const MultiSelect: FunctionComponent<MultiSelectProps> = ({
   "aria-required": ariaRequired,
   onBlur,
 }) => {
+  const { translate } = useOptionalDashboardI18n();
+  const resolvedPlaceholder = placeholder ?? translate(shellMessages, "addLabel");
   const [inputValue, setInputValue] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -207,7 +211,7 @@ export const MultiSelect: FunctionComponent<MultiSelectProps> = ({
                 }}
                 className="hover:text-status-red focus:outline-none"
                 aria-disabled="false"
-                aria-label={`Remove ${label}`}
+                aria-label={translate(shellMessages, "removeLabel", { label })}
               >
                 <X className="h-3 w-3" strokeWidth={2.5} />
               </button>
@@ -233,7 +237,7 @@ export const MultiSelect: FunctionComponent<MultiSelectProps> = ({
           }}
           onKeyDown={handleInputKeyDown}
           onBlur={handleBlur}
-          placeholder={value.length === 0 ? placeholder : ""}
+          placeholder={value.length === 0 ? resolvedPlaceholder : ""}
           className="min-w-[60px] flex-1 bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200"
         />
       </div>

@@ -2,6 +2,8 @@ import type { ComponentChildren, FunctionComponent } from "preact";
 import { toChildArray } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 const SkeletonBlock: FunctionComponent<{ className?: string }> = ({ className = "" }) => {
   const isReducedMotion = useReducedMotion();
@@ -24,7 +26,9 @@ export const SkeletonLoader: FunctionComponent<{
   skeleton?: ComponentChildren;
   className?: string;
   loadingLabel?: string;
-}> = ({ show, children, skeleton, className, loadingLabel = "Loading content" }) => {
+}> = ({ show, children, skeleton, className, loadingLabel }) => {
+  const { translate } = useOptionalDashboardI18n();
+  const resolvedLoadingLabel = loadingLabel ?? translate(shellMessages, "loadingContent");
   const [renderSkeleton, setRenderSkeleton] = useState(show);
   const [renderChildren, setRenderChildren] = useState(!show);
   const isReducedMotion = useReducedMotion();
@@ -79,29 +83,34 @@ export const SkeletonLoader: FunctionComponent<{
         </div>
       )}
       <div aria-live="polite" aria-atomic="true" className="sr-only">
-        {show ? loadingLabel : ""}
+        {show ? resolvedLoadingLabel : ""}
       </div>
     </div>
   );
 };
 
-export const SkeletonRow: FunctionComponent = () => (
+export const SkeletonRow: FunctionComponent = () => {
+  const { translate } = useOptionalDashboardI18n();
+  return (
   <div
     className="relative overflow-hidden flex h-16 w-full items-center gap-4 rounded-2xl border border-black/[0.04] bg-black/[0.02] px-5 dark:border-white/[0.04] dark:bg-white/[0.02]"
   >
-    <span className="sr-only">Loading row...</span>
+    <span className="sr-only">{translate(shellMessages, "loadingRow")}</span>
     <SkeletonBlock className="h-4 w-4 rounded" />
     <SkeletonBlock className="h-4 w-1/4 rounded" />
     <SkeletonBlock className="ml-auto h-6 w-20 rounded-full" />
     <SkeletonBlock className="h-8 w-8 rounded-full" />
   </div>
-);
+  );
+};
 
-export const SkeletonCard: FunctionComponent = () => (
+export const SkeletonCard: FunctionComponent = () => {
+  const { translate } = useOptionalDashboardI18n();
+  return (
   <div
     className="skeleton-card-entry relative overflow-hidden flex h-40 w-full flex-col gap-4 rounded-2xl border border-black/[0.04] bg-black/[0.02] p-5 dark:border-white/[0.04] dark:bg-white/[0.02]"
   >
-    <span className="sr-only">Loading card...</span>
+    <span className="sr-only">{translate(shellMessages, "loadingCard")}</span>
     <div className="flex items-center justify-between">
       <SkeletonBlock className="h-5 w-1/3 rounded" />
       <SkeletonBlock className="h-6 w-16 rounded-full" />
@@ -115,13 +124,16 @@ export const SkeletonCard: FunctionComponent = () => (
       <SkeletonBlock className="h-4 w-12 rounded" />
     </div>
   </div>
-);
+  );
+};
 
-export const SkeletonPanel: FunctionComponent = () => (
+export const SkeletonPanel: FunctionComponent = () => {
+  const { translate } = useOptionalDashboardI18n();
+  return (
   <div
     className="skeleton-panel-entry relative overflow-hidden flex h-64 w-full flex-col gap-6 rounded-2xl border border-black/[0.04] bg-black/[0.02] p-7 dark:border-white/[0.04] dark:bg-white/[0.02]"
   >
-    <span className="sr-only">Loading panel...</span>
+    <span className="sr-only">{translate(shellMessages, "loadingPanel")}</span>
     <SkeletonBlock className="h-6 w-1/4 rounded" />
     <div className="flex flex-col gap-3">
       <SkeletonBlock className="h-4 w-full rounded" />
@@ -133,4 +145,5 @@ export const SkeletonPanel: FunctionComponent = () => (
       <SkeletonBlock className="h-10 w-24 rounded-xl" />
     </div>
   </div>
-);
+  );
+};
