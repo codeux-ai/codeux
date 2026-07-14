@@ -240,7 +240,7 @@ describe("ProjectSettingsEditor", () => {
       updateSystem: vi.fn(),
     } as unknown as SettingsPageState;
 
-    render(<SettingsModelsPanel state={state} />);
+    render(<DashboardI18nProvider initialLocale="en" storage={null}><SettingsModelsPanel state={state} /></DashboardI18nProvider>);
 
     fireEvent.click(screen.getByRole("button", { name: "Expand Codex Primary settings" }));
     const codexThinking = screen.getByRole("button", { name: "Codex Primary base thinking" });
@@ -306,7 +306,7 @@ describe("ProjectSettingsEditor", () => {
       updateSystem: vi.fn(),
     } as unknown as SettingsPageState;
 
-    render(<SettingsModelsPanel state={state} />);
+    render(<DashboardI18nProvider initialLocale="en" storage={null}><SettingsModelsPanel state={state} /></DashboardI18nProvider>);
 
     fireEvent.click(screen.getByRole("button", { name: "Expand Codex Primary overrides" }));
     const routeThinking = screen.getByRole("button", { name: "Codex Primary thinking override for Task coding" });

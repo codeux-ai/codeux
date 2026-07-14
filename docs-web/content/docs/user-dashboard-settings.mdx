@@ -57,6 +57,8 @@ Open **AI Models -> Configure speech** and choose the output language first. Cod
 
 No model downloads automatically. **Download recommended** opens the named model's license and attribution confirmation, and only **Accept & Download** starts the transfer. **Compare compatible models** opens Speech output filtered to the chosen language, with the preferred model first and alternatives still available.
 
+AI Models and Memory settings follow the active dashboard language. German mode translates routing, model and speech controls, pricing, catalog filters, download confirmation, and memory remediation labels. Counts, model sizes, percentages, prices, and memory limits use German number separators where applicable. Provider/model IDs, language tags, BCP-47 values, voice IDs, API-returned language and model metadata, license and attribution text, and runtime diagnostics remain unchanged.
+
 ## General legal actions
 
 In System scope, the General category includes a legal-actions card alongside its runtime and setup controls:

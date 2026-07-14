@@ -1,4 +1,5 @@
 import type { SpeechModelStatus, SpeechModelVoice } from "../../types.js";
+import type { DashboardLocale } from "../i18n/locales.js";
 
 export interface SynthesisLanguageOption {
   code: string;
@@ -22,14 +23,17 @@ const getModelLanguages = (model: SpeechModelStatus): SynthesisLanguageOption[] 
   return [{ code, label: model.language }];
 };
 
-export const getSynthesisLanguageOptions = (models: SpeechModelStatus[]): SynthesisLanguageOption[] => {
+export const getSynthesisLanguageOptions = (
+  models: SpeechModelStatus[],
+  locale: DashboardLocale = "en",
+): SynthesisLanguageOption[] => {
   const languages = new Map<string, string>();
   for (const model of getSynthesisModels(models)) {
     for (const language of getModelLanguages(model)) languages.set(language.code, language.label);
   }
   return [...languages.entries()]
     .map(([code, label]) => ({ code, label }))
-    .sort((left, right) => left.label.localeCompare(right.label));
+    .sort((left, right) => left.label.localeCompare(right.label, locale));
 };
 
 export const modelSupportsLanguage = (model: SpeechModelStatus, languageCode: string): boolean => (

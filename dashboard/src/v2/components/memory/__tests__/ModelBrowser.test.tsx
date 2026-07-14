@@ -280,4 +280,16 @@ describe("ModelBrowser", () => {
     expect(props.onModelsChanged).toHaveBeenCalledWith(refreshed);
     expect(await screen.findByRole("status", { name: "Custom model status" })).toHaveTextContent("Acme Custom Embed added to embedding models.");
   });
+  it("localizes German filters, validation, measurements, and metadata-safe results", async () => {
+    const user = userEvent.setup();
+    renderBrowser({ models: [model({ sizeBytes: 1_500_000_000, language: "German (Germany)" })] }, "de");
+
+    expect(screen.getByRole("region", { name: "Einbettungsmodelle" })).toHaveTextContent("1,5 GB");
+    expect(screen.getAllByText("German (Germany)")).toHaveLength(2);
+    expect(screen.getByLabelText("Installationsstatus")).toHaveValue("all");
+    await user.click(screen.getByRole("button", { name: "Benutzerdefiniertes Modell hinzufügen" }));
+    await user.click(screen.getByRole("button", { name: "Hinzufügen" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Anzeigename ist erforderlich.");
+  });
+
 });

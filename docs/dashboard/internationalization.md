@@ -53,6 +53,16 @@ Project card timestamps, counts, and completion percentages use locale-bound `In
 
 Project deletion uses a localized confirmation dialog before invoking the existing deletion request. Creation, setup, selection, Settings navigation, invocation tracking, duplicate-submit protection, and stale project-selection handling retain their existing contracts.
 
+## Settings model and memory workflows
+
+The AI Models and Memory settings surfaces use the feature-owned `messages/settings-models.ts` catalog. Routing diagrams, provider and model affordances, thinking modes, model pricing, speech configuration, catalog filters, license confirmations, and memory remediation controls switch with the active dashboard locale.
+
+Measurements are formatted through the same active locale. This includes model and provider counts, byte sizes, download percentages, token prices, and memory limit summaries. Currency remains USD with the existing per-million-token precision; only locale-specific number separators change.
+
+Speech selection keeps contract values separate from presentation. Language tags, BCP-47 values, voice IDs, model IDs, license and attribution text, API endpoints, and provider diagnostics pass through unchanged. Dashboard-owned language choices such as automatic detection are translated, while language and model metadata returned by the catalog API is displayed verbatim. Selecting a recommended local model never starts a download; the localized license confirmation remains the only path that invokes the download API.
+
+Pure presentation helpers accept an explicit locale and default to English for compatibility. Components pass the provider's active locale, while unit tests and non-component consumers can request deterministic English or German formatting directly.
+
 The Sprints route owns its catalog in `dashboard/src/v2/i18n/messages/sprints.ts`. The page header, gallery, ledger, menus, bulk actions, importers, rollback flow, status summaries, empty/error states, and ARIA announcements follow the active locale. Sprint and task records, linked issue keys/titles/content, provider names, Git/PR details, review output, runtime events, importer warnings, and API error messages are data rather than interface copy and remain verbatim. Dates, times, counts, percentages, and list summaries use the active locale without changing stored UTC timestamps or sort keys.
 
 ## Translation scope
@@ -129,6 +139,9 @@ Numbers, timestamps, durations, percentages, token totals, and plural counts use
 ## Verification
 
 Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization.
+
+Model and memory coverage exercises German catalog and remediation controls, locale-aware sizes and prices, language compatibility and recommendations, selected/install/enabled distinctions, explicit download confirmation, invalid license metadata, provider failures, and unchanged provider/model payload values.
+Task-focused component, view-model, controller, dependency, review, rerun, and page tests additionally verify German CRUD presentation while persisted and runtime content remains unchanged.
 Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. Memory route coverage lives with the page, filter, search, list, inspector, batch-delete, model-browser, and model-card tests. Together they exercise German controls and announcements while asserting persisted knowledge, catalog metadata, identifiers, and API diagnostics remain verbatim.
 Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization. Agents coverage additionally verifies German route chrome and validation while asserting that authored instructions, imported Markdown, server labels, and persisted configuration values are not translated.
 Feature coverage additionally exercises German sprint validation and planning modes, Quicksprint execution and cancellation, provider failures, Markdown round-trips, settings override save/reset, and keyboard/focus behavior. These tests assert both localized chrome and verbatim authoring payloads.

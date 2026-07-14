@@ -37,6 +37,11 @@ English and German must declare exactly the same top-level keys. Interpolation t
 
  Keep each catalog with its owning feature and import it only where the feature is loaded. Translate dashboard-authored interface copy only. Never translate provider output, API responses, stored instructions, project data, runtime diagnostics, or user-authored content.
 
+## Model and memory settings
+
+AI Models and Memory settings use a feature-owned catalog for routing diagrams, provider and model controls, thinking modes, pricing, speech configuration, catalog filters, license confirmations, and remediation controls. Counts, byte sizes, percentages, token prices, and memory limits use the active locale while preserving USD and the existing per-million-token precision.
+
+Speech and model contracts remain locale-neutral. Provider and model IDs, language tags, BCP-47 values, voice IDs, API-returned metadata, license and attribution text, endpoints, and runtime diagnostics are displayed unchanged. Choosing a recommended speech model only updates the settings draft; a model download starts only after the user accepts the localized license confirmation.
 The Knowledge route is a concrete feature catalog: its headers, document controls and states, ingestion dialogs, search feedback, confirmations, and accessible announcements support English and German. Counts, sizes, dates, and similarity percentages follow the active locale, while document data, paths, names, identifiers, search excerpts, partial-failure diagnostics, and API errors remain verbatim.
 
 The Integrations and MCP catalog localizes provider and chat-bridge setup, authentication and connection states, terminal-login controls, automation credentials, MCP categories, local CLI installation, clipboard feedback, and custom-server validation. Provider and product names, credential values, redacted placeholders, paths, endpoints, repository identifiers, tool and server names, scopes, transport literals, terminal streams, and server diagnostics remain verbatim and are never passed through translation interpolation.

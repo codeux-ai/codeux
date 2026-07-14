@@ -400,4 +400,63 @@ describe("AIModelCatalogPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "Accept & Download" }));
     await waitFor(() => expect(speechApi.downloadSpeechModel).toHaveBeenCalledWith("piper-de-de-mls-medium", "german-license"));
   });
+  it("filters the German catalog while keeping API language metadata and download states distinct", async () => {
+    const Harness = () => {
+      const [settings, setSettings] = useState(DEFAULT_DASHBOARD_SETTINGS);
+      return <AIModelCatalogPanel state={{
+        editableSettings: settings,
+        selectedProject: null,
+        updateEditableSettings: (recipe: (current: typeof settings) => typeof settings) => setSettings((current) => recipe(current)),
+      } as any} />;
+    };
+    render(<Harness />, "de");
+
+    await userEvent.click(screen.getByRole("button", { name: "Sprache konfigurieren" }));
+    await userEvent.click(screen.getByRole("button", { name: "Sprache für Text zu Sprache" }));
+    await userEvent.click(screen.getByRole("option", { name: "German (Germany)" }));
+
+    expect(screen.getByText("Ausgewählt")).toBeInTheDocument();
+    expect(screen.getAllByText("Download erforderlich").length).toBeGreaterThan(0);
+    expect(screen.getByText("Ausgabe aus")).toBeInTheDocument();
+    expect(screen.getAllByText("German (Germany)").length).toBeGreaterThan(0);
+    expect(speechApi.downloadSpeechModel).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Kompatible Modelle vergleichen" }));
+    const catalog = screen.getByRole("region", { name: "Modellkatalog" });
+    expect(within(catalog).getByRole("combobox", { name: "Sprachmodelle nach Sprache filtern" })).toHaveValue("de-DE");
+    expect(within(catalog).getByText("Piper German MLS Medium")).toBeInTheDocument();
+    expect(within(catalog).queryByText("Kokoro 82M v1.0 Q8")).not.toBeInTheDocument();
+    expect(within(catalog).getByRole("option", { name: "German (Germany)" })).toHaveValue("de-DE");
+    expect(speechApi.downloadSpeechModel).not.toHaveBeenCalled();
+  });
+
+  it("preserves provider diagnostics when the catalog request fails", async () => {
+    speechApi.listSpeechModels.mockRejectedValueOnce(new Error("Provider network unavailable"));
+    render(<AIModelCatalogPanel state={{
+      editableSettings: DEFAULT_DASHBOARD_SETTINGS,
+      selectedProject: null,
+      updateEditableSettings: vi.fn(),
+    } as any} />, "de");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Provider network unavailable");
+  });
+
+  it("blocks downloads whose API license metadata fails validation", async () => {
+    const models = await speechApi.listSpeechModels();
+    speechApi.listSpeechModels.mockResolvedValue(models.map((model: any) => model.id === "piper-de-de-mls-medium"
+      ? { ...model, license: { ...model.license, commercialUseAllowed: false } }
+      : model));
+    render(<AIModelCatalogPanel state={{
+      editableSettings: DEFAULT_DASHBOARD_SETTINGS,
+      selectedProject: null,
+      updateEditableSettings: vi.fn(),
+    } as any} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Manage local models" }));
+    const card = (await screen.findByText("Piper German MLS Medium")).closest("article");
+    expect(card).not.toBeNull();
+    expect(within(card as HTMLElement).getByRole("button", { name: "Download Piper German MLS Medium" })).toBeDisabled();
+    expect(speechApi.downloadSpeechModel).not.toHaveBeenCalled();
+  });
+
 });
