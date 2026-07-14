@@ -36,10 +36,10 @@ function createSource(id: string, status: SourceStatus): Source {
 describe("projects-page-view-model", () => {
   it("defines filters in display order with their matching statuses", () => {
     expect(PROJECT_FILTER_DEFINITIONS).toEqual([
-      { filter: "All", status: null },
-      { filter: "Running", status: "running" },
-      { filter: "Idle", status: "idle" },
-      { filter: "Failed", status: "failed" },
+      { filter: "All", status: null, labelKey: "filterAll", emptyMessageKey: null },
+      { filter: "Running", status: "running", labelKey: "filterRunning", emptyMessageKey: "noRunningProjects" },
+      { filter: "Idle", status: "idle", labelKey: "filterIdle", emptyMessageKey: "noIdleProjects" },
+      { filter: "Failed", status: "failed", labelKey: "filterFailed", emptyMessageKey: "noFailedProjects" },
     ]);
   });
 
