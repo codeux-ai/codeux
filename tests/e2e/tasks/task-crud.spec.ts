@@ -40,10 +40,14 @@ async function holdToConfirm(page: Page, button: Locator): Promise<void> {
   await page.mouse.up();
 }
 
-async function activateButtonWithKeyboard(page: Page, button: Locator): Promise<void> {
-  await button.scrollIntoViewIfNeeded();
-  await button.focus();
+async function openTaskActionMenu(page: Page, taskKey: string, title: string): Promise<Locator> {
+  const trigger = page.getByRole('button', { name: `Open task actions for task ${taskKey}: ${title}` });
+  await trigger.scrollIntoViewIfNeeded();
+  await trigger.focus();
   await page.keyboard.press('Enter');
+  const menu = page.getByRole('menu', { name: `Actions for task ${taskKey}: ${title}` });
+  await expect(menu).toBeVisible();
+  return menu;
 }
 
 async function expectTaskInProject(
@@ -93,7 +97,7 @@ test.describe('task CRUD from the Tasks page', () => {
     const promptMarkdown = 'Verify task CRUD without dispatching AI planning or Docker workers.';
 
     await page.goto(`/tasks?projectId=${encodeURIComponent(project.id)}&sprintId=${encodeURIComponent(sprint.id)}`);
-    await expect(page.getByRole('heading', { level: 1, name: 'Task Board' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Tasks' })).toBeVisible();
 
     await page.getByRole('button', { name: 'New Task' }).click();
     await expect(page.getByText('Task Composer')).toBeVisible();
@@ -112,7 +116,8 @@ test.describe('task CRUD from the Tasks page', () => {
     const createdTask = await createResponse.json() as TaskRecord;
     taskIdForCleanup = createdTask.id;
 
-    await expect(page.getByRole('button', { name: `Delete task ${createdTask.taskKey}: ${title}` })).toBeVisible();
+    const actionTrigger = page.getByRole('button', { name: `Open task actions for task ${createdTask.taskKey}: ${title}` });
+    await expect(actionTrigger).toBeVisible();
     await expect.poll(() => expectTaskInProject(request, project!.id, createdTask.id)).toMatchObject({
       id: createdTask.id,
       sprintId: sprint.id,
@@ -120,7 +125,10 @@ test.describe('task CRUD from the Tasks page', () => {
       promptMarkdown,
     });
 
-    await activateButtonWithKeyboard(page, page.getByRole('button', { name: `Delete task ${createdTask.taskKey}: ${title}` }));
+    const taskMenu = await openTaskActionMenu(page, createdTask.taskKey, title);
+    const deleteAction = taskMenu.getByRole('menuitem', { name: `Delete task ${createdTask.taskKey}: ${title}` });
+    await deleteAction.focus();
+    await page.keyboard.press('Enter');
     const dialog = page.getByRole('dialog', { name: 'Delete Task' });
     await expect(dialog).toBeVisible();
 
@@ -133,7 +141,7 @@ test.describe('task CRUD from the Tasks page', () => {
       holdToConfirm(page, dialog.getByRole('button', { name: 'Hold to Delete Task' })),
     ]);
 
-    await expect(page.getByRole('button', { name: `Delete task ${createdTask.taskKey}: ${title}` })).toHaveCount(0);
+    await expect(actionTrigger).toHaveCount(0);
     await expect.poll(async () => {
       const tasks = await fetchTasksViaApi(request, project!.id);
       return tasks.some((task) => task.id === createdTask.id);

@@ -23,6 +23,7 @@ vi.mock("../../../../../src/infrastructure/providers/cli/provider-usage.js", () 
 import {
   readQwenLogData,
   readCodexLatestSessionJson,
+  readCodexLatestSessionChunk,
   readClaudeSessionJsonl,
   parseAntigravityConversationId,
   readAntigravityTranscript,
@@ -137,6 +138,36 @@ describe("readCodexLatestSessionJson", () => {
   it("returns null when the host sessions dir cannot be read", async () => {
     readdir.mockRejectedValue(new Error("ENOENT"));
     expect(await readCodexLatestSessionJson("/cwd", "HOST" as Mode, {} as never)).toBeNull();
+  });
+});
+
+describe("readCodexLatestSessionChunk", () => {
+  it("forwards the Docker byte cursor without reading the full rollout", async () => {
+    const chunk = {
+      sourceId: "1:22",
+      startOffset: 128,
+      nextOffset: 256,
+      totalBytes: 300,
+      contentBase64: Buffer.from("delta").toString("base64"),
+      reset: false,
+    };
+    const runner = { readLatestWorkspaceFileChunk: vi.fn(async () => chunk) };
+
+    const result = await readCodexLatestSessionChunk(
+      "/cwd",
+      "DOCKER" as Mode,
+      { sourceId: "1:22", offset: 128 },
+      runner as never,
+    );
+
+    expect(result).toEqual(chunk);
+    expect(runner.readLatestWorkspaceFileChunk).toHaveBeenCalledWith(
+      "/cwd",
+      expect.stringContaining(".codex/sessions"),
+      "*.jsonl",
+      { sourceId: "1:22", offset: 128 },
+      2 * 1024 * 1024,
+    );
   });
 });
 

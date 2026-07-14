@@ -27,11 +27,11 @@ This runbook covers day-to-day operation and incident handling for the MCP serve
 
 ## Normal Startup Procedure
 
-Database maintenance (`DatabaseMaintenanceService`) runs automatically during normal startup to perform settings-driven DB pruning, VACUUM, and WAL checkpointing. Do not instruct operators to manually perform destructive DB edits. Operators can expect:
-- `dbAutoVacuumOnStartup`: Triggers VACUUM on local databases. Can skip if set to false.
-- `dbPruningEnabled`: Prunes old data matching `dbRetentionDays`. Can skip if set to false.
+Database maintenance (`DatabaseMaintenanceService`) is scheduled after normal startup and advances on the periodic maintenance timer. Do not instruct operators to manually perform destructive DB edits. Operators can expect:
+- `dbAutoVacuumOnStartup`: Disabled by default. When enabled, requests at most 256 incremental-vacuum pages during an idle startup pass; it never triggers a full-file `VACUUM`.
+- `dbPruningEnabled`: Prunes old data matching `dbRetentionDays` in cursor-based batches of at most 500 rows per table. Can skip if set to false.
 - `dbRetentionDays`: Bounded to a safe range (1-3650 days). Negative or zero values will be clamped.
-- Startup logs will show a structured result detailing counts of pruned elements, failed vacuums, and WAL checkpoint failures (`checkpointFailures`). WAL checkpoint failures are non-fatal, busy checkpoints are safe to retry later.
+- All database writes and WAL checkpoints are deferred while provider invocations are active. Startup logs show a structured result with bounded prune counts, skipped work, incremental-vacuum failures, and WAL checkpoint failures (`checkpointFailures`). Checkpoint failures are non-fatal and safe to retry later.
 
 1. Confirm API key source is available (recommended, but startup is allowed without key).
 2. Start server (`pnpm run dev` or `pnpm start`).
@@ -86,7 +86,8 @@ If consecutive task creation failures reach threshold:
 ### Provider Concurrency Controls
 Provider concurrency is enforced globally across all projects using `ProviderSettings.maxConcurrentTasks`.
 - **Pre-Launch Enforcement**: Slots are claimed atomically before any provider container or host process is launched. If no slot is available, the task dispatch waits and retries until a slot becomes free.
-- **Unlimited Mode**: Setting `maxConcurrentTasks` to `0` disables concurrency enforcement for that provider (unlimited).
+- **Automatic Local Mode**: For local CLI/Docker providers, `maxConcurrentTasks = 0` selects adaptive CPU/memory admission. Jules remains hosted, so its `0` value is unlimited.
+- **Pressure Priority**: Background expansion freezes under host pressure while one slot is reserved for interactive reply work when the explicit provider cap permits it. Existing work is never killed.
 - **Terminal States**: Completed, failed, cancelled, or quota-wait terminal invocations do not count against the cap. Only 'running' invocations are counted.
 - **Abort Handling**: If a task dispatch is cancelled while waiting for a slot, the wait loop exits immediately without creating a stale running invocation record.
 
@@ -202,7 +203,7 @@ Checks:
   - Rerun resume uses the latest `cli_workspace_bound` event as the source of truth for the workspace session id. If the latest interrupted provider invocation has a different `session_id`, Code UX still resumes the Docker volume named by the recorded workspace binding.
   - Codex uses per-session container home directories under that runtime root to prevent stale state from previous Codex runs.
   - `RuntimeCleanupService` performs a periodic sweep for stale/offline connections, expired leases, terminal dispatch reconciliation, stale sprint runs, and runtime artifacts.
-- During shutdown, Code UX disposes the command-spawner host before Docker cleanup (`DockerRuntimePruneService` and `DockerAssetPruneService`). `DockerRuntimePruneService` safely prunes stale per-runtime paths and shared temp paths after their age threshold while preserving active roots/Codex homes. `DockerAssetPruneService` cleans up orphaned workspace volumes, login containers, helper containers, and temporary credential directories on startup. Workspace volume helpers use `code-ux.managed=true` and `code-ux.helper=volume` on both persistent helpers and `docker run --rm` fallback helpers. Do not instruct operators to run broad manual `docker system prune` commands.
+- During shutdown, Code UX disposes the command-spawner host before Docker cleanup (`DockerRuntimePruneService` and `DockerAssetPruneService`). `DockerRuntimePruneService` safely prunes stale per-runtime paths and shared temp paths after their age threshold while preserving active roots/Codex homes; its periodic traversal is single-flight and uses bounded asynchronous filesystem operations. `DockerAssetPruneService` cleans up orphaned workspace volumes, login containers, helper containers, and temporary credential directories on startup. Startup cleanup is single-flight, removes helper containers before workspace volumes, then uses bounded parallel Docker inspection/removal batches without changing active-session, grace-period, newest-version, or age-retention protections. Workspace volume helpers use `code-ux.managed=true` and `code-ux.helper=volume` on both persistent helpers and `docker run --rm` fallback helpers. Do not instruct operators to run broad manual `docker system prune` commands.
 - Docker provider launches use readable container names such as `code-ux-codex-<session>` and mount provider arguments through a generated argv file instead of passing the full prompt through the host `docker run` command line. Secret-bearing provider environment variables are written to temporary `0600` env-files and supplied with `--env-file`, so `ps`/process-list inspection should show only the env-file path and not API key values. If Docker reports that the deterministic provider container name is already in use, Code UX force-removes that named container with volumes and retries the launch once; repeated conflicts usually mean an external Docker daemon or another runtime is recreating the same session container. Packaged Windows Electron builds that fail with `spawn ENAMETOOLONG` during provider launch are using an older build or a non-provider launch path that still embeds a large payload in command arguments.
 - In custom-image mode, setup-image caching may spend several minutes building a content-addressed `code-ux-setup-cache-*` image for the first base-image/setup-script combination. Activity logs call out the cache miss, stream Docker build steps, and report bounded progress; later runs reuse it until the base image, setup script, Dockerfile template, or Playwright setting changes. Managed mode performs no setup build: it preloads the Playwright-matched browser into a versioned local Docker volume and mounts `/ms-playwright` read-only. If a custom setup build fails, Code UX logs the fallback and runs the explicit setup script at container runtime instead.
 - Provider login uses a separate content-addressed `code-ux-login-base-node-24-bookworm-slim:*` image with curl and keyring prerequisites baked in. The image is prewarmed after dashboard logging is available, but this is best-effort: failures should be treated as startup warnings, not as a reason to block the dashboard or provider login.
@@ -323,6 +324,72 @@ Transient provider failures are classified and managed in `src/shared/providers/
 - **Claude missing conversations**: Attempts to resume a non-existent session resulting in "no conversation found". Code UX retries once with a fresh Claude session; planning continuations are self-contained so that fallback still has the original schema, sprint goal, and task-generation instructions.
 - **OpenCode missing sessions**: Attempts to resume a removed native session resulting in "Session not found"; Code UX retries once as a fresh OpenCode session in the same workspace.
 - **Silent quota signals**: Provider tools (like Antigravity) failing due to capacity limits without explicit failure output.
+
+### External chat connector incidents
+
+Use only redacted connection, binding, delivery, and session IDs in incident notes. Start with `GET /api/chat-providers/health`, the connection record, persisted binding, and `GET /api/chat-providers/deliveries?...`. Connector health is a local persisted-state summary; it does not prove provider reachability.
+
+#### Bad or rotated credentials
+
+1. Disable the affected connection or its inbound/outbound binding.
+2. Rotate the provider credential, then replace the write-only secret through a local operator or authorized TLS `credential_admin` path with remote credential management enabled.
+3. Treat the update as verification-invalidating. Run `POST /api/chat-providers/connections/:connectionId/verify` or MCP `verify_connection`; do not reactivate until it returns `verified`.
+4. If a credential-gated lane skips, record **not run**, not passed. Telegram `getMe`, Slack `auth.test`, and Discord current-user checks need test credentials. Meta sends need explicit test-number opt-in.
+5. Re-enable one test binding and observe one inbound/outbound cycle before restoring broader routing.
+
+Rollback: disable the changed connection and re-enable the previously verified managed/custom bridge. Do not paste the previous secret into logs or approval payloads.
+
+#### Provider outage or throttling
+
+1. Confirm provider status outside Code UX and inspect the sanitized provider error code/retry time.
+2. Leave scheduled retries alone when `nextAttemptAt` follows provider `Retry-After`; repeated manual retry can duplicate messages and worsen throttling.
+3. Disable outbound routing if the queue grows faster than recovery. Inbound may remain enabled only if callback acknowledgement is healthy.
+4. Cancel deliveries that are no longer safe. After recovery, manually retry one known delivery through the approval handshake, then let the durable worker drain.
+
+Rollback: route new traffic through an existing managed/custom bridge only after verifying its credentials and binding. Preserve failed delivery rows for audit.
+
+#### Stale or reconnecting sessions
+
+Discord symptoms include repeated Gateway reconnects, missed heartbeat acknowledgements, invalid-session loops, or exhausted attempts. iMessage bridge symptoms mean the operator bridge is unavailable; Code UX does not own an Apple session.
+
+1. Disable the connection to stop reconnect timers and outbound work.
+2. Confirm Discord bot token, intents, and privileged `MESSAGE_CONTENT` access. Reject a persisted resume URL that is not a secure Discord-owned host.
+3. Restart Code UX once. Eligible sessions resume durable state; Discord falls back to Identify after invalid/expired resume state.
+4. If attempts exhaust, keep the connection disabled, correct provider configuration, reverify, and restart/re-enable. Do not create an unbounded restart loop.
+5. For iMessage, repair the selected bridge and run its protocol health check; do not substitute unsupported AppleScript or Messages-database automation.
+
+Rollback: restore the known-good custom Discord gateway or managed/native iMessage bridge connection. Registry presence is not bridge certification.
+
+#### Failed legacy-secret migration
+
+1. Stop credential edits and take a protected database backup plus the referenced key-provider version. Never copy `secret_json` into incident notes.
+2. Restore the original secure key provider (KMS/Vault version, Electron safe storage, or owner-only mounted key) and verify health.
+3. Restart Code UX or rerun migration. It seals first and compare-and-set commits before clearing the legacy row, so completed rows need not repeat.
+4. Resolve each sanitized failure and repeat until `pending: 0`.
+5. Reverify affected connections if credentials/setup changed during recovery.
+
+Rollback: restore the database **and matching key material** from one backup point. Never downgrade an encrypted row to plaintext or delete the legacy source before a successful envelope commit.
+
+#### Disabled or ambiguous routing
+
+1. Confirm the connection is enabled/active and the persisted binding has the intended project, external channel, inbound/outbound flags, and selector.
+2. For a shared channel, add a unique selector/alias. Code UX intentionally refuses to guess between projects.
+3. Confirm the principal is authorized for the binding's stored project; a query `projectId` cannot grant access.
+4. Create a new inbound message after correction. Do not mutate a historical delivery into a different project.
+
+Rollback: disable the new binding and re-enable the prior binding/bridge pair. Preserve the ambiguous delivery as evidence.
+
+#### Repeated retries or possible duplicate send
+
+1. Inspect attempt count, sanitized `lastError`, `nextAttemptAt`, and ambiguity classification.
+2. Do not manually retry `sending` work with an unexpired lease. After a crash, let lease expiry/startup recovery reclaim it.
+3. Cancel unsafe/stale work. Manual retry is one-use approval-gated because the provider could receive it twice.
+4. Reconcile provider-declared ambiguous terminal outcomes with provider history before retrying.
+5. If retries loop after restart, disable outbound routing, capture redacted diagnostics, fix configuration, and test one delivery.
+
+#### Cleanup after rollback
+
+Keep failed connections disabled until retention is satisfied. Cancel unwanted pending deliveries, let in-flight leases settle, and verify resumable timers stopped. Delete a connection only after approval and a backup decision because deletion cascades bindings and delivery rows. Expired replay receipts and sessions are cleaned automatically; connector cleanup does not require deleting global runtime state.
 
 ## Recovery Techniques
 

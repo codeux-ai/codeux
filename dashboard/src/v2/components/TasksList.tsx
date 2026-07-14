@@ -6,7 +6,14 @@ import { SprintStreamRow } from "./ui/SprintStreamRow.js";
 import { FilterStrip } from "./ui/FilterStrip.js";
 import { SkeletonRow } from "./layout/SkeletonLoader.js";
 import { EmptyState } from "./ui/EmptyState.js";
-import { deriveActiveSprintIds, filterOverviewTasks, filterTasksToActiveSprints, type OverviewTaskFilter } from "../lib/overview-streams.js";
+import {
+    deriveActiveSprintIds,
+    deriveOverviewTaskHumanInterventions,
+    deriveOverviewTaskCiPresentations,
+    filterTasksToActiveSprints,
+    filterOverviewTasks,
+    type OverviewTaskFilter,
+} from "../lib/overview-streams.js";
 import { useOverviewStreamActions } from "../hooks/use-overview-stream-actions.js";
 import { useListReorder } from "../lib/motion/use-list-reorder.js";
 import { useProgressiveList } from "../hooks/use-progressive-list.js";
@@ -41,6 +48,14 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
     const sprintById = useMemo(() => new Map(sprints.map((sprint) => [sprint.id, sprint])), [sprints]);
     const activeSprintIds = useMemo(() => deriveActiveSprintIds(sprints), [sprints]);
     const activeTasks = useMemo(() => filterTasksToActiveSprints(tasks, activeSprintIds), [tasks, activeSprintIds]);
+    const taskCiPresentations = useMemo(
+        () => deriveOverviewTaskCiPresentations(activeTasks, execution),
+        [activeTasks, execution],
+    );
+    const taskHumanInterventions = useMemo(
+        () => deriveOverviewTaskHumanInterventions(activeTasks, execution),
+        [activeTasks, execution],
+    );
 
     const filteredTasks = useMemo(() => filterOverviewTasks(activeTasks, activeFilter), [activeTasks, activeFilter]);
     const visibleTasks = useProgressiveList(filteredTasks, {
@@ -134,6 +149,8 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                                 <TaskRow
                                     task={task}
                                     state={streamActions.getTaskState(task)}
+                                    ciPresentation={taskCiPresentations.get(task.recordId) ?? null}
+                                    humanIntervention={taskHumanInterventions.get(task.recordId) ?? null}
                                     onPlayStop={() => streamActions.playStopTask(task)}
                                 />
                             </div>

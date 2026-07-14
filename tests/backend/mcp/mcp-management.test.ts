@@ -914,6 +914,7 @@ describe("ManagementToolHandler", () => {
     const schema = tool?.inputSchema as { properties: Record<string, JsonSchemaProperty> } | undefined;
     const properties = schema?.properties ?? {};
 
+    expect(properties.action?.enum).toContain("followup");
     expect(properties.action?.enum).toContain("import_issues");
     expect(properties.provider?.enum).toEqual(["github", "gitlab", "jira", "notion", "asana", "linear", "miro", "lucid", "figma", "mural"]);
     expect(properties.state).toMatchObject({ type: "string" });
@@ -1147,6 +1148,36 @@ describe("ManagementToolHandler", () => {
     response = await handler.handleManageSprints({ action: "delete", sprintId: "s1", approval: { confirmed: true } });
     parsed = JSON.parse(response.content[0].text);
     expect(parsed.result).toEqual({ status: "success", deletedSprintId: "s1" });
+  });
+
+  it("serializes follow-up draft creation without invoking planning or scheduling", async () => {
+    const draft = {
+      id: "s-followup",
+      projectId: "p1",
+      name: "Deferred follow-up",
+      goal: "Run after the active sprint finishes.",
+      status: "idle",
+    };
+    deps.projectManagementRepository.createSprint = vi.fn().mockReturnValue(draft);
+
+    const response = await handler.handleManageSprints({
+      action: "followup",
+      projectId: "p1",
+      title: "Deferred follow-up",
+      goalMarkdown: "Run after the active sprint finishes.",
+      status: "completed",
+    });
+
+    expect(JSON.parse(response.content[0].text).result).toEqual(draft);
+    expect(deps.projectManagementRepository.createSprint).toHaveBeenCalledWith("p1", {
+      name: "Deferred follow-up",
+      goal: "Run after the active sprint finishes.",
+      status: "idle",
+    });
+    expect(deps.planningAgentService.planSprint).not.toHaveBeenCalled();
+    expect(deps.planningAgentService.startPlanSprint).not.toHaveBeenCalled();
+    expect(deps.executionControlService.orchestrateSprint).not.toHaveBeenCalled();
+    expect(deps.schedulerService.createEntry).not.toHaveBeenCalled();
   });
 
   it("should cover the full lifecycle of task management and require approval for delete", async () => {

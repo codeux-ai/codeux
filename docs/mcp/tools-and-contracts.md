@@ -251,20 +251,25 @@ The restricted tool intentionally does not expose due-entry execution, arbitrary
 - `publish_revision` publishes only a revision that is already marked passed with a valid report or a revision accompanied by a passed `validationSessionId`.
 - `archive` clears any active publication and marks the dashboard archived. It follows the normal destructive-action approval fingerprint flow.
 - `data_catalog` returns project dashboard summaries and declared source nodes for agents building or inspecting generated dashboards.
+- `list_credential_slots` returns a bounded metadata-only review of declared slots, current bindings, backend health, and compatible credential candidates for the owning project. An optional `revisionId` reviews an immutable revision.
+- `bind_credential` binds or replaces one declared slot by credential ID with `expectedBindingRevision`; `unbind_credential` removes one slot binding with the same optimistic guard. Both mutations require the stateful human-confirmation handshake. Their arguments are strictly validated and reduced to the allowed metadata fields before an approval fingerprint is built, so secret-bearing or unsupported fields cannot enter pending approval state.
 
 Payload fields:
 
-- `projectId` is required for `list`, `create`, `validate_revision`, and `data_catalog`.
-- `dashboardId` is required for `get`, `update`, `create_revision`, `validate_revision`, `publish_revision`, and `archive`.
+- `projectId` is required for `list`, `create`, `validate_revision`, `data_catalog`, and every credential-binding action.
+- `dashboardId` is required for `get`, `update`, `create_revision`, `validate_revision`, `publish_revision`, `archive`, and every credential-binding action.
 - `revisionId` is required for `validate_revision` and `publish_revision`.
 - `sessionId` is required for `validation_status` and `validation_logs`.
 - `validationSessionId` is optional for `publish_revision` and, when supplied, must identify a passed session for the same dashboard, revision, and project.
 - `manifest`, `fileBundle`, `sourceNodeGraph`, `styleguide`, and `runtimeMetadata` are accepted by `create`, `update`, and `create_revision` according to each action's required fields.
 - `tail` limits validation log output.
+- `slotId`, `credentialId`, and `expectedBindingRevision` identify a metadata-only bind/replace operation; unbind omits `credentialId`. Secret-bearing and undeclared fields are rejected.
 
 Validation sessions move through `queued`, `building`, `running`, `passed`, `failed`, or `cancelled`. `validate_revision` starts the detached Docker validation runtime; it does not publish the revision. A passed session means install, build, detached preview startup, and root health checks completed successfully.
 
-`publish_revision` is gated by repository state. The revision must belong to the dashboard, have `validationStatus: "passed"`, have `validatedAt`, and have `validationReport.valid === true`. Failed, queued, running, cancelled, missing, or cross-revision validation sessions are rejected before publication state changes, so the prior published revision remains active.
+`validate_revision` and `publish_revision` perform a fresh metadata-only credential compatibility review. Required unbound slots and missing, revoked, inaccessible, unconfigured, wrong-kind, insufficient-capability, or unavailable-backend bindings fail closed with slot-specific validation issues. Optional unbound slots remain valid. A rejected publication returns the sanitized slot-specific `issues` array in the error result without credential IDs or values. Only after that review does `publish_revision` apply the repository validation-state gate, so the prior published revision remains active on any denial.
+
+Generic custom-dashboard MCP responses recursively redact known binding IDs from dashboard, revision, source, runtime-metadata, validation-report, file, and viewer-artifact content. Only `list_credential_slots`, `bind_credential`, and `unbind_credential` may return binding IDs and non-secret credential metadata. These actions never accept or return plaintext and never call credential secret resolution.
 
 The generated dashboard data-source graph is user-declared JSON with `nodes`, `edges`, and optional `metadata`. Runtime viewer source types currently map to Code UX project execution data, project stats, overview telemetry, non-secret integration metadata, and unavailable `external_api` placeholders. Do not claim arbitrary external API connectors are available through this surface until a dedicated sanitized proxy contract exists.
 
@@ -803,13 +808,28 @@ The first call returns `approvalRequired: true`. To execute the deprecation afte
 }
 ```
 
-For sprint create/update calls:
+For sprint create/followup/update calls:
 - `name` is the canonical repository field.
 - `title` is accepted as a public MCP alias for `name`.
 - `goal` is the canonical repository field.
 - `goalMarkdown` is accepted as a public MCP alias for `goal`.
 - `linkedIssues` can include imported issue body and conversation markdown. Sprint create merges that context into the goal under `## Linked Issues`; sprint update does the same when a replacement goal is provided. Prompt-only issue body and conversation content are not stored in linked issue repository rows.
 - Missing or blank `projectId`, `sprintId`, `sprintRunId`, `name`, and `title` values are rejected before repository calls so MCP clients receive a validation error instead of a low-level `.trim()` failure.
+
+### `manage_sprints followup`
+
+Use `manage_sprints` with `action: "followup"` when a later sprint should be captured now but must not be planned until its scheduled start. The action accepts the same draft fields and public aliases as sprint creation, requires `projectId`, creates a sprint with `status: "idle"`, and returns the saved sprint record synchronously.
+
+```json
+{
+  "action": "followup",
+  "projectId": "project-123",
+  "title": "Post-migration follow-up",
+  "goalMarkdown": "Apply the findings from the migration sprint."
+}
+```
+
+`followup` does not call the Planning agent, create tasks, start orchestration, or create a scheduler entry. To run it after another sprint, pass the returned sprint id to `manage_scheduler` with `action: "schedule_sprint"`, `scheduleMode: "after_sprint_end"`, and the source sprint id. Never call `manage_sprints plan` for that follow-up first: when the scheduled entry starts the still-unplanned sprint, Code UX plans it with auto-start at that time, after the source sprint has completed.
 
 ### `manage_sprints plan`
 
@@ -1174,14 +1194,15 @@ For preview calls:
 - `remove_session` requires approval confirmation.
 
 For external chat provider calls:
-- `manage_chat_providers` supports `list_provider_definitions`, `list_connections`, `get_connection`, `create_connection`, `update_connection`, `delete_connection`, `list_channel_bindings`, `create_channel_binding`, `update_channel_binding`, `delete_channel_binding`, and `list_outbound_deliveries`.
-- Supported provider kinds are `whatsapp`, `imessage`, `telegram`, `slack`, `microsoft-teams`, and `discord`, delivered through the implemented `managed_bridge`, `webhook`, or `native_bridge` bridge contracts. The tool does not claim direct official API integration with those providers.
+- `manage_chat_providers` supports `list_provider_definitions`, `list_connections`, `get_connection`, `create_connection`, `update_connection`, `delete_connection`, `list_channel_bindings`, `create_channel_binding`, `update_channel_binding`, `delete_channel_binding`, `verify_connection`, `get_health`, `list_deliveries`, `retry_delivery`, `cancel_delivery`, and compatibility action `list_outbound_deliveries`.
+- Supported provider kinds are `whatsapp`, `imessage`, `telegram`, `slack`, `microsoft-teams`, and `discord`. Each typed profile advertises only the `managed_bridge`, `webhook`, `native_bridge`, or `official_api` modes it implements. Official modes call profile-pinned provider endpoints; the other modes use operator-selected managed/custom/local bridges. Registry presence is not provider certification or production readiness.
 - Connection responses return redacted credential metadata and generated ingress URL guidance; raw `secrets` are not exposed in success responses, validation errors, or approval envelopes.
 - `delete_connection` and `delete_channel_binding` require approval confirmation.
-- `update_connection` requires a one-use approval handshake before replacing a non-empty `secrets` payload. The preflight response is bound to a redacted payload plus secret hash and does not echo secret values.
+- `update_connection` requires a one-use approval handshake before replacing secrets or changing executable/endpoint setup. `retry_delivery` also requires one-use approval. Preflight state is bound to the exact redacted payload and expires after 15 minutes.
 - Channel bindings attach an external channel to a project with optional routing hints, inbound/outbound flags, and `suppressRichWidgets`. Multiple projects may share one external channel; runtime ingress uses selectors and records `disambiguation_needed` instead of guessing when no selector chooses exactly one project.
-- `list_outbound_deliveries` is read-only delivery-state inspection. It can filter by provider connection, channel binding, external channel, delivery status, and limit. Delivery statuses include `pending`, `sending`, `delivered`, `retryable_failure`, `processed`, `failed`, `duplicate`, and `cancelled`.
-- The management surface only configures providers, bindings, setup definitions, ingress URL guidance, and outbound delivery inspection. Authenticated ingress and outbound sending remain runtime services outside this management contract.
+- `list_deliveries` inspects both directions; `list_outbound_deliveries` retains its outbound-only behavior. Results omit payload and lease fields and can filter by provider connection, binding, external channel, direction, status, and limit.
+- `verify_connection` returns sanitized status, timestamp, capabilities, provider error code, retry state, diagnostics, and setup guidance. `get_health` reads persisted counts/outcomes only and never calls provider networks.
+- Project scope is derived from each persisted binding/delivery rather than caller-supplied project IDs. Generated ingress URLs use `/api/chat-providers/ingress/:providerConnectionId`.
 
 Create a webhook-backed connection:
 
@@ -1234,6 +1255,68 @@ Inspect retryable outbound delivery state:
   "limit": 25
 }
 ```
+
+Run the connection's bounded verification contract:
+
+```json
+{
+  "action": "verify_connection",
+  "providerConnectionId": "connection-generic"
+}
+```
+
+Official Telegram `getMe`, Slack `auth.test`, and Discord current-user checks require explicitly configured test credentials. Meta send testing is a separate test-number opt-in. Teams verification coverage is deterministic Emulator/contract testing rather than a public sandbox, and iMessage has no provider-native bot sandbox. A credential-gated skip is not a successful live result.
+
+A redacted timeout/failure result retains classification but not upstream URL, request/response body, signed data, identity values, or credentials:
+
+```json
+{
+  "result": {
+    "status": "success",
+    "domain": "chat_providers",
+    "action": "verify_connection",
+    "verification": {
+      "providerConnectionId": "connection-generic",
+      "providerKind": "slack",
+      "status": "failed",
+      "verifiedAt": "2030-01-01T00:00:00.000Z",
+      "capabilities": ["setup", "authentication", "handshake", "outbound"],
+      "providerErrorCode": "verification_timeout",
+      "retryable": true,
+      "issues": ["Provider verification timed out."],
+      "diagnostics": null
+    }
+  }
+}
+```
+
+Manual retry is a two-call approval flow. The first call returns `approvalRequired`; repeat the exact action/payload only after human confirmation:
+
+```json
+{
+  "action": "retry_delivery",
+  "deliveryId": "delivery-generic"
+}
+```
+
+```json
+{
+  "action": "retry_delivery",
+  "deliveryId": "delivery-generic",
+  "approval": { "confirmed": true }
+}
+```
+
+Cancellation does not send again and therefore does not require the retry approval:
+
+```json
+{
+  "action": "cancel_delivery",
+  "deliveryId": "delivery-generic"
+}
+```
+
+Validation rejects unsupported provider/mode combinations, missing required IDs, non-object setup/secrets, and `limit` outside 1-500. Credential mutation/verification can be disabled for remote MCP clients. Binding and delivery operations authorize the project stored on the binding; an unauthorized principal receives a generic project-authorization failure rather than foreign delivery data. Provider 429/temporary failures return `retryable: true` with a sanitized retry schedule, while invalid authentication/permissions are terminal until configuration changes.
 
 For settings patch calls, `value` may be any JSON value, including strings, booleans, numbers, `null`, arrays, or objects.
 Settings patch and replacement calls still require the stateful human-confirmation gate described above.

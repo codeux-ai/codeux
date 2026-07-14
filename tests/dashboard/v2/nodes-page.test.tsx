@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 /** @jsx h */
 import { h } from "preact";
-import { cleanup, render, screen, waitFor } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,15 +11,39 @@ import { DashboardI18nProvider, type DashboardLocale } from "../../../dashboard/
 
 const api = vi.hoisted(() => ({ fetchNodeFlows: vi.fn(), fetchNodeFlowCatalog: vi.fn(), createNodeFlowDraft: vi.fn(), fetchNodeFlow: vi.fn(), fetchNodeFlowRuns: vi.fn(), fetchNodeFlowNodeRuns: vi.fn(), fetchNodeFlowAttempts: vi.fn(), fetchNodeFlowApprovals: vi.fn(), fetchNodeFlowAgentSkills: vi.fn(), attachNodeFlowToAgent: vi.fn(), detachNodeFlowFromAgent: vi.fn(), decideNodeFlowApproval: vi.fn(), patchNodeFlowDraft: vi.fn(), fetchNodeDefinition: vi.fn(), validateNodeFlowDraft: vi.fn(), runNodeFlow: vi.fn(), deleteNodeFlow: vi.fn() }));
 const agentApi = vi.hoisted(() => ({ fetchAgentPresets: vi.fn() }));
+const credentialApi = vi.hoisted(() => ({ fetchAutomationCredentials: vi.fn(), fetchCredentialHealth: vi.fn(), assessAutomationCredentialCompatibility: vi.fn() }));
 vi.mock("../../../dashboard/src/v2/lib/node-flow-api.js", async (original) => ({ ...(await original()), ...api }));
 vi.mock("../../../dashboard/src/v2/lib/agent-preset-api.js", async (original) => ({ ...(await original()), ...agentApi }));
+vi.mock("../../../dashboard/src/v2/lib/automation-credential-api.js", () => credentialApi);
 vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({ useReducedMotion: () => true, useResolvedMotionDuration: <T,>(value: T): T => value }));
 
 const flow = { id: "flow-1", projectId: "project-1", title: "Release automation", description: "Governed", graph: { schemaVersion: 2 as const, nodes: [{ id: "input-1", type: "input", title: "Input", definition: { type: "input", version: 1 }, position: { x: 40, y: 40 } }], edges: [] }, version: 2, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" };
 const agent = { id: "agent-1", projectId: "project-1", name: "Release Agent", description: "Release helper", instructionMarkdown: "PRIVATE AGENT INSTRUCTIONS", labels: [], sourcePath: null, sourceScope: null, sourceUpdatedAt: null, sourceImportedAt: null, sourceExists: false, syncStatus: "manual", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" };
 const attachment = { flowId: "flow-1", projectId: "project-1", agentPresetId: "agent-1", skillName: "Release skill", description: "Governed", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" };
 const context = { projects: [{ id: "project-1", name: "Test project" }], selectedProjectId: "project-1", selectedProject: { id: "project-1", name: "Test project" }, loading: false, error: null, refreshProjects: async () => undefined, selectProject: async () => undefined, createProject: async () => { throw new Error("unused"); }, updateProject: async () => { throw new Error("unused"); }, deleteProject: async () => undefined };
-
+const credentialDefinition = {
+  type: "provider_prompt", version: 1, executable: true, executionKind: "provider", configurationSchema: { type: "object" },
+  ui: { label: "Provider prompt", description: "Prompt", category: "Providers", widgetSchema: { fields: [] } }, ports: [],
+  credentials: [{ slot: "provider", label: "Provider connection", required: true, allowedKinds: ["provider"], requiredCapabilities: ["read"] }],
+  capabilities: [], sideEffect: "none", defaultPolicy: {}, documentation: "", deprecation: { deprecated: false },
+};
+const credentialFlow = {
+  ...flow,
+  graph: {
+    schemaVersion: 2 as const,
+    nodes: [{
+      id: "provider-1", type: "provider_prompt", title: "Provider prompt", description: "Prompt",
+      definition: { type: "provider_prompt", version: 1 }, data: { prompt: "Keep this configuration" },
+      credentialBindings: [{ slot: "audit", credentialId: "credential-audit" }], position: { x: 40, y: 40 },
+    }],
+    edges: [],
+  },
+};
+const credentialMetadata = (id: string, name: string) => ({
+  id, name, kind: "provider", scope: "project", projectId: "project-1", managementProjectId: "project-1",
+  allowedProjectIds: [], capabilities: ["read"], status: "active", configured: true, keyId: "hidden-key",
+  keyVersion: 1, version: 1, lastValidatedAt: null, validationStatus: "valid", createdAt: "now", updatedAt: "now",
+});
 const renderPage = (value: typeof context = context, locale: DashboardLocale = "en") => render(
   <DashboardI18nProvider initialLocale={locale} storage={null}>
     <ProjectDataContext.Provider value={value as never}><NodesPage /></ProjectDataContext.Provider>
@@ -28,8 +52,45 @@ const renderPage = (value: typeof context = context, locale: DashboardLocale = "
 
 describe("NodesPage governed workspace", () => {
   const review = { flowId: "flow-1", projectId: "project-1", name: "Release automation", description: "Governed", draftRevision: 2, nodeCount: 1, edgeCount: 0, valid: true, validationIssues: [], policyFindings: [], requiredCredentials: [], requestedCapabilities: [], sideEffectDiffs: [], publishedVersion: 1 };
+  const credentialReview = (currentFlow: typeof credentialFlow, status: "bound" | "missing" | "denied" = "bound") => {
+    const credentialId = currentFlow.graph.nodes[0]?.credentialBindings.find((binding) => binding.slot === "provider")?.credentialId ?? null;
+    return {
+      ...review,
+      draftRevision: currentFlow.version,
+      requiredCredentials: [{
+        nodeId: "provider-1", slot: "provider", allowedKinds: ["provider"], requiredCapabilities: ["read"], required: true,
+        credentialId, status: credentialId ? status : "missing", backendReady: credentialId ? true : null, configured: credentialId ? true : null,
+        active: credentialId ? true : null, projectAccess: credentialId ? true : null, kindAllowed: credentialId ? true : null,
+        capabilitiesAllowed: credentialId ? true : null, missingCapabilities: credentialId ? [] : ["read"], compatibilityIssues: [],
+      }],
+    };
+  };
+  const setupCredentialFlow = (initialFlow: typeof credentialFlow = credentialFlow) => {
+    let canonical = initialFlow;
+    api.fetchNodeFlows.mockResolvedValue({ flows: [canonical] });
+    api.fetchNodeDefinition.mockResolvedValue(credentialDefinition);
+    api.fetchNodeFlow.mockImplementation(async () => canonical);
+    api.validateNodeFlowDraft.mockImplementation(async () => credentialReview(canonical));
+    credentialApi.fetchAutomationCredentials.mockResolvedValue([
+      credentialMetadata("credential-old", "Existing provider token"),
+      credentialMetadata("credential-new", "Replacement provider token"),
+    ]);
+    credentialApi.assessAutomationCredentialCompatibility.mockImplementation(async (_projectId: string, credentialId: string) => ({
+      credentialId, projectId: "project-1", compatible: true, backendReady: true, configured: true, active: true,
+      projectAccess: true, kindAllowed: true, capabilitiesAllowed: true, missingCapabilities: [], issues: [], metadata: null,
+    }));
+    return {
+      current: () => canonical,
+      updateFromPatch: (input: { graph: typeof credentialFlow.graph }) => {
+        canonical = { ...canonical, graph: input.graph, version: canonical.version + 1, updatedAt: "2026-01-01T00:01:00.000Z" };
+        return canonical;
+      },
+      replace: (next: typeof credentialFlow) => { canonical = next; },
+    };
+  };
+  beforeEach(() => { api.patchNodeFlowDraft.mockReset(); api.fetchNodeFlow.mockReset(); });
   beforeEach(() => { api.validateNodeFlowDraft.mockResolvedValue(review); });
-  beforeEach(() => { window.localStorage.clear(); api.fetchNodeFlows.mockResolvedValue({ flows: [flow] }); api.fetchNodeFlowCatalog.mockResolvedValue({ nodes: [{ type: "input", version: 1, executable: true, executionKind: "local", label: "Input", description: "Input", category: "Core", credentials: [], capabilities: [], sideEffect: "none", ports: [] }] }); api.fetchNodeFlow.mockResolvedValue(flow); api.createNodeFlowDraft.mockResolvedValue(review); api.patchNodeFlowDraft.mockResolvedValue({ draft: review }); api.runNodeFlow.mockResolvedValue({ run: { id: "run-1", flowId: "flow-1", projectId: "project-1", version: 1, publicationId: "publication-1", status: "succeeded", policy: {}, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: null, cancelRequestedAt: null, executionInvocationId: null, triggerType: "manual", triggerPayload: null, input: {}, output: { providerMessage: "PROVIDER_OUTPUT_VERBATIM" }, errorMessage: null, startedAt: null, finishedAt: null, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" }, nodeRuns: [], attempts: [] }); api.fetchNodeFlowRuns.mockResolvedValue({ runs: [] }); api.fetchNodeFlowNodeRuns.mockResolvedValue({ nodeRuns: [] }); api.fetchNodeFlowAttempts.mockResolvedValue({ attempts: [] }); api.fetchNodeFlowApprovals.mockResolvedValue({ approvals: [] }); api.fetchNodeFlowAgentSkills.mockResolvedValue([]); api.attachNodeFlowToAgent.mockResolvedValue(attachment); api.detachNodeFlowFromAgent.mockResolvedValue(undefined); agentApi.fetchAgentPresets.mockResolvedValue([agent]); api.fetchNodeDefinition.mockResolvedValue({ type: "input", version: 1, executable: true, executionKind: "local", configurationSchema: { type: "object" }, ui: { label: "Input", description: "Input", category: "Core", widgetSchema: { fields: [] } }, ports: [], credentials: [], capabilities: [], sideEffect: "none", defaultPolicy: {}, documentation: "", deprecation: { deprecated: false } }); });
+  beforeEach(() => { window.localStorage.clear(); api.fetchNodeFlows.mockResolvedValue({ flows: [flow] }); api.fetchNodeFlowCatalog.mockResolvedValue({ nodes: [{ type: "input", version: 1, executable: true, executionKind: "local", label: "Input", description: "Input", category: "Core", credentials: [], capabilities: [], sideEffect: "none", ports: [] }] }); api.fetchNodeFlowRuns.mockResolvedValue({ runs: [] }); api.fetchNodeFlowNodeRuns.mockResolvedValue({ nodeRuns: [] }); api.fetchNodeFlowAttempts.mockResolvedValue({ attempts: [] }); api.fetchNodeFlowApprovals.mockResolvedValue({ approvals: [] }); api.fetchNodeFlowAgentSkills.mockResolvedValue([]); api.attachNodeFlowToAgent.mockResolvedValue(attachment); api.detachNodeFlowFromAgent.mockResolvedValue(undefined); agentApi.fetchAgentPresets.mockResolvedValue([agent]); api.fetchNodeDefinition.mockResolvedValue({ type: "input", version: 1, executable: true, executionKind: "local", configurationSchema: { type: "object" }, ui: { label: "Input", description: "Input", category: "Core", widgetSchema: { fields: [] } }, ports: [], credentials: [], capabilities: [], sideEffect: "none", defaultPolicy: {}, documentation: "", deprecation: { deprecated: false } }); credentialApi.fetchAutomationCredentials.mockResolvedValue([]); credentialApi.fetchCredentialHealth.mockResolvedValue({ available: true, secure: true, provider: "secure", keyId: "key", keyVersion: 1 }); credentialApi.assessAutomationCredentialCompatibility.mockResolvedValue({ credentialId: "credential-1", projectId: "project-1", compatible: true, backendReady: true, configured: true, active: true, projectAccess: true, kindAllowed: true, capabilitiesAllowed: true, missingCapabilities: [], issues: [], metadata: null }); });
   afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
   it("loads a project flow library and registry-backed editor", async () => {
@@ -71,9 +132,10 @@ describe("NodesPage governed workspace", () => {
     api.attachNodeFlowToAgent.mockImplementation(async () => { isAttached = true; return attachment; });
     renderPage();
 
-    const select = await screen.findByRole("combobox", { name: "Agent preset" });
+    const select = await screen.findByRole("button", { name: "Agent preset" });
     await waitFor(() => expect(select).toBeEnabled());
-    await user.selectOptions(select, "agent-1");
+    await user.click(select);
+    await user.click(screen.getByRole("option", { name: "Release Agent" }));
     const attachButton = screen.getByRole("button", { name: "Attach node flow to agent" });
     attachButton.focus();
     await user.keyboard("{Enter}");
@@ -121,6 +183,7 @@ describe("NodesPage governed workspace", () => {
 
     expect(await screen.findByText("Quality skill")).toBeInTheDocument();
     expect(screen.queryByText("Release skill")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Agent preset" }));
     expect(screen.getByRole("option", { name: "Quality Agent" })).toBeInTheDocument();
     expect(firstAgentSignal?.aborted).toBe(true);
     expect(firstAttachmentSignal?.aborted).toBe(true);
@@ -138,6 +201,9 @@ describe("NodesPage governed workspace", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Agent service unavailable");
     await user.click(screen.getByRole("button", { name: "Retry attachments" }));
 
+    const select = await screen.findByRole("button", { name: "Agent preset" });
+    await waitFor(() => expect(select).toBeEnabled());
+    await user.click(select);
     expect(await screen.findByRole("option", { name: "Release Agent" })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("Agent service unavailable")).not.toBeInTheDocument());
   });
@@ -147,9 +213,10 @@ describe("NodesPage governed workspace", () => {
     api.attachNodeFlowToAgent.mockRejectedValueOnce(new Error("Attachment denied"));
     renderPage();
 
-    const select = await screen.findByRole("combobox", { name: "Agent preset" });
+    const select = await screen.findByRole("button", { name: "Agent preset" });
     await waitFor(() => expect(select).toBeEnabled());
-    await user.selectOptions(select, "agent-1");
+    await user.click(select);
+    await user.click(screen.getByRole("option", { name: "Release Agent" }));
     await user.click(screen.getByRole("button", { name: "Attach node flow to agent" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Attachment denied");
@@ -242,57 +309,121 @@ describe("NodesPage governed workspace", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Current revision is 3");
   });
 
-  it("supports the German edit, validate, run, debug, and schedule path without changing payload values", async () => {
+  it("binds a compatible credential immediately and refreshes the canonical review", async () => {
     const user = userEvent.setup();
-    renderPage(context, "de");
+    const state = setupCredentialFlow();
+    api.patchNodeFlowDraft.mockImplementation(async (_flowId: string, input: { graph: typeof credentialFlow.graph }) => {
+      const saved = state.updateFromPatch(input);
+      return { draft: credentialReview(saved) };
+    });
+    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
 
-    expect(await screen.findByRole("heading", { name: "Automatisierungsbereich" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Node-Katalog" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Planen" })).toHaveAttribute("href", "/scheduler");
+    await user.click(await screen.findByRole("button", { name: "Choose credential for Provider connection" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Replacement provider token/ }));
 
-    const flowName = screen.getByLabelText("Flow-Name");
-    await user.clear(flowName);
-    await user.type(flowName, "German UI, stable graph");
-    await user.click(screen.getByRole("button", { name: "Entwurf speichern" }));
-
-    expect(api.patchNodeFlowDraft).toHaveBeenCalledWith("flow-1", expect.objectContaining({
-      projectId: "project-1",
-      title: "German UI, stable graph",
-      graph: flow.graph,
-    }));
-
-    await user.click(screen.getByRole("button", { name: "Validieren" }));
-    expect(api.validateNodeFlowDraft).toHaveBeenCalledWith("project-1", "flow-1");
-
-    await user.click(screen.getByRole("button", { name: "Veröffentlichung ausführen" }));
-    expect(api.runNodeFlow).toHaveBeenCalledWith("flow-1", { projectId: "project-1", input: {} });
-    expect(await screen.findByText(/PROVIDER_OUTPUT_VERBATIM/)).toBeInTheDocument();
-    expect(screen.getByText("Erfolgreich · v1")).toBeInTheDocument();
+    await waitFor(() => expect(api.patchNodeFlowDraft).toHaveBeenCalledTimes(1));
+    const patchInput = api.patchNodeFlowDraft.mock.calls[0]?.[1];
+    expect(patchInput).toMatchObject({ projectId: "project-1", draftRevision: 2 });
+    expect(patchInput.graph.nodes[0]).toMatchObject({
+      data: { prompt: "Keep this configuration" },
+      credentialBindings: [
+        { slot: "audit", credentialId: "credential-audit" },
+        { slot: "provider", credentialId: "credential-new" },
+      ],
+    });
+    expect(await screen.findByText("Credential binding saved and draft review refreshed.")).toBeInTheDocument();
+    expect(api.fetchNodeFlow).toHaveBeenCalledWith("flow-1");
+    expect(api.validateNodeFlowDraft).toHaveBeenCalledTimes(2);
+    expect(document.body).not.toHaveTextContent("hidden-key");
   });
 
-  it("keeps stable English draft defaults when creating from the German interface", async () => {
+  it("rebinds and explicitly unbinds one slot without changing sibling bindings or node data", async () => {
     const user = userEvent.setup();
-    renderPage(context, "de");
+    const initiallyBound = {
+      ...credentialFlow,
+      graph: {
+        ...credentialFlow.graph,
+        nodes: [{
+          ...credentialFlow.graph.nodes[0]!,
+          credentialBindings: [
+            { slot: "audit", credentialId: "credential-audit" },
+            { slot: "provider", credentialId: "credential-old" },
+          ],
+        }],
+      },
+    };
+    const state = setupCredentialFlow(initiallyBound);
+    api.patchNodeFlowDraft.mockImplementation(async (_flowId: string, input: { graph: typeof credentialFlow.graph }) => {
+      const saved = state.updateFromPatch(input);
+      return { draft: credentialReview(saved) };
+    });
+    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
 
-    await user.click(await screen.findByRole("button", { name: "Neuer Entwurf" }));
+    await user.click(await screen.findByRole("button", { name: "Choose credential for Provider connection" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Replacement provider token/ }));
+    expect(await screen.findByText("Credential binding saved and draft review refreshed.")).toBeInTheDocument();
 
-    expect(api.createNodeFlowDraft).toHaveBeenCalledWith("project-1", expect.objectContaining({
-      title: "Untitled automation",
-      description: "",
-      graph: expect.objectContaining({
-        nodes: [expect.objectContaining({ id: "trigger", type: "input", title: "Run Input", data: { label: "Manual run" } })],
-      }),
-    }));
+    await user.click(screen.getByRole("button", { name: "Choose credential for Provider connection" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Remove Replacement provider token binding/ }));
+
+    expect(await screen.findByText("Credential binding removed and draft review refreshed.")).toBeInTheDocument();
+    const unbindInput = api.patchNodeFlowDraft.mock.calls[1]?.[1];
+    expect(unbindInput).toMatchObject({ draftRevision: 3 });
+    expect(unbindInput.graph.nodes[0]).toMatchObject({
+      data: { prompt: "Keep this configuration" },
+      credentialBindings: [{ slot: "audit", credentialId: "credential-audit" }],
+    });
   });
 
-  it("shows provider diagnostics verbatim beside German recovery controls", async () => {
+  it("refreshes a conflicted draft, keeps the slot picker open, and requires an explicit retry", async () => {
     const user = userEvent.setup();
-    api.runNodeFlow.mockRejectedValueOnce(new Error("PROVIDER_NETWORK_DIAGNOSTIC_503"));
-    renderPage(context, "de");
+    const state = setupCredentialFlow();
+    const latest = {
+      ...credentialFlow,
+      version: 3,
+      graph: {
+        ...credentialFlow.graph,
+        nodes: [{ ...credentialFlow.graph.nodes[0]!, data: { prompt: "Sibling edit from latest draft" } }],
+      },
+    };
+    api.patchNodeFlowDraft.mockResolvedValueOnce({
+      conflict: { code: "draft_revision_conflict", flowId: "flow-1", expectedDraftRevision: 2, actualDraftRevision: 3, message: "The draft changed after it was read; reload the summary and reapply the patch." },
+    }).mockImplementationOnce(async (_flowId: string, input: { graph: typeof credentialFlow.graph }) => {
+      const saved = state.updateFromPatch(input);
+      return { draft: credentialReview(saved) };
+    });
+    let fetchCount = 0;
+    api.fetchNodeFlow.mockImplementation(async () => {
+      fetchCount += 1;
+      if (fetchCount === 1) { state.replace(latest); return latest; }
+      return state.current();
+    });
+    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
 
-    await user.click(await screen.findByRole("button", { name: "Veröffentlichung ausführen" }));
+    await user.click(await screen.findByRole("button", { name: "Choose credential for Provider connection" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Replacement provider token/ }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("PROVIDER_NETWORK_DIAGNOSTIC_503");
-    expect(screen.getByRole("button", { name: "Erneut versuchen" })).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("choose the credential again to retry");
+    expect(api.patchNodeFlowDraft).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("menu", { name: "Credential picker for Provider connection" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("menuitem", { name: /Replacement provider token/ }));
+    expect(await screen.findByText("Credential binding saved and draft review refreshed.")).toBeInTheDocument();
+    expect(api.patchNodeFlowDraft.mock.calls[1]?.[1]).toMatchObject({ draftRevision: 3 });
+    expect(api.patchNodeFlowDraft.mock.calls[1]?.[1].graph.nodes[0].data).toEqual({ prompt: "Sibling edit from latest draft" });
+  });
+
+  it("announces policy denial without presenting the requested status as saved", async () => {
+    const user = userEvent.setup();
+    setupCredentialFlow();
+    api.patchNodeFlowDraft.mockRejectedValueOnce(new Error("Policy denied this project change"));
+    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+
+    await user.click(await screen.findByRole("button", { name: "Choose credential for Provider connection" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Replacement provider token/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("policy denied the change");
+    expect(screen.queryByText("Request binding")).not.toBeInTheDocument();
+    expect(screen.queryByText("Credential binding saved and draft review refreshed.")).not.toBeInTheDocument();
   });
 });

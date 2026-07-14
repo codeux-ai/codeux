@@ -20,6 +20,7 @@ import {
   improveSprintPrompt,
   planSprint,
   updateSprint,
+  updateSprintBranch,
   markSprintCompleted,
   markSprintQaPassed,
   cancelPlanningRequest,
@@ -81,6 +82,7 @@ export interface SprintsPageActionsDeps {
   reserveNextSprintNumber: () => number;
   releaseSprintNumberReservation: (reservedNumber: number) => void;
   setError: (error: string) => void;
+  setSuccess: (message: string) => void;
   setExportState: (state: any) => void;
   addTaskForSprint: Sprint | null;
   setAddTaskSprintTasks: (tasks: any[]) => void;
@@ -114,6 +116,7 @@ export function useSprintsPageActions({
   reserveNextSprintNumber,
   releaseSprintNumberReservation,
   setError,
+  setSuccess,
   setExportState,
   addTaskForSprint,
   setAddTaskSprintTasks,
@@ -652,6 +655,27 @@ export function useSprintsPageActions({
     [actionRunner],
   );
 
+  const handleUpdateBranch = useCallback(
+    async (sprint: Sprint) => {
+      if (!selectedProject) return;
+      let resultMessage: string | null = null;
+      await actionRunner.runAction(
+        `sprint-update-branch:${sprint.id}`,
+        sprint.id,
+        async () => {
+          const result = await updateSprintBranch(selectedProject.id, sprint.id);
+          resultMessage = result.status === "advanced"
+            ? `Updated ${result.featureBranch} to the latest ${result.defaultBranch}.`
+            : `${result.featureBranch} is already current with ${result.defaultBranch}.`;
+        },
+      );
+      if (resultMessage) {
+        setSuccess(resultMessage);
+      }
+    },
+    [actionRunner, selectedProject, setSuccess],
+  );
+
   const handleOpenExport = useCallback(
     async (sprintId: string, sprintName: string) => {
       if (!selectedProject) {
@@ -860,6 +884,7 @@ export function useSprintsPageActions({
     handleAppendTask,
     handleDeleteSprint,
     handleToggleShowcase,
+    handleUpdateBranch,
     handleBulkToggleShowcase,
     handleOpenExport,
     handleImportSprint,

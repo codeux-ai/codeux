@@ -24,11 +24,13 @@ import { applyDashboardPreRouteMiddleware } from "../../../src/server/dashboard-
 import type { DashboardDependencies, DashboardServerOptions } from "../../../src/server/dashboard-server.js";
 import { registerHeadlessOperationsRoutes } from "../../../src/server/headless-operations-routes.js";
 import { runWithMcpAgentContext } from "../../../src/server/mcp-agent-context.js";
+import { registerAutomationCredentialRoutes } from "../../../src/server/automation-credential-routes.js";
 import { registerNodeFlowRoutes } from "../../../src/server/node-flow-routes.js";
 import { AutomationAuditExportService } from "../../../src/services/automation-audit-export-service.js";
 import type { CommandResult } from "../../../src/services/cli-process-runner.js";
 import { CredentialBroker } from "../../../src/services/credentials/credential-broker.js";
 import type { KeyProvider } from "../../../src/services/credentials/key-provider.js";
+import { selectCredentialKeyProvider } from "../../../src/services/credentials/key-provider-selection.js";
 import { CustomNodeBuildService } from "../../../src/services/custom-nodes/custom-node-build-service.js";
 import { CustomNodeProjectService } from "../../../src/services/custom-nodes/custom-node-project-service.js";
 import { CustomNodeRuntimeService } from "../../../src/services/custom-nodes/custom-node-runtime-service.js";
@@ -44,6 +46,13 @@ import { OutboxService, type SideEffectProvider } from "../../../src/services/no
 import { createLogger, type Logger } from "../../../src/shared/logging/logger.js";
 
 interface JobFixture { id: string; name: string; selected: boolean }
+
+interface ComposedCredentialRuntime {
+  appDbStorage: AppDbStorage;
+  credentialBroker: CredentialBroker;
+  projectManagementRepository: ProjectManagementRepository;
+  close(): Promise<void>;
+}
 
 const EXPECTED_RECORD_COUNT = 20;
 const EXPECTED_SELECTED_MESSAGE_COUNT = 5;
@@ -94,6 +103,49 @@ function createHeadlessApp(input: {
   return app;
 }
 
+function createCredentialApp(credentialBroker: CredentialBroker): Express {
+  const app = express();
+  app.use(express.json());
+  registerAutomationCredentialRoutes(app, { credentialBroker } as DashboardDependencies);
+  return app;
+}
+
+function sqliteText(storage: AppDbStorage): string {
+  const database = storage.getDatabase();
+  const tables = database.prepare(`
+    SELECT name
+    FROM sqlite_master
+    WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+    ORDER BY name
+  `).all() as Array<{ name: string }>;
+  const textValues: unknown[] = [];
+  for (const { name } of tables) {
+    const columns = database.prepare(`PRAGMA table_info(${JSON.stringify(name)})`).all() as Array<{ name: string; type: string }>;
+    const textColumns = columns.filter((column) => /TEXT|CHAR|CLOB/i.test(column.type));
+    if (textColumns.length === 0) continue;
+    const selection = textColumns.map((column) => JSON.stringify(column.name)).join(", ");
+    textValues.push(...database.prepare(`SELECT ${selection} FROM ${JSON.stringify(name)}`).all());
+  }
+  return JSON.stringify(textValues);
+}
+
+async function readableWorkspaceText(root: string): Promise<string> {
+  const chunks: string[] = [];
+  const visit = async (directory: string): Promise<void> => {
+    for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+      const target = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await visit(target);
+        continue;
+      }
+      if (!entry.isFile() || /(?:\.db(?:-(?:wal|shm))?|\.key)$/i.test(entry.name)) continue;
+      chunks.push(await fs.readFile(target, "utf8"));
+    }
+  };
+  await visit(root);
+  return chunks.join("\n");
+}
+
 function createManagementHandler(nodeFlowService: NodeFlowService): ManagementToolHandler {
   return new ManagementToolHandler({
     projectManagementRepository: {}, sprintPreviewService: {}, executionRepository: {}, getDashboardSettings: () => ({}),
@@ -122,6 +174,269 @@ async function waitForActiveRun(repository: NodeFlowRepository, flowId: string):
 }
 
 describe("credentialed automation authoring-to-execution", () => {
+  it("persists credentials across CodeUxServer production-composition restarts", async () => {
+    vi.stubEnv("VITEST_IN_MEMORY_DB", "false");
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-composed-credential-runtime-"));
+    temporaryDirectories.push(root);
+    vi.stubEnv("HOME", root);
+    vi.stubEnv("USERPROFILE", root);
+    vi.stubEnv("CODE_UX_HOME", path.join(root, ".code-ux"));
+    vi.stubEnv("DASHBOARD_HOST", "127.0.0.1");
+    vi.stubEnv("CODE_UX_DASHBOARD_AUTH_MODE", "local");
+    vi.stubEnv("CODE_UX_REMOTE_CREDENTIAL_MANAGEMENT", "false");
+    vi.stubEnv("CODE_UX_CREDENTIAL_KEY_PROVIDER", "");
+    vi.stubEnv("CODE_UX_CREDENTIAL_KEY_FILE", "");
+    vi.resetModules();
+
+    const [{ CodeUxServer }, { loadAppConfig }, { resetRuntimeShutdownForTests }] = await Promise.all([
+      import("../../../src/server/code-ux-server.js"),
+      import("../../../src/config/app-config.js"),
+      import("../../../src/services/shutdown-state.js"),
+    ]);
+    const appConfig = loadAppConfig(["node", "index.js", "--no-mcp-https"], path.resolve(process.cwd()));
+    const databasePath = path.join(root, ".code-ux", "app.db");
+    const keyPath = path.join(root, ".code-ux", "security", "credential-root.key");
+    const canary = "COMPOSED_RUNTIME_SECRET_CANARY_39bc8d6a";
+    let firstRuntime: ComposedCredentialRuntime | null = null;
+    let restartedRuntime: ComposedCredentialRuntime | null = null;
+
+    const closeRuntime = async (runtime: ComposedCredentialRuntime): Promise<void> => {
+      await runtime.close();
+      runtime.appDbStorage.close();
+      resetRuntimeShutdownForTests();
+    };
+
+    try {
+      firstRuntime = new CodeUxServer({ projectRoot: path.resolve(process.cwd()), appConfig }) as unknown as ComposedCredentialRuntime;
+      expect(firstRuntime.appDbStorage.getPath()).toBe(databasePath);
+      const project = firstRuntime.projectManagementRepository.createProject({
+        name: "Approved local test project",
+        sourceType: "local",
+        sourceRef: path.join(root, "project"),
+      });
+      const credential = await firstRuntime.credentialBroker.create(project.id, {
+        name: "Composed runtime credential",
+        kind: "http",
+        value: canary,
+        scope: "project",
+        allowedProjectIds: [],
+        capabilities: ["read"],
+      });
+      firstRuntime.credentialBroker.bind(project.id, credential.id, {
+        bindingKey: "composed-runtime",
+        requiredCapabilities: ["read"],
+      });
+      const initialHealth = await firstRuntime.credentialBroker.health();
+      expect(initialHealth).toMatchObject({ available: true, secure: true, provider: "local-file", keyVersion: 1 });
+      expect(JSON.stringify(firstRuntime.credentialBroker.list(project.id))).not.toContain(canary);
+      expect((await fs.stat(keyPath)).mode & 0o777).toBe(0o600);
+
+      await closeRuntime(firstRuntime);
+      firstRuntime = null;
+
+      restartedRuntime = new CodeUxServer({ projectRoot: path.resolve(process.cwd()), appConfig }) as unknown as ComposedCredentialRuntime;
+      expect(restartedRuntime.appDbStorage.getPath()).toBe(databasePath);
+      const metadata = restartedRuntime.credentialBroker.list(project.id);
+      expect(metadata).toEqual([
+        expect.objectContaining({ id: credential.id, name: "Composed runtime credential", configured: true, version: 1 }),
+      ]);
+      expect(JSON.stringify(metadata)).not.toContain(canary);
+      const restartedHealth = await restartedRuntime.credentialBroker.health();
+      expect(restartedHealth).toMatchObject({
+        available: true,
+        secure: true,
+        provider: "local-file",
+        keyId: initialHealth.keyId,
+        keyVersion: initialHealth.keyVersion,
+      });
+      const resolved = await restartedRuntime.credentialBroker.resolve({
+        projectId: project.id,
+        bindingKey: "composed-runtime",
+        requiredCapabilities: ["read"],
+        allowedKinds: ["http"],
+        workspaceId: "composed-runtime-restart",
+      });
+      expect(resolved).toMatchObject({ credentialId: credential.id, value: canary, version: 1 });
+      expect(sqliteText(restartedRuntime.appDbStorage)).not.toContain(canary);
+      expect(await readableWorkspaceText(root)).not.toContain(canary);
+    } finally {
+      if (restartedRuntime) await closeRuntime(restartedRuntime);
+      if (firstRuntime) await closeRuntime(firstRuntime);
+    }
+  });
+
+  it("persists local-runtime custody and exercises the complete REST lifecycle without exposing plaintext", async () => {
+    vi.stubEnv("VITEST_IN_MEMORY_DB", "false");
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-local-credential-runtime-"));
+    temporaryDirectories.push(root);
+    const codeUxHome = path.join(root, ".code-ux");
+    const databasePath = path.join(codeUxHome, "app.db");
+    const keyPath = path.join(codeUxHome, "security", "credential-root.key");
+    const canary = "CREDENTIAL_RUNTIME_CANARY_6b5d60e9e4";
+    const rotatedCanary = `${canary}_ROTATED`;
+    const replacementCanary = `${canary}_REPLACED`;
+    const selection = {
+      appConfig: { serverMode: false, dashboardEnabled: true },
+      security: { mode: "local" as const, remoteCredentialManagement: false },
+      environment: { DASHBOARD_HOST: "127.0.0.1" },
+      processProvider: null,
+      localFilePath: keyPath,
+    };
+
+    const providers = Array.from({ length: 8 }, () => selectCredentialKeyProvider(selection));
+    const materials = await Promise.all(providers.map((provider) => provider.getActiveKey()));
+    expect(materials.every((material) => material.key.equals(materials[0]!.key))).toBe(true);
+    materials.forEach((material) => material.key.fill(0));
+
+    let storage = new AppDbStorage(databasePath);
+    let projects = new ProjectManagementRepository(storage);
+    const managingProject = projects.createProject({ name: "Approved local test project", sourceType: "local", sourceRef: root });
+    const allowedProject = projects.createProject({ name: "Secondary local test project", sourceType: "local", sourceRef: path.join(root, "allowed") });
+    let credentialRepository = new AutomationCredentialRepository(storage);
+    let localProvider = selectCredentialKeyProvider(selection);
+    let credentialBroker = new CredentialBroker(
+      credentialRepository,
+      new EncryptedSqliteSecretStore(credentialRepository, localProvider),
+      localProvider,
+      new AutomationAuditExportService(storage),
+    );
+    const initialApp = createCredentialApp(credentialBroker);
+    const publicResponses: unknown[] = [];
+    const createdResponse = await request(initialApp)
+      .post(`/api/projects/${managingProject.id}/credentials`)
+      .send({
+        name: "Runtime jobs credential",
+        kind: "http",
+        value: canary,
+        scope: "project",
+        allowedProjectIds: [],
+        capabilities: ["read", "write"],
+      })
+      .expect(201);
+    publicResponses.push(createdResponse.body);
+    const created = createdResponse.body as { id: string; version: number };
+    credentialBroker.bind(managingProject.id, created.id, { bindingKey: "runtime-jobs", requiredCapabilities: ["read"] });
+    expect(JSON.stringify(createdResponse.body)).not.toContain(canary);
+    expect((await fs.stat(keyPath)).mode & 0o777).toBe(0o600);
+    storage.close();
+
+    storage = new AppDbStorage(databasePath);
+    projects = new ProjectManagementRepository(storage);
+    expect(projects.getProject(managingProject.id)?.name).toBe("Approved local test project");
+    credentialRepository = new AutomationCredentialRepository(storage);
+    localProvider = selectCredentialKeyProvider(selection);
+    credentialBroker = new CredentialBroker(
+      credentialRepository,
+      new EncryptedSqliteSecretStore(credentialRepository, localProvider),
+      localProvider,
+      new AutomationAuditExportService(storage),
+    );
+    const restartedApp = createCredentialApp(credentialBroker);
+    const listed = await request(restartedApp).get(`/api/projects/${managingProject.id}/credentials`).expect(200);
+    publicResponses.push(listed.body);
+    expect(listed.body).toEqual([expect.objectContaining({ id: created.id, configured: true, version: 1 })]);
+    const resolved = await credentialBroker.resolve({
+      projectId: managingProject.id,
+      bindingKey: "runtime-jobs",
+      requiredCapabilities: ["read"],
+      allowedKinds: ["http"],
+      workspaceId: "restart-resolution",
+    });
+    expect(resolved).toMatchObject({ credentialId: created.id, value: canary, version: 1 });
+
+    const concurrentUpdates = await Promise.all([
+      request(restartedApp).patch(`/api/projects/${managingProject.id}/credentials/${created.id}`).send({ name: "Concurrent winner A", expectedVersion: 1 }),
+      request(restartedApp).patch(`/api/projects/${managingProject.id}/credentials/${created.id}`).send({ name: "Concurrent winner B", expectedVersion: 1 }),
+    ]);
+    expect(concurrentUpdates.map((response) => response.status).sort()).toEqual([200, 409]);
+    publicResponses.push(...concurrentUpdates.map((response) => response.body));
+    const winner = concurrentUpdates.find((response) => response.status === 200)!;
+    expect(winner.body).toMatchObject({ version: 2 });
+    expect(concurrentUpdates.find((response) => response.status === 409)?.body.error).toMatch(/refresh its metadata/i);
+
+    const tested = await request(restartedApp)
+      .post(`/api/projects/${managingProject.id}/credentials/${created.id}/test`)
+      .send({ expectedVersion: 2 })
+      .expect(200);
+    publicResponses.push(tested.body);
+    expect(tested.body).toMatchObject({ validationStatus: "valid", version: 3 });
+    const rotated = await request(restartedApp)
+      .post(`/api/projects/${managingProject.id}/credentials/${created.id}/rotate`)
+      .send({ value: rotatedCanary, expectedVersion: 3 })
+      .expect(200);
+    publicResponses.push(rotated.body);
+    expect(rotated.body).toMatchObject({ version: 4 });
+    const staleRotation = await request(restartedApp)
+      .post(`/api/projects/${managingProject.id}/credentials/${created.id}/rotate`)
+      .send({ value: `${rotatedCanary}_STALE`, expectedVersion: 3 })
+      .expect(409);
+    publicResponses.push(staleRotation.body);
+    expect(staleRotation.body.error).toMatch(/current version/i);
+    const replaced = await request(restartedApp)
+      .post(`/api/projects/${managingProject.id}/credentials/${created.id}/replace`)
+      .send({ value: replacementCanary, expectedVersion: 4 })
+      .expect(200);
+    publicResponses.push(replaced.body);
+    const restricted = await request(restartedApp)
+      .post(`/api/projects/${managingProject.id}/credentials/${created.id}/restrict`)
+      .send({ allowedProjectIds: [], capabilities: ["read"], expectedVersion: 5 })
+      .expect(200);
+    publicResponses.push(restricted.body);
+    expect(restricted.body).toMatchObject({ capabilities: ["read"], version: 6 });
+
+    const unconfirmedPromotion = await request(restartedApp)
+      .post(`/api/projects/${managingProject.id}/credentials/${created.id}/promote`)
+      .send({ allowedProjectIds: [managingProject.id, allowedProject.id], expectedVersion: 6, confirmScopeExpansion: false })
+      .expect(400);
+    publicResponses.push(unconfirmedPromotion.body);
+    expect(unconfirmedPromotion.body.error).toMatch(/must be true/i);
+    const promoted = await request(restartedApp)
+      .post(`/api/projects/${managingProject.id}/credentials/${created.id}/promote`)
+      .send({ allowedProjectIds: [managingProject.id, allowedProject.id], expectedVersion: 6, confirmScopeExpansion: true })
+      .expect(200);
+    publicResponses.push(promoted.body);
+    expect(promoted.body).toMatchObject({ scope: "global", projectId: null, version: 7 });
+    const revoked = await request(restartedApp)
+      .post(`/api/projects/${managingProject.id}/credentials/${created.id}/revoke`)
+      .send({ expectedVersion: 7 })
+      .expect(200);
+    publicResponses.push(revoked.body);
+    expect(revoked.body).toMatchObject({ status: "revoked", version: 8 });
+
+    const invalidCreate = await request(restartedApp)
+      .post(`/api/projects/${managingProject.id}/credentials`)
+      .send({ name: "Invalid", kind: "bad kind", value: canary, scope: "project", allowedProjectIds: [], capabilities: [], plaintext: canary })
+      .expect(400);
+    publicResponses.push(invalidCreate.body);
+    expect(invalidCreate.body.error).toMatch(/unsupported fields/i);
+
+    const unavailableProvider = selectCredentialKeyProvider({
+      ...selection,
+      environment: { CODE_UX_CREDENTIAL_KEY_PROVIDER: "mounted-key-file" },
+    });
+    const unavailableBroker = new CredentialBroker(
+      credentialRepository,
+      new EncryptedSqliteSecretStore(credentialRepository, unavailableProvider),
+      unavailableProvider,
+      new AutomationAuditExportService(storage),
+    );
+    const unavailableApp = createCredentialApp(unavailableBroker);
+    const unavailableHealth = await request(unavailableApp).get("/api/credentials/health").expect(200);
+    publicResponses.push(unavailableHealth.body);
+    expect(unavailableHealth.body).toMatchObject({ available: false, provider: "mounted-key-file" });
+    const unavailableCreate = await request(unavailableApp)
+      .post(`/api/projects/${managingProject.id}/credentials`)
+      .send({ name: "Unavailable", kind: "http", value: canary, scope: "project", allowedProjectIds: [], capabilities: ["read"] })
+      .expect(503);
+    publicResponses.push(unavailableCreate.body);
+
+    const publicText = JSON.stringify(publicResponses);
+    expect(publicText).not.toContain(canary);
+    expect(sqliteText(storage)).not.toContain(canary);
+    expect(await readableWorkspaceText(root)).not.toContain(canary);
+    storage.close();
+  });
+
   it("runs the authenticated governed drill through the executable runtime and durable recovery boundaries", async () => {
     vi.stubEnv("VITEST_IN_MEMORY_DB", "false");
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-credentialed-e2e-"));
@@ -130,14 +445,21 @@ describe("credentialed automation authoring-to-execution", () => {
     let storage = new AppDbStorage(databasePath);
     const projectRepository = new ProjectManagementRepository(storage);
     const project = projectRepository.createProject({ name: "Approved local test project", sourceType: "local", sourceRef: root });
+    const deniedProject = projectRepository.createProject({ name: "Denied local test project", sourceType: "local", sourceRef: path.join(root, "denied") });
     let keyAvailable = true;
     const encryptionKey = Buffer.alloc(32, 7);
     const keyProvider: KeyProvider = {
       providerName: "mock-kms",
       health: async () => ({ available: keyAvailable, secure: true, provider: "mock-kms", keyId: keyAvailable ? "fixture-key" : null,
         keyVersion: keyAvailable ? 1 : null, reason: keyAvailable ? undefined : "mock key provider unavailable" }),
-      getActiveKey: async () => ({ key: Buffer.from(encryptionKey), keyId: "fixture-key", version: 1 }),
-      getKey: async () => ({ key: Buffer.from(encryptionKey), keyId: "fixture-key", version: 1 }),
+      getActiveKey: async () => {
+        if (!keyAvailable) throw new Error("mock key provider unavailable");
+        return { key: Buffer.from(encryptionKey), keyId: "fixture-key", version: 1 };
+      },
+      getKey: async () => {
+        if (!keyAvailable) throw new Error("mock key provider unavailable");
+        return { key: Buffer.from(encryptionKey), keyId: "fixture-key", version: 1 };
+      },
     };
     const security: HeadlessSecurityConfiguration = {
       mode: "service_token", allowInsecureHttp: false, remoteCredentialManagement: true,
@@ -156,9 +478,9 @@ describe("credentialed automation authoring-to-execution", () => {
     let credentialRepository = new AutomationCredentialRepository(storage);
     let broker = new CredentialBroker(credentialRepository, new EncryptedSqliteSecretStore(credentialRepository, keyProvider), keyProvider, audit);
     const credential = await broker.create(project.id, {
-      name: "Mock jobs API", kind: "http", value: FIRST_SECRET_CANARY, capabilities: ["read"],
+      name: "Mock jobs API", kind: "http", value: FIRST_SECRET_CANARY, scope: "project", allowedProjectIds: [], capabilities: ["read"],
     });
-    broker.bind(project.id, credential.id, "jobs-api", ["read"]);
+    broker.bind(project.id, credential.id, { bindingKey: "jobs-api", requiredCapabilities: ["read"] });
 
     const fixtures = JSON.parse(await fs.readFile(path.resolve("tests/e2e/fixtures/headless-automation-records.json"), "utf8")) as JobFixture[];
     expect(fixtures).toHaveLength(EXPECTED_RECORD_COUNT);
@@ -346,11 +668,37 @@ describe("credentialed automation authoring-to-execution", () => {
     expect(latestAfterRollback.graph.nodes.some((node) => node.id === "output-v1")).toBe(true);
     expect(flowRepository.getRun(runId)).toMatchObject({ version: 2, publicationId: publicationV2.id });
 
+    const invocationsBeforeDenials = runtimeCommandRunner.mock.calls.length;
     await expect(customRuntime.execute({ projectId: project.id, nodeType: "custom.fixture-record-selector", version: 1,
       input: {}, config: {}, credentialBindings: { jobs: "missing-credential" }, workspaceId: "missing", invocationId: "missing", correlationId: "missing" }))
       .rejects.toThrow(/credential is missing/i);
-    await broker.rotate(project.id, credential.id, ROTATED_SECRET_CANARY);
-    const rotated = await broker.resolve({ projectId: project.id, bindingKey: "jobs-api", capability: "read", workspaceId: "rotation" });
+    expect(runtimeCommandRunner).toHaveBeenCalledTimes(invocationsBeforeDenials);
+    const wrongKindCredential = await broker.create(project.id, {
+      name: "Wrong kind", kind: "ssh", value: FIRST_SECRET_CANARY, scope: "project", allowedProjectIds: [], capabilities: ["read"],
+    });
+    await expect(customRuntime.execute({ projectId: project.id, nodeType: "custom.fixture-record-selector", version: 1,
+      input: {}, config: {}, credentialBindings: { jobs: wrongKindCredential.id }, workspaceId: "wrong-kind", invocationId: "wrong-kind", correlationId: "wrong-kind" }))
+      .rejects.toThrow(/kind is not approved/i);
+    expect(runtimeCommandRunner).toHaveBeenCalledTimes(invocationsBeforeDenials);
+    const insufficientCredential = await broker.create(project.id, {
+      name: "Insufficient capability", kind: "http", value: FIRST_SECRET_CANARY, scope: "project", allowedProjectIds: [], capabilities: [],
+    });
+    await expect(customRuntime.execute({ projectId: project.id, nodeType: "custom.fixture-record-selector", version: 1,
+      input: {}, config: {}, credentialBindings: { jobs: insufficientCredential.id }, workspaceId: "insufficient", invocationId: "insufficient", correlationId: "insufficient" }))
+      .rejects.toThrow(/does not approve every required capability/i);
+    expect(runtimeCommandRunner).toHaveBeenCalledTimes(invocationsBeforeDenials);
+    const deniedCredential = await broker.create(deniedProject.id, {
+      name: "Denied project credential", kind: "http", value: FIRST_SECRET_CANARY, scope: "project", allowedProjectIds: [], capabilities: ["read"],
+    });
+    await expect(customRuntime.execute({ projectId: project.id, nodeType: "custom.fixture-record-selector", version: 1,
+      input: {}, config: {}, credentialBindings: { jobs: deniedCredential.id }, workspaceId: "denied", invocationId: "denied", correlationId: "denied" }))
+      .rejects.toThrow(/outside the project scope/i);
+    expect(runtimeCommandRunner).toHaveBeenCalledTimes(invocationsBeforeDenials);
+    const backendCredential = await broker.create(project.id, {
+      name: "Backend outage credential", kind: "http", value: FIRST_SECRET_CANARY, scope: "project", allowedProjectIds: [], capabilities: ["read"],
+    });
+    await broker.rotate(project.id, credential.id, { value: ROTATED_SECRET_CANARY, expectedVersion: credential.version });
+    const rotated = await broker.resolve({ projectId: project.id, bindingKey: "jobs-api", requiredCapabilities: ["read"], allowedKinds: ["http"], workspaceId: "rotation" });
     await jobApi.authenticate(rotated.value, rotated.version);
     expect(jobApi.authenticate).toHaveBeenCalledWith(ROTATED_SECRET_CANARY, 2);
     diagnosticMode = true;
@@ -366,12 +714,18 @@ describe("credentialed automation authoring-to-execution", () => {
       publicationId: latestAfterRollback.id, runId, nodeId: "send-unavailable", logicalItem: "provider-unavailable",
       effectType: "email", payload: { to: "nobody@example.test" } });
     expect(failedDelivery).toMatchObject({ status: "failed", attemptCount: 1 });
-    broker.revoke(project.id, credential.id);
+    broker.revoke(project.id, credential.id, { expectedVersion: rotated.version });
+    const invocationsBeforeRevoked = runtimeCommandRunner.mock.calls.length;
     await expect(customRuntime.execute({ projectId: project.id, nodeType: "custom.fixture-record-selector", version: 1,
       input: {}, config: {}, credentialBindings: { jobs: credential.id }, workspaceId: "revoked", invocationId: "revoked", correlationId: "revoked" }))
       .rejects.toThrow(/not active/i);
+    expect(runtimeCommandRunner).toHaveBeenCalledTimes(invocationsBeforeRevoked);
 
     keyAvailable = false;
+    await expect(customRuntime.execute({ projectId: project.id, nodeType: "custom.fixture-record-selector", version: 1,
+      input: {}, config: {}, credentialBindings: { jobs: backendCredential.id }, workspaceId: "backend-unavailable", invocationId: "backend-unavailable", correlationId: "backend-unavailable" }))
+      .rejects.toThrow(/key custody is unavailable/i);
+    expect(runtimeCommandRunner).toHaveBeenCalledTimes(invocationsBeforeRevoked);
     await request(app).get("/health").set("Host", "localhost").expect(200, { status: "UP" });
     await request(app).get("/ready").set("Host", "localhost").expect(503, /mock key provider unavailable/i);
     await expect(readinessService.assertStartupReady()).rejects.toThrow(/key recovery is unavailable/i);
@@ -384,6 +738,9 @@ describe("credentialed automation authoring-to-execution", () => {
       graphs: [flowRepository.getFlow(draft.flowId)?.graph, latestAfterRollback.graph],
       attempts: flowRepository.listNodeAttempts(runId), invocationMessages, audit: auditResponse.text,
       logs: capturedLogs, diagnostics, runSummaries: [summary, flowRepository.getRun(runId)],
+      buildCommands: buildCommandRunner.mock.calls,
+      runtimeCommands: runtimeCommandRunner.mock.calls,
+      workspaceText: await readableWorkspaceText(root),
     });
     expect(observable).not.toContain(FIRST_SECRET_CANARY);
     expect(observable).not.toContain(ROTATED_SECRET_CANARY);

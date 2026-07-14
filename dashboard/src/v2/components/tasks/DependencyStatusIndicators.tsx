@@ -7,8 +7,16 @@ import { useOptionalDashboardI18n } from "../../i18n/context.js";
 import { taskMessages } from "../../i18n/messages/tasks.js";
 import type { DashboardTranslate } from "../../i18n/context.js";
 
+function getDependencyStatusCopy(dep: DependencyIndicator): string {
+  return getDependencyPresentation(dep.status, isDependencyKnown(dep)).stateLabel ?? "Unknown";
+}
+
+function isDependencyKnown(dep: DependencyIndicator): boolean {
+  return dep.isKnown !== false && !dep.title.startsWith("Unknown Task");
+}
+
 function getDependencyState(dep: DependencyIndicator): "unknown" | "resolved" | "qa_failed" | "in_progress" | "blocked" {
-  if (dep.isKnown === false || dep.title.startsWith("Unknown Task")) {
+  if (!isDependencyKnown(dep)) {
     return "unknown";
   }
 
@@ -31,7 +39,7 @@ function isDependencyBlocking(dep: DependencyIndicator): boolean {
 }
 
 function getDependencyToneClass(dep: DependencyIndicator): string {
-  if (dep.isKnown === false || dep.title.startsWith("Unknown Task")) {
+  if (!isDependencyKnown(dep)) {
     return "bg-slate-400/[0.08] border-slate-400/30 text-slate-600 dark:text-slate-300 border-dashed";
   }
 
@@ -103,13 +111,11 @@ export const DependencyStatusIndicators: FunctionComponent<{
     >
       <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</span>
       <div
-        role="listitem"
-        className={`flex min-h-7 max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] transition-colors motion-reduce:transition-none ${
+        className={`inline-flex min-h-6 max-w-full items-center rounded-md border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] transition-colors motion-reduce:transition-none ${
           blockerCount === 0
             ? "border-status-green/20 bg-status-green/[0.08] text-status-green"
             : "border-status-amber/25 bg-status-amber/[0.08] text-status-amber"
         }`}
-        aria-label={summary}
       >
         {summary}
       </div>

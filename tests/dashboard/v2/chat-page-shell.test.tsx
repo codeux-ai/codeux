@@ -245,7 +245,7 @@ describe("ChatPageShell", () => {
   });
 
   it("shows a clean planning label without background or provider prefixes", () => {
-    const { getByText, queryByText } = render(
+    const { getByTestId, getByText, queryByText } = render(
       <StageActivityStrip
         backgroundActivityCount={1}
         backgroundCue={{
@@ -262,6 +262,12 @@ describe("ChatPageShell", () => {
 
     expect(getByText("Planning in progress")).toBeInTheDocument();
     expect(queryByText(/Background|Codex/)).not.toBeInTheDocument();
+    expect(getByTestId("cinematic-thinking-bubble")).toHaveClass(
+      "left-1/2",
+      "-translate-x-1/2",
+      "md:-top-14",
+    );
+    expect(getByTestId("cinematic-thinking-bubble")).not.toHaveClass("md:-translate-x-[163%]");
   });
 
   it("renders create-app quickactions with accessible labels and disabled status text", () => {
@@ -351,12 +357,55 @@ describe("ChatPageShell", () => {
     expect(getByText("In progress")).toBeInTheDocument();
     expect(getByText("0 tools used")).toBeInTheDocument();
     expect(getByText("Preparing the first progress update…")).toBeInTheDocument();
-    expect(getByTestId("cinematic-exchange")).toHaveClass("top-[48%]", "bottom-32", "min-h-0");
+    expect(getByTestId("cinematic-exchange")).toHaveClass(
+      "top-[48%]",
+      "bottom-32",
+      "min-h-0",
+      "md:w-[42%]",
+      "lg:w-[40%]",
+    );
     expect(getByTestId("cinematic-exchange")).not.toHaveClass("top-full");
     const activityLabel = getByText(/Container starting/);
     expect(activityLabel).toBeInTheDocument();
     expect(activityLabel.closest('[role="status"]')).toHaveAttribute("aria-atomic", "true");
     expect(container.querySelector(".stage-thinking-dot")).toHaveClass("motion-reduce:animate-none");
+  });
+
+  it("shows a work tool while an awaited reply is active before invocation feedback exists", () => {
+    const selectedThread = {
+      id: "thread-awaiting-reply",
+      title: "Awaiting reply",
+      messageCount: 1,
+      runtimeState: null,
+    } as ChatThread;
+    const view = render(
+      <CinematicStage
+        selectedProject={mockProject as Source}
+        selectedThread={selectedThread}
+        messages={[]}
+        threadMessagesLoading={false}
+        hasAwaitedReply
+        invocations={[]}
+        sending={false}
+        error={null}
+        input=""
+        setInput={vi.fn()}
+        onSpeechTranscript={vi.fn()}
+        handleSend={vi.fn(async () => undefined)}
+        handleCreateAppQuickaction={vi.fn(async () => undefined)}
+        initialEligibilityLoaded
+        canCreateInitialAppQuickactions={false}
+        navigateHistory={vi.fn(() => false)}
+        composerRef={{ current: null }}
+        activeConnection={null}
+        agentPreset={projectManagerPreset}
+        onOpenThreads={vi.fn()}
+      />,
+    );
+
+    expect(view.getByTestId("agent-avatar-scene")).toHaveAttribute("data-expression", "thinking");
+    expect(view.getByTestId("agent-avatar-scene").getAttribute("data-tool")).not.toBe("");
+    expect(view.queryByTestId("cinematic-invocation-progress")).not.toBeInTheDocument();
   });
 
   it("projects changing interim assistant markdown and a deduplicated tool count", async () => {
@@ -469,7 +518,7 @@ describe("ChatPageShell", () => {
       messageCount: 0,
     } as ChatThread));
     expect(view.queryByTestId("cinematic-invocation-progress")).not.toBeInTheDocument();
-    expect(view.getByTestId("agent-avatar-scene")).toHaveAttribute("data-tool", "");
+    expect(view.getByTestId("agent-avatar-scene").getAttribute("data-tool")).not.toBe("");
 
     view.rerender(stage(invocationRecord({ status: "completed" }), [finalMessage]));
 
@@ -477,6 +526,21 @@ describe("ChatPageShell", () => {
     expect(view.getByTestId("agent-avatar-scene")).toHaveAttribute("data-tool", "");
     expect(view.getAllByText("Final reply text.")).toHaveLength(1);
     expect(view.getByTestId("cinematic-exchange")).toContainElement(view.getByText("Final reply text."));
+    expect(view.getByTestId("cinematic-agent-reply")).toHaveClass(
+      "max-w-[620px]",
+      "lg:max-w-[560px]",
+      "2xl:max-w-[680px]",
+    );
+    expect(view.getByTestId("cinematic-agent-reply").parentElement).toHaveClass(
+      "ml-auto",
+      "justify-end",
+      "lg:max-w-[560px]",
+    );
+    expect(view.getByTestId("cinematic-agent-reply").querySelector(".prose")).toHaveClass(
+      "prose-sm",
+      "text-[12px]",
+      "leading-5",
+    );
   });
 
   it("keeps reduced-motion progress semantic, static, and safely rendered", () => {

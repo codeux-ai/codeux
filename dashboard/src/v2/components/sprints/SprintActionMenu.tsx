@@ -11,6 +11,7 @@ import {
   Pencil,
   Play,
   RotateCcw,
+  RefreshCw,
   Sparkles,
   Square,
   XCircle,
@@ -28,6 +29,7 @@ export interface SprintActionMenuProps {
   markCompletedDisabled?: boolean;
   markQaPassedDisabled?: boolean;
   deleteBusy?: boolean;
+  updateBranchBusy?: boolean;
   // Run controls (rendered only when the matching handler is provided)
   isRunning?: boolean;
   isPaused?: boolean;
@@ -41,6 +43,7 @@ export interface SprintActionMenuProps {
   onExport?: () => void;
   onToggleShowcase?: () => void;
   onOverrides?: () => void;
+  onUpdateBranch?: () => void;
   onMarkCompleted?: () => void;
   onMarkQaPassed?: () => void;
   onRollback?: () => void;
@@ -62,6 +65,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
   markCompletedDisabled = false,
   markQaPassedDisabled = false,
   deleteBusy = false,
+  updateBranchBusy = false,
   isRunning = false,
   isPaused = false,
   primaryBusy = false,
@@ -74,6 +78,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
   onExport,
   onToggleShowcase,
   onOverrides,
+  onUpdateBranch,
   onMarkCompleted,
   onMarkQaPassed,
   onRollback,
@@ -269,6 +274,29 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
         <Sparkles className="h-3.5 w-3.5" strokeWidth={2.1} />
         {translate(sprintsMessages, "overrides")}
       </button>
+      {onUpdateBranch && (
+        <button
+          type="button"
+          role={role}
+          onClick={() => {
+            onClose?.();
+            onUpdateBranch();
+          }}
+          disabled={updateBranchBusy}
+          title={updateBranchBusy ? "Sprint branch update in progress" : "Fast-forward this draft from the latest default branch"}
+          aria-busy={updateBranchBusy}
+          aria-disabled={updateBranchBusy}
+          aria-label={`Update branch for sprint ${sprint.name}`}
+          className={disabledClassName}
+        >
+          {updateBranchBusy ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" strokeWidth={2.1} />
+          ) : (
+            <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.1} />
+          )}
+          {updateBranchBusy ? "Updating Branch" : "Update Branch"}
+        </button>
+      )}
       <button
         type="button"
         role={role}

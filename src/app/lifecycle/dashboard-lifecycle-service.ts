@@ -54,6 +54,7 @@ import type { AgentBaseUpdateService } from "../../services/agent-base-update-se
 import type { ExecutionInvocationControlService } from "../../services/execution-invocation-control-service.js";
 import type { ChatThreadRuntimeService } from "../../services/chat-thread-runtime-service.js";
 import type { ChatProviderOutboundService } from "../../services/chat-provider-outbound-service.js";
+import type { ChatProviderSessionRuntimeService } from "../../services/chat-provider-session-runtime-service.js";
 import type { QuicksprintService } from "../../services/quicksprint-service.js";
 import type { ProjectSetupService } from "../../services/project-setup-service.js";
 import type { SchedulerService } from "../../services/scheduler-service.js";
@@ -75,6 +76,7 @@ import type { EmbeddingService } from "../../services/embedding-service.js";
 import type { MemoryRepository } from "../../repositories/memory-repository.js";
 import type { CustomDashboardRepository } from "../../repositories/custom-dashboard-repository.js";
 import type { CustomDashboardValidationService } from "../../services/custom-dashboard-validation-service.js";
+import type { CustomDashboardCredentialBindingService } from "../../services/custom-dashboard-credential-binding-service.js";
 import type { SkillService } from "../../services/skill-service.js";
 import type { GuardrailService } from "../../services/guardrail-service.js";
 import type { ProjectSettings } from "../../contracts/settings-scope-types.js";
@@ -92,7 +94,10 @@ import {
   getOnboardingRuntimeReadiness,
   invalidateOnboardingRuntimeReadinessCache,
 } from "../../services/onboarding-readiness-service.js";
-import type { SprintImportedTaskInput } from "../../contracts/project-management-types.js";
+import type {
+  SprintBranchUpdateResult,
+  SprintImportedTaskInput,
+} from "../../contracts/project-management-types.js";
 import { SprintManualActionService } from "../../services/sprint-manual-action-service.js";
 import type { McpConnectionInfo } from "../../contracts/mcp-connection-types.js";
 import type {
@@ -103,6 +108,9 @@ import type {
 } from "../../services/local-mcp-cli-config-service.js";
 import type { ProjectInitializationStateService } from "../../services/project-initialization-state-service.js";
 import type { CredentialBroker } from "../../services/credentials/credential-broker.js";
+import type { ChatProviderSecretService } from "../../services/chat-provider-secret-service.js";
+import type { ChatProviderVerificationService } from "../../services/chat-provider-verification-service.js";
+import type { ChatConnectorRegistry } from "../../domain/chat-connectors/registry.js";
 
 const updateCheckerService = new UpdateCheckerService();
 
@@ -118,9 +126,12 @@ export interface BootDashboardDeps {
   projectInitializationStateService: ProjectInitializationStateService;
   projectRuntimeRepository: ProjectRuntimeRepository;
   executionRepository: ExecutionRepository;
-  getDashboardNotifications?: () => ReturnType<ExecutionRepository["getDashboardNotifications"]>;
+  getDashboardNotifications?: (limit?: number) => ReturnType<ExecutionRepository["getDashboardNotifications"]>;
   connectionChatRepository: ConnectionChatRepository;
   chatProviderRepository: ChatProviderRepository;
+  chatProviderSecretService?: ChatProviderSecretService;
+  chatProviderVerificationService?: ChatProviderVerificationService;
+  chatConnectorRegistry?: ChatConnectorRegistry;
   projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   projectAttentionRepository: ProjectAttentionRepository;
@@ -146,6 +157,7 @@ export interface BootDashboardDeps {
   speechSynthesisService: SpeechSynthesisService;
   speechModelManager: SpeechModelManager;
   chatProviderOutboundService?: ChatProviderOutboundService;
+  chatProviderSessionRuntimeService?: ChatProviderSessionRuntimeService;
   nodeFlowService?: NodeFlowService;
   credentialBroker: CredentialBroker;
   headlessAuthService: HeadlessAuthService;
@@ -153,6 +165,7 @@ export interface BootDashboardDeps {
   headlessReadinessService: HeadlessOperationalReadinessService;
   automationSloService: AutomationSloService;
   customDashboardRepository?: CustomDashboardRepository;
+  customDashboardCredentialBindingService?: CustomDashboardCredentialBindingService;
   customDashboardValidationService?: CustomDashboardValidationService;
   skillService: SkillService;
   dashboardRealtimeService: DashboardRealtimeService;
@@ -197,6 +210,7 @@ export interface BootDashboardDeps {
     selectedPort?: string | number | null;
   }) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>;
   listFileBrowserSessions: (projectId: string) => Promise<FileBrowserSession[]>;
+  updateSprintBranch: (projectId: string, sprintId: string) => Promise<SprintBranchUpdateResult>;
   startFileBrowserSession: (projectId: string, sprintId: string) => Promise<FileBrowserSession>;
   rebuildFileBrowserSession: (sessionId: string) => Promise<FileBrowserSession>;
   stopFileBrowserSession: (sessionId: string) => Promise<FileBrowserSession>;
@@ -474,7 +488,21 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     deps.logger.warn(`Embedding model auto-restore failed: ${error}`);
   });
   deps.schedulerService?.start();
-  deps.chatProviderOutboundService?.start();
+  void Promise.resolve(deps.chatProviderIngressService?.start()).catch((error) => {
+    deps.logger.warn("Chat provider ingress recovery failed without blocking dashboard startup", {
+      providerErrorCode: error instanceof Error ? error.name : "ingress_recovery_error",
+    });
+  });
+  void Promise.resolve(deps.chatProviderSessionRuntimeService?.start()).catch((error) => {
+    deps.logger.warn("Chat provider session recovery failed without blocking dashboard startup", {
+      providerErrorCode: error instanceof Error ? error.name : "session_recovery_error",
+    });
+  });
+  void Promise.resolve(deps.chatProviderOutboundService?.start()).catch((error) => {
+    deps.logger.warn("Chat provider outbound recovery failed without blocking dashboard startup", {
+      providerErrorCode: error instanceof Error ? error.name : "outbound_recovery_error",
+    });
+  });
 
   const instructionFileService = new InstructionFileService({
     projectManagementRepository: deps.projectManagementRepository,
@@ -510,6 +538,10 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     knowledgeService: deps.knowledgeService,
     agentPresetRepository: deps.agentPresetRepository,
     chatProviderRepository: deps.chatProviderRepository,
+    chatProviderSecretService: deps.chatProviderSecretService,
+    chatProviderVerificationService: deps.chatProviderVerificationService,
+    chatProviderOutboundService: deps.chatProviderOutboundService,
+    chatConnectorRegistry: deps.chatConnectorRegistry,
     chatProviderIngressService: deps.chatProviderIngressService,
     speechTranscriptionService: deps.speechTranscriptionService,
     speechSynthesisService: deps.speechSynthesisService,
@@ -521,6 +553,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     headlessReadinessService: deps.headlessReadinessService,
     automationSloService: deps.automationSloService,
     customDashboardRepository: deps.customDashboardRepository,
+    customDashboardCredentialBindingService: deps.customDashboardCredentialBindingService,
     customDashboardValidationService: deps.customDashboardValidationService,
     skillService: deps.skillService,
     projectManagementRepository: deps.projectManagementRepository,
@@ -551,7 +584,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     },
     getOverviewTelemetrySnapshot: cache.getOverviewTelemetrySnapshot,
     getDashboardNotifications: deps.getDashboardNotifications
-      ?? (() => deps.executionRepository.getDashboardNotifications()),
+      ?? ((limit) => deps.executionRepository.getDashboardNotifications({ limit })),
     // `/api/projects/:id/execution` is the public REST snapshot and includes
     // recent events/invocations; realtime execution pushes stay feed-less above.
     getProjectExecutionSnapshot: cache.getProjectExecutionSnapshot,
@@ -737,6 +770,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     getSprint: (sprintId) => deps.projectManagementRepository.getSprint(sprintId),
     createSprint: (projectId, input) => deps.projectManagementRepository.createSprint(projectId, input),
     updateSprint: (sprintId, input) => deps.projectManagementRepository.updateSprint(sprintId, input),
+    updateSprintBranch: (projectId, sprintId) => deps.updateSprintBranch(projectId, sprintId),
     markSprintCompleted: (sprintId) => sprintManualActionService.markCompleted(sprintId),
     markSprintQaPassed: (sprintId) => sprintManualActionService.markQaPassed(sprintId),
     deleteSprint: (sprintId) => deps.projectManagementRepository.deleteSprint(sprintId),
@@ -745,6 +779,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     importSprintFromMarkdown: (projectId, input) => deps.sprintMarkdownService.importSprint(projectId, input),
     exportSprintToMarkdown: (projectId, sprintId) => deps.sprintMarkdownService.exportSprint(projectId, sprintId),
     listTasks: (projectId, sprintId) => deps.projectManagementRepository.listTasks(projectId, sprintId),
+    listTaskOverviews: (projectId) => deps.projectManagementRepository.listTaskOverviews(projectId),
     getTask: (taskId) => deps.projectManagementRepository.getTask(taskId),
     createTask: (projectId, input) => deps.projectManagementRepository.createTask(projectId, input),
     createImportedTasks: (projectId, sprintId, inputs) => {
@@ -944,7 +979,9 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
   return {
     ...handle,
     close: async () => {
-      deps.chatProviderOutboundService?.stop();
+      await deps.chatProviderIngressService?.stop();
+      await deps.chatProviderOutboundService?.stop();
+      await deps.chatProviderSessionRuntimeService?.stop();
       await handle.close?.();
     },
   };

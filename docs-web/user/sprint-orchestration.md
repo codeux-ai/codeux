@@ -12,7 +12,7 @@ A sprint can be acted on in three modes:
 | --- | --- | --- |
 | **plan** | Generate or regenerate subtasks via the planning agent | Writes subtask markdown files; creates DB rows |
 | **status** | Render the current state | None (refreshes dashboard snapshot only) |
-| **orchestrate** | Execute — start tasks, gate merges, advance dependencies | Many: provider calls, Git pushes, PRs, merges |
+| **orchestrate** | Execute — automatically plan when needed, then start tasks, gate merges, and advance dependencies | Many: provider calls, Git pushes, PRs, merges |
 
 The MCP API exposes all three under the `sprints` and `tasks` management domains. The dashboard buttons map 1:1.
 
@@ -20,8 +20,8 @@ The MCP API exposes all three under the `sprints` and `tasks` management domains
 
 A single orchestration *cycle* runs the following pipeline (each step is independently toggleable in `sprintLoopSteps`):
 
-1. **branchPreflight** — Ensure the feature branch exists; create it from default branch if not.
-2. **planningPreflight** — Validate the subtask graph: detect cycles, ensure required fields, sanity-check dependencies.
+1. **branchPreflight** — Ensure the feature branch exists; create it from the default branch if needed. Before the first task starts, safely fast-forward an unchanged feature branch to the latest default commit. Once task execution has begun, or when the feature branch has commits not present on default, preserve it without merging, rebasing, resetting, or rewriting history.
+2. **planningPreflight** — If the sprint has no tasks, Start launches planning automatically after branch refresh and continues orchestration after the tasks are saved. Repeated starts reuse the in-progress planning request. Status checks remain read-only and report that planning is required.
 3. **loadSubtasks** — Read subtask markdown files and reconcile with DB state.
 4. **sessionSync** — Synchronize the latest state of every active provider invocation (hosted and CLI providers).
 5. **statusDerivation** — Apply state rules to derive each subtask's effective status (`PENDING`, `RUNNING`, `CODING_COMPLETED`, `COMPLETED`, etc.).
@@ -30,6 +30,10 @@ A single orchestration *cycle* runs the following pipeline (each step is indepen
 8. **statusTable** — Render the cycle report.
 
 Each step is independently catchable; a failure in one step does not crash the cycle. Errors are logged and surface as attention items.
+
+For an idle sprint, **Update Branch** in its Sprints action menu runs the same true fast-forward on demand. The action refuses to run after task work has started or when the feature branch has diverged, so manual refresh cannot overwrite sprint work.
+
+This ordering also applies to scheduled follow-up sprints. A follow-up draft anchored after another sprint remains unplanned while its source is running. Once the source completes, the scheduler submits the draft through the normal Start path, so branch refresh and planning both happen against the completed source sprint's latest default-branch state before task execution begins.
 
 ## The watch loop
 
@@ -100,13 +104,15 @@ Per-provider concurrency is controlled by `provider.maxConcurrentTasks`:
 | Provider | Default cap |
 | --- | --- |
 | Hosted Provider | `15` |
-| Gemini | `0` (unlimited) |
-| Codex | `0` (unlimited) |
-| Claude Code | `0` (unlimited) |
-| Qwen Code | `0` (unlimited) |
-| OpenCode | `0` (unlimited) |
+| Gemini | `0` (adaptive) |
+| Codex | `0` (adaptive) |
+| Claude Code | `0` (adaptive) |
+| Qwen Code | `0` (adaptive) |
+| OpenCode | `0` (adaptive) |
 
-`0` means no cap. Set explicit caps when running on shared infrastructure to avoid resource contention.
+For local providers, `0` derives a safe ceiling from CPU and memory and pauses background expansion
+under pressure. Positive values remain hard ceilings. The hosted provider does not consume local
+Docker capacity.
 
 For CLI/Docker providers, Code UX counts both running provider invocations and running task runs when enforcing provider capacity. A task run can reserve orchestration capacity before its provider invocation row starts, so this prevents wide DAGs from creating hidden running backlogs while provider calls appear idle.
 
@@ -114,9 +120,13 @@ Docker-backed task workspaces prepare independently. Code UX locks only the work
 
 On restart, interrupted local CLI task runs may be cancelled and redispatched, but their workspace volumes are preserved. If the coding provider had already finished, the resumed run continues with Git finalization from that workspace instead of invoking the coding agent again. Session sync treats finished local CLI task runs as terminal even if a stale cached session snapshot still reports the old session as running.
 
+With restart invocation policy `continue`, the same continuity applies to QA reviewers, CI-fix workers, and merge-conflict workers. Each resumed invocation keeps its logical session and preserved workspace, and continues the provider-native conversation when supported. Code UX releases repair attention left claimed by the stopped virtual worker and returns it to the queue without consuming another repair attempt.
+
+QA fix handoffs are durable as well. Code UX records a requested-fix handoff before invoking the task's coding session. If restart occurs in that gap, the watch loop resumes the pending handoff; if the coding follow-up finished before its final QA update was written, the loop recognizes that execution and proceeds to verification instead of repeating the fix or leaving the task at `QA_PENDING`.
+
 When a worker resolves a merge conflict, Code UX clears the task's stale `MERGE_CONFLICT` marker while keeping the task unmerged. The next protocol cycle retries the normal merge path instead of reopening the same attention item. That clear history is separate from merge-required suppression: suppression applies only after Git confirms the source branch has no commits ahead of the target feature branch. If the branch still has merge work, the task remains merge-required. Task-level human conflict handoffs are dismissed automatically once the task marker is cleared, while main-merge and unrelated manual handoffs remain visible.
 
-CLI tasks that complete with a worker branch but no PR use a branch-only merge path in both LOCAL and REMOTE git modes; REMOTE mode then pushes the sprint feature branch. If the task snapshot lost the worker branch, Code UX recovers it from the completed task run before checking merge readiness. For CLI-backed runs, branch-only classification and protocol merge-required attention wait for the git-finalize event (`cli_git_pushed` or `cli_git_no_changes`) so provider/session completion cannot race ahead of branch materialization. Task QA reviews run from an isolated snapshot of that selected branch in both Docker and host execution, so a visible default-branch checkout cannot create a false missing-file rejection. That merge runs in a temporary worktree through the containerized Git helper so the visible checkout and `.code-ux/` runtime files do not interfere with task settlement. When several clean LOCAL worker branches are ready in one cycle, they share that worktree while each successful merge is committed and published to the feature branch independently. Code UX normalizes temporary worktree gitdir metadata after creation so later helper-container Git calls resolve the same repository. Once the task is settled as merged, stale task-run worker branch evidence is suppressed from live status so old branches do not keep re-entering merge scans.
+CLI tasks that complete with a worker branch but no PR use a branch-only merge path in both LOCAL and REMOTE git modes; REMOTE mode then pushes the sprint feature branch. If the task snapshot lost the worker branch, Code UX recovers it from the completed task run before checking merge readiness. For CLI-backed runs, branch-only classification and protocol merge-required attention wait for the git-finalize event (`cli_git_pushed` or `cli_git_no_changes`) so provider/session completion cannot race ahead of branch materialization. Task QA reviews run from an isolated snapshot of that selected branch in both Docker and host execution, so a visible default-branch checkout cannot create a false missing-file rejection. That merge runs in a temporary worktree through the containerized Git helper so the visible checkout and `.code-ux/` runtime files do not interfere with task settlement. When several clean LOCAL worker branches are ready in one cycle, they share that worktree while each successful merge is committed and published to the feature branch independently. Feature-branch publication is atomic: if a task merge overlaps a CI-fix patch, the writer that loses the ref race rebuilds on the new tip and retries, so neither result is discarded and provider work remains parallel. Code UX normalizes temporary worktree gitdir metadata after creation so later helper-container Git calls resolve the same repository. Once the task is settled as merged, stale task-run worker branch evidence is suppressed from live status so old branches do not keep re-entering merge scans.
 
 Sprint-completion QA stays fail-closed. If its provider terminates without a verdict, Code UX retries on the next watch cycle even when the sprint has not changed. Earlier review cycles may create separate tracked tasks for distinct blockers, but the final configured cycle is verification-only and cannot create another automatic batch. At the sprint-QA cap, any non-passing result raises one sprint-scoped human handoff with the attempt count and latest review summary or provider error, even when completed follow-up work changed the task snapshot. The sprint remains active while waiting for that handoff, so resolving it resets only sprint-completion QA and permits one fresh review cycle without manually resuming the sprint. Keeping task-completion QA enabled reduces task-local defects being deferred to this integrated review.
 

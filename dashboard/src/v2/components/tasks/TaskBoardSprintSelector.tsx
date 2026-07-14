@@ -6,10 +6,7 @@ import type { Sprint } from "../../types.js";
 import { formatSprintDisplay } from "../../lib/format-sprint.js";
 import { buildTaskBoardSprintScopeState } from "../../lib/tasks/task-board-view-model.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
-import { clampSprintCompletion } from "../../lib/sprint-progress-display.js";
-import { useOptionalDashboardI18n } from "../../i18n/context.js";
-import { taskMessages } from "../../i18n/messages/tasks.js";
-import { formatTaskSprintDateRange } from "../../lib/tasks/task-presentation.js";
+import { clampSprintCompletion, formatSprintCompletion } from "../../lib/sprint-progress-display.js";
 
 export interface TaskBoardSprintSelectorProps {
   sprints: Sprint[];
@@ -32,26 +29,24 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
   const triggerRef = useRef<HTMLButtonElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const interactionTokens = useInteractionTokens();
-  const { locale, translate, translatePlural, formatNumber } = useOptionalDashboardI18n();
   const listboxId = "tasks-sprint-selector-listbox";
   const statusId = "tasks-sprint-selector-status";
   const selected = selectedId ? sprints.find((sprint: Sprint) => sprint.id === selectedId) : null;
   const selectedLabel = selected ? formatSprintDisplay(selected, sprintKeyPrefix) : null;
   const selectedAnnouncement = selectedLabel
-    ? translate(taskMessages, "selectedScopeSprint", { scope: selectedLabel })
-    : translate(taskMessages, "selectedScopeAll");
+    ? `Selected sprint scope changed to ${selectedLabel}.`
+    : "Selected sprint scope changed to All Sprints.";
   const scopeState = buildTaskBoardSprintScopeState({
     sprints,
     selectedSprintId: selectedId,
     selectedSprintLabel: selectedLabel,
     loading,
-    locale,
   });
   const options = useMemo(() => [
     {
       id: null as string | null,
-      label: translate(taskMessages, "allSprints"),
-      description: translate(taskMessages, "projectWideTaskScope"),
+      label: "All Sprints",
+      description: "Project-wide task scope",
       sprint: null as Sprint | null,
       completion: 0,
     },
@@ -60,16 +55,12 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
       return {
         id: sprint.id,
         label: formatSprintDisplay(sprint, sprintKeyPrefix),
-        description: translate(taskMessages, "sprintOptionDescription", {
-          date: formatTaskSprintDateRange(sprint.startDate, sprint.endDate, locale),
-          tasks: translatePlural(taskMessages, "taskCount", sprint.tasksCount, { count: formatNumber(sprint.tasksCount) }),
-          percent: formatNumber(completion),
-        }),
+        description: `${sprint.date}, ${sprint.tasksCount} ${sprint.tasksCount === 1 ? "task" : "tasks"}, ${formatSprintCompletion(completion)} complete`,
         sprint,
         completion,
       };
     }),
-  ], [formatNumber, locale, sprints, sprintKeyPrefix, translate, translatePlural]);
+  ], [sprints, sprintKeyPrefix]);
 
   const selectedIndex = Math.max(0, options.findIndex((option) => option.id === selectedId));
 
@@ -180,7 +171,7 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
 
   return (
     <div
-      className="relative"
+      className="relative w-full min-w-0"
       ref={rootRef}
       style={{
         "--task-sprint-control-duration": interactionTokens.controlFeedback.duration,
@@ -198,7 +189,7 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
       data-motion-list-reorder="listReorder"
     >
       <div id={statusId} className="sr-only" aria-live="polite" aria-atomic="true">
-        {open ? translate(taskMessages, "scopeListOpen", { description: scopeState.description }) : `${selectedAnnouncement} ${scopeState.description}`}
+        {open ? `Sprint scope list open. ${scopeState.description}` : `${selectedAnnouncement} ${scopeState.description}`}
       </div>
       <button
         ref={triggerRef}
@@ -208,7 +199,7 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
         aria-controls={listboxId}
         aria-describedby={statusId}
         aria-busy={loading}
-        aria-label={translate(taskMessages, "taskSprintScopeValue", { scope: scopeState.label })}
+        aria-label={`Task sprint scope: ${scopeState.label}`}
         onClick={() => {
           if (open) {
             closeListbox(false);
@@ -218,11 +209,11 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
         }}
         onKeyDown={(event) => handleTriggerKeyDown(event as KeyboardEvent)}
         style={{ transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }}
-        className={`group flex items-center gap-3 px-5 py-3 rounded-2xl border transition-all min-w-0 max-w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
+        className={`group flex min-h-[44px] w-full min-w-0 max-w-full items-center gap-3 rounded-xl border px-4 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white motion-reduce:transition-none dark:focus-visible:ring-offset-void-900 ${
           selected
             ? "bg-ember-500/[0.06] dark:bg-ember-500/[0.08] border-ember-500/20 dark:border-ember-500/25 shadow-[0_0_20px_rgba(255,184,0,0.06)]"
             : "bg-black/[0.03] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06]"
-        } hover:border-ember-500/40 dark:hover:border-ember-500/40`}
+        } hover:border-signal-500/35 dark:hover:border-signal-500/35`}
       >
         <Target className={`w-4 h-4 shrink-0 ${selected || open ? "text-ember-500" : "text-slate-400"} transition-colors`} strokeWidth={2} />
         <span className={`text-sm font-bold tracking-tight truncate min-w-0 ${selected ? "text-ember-600 dark:text-ember-400" : "text-slate-600 dark:text-slate-400"}`}>
@@ -235,20 +226,20 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
               ? "border-ember-500/25 bg-ember-500/[0.08] text-ember-600 dark:text-ember-400"
               : "border-black/[0.06] bg-black/[0.03] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03]"
         }`}>
-          {translate(taskMessages, scopeState.isLoading ? "loading" : scopeState.isScoped ? "selected" : scopeState.isEmpty ? "empty" : "all")}
+          {scopeState.isLoading ? "Loading" : scopeState.isScoped ? "Selected" : scopeState.isEmpty ? "Empty" : "All"}
         </span>
-        <ChevronDown className={`w-4 h-4 shrink-0 text-slate-400 transition-transform duration-300 ${open ? "rotate-180" : ""}`} strokeWidth={2} />
+        <ChevronDown className={`ml-auto h-4 w-4 shrink-0 text-slate-400 transition-transform motion-reduce:transition-none ${open ? "rotate-180 motion-reduce:rotate-0" : ""}`} strokeWidth={2} />
       </button>
 
       {open && (
         <div
           id={listboxId}
           role="listbox"
-          aria-label={translate(taskMessages, "taskSprintScope")}
+          aria-label="Task sprint scope"
           aria-activedescendant={`tasks-sprint-option-${activeIndex}`}
           aria-busy={loading}
           style={{ transitionDuration: interactionTokens.listReveal.duration, transitionTimingFunction: interactionTokens.listReveal.ease }}
-          className="absolute left-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] z-50 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden flex flex-col max-h-[60vh] motion-reduce:transition-none"
+          className="absolute left-0 top-full z-50 mt-2 flex max-h-96 w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-black/[0.06] bg-white/95 shadow-[0_20px_40px_rgba(0,0,0,0.12)] backdrop-blur-2xl motion-reduce:transition-none dark:border-white/[0.08] dark:bg-void-800/95 dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] sm:min-w-80"
           data-motion-contract="listReveal"
         >
           <button
@@ -261,16 +252,16 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
             onClick={() => selectOption(null)}
             onKeyDown={(event) => handleOptionKeyDown(event as KeyboardEvent, 0, null)}
             style={{ transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }}
-            className={`w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 ${
+            className={`flex min-h-[44px] w-full min-w-0 items-center gap-3 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 motion-reduce:transition-none ${
               !selectedId ? "bg-signal-500/[0.06] dark:bg-signal-500/[0.08]" : "hover:bg-black/[0.03] dark:hover:bg-white/[0.03]"
             }`}
           >
             <ListChecks className="w-4 h-4 text-signal-500" strokeWidth={2} />
             <div className="flex-1 min-w-0">
-              <span className="text-sm font-bold text-slate-800 dark:text-white">{translate(taskMessages, "allSprints")}</span>
-              <span className="block truncate text-[9px] font-mono uppercase tracking-[0.1em] text-slate-400">{translate(taskMessages, "projectWideScope")}</span>
+              <span className="text-sm font-bold text-slate-800 dark:text-white">All Sprints</span>
+              <span className="block truncate text-[9px] font-mono uppercase tracking-[0.1em] text-slate-400">Project-wide scope</span>
             </div>
-            {!selectedId && <span className="rounded-full bg-signal-500/[0.1] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-signal-600 dark:text-signal-400">{translate(taskMessages, "selected")}</span>}
+            {!selectedId && <span className="rounded-full bg-signal-500/[0.1] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-signal-600 dark:text-signal-400">Selected</span>}
           </button>
 
           <div className="h-px bg-black/[0.04] dark:bg-white/[0.04] shrink-0" />
@@ -282,12 +273,12 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
           >
             {loading && (
               <div role="status" className="px-5 py-3 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400">
-                {translate(taskMessages, "loadingSprintScopes")}
+                Loading sprint scopes
               </div>
             )}
             {!loading && sprints.length === 0 && (
               <div role="status" className="px-5 py-3 text-xs font-medium text-slate-500 dark:text-slate-400">
-                {translate(taskMessages, "noSprintScopes")}
+                No sprints available. All Sprints remains selected until a sprint is created.
               </div>
             )}
             {sprints.map((sprint, sprintIndex) => {
@@ -305,7 +296,7 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
                   onClick={() => selectOption(sprint.id)}
                   onKeyDown={(event) => handleOptionKeyDown(event as KeyboardEvent, index, sprint.id)}
                   style={{ transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }}
-                  className={`w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/40 ${
+                  className={`flex min-h-[44px] w-full min-w-0 items-center gap-3 overflow-hidden px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 motion-reduce:transition-none ${
                     isActive ? "bg-ember-500/[0.06] dark:bg-ember-500/[0.08]" : "hover:bg-black/[0.03] dark:hover:bg-white/[0.03]"
                   }`}
                 >
@@ -326,15 +317,15 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
                       {formatSprintDisplay(sprint, sprintKeyPrefix)}
                     </span>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[9px] font-mono text-slate-400 uppercase tracking-[0.1em] truncate min-w-0">{formatTaskSprintDateRange(sprint.startDate, sprint.endDate, locale)}</span>
+                      <span className="text-[9px] font-mono text-slate-400 uppercase tracking-[0.1em] truncate min-w-0">{sprint.date}</span>
                       <span className="sr-only">{options[index].description}</span>
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-0.5 shrink-0 pl-2">
-                    {isActive && <span className="rounded-full bg-ember-500/[0.1] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-ember-600 dark:text-ember-400">{translate(taskMessages, "selected")}</span>}
-                    <span className="text-[10px] font-mono font-bold text-slate-500">{formatNumber(sprint.tasksCount)}</span>
-                    <div className="w-12 h-1 rounded-full bg-black/[0.06] dark:bg-white/[0.06] overflow-hidden">
-                      <div className="h-full rounded-full bg-signal-500 transition-all duration-500" style={{ width: `${options[index].completion}%` }} />
+                    {isActive && <span className="rounded-full bg-ember-500/[0.1] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-ember-600 dark:text-ember-400">Selected</span>}
+                    <span className="text-[10px] font-mono font-bold text-slate-500">{sprint.tasksCount}</span>
+                    <div className="h-1 w-12 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.06]">
+                      <div className="h-full rounded-full bg-signal-500 transition-[width] motion-reduce:transition-none" style={{ width: `${options[index].completion}%` }} />
                     </div>
                   </div>
                 </button>

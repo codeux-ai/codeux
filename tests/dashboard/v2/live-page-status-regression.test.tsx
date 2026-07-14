@@ -396,6 +396,44 @@ describe("LiveSessionPage Status Regression", () => {
     expect(screen.getByRole("button", { name: /CI-Status: CI läuft/i })).toBeInTheDocument();
   });
 
+  it("forwards only active human-only task intervention to the Live workflow badge", () => {
+    const humanAttention = ciAttention({
+      attentionType: "human_escalation_required",
+      ownerType: "human",
+      title: "Operator decision required",
+      summaryMarkdown: "Choose the safe recovery path.",
+    });
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      tasksWithLiveActivities: [liveTask()],
+      execution: liveExecution({ attentionItems: [humanAttention] }),
+    }));
+
+    const { rerender } = render(<LiveSessionPage />);
+    const humanNeeded = screen.getByRole("button", { name: /CI status: Human needed/i });
+    expect(humanNeeded).toHaveTextContent("Human needed");
+    expect(humanNeeded).toHaveClass("text-status-red");
+
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      tasksWithLiveActivities: [liveTask()],
+      execution: liveExecution({
+        attentionItems: [{ ...humanAttention, status: "resolved", resolvedAt: "2026-07-13T10:03:00.000Z" }],
+      }),
+    }));
+    rerender(<LiveSessionPage />);
+    expect(screen.queryByRole("button", { name: /CI status: Human needed/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /CI status: CI running/i })).toBeInTheDocument();
+
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      tasksWithLiveActivities: [liveTask()],
+      execution: liveExecution({
+        attentionItems: [{ ...humanAttention, status: "open", resolvedAt: null, assignedWorkerEndpointId: "worker-endpoint-1" }],
+      }),
+    }));
+    rerender(<LiveSessionPage />);
+    expect(screen.queryByRole("button", { name: /CI status: Human needed/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /CI status: CI running/i })).toBeInTheDocument();
+  });
+
   it("preserves QA disclosures, runtime feed, prompt disclosure, and task controls", async () => {
     vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
       tasksWithLiveActivities: [liveTask({

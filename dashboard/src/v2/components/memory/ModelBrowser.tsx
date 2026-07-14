@@ -7,6 +7,7 @@ import { useInteractionTokens } from "../../lib/motion/index.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 import { ModelCard } from "./ModelCard.js";
+import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { useMemoryI18n, type MemoryTextKey } from "../../i18n/messages/memory.js";
 import type { DashboardMessageVariables } from "../../i18n/locales.js";
 
@@ -569,28 +570,46 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
             </div>
             <label className="min-w-0 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
               {t("installState")}
-              <select value={installFilter} onChange={(event) => setInstallFilter(event.currentTarget.value as InstallFilter)} className={`${formFieldClass(false)} mt-1.5 w-full min-w-0 normal-case tracking-normal`}>
-                <option value="all">{t("allStates")}</option>
-                <option value="available">{t("available")}</option>
-                <option value="downloaded">{t("downloaded")}</option>
-                <option value="downloading">{t("downloading")}</option>
-                <option value="unavailable">{t("unavailable")}</option>
-              </select>
+              <AvantgardeSelect
+                value={installFilter}
+                onChange={(value) => setInstallFilter(value as InstallFilter)}
+                className="mt-1.5 w-full min-w-0"
+                variant="card"
+                options={[
+                  { value: "all", label: t("allStates") },
+                  { value: "available", label: t("available") },
+                  { value: "downloaded", label: t("downloaded") },
+                  { value: "downloading", label: t("downloading") },
+                  { value: "unavailable", label: t("unavailable") },
+                ]}
+              />
             </label>
             <label className="min-w-0 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
               {t("language")}
-              <select value={languageFilter} onChange={(event) => setLanguageFilter(event.currentTarget.value)} className={`${formFieldClass(false)} mt-1.5 w-full min-w-0 normal-case tracking-normal`}>
-                <option value="all">{t("allLanguages")}</option>
-                {languageOptions.map((language) => <option key={language} value={language}>{language}</option>)}
-              </select>
+              <AvantgardeSelect
+                value={languageFilter}
+                onChange={setLanguageFilter}
+                className="mt-1.5 w-full min-w-0"
+                variant="card"
+                options={[
+                  { value: "all", label: t("allLanguages") },
+                  ...languageOptions.map((language) => ({ value: language, label: language })),
+                ]}
+              />
             </label>
             <label className="min-w-0 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
               {t("source")}
-              <select value={sourceFilter} onChange={(event) => setSourceFilter(event.currentTarget.value as SourceFilter)} className={`${formFieldClass(false)} mt-1.5 w-full min-w-0 normal-case tracking-normal`}>
-                <option value="all">{t("allSources")}</option>
-                <option value="built_in">{t("builtIn")}</option>
-                <option value="custom">{t("custom")}</option>
-              </select>
+              <AvantgardeSelect
+                value={sourceFilter}
+                onChange={(value) => setSourceFilter(value as SourceFilter)}
+                className="mt-1.5 w-full min-w-0"
+                variant="card"
+                options={[
+                  { value: "all", label: t("allSources") },
+                  { value: "built_in", label: t("builtIn") },
+                  { value: "custom", label: t("custom") },
+                ]}
+              />
             </label>
           </div>
 

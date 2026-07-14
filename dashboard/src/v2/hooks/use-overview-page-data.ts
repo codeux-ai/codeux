@@ -14,8 +14,8 @@ export function useOverviewPageData() {
   const projectId = selectedProject?.id || null;
 
   const { data: sprints, loading: sprintsLoading } = useSprints(projectId);
-  const { tasks, loading: tasksLoading } = useProjectTasks(projectId, projects, sprints);
-  const { stats, loading: statsLoading } = useProjectStats(projectId, "7d");
+  const { tasks, loading: tasksLoading } = useProjectTasks(projectId, projects, sprints, null, { view: "overview" });
+  const { stats, loading: statsLoading } = useProjectStats(projectId, "7d", 30_000, { realtime: false });
   const { data: execution } = useExecutions(projectId);
 
   const isLoading = projectsLoading || sprintsLoading || tasksLoading || statsLoading;

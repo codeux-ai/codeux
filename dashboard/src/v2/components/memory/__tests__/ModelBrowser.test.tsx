@@ -135,12 +135,15 @@ describe("ModelBrowser", () => {
       ],
     });
 
-    await user.selectOptions(screen.getByLabelText("Install state"), "downloaded");
+    await user.click(screen.getByLabelText("Install state"));
+    await user.click(screen.getByRole("option", { name: "Downloaded" }));
     expect(screen.queryByText("BGE Small EN")).not.toBeInTheDocument();
     expect(screen.getByText("Acme Custom Embed")).toBeInTheDocument();
 
-    await user.selectOptions(screen.getByLabelText("Language"), "French");
-    await user.selectOptions(screen.getByLabelText("Source"), "built_in");
+    await user.click(screen.getByLabelText("Language"));
+    await user.click(screen.getByRole("option", { name: "French" }));
+    await user.click(screen.getByLabelText("Source"));
+    await user.click(screen.getByRole("option", { name: "Built-in" }));
     expect(screen.getByText("No embedding models match this view.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Show all models" }));

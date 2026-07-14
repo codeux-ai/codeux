@@ -45,9 +45,10 @@ Domain for project CRUD and selection.
 | `list` | – | `projectId` | List sprints for a project. |
 | `get` | – | `sprintId` | Get a sprint. |
 | `create` | – | `projectId`, `name \| title` | Create a sprint. Accepts `goal` or `goalMarkdown`, plus optional sprint metadata. |
+| `followup` | – | `projectId` | Save an idle, unplanned follow-up draft. Accepts the same title and goal aliases as `create` and never starts planning. |
 | `update` | – | `sprintId`, update fields | Update a sprint. Accepts `name` or `title`, and `goal` or `goalMarkdown`. |
 | `delete` | ✅ | `sprintId` | Delete a sprint. |
-| `start` | – | `projectId`, `sprintId` | Begin a sprint run (orchestrate). |
+| `start` | – | `projectId`, `sprintId` | Begin a sprint run. If the sprint has no tasks, plan it with auto-start first. |
 | `pause` | – | `sprintRunId` | Pause an active run. |
 | `cancel` | – | `sprintRunId` | Cancel gracefully. |
 | `force_cancel` | – | `sprintRunId` | Force-cancel (immediate). |
@@ -56,6 +57,8 @@ Domain for project CRUD and selection.
 | `plan` | – | `projectId`, `sprintId` | Start the planning agent server-side and return a started acknowledgement immediately after synchronous precondition validation. Optional `autoStart`, `replan`, `planningAgentPresetId`, and `overrides` are preserved. |
 
 `title` and `goalMarkdown` are MCP-friendly aliases. The repository stores sprint `name` and `goal`.
+
+For follow-up work that must wait for another sprint, call `followup` first, then schedule the returned sprint through `manage_scheduler` with `schedule_sprint`, `scheduleMode: "after_sprint_end"`, and the source sprint id. The draft stays idle and unplanned until that schedule starts it. Do not call `plan` before scheduling: the scheduled `start` performs planning with auto-start only after the source sprint has completed.
 
 The stable immediate response is:
 
@@ -303,8 +306,11 @@ Project-scoped generated dashboards, immutable revisions, detached validation se
 | `publish_revision` | – | `dashboardId`, `revisionId`, optional `validationSessionId` | Publish only a passed revision with a valid report. |
 | `archive` | ✅ | `dashboardId` | Clear active publication and mark the dashboard archived. |
 | `data_catalog` | – | `projectId` | Return dashboard summaries and declared source nodes. |
+| `list_credential_slots` | – | `projectId`, `dashboardId` | Return a bounded metadata-only review of declared slots, bindings, backend health, and compatible candidates. Optional `revisionId` reviews an immutable revision. |
+| `bind_credential` | ✅ | `projectId`, `dashboardId`, `slotId`, `credentialId`, `expectedBindingRevision` | Bind or replace a slot by credential ID after the stateful approval handshake. |
+| `unbind_credential` | ✅ | `projectId`, `dashboardId`, `slotId`, `expectedBindingRevision` | Remove a slot binding after the stateful approval handshake. |
 
-Publication rejects failed, queued, running, cancelled, missing, or cross-revision validation sessions before the active publication pointer changes.
+Credential actions reject secret-bearing, malformed approval, or undeclared fields before approval fingerprinting, reduce accepted mutations to their allowed metadata, and never resolve plaintext. Validation and publication review required and bound slots against backend health, project access, status, kind, and required capabilities; a denial blocks the operation before the active publication pointer changes and returns sanitized slot-specific issues. Generic custom-dashboard responses recursively redact known binding IDs from nested content.
 
 ---
 

@@ -13,6 +13,7 @@ import {
   Brain,
   Code2,
   Clock3,
+  Coins,
   Cpu,
   Database,
   GitBranch,
@@ -50,7 +51,7 @@ import { useInteractionTokens } from "../../../lib/motion/tokens.js";
 import { useStatsI18n } from "../stats-i18n.js";
 
 import type { DonutSliceGeometry, ChartPoint } from "./stats-geometry.js";
-export type StatsVisualMode = "trend" | "composition" | "models" | "reliability" | "ledgers" | "system";
+export type StatsVisualMode = "trend" | "composition" | "cost" | "models" | "reliability" | "ledgers" | "system";
 export type ChartSeriesId = "tokens" | "active" | "invocations";
 export type LedgerSortKey = "last" | "tokens" | "active" | "input" | "output" | "name" | "p50" | "p95";
 
@@ -211,6 +212,7 @@ export const ViewToggle: FunctionComponent<{
   const modes: Array<{ id: StatsVisualMode; label: string; accessibleLabel: string; icon: LucideIcon }> = [
     { id: "trend", label: "Trend", accessibleLabel: "Trend", icon: BarChart3 },
     { id: "composition", label: locale === "de" ? "Zusammensetzung" : "Composition", accessibleLabel: locale === "de" ? "Zusammensetzung" : "Composition", icon: PieChart },
+    { id: "cost", label: locale === "de" ? "Kosten" : "Cost", accessibleLabel: locale === "de" ? "Kosten" : "Cost", icon: Coins },
     { id: "models", label: locale === "de" ? "Modelle" : "Models", accessibleLabel: locale === "de" ? "Modelle" : "Models", icon: Cpu },
     { id: "reliability", label: locale === "de" ? "Provider" : "Providers", accessibleLabel: locale === "de" ? "Provider" : "Providers", icon: ShieldCheck },
     { id: "ledgers", label: "Ledgers", accessibleLabel: "Ledgers", icon: Layers3 },

@@ -35,7 +35,7 @@ The redesigned Stats page uses a stable top-to-bottom shell:
    - Invalid or incomplete custom ranges keep focusable controls visible, keep Apply keyboard-reachable, set `aria-invalid` on the first invalid field, connect `aria-errormessage`, move focus to that field on failed apply, and announce inline error text.
    - Successful preset and custom range changes produce short polite status copy such as `Time window changed to 24h.` or `Custom range applied: 2026-06-26 to 2026-07-03.` without changing the stats API query contract.
 2. Mode navigation
-   - The mode rail is a responsive segmented grid with icon-first buttons and stable accessible labels: `Trend`, `Composition`, `Models`, `Providers`, `Ledgers`, and `System`.
+   - The mode rail is a responsive segmented grid with icon-first buttons and stable accessible labels in this order: `Trend`, `Composition`, `Cost`, `Models`, `Providers`, `Ledgers`, and `System`.
    - The visible `Providers` label maps to the internal reliability mode. Keep user-facing copy and tests aligned if this mapping changes.
    - The rail uses `role="group"` and `aria-pressed`; it is not a tablist because mode changes replace the whole analysis workspace.
    - The active mode also has a screen-reader-only polite status so compact controls communicate selected-state changes without changing their pressed-button semantics.
@@ -90,6 +90,18 @@ Composition explains where usage comes from.
 - Provider activity is a compact ledger ordered by token volume. Desktop rows align provider identity, token distribution, calls, cache rate, tokens per call, active time, and optional cost beneath one shared column header; narrow layouts retain visible per-value labels. The enclosing sheet owns the radius while rows use hairline separators and quiet hover emphasis.
 - Source-confidence cards distinguish reported, estimated, unavailable, unsupported, and defensive unknown buckets without inventing alternate totals.
 - Distribution strips and flow bars need nearby text or `role="img"` labels so color is never the only signal.
+
+### Cost
+
+Cost is the pricing-aware spend workspace for the current project and time window.
+
+- The metric deck leads with total spend, average per task, average per canonical sprint, blended cost per million tokens, and pricing coverage. All monetary values use adaptive precision and retain provenance; a partially priced value is a minimum, not a complete total.
+- `CostStudio` derives `CostAnalyticsViewModel` once from the existing Stats snapshot and composes the executive overview and spend trend, token/spend allocation, model/purpose rankings, and task/canonical-sprint ledger. Cost must not issue another request or maintain a separate settings or persistence protocol.
+- Average per task and average per sprint use distinct entities with at least one provider invocation. Covered `$0.00` entities remain in the denominator. Sprint averages and rows use `costAnalytics.sprints`, which combines reruns of the same conceptual sprint; legacy snapshots fall back to the run-oriented `sprints` array only when that additive projection is absent.
+- Token allocation defines input, cached input, output excluding separately reported reasoning when necessary, and reasoning lanes. Spend allocation defines input, cached-input, output, and provider-reported fallback cost lanes, reconciled to snapshot totals.
+- Pricing provenance is invocation-count based: configured model pricing and provider-reported fallback calls are covered, uncovered calls are unpriced, and legacy rows without `costCoverage` are unknown. Partial coverage shows a priced subtotal and never claims completeness.
+- Fully covered zero-cost usage may display `$0.00`; unpriced usage displays `Unpriced`, legacy usage displays `Coverage unknown`, and an empty window displays `Unavailable`. Never describe an unpriced zero total as free.
+- Operators should maintain current per-model input and output prices in **Settings → Model Pricing**, verify the active System or Project scope, and refresh Stats after saving. Catalogue or override prices affect estimates and historical projections, not provider invoices or stored invocation telemetry.
 
 ### Models
 
@@ -161,7 +173,7 @@ Stats copy and visuals should teach operators how trustworthy a number is withou
 
 Cost values come from snapshot cost fields and should only be presented when configured data makes them meaningful. Do not imply a free run from a zero cost when pricing may be unavailable.
 
-Cost displays use two fractional digits for scanability, rounding values such as `$55.4093` to `$55.41`.
+Cost displays use two fractional digits for ordinary values and adaptive precision for sub-cent values. Focused chart buckets and the screen-reader data table preserve the exact normalized USD value so scan-friendly headlines never remove recoverable detail.
 
 CLI task-coding analytics distinguish workflow visibility from provider usage. A running execution invocation may appear while Code UX is preparing a cancellable workspace or waiting to claim provider capacity. Provider `started_at`, duration, concurrency, token, and cost telemetry begin only after the provider claim/run starts; preparation failure or pre-claim cancellation therefore leaves an auditable execution row without fabricated provider usage.
 
@@ -180,14 +192,23 @@ Use page-scoped Stats primitives instead of one-off analytics chrome. The Stats 
 - Chips, tabs, inputs, subpanels, summary rows, and table cells are flat primitives. Use quiet fills, fixed control geometry, compact labels, small radii, and neutral selected states instead of decorative capsules, glow, animated elevation, or nested decorative cards.
 - Status fills are semantic. Signal, positive, warning, negative, neutral, and cyan tones should communicate running, success, warning, failure, informational, or data-accent meaning; avoid using them as ambient decoration.
 - Backdrop blur is not a primary Stats material. Do not add `backdrop-blur-*`, shared translucent material tokens, large glow washes, or translucent chrome to panels, chips, inactive legend controls, ledger rows, System filters, invocation tables, or transcript detail as the default treatment.
-- Do not fix design drift with broad page-root `:global()` color or spacing overrides. Tokenize the owning component or extend the shared primitive vocabulary so Trend, Composition, Models, Providers, Ledgers, and System stay consistent without hidden CSS bridges.
+- Do not fix design drift with broad page-root `:global()` color or spacing overrides. Tokenize the owning component or extend the shared primitive vocabulary so Trend, Composition, Cost, Models, Providers, Ledgers, and System stay consistent without hidden CSS bridges.
 - Metric cards with sparkline micrographs use the standard card surface, not a separate muted graph background. The sparkline must fit its own stable slot so hover glow and line geometry are not cut off by card overflow. Populated sparklines expose a concise `role="img"` summary with point count and high/low values; empty sparkline slots show a static `No sparkline data` label and an explicit no-data `role="img"` description.
 
 Dense analytics layouts should stay calm: restrained contrast, low-opacity fills, semantic color, stable grids, and short labels. Avoid nested decorative cards; repeated cards, ledger rows, modals, and tool panels may be framed, while page sections should read as workspaces.
 
 ## Architecture
 
-The `StatsPage` uses the `useStatsPageData` hook to coordinate visual modes. The hook manages and exposes state including `activeQuery`, `visualMode`, `chartState`, `providerSegments`, `sourceSegments`, `tokenSegments`, and `planningUsage`, ensuring seamless transitions across Trend, Composition, Models, Providers, Ledgers, and System views.
+The `StatsPage` uses the `useStatsPageData` hook to coordinate visual modes. The hook manages and exposes state including `activeQuery`, `visualMode`, `chartState`, `providerSegments`, `sourceSegments`, `tokenSegments`, and `planningUsage`, ensuring seamless transitions across Trend, Composition, Cost, Models, Providers, Ledgers, and System views. The selected mode remains scoped to the same per-project storage key, and unknown persisted values fall back to Composition.
+
+`cost-insights.ts` is the pure frontend boundary for Cost calculations and display state. Cost components consume its normalized totals, rates, averages, reconciled spend/token segments, deterministic dimension rows, and task/canonical-sprint details instead of re-deriving values in JSX. Every monetary amount carries coverage provenance so complete zero-price usage, partial pricing, unpriced telemetry, legacy unknown coverage, and empty data remain distinct.
+
+Cost allocation panels pair separate token and spend graphics with exact textual legends. Token lanes cover input, cached input, output, and reasoning; spend lanes keep token-priced input, cached input, output, and provider-reported fallback spend distinct. Ranked model and execution-purpose rows show spend, tokens, calls, both shares, and cost per call. The first six rows remain visible and all additional rows reconcile into one bounded `Other` summary so source collection size does not expand the rendered ledger. Patterns, labels, focusable rows, and full provider/model identities make the breakdown usable without relying on color or pointer input.
+`CostOverviewPanel` renders the Cost executive metrics and spend-over-time surface directly from that view model. Its SVG is presentation-only: every bucket is also a keyboard-focusable value with exact focused detail and a screen-reader table, while peak, selection, and missing-price states use shape or text cues in addition to color. The panel keeps no-usage, fully unpriced, partial, covered-zero, and single-bucket states explicit and page-overflow safe.
+
+Task and canonical sprint averages use distinct rows that contain provider invocations. Covered zero-cost rows remain in the denominator, while an empty collection produces an unavailable amount. Canonical sprint rows come from `costAnalytics.sprints`; legacy snapshots fall back to the run-oriented `sprints` ledger only when the additive projection is absent.
+
+The Cost task/sprint ledger consumes those prepared detail rows directly. Its Task and Sprint tabs support roving Arrow/Home/End navigation, and its Cost-local controls sort by spend, tokens, calls, cost per call, recency, or name without changing the general telemetry-ledger contract. Search totals include every matching row even when only an initial progressive batch is mounted; the displayed per-entity average remains the full conceptual task or canonical-sprint average so filtering cannot silently redefine the comparison baseline. Rows expose spend share, token mix, status, secondary context, recency, and full/partial/unpriced/unknown pricing provenance as wrapping semantic articles.
 
 ## Responsive Behavior
 

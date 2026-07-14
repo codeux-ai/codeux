@@ -101,7 +101,9 @@ describe("SprintJiraImportModal", () => {
     expect(searchInput).not.toHaveProperty("statusNames");
 
     expect(screen.getByDisplayValue("OPS")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Jira status" })).toHaveDisplayValue("All statuses");
+    const statusSelect = screen.getByRole("button", { name: "Jira status" });
+    expect(statusSelect).toHaveTextContent("All statuses");
+    fireEvent.click(statusSelect);
     expect(screen.getByRole("option", { name: "Zu erledigen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^search$/i })).toBeEnabled();
     expect(screen.getByRole("button", { name: /import issues disabled until jira issues are selected/i })).toBeDisabled();
@@ -124,17 +126,12 @@ describe("SprintJiraImportModal", () => {
 
     renderWithI18n(<SprintJiraImportModal projectId="project-1" onClose={vi.fn()} onImport={vi.fn()} />);
 
-    await waitFor(() => {
-      expect(screen.getByRole("option", { name: "Zu erledigen" })).toBeInTheDocument();
-    });
-
-    const statusSelect = screen.getByRole("combobox", { name: "Jira status" }) as HTMLSelectElement;
-    statusSelect.value = "jira-status:Zu%20erledigen";
-    fireEvent.input(statusSelect);
-    fireEvent.change(statusSelect);
+    const statusSelect = await screen.findByRole("button", { name: "Jira status" });
+    fireEvent.click(statusSelect);
+    fireEvent.click(await screen.findByRole("option", { name: "Zu erledigen" }));
 
     await waitFor(() => {
-      expect(statusSelect).toHaveDisplayValue("Zu erledigen");
+      expect(statusSelect).toHaveTextContent("Zu erledigen");
     });
 
     fireEvent.click(screen.getByRole("button", { name: /^search$/i }));
@@ -165,7 +162,9 @@ describe("SprintJiraImportModal", () => {
     });
 
     expect(screen.getByText(/Jira status endpoint unavailable/i)).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Jira status" })).toHaveDisplayValue("Open");
+    const statusSelect = screen.getByRole("button", { name: "Jira status" });
+    expect(statusSelect).toHaveTextContent("Open");
+    fireEvent.click(statusSelect);
     expect(screen.getByRole("option", { name: "In Work" })).toBeInTheDocument();
 
     const searchInput = vi.mocked(searchJiraIssues).mock.calls.at(-1)?.[1];
@@ -207,16 +206,15 @@ describe("SprintJiraImportModal", () => {
     renderWithI18n(<SprintJiraImportModal projectId="project-1" onClose={vi.fn()} onImport={onImport} />);
 
     await waitFor(() => {
-      expect(screen.getByRole("combobox", { name: "Jira status" })).toHaveDisplayValue("Open");
+      expect(screen.getByRole("button", { name: "Jira status" })).toHaveTextContent("Open");
     });
 
-    const statusSelect = screen.getByRole("combobox", { name: "Jira status" }) as HTMLSelectElement;
-    statusSelect.value = "category:in_progress";
-    fireEvent.input(statusSelect);
-    fireEvent.change(statusSelect);
+    const statusSelect = screen.getByRole("button", { name: "Jira status" });
+    fireEvent.click(statusSelect);
+    fireEvent.click(screen.getByRole("option", { name: "In Work" }));
 
     await waitFor(() => {
-      expect(statusSelect).toHaveDisplayValue("In Work");
+      expect(statusSelect).toHaveTextContent("In Work");
     });
 
     fireEvent.click(screen.getByRole("button", { name: /^search$/i }));

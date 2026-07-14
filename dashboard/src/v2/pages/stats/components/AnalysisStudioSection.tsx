@@ -14,6 +14,7 @@ import { SystemStudio } from "./system/SystemStudio.js";
 import { ModelsStudio } from "./ModelsStudio.js";
 import { TelemetryLedgerTabs } from "./TelemetryLedgerTabs.js";
 import { useStatsI18n } from "../stats-i18n.js";
+import { CostStudio } from "./cost/CostStudio.js";
 
 interface StudioMetadata {
   label: string;
@@ -34,6 +35,12 @@ const STUDIO_METADATA: Record<StatsVisualMode, StudioMetadata> = {
     eyebrow: "Usage mix",
     description: "Provider, token, purpose, and source mix for the current telemetry window.",
     emptyMessage: "Select a time window to see Composition data.",
+  },
+  cost: {
+    label: "Cost",
+    eyebrow: "Spend intelligence",
+    description: "Spend, pricing coverage, allocation, and entity-level cost detail for the selected range.",
+    emptyMessage: "Select a time window to see Cost data.",
   },
   models: {
     label: "Models",
@@ -93,6 +100,7 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
   const localizedMetadata: Record<StatsVisualMode, StudioMetadata> = locale === "de" ? {
     trend: { label: "Trend", eyebrow: "Zeitreihenansicht", description: "Token-, Aufruf- und Laufzeitverlauf im ausgewählten Zeitraum.", emptyMessage: "Wählen Sie einen Zeitraum aus, um Trenddaten zu sehen." },
     composition: { label: "Zusammensetzung", eyebrow: "Nutzungsmix", description: "Anbieter-, Token-, Zweck- und Quellenmix im aktuellen Telemetriezeitraum.", emptyMessage: "Wählen Sie einen Zeitraum aus, um Zusammensetzungsdaten zu sehen." },
+    cost: { label: "Kosten", eyebrow: "Kostenstudio", description: "Kosten, Preisabdeckung und Nutzung nach Anbieter, Modell und Projektaktivität.", emptyMessage: "Wählen Sie einen Zeitraum aus, um Kostendaten zu sehen." },
     models: { label: "Modelle", eyebrow: "Modellleistung", description: "Modellaktivität, Latenz, Cache-Verhalten und Zuverlässigkeitssignale.", emptyMessage: "Wählen Sie einen Zeitraum aus, um Modelldaten zu sehen." },
     reliability: { label: "Anbieter", eyebrow: "Zuverlässigkeitsansicht", description: "Anbieterzustand, Quellenvertrauen, Fehler und Integritätshinweise.", emptyMessage: "Wählen Sie einen Zeitraum aus, um Anbieterdaten zu sehen." },
     ledgers: { label: "Protokolle", eyebrow: "Prüfzeilen", description: "Detaillierte Aufgaben-, Sprint- und Git-Telemetriezeilen für prüfungsartige Analysen.", emptyMessage: "Wählen Sie einen Zeitraum aus, um Protokolldaten zu sehen." },
@@ -157,6 +165,14 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
             <CompositionStudio stats={stats} providerSegments={providerSegments} tokenSegments={tokenSegments} />
           </div>
         ) : renderEmptyState(localizedMetadata.composition)
+      ) : null}
+
+      {visualMode === "cost" ? (
+        stats ? (
+          <div className={loading ? "pointer-events-none opacity-60 transition-opacity motion-reduce:transition-none" : "transition-opacity motion-reduce:transition-none"}>
+            <CostStudio stats={stats} />
+          </div>
+        ) : renderEmptyState(STUDIO_METADATA.cost)
       ) : null}
 
       {visualMode === "models" ? (

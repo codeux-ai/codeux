@@ -200,6 +200,32 @@ describe("git branch sync service", () => {
     ]);
   });
 
+  it("single-flights and briefly reuses successful syncs for the same repository branch", async () => {
+    let releaseFetch!: () => void;
+    const fetchPending = new Promise<void>((resolve) => { releaseFetch = resolve; });
+    const runner = vi.fn(async (_command: string, args: string[]) => {
+      if (args[0] === "remote") return { stdout: "git@github.com:owner/repo.git\n", stderr: "", exitCode: 0 };
+      if (args[0] === "fetch") {
+        await fetchPending;
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (args[0] === "show-ref" && String(args[3]).startsWith("refs/heads/")) {
+        throw new Error("missing local branch");
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+
+    const first = syncRemoteBranchIfAvailable("/repo", "feature/shared", runner);
+    const second = syncRemoteBranchIfAvailable("/repo", "feature/shared", runner);
+    releaseFetch();
+    await Promise.all([first, second]);
+    const callsAfterConcurrentSync = runner.mock.calls.length;
+    await syncRemoteBranchIfAvailable("/repo", "feature/shared", runner);
+
+    expect(runner.mock.calls.filter(([, args]) => args[0] === "fetch")).toHaveLength(1);
+    expect(runner).toHaveBeenCalledTimes(callsAfterConcurrentSync);
+  });
+
   it("refreshes only the requested remote branch before branch-sensitive work", async () => {
     const runner = vi.fn()
       .mockResolvedValueOnce({ stdout: "git@github.com:owner/repo.git\n", stderr: "", exitCode: 0 })

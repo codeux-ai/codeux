@@ -120,10 +120,8 @@ export function useSprints(projectId: string | null): UseSprintsResult {
         if (message.type === "snapshot_required") {
           return true;
         }
-        return message.type === "event" && (
-          message.event.eventType === "project.structure.updated"
-          || message.event.eventType === "project.execution.updated"
-        );
+        return message.type === "event"
+          && message.event.eventType === "project.structure.updated";
       },
     } : undefined,
     pollIntervalMs: projectId ? 15000 : 0,

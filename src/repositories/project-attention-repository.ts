@@ -487,47 +487,57 @@ export class ProjectAttentionRepository {
 
 
   claimAttentionItem(itemId: string, input: ClaimProjectAttentionItemInput): ProjectAttentionItemRecord {
-    const current = this.mapRow(requireRecord(this.db.prepare('SELECT * FROM project_attention_items WHERE id = ?').get(itemId) as any, "Project attention item", itemId));
-    if (current.status === "resolved" || current.status === "dismissed" || current.status === "expired") {
-      throw new Error(`Attention item ${itemId} is already closed.`);
-    }
-    if (current.ownerType !== "worker") {
-      throw new Error(`Attention item ${itemId} is not worker-claimable.`);
-    }
-    if (
-      current.assignedWorkerEndpointId
-      && current.assignedWorkerEndpointId !== input.assignedWorkerEndpointId
-      && !input.claimReason?.startsWith("virtual_worker_")
-      && current.attentionType !== "ci_fix_required"
-      && current.attentionType !== "merge_conflict"
-    ) {
-      throw new Error(`Attention item ${itemId} is assigned to another worker endpoint.`);
-    }
+    return this.db.transaction(() => {
+      const current = this.mapRow(requireRecord(this.db.prepare('SELECT * FROM project_attention_items WHERE id = ?').get(itemId) as any, "Project attention item", itemId));
+      if (current.status === "resolved" || current.status === "dismissed" || current.status === "expired") {
+        throw new Error(`Attention item ${itemId} is already closed.`);
+      }
+      if (current.ownerType !== "worker") {
+        throw new Error(`Attention item ${itemId} is not worker-claimable.`);
+      }
+      if (
+        current.assignedWorkerEndpointId
+        && current.assignedWorkerEndpointId !== input.assignedWorkerEndpointId
+        && !input.claimReason?.startsWith("virtual_worker_")
+        && current.attentionType !== "ci_fix_required"
+        && current.attentionType !== "merge_conflict"
+      ) {
+        throw new Error(`Attention item ${itemId} is assigned to another worker endpoint.`);
+      }
 
-    const now = new Date().toISOString();
-    const nextPayload = {
-      ...(current.payload || {}),
-      claimedByWorkerEndpointId: input.assignedWorkerEndpointId,
-      claimReason: input.claimReason ?? (current.payload || {}).claimReason ?? null,
-    };
+      const now = new Date().toISOString();
+      const nextPayload = {
+        ...(current.payload || {}),
+        claimedByWorkerEndpointId: input.assignedWorkerEndpointId,
+        claimReason: input.claimReason ?? (current.payload || {}).claimReason ?? null,
+      };
 
-    this.db.prepare(`
-      UPDATE project_attention_items
-      SET status = 'claimed',
-          assigned_worker_endpoint_id = ?,
-          claimed_at = COALESCE(claimed_at, ?),
-          updated_at = ?,
-          payload_json = ?
-      WHERE id = ?
-    `).run(
-      input.assignedWorkerEndpointId,
-      now,
-      now,
-      serializePayload(nextPayload),
-      itemId,
-    );
+      const result = this.db.prepare(`
+        UPDATE project_attention_items
+        SET status = 'claimed',
+            assigned_worker_endpoint_id = ?,
+            claimed_at = COALESCE(claimed_at, ?),
+            updated_at = ?,
+            payload_json = ?
+        WHERE id = ?
+          AND (
+            status = 'open'
+            OR (status = 'claimed' AND (assigned_worker_endpoint_id IS NULL OR assigned_worker_endpoint_id = ?))
+          )
+      `).run(
+        input.assignedWorkerEndpointId,
+        now,
+        now,
+        serializePayload(nextPayload),
+        itemId,
+        input.assignedWorkerEndpointId,
+      );
+      if (result.changes === 0) {
+        throw new Error(`Attention item ${itemId} was claimed by another worker.`);
+      }
 
-    return this.requireAndNotifyItem(itemId, current.projectId, true);
+      return this.requireAndNotifyItem(itemId, current.projectId, true);
+    });
   }
 
   resolveAttentionItem(itemId: string, input: ResolveProjectAttentionItemInput): ProjectAttentionItemRecord {
@@ -654,6 +664,30 @@ export class ProjectAttentionRepository {
     `).run(now, serializePayload(nextPayload), itemId);
 
     return this.requireAndNotifyItem(itemId, current.projectId, true);
+  }
+
+  requeueInterruptedVirtualRepairItems(): ProjectAttentionItemRecord[] {
+    const rows = this.db.prepare(`
+      SELECT attention.*
+      FROM project_attention_items attention
+      LEFT JOIN worker_endpoints endpoint
+        ON endpoint.id = attention.assigned_worker_endpoint_id
+      WHERE attention.owner_type = 'worker'
+        AND attention.status = 'claimed'
+        AND attention.attention_type IN ('ci_fix_required', 'merge_conflict')
+        AND (
+          attention.assigned_worker_endpoint_id IS NULL
+          OR endpoint.endpoint_type = 'virtual_cli'
+          OR json_extract(attention.payload_json, '$.repairRuntime.sessionId') IS NOT NULL
+        )
+      ORDER BY attention.opened_at ASC, attention.id ASC
+    `).all() as unknown as ProjectAttentionItemRow[];
+
+    return rows.map((row) => this.requeueAttentionItem(row.id, {
+      recoveredByStartup: true,
+      repairRecoveryReason: "startup_interrupted_virtual_repair",
+      repairRecoveredAt: new Date().toISOString(),
+    }));
   }
 
   private requireAndNotifyItem(itemId: string, projectId: string, includeOverview: boolean): ProjectAttentionItemRecord {

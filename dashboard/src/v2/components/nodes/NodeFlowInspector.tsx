@@ -1,5 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { Link2, Unlink } from "lucide-preact";
+import type { NodeDefinitionCredentialRequirement } from "../../../../../src/contracts/node-definition-types.js";
 import type {
   AgentPreset,
   NodeFlowJsonObject,
@@ -15,7 +16,18 @@ import {
   buildValidationMessagesByField,
 } from "../../lib/node-flow-view-models.js";
 import { NodeWidgetField } from "./NodeWidgetField.js";
-import { translateNodesStatus, useNodesI18n } from "../../i18n/messages/nodes.js";
+import { useNodesI18n } from "../../i18n/messages/nodes.js";
+import { NodeCredentialPicker, type CredentialSelectionResult } from "./NodeCredentialPicker.js";
+import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
+
+export type CredentialBindingSaveStatus = "saving" | "saved" | "conflict" | "policy-denied" | "error";
+
+export interface CredentialBindingFeedback {
+  nodeId: string;
+  slot: string;
+  status: CredentialBindingSaveStatus;
+  message: string;
+}
 
 interface NodeFlowInspectorProps {
   selectedNode: NodeFlowNode | null;
@@ -31,9 +43,12 @@ interface NodeFlowInspectorProps {
   onDetachAgent: (agentPresetId: string) => void;
   onRetryAttachments?: () => void;
   onNodeChange: (nodeId: string, update: Partial<NodeFlowNode>) => void;
+  projectId: string;
+  flowId: string;
   definition?: NodeDefinitionManifest | null;
   requiredCredentials?: NodeFlowRequiredCredential[];
-  onRequestCredential?: (nodeId: string, slot: string) => void;
+  credentialFeedback?: CredentialBindingFeedback | null;
+  onCredentialChange: (nodeId: string, slot: string, credentialId: string | null) => Promise<CredentialSelectionResult>;
 }
 
 const inputClass = "w-full rounded-xl border border-black/[0.08] bg-white/75 px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-signal-500/50 focus:ring-2 focus:ring-signal-500/20 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-100";
@@ -52,11 +67,14 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
   onDetachAgent,
   onRetryAttachments,
   onNodeChange,
+  projectId,
+  flowId,
   definition = null,
   requiredCredentials = [],
-  onRequestCredential,
+  credentialFeedback = null,
+  onCredentialChange,
 }) => {
-  const { locale, t, tp } = useNodesI18n();
+  const { t, tp } = useNodesI18n();
   const messagesByField = buildValidationMessagesByField(validation);
 
   if (!selectedNode) {
@@ -69,6 +87,15 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
 
   const widgetSchema = definition?.ui?.widgetSchema ?? selectedNode.widgetSchema;
   const data = applyWidgetDefaults(widgetSchema, selectedNode.data);
+  const credentialRequirements: NodeDefinitionCredentialRequirement[] = definition
+    ? definition.credentials
+    : requiredCredentials.map((credential) => ({
+      slot: credential.slot,
+      label: credential.slot,
+      required: credential.required,
+      allowedKinds: credential.allowedKinds,
+      requiredCapabilities: credential.requiredCapabilities,
+    }));
 
   const updateDataField = (fieldId: string, value: NodeFlowJsonValue): void => {
     onNodeChange(selectedNode.id, {
@@ -131,31 +158,60 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
       </section>
 
       <section className="flex flex-col gap-3 border-t border-black/[0.06] pt-4 dark:border-white/[0.06]" aria-labelledby="node-credentials-heading">
-        <h3 id="node-credentials-heading" className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t("credentialBindings")}</h3>
-        {requiredCredentials.length === 0 ? <p className="text-xs text-slate-500">{t("noCredentialRequest")}</p> : requiredCredentials.map((credential) => (
-          <div key={credential.slot} className="rounded-xl border border-black/[0.06] bg-white/60 p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
-            <div className="flex items-center justify-between gap-3"><span className="text-sm font-bold text-slate-800 dark:text-slate-100">{credential.slot}</span><span className={`text-[10px] font-bold uppercase ${credential.status === "bound" ? "text-status-green" : "text-status-red"}`}>{translateNodesStatus(locale, credential.status)}</span></div>
-            <p className="mt-1 text-xs text-slate-500">{credential.allowedKinds.join(", ")} · {t("secretNeverDisplayed")}</p>
-            {credential.status !== "bound" && onRequestCredential ? <button type="button" className="mt-2 rounded-lg border border-signal-500/30 px-2.5 py-1.5 text-xs font-bold text-signal-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40" onClick={() => onRequestCredential(selectedNode.id, credential.slot)}>{t("requestBinding")}</button> : null}
-          </div>
-        ))}
+        <h3 id="node-credentials-heading" className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Credential bindings</h3>
+        {credentialRequirements.length === 0 ? <p className="text-xs text-slate-500">This node does not request credentials.</p> : credentialRequirements.map((requirement) => {
+          const reviewCredential = requiredCredentials.find((credential) => credential.slot === requirement.slot);
+          const binding = selectedNode.credentialBindings?.find((entry) => entry.slot === requirement.slot) ?? null;
+          const feedback = credentialFeedback?.nodeId === selectedNode.id && credentialFeedback.slot === requirement.slot
+            ? credentialFeedback
+            : null;
+          const status = binding
+            ? reviewCredential?.status ?? "bound"
+            : "missing";
+          return (
+            <div key={requirement.slot} className="rounded-xl border border-black/[0.06] bg-white/60 p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{requirement.label}</span>
+                <span className={`text-[10px] font-bold uppercase ${status === "bound" ? "text-status-green" : status === "denied" ? "text-status-red" : "text-amber-600"}`}>{status}</span>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">{requirement.allowedKinds.join(", ")} · {requirement.requiredCapabilities.join(", ") || "declared"} access · secret value never displayed</p>
+              <NodeCredentialPicker
+                projectId={projectId}
+                identity={`${projectId}:${flowId}:${selectedNode.id}:${requirement.slot}`}
+                requirement={requirement}
+                boundCredentialId={binding?.credentialId ?? null}
+                disabled={feedback?.status === "saving"}
+                onSelect={(credentialId) => onCredentialChange(selectedNode.id, requirement.slot, credentialId)}
+              />
+              {feedback ? (
+                <p
+                  role={feedback.status === "saved" || feedback.status === "saving" ? "status" : "alert"}
+                  aria-live={feedback.status === "saved" || feedback.status === "saving" ? "polite" : "assertive"}
+                  className={`mt-2 text-xs leading-relaxed ${feedback.status === "saved" ? "text-status-green" : feedback.status === "saving" ? "text-slate-500" : feedback.status === "conflict" ? "text-amber-700 dark:text-amber-300" : "text-status-red"}`}
+                >
+                  {feedback.message}
+                </p>
+              ) : null}
+            </div>
+          );
+        })}
       </section>
 
       <section className="flex flex-col gap-3 border-t border-black/[0.06] pt-4 dark:border-white/[0.06]" aria-labelledby="node-agent-attachments-heading" aria-busy={attachmentsLoading || attaching}>
         <h3 id="node-agent-attachments-heading" className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t("agentAttachments")}</h3>
         <div className="flex gap-2">
-          <select
+          <AvantgardeSelect
             aria-label={t("agentPreset")}
-            className={inputClass}
+            className="min-w-0 flex-1"
             value={attachAgentId}
             disabled={attachmentsLoading || attaching}
-            onChange={(event) => onAttachAgentIdChange(event.currentTarget.value)}
-          >
-            <option value="">{t("selectAgent")}</option>
-            {agents.map((agent) => (
-              <option key={agent.id} value={agent.id}>{agent.name}</option>
-            ))}
-          </select>
+            onChange={onAttachAgentIdChange}
+            placeholder={t("selectAgent")}
+            options={[
+              { value: "", label: t("selectAgent") },
+              ...agents.map((agent) => ({ value: agent.id, label: agent.name })),
+            ]}
+          />
           <button
             type="button"
             aria-label={t("attachFlowToAgent")}

@@ -12,9 +12,8 @@ import { MARKDOWN_PROSE_CLASS } from "./ui/MarkdownEditorField.js";
 import { TaskStagePills } from "./SprintStatsDeck.js";
 import { RuntimeEventFeed } from "./RuntimeEventFeed.js";
 import { renderMarkdown } from "../../lib/markdown.js";
-import type { Subtask, ExecutionRuntimeEventSummary, ExecutionInvocationRecord } from "../../types.js";
+import type { Subtask, ExecutionAttentionItemSummary, ExecutionRuntimeEventSummary, ExecutionInvocationRecord } from "../../types.js";
 import {
-    MERGE_INDICATOR_CFG,
     getTaskCfg,
 } from "../lib/live-session-config.js";
 import { getTaskProgressPhase, type TaskProgressPhase } from "../../lib/task-progress.js";
@@ -23,14 +22,13 @@ import { RerunTaskModal } from "./ui/RerunTaskModal.js";
 import { Button } from "./ui/Button.js";
 import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 import { AgentSelectAvatarIcon } from "./agents/AgentSelectAvatarIcon.js";
-import { SprintReviewBadge } from "./sprints/SprintReviewBadge.js";
 import { SelfReflectionRatingBadge } from "./tasks/SelfReflectionRatingBadge.js";
 import { getSafeUrl } from "../lib/safe-url.js";
 import { LiveTaskInvocationRow } from "./live-session/LiveTaskInvocationRow.js";
 import { QuotaCountdown, TaskDuration } from "./live-session/LiveTaskTiming.js";
-import { CiStatusBadge } from "./ui/CiStatusBadge.js";
+import { WorkflowStatusBadge } from "./ui/WorkflowStatusBadge.js";
 import type { CiStatusPresentation } from "../lib/ci-status-presentation.js";
-import { useLiveI18n, type LiveMessageKey } from "../i18n/messages/live.js";
+import { useLiveI18n } from "../i18n/messages/live.js";
 
 /* ─── LiveTaskCard ───────────────────────────────────────────────────────── */
 
@@ -53,6 +51,7 @@ export interface LiveTaskCardProps {
     events?: ExecutionRuntimeEventSummary[];
     invocations?: ExecutionInvocationRecord[];
     ciPresentation?: CiStatusPresentation | null;
+    humanIntervention?: ExecutionAttentionItemSummary | null;
     onRerun: (id: string, options?: RerunOptions) => void;
     onEdit: (task: Subtask) => void;
     onForceComplete: (task: Subtask) => void;
@@ -76,6 +75,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     events,
     invocations = [],
     ciPresentation = null,
+    humanIntervention = null,
     onRerun,
     onEdit,
     onForceComplete,
@@ -105,14 +105,9 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
 
     const taskPhase = phase ?? getTaskProgressPhase(task);
     const cfg = getTaskCfg(taskPhase);
-    const localizedStatusLabel = t(({ RUNNING: "running", CODING_COMPLETED: "codingCompleted", COMPLETED: "completed", FAILED: "failed", BLOCKED: "blocked", PENDING: "pending", QUOTA: "quota" } as const)[taskPhase] ?? "pending");
     const StatusIcon = cfg.icon;
     const hasEventFeed = Boolean(events && events.length > 0);
     const hasInvocations = invocations.length > 0;
-    const mergeCfg = task.merge_indicator ? MERGE_INDICATOR_CFG[task.merge_indicator] : null;
-    const localizedMergeLabel = task.merge_indicator
-        ? t((({ QA_PENDING: "qaPending", AUTOMERGE: "automerge", MERGED: "merged", MERGE_BLOCKED: "mergeBlocked", MERGE_CONFLICT: "mergeConflict", CI: "ci" } as Partial<Record<string, LiveMessageKey>>)[task.merge_indicator]) ?? "merge")
-        : null;
     const sessionLabel = (task.session_id || task.session_name || "").replace(/^sessions\//, "");
     const isForceCompleteUnavailable = taskPhase === "COMPLETED" || isForceCompleting;
     const forceCompleteStatusMessage = isForceCompleting
@@ -296,22 +291,15 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                                 <span className="font-mono text-[10px] font-bold px-2.5 py-0.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.04] text-slate-400">
                                     #{task.id}
                                 </span>
-                                {/* Status badge */}
-                                <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.14em] ${cfg.bg} ${cfg.text} border ${cfg.border}`}>
-                                    <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${cfg.dot}`} />
-                                    <span className="sr-only">{t("taskStatus")} </span>{localizedStatusLabel}
-                                </span>
-                                {ciPresentation && (
-                                    <CiStatusBadge presentation={ciPresentation} compact />
-                                )}
-                                {mergeCfg && !ciPresentation && taskPhase !== "RUNNING" && taskPhase !== "PENDING" && (
-                                    <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.14em] ${mergeCfg.bg} ${mergeCfg.text} border ${mergeCfg.border}`}>
-                                        {localizedMergeLabel}
-                                    </span>
-                                )}
-                                {task.latestReview && (
-                                    <SprintReviewBadge summary={task.latestReview} compact showCompactLabel align="right" />
-                                )}
+                                <WorkflowStatusBadge
+                                    scope="task"
+                                    status={taskPhase}
+                                    review={task.latestReview}
+                                    ciPresentation={ciPresentation}
+                                    humanIntervention={humanIntervention}
+                                    compact
+                                    align="right"
+                                />
                                 <SelfReflectionRatingBadge rating={task.selfReflectionRating} align="start" />
                             </div>
                             <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white leading-snug">

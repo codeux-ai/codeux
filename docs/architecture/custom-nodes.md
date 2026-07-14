@@ -32,6 +32,8 @@ The handler receives only `NodeExecutionContext`: immutable JSON input/config, c
 
 Any failed check records a `failed` report and no artifact. A passed build records dependency inventory, source revision, deterministic build digest, Docker image id, validation report, creator/invocation/correlation metadata, manifest, and declared capabilities. The artifact envelope is content-addressed and immutable. Publication stores only its digest and registers a typed `custom.*@version` definition; flow graph JSON contains the definition reference and configuration, never source.
 
+Schema-v1 custom manifests retain their singular per-slot `requiredCapability`. Registration normalizes it into the node-definition slot's explicit `requiredCapabilities` list, alongside allowed credential kinds and required/optional state, so existing published artifacts use the same review and runtime policy as built-ins without a manifest-version break.
+
 The audit hook is intentionally injected so custom nodes consume the governed dependency policy instead of creating a second vulnerability policy. With no hook, validation fails.
 
 ## Runtime boundary

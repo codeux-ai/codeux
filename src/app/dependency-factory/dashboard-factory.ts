@@ -26,6 +26,7 @@ import { ExecutionInvocationControlService } from "../../services/execution-invo
 import { createLateBoundDependency } from "../../shared/late-bound-dependency.js";
 import { ChatProviderIngressService } from "../../services/chat-provider-ingress-service.js";
 import { ChatProviderOutboundService } from "../../services/chat-provider-outbound-service.js";
+import { ChatProviderSessionRuntimeService } from "../../services/chat-provider-session-runtime-service.js";
 import { SpeechTranscriptionService } from "../../services/speech-transcription-service.js";
 import { SpeechSynthesisService } from "../../services/speech-synthesis-service.js";
 import { SpeechModelManager } from "../../services/speech-model-manager.js";
@@ -55,8 +56,12 @@ export interface DashboardDependencies {
   automationSloService: CoreDependencies["automationSloService"];
   chatThreadRuntimeService: ChatThreadRuntimeService;
   chatProviderRepository: CoreDependencies["chatProviderRepository"];
+  chatProviderSecretService: CoreDependencies["chatProviderSecretService"];
+  chatProviderVerificationService: CoreDependencies["chatProviderVerificationService"];
+  chatConnectorRegistry: CoreDependencies["chatConnectorRegistry"];
   chatProviderIngressService: ChatProviderIngressService;
   chatProviderOutboundService: ChatProviderOutboundService;
+  chatProviderSessionRuntimeService: ChatProviderSessionRuntimeService;
   speechTranscriptionService: SpeechTranscriptionService;
   speechSynthesisService: SpeechSynthesisService;
   speechModelManager: SpeechModelManager;
@@ -92,6 +97,9 @@ export function createDashboardDependencies(
     projectManagementRepository,
     connectionChatRepository,
     chatProviderRepository,
+    chatProviderSecretService,
+    chatProviderVerificationService,
+    chatConnectorRegistry,
     projectWorkerAssignmentRepository,
     projectAttentionService,
     agentPresetSyncService,
@@ -145,9 +153,23 @@ export function createDashboardDependencies(
     logger: logger.child({ component: "sprint-rollback-service" }),
   });
 
+  const chatProviderOutboundService = new ChatProviderOutboundService({
+    chatProviderRepository,
+    chatProviderSecretService,
+    connectorRegistry: chatConnectorRegistry,
+    logger: logger.child({ component: "chat-provider-outbound-service" }),
+  });
+  const chatProviderSessionRuntimeService = new ChatProviderSessionRuntimeService({
+    chatProviderRepository,
+    chatProviderSecretService,
+    connectorRegistry: chatConnectorRegistry,
+    logger: logger.child({ component: "chat-provider-session-runtime-service" }),
+  });
+
   const managementToolHandler = new ManagementToolHandler({
     sprintPreviewService: coreDeps.sprintPreviewService,
     customDashboardRepository: coreDeps.customDashboardRepository,
+    customDashboardCredentialBindingService: coreDeps.customDashboardCredentialBindingService,
     customDashboardValidationService: coreDeps.customDashboardValidationService,
     executionRepository: coreDeps.executionRepository,
     getDashboardSettings: () => resolveDashboardSettings(),
@@ -156,6 +178,12 @@ export function createDashboardDependencies(
     taskRerunService: taskRerunServiceRef,
     settingsRepository: coreDeps.settingsRepository,
     chatProviderRepository: coreDeps.chatProviderRepository,
+    chatProviderSecretService: coreDeps.chatProviderSecretService,
+    chatProviderVerificationService: coreDeps.chatProviderVerificationService,
+    chatProviderOutboundService,
+    chatConnectorRegistry: coreDeps.chatConnectorRegistry,
+    headlessAuthService: coreDeps.headlessAuthService,
+    agentPresetRepository: coreDeps.agentPresetRepository,
     agentPresetSyncService: coreDeps.agentPresetSyncService,
     memoryService: coreDeps.memoryService,
     memoryPromotionService: coreDeps.memoryPromotionService,
@@ -206,11 +234,6 @@ export function createDashboardDependencies(
     executionRepository,
   });
 
-  const chatProviderOutboundService = new ChatProviderOutboundService({
-    chatProviderRepository,
-    logger: logger.child({ component: "chat-provider-outbound-service" }),
-  });
-
   const chatThreadRuntimeService = new ChatThreadRuntimeService({
     connectionChatRepository,
     projectWorkerAssignmentRepository,
@@ -238,6 +261,8 @@ export function createDashboardDependencies(
 
   const chatProviderIngressService = new ChatProviderIngressService({
     chatProviderRepository,
+    chatProviderSecretService,
+    connectorRegistry: chatConnectorRegistry,
     chatThreadRuntimeService,
     logger: logger.child({ component: "chat-provider-ingress-service" }),
   });
@@ -563,6 +588,12 @@ export function createDashboardDependencies(
   });
 
   planningAgentServiceRef.set(planningAgentService);
+  sprintOrchestrator.setUnplannedSprintPlanner((projectId, sprintId) => (
+    planningAgentService.startPlanSprint(projectId, sprintId, {
+      autoStart: true,
+      replan: false,
+    })
+  ));
 
   const agentBaseUpdateService = new AgentBaseUpdateService({
     projectManagementRepository,
@@ -612,7 +643,6 @@ export function createDashboardDependencies(
     quicksprintService,
     chatThreadRuntimeService,
     executionControlService,
-    planningAgentService,
     taskRerunService,
     memoryRemediationService,
     nodeFlowRuntimeService,
@@ -628,9 +658,13 @@ export function createDashboardDependencies(
     headlessReadinessService: coreDeps.headlessReadinessService,
     automationSloService: coreDeps.automationSloService,
     chatProviderRepository,
+    chatProviderSecretService,
+    chatProviderVerificationService,
+    chatConnectorRegistry,
     chatThreadRuntimeService,
     chatProviderIngressService,
     chatProviderOutboundService,
+    chatProviderSessionRuntimeService,
     speechTranscriptionService,
     speechSynthesisService,
     speechModelManager,

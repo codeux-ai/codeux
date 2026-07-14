@@ -1,5 +1,15 @@
 import { fetchJson } from "../../lib/api/fetch-json.js";
 import type {
+  AutomationCredentialCompatibilityIssue,
+  AutomationCredentialMetadata,
+  CredentialBackendHealth,
+} from "../../../../src/contracts/automation-credential-types.js";
+import type {
+  CustomDashboardCredentialBinding,
+  CustomDashboardCredentialSlotDeclaration,
+  CustomDashboardValidationIssue,
+} from "../../../../src/contracts/custom-dashboard-types.js";
+import type {
   CreateCustomDashboardDraftInput,
   CreateCustomDashboardRevisionInput,
   CustomDashboardDataSourceNodeGraph,
@@ -43,7 +53,69 @@ export interface CustomDashboardValidationLogsResponse {
   logs: string;
 }
 
+export interface CustomDashboardCredentialCandidate {
+  credentialId: string;
+  metadata: AutomationCredentialMetadata | null;
+  compatible: boolean;
+  issues: AutomationCredentialCompatibilityIssue[];
+  missingCapabilities: string[];
+}
+
+export interface CustomDashboardCredentialSlotReview {
+  slot: CustomDashboardCredentialSlotDeclaration;
+  binding: CustomDashboardCredentialBinding | null;
+  metadata: AutomationCredentialMetadata | null;
+  compatible: boolean;
+  issues: CustomDashboardValidationIssue[];
+  candidates?: CustomDashboardCredentialCandidate[];
+}
+
+export interface CustomDashboardCredentialBindingReview {
+  projectId: string;
+  dashboardId: string;
+  revisionId: string | null;
+  credentialBindingRevision: number | null;
+  backend: CredentialBackendHealth;
+  valid: boolean;
+  issues: CustomDashboardValidationIssue[];
+  slots: CustomDashboardCredentialSlotReview[];
+  credentialCandidateCount: number;
+  credentialCandidatesTruncated: boolean;
+}
+
+export class CustomDashboardCredentialBindingApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly issues: CustomDashboardValidationIssue[] = [],
+  ) {
+    super(message);
+    this.name = "CustomDashboardCredentialBindingApiError";
+  }
+}
+
 const jsonHeaders = { "Content-Type": "application/json" };
+
+const credentialBindingsPath = (projectId: string, dashboardId: string): string => (
+  `/api/projects/${encodeURIComponent(projectId)}/custom-dashboards/${encodeURIComponent(dashboardId)}/credential-bindings`
+);
+
+const mutateCredentialBindings = async (
+  path: string,
+  init: RequestInit,
+): Promise<CustomDashboardCredentialBindingReview> => {
+  const response = await fetch(path, { ...init, cache: "no-store" });
+  const body = await response.json().catch(() => ({})) as Partial<CustomDashboardCredentialBindingReview> & {
+    error?: unknown;
+    issues?: unknown;
+  };
+  if (!response.ok) {
+    const message = typeof body.error === "string" ? body.error : `Credential binding request failed: ${path}`;
+    const issues = Array.isArray(body.issues) ? body.issues as CustomDashboardValidationIssue[] : [];
+    throw new CustomDashboardCredentialBindingApiError(response.status, message, issues);
+  }
+  return body as CustomDashboardCredentialBindingReview;
+};
 
 export const fetchCustomDashboards = (
   projectId: string,
@@ -57,6 +129,43 @@ export const fetchCustomDashboard = (
   signal?: AbortSignal,
 ): Promise<CustomDashboardDetailResponse> => (
   fetchJson<CustomDashboardDetailResponse>(`/api/custom-dashboards/${encodeURIComponent(dashboardId)}`, { signal })
+);
+
+export const fetchCustomDashboardCredentialBindings = (
+  projectId: string,
+  dashboardId: string,
+  signal?: AbortSignal,
+): Promise<CustomDashboardCredentialBindingReview> => (
+  fetchJson<CustomDashboardCredentialBindingReview>(credentialBindingsPath(projectId, dashboardId), { signal })
+);
+
+export const bindCustomDashboardCredential = (
+  projectId: string,
+  dashboardId: string,
+  input: { slotId: string; credentialId: string; expectedBindingRevision: number },
+  signal?: AbortSignal,
+): Promise<CustomDashboardCredentialBindingReview> => (
+  mutateCredentialBindings(credentialBindingsPath(projectId, dashboardId), {
+    method: "PUT",
+    headers: jsonHeaders,
+    body: JSON.stringify(input),
+    signal,
+  })
+);
+
+export const unbindCustomDashboardCredential = (
+  projectId: string,
+  dashboardId: string,
+  slotId: string,
+  expectedBindingRevision: number,
+  signal?: AbortSignal,
+): Promise<CustomDashboardCredentialBindingReview> => (
+  mutateCredentialBindings(`${credentialBindingsPath(projectId, dashboardId)}/${encodeURIComponent(slotId)}`, {
+    method: "DELETE",
+    headers: jsonHeaders,
+    body: JSON.stringify({ expectedBindingRevision }),
+    signal,
+  })
 );
 
 export const createCustomDashboard = (

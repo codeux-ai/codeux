@@ -1149,9 +1149,9 @@ describe("SchedulerPage", () => {
 
     await screen.findByText("Laufzeit-Zeitplaner");
     fireEvent.click(screen.getByRole("button", { name: "Speicher" }));
-    const remediationMode = screen.getByLabelText(/^Modus der Langzeitspeicher-Bereinigung/i) as HTMLSelectElement;
-    fireEvent.input(remediationMode, { target: { value: "ai" } });
-    expect(remediationMode.value).toBe("ai");
+    const remediationMode = screen.getByRole("button", { name: /^Modus der Langzeitspeicher-Bereinigung/i });
+    fireEvent.click(remediationMode);
+    fireEvent.click(screen.getByRole("option", { name: "KI-gestützte Prüfung" }));
     expect(screen.getByText(/Im KI-Modus werden Kandidaten/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Planen" }));
 

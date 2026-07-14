@@ -1,5 +1,5 @@
-import type { FunctionComponent } from "preact";
-import { Database, FileCode2, Layers3, Palette, ScrollText } from "lucide-preact";
+import type { ComponentChildren, FunctionComponent } from "preact";
+import { Database, FileCode2, KeyRound, Layers3, Palette, ScrollText } from "lucide-preact";
 import { Button } from "../ui/Button.js";
 import type {
   CustomDashboardDataSourceNodeGraph,
@@ -13,7 +13,7 @@ import { parseJsonDraft, stableJsonStringify } from "../../lib/custom-dashboard-
 import { useDashboardI18n } from "../../i18n/context.js";
 import { customDashboardMessages } from "../../i18n/messages/custom-dashboards.js";
 
-export type CustomDashboardEditorTab = "manifest" | "files" | "sources" | "styleguide" | "catalog";
+export type CustomDashboardEditorTab = "manifest" | "files" | "sources" | "styleguide" | "catalog" | "credentials";
 
 export interface CustomDashboardDraftState {
   title: string;
@@ -32,6 +32,7 @@ interface CustomDashboardEditorPanelProps {
   selectedFilePath: string;
   onSelectedFilePathChange: (path: string) => void;
   catalog: CustomDashboardDataCatalogResponse | null;
+  credentialPanel?: ComponentChildren;
 }
 
 export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditorPanelProps> = ({
@@ -42,6 +43,7 @@ export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditor
   selectedFilePath,
   onSelectedFilePathChange,
   catalog,
+  credentialPanel,
 }) => {
   const { locale, translate } = useDashboardI18n();
   const tabs: Array<{ id: CustomDashboardEditorTab; label: string; icon: typeof ScrollText }> = [
@@ -58,6 +60,10 @@ export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditor
   );
   const files = parsedBundle.ok && Array.isArray(parsedBundle.value.files) ? parsedBundle.value.files : [];
   const selectedFile = files.find((file) => file.path === selectedFilePath) ?? files[0] ?? null;
+  const visibleTabs = credentialPanel
+    ? [...tabs, { id: "credentials" as const, label: "Credentials", icon: KeyRound }]
+    : tabs;
+  const effectiveActiveTab = activeTab === "credentials" && !credentialPanel ? "manifest" : activeTab;
 
   const setDraftField = (field: keyof CustomDashboardDraftState, value: string) => {
     onDraftChange({ ...draft, [field]: value });
@@ -144,9 +150,9 @@ export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditor
       </div>
 
       <div className="mt-4 flex min-w-0 gap-2 overflow-x-auto pb-1" role="tablist" aria-label={translate(customDashboardMessages, "draftSectionsAriaLabel")}>
-        {tabs.map((tab) => {
+        {visibleTabs.map((tab) => {
           const Icon = tab.icon;
-          const selected = activeTab === tab.id;
+          const selected = effectiveActiveTab === tab.id;
           return (
             <button
               key={tab.id}
@@ -168,7 +174,7 @@ export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditor
       </div>
 
       <div className="mt-4 min-h-0 flex-1">
-        {activeTab === "manifest" ? (
+        {effectiveActiveTab === "manifest" ? (
           <JsonTextarea
             label={translate(customDashboardMessages, "manifestJson")}
             value={draft.manifestText}
@@ -177,7 +183,7 @@ export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditor
           />
         ) : null}
 
-        {activeTab === "files" ? (
+        {effectiveActiveTab === "files" ? (
           <div className="grid min-h-0 gap-3 lg:grid-cols-[minmax(11rem,0.45fr)_minmax(0,1fr)]">
             <div className="flex min-h-[16rem] flex-col gap-2 rounded-[1rem] border border-black/[0.06] bg-slate-900/[0.03] p-2 dark:border-white/[0.06] dark:bg-white/[0.03]">
               <div className="flex items-center justify-between gap-2">
@@ -230,7 +236,7 @@ export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditor
           </div>
         ) : null}
 
-        {activeTab === "sources" ? (
+        {effectiveActiveTab === "sources" ? (
           <JsonTextarea
             label={translate(customDashboardMessages, "sourceGraphJson")}
             value={draft.sourceGraphText}
@@ -239,7 +245,7 @@ export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditor
           />
         ) : null}
 
-        {activeTab === "styleguide" ? (
+        {effectiveActiveTab === "styleguide" ? (
           <JsonTextarea
             label={translate(customDashboardMessages, "styleguideJson")}
             value={draft.styleguideText}
@@ -248,7 +254,7 @@ export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditor
           />
         ) : null}
 
-        {activeTab === "catalog" ? (
+        {effectiveActiveTab === "catalog" ? (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {(catalog?.sources ?? []).map((source) => (
               <article key={`${source.dashboardId}:${source.id}`} className="rounded-[1rem] border border-black/[0.08] bg-white/70 p-3 dark:border-white/[0.08] dark:bg-white/[0.04]">
@@ -270,6 +276,8 @@ export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditor
             ) : null}
           </div>
         ) : null}
+
+        {effectiveActiveTab === "credentials" ? credentialPanel : null}
       </div>
     </section>
   );

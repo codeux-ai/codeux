@@ -273,6 +273,7 @@ export const SprintsPage: FunctionComponent = () => {
     handleAppendTask,
     handleDeleteSprint,
     handleToggleShowcase,
+    handleUpdateBranch,
     handleBulkToggleShowcase,
     handleOpenExport,
     handleImportSprint,
@@ -599,6 +600,10 @@ export const SprintsPage: FunctionComponent = () => {
     setOverrideSprint(sprint);
   }, [setOverrideSprint]);
 
+  const handleUpdateBranchFromLedger = useCallback((sprint: typeof sortedSprints[number]) => {
+    void handleUpdateBranch(sprint);
+  }, [handleUpdateBranch]);
+
   const handleMarkCompletedFromLedger = useCallback((sprintId: string) => {
     void handleMarkCompleted(sprintId);
   }, [handleMarkCompleted]);
@@ -781,7 +786,7 @@ export const SprintsPage: FunctionComponent = () => {
                     : "max-h-[460rem] overflow-visible translate-y-0 scale-100 opacity-100 blur-0"
                 }`}
               >
-                <div ref={bubblesRef} className="flex flex-wrap justify-center gap-10 py-6 xl:gap-12">
+                <div ref={bubblesRef} className="flex flex-wrap justify-center gap-x-10 gap-y-[4.5rem] pb-6 pt-[4.5rem] xl:gap-x-12 xl:gap-y-20">
                   {showcaseSprints.map((sprint, index) => {
                     const activeRun = activeRunsBySprintId.get(sprint.id);
                     const pendingActionId = activeRun ? `sprint-stop:${activeRun.id}` : `sprint-start:${sprint.id}`;
@@ -806,6 +811,7 @@ export const SprintsPage: FunctionComponent = () => {
                         showcaseBusy={pendingActionIds.has(pinActionId)}
                         markCompletedBusy={pendingActionIds.has(markCompletedActionId)}
                         markQaPassedBusy={pendingActionIds.has(markQaPassedActionId)}
+                        updateBranchBusy={pendingActionIds.has(`sprint-update-branch:${sprint.id}`)}
                         isPaused={isPaused}
                         pauseResumeBusy={pauseResumeBusy}
                         humanIntervention={interventionBySprintId.get(sprint.id) || null}
@@ -837,6 +843,7 @@ export const SprintsPage: FunctionComponent = () => {
                         }}
                         onExport={() => { void handleOpenExport(sprint.id, sprint.name); }}
                         onOverrides={() => { setOverrideSprint(sprint); }}
+                        onUpdateBranch={sprint.status === "idle" ? () => { void handleUpdateBranch(sprint); } : undefined}
                         onToggleShowcase={() => { void handleToggleShowcase(sprint); }}
                       />
                     );
@@ -988,6 +995,7 @@ export const SprintsPage: FunctionComponent = () => {
                 onEditSprint={handleEditSprintFromLedger}
                 onExportSprint={handleExportSprintFromLedger}
                 onOverridesSprint={handleOverridesSprintFromLedger}
+                onUpdateBranchSprint={handleUpdateBranchFromLedger}
                 onMarkCompletedSprint={handleMarkCompletedFromLedger}
                 onMarkQaPassedSprint={handleMarkQaPassedFromLedger}
                 onRollbackSprint={setRollbackSprint}
@@ -1165,6 +1173,10 @@ export const SprintsPage: FunctionComponent = () => {
               onOverrides={() => {
                 setOverrideSprint(activeRowMenuSprint);
               }}
+              onUpdateBranch={activeRowMenuSprint.status === "idle" ? () => {
+                void handleUpdateBranch(activeRowMenuSprint);
+              } : undefined}
+              updateBranchBusy={pendingActionIds.has(`sprint-update-branch:${activeRowMenuSprint.id}`)}
               onMarkCompleted={() => {
                 void handleMarkCompleted(activeRowMenuSprint.id);
               }}

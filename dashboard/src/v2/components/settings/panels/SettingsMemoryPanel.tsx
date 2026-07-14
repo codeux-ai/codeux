@@ -9,6 +9,7 @@ import { fetchMemoryRemediationSchedule, saveMemoryRemediationSchedule } from ".
 import type { MemoryRemediationScheduleCadence } from "../../../types.js";
 import { useDashboardI18n } from "../../../i18n/index.js";
 import { settingsModelsMessages } from "../../../i18n/messages/settings-models.js";
+import { AvantgardeSelect } from "../../ui/AvantgardeSelect.js";
 
 export const SettingsMemoryPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
   const { formatNumber, translate: t, translatePlural: tp } = useDashboardI18n();
@@ -145,22 +146,23 @@ export const SettingsMemoryPanel: FunctionComponent<{ state: SettingsPageState }
             />
           </Row>
           <Row label={t(settingsModelsMessages, "postSprintRemediation")} description={t(settingsModelsMessages, "postSprintRemediationDescription")} badge={getFieldBadge("memory.remediationMode")} last>
-            <select
+            <AvantgardeSelect
+              aria-label={t(settingsModelsMessages, "postSprintRemediation")}
               value={editableSettings.memory.remediationMode}
               disabled={!editableSettings.memory.enabled}
-              onChange={(event) => {
-                const value = (event.currentTarget as HTMLSelectElement).value as typeof editableSettings.memory.remediationMode;
+              onChange={(value) => {
                 updateEditableSettings((current) => ({
                   ...current,
-                  memory: { ...current.memory, remediationMode: value },
+                  memory: { ...current.memory, remediationMode: value as typeof editableSettings.memory.remediationMode },
                 }));
               }}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 dark:border-white/10 dark:bg-void-900 dark:text-slate-100"
-            >
-              <option value="off">{t(settingsModelsMessages, "off")}</option>
-              <option value="deterministic">{t(settingsModelsMessages, "deterministic")}</option>
-              <option value="ai">{t(settingsModelsMessages, "aiRemediation")}</option>
-            </select>
+              className="min-w-[12rem]"
+              options={[
+                { value: "off", label: t(settingsModelsMessages, "off") },
+                { value: "deterministic", label: t(settingsModelsMessages, "deterministic") },
+                { value: "ai", label: t(settingsModelsMessages, "aiRemediation") },
+              ]}
+            />
           </Row>
         </SectionCard>
 
@@ -185,27 +187,31 @@ export const SettingsMemoryPanel: FunctionComponent<{ state: SettingsPageState }
           ) : (
             <>
               <Row label={t(settingsModelsMessages, "scheduleCadence")} description={t(settingsModelsMessages, "scheduleCadenceDescription")} badge={getFieldBadge("memory.remediationMode")}>
-                <select
+                <AvantgardeSelect
+                  aria-label={t(settingsModelsMessages, "scheduleCadence")}
                   value={scheduleCadence}
                   disabled={scheduleLoading || scheduleSaving || !editableSettings.memory.enabled}
-                  onChange={(event) => setScheduleCadence((event.currentTarget as HTMLSelectElement).value as MemoryRemediationScheduleCadence)}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 dark:border-white/10 dark:bg-void-900 dark:text-slate-100"
-                >
-                  <option value="off">{t(settingsModelsMessages, "off")}</option>
-                  <option value="daily">{t(settingsModelsMessages, "everyDay")}</option>
-                  <option value="weekly">{t(settingsModelsMessages, "everyWeek")}</option>
-                </select>
+                  onChange={(value) => setScheduleCadence(value as MemoryRemediationScheduleCadence)}
+                  className="min-w-[12rem]"
+                  options={[
+                    { value: "off", label: t(settingsModelsMessages, "off") },
+                    { value: "daily", label: t(settingsModelsMessages, "everyDay") },
+                    { value: "weekly", label: t(settingsModelsMessages, "everyWeek") },
+                ]}
+                />
               </Row>
               <Row label={t(settingsModelsMessages, "remediationMode")} description={t(settingsModelsMessages, "remediationModeDescription")} badge={getFieldBadge("memory.remediationMode")}>
-                <select
+                <AvantgardeSelect
+                  aria-label={t(settingsModelsMessages, "remediationMode")}
                   value={scheduleMode}
                   disabled={scheduleLoading || scheduleSaving || !editableSettings.memory.enabled || scheduleCadence === "off"}
-                  onChange={(event) => setScheduleMode((event.currentTarget as HTMLSelectElement).value as "deterministic" | "ai")}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 dark:border-white/10 dark:bg-void-900 dark:text-slate-100"
-                >
-                  <option value="deterministic">{t(settingsModelsMessages, "deterministic")}</option>
-                  <option value="ai">{t(settingsModelsMessages, "aiRemediation")}</option>
-                </select>
+                  onChange={(value) => setScheduleMode(value as "deterministic" | "ai")}
+                  className="min-w-[12rem]"
+                  options={[
+                    { value: "deterministic", label: t(settingsModelsMessages, "deterministic") },
+                    { value: "ai", label: t(settingsModelsMessages, "aiRemediation") },
+                ]}
+                />
               </Row>
               <Row label={t(settingsModelsMessages, "runTime")} description={t(settingsModelsMessages, "runTimeDescription")} badge={getFieldBadge("memory.remediationMode")} last>
                 <div className="flex flex-wrap items-center justify-end gap-2">
@@ -331,21 +337,22 @@ export const SettingsMemoryPanel: FunctionComponent<{ state: SettingsPageState }
           ]}
         >
           <Row label={t(settingsModelsMessages, "embeddingBackend")} description={t(settingsModelsMessages, "embeddingBackendDescription")} badge={getFieldBadge("memory.embeddingProvider")}>
-            <select
+            <AvantgardeSelect
+              aria-label={t(settingsModelsMessages, "embeddingBackend")}
               value={editableSettings.memory.embeddingProvider}
               disabled={!editableSettings.memory.enabled}
-              onChange={(event) => {
-                const value = (event.currentTarget as HTMLSelectElement).value as typeof editableSettings.memory.embeddingProvider;
+              onChange={(value) => {
                 updateEditableSettings((current) => ({
                   ...current,
-                  memory: { ...current.memory, embeddingProvider: value },
+                  memory: { ...current.memory, embeddingProvider: value as typeof editableSettings.memory.embeddingProvider },
                 }));
               }}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 dark:border-white/10 dark:bg-void-900 dark:text-slate-100"
-            >
-              <option value="in_app">{t(settingsModelsMessages, "inAppModels")}</option>
-              <option value="external_api">{t(settingsModelsMessages, "externalApi")}</option>
-            </select>
+              className="min-w-[12rem]"
+              options={[
+                { value: "in_app", label: t(settingsModelsMessages, "inAppModels") },
+                { value: "external_api", label: t(settingsModelsMessages, "externalApi") },
+              ]}
+            />
           </Row>
           {editableSettings.memory.embeddingProvider === "external_api" && (
             <>

@@ -10,6 +10,7 @@ import { useProjectData } from "./context/project-data.js";
 import { listEmbeddingModels } from "./lib/memory-api.js";
 import { fetchAgentPresets } from "./lib/agent-preset-api.js";
 import type { AgentPreset, Source } from "./types.js";
+import { AvantgardeSelect } from "./components/ui/AvantgardeSelect.js";
 import {
   fetchKnowledgeDocuments,
   addPastedDocument,
@@ -474,15 +475,16 @@ const KnowledgeSearchBox: FunctionComponent<{ projectId: string; agentPresets: A
             className="w-full rounded-xl border border-black/[0.08] bg-white/70 py-2.5 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-200"
           />
         </div>
-        <select
+        <AvantgardeSelect
           value={agentId}
-          onChange={(e) => setAgentId((e.target as HTMLSelectElement).value)}
+          onChange={setAgentId}
+          className="min-w-[12rem]"
           aria-label={translate(knowledgeMessages, "agentSelectorLabel")}
-          className="rounded-xl border border-black/[0.08] bg-white/70 px-3 py-2.5 text-sm font-semibold text-slate-600 outline-none dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300"
-        >
-          <option value="">{translate(knowledgeMessages, "wholeLibrary")}</option>
-          {agentPresets.map((preset) => <option key={preset.id} value={preset.id}>{translate(knowledgeMessages, "agentDocuments", { agentName: preset.name })}</option>)}
-        </select>
+          options={[
+            { value: "", label: translate(knowledgeMessages, "wholeLibrary") },
+            ...agentPresets.map((preset) => ({ value: preset.id, label: translate(knowledgeMessages, "agentDocuments", { agentName: preset.name }) })),
+          ]}
+        />
         <button type="button" onClick={run} disabled={searching || !query.trim()} className="inline-flex items-center gap-2 rounded-xl bg-signal-500/90 px-4 py-2.5 text-sm font-bold text-white hover:bg-signal-400 disabled:opacity-50 dark:text-void-900">
           {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" strokeWidth={2.5} />}
           {translate(knowledgeMessages, "search")}
@@ -696,16 +698,12 @@ const ProjectKnowledgeModal: FunctionComponent<{
   return (
     <ModalShell title={translate(knowledgeMessages, "importFromProject")} onClose={onClose}>
       <div className="flex flex-col gap-4">
-        <select
+        <AvantgardeSelect
           value={sourceProjectId}
-          onChange={(e) => setSourceProjectId((e.target as HTMLSelectElement).value)}
+          onChange={setSourceProjectId}
           aria-label={translate(knowledgeMessages, "sourceProjectLabel")}
-          className="rounded-xl border border-black/[0.08] bg-white/70 px-3 py-2.5 text-sm font-semibold text-slate-600 outline-none dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300"
-        >
-          {sourceProjects.map((project) => (
-            <option key={project.id} value={project.id}>{project.name}</option>
-          ))}
-        </select>
+          options={sourceProjects.map((project) => ({ value: project.id, label: project.name }))}
+        />
 
         <div className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-2xl border border-black/[0.06] bg-black/[0.02] p-2 dark:border-white/[0.06] dark:bg-white/[0.02]">
           {loadingDocs ? (

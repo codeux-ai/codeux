@@ -72,56 +72,64 @@ const supportedSourceTypes = new Set<string>([
   "integrations",
   "external_api",
 ]);
+const CREDENTIAL_BINDING_ID_REDACTION = "[REDACTED_CREDENTIAL_BINDING_ID]";
+const CREDENTIAL_BINDING_PROPERTY_NAMES = new Set(["credentialbindings", "credentialid"]);
 
 export function resolvePublishedCustomDashboardRuntime(
   dashboard: CustomDashboardRecord,
   revisions: CustomDashboardRevisionRecord[],
   locale: DashboardLocale = "en",
 ): CustomDashboardRuntimeResolution {
+  const credentialIds = collectCredentialBindingIds(dashboard, revisions);
+  const safeDashboard = sanitizeViewerValue(dashboard, credentialIds);
+  const safeRevisions = sanitizeViewerValue(revisions, credentialIds);
   const publishedRevision = dashboard.publishedRevisionId
     ? revisions.find((revision) => revision.id === dashboard.publishedRevisionId) ?? null
     : null;
-  const validationReport = getLastValidationReport(revisions);
+  const safePublishedRevision = publishedRevision ? sanitizeViewerValue(publishedRevision, credentialIds) : null;
+  const validationReport = getLastValidationReport(safeRevisions);
 
-  if (dashboard.status === "archived") {
+  if (safeDashboard.status === "archived") {
     return {
       status: "blocked",
       reason: translateDashboardMessage(customDashboardMessages, locale, "blockedArchived"),
       validationReport,
-      publishedRevision,
+      publishedRevision: safePublishedRevision,
     };
   }
-  if (dashboard.status !== "published") {
+  if (safeDashboard.status !== "published") {
     return {
       status: "blocked",
       reason: translateDashboardMessage(customDashboardMessages, locale, "blockedUnpublished"),
       validationReport,
-      publishedRevision,
+      publishedRevision: safePublishedRevision,
     };
   }
-  if (!dashboard.publishedRevisionId || !publishedRevision) {
+  if (!safeDashboard.publishedRevisionId || !publishedRevision) {
     return {
       status: "blocked",
       reason: translateDashboardMessage(customDashboardMessages, locale, "blockedNoRevision"),
       validationReport,
-      publishedRevision,
+      publishedRevision: safePublishedRevision,
     };
   }
   if (publishedRevision.validationStatus !== "passed" || publishedRevision.validationReport?.valid !== true) {
     return {
       status: "blocked",
       reason: translateDashboardMessage(customDashboardMessages, locale, "blockedInvalidRevision"),
-      validationReport: publishedRevision.validationReport ?? validationReport,
-      publishedRevision,
+      validationReport: safePublishedRevision?.validationReport ?? validationReport,
+      publishedRevision: safePublishedRevision,
     };
   }
+
+  const readyRevision = sanitizeViewerValue(publishedRevision, credentialIds);
 
   return {
     status: "ready",
     runtime: {
-      dashboard,
-      revision: publishedRevision,
-      document: buildCustomDashboardFrameDocument(dashboard, publishedRevision, locale),
+      dashboard: safeDashboard,
+      revision: readyRevision,
+      document: buildCustomDashboardFrameDocument(safeDashboard, readyRevision, locale),
     },
   };
 }
@@ -130,6 +138,19 @@ export function buildCustomDashboardFrameDocument(
   dashboard: CustomDashboardRecord,
   revision: CustomDashboardRevisionRecord,
   locale: DashboardLocale = "en",
+): string {
+  const credentialIds = collectCredentialBindingIds(dashboard, [revision]);
+  return buildSanitizedCustomDashboardFrameDocument(
+    sanitizeViewerValue(dashboard, credentialIds),
+    sanitizeViewerValue(revision, credentialIds),
+    locale,
+  );
+}
+
+function buildSanitizedCustomDashboardFrameDocument(
+  dashboard: CustomDashboardRecord,
+  revision: CustomDashboardRevisionRecord,
+  locale: DashboardLocale,
 ): string {
   const entryFile = revision.fileBundle.files.find((file) => file.path === revision.manifest.entryFile) ?? null;
   const bridgeConfig = {
@@ -360,7 +381,7 @@ function buildBridgeBootstrapScript(config: Record<string, unknown>): string {
     "    window.parent.postMessage({ type: 'codeux-custom-dashboard:source-request', requestId, sourceId }, '*');",
     "  });",
     "  window.addEventListener('message', (event) => {",
-    `    if (!event.data || event.data.type !== '${CUSTOM_DASHBOARD_SOURCE_RESPONSE_TYPE}') return;`,
+    `    if (event.source !== window.parent || !event.data || event.data.type !== '${CUSTOM_DASHBOARD_SOURCE_RESPONSE_TYPE}') return;`,
     "    const entry = pending.get(event.data.requestId);",
     "    if (!entry) return;",
     "    pending.delete(event.data.requestId);",
@@ -379,6 +400,47 @@ function buildBridgeBootstrapScript(config: Record<string, unknown>): string {
     "  window.addEventListener('unhandledrejection', (event) => report(event.reason?.message || String(event.reason || 'Unhandled custom dashboard rejection.')));",
     "})();",
   ].join("\n");
+}
+
+function collectCredentialBindingIds(
+  dashboard: CustomDashboardRecord,
+  revisions: CustomDashboardRevisionRecord[],
+): string[] {
+  const credentialIds = new Set<string>();
+  for (const record of [dashboard, ...revisions]) {
+    for (const binding of record.credentialBindings ?? []) {
+      if (binding.credentialId) credentialIds.add(binding.credentialId);
+    }
+  }
+  return [...credentialIds].sort((left, right) => right.length - left.length);
+}
+
+function sanitizeViewerValue<T>(value: T, credentialIds: readonly string[]): T {
+  return sanitizeViewerUnknown(value, credentialIds) as T;
+}
+
+function sanitizeViewerUnknown(value: unknown, credentialIds: readonly string[]): unknown {
+  if (typeof value === "string") {
+    return credentialIds.reduce(
+      (safe, credentialId) => safe.split(credentialId).join(CREDENTIAL_BINDING_ID_REDACTION),
+      value,
+    );
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeViewerUnknown(entry, credentialIds));
+  }
+  if (!value || typeof value !== "object") return value;
+
+  const safe: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    const normalizedKey = key.toLowerCase();
+    if (CREDENTIAL_BINDING_PROPERTY_NAMES.has(normalizedKey)
+      || credentialIds.some((credentialId) => key.includes(credentialId))) {
+      continue;
+    }
+    safe[key] = sanitizeViewerUnknown(entry, credentialIds);
+  }
+  return safe;
 }
 
 function injectBootstrapIntoHtml(html: string, bootstrap: string, title: string): string {

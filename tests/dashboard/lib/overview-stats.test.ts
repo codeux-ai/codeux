@@ -199,8 +199,8 @@ describe("overview-stats", () => {
     it("should verify basic visual modes array matches expected valid modes", () => {
       // While mode switching is mainly UI, we test the allowed set here
       // matching the StatsVisualMode type definition keys
-      const expectedModes = ["trend", "composition", "models", "reliability", "ledgers", "system"];
-      expect(expectedModes.length).toBe(6);
+      const expectedModes = ["trend", "composition", "cost", "models", "reliability", "ledgers", "system"];
+      expect(expectedModes.length).toBe(7);
       expect(expectedModes).toContain("trend");
       expect(expectedModes).toContain("system");
     });

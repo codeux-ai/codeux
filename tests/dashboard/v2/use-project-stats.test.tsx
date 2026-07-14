@@ -47,8 +47,8 @@ vi.mock("../../../dashboard/src/v2/lib/project-api.js", () => ({
 
 import { fetchProjectStats } from "../../../dashboard/src/v2/lib/project-api.js";
 
-function TestComponent({ projectId, query, pollIntervalMs = 30000, onStats }: { projectId: string | null; query: any, pollIntervalMs?: number, onStats?: (s: any) => void }) {
-  const { stats, loading, error } = useProjectStats(projectId, query, pollIntervalMs);
+function TestComponent({ projectId, query, pollIntervalMs = 30000, onStats, realtime = true }: { projectId: string | null; query: any, pollIntervalMs?: number, onStats?: (s: any) => void, realtime?: boolean }) {
+  const { stats, loading, error } = useProjectStats(projectId, query, pollIntervalMs, { realtime });
 
   if (onStats && stats) {
     onStats(stats);
@@ -173,6 +173,20 @@ describe("useProjectStats cancellation", () => {
 
     // It should be a silent refresh, so no foreground loading
     expect(getByTestId("loading").textContent).toBe("idle");
+  });
+
+  it("can disable realtime invalidation for wide overview snapshots", async () => {
+    const { getByTestId } = render(h(TestComponent, {
+      projectId: "p1",
+      query: "7d",
+      realtime: false,
+    }));
+
+    await waitFor(() => {
+      expect(getByTestId("loading").textContent).toBe("idle");
+    });
+    expect(mockRealtimeCallback).toBeNull();
+    expect(fetchProjectStats).toHaveBeenCalledTimes(1);
   });
 
   it("performs background polling based on interval", async () => {

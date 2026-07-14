@@ -13,6 +13,7 @@ import {
 } from "./command-spawner-client.js";
 import type { SpawnerCommandOptions, SpawnerRawResult } from "./command-spawner-protocol.js";
 import { isRuntimeShutdownInProgress } from "../../services/shutdown-state.js";
+import { BoundedTextBuffer } from "./bounded-text-buffer.js";
 
 declare const spawnCommandBrand: unique symbol;
 declare const spawnArgumentBrand: unique symbol;
@@ -419,10 +420,10 @@ export class CommandRunner {
         stdio: [safeStdinFile ? "pipe" : "ignore", "pipe", "pipe"],
       });
 
-      let stdout = "";
-      let stderr = "";
-      let stdoutBuffer = "";
-      let stderrBuffer = "";
+      const stdout = new BoundedTextBuffer(maxStdoutChars);
+      const stderr = new BoundedTextBuffer(maxStderrChars);
+      const stdoutLineBuffer = new BoundedTextBuffer(maxStdoutChars);
+      const stderrLineBuffer = new BoundedTextBuffer(maxStderrChars);
       let stdoutClipped = false;
       let stderrClipped = false;
       let timedOut = false;
@@ -446,7 +447,8 @@ export class CommandRunner {
           signal.removeEventListener("abort", abortHandler);
         }
 
-        let finalStderr = trimOutput ? stderr.trim() : stderr;
+        const retainedStderr = stderr.takeString();
+        let finalStderr = trimOutput ? retainedStderr.trim() : retainedStderr;
         if (extraStderr) {
           const separator = finalStderr.length > 0 && !finalStderr.endsWith("\n") ? "\n" : "";
           finalStderr = `${finalStderr}${separator}${extraStderr}`;
@@ -455,9 +457,10 @@ export class CommandRunner {
           finalStderr = `...${finalStderr}`;
         }
 
+        const retainedStdout = stdout.takeString();
         let normalizedStdout = resolvedCommand.containerHostCwd
-          ? this.mapContainerStdoutToHost(stdout, resolvedCommand.containerHostCwd)
-          : stdout;
+          ? this.mapContainerStdoutToHost(retainedStdout, resolvedCommand.containerHostCwd)
+          : retainedStdout;
         normalizedStdout = trimOutput ? normalizedStdout.trim() : normalizedStdout;
         if (stdoutClipped) {
           normalizedStdout = `...${normalizedStdout}`;
@@ -527,38 +530,16 @@ export class CommandRunner {
       const handleData = (data: Buffer, isStderr: boolean, callback?: (line: string) => void) => {
         const text = data.toString();
         if (isStderr) {
-          stderr += text;
-          if (stderr.length > maxStderrChars) {
-            stderr = stderr.slice(-maxStderrChars);
-            stderrClipped = true;
-          }
+          stderr.append(text);
+          stderrClipped = stderr.clipped;
           if (callback) {
-            stderrBuffer += text;
-            const lines = stderrBuffer.split("\n");
-            stderrBuffer = lines.pop() ?? "";
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (trimmed.length > 0) {
-                callback(trimmed);
-              }
-            }
+            this.emitCompletedLines(stderrLineBuffer, text, callback);
           }
         } else {
-          stdout += text;
-          if (stdout.length > maxStdoutChars) {
-            stdout = stdout.slice(-maxStdoutChars);
-            stdoutClipped = true;
-          }
+          stdout.append(text);
+          stdoutClipped = stdout.clipped;
           if (callback) {
-            stdoutBuffer += text;
-            const lines = stdoutBuffer.split("\n");
-            stdoutBuffer = lines.pop() ?? "";
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (trimmed.length > 0) {
-                callback(trimmed);
-              }
-            }
+            this.emitCompletedLines(stdoutLineBuffer, text, callback);
           }
         }
       };
@@ -572,11 +553,13 @@ export class CommandRunner {
       });
 
       child.on("close", (code) => {
-        if (onStdoutLine && stdoutBuffer.trim().length > 0) {
-          onStdoutLine(stdoutBuffer.trim());
+        const finalStdoutLine = stdoutLineBuffer.takeString().trim();
+        if (onStdoutLine && finalStdoutLine.length > 0) {
+          onStdoutLine(finalStdoutLine);
         }
-        if (onStderrLine && stderrBuffer.trim().length > 0) {
-          onStderrLine(stderrBuffer.trim());
+        const finalStderrLine = stderrLineBuffer.takeString().trim();
+        if (onStderrLine && finalStderrLine.length > 0) {
+          onStderrLine(finalStderrLine);
         }
 
         const ok = code === 0 && !timedOut && !aborted;
@@ -588,6 +571,26 @@ export class CommandRunner {
         finish(ok, code, extra);
       });
     });
+  }
+
+  private emitCompletedLines(
+    pending: BoundedTextBuffer,
+    chunk: string,
+    callback: (line: string) => void,
+  ): void {
+    const lastNewline = chunk.lastIndexOf("\n");
+    if (lastNewline < 0) {
+      pending.append(chunk);
+      return;
+    }
+    const completed = `${pending.takeString()}${chunk.slice(0, lastNewline)}`;
+    for (const line of completed.split("\n")) {
+      const trimmed = line.trim();
+      if (trimmed.length > 0) {
+        callback(trimmed);
+      }
+    }
+    pending.append(chunk.slice(lastNewline + 1));
   }
 
   /**

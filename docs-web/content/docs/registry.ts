@@ -111,9 +111,18 @@ export type DocsSlug =
   | 'settings-google-drive-mount'
   | 'user-dashboard-custom-dashboards'
   | 'architecture-card-ci-status-projection'
+  | 'architecture-chat-connector-runtime-reliability'
+  | 'architecture-chat-connectors-discord'
+  | 'architecture-chat-connectors-imessage'
+  | 'architecture-chat-connectors-overview'
+  | 'architecture-chat-connectors-microsoft-teams'
+  | 'architecture-chat-connectors-slack'
+  | 'architecture-chat-connectors-telegram'
+  | 'architecture-chat-connectors-whatsapp'
   | 'architecture-custom-dashboard-foundation'
   | 'architecture-custom-nodes'
   | 'architecture-dashboard-internationalization'
+  | 'architecture-high-concurrency-orchestration'
   | 'architecture-managed-container-runtime'
   | 'architecture-node-flow-builtins-and-security'
   | 'architecture-node-flow-durable-execution'
@@ -243,7 +252,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-tasks',
     section: 'User Guide',
     title: "Tasks",
-    description: "The Tasks page (/tasks) is a Kanban-style task board for the active project. It organizes tasks into Queued, In Progress, and Completed lanes, with sprint scope, status, priority, and search controls above the board.",
+    description: "The Tasks page (/tasks) is a Kanban-style task board for the active project. It organizes tasks into Queued, In Progress, and Completed lanes, with sprint scope, status, priority, and visible-card controls above the b...",
   },
   'user-dashboard-live-session': {
     id: 'user-dashboard-live-session',
@@ -284,7 +293,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     id: 'user-dashboard-node-flows',
     path: '/docs/user-dashboard-node-flows',
     section: 'User Guide',
-    title: "Node Flows",
+    title: "Node Flows Dashboard",
     description: "The Nodes page (/nodes) is the project-scoped backend authoring, publication, and operations surface for canonical node flows. No selected project means no flow library, credential metadata, publications, or durable r...",
   },
   'user-dashboard-scheduler': {
@@ -572,7 +581,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/settings-integrations',
     section: 'User Guide',
     title: "Integrations",
-    description: "Lists provider, git-host, issue-tracker, and read-only importer integrations and exposes manage/add actions.",
+    description: "Lists automation credentials, providers, git hosts, issue trackers, and read-only importer integrations and exposes manage/add actions.",
   },
   'settings-jules-automation': {
     id: 'settings-jules-automation',
@@ -823,8 +832,8 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     id: 'architecture-external-chat-providers',
     path: '/docs/architecture-external-chat-providers',
     section: 'Architecture',
-    title: "External chat connectors",
-    description: "Code UX persists external chat provider configuration separately from MCP listener connections and dashboard conversation messages. The runtime stays adapter-neutral: it records provider setup, bridge mode, channel ro...",
+    title: "External Chat Providers",
+    description: "Code UX connector profiles declare setup, provider-native or bridge transport, ingress authentication, identity, verification, and session requirements. Shared services own encrypted secrets, authorized project routin...",
   },
   'architecture-configuration-resolution': {
     id: 'architecture-configuration-resolution',
@@ -845,7 +854,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/operations-credential-security',
     section: 'User Guide',
     title: "Automation Credential Security",
-    description: "Code UX resolves canonical node credential IDs and named project binding keys through the credential broker. Stored values are not exposed to nodes, dashboard reads, MCP payloads, agent context, run inspection records...",
+    description: "Code UX stores automation credentials through a broker rather than exposing secret values to node definitions, dashboard reads, MCP payloads, agent context, or run inspection records. Canonical node bindings reference...",
   },
   'operations-runbook': {
     id: 'operations-runbook',
@@ -865,8 +874,8 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     id: 'operations-server-mode',
     path: '/docs/operations-server-mode',
     section: 'User Guide',
-    title: "Authenticated Headless Server Mode",
-    description: "Code UX separates MCP bearer access from the authenticated dashboard administrative API. Remote dashboard/API deployments must use digest-backed service identities or terminate OIDC at a trusted reverse proxy; loopbac...",
+    title: "Secure Headless Server Mode",
+    description: "Server mode runs Code UX as an authenticated MCP HTTP control plane without binding the dashboard UI, dashboard REST routes, dashboard realtime websocket, terminal websocket, or static dashboard assets. Use it for hea...",
   },
   'settings-google-drive-mount': {
     id: 'settings-google-drive-mount',
@@ -889,6 +898,62 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Card CI Status Projection",
     description: "Task, Sprint, and Live cards expose one compact persisted ciStatus: pending, running, failed, or null after settlement. The projection does not load the large remote Git status snapshot and does not poll GitHub or Git...",
   },
+  'architecture-chat-connector-runtime-reliability': {
+    id: 'architecture-chat-connector-runtime-reliability',
+    path: '/docs/architecture-chat-connector-runtime-reliability',
+    section: 'Architecture',
+    title: "Chat connector runtime reliability",
+    description: "External connector callbacks and replies cross process, network, and provider boundaries. Code UX separates durable state changes from model, fetch, command, and reconnect work. Provider-specific policy comes from the...",
+  },
+  'architecture-chat-connectors-discord': {
+    id: 'architecture-chat-connectors-discord',
+    path: '/docs/architecture-chat-connectors-discord',
+    section: 'Architecture',
+    title: "Discord Connector Profile",
+    description: "Discord has two independently selected transports. Existing webhook mode preserves custom bot/gateway URLs. Provider-native official_api owns Discord HTTP interaction authentication, Gateway v10 delivery, REST replies...",
+  },
+  'architecture-chat-connectors-imessage': {
+    id: 'architecture-chat-connectors-imessage',
+    path: '/docs/architecture-chat-connectors-imessage',
+    section: 'Architecture',
+    title: "iMessage Connector Architecture",
+    description: "The iMessage profile is a transparent third-party bridge contract. It advertises only managed_bridge and native_bridge; it does not expose official_api, imply Apple endorsement, or verify an Apple provider endpoint.",
+  },
+  'architecture-chat-connectors-overview': {
+    id: 'architecture-chat-connectors-overview',
+    path: '/docs/architecture-chat-connectors-overview',
+    section: 'Architecture',
+    title: "Chat Connector Registry",
+    description: "Code UX registers one typed, independently editable profile for each external chat connector. Profiles own setup schemas, implemented transport modes, authentication and handshake metadata, inbound normalization, exte...",
+  },
+  'architecture-chat-connectors-microsoft-teams': {
+    id: 'architecture-chat-connectors-microsoft-teams',
+    path: '/docs/architecture-chat-connectors-microsoft-teams',
+    section: 'Architecture',
+    title: "Microsoft Teams Connector Profile",
+    description: "Microsoft Teams retains managed_bridge and custom webhook transports and provides a direct official_api profile based on Bot Connector Activities. Managed/custom endpoints remain operator-selected and are not represen...",
+  },
+  'architecture-chat-connectors-slack': {
+    id: 'architecture-chat-connectors-slack',
+    path: '/docs/architecture-chat-connectors-slack',
+    section: 'Architecture',
+    title: "Slack Connector Profile",
+    description: "Slack implements managed_bridge, explicit custom webhook, and direct official_api transports. The custom webhook remains a generic configured bridge URL; only official mode uses Slack APIs, with fixed https://slack.co...",
+  },
+  'architecture-chat-connectors-telegram': {
+    id: 'architecture-chat-connectors-telegram',
+    path: '/docs/architecture-chat-connectors-telegram',
+    section: 'Architecture',
+    title: "Telegram Connector Profile",
+    description: "Telegram implements managed_bridge, webhook, and direct official_api transports. The two legacy modes preserve their existing schemas, bridge URL fallbacks, authentication metadata, response parsing, and retry classif...",
+  },
+  'architecture-chat-connectors-whatsapp': {
+    id: 'architecture-chat-connectors-whatsapp',
+    path: '/docs/architecture-chat-connectors-whatsapp',
+    section: 'Architecture',
+    title: "WhatsApp Connector Profile",
+    description: "WhatsApp implements managed_bridge, webhook, and direct Meta Cloud API official_api transport. The legacy schemas and bridge mappings retain their original meaning; official mode is additive.",
+  },
   'architecture-custom-dashboard-foundation': {
     id: 'architecture-custom-dashboard-foundation',
     path: '/docs/architecture-custom-dashboard-foundation',
@@ -909,6 +974,12 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     section: 'Architecture',
     title: "Dashboard internationalization",
     description: "The v2 dashboard includes a dependency-free internationalization foundation for English (en) and German (de). English is the compatibility default, and the dashboard does not infer a locale from browser preferences.",
+  'architecture-high-concurrency-orchestration': {
+    id: 'architecture-high-concurrency-orchestration',
+    path: '/docs/architecture-high-concurrency-orchestration',
+    section: 'Architecture',
+    title: "High-Concurrency Docker Orchestration",
+    description: "Code UX keeps local provider and CI work parallel while reserving host capacity for Docker, SQLite, the dashboard, and interactive replies.",
   },
   'architecture-managed-container-runtime': {
     id: 'architecture-managed-container-runtime',
@@ -922,7 +993,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/architecture-node-flow-builtins-and-security',
     section: 'Architecture',
     title: "Node Flow Built-ins and External-Effect Security",
-    description: "The governed catalog adds deterministic branches, bounded collection processing, durable approvals, and replay-safe external effects while keeping the versioned definition registry as the executable authority.",
+    description: "The governed built-in catalog extends publication-based node-flow execution with deterministic control nodes and durable boundaries for external effects. The definition registry remains the executable authority; a gra...",
   },
   'architecture-node-flow-durable-execution': {
     id: 'architecture-node-flow-durable-execution',
@@ -943,7 +1014,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/architecture-node-flows',
     section: 'Architecture',
     title: "Node Flows",
-    description: "Node flows are project-owned, versioned Graph v2 workflows.",
+    description: "Node flows are project-scoped, repeatable workflow graphs for turning an operator or agent-defined procedure into a saved Code UX workflow. They are not a generic n8n compatibility layer. A good flow uses Code UX conc...",
   },
   'architecture-speech-input': {
     id: 'architecture-speech-input',
@@ -1084,9 +1155,18 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['settings-google-drive-mount'],
   docsRegistry['user-dashboard-custom-dashboards'],
   docsRegistry['architecture-card-ci-status-projection'],
+  docsRegistry['architecture-chat-connector-runtime-reliability'],
+  docsRegistry['architecture-chat-connectors-discord'],
+  docsRegistry['architecture-chat-connectors-imessage'],
+  docsRegistry['architecture-chat-connectors-overview'],
+  docsRegistry['architecture-chat-connectors-microsoft-teams'],
+  docsRegistry['architecture-chat-connectors-slack'],
+  docsRegistry['architecture-chat-connectors-telegram'],
+  docsRegistry['architecture-chat-connectors-whatsapp'],
   docsRegistry['architecture-custom-dashboard-foundation'],
   docsRegistry['architecture-custom-nodes'],
   docsRegistry['architecture-dashboard-internationalization'],
+  docsRegistry['architecture-high-concurrency-orchestration'],
   docsRegistry['architecture-managed-container-runtime'],
   docsRegistry['architecture-node-flow-builtins-and-security'],
   docsRegistry['architecture-node-flow-durable-execution'],

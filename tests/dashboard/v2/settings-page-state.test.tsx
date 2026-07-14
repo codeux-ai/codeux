@@ -5,14 +5,18 @@ import { renderHook, act, waitFor, cleanup, render, screen, fireEvent } from "@t
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { useSettingsPageState } from "../../../dashboard/src/v2/hooks/use-settings-page-state.js";
 import { SettingsCategoryRail, CATEGORIES, getLocalizedSettingsCategories } from "../../../dashboard/src/v2/components/settings/SettingsCategoryRail.js";
+import { ActionFeedbackRegion } from "../../../dashboard/src/v2/components/ui/ActionFeedbackRegion.js";
 import { focusFirstInvalidSettingsControl, SettingsPage } from "../../../dashboard/src/v2/SettingsPage.js";
 import { applyEffectiveProjectSettings } from "../../../dashboard/src/v2/lib/settings-view-models.js";
 import * as settingsApi from "../../../dashboard/src/v2/lib/settings-api.js";
 import * as memoryApi from "../../../dashboard/src/v2/lib/memory-api.js";
 import * as agentPresetApi from "../../../dashboard/src/v2/lib/agent-preset-api.js";
+import * as chatProviderApi from "../../../dashboard/src/v2/lib/chat-provider-api.js";
 import * as dashboardApi from "../../../dashboard/src/lib/api/dashboard-api.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import { SETTINGS_NAVIGATION_SESSION_KEY } from "../../../dashboard/src/v2/lib/settings-navigation-state.js";
+import type { ChatProviderVerificationOutcome } from "../../../dashboard/src/v2/types.js";
+import type { DashboardChatProviderConnectionRecord } from "../../../dashboard/src/v2/lib/chat-provider-api.js";
 
 import * as navigationBlocker from "../../../dashboard/src/v2/router/navigation-blocker.js";
 
@@ -83,6 +87,40 @@ const buildSystemSettings = (overrides: Record<string, any> = {}) => {
   };
 };
 
+const ChatProviderMutationErrorHarness = () => {
+  const state = useSettingsPageState(CATEGORIES);
+  const { chatProviders } = state;
+  return (
+    <>
+      <button type="button" onClick={() => void chatProviders.createConnection({
+        providerKind: "slack",
+        displayName: "Slack test",
+      })}>Create connection</button>
+      <button type="button" onClick={() => void chatProviders.updateConnection("connection-1", {
+        displayName: "Slack updated",
+      })}>Update connection</button>
+      <button type="button" onClick={() => void chatProviders.deleteConnection("connection-1")}>Delete connection</button>
+      <button type="button" onClick={() => void chatProviders.createBinding({
+        providerConnectionId: "connection-1",
+        externalChannelId: "channel-1",
+        externalChannelName: "Channel one",
+        projectId: "proj-1",
+      })}>Create binding</button>
+      <button type="button" onClick={() => void chatProviders.updateBinding("binding-1", {
+        projectId: "proj-1",
+      })}>Update binding</button>
+      <button type="button" onClick={() => void chatProviders.deleteBinding("binding-1")}>Delete binding</button>
+      <button type="button" onClick={() => void chatProviders.verifyConnection("connection-1")}>Verify connection</button>
+      <ActionFeedbackRegion
+        status={chatProviders.error ? "error" : "idle"}
+        message={chatProviders.error}
+        clearError={chatProviders.clearError}
+        autoDismiss={false}
+      />
+    </>
+  );
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   window.sessionStorage.removeItem(SETTINGS_NAVIGATION_SESSION_KEY);
@@ -128,6 +166,92 @@ afterEach(() => {
 });
 
 describe("useSettingsPageState", () => {
+  it("redacts verification issue details before rendering the persistent alert", async () => {
+    const rawToken = "xoxb-12345678901234567890123456789012";
+    const rawUrl = "https://hooks.example.test/services/T000/B000/secret";
+    const outcome: ChatProviderVerificationOutcome = {
+      providerConnectionId: "connection-1",
+      providerKind: "slack",
+      status: "failed",
+      verifiedAt: null,
+      capabilities: [],
+      providerErrorCode: null,
+      retryable: false,
+      issues: [`Verification token=${rawToken} rejected by ${rawUrl}`],
+      diagnostics: null,
+      setupGuidance: {
+        providerKind: "slack",
+        bridgeMode: "managed_bridge",
+        requiredSetupFields: [],
+        requiredSecretFields: [],
+        capabilities: [],
+        liveVerificationAvailable: false,
+      },
+    };
+    const connection: DashboardChatProviderConnectionRecord = {
+      id: "connection-1",
+      providerKind: "slack",
+      displayName: "Slack test",
+      bridgeMode: "managed_bridge",
+      status: "error",
+      enabled: false,
+      setup: {},
+      credentials: [],
+      verificationStatus: "failed",
+      verificationDetails: null,
+      verifiedAt: null,
+      secretVersion: 1,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      ingressUrl: "http://localhost/api/chat-providers/ingress/connection-1",
+      setupHints: {
+        bridgeModeLabel: "Managed bridge",
+        integration: "managed_core",
+        requiredSetupFields: [],
+        requiredSecretFields: [],
+      },
+    };
+    vi.spyOn(chatProviderApi, "verifyChatProviderConnection").mockResolvedValue(outcome);
+    vi.spyOn(chatProviderApi, "fetchChatProviderConnection").mockResolvedValue(connection);
+
+    render(<ChatProviderMutationErrorHarness />);
+    fireEvent.click(screen.getByRole("button", { name: "Verify connection" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Verification token=[redacted] rejected by [redacted URL]");
+    expect(alert).not.toHaveTextContent(rawToken);
+    expect(alert).not.toHaveTextContent(rawUrl);
+  });
+
+  it("redacts sensitive details from every rendered chat-provider mutation error", async () => {
+    const rawToken = "xoxb-12345678901234567890123456789012";
+    const rawUrl = "https://hooks.example.test/services/T000/B000/secret";
+    const mutationError = new Error(`Bearer ${rawToken} failed at ${rawUrl} token=${rawToken}`);
+    const operations = [
+      ["Create connection", vi.spyOn(chatProviderApi, "createChatProviderConnection").mockRejectedValue(mutationError)],
+      ["Update connection", vi.spyOn(chatProviderApi, "updateChatProviderConnection").mockRejectedValue(mutationError)],
+      ["Delete connection", vi.spyOn(chatProviderApi, "deleteChatProviderConnection").mockRejectedValue(mutationError)],
+      ["Create binding", vi.spyOn(chatProviderApi, "createChatProviderChannelBinding").mockRejectedValue(mutationError)],
+      ["Update binding", vi.spyOn(chatProviderApi, "updateChatProviderChannelBinding").mockRejectedValue(mutationError)],
+      ["Delete binding", vi.spyOn(chatProviderApi, "deleteChatProviderChannelBinding").mockRejectedValue(mutationError)],
+    ] as const;
+
+    render(<ChatProviderMutationErrorHarness />);
+
+    for (const [label, operation] of operations) {
+      fireEvent.click(screen.getByRole("button", { name: label }));
+
+      await waitFor(() => expect(operation).toHaveBeenCalledTimes(1));
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("Bearer [redacted] failed at [redacted URL] token=[redacted]");
+      expect(alert).not.toHaveTextContent(rawToken);
+      expect(alert).not.toHaveTextContent(rawUrl);
+
+      fireEvent.click(screen.getByRole("button", { name: "Clear error" }));
+      await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+    }
+  });
+
   it("restores the active settings category, focused card, and invocation route after a hard refresh", async () => {
     const first = renderHook(() => useSettingsPageState(CATEGORIES));
     await waitFor(() => expect(first.result.current.loading).toBe(false));
@@ -366,7 +490,10 @@ describe("useSettingsPageState", () => {
 
     render(<SettingsPage />);
 
-    expect(screen.getByRole("region", { name: "Settings category panel" })).toHaveAttribute("aria-busy", "true");
+    const categoryPanel = screen.getByRole("region", { name: "Settings category panel" });
+    expect(categoryPanel).toHaveAttribute("aria-busy", "true");
+    expect(categoryPanel).toHaveClass("self-start", "justify-start");
+    expect(categoryPanel).not.toHaveClass("self-center", "justify-center");
     expect(screen.getByRole("status", { name: "Loading settings" })).toHaveTextContent("Loading settings.");
   });
 
@@ -563,7 +690,7 @@ describe("useSettingsPageState", () => {
       result.current.setSettingsSearch("automation");
     });
 
-    expect(result.current.filteredCategories.length).toBe(1);
+    expect(result.current.filteredCategories.map((category) => category.id)).toEqual(["general", "integrations"]);
     expect(result.current.activeCategory).toBe("general");
   });
 

@@ -10,7 +10,7 @@ import type {
   NodeCanvasValidationIssue,
 } from "../../lib/nodes-canvas-state.js";
 import { Input } from "../ui/Input.js";
-import { Select } from "../ui/Select.js";
+import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { Toggle } from "../ui/Toggle.js";
 import { Button } from "../ui/Button.js";
 import { NodePortList } from "./NodePortList.js";
@@ -101,18 +101,17 @@ const ConfigFieldControl: FunctionComponent<{
     return (
       <div className="flex flex-col gap-1.5">
         {commonLabel}
-        <Select
+        <AvantgardeSelect
           id={inputId}
           value={configValueAsString(field.value)}
-          errorText={issue?.message}
+          invalid={Boolean(issue)}
           aria-invalid={issue ? "true" : undefined}
           aria-required={field.required ? "true" : undefined}
-          onChange={(event) => onNodeConfigChange(nodeId, field.id, event.currentTarget.value)}
-        >
-          {(field.options ?? []).map((option) => (
-            <option key={option} value={option}>{option}</option>
-          ))}
-        </Select>
+          aria-errormessage={issue ? `${inputId}-error` : undefined}
+          onChange={(value) => onNodeConfigChange(nodeId, field.id, value)}
+          options={(field.options ?? []).map((value) => ({ value, label: value }))}
+        />
+        {issue ? <p id={`${inputId}-error`} role="alert" className="text-xs text-status-red">{issue.message}</p> : null}
       </div>
     );
   }
@@ -284,33 +283,31 @@ export const NodeInspector: FunctionComponent<NodeInspectorProps> = ({
         {selectedNode.kind === "agent" || selectedNode.metadata.agentIntent !== undefined ? (
           <div className="flex flex-col gap-1.5">
             <label className={FIELD_LABEL_CLASS} htmlFor={`node-agent-intent-${selectedNode.id}`}>{t("agentIntent")}</label>
-            <Select
+            <AvantgardeSelect
               id={`node-agent-intent-${selectedNode.id}`}
               value={selectedNode.metadata.agentIntent ?? "implement"}
-              errorText={agentIntentIssue?.message}
+              invalid={Boolean(agentIntentIssue)}
               aria-invalid={agentIntentIssue ? "true" : undefined}
-              onChange={(event) => updateMetadata({ agentIntent: event.currentTarget.value as NodeCanvasNodeMetadata["agentIntent"] })}
-            >
-              {AGENT_INTENTS.map((intent) => (
-                <option key={intent} value={intent}>{intent}</option>
-              ))}
-            </Select>
+              aria-errormessage={agentIntentIssue ? `node-agent-intent-${selectedNode.id}-error` : undefined}
+              onChange={(value) => updateMetadata({ agentIntent: value as NodeCanvasNodeMetadata["agentIntent"] })}
+              options={AGENT_INTENTS.map((value) => ({ value, label: value }))}
+            />
+            {agentIntentIssue ? <p id={`node-agent-intent-${selectedNode.id}-error`} role="alert" className="text-xs text-status-red">{agentIntentIssue.message}</p> : null}
           </div>
         ) : null}
         {selectedNode.kind === "task" || selectedNode.metadata.taskIntent !== undefined ? (
           <div className="flex flex-col gap-1.5">
             <label className={FIELD_LABEL_CLASS} htmlFor={`node-task-intent-${selectedNode.id}`}>{t("taskIntent")}</label>
-            <Select
+            <AvantgardeSelect
               id={`node-task-intent-${selectedNode.id}`}
               value={selectedNode.metadata.taskIntent ?? "feature"}
-              errorText={taskIntentIssue?.message}
+              invalid={Boolean(taskIntentIssue)}
               aria-invalid={taskIntentIssue ? "true" : undefined}
-              onChange={(event) => updateMetadata({ taskIntent: event.currentTarget.value as NodeCanvasNodeMetadata["taskIntent"] })}
-            >
-              {TASK_INTENTS.map((intent) => (
-                <option key={intent} value={intent}>{intent}</option>
-              ))}
-            </Select>
+              aria-errormessage={taskIntentIssue ? `node-task-intent-${selectedNode.id}-error` : undefined}
+              onChange={(value) => updateMetadata({ taskIntent: value as NodeCanvasNodeMetadata["taskIntent"] })}
+              options={TASK_INTENTS.map((value) => ({ value, label: value }))}
+            />
+            {taskIntentIssue ? <p id={`node-task-intent-${selectedNode.id}-error`} role="alert" className="text-xs text-status-red">{taskIntentIssue.message}</p> : null}
           </div>
         ) : null}
       </section>

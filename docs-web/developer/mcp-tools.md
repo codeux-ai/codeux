@@ -48,7 +48,7 @@ action-specific fields, and an optional `approval` object for destructive action
 | `request_clarification` | orchestration | Raise an idempotent, project-owned Markdown question from an eligible coding agent. |
 | `reply_to_clarification` | orchestration | Answer a pending clarification as the eligible project-manager agent or an unscoped project-manager client. |
 | `manage_projects` | orchestration | List, get, create, update, select, set up, and delete projects. |
-| `manage_sprints` | orchestration | Plan, start, pause, cancel, inspect, import issues into, and edit sprints. |
+| `manage_sprints` | orchestration | Save unplanned follow-up drafts; plan, start, pause, cancel, inspect, import issues into, and edit sprints. |
 | `manage_tasks` | orchestration | Create, edit, start, stop, pause, and inspect tasks. |
 | `manage_quicksprints` | orchestration | Manage quicksprint templates and execute them. |
 | `manage_scheduler` | orchestration | Create and run scheduled sprints, quicksprints, messages, and node flows. |
@@ -63,7 +63,7 @@ action-specific fields, and an optional `approval` object for destructive action
 | `search_skills` | agents & memory | Semantic retrieval over persistent project skills, optionally scoped to an agent or storage. |
 | `manage_settings` | platform | Get/resolve/patch/replace/reset system, project, and sprint settings. |
 | `manage_preview` | platform | Manage sprint preview containers (start/stop/rebuild, logs, scripts). |
-| `manage_custom_dashboards` | platform | Manage project custom dashboard drafts, revisions, detached validation sessions, publication, archiving, and data catalog lookup. |
+| `manage_custom_dashboards` | platform | Manage project custom dashboard drafts, metadata-only credential bindings, revisions, detached validation sessions, publication, archiving, and data catalog lookup. |
 | `manage_chat_providers` | platform | Manage external chat provider setup definitions, connections, bindings, and outbound delivery state. |
 | `manage_telemetry` | platform | Read execution snapshots, invocations, sprint runs, and dispatches. |
 
@@ -121,7 +121,7 @@ Clarification states are `pending`, `replied`, `expired`, and `cancelled`. Repea
 | Tool | `action` values |
 | --- | --- |
 | `manage_projects` | `list`, `get`, `create`, `update`, `select`, `setup`, `delete` |
-| `manage_sprints` | `list`, `get`, `create`, `update`, `delete`, `start`, `pause`, `cancel`, `force_cancel`, `inspect_run`, `import_issues`, `plan` |
+| `manage_sprints` | `list`, `get`, `create`, `followup`, `update`, `delete`, `start`, `pause`, `cancel`, `force_cancel`, `inspect_run`, `import_issues`, `plan` |
 | `manage_tasks` | `list`, `get`, `create`, `update`, `delete`, `start`, `stop`, `force_stop`, `pause`, `inspect_run` |
 | `manage_quicksprints` | `list_templates`, `get_template`, `create_template`, `update_template`, `delete_template`, `execute`, `start` |
 | `manage_scheduler` | `list`, `create`, `update`, `delete`, `run_due`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `schedule_node_flow` |
@@ -132,13 +132,19 @@ Clarification states are `pending`, `replied`, `expired`, and `cancelled`. Repea
 | `manage_skills` | `authoring_prompt`, `list_storages`, `get_storage`, `create_storage`, `update_storage`, `delete_storage`, `reset_storage`, `list_agent_storages`, `attach_storage`, `detach_storage`, `list_skills`, `get_skill`, `create_skill`, `update_skill`, `delete_skill`, `import_markdown`, `export_markdown` |
 | `manage_settings` | `get_system`, `get_project_override`, `resolve_project_effective`, `get_sprint_override`, `resolve_sprint_effective`, `replace_system_settings`, `patch_system_setting`, `replace_project_settings`, `patch_project_setting`, `reset_project_settings`, `replace_sprint_settings`, `patch_sprint_setting`, `reset_sprint_settings`, `export_settings_bundle`, `apply_settings_bundle` |
 | `manage_preview` | `list_sessions`, `start_session`, `stop_session`, `rebuild_session`, `remove_session`, `get_logs`, `get_url`, `get_script`, `update_script` |
-| `manage_custom_dashboards` | `list`, `get`, `create`, `update`, `create_revision`, `validate_revision`, `validation_status`, `validation_logs`, `publish_revision`, `archive`, `data_catalog` |
+| `manage_custom_dashboards` | `list`, `get`, `create`, `update`, `create_revision`, `validate_revision`, `validation_status`, `validation_logs`, `publish_revision`, `archive`, `data_catalog`, `list_credential_slots`, `bind_credential`, `unbind_credential` |
 | `manage_chat_providers` | `list_provider_definitions`, `list_connections`, `get_connection`, `create_connection`, `update_connection`, `delete_connection`, `list_channel_bindings`, `create_channel_binding`, `update_channel_binding`, `delete_channel_binding`, `list_outbound_deliveries` |
 | `manage_telemetry` | `get_project_stats_snapshot`, `get_project_execution_snapshot`, `list_execution_invocations`, `list_execution_invocation_messages`, `list_sprint_runs`, `list_task_dispatches` |
 
 For `manage_projects` setup, clients may send setup options either as `setup.options` or as top-level `options`. `options.docs: true` is opt-in and embeds discovered repository documentation into the Knowledge docs library.
 
 For the full per-action payloads and return shapes, see [Management actions](./management-actions.md).
+
+Custom-dashboard credential actions are project-scoped and metadata-only. `list_credential_slots` returns bounded compatible credential metadata; `bind_credential` and `unbind_credential` require `projectId`, `dashboardId`, `slotId`, `expectedBindingRevision`, and the stateful approval handshake, with `credentialId` added for bind/replace. Before fingerprinting, their arguments are strictly validated and rebuilt from only those allowed metadata fields, so secret-bearing, malformed approval, or undeclared fields cannot enter pending approval state. Validation and publication fail closed on required or incompatible bindings without resolving plaintext; publication errors retain sanitized slot-specific issues, and generic custom-dashboard MCP responses recursively redact known binding IDs from nested content.
+
+### Scheduled follow-up sprint drafts
+
+`manage_sprints` with `action: "followup"` saves a new idle sprint without calling the Planning agent, creating tasks, starting orchestration, or creating a schedule. For work that must begin after another sprint, create the draft first and then pass its returned id to `manage_scheduler` `schedule_sprint` with `scheduleMode: "after_sprint_end"` and the source sprint id. Never call `plan` before that schedule: starting the still-unplanned draft automatically plans it with auto-start after the source sprint completes.
 
 ### Background sprint planning
 
@@ -305,13 +311,14 @@ Chat provider management uses the same safety model for sensitive operations:
 ## `manage_chat_providers`
 
 `manage_chat_providers` configures external chat provider setup definitions, provider connections,
-channel bindings, and outbound delivery inspection. It does not process inbound messages or force
-outbound sends; those are runtime services behind authenticated ingress and delivery adapters.
+channel bindings, bounded verification/health, and durable delivery inspection/control. Inbound
+processing remains behind authenticated ingress and sends remain behind leased delivery adapters.
 
 Supported provider kinds are `whatsapp`, `imessage`, `telegram`, `slack`, `microsoft-teams`, and
-`discord`. Supported bridge modes are `managed_bridge`, `webhook`, and `native_bridge`. Code UX does not
-call those providers' official APIs directly; it talks to the configured managed bridge, webhook
-gateway, or native bridge command.
+`discord`. Profiles advertise only their implemented `managed_bridge`, `webhook`, `native_bridge`, or
+`official_api` modes. Official modes use profile-pinned provider endpoints; the other modes use
+operator-selected managed/custom/local bridges. Registry presence is not provider certification or
+production readiness.
 
 Common actions:
 
@@ -320,22 +327,26 @@ Common actions:
   state, status, and write-only secret replacements.
 - `create_channel_binding` and `update_channel_binding` attach external channels to projects with
   optional routing hints, inbound/outbound flags, `agentPresetId`, and `suppressRichWidgets`.
-- `list_outbound_deliveries` reads persisted outbound delivery state by connection, binding, channel,
-  status, and limit.
+- `verify_connection` runs bounded configuration/provider checks; `get_health` reads only persisted
+  sanitized outcomes and never contacts a provider.
+- `list_deliveries` reads both directions; compatibility action `list_outbound_deliveries` remains
+  outbound-only. `retry_delivery` and `cancel_delivery` control one durable delivery.
 
 Redaction rules:
 
 - Raw `secrets` are never returned in success responses, validation errors, or approval envelopes.
 - Public connection records return `credentials` entries that show only key, label, configured state,
   and redacted placeholder.
-- Delivery payloads, bridge response metadata, and error text are redacted before MCP responses.
+- Delivery payloads and lease fields are omitted. Error text, diagnostics, URLs, identities, and
+  provider metadata are redacted/bounded before MCP responses.
 
 Approval behavior:
 
 - `delete_connection` requires approval and cascades channel bindings and delivery rows.
 - `delete_channel_binding` requires approval and stops routing for that channel/project pair.
-- `update_connection` requires a one-use approval handshake before replacing a non-empty `secrets`
-  payload. The approval fingerprint is bound to the redacted payload plus a secret hash.
+- `update_connection` requires one-use approval before replacing/clearing secrets or modifying/removing
+  executable or endpoint setup. `retry_delivery` also requires one-use approval because it may resend.
+  Approval is bound to the exact redacted payload and expires after 15 minutes.
 
 Create a webhook-backed connection:
 
@@ -388,6 +399,59 @@ Inspect retryable outbound delivery state:
   "limit": 25
 }
 ```
+
+Verify a connection and read local health:
+
+```jsonc
+{ "action": "verify_connection", "providerConnectionId": "connection-generic" }
+```
+
+```jsonc
+{ "action": "get_health" }
+```
+
+Meta send checks require explicit test-number opt-in. Telegram `getMe`, Slack `auth.test`, and Discord
+current-user checks require test credentials. Teams uses deterministic Emulator-shaped/mocked contract
+coverage, and iMessage has no public provider-native bot sandbox. A credential-gated skip is not a pass.
+
+Sanitized timeout example:
+
+```jsonc
+{
+  "providerKind": "slack",
+  "status": "failed",
+  "providerErrorCode": "verification_timeout",
+  "retryable": true,
+  "issues": ["Provider verification timed out."],
+  "diagnostics": null
+}
+```
+
+Retry requires two calls. The first returns `approvalRequired`; repeat the exact request only after
+human confirmation:
+
+```jsonc
+{ "action": "retry_delivery", "deliveryId": "delivery-generic" }
+```
+
+```jsonc
+{
+  "action": "retry_delivery",
+  "deliveryId": "delivery-generic",
+  "approval": { "confirmed": true }
+}
+```
+
+```jsonc
+{ "action": "cancel_delivery", "deliveryId": "delivery-generic" }
+```
+
+Generated ingress guidance uses
+`https://codeux.example.test/api/chat-providers/ingress/connection-generic`. Validation rejects
+unsupported provider/mode pairs and delivery limits outside 1-500. Remote credential mutation may be
+disabled. Binding/delivery access derives from the persisted project; foreign records are filtered or
+return a generic authorization error. Provider throttling/temporary failures schedule sanitized retry,
+while invalid authentication/permissions are terminal until corrected.
 
 Delivery statuses include `pending`, `sending`, `delivered`, `retryable_failure`, `processed`,
 `failed`, `duplicate`, and `cancelled`.

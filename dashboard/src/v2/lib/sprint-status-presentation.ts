@@ -88,7 +88,7 @@ function buildSprintStatusPresentation(input: SprintStatusPresentationInput): Sp
       title: coalesceText(input.humanInterventionTitle, "Merge Conflict exists in base branch") || "Merge Conflict exists in base branch",
       reason: coalesceText(input.humanInterventionReason, "A merge conflict exists into the base branch.") || "A merge conflict exists into the base branch.",
       detail: coalesceText(input.humanInterventionInstructions, "Resolve the merge conflicts in the base branch to complete the sprint.") || "Resolve the merge conflicts in the base branch to complete the sprint.",
-      showHumanInterventionBadge: true,
+      showHumanInterventionBadge: input.humanInterventionOwnerType?.toLowerCase() === "human",
       pauseSource,
       isManualPause: false,
       isSystemStop: true,

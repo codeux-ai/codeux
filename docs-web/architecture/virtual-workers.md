@@ -30,34 +30,26 @@ Bearer tokens and local provider credentials remain local and are not logged by 
 [Reconcile loop, every 3 s]
    │
    ▼
-For each project that needs attention:
+For each project that has worker work:
    │
-   ├─ pickNextWorkerAttention(projectId)   // pull next eligible item
+   ├─ Resolve workers.maxConcurrency and provider capacity
    │
-   ├─ if found:
-   │     ├─ Create ephemeral virtual endpoint in WorkerEndpointRepository
-   │     ├─ Assign worker to project (ProjectWorkerAssignmentService)
-   │     ├─ handleAttentionItem(endpoint.id, item, reason)
-   │     │     │
-   │     │     ├─ For coding/ci_fix/merge_conflict:
-   │     │     │     ├─ Resolve provider settings & model
-   │     │     │     ├─ Provision worktree (WorkspaceManager)
-   │     │     │     ├─ Spawn CLI (DOCKER or HOST mode)
-   │     │     │     │
-   │     │     │     ├─ [Session poll loop, every 2 s]
-   │     │     │     │     ├─ Pull session state
-   │     │     │     │     ├─ Update dispatch (workerTaskDispatchService)
-   │     │     │     │     └─ Exit on terminal state or cancel
-   │     │     │     │
-   │     │     │     └─ Cleanup worktree (unless preserve policy)
-   │     │     │
-   │     │     └─ For action_required (plan / clarification):
-   │     │           └─ Auto-approve or auto-reply (per automationInterventions)
-   │     │
-   │     └─ Release worker assignment & delete ephemeral endpoint
+   ├─ worker attention pending/running?
+   │     └─ wait for active dispatches, then run one exclusive attention cycle
    │
-   └─ if no item: skip project
+   └─ otherwise reserve distinct dispatches up to both limits
+         ├─ atomically claim each dispatch lease
+         ├─ create one ephemeral endpoint/assignment per dispatch
+         ├─ run provider/workspace cycles concurrently
+         └─ release each assignment and endpoint independently
 ```
+
+The process-local cycle registry prevents duplicate task/dispatch reservations and overlapping
+reconcile passes; atomic SQLite leases remain the cross-process authority. Provider capacity is
+checked before an endpoint is created, and the local budget is consumed as a batch fans out.
+Attention claims use a conditional SQLite update and remain project-exclusive because repairs can
+change shared state. Attention arriving after durable coding runs started waits for them instead of
+cancelling them.
 
 Default reconcile cadence: `VIRTUAL_WORKER_RECONCILE_MS = 3000`. Default session poll: `VIRTUAL_WORKER_SESSION_POLL_MS = 2000`. Initial scheduling uses microtasks to coalesce rapid events, but follow-up cycles after `remaining_worker_work` are deferred on the reconcile cadence so stale or unchanged worker state cannot starve dashboard HTTP probes or shutdown handling.
 
@@ -129,6 +121,11 @@ Docker-backed planning uses a read-only snapshot workspace instead of a mutable 
 Provider CLI workspace preparation is centralized through `InvocationWorkspacePreparer`. Its shared provider-invocation option builder constructs snapshot checkout, git policy, and fresh/continue lifecycle values for Docker provider calls, while its continuation resolver locates preserved workspaces and their current branches. Fresh Docker invocations in `REMOTE` git mode use explicit remote refs only: planning, project setup, dashboard/chat replies, worker inbox replies, node-flow provider prompts, QA review snapshots, task coding, QA follow-up, CI autofix, and merge-conflict repair all materialize from `origin/<branch>` refs rather than local branches or the host repo's current checkout. Dashboard/chat replies resolve dashboard settings with the project scope before building this policy, so local Git projects keep `LOCAL` snapshot behavior and do not require `origin/<defaultBranch>`. Continuation/restart flows may reuse a preserved workspace for provider-session continuity; if a preserved workspace is missing and a new workspace must be materialized, the same remote-only branch policy applies.
 
 When a LOCAL branch advances while an isolated worker is running, patch materialization uses Git's three-way index merge on top of that current descendant tip. This retains concurrent task merges and accepts identical first-pass files that are already present while preserving new QA or CI follow-up files from the stale workspace.
+QA reviewers, standalone CI-fix workers, and merge-conflict workers checkpoint their own logical session and workspace before provider execution. Under restart invocation policy `continue`, the replacement invocation reuses that workspace and resumes the provider-native conversation when available. Merge-conflict continuation also recognizes an in-progress Git merge and continues resolving it instead of replaying the merge operation.
+
+CI-fix and merge-conflict repair checkpoints retain the original workspace Git baseline, the finalized repair head, and the host-publication phase. A restart after provider or merge completion exports from that original baseline and resumes publication instead of treating the repair commit as a new baseline, rerunning the provider, or replaying the merge. Merge recovery also recognizes a completed merge commit by its target-branch ancestry when the restart landed immediately before the finalization checkpoint. Host publication commits carry the repair head as a trailer; recovery from `host_publishing` finds that marker and idempotently pushes the existing remote branch before settlement, preventing a second patch application when the process exited after materialization but before the `host_published` checkpoint. For legacy unmarked publications, Code UX derives the effective workspace tree including uncommitted and newly created files and searches matching reachable repair commits even if the branch later advanced. Settlement requires the exact repair tree and subject, baseline ancestry, and the target parent for merge repairs.
+
+Docker-volume artifact export performs Git discovery, staging, binary diffing, and temporary-index cleanup in one helper-container invocation instead of paying four or five Docker control-plane round trips per completed task. Host-side patch transaction files live under Git's administrative directory so materialization stays on the warm project Git helper rather than creating one-shot helpers for external temporary binds. When a LOCAL branch advances while an isolated worker is running, patch materialization applies the diff against its true workspace base and three-way merges the resulting tree onto the current descendant tip. Concurrent work is retained, identical already-landed file additions are de-duplicated, and genuine overlapping edits remain conflicts.
 
 ## Session lifecycle
 
@@ -181,6 +178,8 @@ The virtual worker can claim and act on these attention item categories:
 | `ci_failure` | Provision a worker; instruct the CLI to read the failing CI log and apply a fix; respects `julesCiAutofixMaxRetries`. |
 
 Repair attention is scheduled before ordinary coding dispatches. Code UX does not lease a coding task while CI-fix or merge-conflict attention is waiting, and capacity is checked against the provider selected by the invocation-specific route rather than the generic virtual-worker provider. The final provider-slot wait is bounded to 30 seconds so sprint finalization cannot wait forever on a saturated or stale route.
+
+Startup recovery releases `ci_fix_required` and `merge_conflict` items claimed by stopped virtual-worker endpoints and returns them to the queue with their repair-session checkpoint intact. Continuing that same interrupted attempt does not spend another guardrail attempt. Retryable interruption preserves the repair workspace; terminal success or exhaustion follows normal cleanup.
 
 Task-scoped CI repair continues the originating coding session, native provider session, effective model, coding-agent instructions, and preserved workspace by default. Settings → AI Models → CI fix can disable this behavior and force the standalone CI Fix route; sprint-level final-merge repair always uses that route. Failed invocations return attention to an unclaimed retryable state while the guardrail budget remains. When the default five-attempt limit is reached, Code UX creates a human handoff containing the last error and attempt count.
 

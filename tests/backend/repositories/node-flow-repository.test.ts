@@ -42,7 +42,7 @@ afterEach(async () => {
 });
 
 describe("NodeFlowRepository", () => {
-  it("persists a deterministic v2 migration as a new version and preserves v1 history", async () => {
+  it("normalizes legacy reads immediately and persists the v2 migration in a bounded idle pass", async () => {
     const { dir, storage, projectRepository, nodeFlowRepository } = await createRepositories();
     const project = projectRepository.createProject({ name: "Migration fixture", sourceType: "local", sourceRef: dir });
     const flow = nodeFlowRepository.createFlow(project.id, { title: "Legacy flow", graph: graph() });
@@ -50,13 +50,27 @@ describe("NodeFlowRepository", () => {
     storage.getDatabase().prepare("UPDATE node_flows SET graph_json = ?, version = 1 WHERE id = ?").run(original, flow.id);
     storage.getDatabase().prepare("UPDATE node_flow_versions SET graph_json = ? WHERE flow_id = ? AND version = 1").run(original, flow.id);
 
+    const legacyRepository = new NodeFlowRepository(storage);
+    const normalized = legacyRepository.getFlow(flow.id);
+
+    expect(normalized).toMatchObject({ version: 1, graph: { schemaVersion: 2 } });
+    expect(legacyRepository.listVersions(flow.id).map((version) => version.version)).toEqual([1]);
+
+    const migration = storage.runBoundedDataMigrationsIfIdle();
+    expect(migration).toMatchObject({ skipped: false, migratedNodeFlowGraphs: 1 });
+
     const migratedRepository = new NodeFlowRepository(storage);
     const migrated = migratedRepository.getFlow(flow.id);
     const versions = migratedRepository.listVersions(flow.id);
+    const originalVersion = storage
+      .getDatabase()
+      .prepare("SELECT graph_json FROM node_flow_versions WHERE flow_id = ? AND version = 1")
+      .get(flow.id) as { graph_json: string } | undefined;
 
     expect(migrated).toMatchObject({ version: 2, graph: { schemaVersion: 2 } });
     expect(versions.map((version) => version.version)).toEqual([2, 1]);
-    expect(versions[1]?.graph).toEqual(graph());
+    expect(versions[1]?.graph).toMatchObject({ schemaVersion: 2 });
+    expect(originalVersion?.graph_json).toBe(original);
     expect(new NodeFlowRepository(storage).getFlow(flow.id)).toEqual(migrated);
   });
 

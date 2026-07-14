@@ -16,13 +16,14 @@ interface UseProjectTasksResult {
 
 interface UseProjectTasksOptions {
   enabled?: boolean;
+  view?: "overview";
 }
 
 const taskRecordsCache = new Map<string, TaskRecord[]>();
 const taskRecordsInflightRequests = new Map<string, Promise<TaskRecord[]>>();
 
-const getTaskRecordsKey = (projectId: string, sprintId?: string | null): string => (
-  `${projectId}:${sprintId || "all"}`
+const getTaskRecordsKey = (projectId: string, sprintId?: string | null, view?: "overview"): string => (
+  `${projectId}:${sprintId || "all"}:${view || "full"}`
 );
 
 export function useProjectTasks(
@@ -39,7 +40,8 @@ export function useProjectTasks(
   const hasLoadedRef = useRef(false);
   const loadedResourceKeyRef = useRef<string | null>(null);
   const enabled = options?.enabled ?? true;
-  const resourceKey = projectId ? getTaskRecordsKey(projectId, sprintId) : null;
+  const view = options?.view;
+  const resourceKey = projectId ? getTaskRecordsKey(projectId, sprintId, view) : null;
 
   const refreshInternal = useCallback(async (options?: { silent?: boolean }): Promise<void> => {
     if (!projectId || !enabled) {
@@ -57,10 +59,10 @@ export function useProjectTasks(
       setLoading(true);
     }
     try {
-      const key = getTaskRecordsKey(projectId, sprintId);
+      const key = getTaskRecordsKey(projectId, sprintId, view);
       let request = taskRecordsInflightRequests.get(key);
       if (!request) {
-        request = fetchTasks(projectId, sprintId || undefined).finally(() => {
+        request = fetchTasks(projectId, sprintId || undefined, view).finally(() => {
           taskRecordsInflightRequests.delete(key);
         });
         taskRecordsInflightRequests.set(key, request);
@@ -83,7 +85,7 @@ export function useProjectTasks(
         setLoading(false);
       }
     }
-  }, [enabled, projectId, sprintId]);
+  }, [enabled, projectId, sprintId, view]);
 
   useEffect(() => {
     hasLoadedRef.current = false;

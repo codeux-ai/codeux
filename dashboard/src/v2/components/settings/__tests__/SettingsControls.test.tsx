@@ -838,6 +838,10 @@ const createSystemSettings = (projectSettings: ProjectSettings): SystemSettings 
     );
 
     const toggle = screen.getByRole("switch", { name: "Review completed tasks" });
+    const row = toggle.closest("div.rounded-\\[1rem\\]");
+    expect(row).toHaveClass("sm:items-start");
+    expect(row).not.toHaveClass("sm:items-center");
+    expect(row?.lastElementChild).toHaveClass("self-start");
     expect(toggle).toHaveAccessibleDescription("Runs QA after task completion.");
     await user.click(toggle);
     expect(onToggle).toHaveBeenCalledWith(true);

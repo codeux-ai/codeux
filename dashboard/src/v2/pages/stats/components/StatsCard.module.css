@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@reference "../../../../styles.css";
 
 .card {
   @apply relative flex min-w-0 flex-col justify-between overflow-visible motion-safe:transform-gpu;

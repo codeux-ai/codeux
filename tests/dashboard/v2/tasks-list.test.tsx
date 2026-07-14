@@ -328,6 +328,43 @@ const baseProps: any = {
         expect(progress.firstElementChild).toHaveStyle({ width: "7.5%" });
     });
 
+    it("projects realtime CI evidence into the active-stream workflow badge", async () => {
+        render(
+            <ProjectDataProvider initialData={null as any}>
+                <TasksList pageData={{
+                    ...pageData,
+                    execution: {
+                        ...pageData.execution,
+                        attentionItems: [],
+                        recentEvents: [{
+                            id: "event-ci-failed",
+                            eventType: "ci_gate_status",
+                            sprintId: "sprint-1",
+                            taskId: "task-record-1",
+                            taskKey: "task-1",
+                            createdAt: "2026-07-14T10:00:00.000Z",
+                            payload: {
+                                state: "blocked",
+                                prNumber: 42,
+                                hasFailedChecks: true,
+                            },
+                        }],
+                    },
+                }} />
+            </ProjectDataProvider>
+        );
+
+        const workflowButton = screen.getByRole("button", { name: /CI status: CI failed/i });
+        expect(workflowButton).toBeInTheDocument();
+        await act(async () => {
+            fireEvent.click(workflowButton);
+        });
+
+        const checksStage = document.querySelector('[data-workflow-stage="checks"]');
+        expect(checksStage).toHaveAttribute("data-workflow-stage-state", "failed");
+        expect(checksStage).toHaveTextContent("Checks failed");
+    });
+
     it("keeps the running sprint selector dot visible without raw pulse animation classes", () => {
         const sprint = {
             id: "sprint-running",

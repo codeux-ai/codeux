@@ -162,7 +162,7 @@ describe("FileBrowserPage", () => {
     expect(screen.getByRole("heading", { level: 1, name: /Browse & Diff the Sprint Branch/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: /Launch the file browser/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Open file browser/i })).toBeInTheDocument();
-    expect(screen.getByRole("combobox")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sprint to browse" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Refresh/i })).toBeInTheDocument();
     expect(pageRoot.innerHTML).not.toContain("#f5f1e8");
     expect(pageRoot.innerHTML).not.toContain("#f7f3ea");

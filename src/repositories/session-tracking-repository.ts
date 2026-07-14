@@ -285,7 +285,6 @@ export class SessionTrackingRepository {
         update_time AS updateTime
       FROM provider_sessions
       WHERE provider IN (${TRACKED_CLI_PROVIDER_SQL})
-        AND id LIKE 'cli-%'
       ORDER BY update_time DESC
     `).all() as unknown as TrackedCliSessionRow[];
   }
@@ -354,7 +353,6 @@ export class SessionTrackingRepository {
         AND feature_branch = ?
         AND (repo_path = ? OR repo_path = ? OR repo_path = '/workspace')
         AND state IN (${statePlaceholders})
-        AND id LIKE 'cli-%'
         AND worker_branch IS NOT NULL
       ORDER BY create_time DESC, update_time DESC, id DESC
       LIMIT 1
@@ -392,7 +390,6 @@ export class SessionTrackingRepository {
       WHERE (repo_path = ? OR repo_path = ? OR repo_path = '/workspace')
         AND worker_branch = ?
         AND provider IN (${placeholders})
-        AND id LIKE 'cli-%'
       ORDER BY create_time DESC, update_time DESC, id DESC
       LIMIT 1
     `).get(
@@ -419,7 +416,6 @@ export class SessionTrackingRepository {
       FROM provider_sessions
       WHERE state = 'RUNNING'
         AND provider IN (${TRACKED_CLI_PROVIDER_SQL})
-        AND id LIKE 'cli-%'
       ORDER BY create_time ASC
     `).all() as unknown as SessionIdRow[];
 

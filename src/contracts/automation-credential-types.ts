@@ -23,13 +23,81 @@ export interface AutomationCredentialMetadata {
   updatedAt: string;
 }
 
+/** Secret-bearing fields in this contract are write-only and must never be serialized in a response. */
 export interface CreateAutomationCredentialInput {
   name: string;
   kind: string;
   value: string;
-  scope?: AutomationCredentialScope;
-  allowedProjectIds?: string[];
-  capabilities?: AutomationCredentialCapability[];
+  scope: AutomationCredentialScope;
+  allowedProjectIds: string[];
+  capabilities: AutomationCredentialCapability[];
+}
+
+export interface UpdateAutomationCredentialMetadataInput {
+  name: string;
+  expectedVersion: number;
+}
+
+export interface ReplaceAutomationCredentialSecretInput {
+  value: string;
+  expectedVersion: number;
+}
+
+export type RotateAutomationCredentialSecretInput = ReplaceAutomationCredentialSecretInput;
+
+export interface PromoteAutomationCredentialInput {
+  allowedProjectIds: string[];
+  expectedVersion: number;
+  confirmScopeExpansion: boolean;
+}
+
+export interface RestrictAutomationCredentialInput {
+  allowedProjectIds: string[];
+  capabilities: AutomationCredentialCapability[];
+  expectedVersion: number;
+}
+
+export interface TestAutomationCredentialInput {
+  expectedVersion: number;
+}
+
+export interface RevokeAutomationCredentialInput {
+  expectedVersion: number;
+}
+
+export interface BindAutomationCredentialInput {
+  bindingKey: string;
+  requiredCapabilities: AutomationCredentialCapability[];
+}
+
+export interface AutomationCredentialCompatibilityInput {
+  projectId: string;
+  allowedKinds: string[];
+  requiredCapabilities: AutomationCredentialCapability[];
+}
+
+export type AutomationCredentialCompatibilityIssue =
+  | "backend_unavailable"
+  | "backend_insecure"
+  | "not_configured"
+  | "not_active"
+  | "project_access_denied"
+  | "kind_not_allowed"
+  | "capability_missing";
+
+export interface AutomationCredentialCompatibilityAssessment {
+  credentialId: string;
+  projectId: string;
+  compatible: boolean;
+  backendReady: boolean;
+  configured: boolean;
+  active: boolean;
+  projectAccess: boolean;
+  kindAllowed: boolean;
+  capabilitiesAllowed: boolean;
+  missingCapabilities: AutomationCredentialCapability[];
+  issues: AutomationCredentialCompatibilityIssue[];
+  metadata: AutomationCredentialMetadata | null;
 }
 
 export interface AutomationCredentialBinding {
@@ -68,7 +136,8 @@ export interface AutomationCredentialRotation {
 export interface CredentialResolutionRequest {
   projectId: string;
   bindingKey: string;
-  capability: AutomationCredentialCapability;
+  requiredCapabilities: AutomationCredentialCapability[];
+  allowedKinds: string[];
   workspaceId: string;
 }
 

@@ -24,7 +24,7 @@ import type {
 } from "../contracts/node-flow-types.js";
 import { DEFAULT_NODE_FLOW_EXECUTION_POLICY } from "../contracts/node-flow-execution-policy-types.js";
 import type { NodeFlowExecutionPolicySnapshot, NodeFlowFailureClassification } from "../contracts/node-flow-execution-policy-types.js";
-import { migratePersistedNodeFlowGraphs } from "./db/app-db-migrations.js";
+import { migrateNodeFlowGraph } from "../domain/node-flows/node-flow-migrators.js";
 
 interface NodeFlowRow {
   id: string;
@@ -122,8 +122,6 @@ export class NodeFlowRepository {
     private readonly realtimeNotifier?: DashboardRealtimeMutationNotifier,
   ) {
     this.db = storage.getDatabase();
-    migratePersistedNodeFlowGraphs(this.db);
-    this.backfillPublications();
   }
 
   listFlows(projectId: string): NodeFlowRecord[] {
@@ -567,14 +565,6 @@ export class NodeFlowRepository {
       .run(randomUUID(), flowId, projectId, version, graphJson, this.serializeJson(policy), publishedBy, new Date().toISOString());
   }
 
-  private backfillPublications(): void {
-    const versions = this.db.prepare(`SELECT flow_id, project_id, version, graph_json, created_at FROM node_flow_versions`).all() as Array<{ flow_id: string; project_id: string; version: number | string; graph_json: string; created_at: string }>;
-    for (const version of versions) {
-      this.db.prepare(`INSERT OR IGNORE INTO node_flow_publications (id, flow_id, project_id, version, graph_json, policy_json, published_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(randomUUID(), version.flow_id, version.project_id, toNumber(version.version), version.graph_json, this.serializeJson(DEFAULT_NODE_FLOW_EXECUTION_POLICY), "migration", version.created_at);
-    }
-  }
-
   private requireProject(projectId: string): void {
     requireRecord(this.db.prepare(`SELECT id FROM projects WHERE id = ?`).get(projectId), "Project", projectId);
   }
@@ -637,7 +627,7 @@ export class NodeFlowRepository {
 
   private parseGraph(value: string): NodeFlowGraph {
     try {
-      return JSON.parse(value) as NodeFlowGraph;
+      return migrateNodeFlowGraph(JSON.parse(value) as unknown).graph;
     } catch {
       return { nodes: [], edges: [] };
     }

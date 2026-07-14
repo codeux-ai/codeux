@@ -175,7 +175,7 @@ describe("SprintCell", () => {
     expect(screen.queryByText("Mark Completed")).toBeNull();
   });
 
-  it("renders only the canonical Human Intervention badge and no redundant alerts", () => {
+  it("renders one human waiting cue above the cell without redundant badges", () => {
     const mockIntervention = {
       title: "Manual Approval Required",
       reason: "Reviewing large diffs",
@@ -195,12 +195,12 @@ describe("SprintCell", () => {
       />
     );
 
-    // Canonical badge should be present
-    expect(screen.getByText("Needs you")).toBeDefined();
-    expect(screen.getByRole("status", { name: "Sprint waiting for human intervention" })).toBeDefined();
+    const waitingCue = screen.getByRole("status", { name: "Sprint waiting for human intervention" });
+    expect(waitingCue).toBeDefined();
+    expect(waitingCue.className).toContain("bottom-full");
+    expect(waitingCue.className).toContain("mb-[10px]");
     expect(screen.getByText("zZZ")).toBeDefined();
-
-    // Redundant inline alert should be absent
+    expect(screen.queryByText("Needs you")).toBeNull();
     expect(screen.queryByText("Human intervention required")).toBeNull();
   });
 
@@ -211,10 +211,10 @@ describe("SprintCell", () => {
         isEven={true}
         accentColor="text-blue-500"
         humanIntervention={{
-          title: "Worker retry",
-          reason: "The worker is retrying execution",
+          title: "Merge conflict",
+          reason: "The worker is resolving a branch conflict",
           instructions: "Wait for the worker",
-          attentionType: null,
+          attentionType: "merge_conflict",
           severity: "medium",
           ownerType: "worker",
         }}
@@ -224,5 +224,6 @@ describe("SprintCell", () => {
     expect(screen.queryByRole("status", { name: "Sprint waiting for human intervention" })).toBeNull();
     expect(screen.queryByText("zZZ")).toBeNull();
     expect(screen.queryByText("Needs you")).toBeNull();
+    expect(screen.queryByText("Merge conflict")).toBeNull();
   });
 });

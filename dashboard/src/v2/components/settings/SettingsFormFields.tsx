@@ -358,7 +358,7 @@ export const ToggleLinkedControlRow: FunctionComponent<{
   const describedBy = [descriptionId, disabledReasonId, ariaDescribedby].filter(Boolean).join(" ") || undefined;
 
   return (
-    <div className="flex min-w-0 w-full flex-col gap-3 rounded-[1rem] border border-[color:var(--border-hairline)] bg-[var(--fill-muted)] p-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex min-w-0 w-full flex-col gap-3 rounded-[1rem] border border-[color:var(--border-hairline)] bg-[var(--fill-muted)] p-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="flex min-w-0 items-start gap-3">
         <Toggle
           value={enabled}
@@ -381,7 +381,7 @@ export const ToggleLinkedControlRow: FunctionComponent<{
           ) : null}
         </div>
       </div>
-      <div className="min-w-0 w-full sm:w-auto sm:min-w-[14rem]">
+      <div className="min-w-0 w-full self-start sm:w-auto sm:min-w-[14rem]">
         {children}
       </div>
     </div>

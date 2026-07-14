@@ -7,14 +7,18 @@ Code UX dispatches work across **seven providers**, each accepting one or more *
 | Provider | Type | Auth detection path | Default `maxConcurrentTasks` |
 | --- | --- | --- | --- |
 | `jules` | Hosted Jules Agent API | `JULES_API_KEY` env | `15` |
-| `gemini` | Local Gemini CLI (deprecated) | `~/.gemini/` | `0` (unlimited) |
-| `codex` | Local Codex CLI (OpenAI) | `~/.codex/` | `0` (unlimited) |
-| `claude-code` | Local Claude Code CLI | `~/.claude/` | `0` (unlimited) |
-| `qwen-code` | Local Qwen Code CLI | `~/.qwen/` | `0` (unlimited) |
-| `opencode` | Local OpenCode CLI (multi-model) | `~/.local/share/opencode/` or `~/.config/opencode/` | `0` (unlimited) |
-| `antigravity` | Local Antigravity CLI | `~/.antigravity/` | `0` (unlimited) |
+| `gemini` | Local Gemini CLI (deprecated) | `~/.gemini/` | `0` (adaptive) |
+| `codex` | Local Codex CLI (OpenAI) | `~/.codex/` | `0` (adaptive) |
+| `claude-code` | Local Claude Code CLI | `~/.claude/` | `0` (adaptive) |
+| `qwen-code` | Local Qwen Code CLI | `~/.qwen/` | `0` (adaptive) |
+| `opencode` | Local OpenCode CLI (multi-model) | `~/.local/share/opencode/` or `~/.config/opencode/` | `0` (adaptive) |
+| `antigravity` | Local Antigravity CLI | `~/.antigravity/` | `0` (adaptive) |
 
-All non-Jules providers are *virtual workers*. In the default Docker workflow, Code UX downloads only activated provider CLIs into versioned local Docker volumes, mounts them read-only, and checks their stable channels for updates on every startup. Selecting a provider in onboarding starts preparation before Login. Authentication still uses each provider's normal login flow and is stored separately from the tool volume.
+All non-Jules providers are *virtual workers*. In the default Docker workflow, Code UX downloads only activated provider CLIs into versioned local Docker volumes, mounts them read-only, and checks their stable channels when the persisted six-hour update watermark is due. Selecting a provider in onboarding starts preparation before Login. Authentication still uses each provider's normal login flow and is stored separately from the tool volume.
+
+For local providers, a concurrency value of `0` selects automatic CPU/memory admission. A positive
+value remains a hard provider ceiling. Jules runs remotely and retains the hosted unlimited meaning
+for `0`.
 
 Gemini CLI remains supported for existing and new configurations but is deprecated in the UI, excluded from fresh Easy recommendations, and accompanied by a migration action toward Antigravity. Code UX does not silently change Gemini credentials, defaults, or routing.
 
@@ -22,13 +26,14 @@ Gemini CLI remains supported for existing and new configurations but is deprecat
 
 Settings -> Integrations -> Chat Connectors includes external chat connector connections for WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, and Discord channels. These are not AI model providers and they do not affect invocation routing. They bind authenticated external chat bridges to Code UX projects so inbound messages can enter project chat threads and assistant replies can be delivered back through the same bridge.
 
-Supported bridge modes are:
+Connection modes are explicit per connector:
 
 - `managed_bridge` — HTTP delivery to a configured managed bridge URL.
 - `webhook` — HTTP delivery to a configured generic bridge or bot gateway URL.
 - `native_bridge` — shell-free local command execution for native bridge scripts, with JSON on stdin and optional bridge token environment variables.
+- `official_api` — provider-native authentication and fixed provider endpoints implemented by the WhatsApp, Telegram, Slack, Microsoft Teams, and Discord profiles.
 
-Code UX does not call the official WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, or Discord APIs directly. Provider-specific API interaction belongs to the managed bridge, webhook gateway, or native bridge you connect.
+iMessage supports managed and native third-party bridges only; Apple does not expose an official public personal-iMessage bot endpoint. Managed, webhook, and native endpoints remain operator-selected integrations and are not provider-certified merely because a connector profile is registered. Use only the modes advertised by the selected profile.
 
 Chat provider setup stores connection records, write-only secrets, channel bindings, routing hints, and outbound delivery state separately from AI provider credentials. Webhook ingress requires HMAC signatures when a signing secret is configured; Managed and native bridge ingress use bearer-style bridge tokens. Shared external channels can route to multiple projects only when a selector or routing hint chooses exactly one binding.
 

@@ -13,6 +13,16 @@ export const DEFAULT_AGENT_FILES = [
 
 const DEFAULT_CONTAINER_SETUP_FILE = "setup.sh";
 const DEFAULT_QUICKSPRINT_TEMPLATE_DIR = path.join("quicksprints", "templates");
+const DEFAULT_ASSET_REVALIDATION_INTERVAL_MS = 5 * 60_000;
+
+interface DefaultAssetInstallState {
+  inFlight: Promise<EnsureDefaultCodeUxAssetsResult> | null;
+  sourceDir: string | null;
+  targetDirectorySignature: string;
+  verifiedAt: number;
+}
+
+const defaultAssetInstallStates = new Map<string, DefaultAssetInstallState>();
 
 interface EnsureDefaultCodeUxAssetsOptions {
   projectRoot?: string;
@@ -38,7 +48,75 @@ export interface EnsureDefaultCodeUxAssetsResult {
 export async function ensureDefaultCodeUxAssetsInstalled(
   options: EnsureDefaultCodeUxAssetsOptions = {},
 ): Promise<EnsureDefaultCodeUxAssetsResult> {
-  return await installDefaultCodeUxAssets(options);
+  if (process.env.NODE_ENV === "test" && process.env.CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS !== "1") {
+    return { sourceDir: null, installed: [] };
+  }
+
+  const cacheKey = [
+    getHomeCodeUxPath(),
+    options.projectRoot ? path.resolve(options.projectRoot) : "runtime-defaults",
+    options.skipDefaultAgentFiles ? "skip-agents" : "all-assets",
+  ].join("\0");
+  const now = Date.now();
+  const existingState = defaultAssetInstallStates.get(cacheKey);
+  if (existingState?.inFlight) {
+    return await existingState.inFlight;
+  }
+
+  const installPromise = (async (): Promise<EnsureDefaultCodeUxAssetsResult> => {
+    if (existingState && now - existingState.verifiedAt < DEFAULT_ASSET_REVALIDATION_INTERVAL_MS) {
+      const targetDirectorySignature = existingState.sourceDir
+        ? await buildDefaultAssetTargetDirectorySignature()
+        : existingState.targetDirectorySignature;
+      if (targetDirectorySignature === existingState.targetDirectorySignature) {
+        return { sourceDir: existingState.sourceDir, installed: [] };
+      }
+    }
+    return await installDefaultCodeUxAssets(options);
+  })();
+  defaultAssetInstallStates.set(cacheKey, {
+    inFlight: installPromise,
+    sourceDir: existingState?.sourceDir ?? null,
+    targetDirectorySignature: existingState?.targetDirectorySignature ?? "",
+    verifiedAt: existingState?.verifiedAt ?? 0,
+  });
+
+  try {
+    const result = await installPromise;
+    defaultAssetInstallStates.set(cacheKey, {
+      inFlight: null,
+      sourceDir: result.sourceDir,
+      targetDirectorySignature: result.sourceDir
+        ? await buildDefaultAssetTargetDirectorySignature()
+        : "",
+      verifiedAt: Date.now(),
+    });
+    return result;
+  } catch (error) {
+    if (defaultAssetInstallStates.get(cacheKey)?.inFlight === installPromise) {
+      defaultAssetInstallStates.delete(cacheKey);
+    }
+    throw error;
+  }
+}
+
+async function buildDefaultAssetTargetDirectorySignature(): Promise<string> {
+  const targetPaths = [
+    getHomeCodeUxPath("agents"),
+    getHomeCodeUxPath("container"),
+    getHomeCodeUxPath("quicksprints", "templates"),
+    ...DEFAULT_AGENT_FILES.map((fileName) => getHomeCodeUxPath("agents", fileName)),
+    getHomeCodeUxPath("container", DEFAULT_CONTAINER_SETUP_FILE),
+  ];
+  const stats = await Promise.all(targetPaths.map(async (targetPath) => {
+    try {
+      const stat = await fs.stat(targetPath, { bigint: true });
+      return `${targetPath}:${stat.mtimeNs}:${stat.size}`;
+    } catch {
+      return `${targetPath}:missing`;
+    }
+  }));
+  return stats.join("\0");
 }
 
 export async function readDefaultContainerSetupScript(
@@ -64,10 +142,6 @@ export async function readDefaultContainerSetupScript(
 async function installDefaultCodeUxAssets(
   options: EnsureDefaultCodeUxAssetsOptions,
 ): Promise<EnsureDefaultCodeUxAssetsResult> {
-  if (process.env.NODE_ENV === "test" && process.env.CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS !== "1") {
-    return { sourceDir: null, installed: [] };
-  }
-
   const sourceDir = await resolveBundledCodeUxDir({ projectRoot: options.projectRoot });
   if (!sourceDir) {
     options.logger?.warn("Code UX default assets were not found; user defaults were not seeded.");
@@ -191,12 +265,11 @@ async function copyOrUpdateSetupScript(
   targetPath: string,
   mode?: number,
 ): Promise<InstalledAsset | null> {
-  let needsUpdate = false;
+  const sourceContent = await fs.readFile(sourcePath, "utf8");
+  let needsUpdate = true;
   try {
     const targetContent = await fs.readFile(targetPath, "utf8");
-    if (!targetContent.includes("gnome-keyring-daemon") || !targetContent.includes("CODE_UX_INSTALL_PLAYWRIGHT")) {
-      needsUpdate = true;
-    }
+    needsUpdate = targetContent !== sourceContent && isLegacyManagedSetupScript(targetContent);
   } catch {
     needsUpdate = true;
   }
@@ -206,9 +279,14 @@ async function copyOrUpdateSetupScript(
   }
 
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
-  await fs.copyFile(sourcePath, targetPath);
+  await fs.writeFile(targetPath, sourceContent, "utf8");
   if (mode && process.platform !== "win32") {
     await fs.chmod(targetPath, mode);
   }
   return { sourcePath, targetPath };
+}
+
+function isLegacyManagedSetupScript(content: string): boolean {
+  return content.includes('echo "[setup] Starting container bootstrap..."')
+    && content.includes('echo "[setup] Installing @openai/codex..."');
 }

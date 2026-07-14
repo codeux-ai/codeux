@@ -184,13 +184,16 @@ const AgentSpeechBubble: FunctionComponent<{
   const segments = parseBubbleSegments(message.bodyMarkdown || "");
 
   return (
-    <div ref={ref} className="relative flex min-h-0 justify-start">
+    <div ref={ref} className="relative ml-auto flex min-h-0 w-full max-w-[620px] justify-end lg:max-w-[560px] xl:max-w-[620px] 2xl:max-w-[680px]">
       {/* Tail — points left toward the bot on desktop */}
       <span
         aria-hidden="true"
         className="absolute -left-1.5 top-7 hidden h-3.5 w-3.5 rotate-45 border-b border-l border-signal-500/25 bg-white/95 dark:bg-void-800/95 md:block"
       />
-      <div className="flex min-h-0 w-full max-w-[720px] flex-col rounded-3xl rounded-tl-lg border border-signal-500/25 bg-white/95 p-5 shadow-[0_12px_48px_rgba(0,224,160,0.10),0_4px_24px_rgba(0,0,0,0.06)] backdrop-blur-md dark:bg-void-800/95 dark:shadow-[0_12px_48px_rgba(0,224,160,0.08),0_8px_32px_rgba(0,0,0,0.35)] lg:max-w-[680px] xl:max-w-[780px] 2xl:max-w-[880px]">
+      <div
+        data-testid="cinematic-agent-reply"
+        className="flex min-h-0 w-full max-w-[620px] flex-col rounded-3xl rounded-tl-lg border border-signal-500/25 bg-white/95 p-5 shadow-[0_12px_48px_rgba(0,224,160,0.10),0_4px_24px_rgba(0,0,0,0.06)] backdrop-blur-md dark:bg-void-800/95 dark:shadow-[0_12px_48px_rgba(0,224,160,0.08),0_8px_32px_rgba(0,0,0,0.35)] lg:max-w-[560px] xl:max-w-[620px] 2xl:max-w-[680px]"
+      >
         <div className="mb-2 flex shrink-0 items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
           <span className="text-signal-600 dark:text-signal-400">{agentName}</span>
           {createdAtLabel && <span className="font-mono font-normal tracking-normal">{createdAtLabel}</span>}
@@ -210,7 +213,7 @@ const AgentSpeechBubble: FunctionComponent<{
               !widgetData.suppressBodyMarkdown && (
                 <div
                   key={index}
-                  className={`${BUBBLE_MARKDOWN_CLASSES} prose-base text-[15px] leading-8 lg:text-base lg:leading-8 xl:text-[17px] xl:leading-9 2xl:text-lg 2xl:leading-9`}
+                  className={`${BUBBLE_MARKDOWN_CLASSES} prose-sm text-[12px] leading-5 xl:text-[13px] xl:leading-6`}
                   dangerouslySetInnerHTML={{ __html: renderMarkdown(segment.markdown) }}
                 />
               )
@@ -584,8 +587,11 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   };
 
   const activeTool = useCinematicWorkTool({
-    active: Boolean(matchingInvocationFeedback),
-    activityKey: matchingInvocationFeedback?.id ?? "inactive-project-manager-invocation",
+    active: runtimeBusy,
+    activityKey: activityState.foregroundCue?.id
+      ?? matchingInvocationFeedback?.id
+      ?? selectedThread?.id
+      ?? "active-project-manager-reply",
     reducedMotion,
   });
 
@@ -811,7 +817,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
              it. History lives one click away in Threads. ── */}
       <div
         data-testid="cinematic-exchange"
-        className="absolute inset-x-0 bottom-32 top-[48%] z-20 flex min-h-0 flex-col justify-end px-4 pb-2 pt-3 md:inset-y-0 md:bottom-0 md:left-auto md:right-0 md:top-0 md:w-[46%] md:justify-end md:px-6 md:py-0 md:pb-36 md:pt-4 lg:w-[44%] lg:px-8 lg:pt-6 xl:w-[46%] xl:px-10 xl:pt-8 2xl:w-[48%] 2xl:justify-center 2xl:px-12 2xl:pb-32 2xl:pt-12"
+        className="absolute inset-x-0 bottom-32 top-[48%] z-20 flex min-h-0 flex-col justify-end px-4 pb-2 pt-3 md:inset-y-0 md:bottom-0 md:left-auto md:right-0 md:top-0 md:w-[42%] md:justify-end md:px-6 md:py-0 md:pb-36 md:pt-4 lg:w-[40%] lg:px-8 lg:pt-6 xl:w-[42%] xl:px-10 xl:pt-8 2xl:w-[42%] 2xl:justify-center 2xl:px-12 2xl:pb-32 2xl:pt-12"
       >
         <div
           ref={exchangeLogRef}

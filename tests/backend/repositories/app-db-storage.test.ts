@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { AppDbStorage, resolveAppDbPath } from "../../../src/repositories/app-db-storage.js";
+import { SqliteDatabaseAdapter } from "../../../src/repositories/db/sqlite-database-adapter.js";
 import {
   createSqliteTempHome,
   expectSqliteSidecarsRemoved,
@@ -181,6 +182,130 @@ describe("AppDbStorage", () => {
     await expect(fs.access(homeDir)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("defers historical cleanup and advances it through bounded resumable passes", async () => {
+    const dbPath = await createTempDbPath();
+    const initial = trackStorage(new AppDbStorage(dbPath));
+    const db = initial.getDatabase();
+    db.exec("PRAGMA foreign_keys = OFF");
+    db.prepare(`
+      INSERT INTO task_runs (id, project_id, sprint_id, task_id, state, finished_at)
+      VALUES ('legacy-run', 'legacy-project', 'legacy-sprint', 'legacy-task', 'COMPLETED', '2000-01-01T00:00:00.000Z')
+    `).run();
+    const insertRealtime = db.prepare(`
+      INSERT INTO dashboard_realtime_events (
+        scope_type, scope_id, event_type, entity_type, entity_id, is_replayable, created_at
+      ) VALUES ('project', 'legacy-project', 'snapshot', 'project', 'legacy-project', 0, '2000-01-01T00:00:00.000Z')
+    `);
+    const insertTaskEvent = db.prepare(`
+      INSERT INTO task_run_events (id, task_run_id, project_id, event_type, created_at)
+      VALUES (?, 'legacy-run', NULL, 'provider_activity', '2000-01-01T00:00:00.000Z')
+    `);
+    db.transaction(() => {
+      for (let index = 0; index < 501; index += 1) {
+        insertRealtime.run();
+        insertTaskEvent.run(`legacy-event-${index}`);
+      }
+    });
+    db.exec("PRAGMA foreign_keys = ON");
+    closeTrackedStorage(initial);
+
+    const reopened = trackStorage(new AppDbStorage(dbPath));
+    const reopenedDb = reopened.getDatabase();
+    expect((reopenedDb.prepare("SELECT COUNT(*) AS count FROM dashboard_realtime_events").get() as { count: number }).count).toBe(501);
+    expect((reopenedDb.prepare("SELECT COUNT(*) AS count FROM task_run_events WHERE project_id IS NULL").get() as { count: number }).count).toBe(501);
+
+    const first = reopened.runBoundedDataMigrationsIfIdle();
+    expect(first.skipped).toBe(false);
+    expect((reopenedDb.prepare("SELECT COUNT(*) AS count FROM dashboard_realtime_events").get() as { count: number }).count).toBe(1);
+    expect((reopenedDb.prepare("SELECT COUNT(*) AS count FROM task_run_events WHERE project_id IS NULL").get() as { count: number }).count).toBe(1);
+    closeTrackedStorage(reopened);
+
+    const continued = trackStorage(new AppDbStorage(dbPath));
+    continued.runBoundedDataMigrationsIfIdle();
+    expect((continued.getDatabase().prepare("SELECT COUNT(*) AS count FROM dashboard_realtime_events").get() as { count: number }).count).toBe(0);
+    expect((continued.getDatabase().prepare("SELECT COUNT(*) AS count FROM task_run_events WHERE project_id IS NULL").get() as { count: number }).count).toBe(0);
+    const completedCursors = continued.getDatabase().prepare(`
+      SELECT key, cursor_rowid AS cursor
+      FROM maintenance_migration_state
+      ORDER BY key
+    `).all() as Array<{ key: string; cursor: number }>;
+    expect(completedCursors).toHaveLength(6);
+    expect(completedCursors.every((row) => row.cursor === -1)).toBe(true);
+    expect(continued.runBoundedDataMigrationsIfIdle()).toMatchObject({
+      skipped: false,
+      deletedNonReplayableEvents: 0,
+      backfilledTaskRunEventProjects: 0,
+      backfilledProviderInvocations: 0,
+      backfilledAutomationCredentials: 0,
+      migratedNodeFlowGraphs: 0,
+      backfilledNodeFlowPublications: 0,
+    });
+  });
+
+  it("defers missing read indexes but restores unique invariants synchronously", async () => {
+    const dbPath = await createTempDbPath();
+    const initial = trackStorage(new AppDbStorage(dbPath));
+    initial.getDatabase().exec(`
+      DROP INDEX idx_provider_invocations_sprint_run_started;
+      DROP INDEX idx_tasks_sprint_key;
+      DROP INDEX idx_chat_provider_message_deliveries_pending_outbound;
+      CREATE INDEX idx_chat_provider_message_deliveries_pending_outbound
+      ON chat_provider_message_deliveries (status);
+    `);
+    closeTrackedStorage(initial);
+
+    const reopened = trackStorage(new AppDbStorage(dbPath));
+    const db = reopened.getDatabase();
+    const findIndex = (name: string) => db.prepare(`
+      SELECT sql
+      FROM sqlite_master
+      WHERE type = 'index' AND name = ?
+    `).get(name) as { sql: string } | undefined;
+    expect(findIndex("idx_tasks_sprint_key")).toBeDefined();
+    expect(findIndex("idx_provider_invocations_sprint_run_started")).toBeUndefined();
+    expect(findIndex("idx_chat_provider_message_deliveries_pending_outbound")?.sql).toContain("(status)");
+    expect(reopened.getPendingDeferredIndexCount()).toBeGreaterThanOrEqual(2);
+
+    db.exec("PRAGMA foreign_keys = OFF");
+    db.prepare(`
+      INSERT INTO provider_invocations (
+        id, project_id, session_id, provider, purpose, status, started_at, created_at, updated_at
+      ) VALUES (
+        'active-index-guard', 'missing-project', 'active-session', 'codex', 'task_coding',
+        'running', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
+      )
+    `).run();
+    db.exec("PRAGMA foreign_keys = ON");
+    expect(reopened.runBoundedDataMigrationsIfIdle()).toEqual({ skipped: true });
+    expect(await reopened.runNextDeferredIndexIfIdle()).toBe("active");
+    db.prepare("DELETE FROM provider_invocations WHERE id = 'active-index-guard'").run();
+
+    const pendingBeforeBusyRetry = reopened.getPendingDeferredIndexCount();
+    const blocker = new SqliteDatabaseAdapter(dbPath);
+    blocker.exec("BEGIN IMMEDIATE");
+    try {
+      expect(await reopened.runNextDeferredIndexIfIdle()).toBe("busy");
+      expect(reopened.getPendingDeferredIndexCount()).toBe(pendingBeforeBusyRetry);
+    } finally {
+      blocker.exec("ROLLBACK");
+      blocker.close();
+    }
+
+    const concurrentResults = await Promise.all([
+      reopened.runNextDeferredIndexIfIdle(),
+      reopened.runNextDeferredIndexIfIdle(),
+    ]);
+    expect(concurrentResults).toContain("created");
+    expect(concurrentResults).toContain("in_flight");
+
+    while (reopened.getPendingDeferredIndexCount() > 0) {
+      expect(await reopened.runNextDeferredIndexIfIdle()).toBe("created");
+    }
+
+    expect(findIndex("idx_provider_invocations_sprint_run_started")).toBeDefined();
+    expect(findIndex("idx_chat_provider_message_deliveries_pending_outbound")?.sql).toContain("updated_at ASC");
+  });
+
   it("backfills estimated Docker CLI usage from persisted character counts", async () => {
     const dbPath = await createTempDbPath();
     const storage = trackStorage(new AppDbStorage(dbPath));
@@ -220,8 +345,9 @@ describe("AppDbStorage", () => {
       now,
     );
 
-    // Re-opening the storage runs migrations against existing data.
-    trackStorage(new AppDbStorage(dbPath));
+    // Re-opening only installs structural migrations; historical data advances after startup.
+    const reopened = trackStorage(new AppDbStorage(dbPath));
+    reopened.runBoundedDataMigrationsIfIdle();
 
     const row = db.prepare(`
       SELECT input_tokens, output_tokens, total_tokens, usage_source, raw_usage_json
@@ -311,8 +437,10 @@ describe("AppDbStorage", () => {
       now,
     );
 
-    trackStorage(new AppDbStorage(dbPath));
-    trackStorage(new AppDbStorage(dbPath));
+    const reopened = trackStorage(new AppDbStorage(dbPath));
+    reopened.runBoundedDataMigrationsIfIdle();
+    const replayed = trackStorage(new AppDbStorage(dbPath));
+    replayed.runBoundedDataMigrationsIfIdle();
 
     const rows = db.prepare(`
       SELECT id, input_tokens, cached_input_tokens, output_tokens, total_tokens, token_accounting_version

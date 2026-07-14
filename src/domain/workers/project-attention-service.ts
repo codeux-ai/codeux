@@ -188,6 +188,14 @@ export class ProjectAttentionService {
     return requeued;
   }
 
+  requeueInterruptedVirtualRepairItems(): ProjectAttentionItemRecord[] {
+    const requeued = this.projectAttentionRepository.requeueInterruptedVirtualRepairItems();
+    for (const item of requeued) {
+      this.onWorkerAttentionOpenedCallback?.(item.projectId);
+    }
+    return requeued;
+  }
+
   private requireItem(itemId: string): ProjectAttentionItemRecord {
     const item = this.projectAttentionRepository.getAttentionItem(itemId);
     if (!item) {

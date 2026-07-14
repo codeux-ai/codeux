@@ -1169,15 +1169,17 @@ export const SchedulerPage: FunctionComponent = () => {
                 <label htmlFor="scheduler-remediation-mode" className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
                   {translate(schedulerMessages, "remediationMode")}
                 </label>
-                <select
+                <AvantgardeSelect
                   id="scheduler-remediation-mode"
+                  aria-label={translate(schedulerMessages, "remediationMode")}
                   value={memoryRemediationMode}
-                  onInput={(event) => setMemoryRemediationMode(event.currentTarget.value === "ai" ? "ai" : "deterministic")}
-                  className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
-                >
-                  <option value="deterministic">{translate(schedulerMessages, "deterministicCleanup")}</option>
-                  <option value="ai">{translate(schedulerMessages, "aiRoutedReview")}</option>
-                </select>
+                  onChange={(value) => setMemoryRemediationMode(value === "ai" ? "ai" : "deterministic")}
+                  className="mt-2 w-full"
+                  options={[
+                    { value: "deterministic", label: translate(schedulerMessages, "deterministicCleanup") },
+                    { value: "ai", label: translate(schedulerMessages, "aiRoutedReview") },
+                  ]}
+                />
                 <p className="mt-2 text-xs leading-relaxed text-slate-400">
                   {translate(schedulerMessages, "remediationRecommendation")}
                 </p>

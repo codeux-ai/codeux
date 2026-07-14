@@ -18,7 +18,7 @@ Each scheduler entry has a **target** — the thing that runs when it fires:
 
 | Target | What it does |
 | --- | --- |
-| **Sprint** | Plans and auto-starts an existing sprint with no tasks, or directly orchestrates one that already has tasks. |
+| **Sprint** | Sends the sprint through its normal Start path. Existing tasks run directly; a draft with no tasks is planned automatically first. |
 | **Quicksprint** | Spawns and runs a [quicksprint template](../quicksprints.md), substituting its variables. |
 | **Node flow** | Runs a saved project [node flow](./node-flows.md) with optional JSON object input. |
 | **Message** | Posts a project message (for example, a recurring planning or status prompt). |
@@ -63,11 +63,15 @@ available, otherwise the completed sprint `endDate`, and then applies the config
 anchors continue to use terminal task run or dispatch finish evidence before falling back to the
 task update time.
 
-When a scheduled sprint becomes due, the scheduler checks whether it already has tasks. A sprint
-with no tasks is sent through planning with auto-start enabled, so it launches after planning
-succeeds. A sprint with existing tasks is orchestrated directly. If either planning or direct
-orchestration fails, the scheduler entry moves to `failed` and displays the recorded error in the
-scheduled-entry list.
+When a scheduled sprint becomes due, the scheduler submits it through the same Start path as the
+dashboard and MCP API. A sprint with existing tasks proceeds directly to orchestration. A draft with
+no tasks first refreshes its unchanged feature branch, starts planning automatically, and requests
+orchestration again after the generated tasks are saved. For an `after_sprint_end` follow-up, none of
+that planning work begins until the source sprint completes successfully and the anchor becomes due.
+
+If the scheduler's Start request itself fails, the entry moves to `failed` and displays the recorded
+error. Planning and orchestration continue asynchronously after an accepted request; later provider
+failures remain visible on their planning invocation or sprint run.
 
 ### Dashboard planning wakeups
 

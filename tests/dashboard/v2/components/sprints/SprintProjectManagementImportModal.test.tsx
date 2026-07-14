@@ -156,7 +156,8 @@ describe("SprintProjectManagementImportModal", () => {
     fireEvent.input(screen.getByLabelText("Asana assignee"), { target: { value: "assignee-1" } });
     await user.type(screen.getByPlaceholderText("triage, backend"), "backend");
     await user.keyboard("{Enter}");
-    await user.selectOptions(screen.getByLabelText("Asana status"), "done");
+    await user.click(screen.getByLabelText("Asana status"));
+    await user.click(screen.getByRole("option", { name: "Done" }));
     fireEvent.input(screen.getByLabelText("Asana result limit"), { target: { value: "12" } });
     fireEvent.click(screen.getByRole("button", { name: /^search asana$/i }));
 
@@ -190,7 +191,8 @@ describe("SprintProjectManagementImportModal", () => {
     await user.keyboard("{Enter}");
     await user.type(screen.getByPlaceholderText("LIN-42, issue-id"), "LIN-99");
     await user.keyboard("{Enter}");
-    await user.selectOptions(screen.getByLabelText("Linear status"), "in_progress");
+    await user.click(screen.getByLabelText("Linear status"));
+    await user.click(screen.getByRole("option", { name: "In Progress" }));
     fireEvent.click(screen.getByRole("button", { name: /^search linear$/i }));
 
     await waitFor(() => {

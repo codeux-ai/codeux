@@ -57,6 +57,7 @@ import {
   type BrowserPreviewMessageKey,
   type BrowserPreviewMessageVariables,
 } from "./i18n/messages/browser-preview.js";
+import { AvantgardeSelect } from "./components/ui/AvantgardeSelect.js";
 
 const PREVIEW_MESSAGE_TYPE = "sprint-preview:state";
 const PREVIEW_NAVIGATION_TYPE = "sprint-preview:navigate";
@@ -1034,7 +1035,7 @@ export const BrowserPage: FunctionComponent = () => {
                 <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                   {t("containerDockerDescription", { name: visibleSelectedSession?.sprintName || t("selectedContainerFallback") })}
                 </p>
-                <select
+                <AvantgardeSelect
                   id="preview-container-docker-access"
                   aria-label={t("containerDockerPolicy")}
                   value={visibleSelectedSession?.dockerAccessOverride === null || visibleSelectedSession?.dockerAccessOverride === undefined
@@ -1042,16 +1043,16 @@ export const BrowserPage: FunctionComponent = () => {
                     : visibleSelectedSession.dockerAccessOverride ? "enabled" : "disabled"}
                   disabled={!visibleSelectedSession || savingDockerAccessScope !== null}
                   aria-busy={savingDockerAccessScope === "session"}
-                  onChange={(event) => {
-                    const value = (event.currentTarget as HTMLSelectElement).value;
+                  onChange={(value) => {
                     void handleSetSessionDockerAccess(value === "inherit" ? null : value === "enabled");
                   }}
-                  className="mt-3 h-10 w-full rounded-xl border border-black/[0.1] bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-signal-500 focus:ring-2 focus:ring-signal-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.1] dark:bg-slate-900 dark:text-slate-200"
-                >
-                  <option value="inherit">{t("useProjectDefault", { status: projectDockerAccessEnabled ? t("enabled") : t("disabled") })}</option>
-                  <option value="enabled">{t("enableForContainer")}</option>
-                  <option value="disabled">{t("disableForContainer")}</option>
-                </select>
+                  className="mt-3 w-full"
+                  options={[
+                    { value: "inherit", label: t("useProjectDefault", { status: projectDockerAccessEnabled ? t("enabled") : t("disabled") }) },
+                    { value: "enabled", label: t("enableForContainer") },
+                    { value: "disabled", label: t("disableForContainer") },
+                  ]}
+                />
               </div>
 
               <div className="flex gap-2 rounded-2xl border border-status-amber/30 bg-status-amber/10 px-3 py-3 text-xs leading-relaxed text-amber-900 dark:text-amber-200" role="note">

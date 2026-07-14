@@ -66,6 +66,15 @@ pnpm run build:dashboard   # production
 pnpm run dev:dashboard     # HMR dev server
 ```
 
+### Startup performance boundaries
+
+- Route pages, project/sprint creation modals, onboarding, the guided tour, desktop title bar, and animated background implementations are split from the initial route bundle. Noncritical shell experiences mount after first content can paint.
+- CSS modules use Tailwind `@reference` for shared utilities; they must not import `tailwindcss` again because that duplicates the generated framework stylesheet.
+- Overview and the top-bar task counters share `GET /api/projects/:projectId/tasks?view=overview`. This compact read model includes only tasks in running sprints and omits prompt, review, rating, and CI payloads that the landing page does not render. The default Tasks API remains the full record.
+- Overview telemetry reuses the execution snapshot loaded at the page root instead of loading `/api/live` a second time.
+- Header throughput uses realtime invalidation with a five-second fallback poll. Notification refreshes request the newest 20 records and do not rerun startup readiness checks.
+- Overview's wide seven-day analytics snapshot uses a 30-second background cadence instead of reacting to every execution heartbeat. The dedicated Stats page remains realtime, while sprint and scheduler summaries refresh on structure changes.
+
 ## Routing
 
 ```ts
@@ -148,6 +157,8 @@ Key tokens (defined in `styles.css`):
 - Animation durations (fast / base / slow).
 
 Components prefer **design tokens over hardcoded values**. New components should reuse existing tokens rather than introducing one-offs.
+
+User-visible single-choice fields use the shared `AvantgardeSelect` trigger/listbox primitive instead of browser-native selects. This keeps option surfaces aligned with Warm Void in both themes while preserving labels, descriptions, disabled and busy states, keyboard navigation, compact layouts, and focus restoration. Disabled options remain visible but are skipped by pointer and keyboard selection. The older native Select wrapper is retained only for isolated compatibility tests and has no production callers.
 
 ## Accessibility
 

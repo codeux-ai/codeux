@@ -124,6 +124,10 @@ interface InFlightChatTurn {
   messageIds: string[];
 }
 
+export interface PostChatMessageRuntimeOptions {
+  signal?: AbortSignal;
+}
+
 type ChatTurnAbortKind = "cancellation" | "supersession";
 
 class ChatTurnAbortError extends Error {
@@ -329,15 +333,17 @@ function hasAnyQuickactionMetadata(metadata: Record<string, unknown> | null | un
 }
 
 function isChatProviderSourcedThread(
-  thread: ConversationThreadRecord,
-  messages: ConversationMessageRecord[],
+  _thread: ConversationThreadRecord,
+  _messages: ConversationMessageRecord[],
   latestMessage: ConversationMessageRecord,
 ): boolean {
-  const runtimeState = thread.runtimeState as (ConversationRuntimeState & { source?: unknown; suppressRichWidgets?: unknown }) | null | undefined;
-  return runtimeState?.source === "chat_provider"
-    || runtimeState?.suppressRichWidgets === true
-    || isChatProviderSourcedMessage(latestMessage)
-    || messages.some((message) => isChatProviderSourcedMessage(message));
+  return latestMessage.metadata?.source === "chat_provider"
+    && latestMessage.metadata?.suppressRichWidgets === true;
+}
+
+function getExternalAgentPresetId(metadata: Record<string, unknown> | null | undefined): string | null {
+  if (metadata?.source !== "chat_provider") return null;
+  return readString(metadata.agentPresetId);
 }
 
 async function writeThreadSessionTitleFile(repoPath: string, threadId: string, title: string): Promise<void> {
@@ -369,6 +375,7 @@ export class ChatThreadRuntimeService {
     liveAssignments: ReturnType<ProjectWorkerAssignmentRepository["listAssignmentsForProject"]>,
     settings: DashboardSettings,
     latestMessageBody: string,
+    latestMessageMetadata?: Record<string, unknown> | null,
   ): Promise<ThreadRouteResolution> {
     const runtimeState = thread.runtimeState || null;
     void liveAssignments;
@@ -382,10 +389,13 @@ export class ChatThreadRuntimeService {
       status: "PENDING",
     };
 
+    const selectedAgentPresetId = getExternalAgentPresetId(latestMessageMetadata)
+      ?? settings.agents?.routing?.dashboardReply?.agentPresetId
+      ?? null;
     const dashboardReplyAgent = typeof this.deps.agentPresetSyncService.resolveDashboardReplyAgent === "function"
       ? await this.deps.agentPresetSyncService.resolveDashboardReplyAgent(
         thread.projectId,
-        settings.agents?.routing?.dashboardReply?.agentPresetId ?? null,
+        selectedAgentPresetId,
       ).catch((err) => {
         this.deps.logger?.warn("Failed to resolve dashboard reply agent template", { projectId: thread.projectId, error: err instanceof Error ? err.message : String(err) });
         return null;
@@ -556,7 +566,11 @@ export class ChatThreadRuntimeService {
     return this.inFlightTurns.has(threadId);
   }
 
-  async postMessage(projectId: string, input: CreateDashboardConversationMessageInput): Promise<ConversationMessageRecord> {
+  async postMessage(
+    projectId: string,
+    input: CreateDashboardConversationMessageInput,
+    options: PostChatMessageRuntimeOptions = {},
+  ): Promise<ConversationMessageRecord> {
     const userMessage = this.deps.connectionChatRepository.postDashboardMessage(projectId, input);
     const thread = this.deps.connectionChatRepository.getThread(userMessage.threadId);
     if (!thread) throw new Error("Thread not found");
@@ -664,6 +678,11 @@ export class ChatThreadRuntimeService {
       latestMessage: userMessage,
       messageIds: [userMessage.id],
     };
+    const abortFromCaller = (): void => {
+      turnHandle.abortController.abort(new ChatTurnAbortError("cancellation", "Chat turn aborted by its caller"));
+    };
+    options.signal?.addEventListener("abort", abortFromCaller, { once: true });
+    if (options.signal?.aborted) abortFromCaller();
     this.inFlightTurns.set(thread.id, turnHandle);
     const settledMessageIds = new Set<string>();
     let ownerMessageFailed = false;
@@ -675,7 +694,13 @@ export class ChatThreadRuntimeService {
       for (;;) {
         const currentThread = this.deps.connectionChatRepository.getThread(thread.id) || thread;
         try {
-          const route = await this.resolveThreadRoute(currentThread, assignments, settings, turnHandle.latestMessage.bodyMarkdown);
+          const route = await this.resolveThreadRoute(
+            currentThread,
+            assignments,
+            settings,
+            turnHandle.latestMessage.bodyMarkdown,
+            turnHandle.latestMessage.metadata,
+          );
           await this.runVirtualProvider(projectId, currentThread, turnHandle.latestMessage, route, turnHandle.abortController.signal);
           for (const messageId of turnHandle.messageIds) {
             settledMessageIds.add(messageId);
@@ -732,6 +757,7 @@ export class ChatThreadRuntimeService {
         turnHandle.abortController = new AbortController();
       }
     } finally {
+      options.signal?.removeEventListener("abort", abortFromCaller);
       this.inFlightTurns.delete(thread.id);
       await this.runDueSchedulerEntriesAfterReply(projectId, thread.id);
     }
@@ -1386,16 +1412,18 @@ export class ChatThreadRuntimeService {
     const allMessages = this.deps.connectionChatRepository.listMessages(thread.id) ?? [];
     const suppressRichWidgets = isChatProviderSourcedThread(thread, allMessages, latestMessage);
 
+    const respondingAgentPresetId = getExternalAgentPresetId(latestMessage.metadata)
+      ?? dashboardSettings.agents?.routing?.dashboardReply?.agentPresetId
+      ?? null;
     const respondingAgent = typeof this.deps.agentPresetSyncService.resolveDashboardReplyAgent === "function"
       ? await this.deps.agentPresetSyncService.resolveDashboardReplyAgent(
         projectId,
-        dashboardSettings.agents?.routing?.dashboardReply?.agentPresetId ?? null,
+        respondingAgentPresetId,
       )
       : await this.deps.agentPresetSyncService.getWorkerAgent(projectId);
-    const dashboardReplyAgentPresetId = dashboardSettings.agents?.routing?.dashboardReply?.agentPresetId ?? null;
     const agentMcpAccess = this.resolveDashboardReplyMcpAccess(
       respondingAgent.mcpAccess,
-      dashboardReplyAgentPresetId,
+      respondingAgentPresetId,
     );
     const mcpAvailable = mcpConnection !== null && agentMcpAccess.codeUxEnabled;
 
@@ -1683,12 +1711,6 @@ export class ChatThreadRuntimeService {
         }),
         continueSessionId,
         nativeSessionOperation: "compact",
-        onActivity: (desc, originator) => {
-          this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
-            role: originator === "user" ? "user" : "assistant",
-            contentMarkdown: `[Status] ${desc}`,
-          });
-        },
       });
 
       const markdown = normalizeProviderReply(result.text);

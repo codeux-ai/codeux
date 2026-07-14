@@ -195,4 +195,21 @@ describe("useUsageChartState", () => {
 
     expect(localStorage.getItem(modeKey("proj-legacy"))).toBe("system");
   });
+
+  it("restores Cost independently for each project and rejects unknown legacy modes", () => {
+    localStorage.setItem(modeKey("proj-cost"), "cost");
+    localStorage.setItem(modeKey("proj-other"), "future-mode");
+
+    let currentProject = "proj-cost";
+    const { result, rerender } = renderHook(() => useUsageChartState(currentProject, baseStats as any));
+    expect(result.current.visualMode).toBe("cost");
+
+    currentProject = "proj-other";
+    rerender();
+    expect(result.current.visualMode).toBe("composition");
+
+    act(() => result.current.setVisualMode("cost"));
+    expect(localStorage.getItem(modeKey("proj-other"))).toBe("cost");
+    expect(localStorage.getItem(modeKey("proj-cost"))).toBe("cost");
+  });
 });

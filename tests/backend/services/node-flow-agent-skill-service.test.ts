@@ -28,6 +28,29 @@ describe("NodeFlowAgentSkillService", () => {
     const base = { get: vi.fn(() => ({ id: "flow-1", projectId: "project-1", graph: { nodes: [], edges: [] } })), runFlow: vi.fn() };
     await expect(new NodeFlowAgentSkillService({ ...base, listAgentSkillsForAgent: () => [] } as never).runAttachedFlow({ projectId: "project-1", flowId: "flow-1", agentPresetId: "agent-1" })).rejects.toThrow(/not attached/i);
     await expect(new NodeFlowAgentSkillService({ ...base, listAgentSkillsForAgent: () => [{ flowId: "flow-1", skillName: "x", description: "" }], validateDraft: () => ({ publishedVersion: null, requiredCredentials: [] }) } as never).runAttachedFlow({ projectId: "project-1", flowId: "flow-1", agentPresetId: "agent-1" })).rejects.toThrow(/not been published/i);
-    await expect(new NodeFlowAgentSkillService({ ...base, listAgentSkillsForAgent: () => [{ flowId: "flow-1", skillName: "x", description: "" }], validateDraft: () => ({ publishedVersion: 1, requiredCredentials: [{ status: "missing" }] }) } as never).runAttachedFlow({ projectId: "project-1", flowId: "flow-1", agentPresetId: "agent-1" })).rejects.toThrow(/credential policy/i);
+    await expect(new NodeFlowAgentSkillService({ ...base, listAgentSkillsForAgent: () => [{ flowId: "flow-1", skillName: "x", description: "" }], validateDraft: () => ({ publishedVersion: 1, requiredCredentials: [{ required: true, status: "missing" }] }) } as never).runAttachedFlow({ projectId: "project-1", flowId: "flow-1", agentPresetId: "agent-1" })).rejects.toThrow(/credential policy/i);
+    await expect(new NodeFlowAgentSkillService({ ...base, listAgentSkillsForAgent: () => [{ flowId: "flow-1", skillName: "x", description: "" }], validateDraft: () => ({ publishedVersion: 1, requiredCredentials: [{ required: false, status: "denied" }] }) } as never).runAttachedFlow({ projectId: "project-1", flowId: "flow-1", agentPresetId: "agent-1" })).rejects.toThrow(/credential policy/i);
+    expect(base.runFlow).not.toHaveBeenCalled();
+  });
+
+  it("executes a published attached flow when an optional credential slot is unbound", async () => {
+    const runFlow = vi.fn(async () => ({ run: { id: "run-optional" }, nodeRuns: [], output: { ok: true } }));
+    const service = new NodeFlowAgentSkillService({
+      listAgentSkillsForAgent: () => [{ flowId: "flow-1", skillName: "x", description: "" }],
+      get: () => ({ id: "flow-1", projectId: "project-1", graph: { nodes: [], edges: [] } }),
+      validateDraft: () => ({
+        publishedVersion: 1,
+        requiredCredentials: [{ required: false, status: "missing" }],
+      }),
+      runFlow,
+    } as never);
+
+    await expect(service.runAttachedFlow({
+      projectId: "project-1",
+      flowId: "flow-1",
+      agentPresetId: "agent-1",
+      parameters: { prompt: "safe" },
+    })).resolves.toMatchObject({ run: { id: "run-optional" } });
+    expect(runFlow).toHaveBeenCalledOnce();
   });
 });

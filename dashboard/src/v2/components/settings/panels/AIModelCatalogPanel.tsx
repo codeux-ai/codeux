@@ -21,6 +21,7 @@ import { NumberInput, Row, SecretInput, SelectInput, TextInput, Toggle } from ".
 import { SectionCard, useSettingsDetailWorkspace } from "./SharedPanelComponents.js";
 import { useConfirmDialog } from "../../../hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "../../ui/ConfirmDialog.js";
+import { AvantgardeSelect } from "../../ui/AvantgardeSelect.js";
 import {
   getRecommendedSynthesisModel,
   getRecommendedVoice,
@@ -480,16 +481,32 @@ export const AIModelCatalogPanel: FunctionComponent<{ state: SettingsPageState }
             </label>
             <label className="flex min-h-11 items-center gap-2 rounded-xl border border-[color:var(--border-hairline)] bg-black/[0.025] px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:bg-white/[0.035]">
               <span>{t(settingsModelsMessages, "language")}</span>
-              <select aria-label={t(settingsModelsMessages, "filterByLanguage")} value={catalogLanguage} onChange={(event) => setCatalogLanguage(event.currentTarget.value)} className="min-w-0 bg-transparent text-xs font-semibold normal-case tracking-normal text-slate-700 outline-none dark:text-slate-200">
-                <option value="all">{t(settingsModelsMessages, "all")}</option>
-                {catalogLanguageOptions.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
-              </select>
+              <AvantgardeSelect
+                aria-label={t(settingsModelsMessages, "filterByLanguage")}
+                value={catalogLanguage}
+                onChange={setCatalogLanguage}
+                variant="compact"
+                className="min-w-[7rem]"
+                options={[
+                  { value: "all", label: t(settingsModelsMessages, "all") },
+                  ...catalogLanguageOptions.map(([value, label]) => ({ value, label })),
+                ]}
+              />
             </label>
             <label className="flex min-h-11 items-center gap-2 rounded-xl border border-[color:var(--border-hairline)] bg-black/[0.025] px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:bg-white/[0.035]">
               <span>{t(settingsModelsMessages, "status")}</span>
-              <select aria-label={t(settingsModelsMessages, "filterByInstallStatus")} value={catalogInstallState} onChange={(event) => setCatalogInstallState(event.currentTarget.value)} className="bg-transparent text-xs font-semibold normal-case tracking-normal text-slate-700 outline-none dark:text-slate-200">
-                <option value="all">{t(settingsModelsMessages, "all")}</option><option value="installed">{t(settingsModelsMessages, "installed")}</option><option value="available">{t(settingsModelsMessages, "available")}</option>
-              </select>
+              <AvantgardeSelect
+                aria-label={t(settingsModelsMessages, "filterByInstallStatus")}
+                value={catalogInstallState}
+                onChange={setCatalogInstallState}
+                variant="compact"
+                className="min-w-[7rem]"
+                options={[
+                  { value: "all", label: t(settingsModelsMessages, "all") },
+                  { value: "installed", label: t(settingsModelsMessages, "installed") },
+                  { value: "available", label: t(settingsModelsMessages, "available") },
+                ]}
+              />
             </label>
           </div> : null}
         </div>

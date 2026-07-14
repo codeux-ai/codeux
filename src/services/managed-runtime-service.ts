@@ -49,7 +49,9 @@ export class ManagedRuntimeService {
   private readonly repository: string;
   private readonly channel: string;
   private readonly inFlight = new Map<ManagedRuntimeRole, Promise<string>>();
-  private stateLoaded = false;
+  private readonly imageChecks = new Map<string, Promise<boolean>>();
+  private readonly verifiedInProcess = new Set<string>();
+  private stateLoadPromise?: Promise<void>;
   private readonly updateWarnings: string[] = [];
   private persistQueue: Promise<void> = Promise.resolve();
   private persisted: ManagedRuntimePersistedState = { active: {}, previous: {}, checkedAt: null };
@@ -68,6 +70,10 @@ export class ManagedRuntimeService {
     return { ...this.status };
   }
 
+  invalidateImage(image: string): void {
+    this.verifiedInProcess.delete(image);
+  }
+
   getCompatibilityKey(image: string): string {
     const compatibilitySource = image.startsWith(`${this.repository}:`) || image.startsWith(`${this.repository}@`)
       ? `managed-runtime-abi-1:${process.arch}`
@@ -82,7 +88,29 @@ export class ManagedRuntimeService {
     return await this.ensureRole(role, false);
   }
 
-  async checkForUpdates(logger?: Logger): Promise<void> {
+  async checkForUpdates(
+    logger?: Logger,
+    options: { minimumIntervalMs?: number } = {},
+  ): Promise<void> {
+    await this.loadState();
+    const minimumIntervalMs = Math.max(0, Math.floor(options.minimumIntervalMs ?? 0));
+    const lastCheckedMs = this.persisted.checkedAt ? Date.parse(this.persisted.checkedAt) : Number.NaN;
+    if (
+      minimumIntervalMs > 0
+      && Number.isFinite(lastCheckedMs)
+      && Date.now() - lastCheckedMs >= 0
+      && Date.now() - lastCheckedMs < minimumIntervalMs
+    ) {
+      this.reflectImagesInStatus();
+      this.updateStatus({
+        state: "ready",
+        stepText: "Managed runtime cache is current.",
+        error: null,
+        checkedAt: this.persisted.checkedAt,
+        progressPercent: 100,
+      });
+      return;
+    }
     this.updateWarnings.length = 0;
     this.updateStatus({
       state: "checking_update",
@@ -126,9 +154,13 @@ export class ManagedRuntimeService {
   private async ensureRole(role: ManagedRuntimeRole, forcePull: boolean, logger?: Logger): Promise<string> {
     await this.loadState();
     const current = this.persisted.active[role];
-    if (!forcePull && current && await this.imageExists(current)) {
-      this.reflectImagesInStatus();
-      return current;
+    if (!forcePull && current) {
+      if (this.verifiedInProcess.has(current) || await this.imageExists(current)) {
+        this.verifiedInProcess.add(current);
+        this.reflectImagesInStatus();
+        return current;
+      }
+      this.verifiedInProcess.delete(current);
     }
     const existing = this.inFlight.get(role);
     if (existing) {
@@ -160,6 +192,7 @@ export class ManagedRuntimeService {
     if (!pull.ok) {
       const cached = this.persisted.active[role];
       if (cached && await this.imageExists(cached)) {
+        this.verifiedInProcess.add(cached);
         this.updateWarnings.push(`Unable to refresh managed ${role} runtime.`);
         logger?.warn("Managed runtime pull failed; using cached digest.", { role, image: cached });
         return cached;
@@ -187,6 +220,7 @@ export class ManagedRuntimeService {
       this.persisted.previous[role] = previous;
     }
     this.persisted.active[role] = digest;
+    this.verifiedInProcess.add(digest);
     await this.persistState();
     this.reflectImagesInStatus();
     return digest;
@@ -205,25 +239,43 @@ export class ManagedRuntimeService {
   }
 
   private async imageExists(image: string): Promise<boolean> {
-    const result = await this.commands.run("docker", ["image", "inspect", image]).catch(() => null);
-    return result?.ok === true;
+    const existing = this.imageChecks.get(image);
+    if (existing) return await existing;
+    const check = this.commands.run("docker", ["image", "inspect", image])
+      .then((result) => {
+        if (result.ok) this.verifiedInProcess.add(image);
+        else this.verifiedInProcess.delete(image);
+        return result.ok;
+      })
+      .catch(() => {
+        this.verifiedInProcess.delete(image);
+        return false;
+      })
+      .finally(() => {
+        if (this.imageChecks.get(image) === check) this.imageChecks.delete(image);
+      });
+    this.imageChecks.set(image, check);
+    return await check;
   }
 
   private async loadState(): Promise<void> {
-    if (this.stateLoaded) return;
-    this.stateLoaded = true;
-    try {
-      const parsed = JSON.parse(await fs.readFile(this.statePath, "utf8")) as ManagedRuntimePersistedState;
-      this.persisted = {
-        active: parsed.active || {},
-        previous: parsed.previous || {},
-        checkedAt: parsed.checkedAt || null,
-      };
-      this.reflectImagesInStatus();
-      this.status.checkedAt = this.persisted.checkedAt;
-    } catch {
-      // The first successful pull creates the state file.
+    if (!this.stateLoadPromise) {
+      this.stateLoadPromise = (async () => {
+        try {
+          const parsed = JSON.parse(await fs.readFile(this.statePath, "utf8")) as ManagedRuntimePersistedState;
+          this.persisted = {
+            active: parsed.active || {},
+            previous: parsed.previous || {},
+            checkedAt: parsed.checkedAt || null,
+          };
+          this.reflectImagesInStatus();
+          this.status.checkedAt = this.persisted.checkedAt;
+        } catch {
+          // The first successful pull creates the state file.
+        }
+      })();
     }
+    await this.stateLoadPromise;
   }
 
   private persistState(): Promise<void> {

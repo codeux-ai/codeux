@@ -39,6 +39,7 @@ const StatsPageContent: FunctionComponent = () => {
   const modeLabels = {
     trend: text("trend"),
     composition: text("composition"),
+    cost: text("cost"),
     models: text("models"),
     reliability: text("providers"),
     ledgers: text("ledgers"),

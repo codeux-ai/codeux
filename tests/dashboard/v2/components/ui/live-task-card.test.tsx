@@ -167,7 +167,7 @@ describe("LiveTaskCard", () => {
 
     expect(screen.getByRole("group", { name: "Status indicators for task test-task" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /CI status: CI failed/i })).toBeTruthy();
-    expect(screen.getByText("Running")).toBeTruthy();
+    expect(screen.queryByText("Running")).toBeNull();
     expect(container.querySelectorAll('[data-ci-state="failed"]')).toHaveLength(1);
     expect(screen.queryByText("CI")).toBeNull();
   });
@@ -188,7 +188,7 @@ describe("LiveTaskCard", () => {
       />,
     );
     const scoped = within(container);
-    expect(scoped.getByText("Quota")).toBeTruthy();
+    expect(scoped.getByText("Quota wait")).toBeTruthy();
     expect(scoped.queryByText("Running")).toBeNull();
   });
 

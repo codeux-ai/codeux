@@ -110,10 +110,14 @@ describe("SprintIssueImportModal", () => {
     fireEvent.change(screen.getByPlaceholderText("gitlab.com"), { target: { value: "gitlab.example.com" } });
     fireEvent.change(screen.getByPlaceholderText("owner/repository"), { target: { value: "acme/widgets" } });
     await user.type(screen.getByPlaceholderText("Title, body, or issue text"), "pipeline");
-    await user.selectOptions(screen.getByLabelText("State"), "closed");
-    await user.selectOptions(screen.getByLabelText("Limit"), "100");
-    await user.selectOptions(screen.getByLabelText("Sort"), "comments");
-    await user.selectOptions(screen.getByLabelText("Direction"), "asc");
+    await user.click(screen.getByLabelText("State"));
+    await user.click(screen.getByRole("option", { name: "Closed" }));
+    await user.click(screen.getByLabelText("Limit"));
+    await user.click(screen.getByRole("option", { name: "100" }));
+    await user.click(screen.getByLabelText("Sort"));
+    await user.click(screen.getByRole("option", { name: "Comments" }));
+    await user.click(screen.getByLabelText("Direction"));
+    await user.click(screen.getByRole("option", { name: "Oldest first" }));
 
     await user.click(screen.getByRole("button", { name: /advanced filters/i }));
     expect(screen.getByRole("button", { name: /advanced filters/i })).toHaveAttribute("aria-expanded", "true");

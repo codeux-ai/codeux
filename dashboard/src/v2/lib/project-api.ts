@@ -22,6 +22,7 @@ import type {
   SprintLinkedIssueInput,
   SprintLinkedIssueRecord,
   SprintRecord,
+  SprintBranchUpdateResult,
   SprintRollbackAssessment,
   TaskRecord,
   UpdateProjectInput,
@@ -429,6 +430,16 @@ export const updateSprint = async (sprintId: string, input: UpdateSprintInput): 
   });
 };
 
+export const updateSprintBranch = async (
+  projectId: string,
+  sprintId: string,
+): Promise<SprintBranchUpdateResult> => {
+  return fetchJson<SprintBranchUpdateResult>(
+    `/api/projects/${encodeURIComponent(projectId)}/sprints/${encodeURIComponent(sprintId)}/update-branch`,
+    { method: "POST" },
+  );
+};
+
 export const markSprintCompleted = async (sprintId: string): Promise<SprintRecord> => {
   return fetchJson<SprintRecord>(`/api/sprints/${encodeURIComponent(sprintId)}/complete`, {
     method: "POST",
@@ -467,10 +478,13 @@ export const exportSprintMarkdown = async (
   );
 };
 
-export const fetchTasks = async (projectId: string, sprintId?: string): Promise<TaskRecord[]> => {
+export const fetchTasks = async (projectId: string, sprintId?: string, view?: "overview"): Promise<TaskRecord[]> => {
   const url = new URL(`/api/projects/${encodeURIComponent(projectId)}/tasks`, window.location.origin);
   if (sprintId) {
     url.searchParams.set("sprintId", sprintId);
+  }
+  if (view) {
+    url.searchParams.set("view", view);
   }
   return fetchJson<TaskRecord[]>(`${url.pathname}${url.search}`);
 };

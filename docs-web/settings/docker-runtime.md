@@ -12,9 +12,9 @@ Managed mode pulls the public `ghcr.io/codeux-ai/codeux-runtime` image family:
 - `base` includes Node 24 on Debian Trixie, JavaScript package managers, Python, Git/GitHub CLI, compilers, keyring support, preview utilities, and common Linux tools.
 - `browser` adds pinned Playwright, Playwright MCP, and browser OS dependencies, but no browser payload.
 
-Code UX checks for runtime updates on every startup. It pulls the stable channel in the background, resolves the immutable repository digest, verifies Node 24 in the image, and routes only future containers to the verified digest. Running containers are not interrupted. Registry or verification failure retains the previous working digest and does not block the dashboard.
+Code UX checks for runtime updates in the background when the persisted update watermark is older than six hours. It resolves the immutable repository digest, verifies Node 24 in the image, and routes only future containers to the verified digest. Restarts inside the freshness window reuse the cached digest without another pull. Running containers are not interrupted. Registry or verification failure retains the previous working digest and does not block the dashboard.
 
-Provider CLIs are not baked into either image. Activated providers are downloaded from fixed official sources into versioned Docker volumes and mounted read-only. Code UX checks every activated provider for a stable update on every startup.
+Provider CLIs are not baked into either image. Activated providers are downloaded from fixed official sources into versioned Docker volumes and mounted read-only. Automatic stable-update discovery uses the same six-hour freshness window; manual preparation still checks immediately.
 
 The browser payload follows the same pattern. When enabled, Code UX downloads the browser matched to the pinned Playwright version directly into a user-local versioned volume, verifies it offline, and mounts it read-only. Code UX does not redistribute the browser through GHCR.
 
@@ -31,6 +31,8 @@ The browser payload follows the same pattern. When enabled, Code UX downloads th
 | Run as root | Privileged compatibility escape hatch; leave disabled unless a trusted project requires it. |
 
 The default managed path never runs `docker build`. Login, coding, QA, previews, and custom dashboard validation share the same resolver instead of building separate base images.
+
+Packaged installs seed the lightweight baseline setup script into `~/.code-ux/container/setup.sh` when needed. Concurrent seed requests share one operation, and the verified result is reused for five minutes rather than rescanning the same bundled files on every agent lookup. Code UX migrates the recognized legacy provider-install bootstrap once, while an already-current baseline or a user-authored setup script remains untouched.
 
 ## Provider Preparation
 

@@ -48,6 +48,7 @@ import { KnowledgeIngestionService } from "../../services/knowledge-ingestion-se
 import { KnowledgeService } from "../../services/knowledge-service.js";
 import { NodeFlowService } from "../../services/node-flow-service.js";
 import { ProviderConcurrencyService } from "../../services/provider-concurrency-service.js";
+import { AdaptiveProviderAdmissionPolicy } from "../../services/adaptive-provider-admission-policy.js";
 import { DashboardSettings, ExternalSettingsHints } from "../../contracts/app-types.js";
 import { loadExternalSettingsHints } from "../../config/external-settings.js";
 import { createLogger, type Logger } from "../../shared/logging/logger.js";
@@ -66,20 +67,21 @@ import { SprintFileBrowserRepository } from "../../repositories/sprint-file-brow
 import { DockerService } from "../../services/docker-service.js";
 import { CustomDashboardRepository } from "../../repositories/custom-dashboard-repository.js";
 import { CustomDashboardValidationService } from "../../services/custom-dashboard-validation-service.js";
+import { CustomDashboardCredentialBindingService } from "../../services/custom-dashboard-credential-binding-service.js";
 import { AutomationCredentialRepository } from "../../repositories/automation-credential-repository.js";
 import { AutomationApprovalRepository } from "../../repositories/automation-approval-repository.js";
 import { AutomationOutboxRepository } from "../../repositories/automation-outbox-repository.js";
 import { AutomationWebhookTriggerRepository } from "../../repositories/automation-webhook-trigger-repository.js";
 import { CredentialBroker } from "../../services/credentials/credential-broker.js";
-import { MountedKeyFileProvider } from "../../infrastructure/security/mounted-key-file-provider.js";
 import { EncryptedSqliteSecretStore } from "../../infrastructure/security/encrypted-sqlite-secret-store.js";
-import { KmsKeyProviderAdapter, VaultKeyProviderAdapter } from "../../infrastructure/security/external-key-provider-adapters.js";
-import { getProcessCredentialKeyProvider } from "../../services/credentials/key-provider-registry.js";
-import type { KeyProvider } from "../../services/credentials/key-provider.js";
+import { selectCredentialKeyProvider } from "../../services/credentials/key-provider-selection.js";
 import { HeadlessAuthService, loadHeadlessSecurityConfiguration } from "../../services/headless-auth-service.js";
 import { AutomationAuditExportService } from "../../services/automation-audit-export-service.js";
 import { HeadlessOperationalReadinessService } from "../../services/headless-operational-readiness-service.js";
 import { AutomationSloService } from "../../services/automation-slo-service.js";
+import { ChatProviderSecretService } from "../../services/chat-provider-secret-service.js";
+import { ChatProviderVerificationService } from "../../services/chat-provider-verification-service.js";
+import { CHAT_CONNECTOR_REGISTRY, type ChatConnectorRegistry } from "../../domain/chat-connectors/registry.js";
 
 export interface CoreDependencies {
   providerRunner: IProviderRunner;
@@ -98,6 +100,9 @@ export interface CoreDependencies {
   projectRuntimeRepository: ProjectRuntimeRepository;
   connectionChatRepository: ConnectionChatRepository;
   chatProviderRepository: ChatProviderRepository;
+  chatProviderSecretService: ChatProviderSecretService;
+  chatProviderVerificationService: ChatProviderVerificationService;
+  chatConnectorRegistry: ChatConnectorRegistry;
   workerEndpointRepository: WorkerEndpointRepository;
   projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   qaReviewRepository: QaReviewRepository;
@@ -138,6 +143,7 @@ export interface CoreDependencies {
   sprintFileBrowserService: SprintFileBrowserService;
   sprintFileBrowserRepository: SprintFileBrowserRepository;
   customDashboardRepository: CustomDashboardRepository;
+  customDashboardCredentialBindingService: CustomDashboardCredentialBindingService;
   customDashboardValidationService: CustomDashboardValidationService;
   automationCredentialRepository: AutomationCredentialRepository;
   automationApprovalRepository: AutomationApprovalRepository;
@@ -208,13 +214,10 @@ export function createCoreDependencies(
   const automationOutboxRepository = new AutomationOutboxRepository(appDbStorage);
   const automationWebhookTriggerRepository = new AutomationWebhookTriggerRepository(appDbStorage);
   const securityConfiguration = loadHeadlessSecurityConfiguration();
-  const configuredKeyProvider = (): KeyProvider => {
-    const provider = process.env.CODE_UX_CREDENTIAL_KEY_PROVIDER?.trim().toLowerCase();
-    if (provider === "vault") return new VaultKeyProviderAdapter();
-    if (provider === "kms") return new KmsKeyProviderAdapter();
-    return new MountedKeyFileProvider(process.env.CODE_UX_CREDENTIAL_KEY_FILE);
-  };
-  const credentialKeyProvider = getProcessCredentialKeyProvider() ?? configuredKeyProvider();
+  const credentialKeyProvider = selectCredentialKeyProvider({
+    appConfig: options.appConfig,
+    security: securityConfiguration,
+  });
   const automationAuditService = new AutomationAuditExportService(appDbStorage);
   const credentialBroker = new CredentialBroker(
     automationCredentialRepository,
@@ -256,6 +259,28 @@ export function createCoreDependencies(
     workerEndpointRepository,
   );
   const chatProviderRepository = new ChatProviderRepository(appDbStorage);
+  const chatProviderSecretService = new ChatProviderSecretService(chatProviderRepository, credentialKeyProvider);
+  const chatConnectorRegistry = CHAT_CONNECTOR_REGISTRY;
+  const chatProviderVerificationService = new ChatProviderVerificationService({
+    chatProviderRepository,
+    chatProviderSecretService,
+    connectorRegistry: chatConnectorRegistry,
+    logger: logger.child({ component: "chat-provider-verification-service" }),
+  });
+  void chatProviderSecretService.migrateLegacySecrets().then((result) => {
+    if (result.status !== "ready") {
+      logger.warn("Connector secret migration is awaiting secure key readiness", {
+        logPurpose: "security",
+        pending: result.pending,
+        reason: result.reason,
+      });
+    }
+  }).catch((error) => {
+    logger.warn("Connector secret migration readiness check failed", {
+      logPurpose: "security",
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
   const workerAttentionOutcomeService = new WorkerAttentionOutcomeService(
     projectAttentionService,
     connectionChatRepository,
@@ -277,6 +302,12 @@ export function createCoreDependencies(
     projectManagementRepository,
     logger: logger.child({ component: "provider-concurrency-service" }),
     dockerService: new DockerService(),
+    admissionPolicy: process.env.VITEST
+      ? undefined
+      : new AdaptiveProviderAdmissionPolicy({
+          executionRepository,
+          logger: logger.child({ component: "provider-admission-policy" }),
+        }),
   });
   const sprintPreviewRepository = new SprintPreviewRepository(appDbStorage);
   const sprintPreviewService = new SprintPreviewService({
@@ -294,8 +325,15 @@ export function createCoreDependencies(
     logger: logger.child({ component: "sprint-file-browser-service" }),
   });
   const customDashboardRepository = new CustomDashboardRepository(appDbStorage);
+  const customDashboardCredentialBindingService = new CustomDashboardCredentialBindingService({
+    customDashboardRepository,
+    projectManagementRepository,
+    credentialBroker,
+    auditService: automationAuditService,
+  });
   const customDashboardValidationService = new CustomDashboardValidationService({
     customDashboardRepository,
+    customDashboardCredentialBindingService,
     projectManagementRepository,
     settingsRepository,
     logger: logger.child({ component: "custom-dashboard-validation-service" }),
@@ -400,6 +438,9 @@ export function createCoreDependencies(
     projectRuntimeRepository,
     connectionChatRepository,
     chatProviderRepository,
+    chatProviderSecretService,
+    chatProviderVerificationService,
+    chatConnectorRegistry,
     workerEndpointRepository,
     projectWorkerAssignmentRepository,
     qaReviewRepository,
@@ -440,6 +481,7 @@ export function createCoreDependencies(
     sprintFileBrowserService,
     sprintFileBrowserRepository,
     customDashboardRepository,
+    customDashboardCredentialBindingService,
     customDashboardValidationService,
     automationCredentialRepository,
     automationApprovalRepository,

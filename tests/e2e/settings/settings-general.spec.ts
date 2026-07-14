@@ -127,7 +127,9 @@ test.describe('settings general panel', () => {
 
     await openSourceSoftwareTrigger.click();
     dialog = page.getByRole('dialog', { name: 'Open Source Software' });
-    await expect(dialog.getByRole('searchbox', { name: 'Search software catalog' })).toHaveValue('');
+    const reopenedSearch = dialog.getByRole('searchbox', { name: 'Search software catalog' });
+    await expect(reopenedSearch).toHaveValue('');
+    await expect(reopenedSearch).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
     await expect(openSourceSoftwareTrigger).toBeFocused();

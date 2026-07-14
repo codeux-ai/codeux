@@ -2,6 +2,7 @@ import type { ComponentChildren, ComponentProps, FunctionComponent } from "preac
 import type { IssueImportProviderMetadata } from "../../../lib/issue-import-view-models.js";
 import { useDashboardI18n } from "../../../i18n/index.js";
 import { sprintsMessages } from "../../../i18n/messages/sprints.js";
+import { AvantgardeSelect, type SelectOption } from "../../ui/AvantgardeSelect.js";
 
 interface IssueImportFilterSectionProps {
   title: string;
@@ -28,8 +29,17 @@ type IssueImportTextareaProps = ComponentProps<"textarea"> & {
   provider: IssueImportProviderMetadata;
 };
 
-type IssueImportSelectProps = ComponentProps<"select"> & {
+type IssueImportSelectProps = {
   provider: IssueImportProviderMetadata;
+  value: string | number;
+  options: SelectOption[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  className?: string;
+  id?: string;
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
+  "aria-describedby"?: string;
 };
 
 const normalizeClassName = (className: ComponentProps<"input">["className"]): string => (
@@ -41,15 +51,6 @@ export const issueImportInputClassName = (
   className = "",
 ): string => [
   "min-h-11 w-full min-w-0 rounded-[1rem] border border-black/[0.07] bg-black/[0.025] px-3 text-sm text-slate-700 outline-none transition-colors placeholder:text-slate-400 focus:border-signal-500 focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200 dark:placeholder:text-slate-600",
-  provider.accent.focusRingClassName,
-  className,
-].filter(Boolean).join(" ");
-
-export const issueImportSelectClassName = (
-  provider: IssueImportProviderMetadata,
-  className = "",
-): string => [
-  "min-h-11 w-full min-w-0 rounded-[1rem] border border-black/[0.07] bg-black/[0.025] px-3 text-xs font-bold uppercase tracking-[0.12em] text-slate-500 outline-none transition-colors focus:border-signal-500 focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-300",
   provider.accent.focusRingClassName,
   className,
 ].filter(Boolean).join(" ");
@@ -150,17 +151,21 @@ export const IssueImportNumberInput: FunctionComponent<IssueImportTextInputProps
 );
 
 export const IssueImportSelect: FunctionComponent<IssueImportSelectProps> = ({
-  provider,
+  provider: _provider,
+  value,
+  options,
+  onChange,
   className,
-  children,
   ...props
 }) => (
-  <select
+  <AvantgardeSelect
     {...props}
-    className={issueImportSelectClassName(provider, normalizeClassName(className))}
-  >
-    {children}
-  </select>
+    value={String(value)}
+    onChange={onChange}
+    options={options}
+    variant="card"
+    className={`w-full min-w-0 ${className ?? ""}`}
+  />
 );
 
 export const IssueImportTextarea: FunctionComponent<IssueImportTextareaProps> = ({

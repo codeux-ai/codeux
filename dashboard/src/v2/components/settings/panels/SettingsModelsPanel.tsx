@@ -658,7 +658,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                   </div>
                   <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
                     <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t(settingsModelsMessages, "cap")}</div>
-                    <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{provider.maxConcurrentTasks ? formatNumber(provider.maxConcurrentTasks) : "∞"}</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{provider.maxConcurrentTasks ? formatNumber(provider.maxConcurrentTasks) : provider.provider === "jules" ? "∞" : t(settingsModelsMessages, "automatic")}</div>
                   </div>
                 </div>
               </div>
@@ -1057,7 +1057,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                         </div>
                         <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
                           <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t(settingsModelsMessages, "cap")}</div>
-                          <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{provider.maxConcurrentTasks ? formatNumber(provider.maxConcurrentTasks) : "∞"}</div>
+                          <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{provider.maxConcurrentTasks ? formatNumber(provider.maxConcurrentTasks) : provider.provider === "jules" ? "∞" : t(settingsModelsMessages, "automatic")}</div>
                         </div>
                       </div>
                     </div>

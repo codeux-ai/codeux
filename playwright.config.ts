@@ -4,6 +4,8 @@ import os from 'os';
 import path from 'path';
 
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'codeux-e2e-home-'));
+const credentialKeyPath = path.join(tempHome, 'credential-root-key');
+fs.writeFileSync(credentialKeyPath, Buffer.alloc(32, 23).toString('hex'), { mode: 0o600 });
 const mockProviderCliPath = path.resolve(process.cwd(), 'scripts/e2e/mock-provider-cli.mjs');
 const dashboardPort = Number.parseInt(
   process.env.CODEUX_E2E_DASHBOARD_PORT || process.env.DASHBOARD_PORT || '4464',
@@ -111,13 +113,18 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: 'node dist/index.js',
+    // Rebuild the dashboard with gated workspaces enabled so navigation specs
+    // exercise the production route tree instead of depending on a caller's
+    // previously built dashboard assets.
+    command: 'pnpm exec vite build && node dist/index.js',
     // Poll the liveness probe (/health) rather than the readiness probe (/ready).
     // /ready only returns 200 once a project has a live-status timestamp, which
     // never happens in a clean CI checkout, so it would hang until timeout.
     url: `${dashboardBaseUrl}/health`,
     reuseExistingServer: false,
-    timeout: 60000,
+    // The feature-gated production dashboard build can exceed one minute on
+    // resource-constrained CI runners before the health listener is available.
+    timeout: 120000,
     stdout: 'pipe',
     stderr: 'pipe',
     env: {
@@ -127,14 +134,22 @@ export default defineConfig({
       XDG_DATA_HOME: path.join(tempHome, '.local', 'share'),
       CODE_UX_DIRECTORY_BROWSER_ROOTS: os.tmpdir(),
       CODEUX_E2E_PROVIDER_CLI_SHIM: mockProviderCliPath,
+      CODEUX_E2E_MODE: '1',
+      CODEUX_E2E_DASHBOARD_API_RATE_LIMIT_MAX: '10000',
       DASHBOARD_PORT: String(resolvedDashboardPort),
       MCP_HTTP_PORT: String(resolvedDashboardPort + 1),
       // Browser E2E only needs the dashboard HTTP server. In particular, do not
       // let Playwright's inherited stdin pipe activate the MCP stdio lifecycle.
       CODE_UX_DISABLE_MCP_STDIO: '1',
       MCP_HTTP_ENABLED: 'false',
+      CODE_UX_CREDENTIAL_KEY_PROVIDER: 'mounted-key-file',
+      CODE_UX_CREDENTIAL_KEY_FILE: credentialKeyPath,
       CODE_UX_CONTAINERIZED_GIT: '0',
       CODE_UX_GIT_CONTAINER_MODE: 'host',
+      VITE_CODEUX_FEATURE_NODES: 'true',
+      VITE_CODEUX_NODE_FLOW_BACKEND: 'true',
+      VITE_CODEUX_AUTOMATION_SECURITY: 'true',
+      VITE_CODEUX_FEATURE_CUSTOM_DASHBOARDS: 'true',
     },
   },
 });

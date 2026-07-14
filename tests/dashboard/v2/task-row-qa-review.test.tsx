@@ -1,8 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, render, screen } from "@testing-library/preact";
-import { fireEvent } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { renderWithI18n } from "../render-with-i18n.js";
 expect.extend(matchers);
@@ -105,7 +104,9 @@ describe("TaskRow QA review indicator", () => {
 
     renderWithI18n(<KanbanTaskCard viewModel={viewModel} onEdit={vi.fn()} onDelete={onDelete} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Delete task T1: Reviewed task/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Open task actions for task T1: Reviewed task/i }));
+    const menu = await screen.findByRole("menu", { name: /Actions for task T1: Reviewed task/i });
+    fireEvent.click(within(menu).getByRole("menuitem", { name: /Delete task T1: Reviewed task/i }));
 
     expect(await screen.findByRole("dialog", { name: "Delete Task" })).toBeInTheDocument();
     expect(screen.getByText(/Delete "Reviewed task"\? This removes the task card and cannot be undone/i)).toBeInTheDocument();
@@ -133,7 +134,7 @@ describe("TaskRow QA review indicator", () => {
     expect(screen.getByLabelText(/^Task T1: Reviewed task/i)).toHaveAttribute("draggable", "false");
   });
 
-  it("keeps task-card action names target-specific and exposes disabled reasons separately", () => {
+  it("keeps task-card action names target-specific and exposes disabled reasons separately", async () => {
     const task = makeTask();
     const viewModel: TaskCardViewModel = {
       task,
@@ -175,13 +176,16 @@ describe("TaskRow QA review indicator", () => {
 
     renderWithI18n(<KanbanTaskCard viewModel={viewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
 
-    expect(screen.getByRole("button", { name: "Rerun task T1: Reviewed task" })).toHaveAccessibleDescription("Open Live to rerun task T1.");
-    expect(screen.getByRole("link", { name: "Open sprint preview for task T1: Reviewed task" })).toHaveAttribute("href", "/browser?sprintId=sprint-1");
-    expect(screen.getByRole("button", { name: "Open pull request for task T1: Reviewed task" })).toHaveAccessibleDescription("No pull request is available for task T1 yet.");
-    expect(screen.getByRole("button", { name: "Open live runtime for task T1: Reviewed task" })).toHaveAccessibleDescription("Live runtime has not started for task T1.");
+    fireEvent.click(screen.getByRole("button", { name: /Open task actions for task T1: Reviewed task/i }));
+    const menu = await screen.findByRole("menu", { name: /Actions for task T1: Reviewed task/i });
+    expect(within(menu).getByRole("menuitem", { name: "Rerun task T1: Reviewed task" })).toHaveAccessibleDescription("Open Live to rerun task T1.");
+    expect(within(menu).getByRole("menuitem", { name: "Open sprint preview for task T1: Reviewed task" })).toHaveAttribute("href", "/browser?sprintId=sprint-1");
+    expect(within(menu).getByRole("menuitem", { name: "Open sprint preview for task T1: Reviewed task" })).toHaveAttribute("title", "Open the sprint preview workspace. Task T1.");
+    expect(within(menu).getByRole("menuitem", { name: "Open pull request for task T1: Reviewed task" })).toHaveAccessibleDescription("No pull request is available for task T1 yet.");
+    expect(within(menu).getByRole("menuitem", { name: "Open live runtime for task T1: Reviewed task" })).toHaveAccessibleDescription("Live runtime has not started for task T1.");
   });
 
-  it("exposes optimistic saving state and disabled edit/delete reasons without changing action names", () => {
+  it("exposes optimistic saving state and disabled edit/delete reasons without changing action names", async () => {
     const task = makeTask();
     const viewModel: TaskCardViewModel = {
       task: { ...task, isOptimistic: true },
@@ -198,7 +202,11 @@ describe("TaskRow QA review indicator", () => {
     expect(card).toHaveAttribute("aria-busy", "true");
     expect(card).toHaveAttribute("draggable", "false");
     expect(screen.getByText("Saving task changes")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Edit task T1: Reviewed task" })).toHaveAccessibleDescription("Saving task T1; edit is temporarily unavailable.");
-    expect(screen.getByRole("button", { name: "Delete task T1: Reviewed task" })).toHaveAccessibleDescription("Saving task T1; delete is temporarily unavailable.");
+    const trigger = screen.getByRole("button", { name: /Open task actions for task T1: Reviewed task/i });
+    expect(trigger).toHaveAttribute("aria-busy", "true");
+    fireEvent.click(trigger);
+    const menu = await screen.findByRole("menu", { name: /Actions for task T1: Reviewed task/i });
+    expect(within(menu).getByRole("menuitem", { name: "Edit task T1: Reviewed task" })).toHaveAccessibleDescription("Saving task T1; edit is temporarily unavailable.");
+    expect(within(menu).getByRole("menuitem", { name: "Delete task T1: Reviewed task" })).toHaveAccessibleDescription("Saving task T1; delete is temporarily unavailable.");
   });
 });

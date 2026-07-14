@@ -8,6 +8,7 @@ import { Button } from "./Button.js";
 import { Modal } from "./Modal.js";
 import { FieldWrapper } from "../forms/FieldWrapper.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { AvantgardeSelect } from "./AvantgardeSelect.js";
 import { useDashboardI18n } from "../../i18n/context.js";
 import { sprintAuthoringMessages } from "../../i18n/messages/sprint-authoring.js";
 
@@ -246,22 +247,23 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} clearError={clearError} autoDismiss={feedback.autoDismiss} retryAction={feedback.retryAction} retryLabel={feedback.retryLabel} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <FieldWrapper label={t("sprint")} required error={validationErrors.sprintId} forceTouch={touched.sprintId} announceError={false}>
-                <select
+                <AvantgardeSelect
                   id="add-task-sprint"
                   value={sprintId}
-                  onInput={(event) => {
-                    setSprintId((event.target as HTMLSelectElement).value);
+                  onChange={(value) => {
+                    setSprintId(value);
                     if (feedback.status === "error") clearError();
                   }}
-                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500"
+                  className="mt-2.5 w-full"
                   onBlur={() => setTouched(prev => ({ ...prev, sprintId: true }))}
-                  required
-                >
-                  <option value="" disabled>{t("selectSprint")}</option>
-                  {sprints.map((sprint) => (
-                    <option key={sprint.id} value={sprint.id}>{sprint.name}</option>
-                  ))}
-                </select>
+                  aria-required="true"
+                  invalid={Boolean(validationErrors.sprintId && touched.sprintId)}
+                  placeholder={t("selectSprint")}
+                  options={[
+                    { value: "", label: t("selectSprint"), disabled: true },
+                    ...sprints.map((sprint) => ({ value: sprint.id, label: sprint.name })),
+                  ]}
+                />
               </FieldWrapper>
 
               <FieldWrapper label={t("title")} required error={validationErrors.title} forceTouch={touched.title} announceError={false}>

@@ -237,4 +237,24 @@ describe("SprintExecutionStateService", () => {
       expect(service.hasPlannedTasks("p1", "s1")).toBe(false);
     });
   });
+
+  describe("hasTaskExecutionHistory", () => {
+    it("returns false before any sprint task has an execution run", () => {
+      vi.mocked(mockProjectManagementRepository.listTasks).mockReturnValue([{ id: "t1" }] as any);
+      vi.mocked(mockExecutionRepository.listLatestTaskRuns).mockReturnValue(new Map());
+
+      expect(service.hasTaskExecutionHistory("p1", "s1")).toBe(false);
+      expect(mockExecutionRepository.listLatestTaskRuns).toHaveBeenCalledWith(["t1"]);
+    });
+
+    it("returns true once any sprint task has execution history", () => {
+      vi.mocked(mockProjectManagementRepository.listTasks).mockReturnValue([{ id: "t1" }, { id: "t2" }] as any);
+      vi.mocked(mockExecutionRepository.listLatestTaskRuns).mockReturnValue(new Map([
+        ["t2", { id: "run-2" }],
+      ]) as any);
+
+      expect(service.hasTaskExecutionHistory("p1", "s1")).toBe(true);
+      expect(mockExecutionRepository.listLatestTaskRuns).toHaveBeenCalledWith(["t1", "t2"]);
+    });
+  });
 });

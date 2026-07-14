@@ -138,6 +138,12 @@ const createCiEvent = (
   ...overrides,
 });
 
+async function openTaskActions(user: ReturnType<typeof userEvent.setup>, taskId: string, title: string): Promise<HTMLElement> {
+  const trigger = screen.getByRole("button", { name: `Open task actions for task ${taskId}: ${title}` });
+  await user.click(trigger);
+  return screen.findByRole("menu", { name: `Actions for task ${taskId}: ${title}` });
+}
+
 describe("TasksPage.cards Integration", () => {
   beforeEach(() => {
     routerState.searchStr = "";
@@ -234,6 +240,13 @@ describe("TasksPage.cards Integration", () => {
 
     // Additional dependency text verification
     expect(screen.getAllByText("Foundation Setup").length).toBeGreaterThan(0);
+    const dependentCard = screen.getByLabelText(/^Task T-101: Dependent Feature/i);
+    const dependencyRow = within(dependentCard).getByRole("listitem", {
+      name: /Depends on task T-100, resolved\. Resolved dependency\. Dependency completed\./i,
+    });
+    expect(within(dependencyRow).getByText("T-100")).toHaveAttribute("aria-hidden", "true");
+    expect(within(dependencyRow).getByText("Resolved")).toHaveAttribute("aria-hidden", "true");
+    expect(within(dependentCard).getByRole("button", { name: /Open task actions for task T-101: Dependent Feature/i })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: /in progress/i })).toHaveAccessibleDescription(/In Progress lane contains 1 task/i);
     expect(screen.getByRole("region", { name: /completed/i })).toHaveAccessibleDescription(/Completed lane contains 1 task/i);
     expect(screen.getByText("Task filters changed. Status All. Priority Any Priority. Showing 20 tasks per lane.")).toHaveClass("sr-only");
@@ -312,7 +325,7 @@ describe("TasksPage.cards Integration", () => {
     expect(within(unrelatedCard).queryByText("CI failed")).not.toBeInTheDocument();
     expect(within(unrelatedCard).getByText("QA no review")).toBeInTheDocument();
     expect(reviewedCard).toHaveAttribute("draggable", "true");
-    expect(within(reviewedCard).getByRole("button", { name: /Edit task T-100/i })).toBeInTheDocument();
+    expect(within(reviewedCard).getByRole("button", { name: /Open task actions for task T-100/i })).toBeInTheDocument();
 
     vi.mocked(useDashboardRuntimeData).mockReturnValue({
       execution: {
@@ -720,6 +733,14 @@ describe("TasksPage.cards Integration", () => {
       </ProjectDataContext.Provider>
     );
 
+    const workspace = screen.getByRole("region", { name: "Task Board" });
+    expect(within(workspace).getByRole("heading", { name: "Tasks" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Task workspace" })).toHaveClass("sr-only");
+    expect(screen.getByRole("heading", { name: "Task board" })).toHaveClass("sr-only");
+    expect(screen.getByRole("region", { name: /Queued lane/i })).toHaveAccessibleDescription(/Queued lane contains 1 task/i);
+    expect(screen.getByRole("region", { name: /Completed lane/i })).toHaveAccessibleDescription(/Completed lane contains 1 task/i);
+    expect(screen.getByRole("button", { name: /Task sprint scope: SPR-1: Sprint One/i })).toHaveAttribute("aria-expanded", "false");
+
     await user.click(screen.getByRole("tab", { name: "Show completed tasks" }));
     await waitFor(() => expect(screen.getByText("Release Notes")).toBeInTheDocument());
     await waitFor(() => expect(screen.queryByText("Foundation Setup")).not.toBeInTheDocument());
@@ -741,7 +762,11 @@ describe("TasksPage.cards Integration", () => {
     expect(screen.getByRole("option", { name: /Agent Beta/i })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Close task composer" }));
 
-    await user.click(screen.getByRole("button", { name: /Edit task T-100: Foundation Setup/i }));
+    let taskMenu = await openTaskActions(user, "T-100", "Foundation Setup");
+    expect(within(taskMenu).getByRole("group", { name: "Task management actions" })).toBeInTheDocument();
+    expect(within(taskMenu).getByRole("group", { name: "Destructive task actions" })).toBeInTheDocument();
+    expect(within(taskMenu).getByRole("menuitem", { name: /Rerun task T-100/i })).toHaveAccessibleDescription("Open Live to rerun task T-100.");
+    await user.click(within(taskMenu).getByRole("menuitem", { name: /Edit task T-100: Foundation Setup/i }));
     expect(screen.getByRole("region", { name: "Edit task editor" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Refine task" })).toBeInTheDocument();
     expect(screen.getByDisplayValue("Foundation Setup")).toBeInTheDocument();
@@ -749,8 +774,15 @@ describe("TasksPage.cards Integration", () => {
     expect(screen.getByText("Foundation Setup")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Close task composer" }));
 
-    await user.click(screen.getByRole("button", { name: /Delete task T-100: Foundation Setup/i }));
+    taskMenu = await openTaskActions(user, "T-100", "Foundation Setup");
+    await user.click(within(taskMenu).getByRole("menuitem", { name: /Delete task T-100: Foundation Setup/i }));
     expect(screen.getByText(/Delete "Foundation Setup"/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Open task actions for task T-100: Foundation Setup/i })).toHaveFocus());
+    expect(deleteTask).not.toHaveBeenCalled();
+
+    taskMenu = await openTaskActions(user, "T-100", "Foundation Setup");
+    await user.click(within(taskMenu).getByRole("menuitem", { name: /Delete task T-100: Foundation Setup/i }));
     const confirmDeleteButton = screen.getByRole("button", { name: "Hold to Delete Task" });
     fireEvent.pointerDown(confirmDeleteButton);
     await waitFor(() => expect(deleteTask).toHaveBeenCalledWith("task_rec_1"), { timeout: 1500 });
@@ -759,7 +791,8 @@ describe("TasksPage.cards Integration", () => {
     expect(refreshSprints).toHaveBeenCalled();
   });
 
-  it("verifies optimistic task rendering and layout stability", () => {
+  it("verifies optimistic task rendering, disabled reasons, and layout stability", async () => {
+    const user = userEvent.setup();
     (useProjectData as unknown as any).mockReturnValue({
       projects: [{ id: "proj_1", name: "Project Alpha" }],
       selectedProject: { id: "proj_1", name: "Project Alpha" },
@@ -797,6 +830,14 @@ describe("TasksPage.cards Integration", () => {
     expect(card).toHaveClass("border-dashed");
     expect(card).toHaveClass("opacity-70");
     expect(card).toHaveTextContent("Saving task changes");
+    const trigger = screen.getByRole("button", { name: /Open task actions for task T-NEW: Optimistic Title/i });
+    expect(trigger).toHaveAttribute("aria-busy", "true");
+    await user.click(trigger);
+    const menu = await screen.findByRole("menu", { name: /Actions for task T-NEW: Optimistic Title/i });
+    expect(within(menu).getByRole("menuitem", { name: /Edit task T-NEW/i })).toHaveAccessibleDescription("Saving task T-NEW; edit is temporarily unavailable.");
+    expect(within(menu).getByRole("menuitem", { name: /Delete task T-NEW/i })).toHaveAccessibleDescription("Saving task T-NEW; delete is temporarily unavailable.");
+    await user.click(within(menu).getByRole("menuitem", { name: /Delete task T-NEW/i }));
+    expect(screen.queryByRole("dialog", { name: "Delete Task" })).not.toBeInTheDocument();
   });
 
   it("submits edited tasks with the selected worker-agent preset", async () => {
@@ -840,7 +881,8 @@ describe("TasksPage.cards Integration", () => {
       </ProjectDataContext.Provider>
     );
 
-    await user.click(screen.getByRole("button", { name: /Edit task T-100: Foundation Setup/i }));
+    const taskMenu = await openTaskActions(user, "T-100", "Foundation Setup");
+    await user.click(within(taskMenu).getByRole("menuitem", { name: /Edit task T-100: Foundation Setup/i }));
     expect(screen.getByRole("region", { name: "Edit task editor" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Worker Agent" }));

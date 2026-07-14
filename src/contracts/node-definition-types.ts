@@ -13,6 +13,7 @@ export interface NodeDefinitionCredentialRequirement {
   label: string;
   required: boolean;
   allowedKinds: string[];
+  requiredCapabilities: string[];
 }
 
 export interface NodeDefinitionUiManifest {

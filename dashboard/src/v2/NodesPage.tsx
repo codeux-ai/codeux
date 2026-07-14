@@ -7,7 +7,8 @@ import { EmptyState } from "./components/ui/EmptyState.js";
 import { Button } from "./components/ui/Button.js";
 import { NodeFlowLibrary } from "./components/nodes/NodeFlowLibrary.js";
 import { NodeFlowCanvas } from "./components/nodes/NodeFlowCanvas.js";
-import { NodeFlowInspector } from "./components/nodes/NodeFlowInspector.js";
+import { NodeFlowInspector, type CredentialBindingFeedback } from "./components/nodes/NodeFlowInspector.js";
+import type { CredentialSelectionResult } from "./components/nodes/NodeCredentialPicker.js";
 import { NodePalette } from "./components/nodes/NodePalette.js";
 import { NodeGovernancePanel } from "./components/nodes/NodeGovernancePanel.js";
 import { NodeRunDebugger } from "./components/nodes/NodeRunDebugger.js";
@@ -19,9 +20,9 @@ import { fetchAgentPresets } from "./lib/agent-preset-api.js";
 import {
   attachNodeFlowToAgent, cancelNodeFlowRun, compareNodeFlowVersions, createNodeFlowDraft, decideNodeFlowApproval, deleteNodeFlow, detachNodeFlowFromAgent, dryRunNodeFlowDraft,
   fetchNodeDefinition, fetchNodeFlow, fetchNodeFlowApprovals, fetchNodeFlowAttempts, fetchNodeFlowCatalog, fetchNodeFlowNodeRuns,
-  fetchNodeFlowAgentSkills, fetchNodeFlowRuns, fetchNodeFlows, patchNodeFlowDraft, publishNodeFlowDraft, requestNodeFlowCredential,
+  fetchNodeFlowAgentSkills, fetchNodeFlowRuns, fetchNodeFlows, patchNodeFlowDraft, publishNodeFlowDraft,
   retryNodeFlowRun, rollbackNodeFlow, runNodeFlow, validateNodeFlowDraft,
-  type NodeDefinitionSummary, type NodeFlowDryRunResponse, type NodeFlowVersionDiff,
+  NodeFlowDraftSaveError, type NodeDefinitionSummary, type NodeFlowDryRunResponse, type NodeFlowVersionDiff,
 } from "./lib/node-flow-api.js";
 import { useNodesI18n } from "./i18n/messages/nodes.js";
 
@@ -40,7 +41,9 @@ export const NodesPage: FunctionComponent = () => {
   const projectRef = useRef(projectId); projectRef.current = projectId;
   const flowRef = useRef<string | null>(null);
   const selectedFlowRef = useRef<string | null>(null);
+  const selectedNodeRef = useRef<string | null>(null);
   const reviewRequestRef = useRef(0);
+  const credentialMutationRequestRef = useRef(0);
   const mountedRef = useRef(true);
   const [flows, setFlows] = useState<NodeFlowRecord[]>([]);
   const [catalog, setCatalog] = useState<NodeDefinitionSummary[]>([]);
@@ -73,6 +76,7 @@ export const NodesPage: FunctionComponent = () => {
   const [error, setError] = useState<string | null>(null);
   const [migrationWarning, setMigrationWarning] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [credentialFeedback, setCredentialFeedback] = useState<CredentialBindingFeedback | null>(null);
 
   const selectedNode = useMemo(() => graph.nodes.find((node) => node.id === selectedNodeId) ?? null, [graph.nodes, selectedNodeId]);
   const selectedDefinition = selectedNode?.definition ? definitions[`${selectedNode.definition.type}@${selectedNode.definition.version}`] ?? null : null;
@@ -81,13 +85,13 @@ export const NodesPage: FunctionComponent = () => {
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; reviewRequestRef.current += 1; };
+    return () => { mountedRef.current = false; reviewRequestRef.current += 1; credentialMutationRequestRef.current += 1; };
   }, []);
 
   const applyRecord = useCallback((flow: NodeFlowRecord): void => {
     flowRef.current = flow.id; selectedFlowRef.current = flow.id;
     setRecord(flow); setSelectedFlowId(flow.id); setTitle(flow.title); setDescription(flow.description); setGraph(flow.graph);
-    setSelectedNodeId(flow.graph.nodes[0]?.id ?? null); setReview(null); setDryRun(null); setDiff(null);
+    selectedNodeRef.current = flow.graph.nodes[0]?.id ?? null; setSelectedNodeId(selectedNodeRef.current); setReview(null); setDryRun(null); setDiff(null);
   }, []);
 
   const loadReview = useCallback(async (nextProjectId: string, flowId: string, signal?: AbortSignal): Promise<void> => {
@@ -136,8 +140,9 @@ export const NodesPage: FunctionComponent = () => {
   }, [applyRecord, errorMessage, loadReview]);
 
   useEffect(() => {
-    flowRef.current = null; selectedFlowRef.current = null; reviewRequestRef.current += 1;
+    flowRef.current = null; selectedFlowRef.current = null; selectedNodeRef.current = null; reviewRequestRef.current += 1; credentialMutationRequestRef.current += 1;
     setFlows([]); setRecord(null); setSelectedFlowId(null); setRuns([]); setAgents([]); setAttachments([]); setAttachAgentId(""); setAgentsError(null); setFlowAttachmentError(null); setAttachmentMutationError(null); setAttachmentBusy(false); setError(null); setMigrationWarning(null); setNotice(null);
+    setCredentialFeedback(null);
     if (!projectId) return;
     const controller = new AbortController(); void loadLibrary(projectId, controller.signal); return () => controller.abort();
   }, [projectId, loadLibrary]);
@@ -201,6 +206,9 @@ export const NodesPage: FunctionComponent = () => {
   useEffect(() => { if (!selectedRunId) { setNodeRuns([]); setAttempts([]); setApprovals([]); return; } const controller = new AbortController(); void Promise.all([fetchNodeFlowNodeRuns(selectedRunId, controller.signal), fetchNodeFlowAttempts(selectedRunId, controller.signal), fetchNodeFlowApprovals(selectedRunId, controller.signal)]).then(([nodes, history, governed]) => { setNodeRuns(nodes.nodeRuns); setAttempts(history.attempts); setApprovals(governed.approvals); }).catch((requestError) => { if (!controller.signal.aborted) setError(errorMessage(requestError)); }); return () => controller.abort(); }, [errorMessage, selectedRunId]);
 
   const act = async (action: () => Promise<void>): Promise<void> => { setBusy(true); setError(null); setNotice(null); try { await action(); } catch (requestError) { if (mountedRef.current) setError(errorMessage(requestError)); } finally { if (mountedRef.current) setBusy(false); } };
+  const editTitle = (value: string): void => { credentialMutationRequestRef.current += 1; setCredentialFeedback(null); setTitle(value); };
+  const editDescription = (value: string): void => { credentialMutationRequestRef.current += 1; setCredentialFeedback(null); setDescription(value); };
+  const editGraph = (update: (current: NodeFlowGraph) => NodeFlowGraph): void => { credentialMutationRequestRef.current += 1; setCredentialFeedback(null); setGraph(update); };
   const refreshAttachmentData = (): void => {
     setAttachmentMutationError(null);
     if (projectId) void loadAgents(projectId);
@@ -237,16 +245,111 @@ export const NodesPage: FunctionComponent = () => {
       if (projectRef.current === mutationProjectId && flowRef.current === flowId) setAttachmentBusy(false);
     });
   };
-  const selectFlow = (flowId: string): void => { const flow = flows.find((item) => item.id === flowId); if (!flow || !projectId) return; applyRecord(flow); void loadReview(projectId, flow.id); };
+  const selectFlow = (flowId: string): void => { const flow = flows.find((item) => item.id === flowId); if (!flow || !projectId) return; credentialMutationRequestRef.current += 1; setCredentialFeedback(null); applyRecord(flow); void loadReview(projectId, flow.id); };
   const createFlow = (): void => { if (!projectId) return; const targetProjectId = projectId; void act(async () => { const created = await createNodeFlowDraft(targetProjectId, { title: "Untitled automation", description: "", graph: createDefaultNodeFlowGraph() }); if (projectRef.current !== targetProjectId) return; const flow = await fetchNodeFlow(created.flowId); if (projectRef.current !== targetProjectId || !mountedRef.current) return; setFlows((current) => [flow, ...current.filter((item) => item.id !== flow.id)]); applyRecord(flow); setReview(created); setNotice(t("draftCreated")); }); };
   const save = (): void => { if (!projectId || !record) return; void act(async () => { const result = await patchNodeFlowDraft(record.id, { projectId, draftRevision: record.version, title, description, graph }); if (result.conflict) { setError(`${result.conflict.message} ${t("currentRevision", { revision: result.conflict.actualDraftRevision })}`); return; } const saved = await fetchNodeFlow(record.id); setFlows((current) => current.map((item) => item.id === saved.id ? saved : item)); applyRecord(saved); setReview(result.draft ?? null); setNotice(t("draftSaved")); }); };
-  const addNode = (summary: NodeDefinitionSummary): void => { void act(async () => { const definition = await fetchNodeDefinition(summary.type, summary.version); setDefinitions((current) => ({ ...current, [`${definition.type}@${definition.version}`]: definition })); let suffix = 1; while (graph.nodes.some((node) => node.id === `${definition.type}-${suffix}`)) suffix += 1; const node: NodeFlowNode = { id: `${definition.type}-${suffix}`, type: definition.type, title: definition.ui.label, description: definition.ui.description, definition: { type: definition.type, version: definition.version }, ports: definition.ports, widgetSchema: definition.ui.widgetSchema, data: {}, capabilities: definition.capabilities, sideEffect: definition.sideEffect, policy: definition.defaultPolicy, credentialBindings: [], position: { x: 80 + graph.nodes.length * 260, y: 100 } }; setGraph((current) => ({ ...current, nodes: [...current.nodes, node] })); setSelectedNodeId(node.id); }); };
+  const addNode = (summary: NodeDefinitionSummary): void => { void act(async () => { const definition = await fetchNodeDefinition(summary.type, summary.version); setDefinitions((current) => ({ ...current, [`${definition.type}@${definition.version}`]: definition })); let suffix = 1; while (graph.nodes.some((node) => node.id === `${definition.type}-${suffix}`)) suffix += 1; const node: NodeFlowNode = { id: `${definition.type}-${suffix}`, type: definition.type, title: definition.ui.label, description: definition.ui.description, definition: { type: definition.type, version: definition.version }, ports: definition.ports, widgetSchema: definition.ui.widgetSchema, data: {}, capabilities: definition.capabilities, sideEffect: definition.sideEffect, policy: definition.defaultPolicy, credentialBindings: [], position: { x: 80 + graph.nodes.length * 260, y: 100 } }; setGraph((current) => ({ ...current, nodes: [...current.nodes, node] })); selectedNodeRef.current = node.id; credentialMutationRequestRef.current += 1; setCredentialFeedback(null); setSelectedNodeId(node.id); }); };
   const validate = (): void => { if (!projectId || !record) return; void act(async () => setReview(await validateNodeFlowDraft(projectId, record.id))); };
   const runDry = (): void => { if (!projectId || !record) return; void act(async () => setDryRun(await dryRunNodeFlowDraft(projectId, record.id))); };
   const publish = (): void => { if (!projectId || !record || !review) return; void act(async () => { setReview(await publishNodeFlowDraft(projectId, record.id, review.draftRevision)); setNotice(t("draftPublished")); }); };
   const compare = (): void => { if (!projectId || !record || !review?.publishedVersion) return; const publishedVersion = review.publishedVersion; void act(async () => setDiff(await compareNodeFlowVersions(projectId, record.id, publishedVersion, record.version))); };
   const rollback = (): void => { if (!projectId || !record || !review?.publishedVersion) return; void act(async () => { const next = await rollbackNodeFlow(projectId, record.id, review.publishedVersion!, record.version); const flow = await fetchNodeFlow(record.id); applyRecord(flow); setReview(next); }); };
   const run = (): void => { if (!projectId || !record) return; void act(async () => { const result = await runNodeFlow(record.id, { projectId, input: {} }); setRuns((current) => [result.run, ...current]); setSelectedRunId(result.run.id); setNodeRuns(result.nodeRuns); setAttempts(result.attempts ?? []); }); };
+  const selectNode = (nodeId: string | null): void => {
+    selectedNodeRef.current = nodeId;
+    credentialMutationRequestRef.current += 1;
+    setCredentialFeedback(null);
+    setSelectedNodeId(nodeId);
+  };
+  const applyCredentialRecord = (saved: NodeFlowRecord, nextReview: NodeFlowDraftReview, nodeId: string): void => {
+    flowRef.current = saved.id; selectedFlowRef.current = saved.id;
+    setFlows((current) => current.map((item) => item.id === saved.id ? saved : item));
+    setRecord(saved); setSelectedFlowId(saved.id); setTitle(saved.title); setDescription(saved.description); setGraph(saved.graph);
+    const nextSelectedNodeId = saved.graph.nodes.some((node) => node.id === nodeId) ? nodeId : null;
+    selectedNodeRef.current = nextSelectedNodeId; setSelectedNodeId(nextSelectedNodeId); setReview(nextReview); setDryRun(null); setDiff(null);
+  };
+  const changeCredential = async (nodeId: string, slot: string, credentialId: string | null): Promise<CredentialSelectionResult> => {
+    if (!projectId || !record || selectedNodeRef.current !== nodeId) return "stale";
+    const node = graph.nodes.find((candidate) => candidate.id === nodeId);
+    if (!node) return "stale";
+    const currentCredentialId = node.credentialBindings?.find((binding) => binding.slot === slot)?.credentialId ?? null;
+    if (currentCredentialId === credentialId) {
+      setCredentialFeedback({ nodeId, slot, status: "saved", message: "This credential is already bound to the slot." });
+      return "saved";
+    }
+    const bindings: NonNullable<NodeFlowNode["credentialBindings"]> = [];
+    let replaced = false;
+    for (const binding of node.credentialBindings ?? []) {
+      if (binding.slot !== slot) { bindings.push(binding); continue; }
+      if (!replaced && credentialId) bindings.push({ slot, credentialId });
+      replaced = true;
+    }
+    if (!replaced && credentialId) bindings.push({ slot, credentialId });
+    const nextGraph = updateNodeInGraph(graph, nodeId, { credentialBindings: bindings });
+    const targetProjectId = projectId;
+    const flowId = record.id;
+    const draftRevision = record.version;
+    const requestId = ++credentialMutationRequestRef.current;
+    const isCurrent = (): boolean => mountedRef.current
+      && credentialMutationRequestRef.current === requestId
+      && projectRef.current === targetProjectId
+      && selectedFlowRef.current === flowId
+      && selectedNodeRef.current === nodeId;
+    setCredentialFeedback({ nodeId, slot, status: "saving", message: credentialId ? "Saving credential binding…" : "Removing credential binding…" });
+    try {
+      const result = await patchNodeFlowDraft(flowId, {
+        projectId: targetProjectId,
+        draftRevision,
+        title,
+        description,
+        graph: nextGraph,
+      });
+      if (!isCurrent()) return "stale";
+      if (result.conflict) {
+        const conflictMessage = `${result.conflict.message} Loaded revision ${result.conflict.actualDraftRevision}; choose the credential again to retry.`;
+        try {
+          const [latest, nextReview] = await Promise.all([
+            fetchNodeFlow(flowId),
+            validateNodeFlowDraft(targetProjectId, flowId),
+          ]);
+          if (!isCurrent()) return "stale";
+          applyCredentialRecord(latest, nextReview, nodeId);
+          setCredentialFeedback({ nodeId, slot, status: "conflict", message: conflictMessage });
+        } catch (refreshError) {
+          if (!isCurrent()) return "stale";
+          setCredentialFeedback({ nodeId, slot, status: "conflict", message: `${conflictMessage} The latest draft could not be refreshed: ${errorMessage(refreshError)}` });
+        }
+        return "conflict";
+      }
+      const [saved, nextReview] = await Promise.all([
+        fetchNodeFlow(flowId),
+        validateNodeFlowDraft(targetProjectId, flowId),
+      ]);
+      if (!isCurrent()) return "stale";
+      applyCredentialRecord(saved, nextReview, nodeId);
+      const reviewedCredential = nextReview.requiredCredentials.find((credential) => credential.nodeId === nodeId && credential.slot === slot);
+      if (credentialId && reviewedCredential?.status === "denied") {
+        setCredentialFeedback({ nodeId, slot, status: "policy-denied", message: "The binding was saved, but current credential policy denies its use. Choose another credential or update it in Settings." });
+        return "policy-denied";
+      }
+      setCredentialFeedback({ nodeId, slot, status: "saved", message: credentialId ? "Credential binding saved and draft review refreshed." : "Credential binding removed and draft review refreshed." });
+      return "saved";
+    } catch (requestError) {
+      if (!isCurrent()) return "stale";
+      const policyDenied = requestError instanceof NodeFlowDraftSaveError
+        ? requestError.status === 401 || requestError.status === 403
+        : /policy|denied|forbidden|not authorized|permission/i.test(errorMessage(requestError));
+      setCredentialFeedback({
+        nodeId,
+        slot,
+        status: policyDenied ? "policy-denied" : "error",
+        message: policyDenied
+          ? `Credential binding was not saved because policy denied the change. ${errorMessage(requestError)}`
+          : `Credential binding was not saved. ${errorMessage(requestError)}`,
+      });
+      return policyDenied ? "policy-denied" : "error";
+    }
+  };
 
   if (projectLoading) return <PageContainer><div role="status" className="p-10 text-sm text-slate-500">{t("loadingProjectWorkspace")}</div></PageContainer>;
   if (!selectedProject) return <PageContainer><PageHeader icon={Workflow} eyebrow={t("nodes")} title={t("automationWorkspace")} subtitle={t("selectProjectSubtitle")} /><EmptyState icon={<Workflow className="h-7 w-7" />} title={t("selectProject")} description={t("projectScopeDescription")} /></PageContainer>;
@@ -256,9 +359,10 @@ export const NodesPage: FunctionComponent = () => {
     {migrationWarning ? <div role="alert" className="rounded-xl border border-amber-500/25 bg-amber-500/[0.07] p-3 text-sm text-amber-800 dark:text-amber-200"><AlertTriangle className="mr-2 inline h-4 w-4" aria-hidden="true" />{migrationWarning}<button type="button" className="ml-3 underline" onClick={() => setMigrationWarning(null)}>{t("dismiss")}</button></div> : null}
     {notice ? <div role="status" className="rounded-xl border border-status-green/20 bg-status-green/[0.06] p-3 text-sm text-slate-700 dark:text-slate-200">{notice}</div> : null}
     <div className="flex min-w-0 flex-col gap-4 xl:flex-row"><NodeFlowLibrary flows={flows} selectedFlowId={selectedFlowId} loading={loading} onSelect={selectFlow} onCreate={createFlow} onDelete={(id) => void act(async () => { await deleteNodeFlow(id); await loadLibrary(selectedProject.id); })} />
-      <div className="min-w-0 flex-1">{record ? <div className="mb-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold uppercase text-slate-500">{t("flowName")}<input className="mt-1 w-full rounded-xl border border-black/[0.08] bg-white/70 px-3 py-2 text-sm normal-case dark:border-white/[0.08] dark:bg-white/[0.04]" value={title} onInput={(event) => setTitle(event.currentTarget.value)} /></label><label className="text-xs font-bold uppercase text-slate-500">{t("description")}<input className="mt-1 w-full rounded-xl border border-black/[0.08] bg-white/70 px-3 py-2 text-sm normal-case dark:border-white/[0.08] dark:bg-white/[0.04]" value={description} onInput={(event) => setDescription(event.currentTarget.value)} /></label></div> : null}{record ? <NodeFlowCanvas graph={graph} selectedNodeId={selectedNodeId} onSelectNode={setSelectedNodeId} onMoveNode={(id, position) => setGraph((current) => updateNodeInGraph(current, id, { position }))} /> : <EmptyState icon={<Workflow className="h-7 w-7" />} title={t("noProjectFlows")} description={t("createDraftDescription")} primaryAction={<Button onClick={createFlow}>{t("createDraft")}</Button>} />}</div>
+      <div className="min-w-0 flex-1">{record ? <div className="mb-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold uppercase text-slate-500">Flow name<input className="mt-1 w-full rounded-xl border border-black/[0.08] bg-white/70 px-3 py-2 text-sm normal-case dark:border-white/[0.08] dark:bg-white/[0.04]" value={title} onInput={(event) => editTitle(event.currentTarget.value)} /></label><label className="text-xs font-bold uppercase text-slate-500">Description<input className="mt-1 w-full rounded-xl border border-black/[0.08] bg-white/70 px-3 py-2 text-sm normal-case dark:border-white/[0.08] dark:bg-white/[0.04]" value={description} onInput={(event) => editDescription(event.currentTarget.value)} /></label></div> : null}{record ? <NodeFlowCanvas graph={graph} selectedNodeId={selectedNodeId} onSelectNode={selectNode} onMoveNode={(id, position) => editGraph((current) => updateNodeInGraph(current, id, { position }))} /> : <EmptyState icon={<Workflow className="h-7 w-7" />} title="No flows in this project" description="Create a draft to start from the canonical backend workspace." primaryAction={<Button onClick={createFlow}>Create draft</Button>} />}</div>
+      <div className="min-w-0 flex-1">{record ? <div className="mb-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold uppercase text-slate-500">{t("flowName")}<input className="mt-1 w-full rounded-xl border border-black/[0.08] bg-white/70 px-3 py-2 text-sm normal-case dark:border-white/[0.08] dark:bg-white/[0.04]" value={title} onInput={(event) => editTitle(event.currentTarget.value)} /></label><label className="text-xs font-bold uppercase text-slate-500">{t("description")}<input className="mt-1 w-full rounded-xl border border-black/[0.08] bg-white/70 px-3 py-2 text-sm normal-case dark:border-white/[0.08] dark:bg-white/[0.04]" value={description} onInput={(event) => editDescription(event.currentTarget.value)} /></label></div> : null}{record ? <NodeFlowCanvas graph={graph} selectedNodeId={selectedNodeId} onSelectNode={selectNode} onMoveNode={(id, position) => editGraph((current) => updateNodeInGraph(current, id, { position }))} /> : <EmptyState icon={<Workflow className="h-7 w-7" />} title={t("noProjectFlows")} description={t("createDraftDescription")} primaryAction={<Button onClick={createFlow}>{t("createDraft")}</Button>} />}</div>
       <NodePalette definitions={catalog} loading={loading} disabled={!record || busy} onCreateNode={addNode} />
-      {record ? <NodeFlowInspector selectedNode={selectedNode} definition={selectedDefinition} validation={review ? { valid: review.valid, errors: review.validationIssues } : null} requiredCredentials={review?.requiredCredentials.filter((item) => item.nodeId === selectedNode?.id) ?? []} agents={agents} attachments={attachments} attachAgentId={attachAgentId} attachmentsLoading={agentsLoading || attachmentsLoading} attachmentError={attachmentMutationError ?? flowAttachmentError ?? agentsError} attaching={attachmentBusy} onAttachAgentIdChange={setAttachAgentId} onAttachAgent={attachAgent} onDetachAgent={detachAgent} onRetryAttachments={refreshAttachmentData} onNodeChange={(id, update) => setGraph((current) => updateNodeInGraph(current, id, update))} onRequestCredential={(nodeId, slot) => { if (projectId && record) void act(async () => { await requestNodeFlowCredential(projectId, record.id, nodeId, slot); setNotice(t("credentialRequestRecorded")); }); }} /> : null}
+      {record ? <NodeFlowInspector selectedNode={selectedNode} definition={selectedDefinition} validation={review ? { valid: review.valid, errors: review.validationIssues } : null} requiredCredentials={review?.requiredCredentials.filter((item) => item.nodeId === selectedNode?.id) ?? []} projectId={selectedProject.id} flowId={record.id} credentialFeedback={credentialFeedback} onCredentialChange={changeCredential} agents={agents} attachments={attachments} attachAgentId={attachAgentId} attachmentsLoading={agentsLoading || attachmentsLoading} attachmentError={attachmentMutationError ?? flowAttachmentError ?? agentsError} attaching={attachmentBusy} onAttachAgentIdChange={setAttachAgentId} onAttachAgent={attachAgent} onDetachAgent={detachAgent} onRetryAttachments={refreshAttachmentData} onNodeChange={(id, update) => editGraph((current) => updateNodeInGraph(current, id, update))} /> : null}
     </div>
     {record ? <><NodeGovernancePanel review={review} dryRun={dryRun} diff={diff} busy={busy} onValidate={validate} onDryRun={runDry} onCompare={compare} onPublish={publish} onRollback={rollback} /><NodeRunDebugger runs={runs} selectedRunId={selectedRunId} nodeRuns={nodeRuns} attempts={attempts} approvals={approvals} busy={busy} onSelectRun={setSelectedRunId} onRefresh={() => void act(refreshRuns)} onCancel={() => { const active = runs.find((item) => item.id === selectedRunId); if (projectId && active) void act(async () => { await cancelNodeFlowRun(projectId, active.id); await refreshRuns(); }); }} onRetry={() => { const active = runs.find((item) => item.id === selectedRunId); if (projectId && active) void act(async () => { const result = await retryNodeFlowRun(projectId, active.id); setRuns((current) => [result.run, ...current]); setSelectedRunId(result.run.id); }); }} onApprovalDecision={(approvalId, decision) => void act(async () => { const result = await decideNodeFlowApproval(approvalId, decision); setRuns((current) => current.map((item) => item.id === result.run.id ? result.run : item)); setNodeRuns(result.nodeRuns); setAttempts(result.attempts ?? []); setApprovals((current) => current.map((item) => item.id === approvalId ? { ...item, status: result.status, decidedAt: result.decidedAt, decidedBy: result.decidedBy, decision: result.decision, updatedAt: result.updatedAt } : item)); })} /></> : null}
   </PageContainer>;

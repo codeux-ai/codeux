@@ -31,6 +31,7 @@ import {
 import { DEFAULT_DASHBOARD_LOCALE, type DashboardLocale } from "../i18n/locales.js";
 import { createDashboardFormatters } from "../i18n/formatters.js";
 import { translateLiveMessage, translateLivePlural } from "../i18n/messages/live.js";
+import { findActiveTaskHumanIntervention } from "./workflow-status-presentation.js";
 
 export type LiveSessionTaskFilter = "All" | "Running" | "Completed" | "Failed" | "Pending";
 
@@ -66,6 +67,7 @@ export interface LiveSessionTaskCardItem {
   events: ExecutionRuntimeEventSummary[];
   invocations: ExecutionInvocationRecord[];
   ciPresentation: CiStatusPresentation | null;
+  humanIntervention: ExecutionAttentionItemSummary | null;
   isRerunning: boolean;
   isForceCompleting: boolean;
   forceCompleteError: string | null;
@@ -638,6 +640,12 @@ export function deriveLiveSessionTaskCardItems(input: LiveSessionTaskCardStateIn
       attentionItems: ciAttentionItems,
       sprintRunId: latestDispatch?.sprintRunId ?? null,
     });
+    const humanIntervention = findActiveTaskHumanIntervention(input.attentionItems ?? [], {
+      recordId: task.record_id,
+      taskKey: task.id,
+      sprintId: task.sprint_id,
+      dispatchId: latestDispatch?.id,
+    });
 
     return {
       key: taskRuntimeId,
@@ -647,6 +655,7 @@ export function deriveLiveSessionTaskCardItems(input: LiveSessionTaskCardStateIn
       events: taskEvents,
       invocations: taskInvocations,
       ciPresentation,
+      humanIntervention,
       isRerunning: input.rerunningIds.has(taskRuntimeId),
       isForceCompleting: input.forceCompletePendingIds.has(taskRuntimeId),
       forceCompleteError: input.forceCompleteErrorByTaskId.get(taskRuntimeId) || null,

@@ -6,6 +6,7 @@ import { FieldWrapper } from "../forms/FieldWrapper.js";
 import { CheckCircle2, Loader2 } from "lucide-preact";
 import { useInteractionTokens } from "../../lib/motion/index.js";
 import { MEMORY_CATEGORY_MESSAGE_KEYS, useMemoryI18n } from "../../i18n/messages/memory.js";
+import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 
 const CATEGORIES: MemoryCategory[] = ["architecture", "codebase", "context", "preferences", "patterns", "decision", "error", "learning"];
 
@@ -139,14 +140,12 @@ export const AddMemoryModal: FunctionComponent<{
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full">
                     <div className="w-full sm:flex-1">
                         <FieldWrapper label={t("category")} htmlFor="memory-category">
-                            <select id="memory-category" value={category} onChange={e => setCategory((e.target as HTMLSelectElement).value as MemoryCategory)}
-                                className="w-full px-3 py-2 rounded-lg text-xs font-medium cursor-pointer
-                                           bg-black/[0.03] dark:bg-white/[0.03] hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors duration-200
-                                           border border-black/[0.06] dark:border-white/[0.06]
-                                           text-slate-700 dark:text-slate-300
-                                           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800">
-                                {CATEGORIES.map(c => <option key={c} value={c}>{t(MEMORY_CATEGORY_MESSAGE_KEYS[c])}</option>)}
-                            </select>
+                            <AvantgardeSelect
+                                id="memory-category"
+                                value={category}
+                                onChange={(value) => setCategory(value as MemoryCategory)}
+                                options={CATEGORIES.map((value) => ({ value, label: t(MEMORY_CATEGORY_MESSAGE_KEYS[value]) }))}
+                            />
                         </FieldWrapper>
                     </div>
                     <div className="w-full sm:w-auto flex items-center gap-2">

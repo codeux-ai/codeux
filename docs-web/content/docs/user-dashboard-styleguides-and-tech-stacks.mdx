@@ -38,9 +38,9 @@ This does not delete built-in styleguides or clear the saved selection. If a hid
 
 ## Project Defaults
 
-Existing projects and imported local or Git projects default both guidance selections to **None**. They do not inherit the Code UX visual styleguide automatically.
+Every imported, new local, and new remote project starts with both guidance selections explicitly set to **None**. Project creation does not inherit system-level selections or accept a create-time selection for either catalog.
 
-New local and new remote projects get an explicit project override selecting the generic Code UX styleguide. Tech-stack guidance remains **None** unless the project creation flow or an operator selects one.
+Custom catalog entries and the default-styleguide visibility preference are preserved during creation. After adding the project, select reusable guidance from the top bar or Settings -> Guidance when the project needs it.
 
 ## Sprint Selector Actions
 

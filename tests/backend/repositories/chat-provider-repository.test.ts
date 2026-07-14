@@ -3,29 +3,47 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
-import { ChatProviderRepository } from "../../../src/repositories/chat-provider-repository.js";
+import {
+  ChatProviderConcurrentModificationError,
+  ChatProviderRepository,
+} from "../../../src/repositories/chat-provider-repository.js";
 import { ConnectionChatRepository } from "../../../src/repositories/connection-chat-repository.js";
 import { ensureChatProviderTables } from "../../../src/repositories/db/app-db-migrations.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
+import { ChatProviderSecretService } from "../../../src/services/chat-provider-secret-service.js";
+import type { KeyProvider } from "../../../src/services/credentials/key-provider.js";
 
 const tempDirs: string[] = [];
 const openStorages: AppDbStorage[] = [];
+
+function createKeyProvider(): KeyProvider {
+  const key = Buffer.alloc(32, 23);
+  return {
+    providerName: "repository-test-key",
+    health: async () => ({ available: true, secure: true, provider: "repository-test-key", keyId: "root", keyVersion: 1 }),
+    getActiveKey: async () => ({ key: Buffer.from(key), keyId: "root", version: 1 }),
+    getKey: async () => ({ key: Buffer.from(key), keyId: "root", version: 1 }),
+  };
+}
 
 async function createRepositories(): Promise<{
   storage: AppDbStorage;
   projectRepository: ProjectManagementRepository;
   providerRepository: ChatProviderRepository;
   conversationRepository: ConnectionChatRepository;
+  secretService: ChatProviderSecretService;
 }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-chat-provider-repo-"));
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   openStorages.push(storage);
+  const providerRepository = new ChatProviderRepository(storage);
   return {
     storage,
     projectRepository: new ProjectManagementRepository(storage),
-    providerRepository: new ChatProviderRepository(storage),
+    providerRepository,
     conversationRepository: new ConnectionChatRepository(storage),
+    secretService: new ChatProviderSecretService(providerRepository, createKeyProvider()),
   };
 }
 
@@ -44,7 +62,7 @@ describe("ChatProviderRepository", () => {
   });
 
   it("creates connections from setup schemas and redacts public credentials", async () => {
-    const { providerRepository } = await createRepositories();
+    const { providerRepository, secretService } = await createRepositories();
 
     const schemas = providerRepository.getSetupSchemas();
     expect(schemas.map((schema) => schema.kind)).toEqual([
@@ -68,7 +86,7 @@ describe("ChatProviderRepository", () => {
       integration: "bot_gateway",
     });
 
-    const connection = providerRepository.createConnection({
+    const connection = await secretService.createConnection({
       providerKind: "slack",
       displayName: "Slack bridge",
       bridgeMode: "webhook",
@@ -108,7 +126,7 @@ describe("ChatProviderRepository", () => {
       ]),
     );
 
-    const internal = providerRepository.getConnectionInternal(connection.id);
+    const internal = await secretService.resolveConnection(connection.id);
     expect(internal?.secrets).toMatchObject({
       signingSecret: "secret-signing-value",
       botToken: "xoxb-secret",
@@ -116,8 +134,8 @@ describe("ChatProviderRepository", () => {
   });
 
   it("preserves secrets when updates omit them and clears them only when requested", async () => {
-    const { providerRepository } = await createRepositories();
-    const connection = providerRepository.createConnection({
+    const { providerRepository, secretService } = await createRepositories();
+    const connection = await secretService.createConnection({
       providerKind: "telegram",
       displayName: "Telegram bridge",
       bridgeMode: "webhook",
@@ -125,21 +143,21 @@ describe("ChatProviderRepository", () => {
       setup: { webhookUrl: "https://example.test/telegram" },
     });
 
-    const updated = providerRepository.updateConnection(connection.id, {
+    const updated = await secretService.updateConnection(connection.id, {
       displayName: "Telegram bridge renamed",
       setup: { webhookUrl: "https://example.test/telegram-v2", botToken: "setup-secret" },
     });
 
     expect(updated.displayName).toBe("Telegram bridge renamed");
     expect(updated.setup).toEqual({ webhookUrl: "https://example.test/telegram-v2" });
-    expect(providerRepository.getConnectionInternal(connection.id)?.secrets).toEqual({
+    expect((await secretService.resolveConnection(connection.id)).secrets).toEqual({
       botToken: "telegram-secret",
     });
 
-    providerRepository.updateConnection(connection.id, { secrets: null });
+    await secretService.updateConnection(connection.id, { secrets: null });
 
     const redacted = providerRepository.getConnection(connection.id);
-    expect(providerRepository.getConnectionInternal(connection.id)?.secrets).toBeNull();
+    expect((await secretService.resolveConnection(connection.id)).secrets).toBeNull();
     expect(redacted?.credentials).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ key: "botToken", configured: false, redactedValue: null }),
@@ -328,7 +346,7 @@ describe("ChatProviderRepository", () => {
   });
 
   it("deletes bindings directly and cascades bindings plus deliveries when a provider is deleted", async () => {
-    const { projectRepository, providerRepository, conversationRepository } = await createRepositories();
+    const { storage, projectRepository, providerRepository, conversationRepository } = await createRepositories();
     const project = projectRepository.createProject({
       name: "Provider Delete Project",
       sourceType: "local",
@@ -370,12 +388,27 @@ describe("ChatProviderRepository", () => {
       externalChannelId: "imessage-live",
       conversationMessageId: conversationMessage.id,
     });
+    providerRepository.insertIngressReplayReceipt(connection.id, "delete-receipt", "2026-06-01T12:05:00.000Z");
+    providerRepository.createProviderSession({
+      providerConnectionId: connection.id,
+      channelBindingId: binding.id,
+      externalChannelId: "imessage-live",
+      sessionKey: "delete-session",
+      state: { cursor: 1 },
+    });
 
     expect(providerRepository.deleteConnection(connection.id)).toBe(true);
     expect(providerRepository.getConnection(connection.id)).toBeNull();
     expect(providerRepository.listChannelBindings({ providerConnectionId: connection.id })).toEqual([]);
     expect(providerRepository.getDelivery(inbound.delivery.id)).toBeNull();
     expect(providerRepository.getDelivery(outbound.id)).toBeNull();
+    const durableChildren = storage.getDatabase().prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM chat_provider_ingress_replay_receipts) AS receipts,
+        (SELECT COUNT(*) FROM chat_provider_sessions) AS sessions,
+        (SELECT COUNT(*) FROM chat_provider_connection_secrets) AS secrets
+    `).get() as { receipts: number; sessions: number; secrets: number };
+    expect(durableChildren).toEqual({ receipts: 0, sessions: 0, secrets: 0 });
   });
 
   it("creates chat provider migration tables and indexes idempotently", async () => {
@@ -391,15 +424,21 @@ describe("ChatProviderRepository", () => {
       WHERE type = 'table'
         AND name IN (
           'chat_provider_connections',
+          'chat_provider_connection_secrets',
           'chat_provider_channel_bindings',
-          'chat_provider_message_deliveries'
+          'chat_provider_message_deliveries',
+          'chat_provider_ingress_replay_receipts',
+          'chat_provider_sessions'
         )
       ORDER BY name ASC
     `).all() as Array<{ name: string }>;
     expect(tableRows.map((row) => row.name)).toEqual([
       "chat_provider_channel_bindings",
+      "chat_provider_connection_secrets",
       "chat_provider_connections",
+      "chat_provider_ingress_replay_receipts",
       "chat_provider_message_deliveries",
+      "chat_provider_sessions",
     ]);
 
     const indexNames = [
@@ -409,10 +448,129 @@ describe("ChatProviderRepository", () => {
       "idx_chat_provider_channel_bindings_provider_channel",
       "idx_chat_provider_message_deliveries_inbound_dedupe",
       "idx_chat_provider_message_deliveries_pending_outbound",
+      "idx_chat_provider_ingress_replay_expiry",
+      "idx_chat_provider_sessions_connection",
     ];
     for (const indexName of indexNames) {
       const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?").get(indexName) as { name: string } | undefined;
       expect(row?.name).toBe(indexName);
     }
+  });
+
+  it("resets sanitized verification for transport changes but preserves it for display-only changes", async () => {
+    const { providerRepository } = await createRepositories();
+    const connection = providerRepository.createConnection({
+      providerKind: "slack",
+      displayName: "Verification fixture",
+      bridgeMode: "webhook",
+      setup: { eventsUrl: "https://example.test/events" },
+    });
+    const verified = providerRepository.updateVerification(connection.id, "verified", {
+      endpoint: "reachable",
+      signingSecret: "must-be-redacted",
+    });
+    expect(verified.verificationDetails).toEqual({ endpoint: "reachable", signingSecret: "[REDACTED]" });
+
+    const renamed = providerRepository.updateConnection(connection.id, { displayName: "Renamed fixture" });
+    expect(renamed.verificationStatus).toBe("verified");
+    expect(renamed.verifiedAt).not.toBeNull();
+
+    const changed = providerRepository.updateConnection(connection.id, {
+      setup: { eventsUrl: "https://example.test/events-v2" },
+    });
+    expect(changed).toMatchObject({ verificationStatus: "unverified", verificationDetails: null, verifiedAt: null });
+  });
+
+  it("atomically deduplicates inbound deliveries and durable replay receipts", async () => {
+    const { providerRepository } = await createRepositories();
+    const connection = providerRepository.createConnection({ providerKind: "telegram", displayName: "Race fixture" });
+    const attempts = await Promise.all(Array.from({ length: 8 }, async () => providerRepository.recordInboundMessage({
+      providerConnectionId: connection.id,
+      externalChannelId: "race-channel",
+      externalMessageId: "race-message",
+    })));
+    expect(attempts.filter((attempt) => !attempt.duplicate)).toHaveLength(1);
+    expect(new Set(attempts.map((attempt) => attempt.delivery.id))).toHaveLength(1);
+
+    const expiresAt = "2026-06-01T12:01:00.000Z";
+    expect(providerRepository.insertIngressReplayReceipt(connection.id, "same-receipt", expiresAt)).toBe(true);
+    expect(providerRepository.insertIngressReplayReceipt(connection.id, "same-receipt", expiresAt)).toBe(false);
+    expect(providerRepository.listIngressReplayReceipts(connection.id)).toHaveLength(1);
+    expect(providerRepository.cleanupExpiredIngressReplayReceipts(new Date(expiresAt))).toBe(1);
+    expect(providerRepository.insertIngressReplayReceipt(connection.id, "same-receipt", "2026-06-01T12:02:00.000Z")).toBe(true);
+  });
+
+  it("enforces binding ownership and compare-and-set provider session updates", async () => {
+    const { projectRepository, providerRepository } = await createRepositories();
+    const project = projectRepository.createProject({ name: "Session project", sourceType: "local", sourceRef: "/tmp/session-project" });
+    const owner = providerRepository.createConnection({ providerKind: "discord", displayName: "Session owner" });
+    const other = providerRepository.createConnection({ providerKind: "discord", displayName: "Other owner" });
+    const binding = providerRepository.createChannelBinding({
+      providerConnectionId: owner.id,
+      externalChannelId: "session-channel",
+      externalChannelName: "Session channel",
+      projectId: project.id,
+    });
+    expect(() => providerRepository.recordInboundMessage({
+      providerConnectionId: other.id,
+      channelBindingId: binding.id,
+      externalChannelId: "session-channel",
+      externalMessageId: "wrong-owner",
+    })).toThrow("does not belong");
+    expect(() => providerRepository.createProviderSession({
+      providerConnectionId: other.id,
+      channelBindingId: binding.id,
+      externalChannelId: "session-channel",
+      sessionKey: "wrong-owner",
+      state: {},
+    })).toThrow("does not belong");
+
+    const session = providerRepository.createProviderSession({
+      providerConnectionId: owner.id,
+      channelBindingId: binding.id,
+      externalChannelId: "session-channel",
+      sessionKey: "provider-native-session",
+      state: { cursor: 1 },
+      expiresAt: "2026-06-01T12:01:00.000Z",
+    });
+    const updated = providerRepository.compareAndSetProviderSession(session.id, 1, { cursor: 2 });
+    expect(updated).toMatchObject({ version: 2, state: { cursor: 2 } });
+    expect(() => providerRepository.compareAndSetProviderSession(session.id, 1, { cursor: 3 }))
+      .toThrow(ChatProviderConcurrentModificationError);
+    expect(providerRepository.cleanupExpiredProviderSessions(new Date("2026-06-01T12:02:00.000Z"))).toBe(1);
+  });
+
+  it("claims outbound deliveries with one lease owner and recovers stale leases", async () => {
+    const { projectRepository, providerRepository, conversationRepository } = await createRepositories();
+    const project = projectRepository.createProject({ name: "Lease project", sourceType: "local", sourceRef: "/tmp/lease-project" });
+    const message = conversationRepository.postDashboardMessage(project.id, { title: "Lease", bodyMarkdown: "Claim once" });
+    const connection = providerRepository.createConnection({ providerKind: "microsoft-teams", displayName: "Lease owner" });
+    const delivery = providerRepository.upsertOutboundDelivery({
+      providerConnectionId: connection.id,
+      externalChannelId: "lease-channel",
+      conversationMessageId: message.id,
+      nextAttemptAt: "2026-06-01T12:00:00.000Z",
+    });
+
+    const claims = await Promise.all([
+      Promise.resolve(providerRepository.claimOutboundDeliveries({ leaseOwner: "worker-a", leaseDurationMs: 1_000 })),
+      Promise.resolve(providerRepository.claimOutboundDeliveries({ leaseOwner: "worker-b", leaseDurationMs: 1_000 })),
+    ]);
+    expect(claims.flat()).toHaveLength(1);
+    const firstOwner = claims[0].length === 1 ? "worker-a" : "worker-b";
+    const secondOwner = firstOwner === "worker-a" ? "worker-b" : "worker-a";
+    expect(providerRepository.getDelivery(delivery.id)?.leaseOwner).toBe(firstOwner);
+    expect(() => providerRepository.completeOutboundDelivery(delivery.id, secondOwner, { status: "delivered" }))
+      .toThrow(ChatProviderConcurrentModificationError);
+
+    vi.setSystemTime(new Date("2026-06-01T12:00:02.000Z"));
+    const recovered = providerRepository.claimOutboundDeliveries({ leaseOwner: secondOwner, leaseDurationMs: 1_000 });
+    expect(recovered).toHaveLength(1);
+    expect(recovered[0]).toMatchObject({ id: delivery.id, leaseOwner: secondOwner });
+    const released = providerRepository.releaseOutboundDelivery(delivery.id, secondOwner, {
+      status: "retryable_failure",
+      nextAttemptAt: "2026-06-01T12:01:00.000Z",
+    });
+    expect(released).toMatchObject({ status: "retryable_failure", leaseOwner: null, nextAttemptAt: "2026-06-01T12:01:00.000Z" });
   });
 });

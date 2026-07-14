@@ -179,19 +179,18 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
           <main className="min-h-0 overflow-y-auto px-5 py-6 sm:px-6 lg:px-8">
             <div data-composer-stagger className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_13rem]">
               <FieldWrapper label={translate(taskMessages, "sprint")} required error={state.sprintIdError} forceTouch={state.touchedFields.sprintId || state.hasAttemptedSubmit}>
-                <select
-                  aria-label={`${translate(taskMessages, "sprint")} (${translate(taskMessages, "required")})`}
+                <AvantgardeSelect
                   value={state.sprintId}
-                  onInput={(event) => state.setSprintId((event.target as HTMLSelectElement).value)}
+                  onChange={state.setSprintId}
                   onBlur={() => state.setFieldTouched("sprintId")}
-                  className="w-full min-w-0 rounded-xl border border-black/[0.07] bg-white/55 px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none transition-[border-color,box-shadow,background-color] placeholder:text-slate-300 focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300"
-                  required
-                >
-                  <option value="" disabled>{translate(taskMessages, "selectSprint")}</option>
-                  {sprints.map((sprint) => (
-                    <option key={sprint.id} value={sprint.id}>{sprint.name}</option>
-                  ))}
-                </select>
+                  aria-required="true"
+                  invalid={Boolean(state.sprintIdError && (state.touchedFields.sprintId || state.hasAttemptedSubmit))}
+                  placeholder={translate(taskMessages, "selectSprint")}
+                  options={[
+                    { value: "", label: translate(taskMessages, "selectSprint"), disabled: true },
+                    ...sprints.map((sprint) => ({ value: sprint.id, label: sprint.name })),
+                  ]}
+                />
               </FieldWrapper>
 
               <fieldset className="rounded-[1.2rem] border border-black/[0.06] bg-black/[0.025] p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">

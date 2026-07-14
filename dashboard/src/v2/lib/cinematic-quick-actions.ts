@@ -2,6 +2,12 @@ import type { DashboardCreateAppQuickactionKind } from "../types.js";
 import { CREATE_APP_QUICKACTION_CATALOG } from "../../../../src/domain/chat/create-app-quickaction-catalog.js";
 import type { DashboardLocale } from "../i18n/locales.js";
 import { translateChatMessage } from "../i18n/messages/chat.js";
+import {
+  isDashboardFeatureEnabled,
+  resolveDashboardFeatureFlags,
+  type DashboardFeatureFlagMap,
+  type DashboardFeatureId,
+} from "./dashboard-feature-flags.js";
 
 export type CinematicQuickActionZone = "create" | "insight" | "workflow";
 
@@ -29,7 +35,16 @@ const INITIAL_ONLY_APP_KINDS = new Set<DashboardCreateAppQuickactionKind>([
   "game",
 ]);
 
-const PROMPT_QUICK_ACTIONS = [
+type PromptQuickAction = {
+  id: string;
+  label: string;
+  zone: "insight" | "workflow";
+  prompt: string;
+  feature?: DashboardFeatureId;
+  requiredSurfaceFeature?: DashboardFeatureId;
+};
+
+const PROMPT_QUICK_ACTIONS: readonly PromptQuickAction[] = [
   {
     id: "status-report",
     label: "Status Report",
@@ -59,12 +74,16 @@ const PROMPT_QUICK_ACTIONS = [
     label: "Add Nodes Workflow",
     zone: "workflow",
     prompt: "Help me add a project-scoped Nodes workflow. Inspect the current project and propose the workflow before making changes.",
+    feature: "chat-nodes-workflow-quick-action",
+    requiredSurfaceFeature: "nodes",
   },
   {
     id: "add-dashboard",
     label: "Add Dashboard",
     zone: "workflow",
     prompt: "Help me add a project dashboard. Inspect the current project and propose the most useful dashboard configuration.",
+    feature: "chat-custom-dashboard-quick-action",
+    requiredSurfaceFeature: "custom-dashboards",
   },
   {
     id: "create-skill",
@@ -84,6 +103,7 @@ export interface CinematicQuickActionOptions {
   hasProject: boolean;
   initialEligibilityLoaded: boolean;
   canCreateInitialAppQuickactions: boolean;
+  featureFlags?: DashboardFeatureFlagMap;
 }
 
 export function isInitialProjectCreateAppQuickaction(kind: DashboardCreateAppQuickactionKind): boolean {
@@ -131,12 +151,18 @@ export function buildCinematicQuickActions(
       animationDelay: `${index * 0.18}s`,
     }));
 
-  const promptActions: CinematicQuickAction[] = PROMPT_QUICK_ACTIONS.map((action, index) => ({
-    ...action,
-    label: translateChatMessage(locale, PROMPT_ACTION_LABEL_KEYS[action.id]),
-    actionType: "send_prompt",
-    animationDelay: `${(createActions.length + index) * 0.18}s`,
-  }));
+  const featureFlags = options.featureFlags ?? resolveDashboardFeatureFlags();
+  const promptActions: CinematicQuickAction[] = PROMPT_QUICK_ACTIONS
+    .filter((action) => (
+      (!action.feature || isDashboardFeatureEnabled(action.feature, featureFlags))
+      && (!action.requiredSurfaceFeature || isDashboardFeatureEnabled(action.requiredSurfaceFeature, featureFlags))
+    ))
+    .map(({ feature: _feature, requiredSurfaceFeature: _requiredSurfaceFeature, ...action }, index) => ({
+      ...action,
+      label: translateChatMessage(locale, PROMPT_ACTION_LABEL_KEYS[action.id]),
+      actionType: "send_prompt",
+      animationDelay: `${(createActions.length + index) * 0.18}s`,
+    }));
 
   return [...createActions, ...promptActions];
 }

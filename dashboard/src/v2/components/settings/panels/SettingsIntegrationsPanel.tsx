@@ -1,4 +1,4 @@
-import type { FunctionComponent } from "preact";
+import type { FunctionComponent, Ref } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { Activity, AlertCircle, ArrowLeft, FolderOpen, Hash, Key, Link2, MessageCircle, Plug, Plus, RefreshCw, Save, Send, Settings2, ShieldCheck, Trash2 } from "lucide-preact";
@@ -8,6 +8,14 @@ import { NumberInput, PillChoiceGroup, ProviderLogo, Row, SecretInput, SelectInp
 import { ProviderBrandIcon } from "../../providers/ProviderBrandIcon.js";
 import { ProviderInstanceCard } from "../ProviderInstanceCard.js";
 import { JiraIcon } from "../../icons/JiraIcon.js";
+import type {
+  AutomationCredentialMetadata,
+  CredentialBackendHealth,
+} from "../../../../../../src/contracts/automation-credential-types.js";
+import {
+  fetchAutomationCredentials,
+  fetchCredentialHealth,
+} from "../../../lib/automation-credential-api.js";
 import type {
   ChatProviderBridgeMode,
   ChatProviderChannelBindingRecord,
@@ -328,10 +336,12 @@ const CatalogActionButton: FunctionComponent<{
   label: string;
   icon: typeof Plus;
   onClick: () => void;
+  buttonRef?: Ref<HTMLButtonElement>;
   disabled?: boolean;
   tone?: "primary" | "neutral";
-}> = ({ label, icon: Icon, onClick, disabled = false, tone = "neutral" }) => (
+}> = ({ label, icon: Icon, onClick, buttonRef, disabled = false, tone = "neutral" }) => (
   <button
+    ref={buttonRef}
     type="button"
     disabled={disabled}
     onClick={onClick}
@@ -536,6 +546,15 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
   const [connectionDrafts, setConnectionDrafts] = useState<Record<string, ChatProviderConnectionDraft>>({});
   const [bindingDrafts, setBindingDrafts] = useState<Record<string, ChatProviderBindingDraft>>({});
   const [newBindingDrafts, setNewBindingDrafts] = useState<Record<string, ChatProviderBindingDraft>>({});
+  const credentialManageButtonRef = useRef<HTMLButtonElement>(null);
+  const integrationBackButtonRef = useRef<HTMLButtonElement>(null);
+  const previousSelectedIntegrationRef = useRef<IntegrationId | null>(selectedIntegration);
+  const [credentialCatalogState, setCredentialCatalogState] = useState<{
+    loading: boolean;
+    health: CredentialBackendHealth | null;
+    credentials: AutomationCredentialMetadata[];
+    unavailable: boolean;
+  }>({ loading: true, health: null, credentials: [], unavailable: false });
   const isInitialMount = useRef(true);
   const chatProviders = state.chatProviders ?? EMPTY_CHAT_PROVIDER_STATE;
   const chatProviderDefinitionsLength = chatProviders.definitions.length;
@@ -560,6 +579,38 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     chatProviders.deliveriesByConnection,
     locale,
   ]);
+
+  useEffect(() => {
+    const hasCredentialIntegration = integrations.some((integration) => integration.id === "automation-credentials");
+    if (!hasCredentialIntegration) return;
+    const projectId = state.selectedProject?.id;
+    if (!projectId) {
+      setCredentialCatalogState({ loading: false, health: null, credentials: [], unavailable: true });
+      return;
+    }
+    let cancelled = false;
+    setCredentialCatalogState((current) => ({ ...current, loading: true, unavailable: false }));
+    void Promise.all([fetchAutomationCredentials(projectId), fetchCredentialHealth()])
+      .then(([credentials, health]) => {
+        if (!cancelled) setCredentialCatalogState({ loading: false, health, credentials, unavailable: false });
+      })
+      .catch(() => {
+        if (!cancelled) setCredentialCatalogState({ loading: false, health: null, credentials: [], unavailable: true });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [integrations, state.selectedProject?.id]);
+
+  useEffect(() => {
+    const previous = previousSelectedIntegrationRef.current;
+    previousSelectedIntegrationRef.current = selectedIntegration;
+    if (previous === "automation-credentials" && selectedIntegration === null) {
+      window.setTimeout(() => credentialManageButtonRef.current?.focus({ preventScroll: true }), 0);
+    } else if (selectedIntegration === "automation-credentials") {
+      window.setTimeout(() => integrationBackButtonRef.current?.focus({ preventScroll: true }), 0);
+    }
+  }, [selectedIntegration]);
 
   useEffect(() => {
     if (selectedIntegration && isChatProviderIntegrationId(selectedIntegration) && chatProviderDefinitionsLength === 0 && !chatProvidersLoading) {
@@ -635,6 +686,12 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
 
   const dockerExecutionEnabled = editableSettings.cliWorkflow.executionMode === "DOCKER";
   const integrationGroups = [
+    {
+      id: "automation",
+      label: "AUTOMATION",
+      purpose: "Project-aware, write-only credentials for trusted automation consumers",
+      items: integrations.filter((integration) => integration.id === "automation-credentials"),
+    },
     {
       id: "api",
       label: "API",
@@ -1377,11 +1434,31 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     if (!integrationId) return null;
 
     const backButton = (
-      <button className="mb-4 flex items-center gap-2 text-sm text-neutral-400 transition-colors hover:text-white" onClick={() => setSelectedIntegration(null)}>
+      <button ref={integrationBackButtonRef} type="button" className="mb-4 flex items-center gap-2 text-sm text-neutral-400 transition-colors hover:text-white" onClick={() => setSelectedIntegration(null)}>
         <ArrowLeft className="h-4 w-4" />
         {t(settingsIntegrationsMessages, "backToIntegrations")}
       </button>
     );
+
+    if (integrationId === "automation-credentials") {
+      return (
+        <>
+          {backButton}
+          <SectionCard title={t(settingsIntegrationsMessages, "automationCredentials")} watermark="KEY" icon={<Key strokeWidth={2.4} />} helpId="integrations">
+            {state.selectedProject?.id ? (
+              <AutomationCredentialManager
+                projectId={state.selectedProject.id}
+                projects={(state.projects ?? [state.selectedProject]).map((project) => ({ id: project.id, name: project.name || project.id }))}
+              />
+            ) : (
+              <NoticePanel tone="warning" title={t(settingsIntegrationsMessages, "selectProjectToManageCredentials")}>
+                {t(settingsIntegrationsMessages, "selectProjectToManageCredentialsDescription")}
+              </NoticePanel>
+            )}
+          </SectionCard>
+        </>
+      );
+    }
 
     if (isChatProviderIntegrationId(integrationId)) {
       return renderChatProviderDetail(integrationId);
@@ -1875,7 +1952,6 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
 
   return (
     <div className="flex flex-col gap-5">
-      {state.selectedProject?.id ? <AutomationCredentialManager projectId={state.selectedProject.id} /> : null}
       <SectionCard
         title={t(settingsIntegrationsMessages, "integrations")}
         watermark="INT"
@@ -1905,6 +1981,37 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                   </div>
                   <div className="grid gap-3 xl:grid-cols-2">
                     {group.items.map((integration) => {
+                  if (integration.id === "automation-credentials") {
+                    const health = credentialCatalogState.health;
+                    const backendReady = Boolean(health?.available && health.secure && health.keyId && health.keyVersion !== null);
+                    const configuredCount = credentialCatalogState.credentials.filter((credential) => credential.configured && credential.status === "active").length;
+                    const unavailable = credentialCatalogState.unavailable || (!credentialCatalogState.loading && !backendReady);
+                    const statusLabel = credentialCatalogState.loading
+                      ? t(settingsIntegrationsMessages, "loading")
+                      : unavailable
+                        ? t(settingsIntegrationsMessages, "notAvailable")
+                        : configuredCount > 0
+                          ? `${configuredCount} ${t(settingsIntegrationsMessages, "configured")}`
+                          : "Ready · not configured";
+                    return (
+                      <div key={integration.id} data-integration-card="automation-credentials" className="group relative min-h-[156px] overflow-hidden rounded-[1.35rem] border border-black/[0.06] bg-white/88 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.035)] dark:border-white/[0.08] dark:bg-void-800/78">
+                        <div className="flex h-full flex-col gap-4">
+                          <div className="flex items-start gap-3">
+                            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[1rem] border border-signal-500/20 bg-signal-500/10 text-signal-700 dark:text-signal-200" aria-hidden><Key className="h-5 w-5" /></span>
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-slate-900 dark:text-white">{integration.label}</div>
+                              <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{getIntegrationDescription(integration)}</div>
+                            </div>
+                          </div>
+                          <div className="mt-auto flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex flex-wrap gap-2"><IntegrationPill label={t(settingsIntegrationsMessages, "writeOnlyValues")} /><IntegrationPill label={statusLabel} tone={unavailable ? "muted" : configuredCount > 0 ? "active" : "neutral"} /></div>
+                            <CatalogActionButton buttonRef={credentialManageButtonRef} label={t(settingsIntegrationsMessages, "manage")} icon={Settings2} onClick={() => setSelectedIntegration(integration.id)} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   if (isChatProviderIntegrationId(integration.id)) {
                     const providerKind = integration.id;
                     const providerCard = chatProviderCards.find((card) => card.providerKind === providerKind);

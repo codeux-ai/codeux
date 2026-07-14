@@ -670,48 +670,36 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
               provider={providerMetadata}
               aria-label={translate(sprintsMessages, "state")}
               value={filters.state}
-              onChange={(event) => updateFilters((current) => ({ ...current, state: (event.target as HTMLSelectElement).value as IssueFilters["state"] }))}
-            >
-              {stateOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </IssueImportSelect>
+              onChange={(value) => updateFilters((current) => ({ ...current, state: value as IssueFilters["state"] }))}
+              options={stateOptions.map((option) => ({ value: option.value, label: option.label }))}
+            />
           </IssueImportField>
           <IssueImportField label={translate(sprintsMessages, "sort")}>
             <IssueImportSelect
               provider={providerMetadata}
               aria-label={translate(sprintsMessages, "sort")}
               value={filters.sortField}
-              onChange={(event) => updateFilters((current) => ({ ...current, sortField: (event.target as HTMLSelectElement).value as IssueFilters["sortField"] }))}
-            >
-              {sortFieldOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </IssueImportSelect>
+              onChange={(value) => updateFilters((current) => ({ ...current, sortField: value as IssueFilters["sortField"] }))}
+              options={sortFieldOptions.map((option) => ({ value: option.value, label: option.label }))}
+            />
           </IssueImportField>
           <IssueImportField label={translate(sprintsMessages, "direction")}>
             <IssueImportSelect
               provider={providerMetadata}
               aria-label={translate(sprintsMessages, "direction")}
               value={filters.sortDirection}
-              onChange={(event) => updateFilters((current) => ({ ...current, sortDirection: (event.target as HTMLSelectElement).value as IssueFilters["sortDirection"] }))}
-            >
-              {sortDirectionOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </IssueImportSelect>
+              onChange={(value) => updateFilters((current) => ({ ...current, sortDirection: value as IssueFilters["sortDirection"] }))}
+              options={sortDirectionOptions.map((option) => ({ value: option.value, label: option.label }))}
+            />
           </IssueImportField>
           <IssueImportField label={translate(sprintsMessages, "limit")}>
             <IssueImportSelect
               provider={providerMetadata}
               aria-label={translate(sprintsMessages, "limit")}
               value={filters.limit}
-              onChange={(event) => updateFilters((current) => ({ ...current, limit: Number((event.target as HTMLSelectElement).value) }))}
-            >
-              {SEARCH_LIMITS.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </IssueImportSelect>
+              onChange={(value) => updateFilters((current) => ({ ...current, limit: Number(value) }))}
+              options={SEARCH_LIMITS.map((value) => ({ value: String(value), label: String(value) }))}
+            />
           </IssueImportField>
         </div>
 

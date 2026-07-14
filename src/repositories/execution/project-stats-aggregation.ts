@@ -26,13 +26,16 @@ export const usageFields = `
     SUM(reasoning_output_tokens) as reasoningOutputTokens,
     SUM(total_tokens) as totalTokens,
     SUM(tool_call_count) as toolCallCount,
-    SUM(
-      CASE
-        WHEN raw_usage_json IS NOT NULL AND json_valid(raw_usage_json)
-        THEN COALESCE(CAST(json_extract(raw_usage_json, '$.cost') AS REAL), 0)
-        ELSE 0
-      END
-    ) as reportedCostUsd,
+    SUM(CASE WHEN raw_usage_json IS NOT NULL AND json_valid(raw_usage_json) THEN
+      CASE WHEN json_type(raw_usage_json, '$.cost') IN ('integer', 'real')
+        AND CAST(json_extract(raw_usage_json, '$.cost') AS REAL) >= 0
+      THEN 1 ELSE 0 END
+    ELSE 0 END) as providerReportedCostInvocationCount,
+    SUM(CASE WHEN raw_usage_json IS NOT NULL AND json_valid(raw_usage_json) THEN
+      CASE WHEN json_type(raw_usage_json, '$.cost') IN ('integer', 'real')
+        AND CAST(json_extract(raw_usage_json, '$.cost') AS REAL) >= 0
+      THEN CAST(json_extract(raw_usage_json, '$.cost') AS REAL) ELSE 0 END
+    ELSE 0 END) as providerReportedCostUsd,
     SUM(CASE WHEN usage_source = 'reported' THEN 1 ELSE 0 END) as reportedInvocationCount,
     SUM(CASE WHEN usage_source = 'estimated' THEN 1 ELSE 0 END) as estimatedInvocationCount,
     SUM(CASE WHEN usage_source = 'unsupported' THEN 1 ELSE 0 END) as unsupportedInvocationCount,
@@ -48,6 +51,9 @@ export interface UsageAggregationRow {
   reasoningOutputTokens: number | string | null;
   totalTokens: number | string | null;
   toolCallCount: number | string | null;
+  providerReportedCostInvocationCount?: number | string | null;
+  providerReportedCostUsd?: number | string | null;
+  /** Legacy helper-fixture alias retained while callers move to the provenance name. */
   reportedCostUsd?: number | string | null;
   reportedInvocationCount: number | string | null;
   estimatedInvocationCount: number | string | null;
@@ -56,6 +62,12 @@ export interface UsageAggregationRow {
 }
 
 export function mapAggregatedUsage(row: UsageAggregationRow, pricingResolver?: SnapshotPricingResolver, provider?: string | null, model?: string | null): ExecutionUsageTotals {
+  const costCoverage = {
+    configuredPricingInvocationCount: 0,
+    providerReportedCostInvocationCount: 0,
+    unpricedInvocationCount: 0,
+    providerReportedCostUsd: 0,
+  };
   const u: ExecutionUsageTotals = {
     invocationCount: toNumber(row.invocationCount),
     activeTimeMs: toNumber(row.activeTimeMs),
@@ -74,22 +86,30 @@ export function mapAggregatedUsage(row: UsageAggregationRow, pricingResolver?: S
     estimatedInvocationCount: toNumber(row.estimatedInvocationCount),
     unsupportedInvocationCount: toNumber(row.unsupportedInvocationCount),
     unavailableInvocationCount: toNumber(row.unavailableInvocationCount),
+    costCoverage,
   };
 
-  if (pricingResolver && provider) {
-    const pricing = pricingResolver(provider, model);
-    if (pricing) {
-      u.inputCostUsd = (u.inputTokens / 1_000_000) * (pricing.inputTokens || 0);
-      u.outputCostUsd = (u.outputTokens / 1_000_000) * (pricing.outputTokens || 0);
-      u.cachedInputCostUsd = (u.cachedInputTokens / 1_000_000) * (pricing.cachedInputTokens || 0);
-      u.totalCostUsd = u.inputCostUsd + u.outputCostUsd + u.cachedInputCostUsd;
-    }
+  const pricing = pricingResolver && provider ? pricingResolver(provider, model) : undefined;
+  if (pricing) {
+    u.inputCostUsd = (u.inputTokens / 1_000_000) * (pricing.inputTokens || 0);
+    u.outputCostUsd = (u.outputTokens / 1_000_000) * (pricing.outputTokens || 0);
+    u.cachedInputCostUsd = (u.cachedInputTokens / 1_000_000) * (pricing.cachedInputTokens || 0);
+    u.totalCostUsd = u.inputCostUsd + u.outputCostUsd + u.cachedInputCostUsd;
+    costCoverage.configuredPricingInvocationCount = u.invocationCount;
+    return u;
   }
 
-  const reportedCostUsd = toNumber(row.reportedCostUsd);
-  if (u.totalCostUsd <= 0 && reportedCostUsd > 0) {
-    u.totalCostUsd = reportedCostUsd;
-  }
+  const providerReportedCostInvocationCount = Math.min(
+    u.invocationCount,
+    Math.max(0, row.providerReportedCostInvocationCount === undefined
+      ? (row.reportedCostUsd === undefined ? 0 : u.invocationCount)
+      : toNumber(row.providerReportedCostInvocationCount)),
+  );
+  const providerReportedCostUsd = Math.max(0, toNumber(row.providerReportedCostUsd ?? row.reportedCostUsd));
+  costCoverage.providerReportedCostInvocationCount = providerReportedCostInvocationCount;
+  costCoverage.providerReportedCostUsd = providerReportedCostUsd;
+  costCoverage.unpricedInvocationCount = Math.max(0, u.invocationCount - providerReportedCostInvocationCount);
+  u.totalCostUsd = providerReportedCostUsd;
 
   return u;
 }
@@ -111,6 +131,20 @@ export function mergeAggregatedUsage(target: ExecutionUsageTotals, source: Execu
   target.estimatedInvocationCount += source.estimatedInvocationCount;
   target.unsupportedInvocationCount += source.unsupportedInvocationCount;
   target.unavailableInvocationCount += source.unavailableInvocationCount;
+  const targetCoverage = target.costCoverage ?? {
+    configuredPricingInvocationCount: 0,
+    providerReportedCostInvocationCount: 0,
+    unpricedInvocationCount: 0,
+    providerReportedCostUsd: 0,
+  };
+  const sourceCoverage = source.costCoverage;
+  if (sourceCoverage) {
+    targetCoverage.configuredPricingInvocationCount += sourceCoverage.configuredPricingInvocationCount;
+    targetCoverage.providerReportedCostInvocationCount += sourceCoverage.providerReportedCostInvocationCount;
+    targetCoverage.unpricedInvocationCount += sourceCoverage.unpricedInvocationCount;
+    targetCoverage.providerReportedCostUsd += sourceCoverage.providerReportedCostUsd;
+  }
+  target.costCoverage = targetCoverage;
 }
 
 export function accumulateBucketUsage(

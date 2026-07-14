@@ -5,6 +5,11 @@ import type {
   ChatProviderConnectionInternalRecord,
   ChatProviderConnectionRecord,
   ChatProviderConnectionStatus,
+  ChatProviderVerificationStatus,
+  ChatProviderIngressReplayReceiptRecord,
+  ChatProviderSessionStateRecord,
+  ClaimChatProviderDeliveriesInput,
+  CreateChatProviderSessionStateInput,
   ChatProviderDeliveryDirection,
   ChatProviderDeliveryStatus,
   ChatProviderKind,
@@ -15,6 +20,7 @@ import type {
   CreateChatProviderConnectionInput,
   RecordInboundChatProviderMessageInput,
   RedactedCredentialField,
+  ReleaseChatProviderDeliveryInput,
   UpdateChatProviderChannelBindingInput,
   UpdateChatProviderConnectionInput,
   UpdateChatProviderDeliveryStateInput,
@@ -27,6 +33,8 @@ import {
 import { AppDbStorage } from "./app-db-storage.js";
 import type { DatabaseAdapter } from "./db/database-adapter.js";
 import { EntityNotFoundError, requireRecord, toBoolean, toNumber, ValidationError } from "./repository-utils.js";
+import type { StoredSecretEnvelope } from "../services/credentials/secret-store.js";
+import { redactMetadata } from "../shared/security/redaction.js";
 
 const CHAT_PROVIDER_KINDS = new Set<ChatProviderKind>([
   "whatsapp",
@@ -55,6 +63,13 @@ const DELIVERY_STATUSES = new Set<ChatProviderDeliveryStatus>([
   "cancelled",
 ]);
 
+const VERIFICATION_STATUSES = new Set<ChatProviderVerificationStatus>([
+  "unverified",
+  "pending",
+  "verified",
+  "failed",
+]);
+
 interface ChatProviderConnectionRow {
   id: string;
   provider_kind: string;
@@ -64,6 +79,11 @@ interface ChatProviderConnectionRow {
   enabled: number | string;
   setup_json: string | null;
   secret_json: string | null;
+  secret_keys_json?: string | null;
+  verification_status: string;
+  verification_details_json: string | null;
+  verified_at: string | null;
+  secret_version: number | string;
   created_at: string;
   updated_at: string;
 }
@@ -100,8 +120,61 @@ interface ChatProviderMessageDeliveryRow {
   conversation_thread_id: string | null;
   conversation_message_id: string | null;
   payload_json: string | null;
+  next_attempt_at: string | null;
+  lease_owner: string | null;
+  lease_expires_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface ChatProviderSecretRow {
+  provider_connection_id: string;
+  ciphertext: Buffer;
+  nonce: Buffer;
+  auth_tag: Buffer;
+  wrapped_data_key: Buffer;
+  wrap_nonce: Buffer;
+  wrap_auth_tag: Buffer;
+  key_id: string;
+  key_version: number | string;
+  secret_keys_json: string;
+}
+
+interface ChatProviderReplayReceiptRow {
+  id: string;
+  provider_connection_id: string;
+  receipt_key: string;
+  expires_at: string;
+  created_at: string;
+}
+
+interface ChatProviderSessionRow {
+  id: string;
+  provider_connection_id: string;
+  channel_binding_id: string | null;
+  external_channel_id: string;
+  session_key: string;
+  state_json: string;
+  version: number | string;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface PreparedChatProviderConnectionUpdate {
+  displayName: string;
+  bridgeMode: ChatProviderBridgeMode;
+  status: ChatProviderConnectionStatus;
+  enabled: boolean;
+  setup: ChatProviderSetupConfig;
+  transportChanged: boolean;
+}
+
+export class ChatProviderConcurrentModificationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ChatProviderConcurrentModificationError";
+  }
 }
 
 export interface ListChatProviderConnectionsOptions {
@@ -146,44 +219,66 @@ export class ChatProviderRepository {
   }
 
   createConnection(input: CreateChatProviderConnectionInput): ChatProviderConnectionRecord {
+    if (input.secrets !== undefined && input.secrets !== null) {
+      throw new ValidationError("Connector secrets must be written through ChatProviderSecretService.");
+    }
+    return this.createConnectionRecord(input, randomUUID(), null, []);
+  }
+
+  createConnectionWithEnvelope(
+    input: Omit<CreateChatProviderConnectionInput, "secrets">,
+    connectionId: string,
+    envelope: StoredSecretEnvelope | null,
+    secretKeys: string[],
+  ): ChatProviderConnectionRecord {
+    if (envelope && envelope.credentialId !== connectionId) {
+      throw new ValidationError("Connector secret envelope id does not match its connection metadata.");
+    }
+    return this.createConnectionRecord(input, connectionId, envelope, secretKeys);
+  }
+
+  private createConnectionRecord(
+    input: CreateChatProviderConnectionInput,
+    id: string,
+    envelope: StoredSecretEnvelope | null,
+    secretKeys: string[],
+  ): ChatProviderConnectionRecord {
     const providerKind = this.requireProviderKind(input.providerKind);
     const bridgeMode = this.resolveBridgeMode(providerKind, input.bridgeMode);
     const status = input.status ? this.requireConnectionStatus(input.status) : "draft";
     const now = new Date().toISOString();
-    const id = randomUUID();
     const setup = this.sanitizeSetup(providerKind, input.setup ?? {});
-
-    this.db.prepare(`
-      INSERT INTO chat_provider_connections (
-        id, provider_kind, display_name, bridge_mode, status, enabled, setup_json, secret_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      providerKind,
-      this.requireNonEmpty(input.displayName, "displayName"),
-      bridgeMode,
-      status,
-      input.enabled === false ? 0 : 1,
-      this.stringifyJson(setup),
-      this.stringifyNullableJson(input.secrets ?? null),
-      now,
-      now,
-    );
-
+    this.db.transaction(() => {
+      this.db.prepare(`
+        INSERT INTO chat_provider_connections (
+          id, provider_kind, display_name, bridge_mode, status, enabled, setup_json, secret_json,
+          verification_status, verification_details_json, verified_at, secret_version, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'unverified', NULL, NULL, ?, ?, ?)
+      `).run(
+        id,
+        providerKind,
+        this.requireNonEmpty(input.displayName, "displayName"),
+        bridgeMode,
+        status,
+        input.enabled === false ? 0 : 1,
+        this.stringifyJson(setup),
+        envelope ? 1 : 0,
+        now,
+        now,
+      );
+      if (envelope) {
+        this.putEnvelope(envelope, secretKeys);
+      }
+    });
     return this.requireConnection(id);
   }
 
   updateConnection(connectionId: string, input: UpdateChatProviderConnectionInput): ChatProviderConnectionRecord {
+    if (input.secrets !== undefined) {
+      throw new ValidationError("Connector secrets must be written through ChatProviderSecretService.");
+    }
     const existing = this.requireConnectionInternal(connectionId);
-    const providerKind = existing.providerKind;
-    const bridgeMode = input.bridgeMode
-      ? this.resolveBridgeMode(providerKind, input.bridgeMode)
-      : existing.bridgeMode;
-    const status = input.status ? this.requireConnectionStatus(input.status) : existing.status;
-    const setup = input.setup !== undefined
-      ? this.sanitizeSetup(providerKind, input.setup)
-      : existing.setup;
-    const secrets = input.secrets !== undefined ? input.secrets : existing.secrets;
+    const update = this.prepareConnectionUpdate(existing, input);
     const now = new Date().toISOString();
 
     this.db.prepare(`
@@ -194,21 +289,67 @@ export class ChatProviderRepository {
         status = ?,
         enabled = ?,
         setup_json = ?,
-        secret_json = ?,
+        verification_status = CASE WHEN ? THEN 'unverified' ELSE verification_status END,
+        verification_details_json = CASE WHEN ? THEN NULL ELSE verification_details_json END,
+        verified_at = CASE WHEN ? THEN NULL ELSE verified_at END,
         updated_at = ?
       WHERE id = ?
     `).run(
-      input.displayName !== undefined ? this.requireNonEmpty(input.displayName, "displayName") : existing.displayName,
-      bridgeMode,
-      status,
-      input.enabled !== undefined ? (input.enabled ? 1 : 0) : (existing.enabled ? 1 : 0),
-      this.stringifyJson(setup),
-      this.stringifyNullableJson(secrets),
+      update.displayName,
+      update.bridgeMode,
+      update.status,
+      update.enabled ? 1 : 0,
+      this.stringifyJson(update.setup),
+      update.transportChanged ? 1 : 0,
+      update.transportChanged ? 1 : 0,
+      update.transportChanged ? 1 : 0,
       now,
       connectionId,
     );
-
     return this.requireConnection(connectionId);
+  }
+
+  updateConnectionWithEnvelope(
+    connectionId: string,
+    input: Omit<UpdateChatProviderConnectionInput, "secrets">,
+    expectedSecretVersion: number,
+    envelope: StoredSecretEnvelope | null,
+    secretKeys: string[],
+  ): ChatProviderConnectionRecord {
+    if (envelope && envelope.credentialId !== connectionId) {
+      throw new ValidationError("Connector secret envelope id does not match its connection metadata.");
+    }
+    const existing = this.requireConnectionInternal(connectionId);
+    const update = this.prepareConnectionUpdate(existing, input);
+    const expectedVersion = this.requireNonNegativeInteger(expectedSecretVersion, "expectedSecretVersion");
+    return this.db.transaction(() => {
+      const now = new Date().toISOString();
+      const result = this.db.prepare(`
+        UPDATE chat_provider_connections
+        SET display_name = ?, bridge_mode = ?, status = ?, enabled = ?, setup_json = ?,
+            verification_status = 'unverified', verification_details_json = NULL, verified_at = NULL,
+            secret_version = secret_version + 1, secret_json = NULL, updated_at = ?
+        WHERE id = ? AND secret_version = ?
+      `).run(
+        update.displayName,
+        update.bridgeMode,
+        update.status,
+        update.enabled ? 1 : 0,
+        this.stringifyJson(update.setup),
+        now,
+        connectionId,
+        expectedVersion,
+      );
+      if (result.changes !== 1) {
+        throw new ChatProviderConcurrentModificationError("Connector secrets changed concurrently; retry the operation.");
+      }
+      if (envelope) {
+        this.putEnvelope(envelope, secretKeys);
+      } else {
+        this.db.prepare("DELETE FROM chat_provider_connection_secrets WHERE provider_connection_id = ?").run(connectionId);
+      }
+      return this.requireConnection(connectionId);
+    });
   }
 
   getConnection(connectionId: string): ChatProviderConnectionRecord | null {
@@ -233,10 +374,11 @@ export class ChatProviderRepository {
     }
     const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
     const rows = this.db.prepare(`
-      SELECT *
-      FROM chat_provider_connections
+      SELECT c.*, s.secret_keys_json
+      FROM chat_provider_connections c
+      LEFT JOIN chat_provider_connection_secrets s ON s.provider_connection_id = c.id
       ${where}
-      ORDER BY updated_at DESC, display_name ASC
+      ORDER BY c.updated_at DESC, c.display_name ASC
     `).all(...params) as unknown as ChatProviderConnectionRow[];
     return rows.map((row) => this.mapConnection(row));
   }
@@ -244,6 +386,87 @@ export class ChatProviderRepository {
   deleteConnection(connectionId: string): boolean {
     const result = this.db.prepare("DELETE FROM chat_provider_connections WHERE id = ?").run(connectionId);
     return result.changes > 0;
+  }
+
+  getEnvelope(connectionId: string): StoredSecretEnvelope | null {
+    const row = this.db.prepare("SELECT * FROM chat_provider_connection_secrets WHERE provider_connection_id = ?")
+      .get(connectionId) as ChatProviderSecretRow | undefined;
+    return row ? {
+      credentialId: row.provider_connection_id,
+      ciphertext: row.ciphertext,
+      nonce: row.nonce,
+      authTag: row.auth_tag,
+      wrappedDataKey: row.wrapped_data_key,
+      wrapNonce: row.wrap_nonce,
+      wrapAuthTag: row.wrap_auth_tag,
+      keyId: row.key_id,
+      keyVersion: toNumber(row.key_version),
+    } : null;
+  }
+
+  replaceSecretEnvelope(
+    connectionId: string,
+    expectedVersion: number,
+    envelope: StoredSecretEnvelope,
+    secretKeys: string[],
+  ): ChatProviderConnectionRecord {
+    return this.updateConnectionWithEnvelope(connectionId, {}, expectedVersion, envelope, secretKeys);
+  }
+
+  clearConnectionSecrets(connectionId: string, expectedVersion: number): ChatProviderConnectionRecord {
+    return this.updateConnectionWithEnvelope(connectionId, {}, expectedVersion, null, []);
+  }
+
+  updateVerification(
+    connectionId: string,
+    status: ChatProviderVerificationStatus,
+    details: Record<string, unknown> | null,
+  ): ChatProviderConnectionRecord {
+    const verificationStatus = this.requireVerificationStatus(status);
+    const now = new Date().toISOString();
+    const sanitizedDetails = details === null ? null : redactMetadata(details) as Record<string, unknown>;
+    const update = this.db.prepare(`
+      UPDATE chat_provider_connections
+      SET verification_status = ?, verification_details_json = ?, verified_at = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      verificationStatus,
+      this.stringifyNullableJson(sanitizedDetails),
+      verificationStatus === "verified" || verificationStatus === "failed" ? now : null,
+      now,
+      connectionId,
+    );
+    if (update.changes !== 1) throw new EntityNotFoundError(`Chat provider connection not found: ${connectionId}`);
+    return this.requireConnection(connectionId);
+  }
+
+  listLegacySecrets(): Array<{ connectionId: string; secretJson: string; secretVersion: number }> {
+    return this.db.prepare(`
+      SELECT id AS connectionId, secret_json AS secretJson, secret_version AS secretVersion
+      FROM chat_provider_connections
+      WHERE secret_json IS NOT NULL AND TRIM(secret_json) <> ''
+      ORDER BY created_at ASC
+    `).all() as Array<{ connectionId: string; secretJson: string; secretVersion: number }>;
+  }
+
+  commitLegacySecretMigration(
+    connectionId: string,
+    expectedSecretJson: string,
+    expectedVersion: number,
+    envelope: StoredSecretEnvelope,
+    secretKeys: string[],
+  ): boolean {
+    if (envelope.credentialId !== connectionId) throw new ValidationError("Connector secret envelope id does not match its connection metadata.");
+    return this.db.transaction(() => {
+      const update = this.db.prepare(`
+        UPDATE chat_provider_connections
+        SET secret_json = NULL, secret_version = secret_version + 1, updated_at = ?
+        WHERE id = ? AND secret_json = ? AND secret_version = ?
+      `).run(new Date().toISOString(), connectionId, expectedSecretJson, expectedVersion);
+      if (update.changes !== 1) return false;
+      this.putEnvelope(envelope, secretKeys);
+      return true;
+    });
   }
 
   createChannelBinding(input: CreateChatProviderChannelBindingInput): ChatProviderChannelBindingRecord {
@@ -397,18 +620,13 @@ export class ChatProviderRepository {
   recordInboundMessage(input: RecordInboundChatProviderMessageInput): RecordInboundChatProviderMessageResult {
     this.requireConnectionInternal(input.providerConnectionId);
     if (input.channelBindingId) {
-      this.requireChannelBinding(input.channelBindingId);
+      this.requireOwnedChannelBinding(input.channelBindingId, input.providerConnectionId);
     }
     const externalMessageId = this.requireNonEmpty(input.externalMessageId, "externalMessageId");
-    const duplicate = this.findInboundDelivery(input.providerConnectionId, externalMessageId);
-    if (duplicate) {
-      return { delivery: duplicate, duplicate: true };
-    }
-
     const id = randomUUID();
     const now = new Date().toISOString();
     const status = input.status ? this.requireDeliveryStatus(input.status) : "processed";
-    this.db.prepare(`
+    const insert = this.db.prepare(`
       INSERT INTO chat_provider_message_deliveries (
         id,
         provider_connection_id,
@@ -425,6 +643,8 @@ export class ChatProviderRepository {
         created_at,
         updated_at
       ) VALUES (?, ?, ?, ?, ?, 'inbound', ?, 0, NULL, ?, ?, ?, ?, ?)
+      ON CONFLICT(provider_connection_id, external_message_id) WHERE direction = 'inbound' AND external_message_id IS NOT NULL
+      DO NOTHING
     `).run(
       id,
       input.providerConnectionId,
@@ -439,13 +659,17 @@ export class ChatProviderRepository {
       now,
     );
 
-    return { delivery: this.requireDelivery(id), duplicate: false };
+    if (insert.changes === 1) {
+      return { delivery: this.requireDelivery(id), duplicate: false };
+    }
+    const duplicate = this.findInboundDelivery(input.providerConnectionId, externalMessageId);
+    return { delivery: requireRecord(duplicate, "Inbound chat provider delivery", externalMessageId), duplicate: true };
   }
 
   upsertOutboundDelivery(input: UpsertOutboundChatProviderDeliveryInput): ChatProviderMessageDeliveryRecord {
     this.requireConnectionInternal(input.providerConnectionId);
     if (input.channelBindingId) {
-      this.requireChannelBinding(input.channelBindingId);
+      this.requireOwnedChannelBinding(input.channelBindingId, input.providerConnectionId);
     }
     const conversationMessageId = this.requireNonEmpty(input.conversationMessageId, "conversationMessageId");
     const existing = this.getOutboundDeliveryByMessage(input.providerConnectionId, conversationMessageId);
@@ -465,6 +689,9 @@ export class ChatProviderRepository {
           last_error = ?,
           conversation_thread_id = ?,
           payload_json = ?,
+          next_attempt_at = ?,
+          lease_owner = NULL,
+          lease_expires_at = NULL,
           updated_at = ?
         WHERE id = ?
       `).run(
@@ -476,6 +703,7 @@ export class ChatProviderRepository {
         input.lastError !== undefined ? input.lastError : existing.lastError,
         input.conversationThreadId !== undefined ? input.conversationThreadId : existing.conversationThreadId,
         input.payload !== undefined ? this.stringifyNullableJson(input.payload) : this.stringifyNullableJson(existing.payload),
+        input.nextAttemptAt !== undefined ? input.nextAttemptAt : existing.nextAttemptAt,
         now,
         existing.id,
       );
@@ -497,9 +725,10 @@ export class ChatProviderRepository {
         conversation_thread_id,
         conversation_message_id,
         payload_json,
+        next_attempt_at,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, 'outbound', ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, 'outbound', ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       input.providerConnectionId,
@@ -512,6 +741,7 @@ export class ChatProviderRepository {
       input.conversationThreadId ?? null,
       conversationMessageId,
       this.stringifyNullableJson(input.payload ?? null),
+      input.nextAttemptAt ?? null,
       now,
       now,
     );
@@ -532,6 +762,9 @@ export class ChatProviderRepository {
         conversation_thread_id = ?,
         conversation_message_id = ?,
         payload_json = ?,
+        next_attempt_at = ?,
+        lease_owner = CASE WHEN ? IN ('pending', 'retryable_failure', 'delivered', 'failed', 'cancelled') THEN NULL ELSE lease_owner END,
+        lease_expires_at = CASE WHEN ? IN ('pending', 'retryable_failure', 'delivered', 'failed', 'cancelled') THEN NULL ELSE lease_expires_at END,
         updated_at = ?
       WHERE id = ?
     `).run(
@@ -542,6 +775,9 @@ export class ChatProviderRepository {
       input.conversationThreadId !== undefined ? input.conversationThreadId : existing.conversationThreadId,
       input.conversationMessageId !== undefined ? input.conversationMessageId : existing.conversationMessageId,
       input.payload !== undefined ? this.stringifyNullableJson(input.payload) : this.stringifyNullableJson(existing.payload),
+      input.nextAttemptAt !== undefined ? input.nextAttemptAt : existing.nextAttemptAt,
+      input.status,
+      input.status,
       now,
       deliveryId,
     );
@@ -568,6 +804,14 @@ export class ChatProviderRepository {
       clauses.push("d.direction = ?");
       params.push(this.requireDeliveryDirection(options.direction));
     }
+    if (options.externalChannelId) {
+      clauses.push("d.external_channel_id = ?");
+      params.push(this.requireNonEmpty(options.externalChannelId, "externalChannelId"));
+    }
+    if (options.status) {
+      clauses.push("d.status = ?");
+      params.push(this.requireDeliveryStatus(options.status));
+    }
     const boundedLimit = Math.max(1, Math.min(Math.trunc(options.limit ?? 100), 500));
     const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
     const rows = this.db.prepare(`
@@ -589,9 +833,11 @@ export class ChatProviderRepository {
       INNER JOIN chat_provider_connections c ON c.id = d.provider_connection_id
       WHERE d.direction = 'outbound'
         AND d.status IN ('pending', 'sending', 'retryable_failure')
+        AND (d.next_attempt_at IS NULL OR d.next_attempt_at <= ?)
+        AND (d.lease_owner IS NULL OR d.lease_expires_at <= ?)
       ORDER BY d.updated_at ASC
       LIMIT ${boundedLimit}
-    `).all() as unknown as ChatProviderMessageDeliveryRow[];
+    `).all(new Date().toISOString(), new Date().toISOString()) as unknown as ChatProviderMessageDeliveryRow[];
     return rows.map((row) => this.mapDelivery(row));
   }
 
@@ -626,11 +872,239 @@ export class ChatProviderRepository {
     return rows.map((row) => this.mapDelivery(row));
   }
 
+  insertIngressReplayReceipt(
+    providerConnectionId: string,
+    receiptKey: string,
+    expiresAt: string,
+    now = new Date(),
+  ): boolean {
+    this.requireConnectionInternal(providerConnectionId);
+    const normalizedKey = this.requireNonEmpty(receiptKey, "receiptKey");
+    const normalizedExpiry = this.requireIsoDate(expiresAt, "expiresAt");
+    return this.db.transaction(() => {
+      const nowIso = now.toISOString();
+      this.db.prepare("DELETE FROM chat_provider_ingress_replay_receipts WHERE expires_at <= ?").run(nowIso);
+      const result = this.db.prepare(`
+        INSERT INTO chat_provider_ingress_replay_receipts (
+          id, provider_connection_id, receipt_key, expires_at, created_at
+        ) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(provider_connection_id, receipt_key) DO NOTHING
+      `).run(randomUUID(), providerConnectionId, normalizedKey, normalizedExpiry, nowIso);
+      return result.changes === 1;
+    });
+  }
+
+  listIngressReplayReceipts(providerConnectionId: string): ChatProviderIngressReplayReceiptRecord[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM chat_provider_ingress_replay_receipts
+      WHERE provider_connection_id = ? ORDER BY created_at ASC
+    `).all(providerConnectionId) as ChatProviderReplayReceiptRow[];
+    return rows.map((row) => ({
+      id: row.id,
+      providerConnectionId: row.provider_connection_id,
+      receiptKey: row.receipt_key,
+      expiresAt: row.expires_at,
+      createdAt: row.created_at,
+    }));
+  }
+
+  cleanupExpiredIngressReplayReceipts(now = new Date()): number {
+    return this.db.prepare("DELETE FROM chat_provider_ingress_replay_receipts WHERE expires_at <= ?")
+      .run(now.toISOString()).changes;
+  }
+
+  createProviderSession(input: CreateChatProviderSessionStateInput): ChatProviderSessionStateRecord {
+    this.requireConnectionInternal(input.providerConnectionId);
+    if (input.channelBindingId) this.requireOwnedChannelBinding(input.channelBindingId, input.providerConnectionId);
+    const now = new Date().toISOString();
+    const id = randomUUID();
+    this.db.prepare(`
+      INSERT INTO chat_provider_sessions (
+        id, provider_connection_id, channel_binding_id, external_channel_id, session_key,
+        state_json, version, expires_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+    `).run(
+      id,
+      input.providerConnectionId,
+      input.channelBindingId ?? null,
+      this.requireNonEmpty(input.externalChannelId, "externalChannelId"),
+      this.requireNonEmpty(input.sessionKey, "sessionKey"),
+      this.stringifyJson(input.state),
+      input.expiresAt ? this.requireIsoDate(input.expiresAt, "expiresAt") : null,
+      now,
+      now,
+    );
+    return this.requireProviderSession(id);
+  }
+
+  getProviderSession(providerConnectionId: string, sessionKey: string): ChatProviderSessionStateRecord | null {
+    const row = this.db.prepare(`
+      SELECT * FROM chat_provider_sessions WHERE provider_connection_id = ? AND session_key = ? LIMIT 1
+    `).get(providerConnectionId, this.requireNonEmpty(sessionKey, "sessionKey")) as ChatProviderSessionRow | undefined;
+    return row ? this.mapProviderSession(row) : null;
+  }
+
+  listProviderSessions(options: { providerConnectionId?: string; limit?: number } = {}): ChatProviderSessionStateRecord[] {
+    const boundedLimit = Math.max(1, Math.min(Math.trunc(options.limit ?? 500), 500));
+    const rows = options.providerConnectionId
+      ? this.db.prepare(`
+          SELECT * FROM chat_provider_sessions
+          WHERE provider_connection_id = ?
+          ORDER BY updated_at ASC
+          LIMIT ${boundedLimit}
+        `).all(options.providerConnectionId) as unknown as ChatProviderSessionRow[]
+      : this.db.prepare(`
+          SELECT * FROM chat_provider_sessions
+          ORDER BY updated_at ASC
+          LIMIT ${boundedLimit}
+        `).all() as unknown as ChatProviderSessionRow[];
+    return rows.map((row) => this.mapProviderSession(row));
+  }
+
+  compareAndSetProviderSession(
+    sessionId: string,
+    expectedVersion: number,
+    state: Record<string, unknown>,
+    expiresAt?: string | null,
+  ): ChatProviderSessionStateRecord {
+    const existing = this.requireProviderSession(sessionId);
+    const result = this.db.prepare(`
+      UPDATE chat_provider_sessions
+      SET state_json = ?, version = version + 1, expires_at = ?, updated_at = ?
+      WHERE id = ? AND version = ?
+    `).run(
+      this.stringifyJson(state),
+      expiresAt === undefined ? existing.expiresAt : expiresAt === null ? null : this.requireIsoDate(expiresAt, "expiresAt"),
+      new Date().toISOString(),
+      sessionId,
+      this.requireNonNegativeInteger(expectedVersion, "expectedVersion"),
+    );
+    if (result.changes !== 1) {
+      throw new ChatProviderConcurrentModificationError("Connector session changed concurrently; reload it before retrying.");
+    }
+    return this.requireProviderSession(sessionId);
+  }
+
+  cleanupExpiredProviderSessions(now = new Date()): number {
+    return this.db.prepare("DELETE FROM chat_provider_sessions WHERE expires_at IS NOT NULL AND expires_at <= ?")
+      .run(now.toISOString()).changes;
+  }
+
+  claimOutboundDeliveries(input: ClaimChatProviderDeliveriesInput): ChatProviderMessageDeliveryRecord[] {
+    const leaseOwner = this.requireNonEmpty(input.leaseOwner, "leaseOwner");
+    if (!Number.isFinite(input.leaseDurationMs) || input.leaseDurationMs <= 0) {
+      throw new ValidationError("leaseDurationMs must be greater than zero");
+    }
+    const limit = Math.max(1, Math.min(Math.trunc(input.limit ?? 1), 100));
+    const now = input.now ?? new Date();
+    const nowIso = now.toISOString();
+    const leaseExpiresAt = new Date(now.getTime() + input.leaseDurationMs).toISOString();
+    return this.db.transaction(() => {
+      const claimedIds: string[] = [];
+      for (let index = 0; index < limit; index += 1) {
+        const candidate = this.db.prepare(`
+          SELECT id FROM chat_provider_message_deliveries
+          WHERE direction = 'outbound'
+            AND status IN ('pending', 'sending', 'retryable_failure')
+            AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+            AND (lease_owner IS NULL OR lease_expires_at IS NULL OR lease_expires_at <= ?)
+          ORDER BY COALESCE(next_attempt_at, created_at) ASC, created_at ASC
+          LIMIT 1
+        `).get(nowIso, nowIso) as { id: string } | undefined;
+        if (!candidate) break;
+        const update = this.db.prepare(`
+          UPDATE chat_provider_message_deliveries
+          SET status = 'sending', lease_owner = ?, lease_expires_at = ?, updated_at = ?
+          WHERE id = ?
+            AND (lease_owner IS NULL OR lease_expires_at IS NULL OR lease_expires_at <= ?)
+        `).run(leaseOwner, leaseExpiresAt, nowIso, candidate.id, nowIso);
+        if (update.changes === 1) claimedIds.push(candidate.id);
+      }
+      return claimedIds.map((id) => this.requireDelivery(id));
+    });
+  }
+
+  claimOutboundDelivery(
+    deliveryId: string,
+    input: Omit<ClaimChatProviderDeliveriesInput, "limit">,
+  ): ChatProviderMessageDeliveryRecord | null {
+    const leaseOwner = this.requireNonEmpty(input.leaseOwner, "leaseOwner");
+    if (!Number.isFinite(input.leaseDurationMs) || input.leaseDurationMs <= 0) {
+      throw new ValidationError("leaseDurationMs must be greater than zero");
+    }
+    const now = input.now ?? new Date();
+    const nowIso = now.toISOString();
+    const leaseExpiresAt = new Date(now.getTime() + input.leaseDurationMs).toISOString();
+    const update = this.db.prepare(`
+      UPDATE chat_provider_message_deliveries
+      SET status = 'sending', lease_owner = ?, lease_expires_at = ?, updated_at = ?
+      WHERE id = ?
+        AND direction = 'outbound'
+        AND status IN ('pending', 'sending', 'retryable_failure')
+        AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+        AND (lease_owner IS NULL OR lease_expires_at IS NULL OR lease_expires_at <= ?)
+    `).run(leaseOwner, leaseExpiresAt, nowIso, deliveryId, nowIso, nowIso);
+    return update.changes === 1 ? this.requireDelivery(deliveryId) : null;
+  }
+
+  completeOutboundDelivery(
+    deliveryId: string,
+    leaseOwner: string,
+    input: UpdateChatProviderDeliveryStateInput,
+  ): ChatProviderMessageDeliveryRecord {
+    const existing = this.requireDelivery(deliveryId);
+    const status = this.requireDeliveryStatus(input.status);
+    const update = this.db.prepare(`
+      UPDATE chat_provider_message_deliveries
+      SET status = ?, attempt_count = ?, last_error = ?, external_message_id = ?,
+          conversation_thread_id = ?, conversation_message_id = ?, payload_json = ?, next_attempt_at = ?,
+          lease_owner = NULL, lease_expires_at = NULL, updated_at = ?
+      WHERE id = ? AND direction = 'outbound' AND lease_owner = ?
+    `).run(
+      status,
+      input.attemptCount !== undefined ? this.requireNonNegativeInteger(input.attemptCount, "attemptCount") : existing.attemptCount,
+      input.lastError !== undefined ? input.lastError : existing.lastError,
+      input.externalMessageId !== undefined ? input.externalMessageId : existing.externalMessageId,
+      input.conversationThreadId !== undefined ? input.conversationThreadId : existing.conversationThreadId,
+      input.conversationMessageId !== undefined ? input.conversationMessageId : existing.conversationMessageId,
+      input.payload !== undefined ? this.stringifyNullableJson(input.payload) : this.stringifyNullableJson(existing.payload),
+      input.nextAttemptAt !== undefined ? input.nextAttemptAt : existing.nextAttemptAt,
+      new Date().toISOString(),
+      deliveryId,
+      this.requireNonEmpty(leaseOwner, "leaseOwner"),
+    );
+    if (update.changes !== 1) throw new ChatProviderConcurrentModificationError("Outbound delivery lease is not owned by this worker.");
+    return this.requireDelivery(deliveryId);
+  }
+
+  releaseOutboundDelivery(
+    deliveryId: string,
+    leaseOwner: string,
+    input: ReleaseChatProviderDeliveryInput = {},
+  ): ChatProviderMessageDeliveryRecord {
+    const status = input.status ?? "pending";
+    const update = this.db.prepare(`
+      UPDATE chat_provider_message_deliveries
+      SET status = ?, next_attempt_at = ?, last_error = ?, lease_owner = NULL, lease_expires_at = NULL, updated_at = ?
+      WHERE id = ? AND direction = 'outbound' AND lease_owner = ?
+    `).run(
+      status,
+      input.nextAttemptAt ?? null,
+      input.lastError ?? null,
+      new Date().toISOString(),
+      deliveryId,
+      this.requireNonEmpty(leaseOwner, "leaseOwner"),
+    );
+    if (update.changes !== 1) throw new ChatProviderConcurrentModificationError("Outbound delivery lease is not owned by this worker.");
+    return this.requireDelivery(deliveryId);
+  }
+
   private getConnectionRow(connectionId: string): ChatProviderConnectionRow | null {
     const row = this.db.prepare(`
-      SELECT *
-      FROM chat_provider_connections
-      WHERE id = ?
+      SELECT c.*, s.secret_keys_json
+      FROM chat_provider_connections c
+      LEFT JOIN chat_provider_connection_secrets s ON s.provider_connection_id = c.id
+      WHERE c.id = ?
     `).get(connectionId) as ChatProviderConnectionRow | undefined;
     return row ?? null;
   }
@@ -655,6 +1129,23 @@ export class ChatProviderRepository {
 
   private requireChannelBinding(bindingId: string): ChatProviderChannelBindingRecord {
     return requireRecord(this.getChannelBinding(bindingId), "Chat provider channel binding", bindingId);
+  }
+
+  private requireOwnedChannelBinding(bindingId: string, providerConnectionId: string): ChatProviderChannelBindingRecord {
+    const binding = this.requireChannelBinding(bindingId);
+    if (binding.providerConnectionId !== providerConnectionId) {
+      throw new ValidationError("Channel binding does not belong to the referenced chat provider connection.");
+    }
+    return binding;
+  }
+
+  private getProviderSessionRow(sessionId: string): ChatProviderSessionRow | null {
+    return (this.db.prepare("SELECT * FROM chat_provider_sessions WHERE id = ?").get(sessionId) as ChatProviderSessionRow | undefined) ?? null;
+  }
+
+  private requireProviderSession(sessionId: string): ChatProviderSessionStateRecord {
+    const row = this.getProviderSessionRow(sessionId);
+    return requireRecord(row ? this.mapProviderSession(row) : null, "Chat provider session", sessionId);
   }
 
   private getDeliveryRow(deliveryId: string): ChatProviderMessageDeliveryRow | null {
@@ -686,6 +1177,7 @@ export class ChatProviderRepository {
 
   private mapConnection(row: ChatProviderConnectionRow): ChatProviderConnectionRecord {
     const internal = this.mapConnectionInternal(row);
+    const configuredSecrets = internal.secrets ?? this.secretKeyRecord(row.secret_keys_json);
     return {
       id: internal.id,
       providerKind: internal.providerKind,
@@ -694,7 +1186,11 @@ export class ChatProviderRepository {
       status: internal.status,
       enabled: internal.enabled,
       setup: internal.setup,
-      credentials: this.redactCredentials(internal.providerKind, internal.bridgeMode, internal.secrets),
+      credentials: this.redactCredentials(internal.providerKind, internal.bridgeMode, configuredSecrets),
+      verificationStatus: internal.verificationStatus,
+      verificationDetails: internal.verificationDetails,
+      verifiedAt: internal.verifiedAt,
+      secretVersion: internal.secretVersion,
       createdAt: internal.createdAt,
       updatedAt: internal.updatedAt,
     };
@@ -702,6 +1198,7 @@ export class ChatProviderRepository {
 
   private mapConnectionInternal(row: ChatProviderConnectionRow): ChatProviderConnectionInternalRecord {
     const providerKind = this.requireProviderKind(row.provider_kind);
+    const secrets = this.parseJsonRecord(row.secret_json);
     return {
       id: row.id,
       providerKind,
@@ -710,7 +1207,11 @@ export class ChatProviderRepository {
       status: this.requireConnectionStatus(row.status),
       enabled: toBoolean(row.enabled),
       setup: this.parseJsonRecord(row.setup_json) ?? {},
-      secrets: this.parseJsonRecord(row.secret_json),
+      secrets: secrets ? { ...secrets } : null,
+      verificationStatus: this.requireVerificationStatus(row.verification_status),
+      verificationDetails: this.parseJsonRecord(row.verification_details_json),
+      verifiedAt: row.verified_at,
+      secretVersion: toNumber(row.secret_version),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -751,6 +1252,24 @@ export class ChatProviderRepository {
       conversationThreadId: row.conversation_thread_id,
       conversationMessageId: row.conversation_message_id,
       payload: this.parseJsonRecord(row.payload_json),
+      nextAttemptAt: row.next_attempt_at,
+      leaseOwner: row.lease_owner,
+      leaseExpiresAt: row.lease_expires_at,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  private mapProviderSession(row: ChatProviderSessionRow): ChatProviderSessionStateRecord {
+    return {
+      id: row.id,
+      providerConnectionId: row.provider_connection_id,
+      channelBindingId: row.channel_binding_id,
+      externalChannelId: row.external_channel_id,
+      sessionKey: row.session_key,
+      state: this.parseJsonRecord(row.state_json) ?? {},
+      version: toNumber(row.version),
+      expiresAt: row.expires_at,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -794,6 +1313,31 @@ export class ChatProviderRepository {
     return sanitized;
   }
 
+  private prepareConnectionUpdate(
+    existing: ChatProviderConnectionInternalRecord,
+    input: Omit<UpdateChatProviderConnectionInput, "secrets">,
+  ): PreparedChatProviderConnectionUpdate {
+    const bridgeMode = input.bridgeMode
+      ? this.resolveBridgeMode(existing.providerKind, input.bridgeMode)
+      : existing.bridgeMode;
+    const status = input.status ? this.requireConnectionStatus(input.status) : existing.status;
+    const setup = input.setup !== undefined
+      ? this.sanitizeSetup(existing.providerKind, input.setup)
+      : existing.setup;
+    const enabled = input.enabled ?? existing.enabled;
+    return {
+      displayName: input.displayName !== undefined
+        ? this.requireNonEmpty(input.displayName, "displayName")
+        : existing.displayName,
+      bridgeMode,
+      status,
+      enabled,
+      setup,
+      transportChanged: bridgeMode !== existing.bridgeMode
+        || this.stringifyJson(setup) !== this.stringifyJson(existing.setup),
+    };
+  }
+
   private resolveBridgeMode(providerKind: ChatProviderKind, bridgeMode: string | undefined): ChatProviderBridgeMode {
     const schema = getChatProviderSetupSchema(providerKind);
     const mode = bridgeMode ?? schema.defaultBridgeMode;
@@ -816,6 +1360,13 @@ export class ChatProviderRepository {
       throw new ValidationError(`Unsupported chat provider connection status: ${value}`);
     }
     return value as ChatProviderConnectionStatus;
+  }
+
+  private requireVerificationStatus(value: string): ChatProviderVerificationStatus {
+    if (!VERIFICATION_STATUSES.has(value as ChatProviderVerificationStatus)) {
+      throw new ValidationError(`Unsupported chat provider verification status: ${value}`);
+    }
+    return value as ChatProviderVerificationStatus;
   }
 
   private requireDeliveryStatus(value: string): ChatProviderDeliveryStatus {
@@ -847,6 +1398,12 @@ export class ChatProviderRepository {
     return value;
   }
 
+  private requireIsoDate(value: string, fieldName: string): string {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) throw new ValidationError(`${fieldName} must be a valid date`);
+    return date.toISOString();
+  }
+
   private parseJsonRecord(value: string | null | undefined): Record<string, unknown> | null {
     if (!value || value.trim().length === 0) {
       return null;
@@ -872,6 +1429,43 @@ export class ChatProviderRepository {
 
   private hasConfiguredSecret(value: unknown): boolean {
     return typeof value === "string" ? value.length > 0 : value !== null && value !== undefined;
+  }
+
+  private secretKeyRecord(value: string | null | undefined): ChatProviderSecretConfig | null {
+    if (!value) return null;
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (!Array.isArray(parsed)) return null;
+      return Object.fromEntries(parsed.filter((key): key is string => typeof key === "string").map((key) => [key, true]));
+    } catch {
+      return null;
+    }
+  }
+
+  private putEnvelope(envelope: StoredSecretEnvelope, secretKeys: string[]): void {
+    this.db.prepare(`
+      INSERT INTO chat_provider_connection_secrets (
+        provider_connection_id, ciphertext, nonce, auth_tag, wrapped_data_key, wrap_nonce, wrap_auth_tag,
+        key_id, key_version, secret_keys_json, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(provider_connection_id) DO UPDATE SET
+        ciphertext = excluded.ciphertext, nonce = excluded.nonce, auth_tag = excluded.auth_tag,
+        wrapped_data_key = excluded.wrapped_data_key, wrap_nonce = excluded.wrap_nonce,
+        wrap_auth_tag = excluded.wrap_auth_tag, key_id = excluded.key_id, key_version = excluded.key_version,
+        secret_keys_json = excluded.secret_keys_json, updated_at = excluded.updated_at
+    `).run(
+      envelope.credentialId,
+      envelope.ciphertext,
+      envelope.nonce,
+      envelope.authTag,
+      envelope.wrappedDataKey,
+      envelope.wrapNonce,
+      envelope.wrapAuthTag,
+      envelope.keyId,
+      envelope.keyVersion,
+      JSON.stringify([...new Set(secretKeys)].sort()),
+      new Date().toISOString(),
+    );
   }
 }
 

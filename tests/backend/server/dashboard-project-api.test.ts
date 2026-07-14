@@ -140,6 +140,7 @@ async function createServerHandle(): Promise<{
   storage: AppDbStorage;
   repository: ProjectManagementRepository;
   executionRepository: ExecutionRepository;
+  settingsRepository: SettingsRepository;
   runtimeRepository: ProjectRuntimeRepository;
   connectionRepository: ConnectionChatRepository;
   workerEndpointRepository: WorkerEndpointRepository;
@@ -174,8 +175,8 @@ async function createServerHandle(): Promise<{
   );
   const connectionRepository = new ConnectionChatRepository(storage, undefined, workerEndpointRepository);
   const agentPresetRepository = new AgentPresetRepository(storage);
-  const executionRepository = new ExecutionRepository(storage);
   const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+  const executionRepository = new ExecutionRepository(storage, undefined, undefined, settingsRepository);
   const agentPresetSyncService = new AgentPresetSyncService({
     projectManagementRepository: repository,
     agentPresetRepository,
@@ -221,7 +222,7 @@ async function createServerHandle(): Promise<{
         };
     },
     getOverviewTelemetrySnapshot: () => executionRepository.getOverviewTelemetrySnapshot(),
-    getDashboardNotifications: () => executionRepository.getDashboardNotifications(),
+    getDashboardNotifications: (limit) => executionRepository.getDashboardNotifications({ limit }),
     getProjectExecutionSnapshot: (projectId) => ({
       ...executionRepository.getProjectExecutionSnapshot(projectId),
       connections: mapExecutionConnections(connectionRepository.listConnections(projectId)),
@@ -343,6 +344,7 @@ async function createServerHandle(): Promise<{
     importSprintFromMarkdown: (projectId, input) => markdownService.importSprint(projectId, input),
     exportSprintToMarkdown: (projectId, sprintId) => markdownService.exportSprint(projectId, sprintId),
     listTasks: (projectId, sprintId) => repository.listTasks(projectId, sprintId),
+    listTaskOverviews: (projectId) => repository.listTaskOverviews(projectId),
     getTask: (taskId) => repository.getTask(taskId),
     createTask: (projectId, input) => repository.createTask(projectId, input),
     updateTask: (taskId, input) => repository.updateTask(taskId, input),
@@ -455,6 +457,7 @@ async function createServerHandle(): Promise<{
     storage,
     repository,
     executionRepository,
+    settingsRepository,
     runtimeRepository,
     connectionRepository,
     workerEndpointRepository,
@@ -772,6 +775,40 @@ describe("dashboard project management API", () => {
       lastRunAt: "2026-03-12T10:11:12.000Z",
       lastRunStatus: "in_progress",
     });
+  });
+
+  it("returns a compact task projection for the dashboard overview", async () => {
+    const { fetch, repository } = await createServerHandle();
+    const project = repository.createProject({
+      name: "Overview Projection Project",
+      sourceType: "local",
+      sourceRef: "/tmp/overview-projection",
+    });
+    const sprint = repository.createSprint(project.id, { name: "Overview Sprint", status: "running" });
+    const dependency = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Dependency",
+      promptMarkdown: "Large dependency instructions",
+    });
+    const task = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Projected task",
+      promptMarkdown: "Large task instructions that are not rendered on overview",
+      description: "Detailed implementation notes",
+      dependsOnTaskIds: [dependency.id],
+    });
+
+    const response = await fetch(`http://127.0.0.1/api/projects/${project.id}/tasks?view=overview`);
+    expect(response.status).toBe(200);
+    const tasks = await response.json() as Array<Record<string, unknown>>;
+
+    expect(tasks.find((entry) => entry.id === task.id)).toMatchObject({
+      title: "Projected task",
+      promptMarkdown: "",
+      description: "",
+      dependsOnTaskIds: [dependency.id],
+    });
+    expect(JSON.stringify(tasks)).not.toContain("Large task instructions");
   });
 
   it("serializes latest task self-reflection ratings in GET /api/projects/:projectId/tasks", async () => {
@@ -1635,6 +1672,197 @@ describe("dashboard project management API", () => {
     });
     expect(orchestrateResponse.status).toBe(202);
     expect(controlCalls.orchestrate).toEqual([{ projectId: project.id, sprintId: sprint.id }]);
+  });
+
+  it("returns cost provenance and canonical sprint cost analytics from the Stats route", async () => {
+    const { fetch, repository, executionRepository, settingsRepository } = await createServerHandle();
+    const baseUrl = "http://127.0.0.1";
+    const currentSettings = settingsRepository.getSystemSettings();
+    settingsRepository.saveSystemSettings({
+      ...currentSettings,
+      modelPricing: {
+        overrides: {
+          "openai/gpt-5.5": { inputTokens: 1, outputTokens: 2, cachedInputTokens: 0.5 },
+        },
+      },
+    });
+
+    const createScope = (name: string) => {
+      const project = repository.createProject({
+        name,
+        sourceType: "local",
+        sourceRef: `/workspace/${name.toLowerCase().replace(/\s+/g, "-")}`,
+      });
+      const sprint = repository.createSprint(project.id, { name: `${name} Sprint` });
+      const task = repository.createTask(project.id, {
+        sprintId: sprint.id,
+        taskKey: "T01",
+        title: "Record cost telemetry",
+        promptMarkdown: "Record one cost source.",
+      });
+      return { project, sprint, task };
+    };
+    const addInvocation = (
+      scope: ReturnType<typeof createScope>,
+      input: {
+        sessionId: string;
+        provider: "codex" | "opencode" | "jules";
+        model: string;
+        sprintRunId?: string;
+        rawUsageJson?: Record<string, unknown>;
+      },
+    ) => {
+      const invocation = executionRepository.createProviderInvocationUsage({
+        projectId: scope.project.id,
+        sprintId: scope.sprint.id,
+        taskId: scope.task.id,
+        sprintRunId: input.sprintRunId,
+        sessionId: input.sessionId,
+        provider: input.provider,
+        purpose: "task_coding",
+        model: input.model,
+      });
+      executionRepository.updateProviderInvocationUsage(invocation.id, {
+        status: "completed",
+        finishedAt: new Date().toISOString(),
+        inputTokens: 1_000_000,
+        cachedInputTokens: 0,
+        outputTokens: 1_000_000,
+        reasoningOutputTokens: 0,
+        totalTokens: 2_000_000,
+        usageSource: "reported",
+        rawUsageJson: input.rawUsageJson,
+      });
+    };
+    const getStats = async (projectId: string) => fetch(
+      `${baseUrl}/api/projects/${projectId}/stats?window=24h`,
+    ).then(async (response) => response.json()) as Promise<{
+      usage: {
+        totalCostUsd: number;
+        costCoverage: {
+          configuredPricingInvocationCount: number;
+          providerReportedCostInvocationCount: number;
+          unpricedInvocationCount: number;
+          providerReportedCostUsd: number;
+        };
+      };
+      sprints: Array<{ id: string }>;
+      costAnalytics: { sprints: Array<{ id: string; usage: { totalCostUsd: number } }> };
+    }>;
+
+    const configured = createScope("Configured Cost");
+    addInvocation(configured, { sessionId: "configured", provider: "codex", model: "gpt-5.5" });
+    await expect(getStats(configured.project.id)).resolves.toMatchObject({
+      usage: {
+        totalCostUsd: 3,
+        costCoverage: {
+          configuredPricingInvocationCount: 1,
+          providerReportedCostInvocationCount: 0,
+          unpricedInvocationCount: 0,
+          providerReportedCostUsd: 0,
+        },
+      },
+    });
+
+    const providerReported = createScope("Provider Reported Cost");
+    addInvocation(providerReported, {
+      sessionId: "provider-reported",
+      provider: "opencode",
+      model: "unknown/reported",
+      rawUsageJson: { cost: 1.5 },
+    });
+    await expect(getStats(providerReported.project.id)).resolves.toMatchObject({
+      usage: {
+        totalCostUsd: 1.5,
+        costCoverage: {
+          configuredPricingInvocationCount: 0,
+          providerReportedCostInvocationCount: 1,
+          unpricedInvocationCount: 0,
+          providerReportedCostUsd: 1.5,
+        },
+      },
+    });
+
+    const legitimateZero = createScope("Legitimate Zero Cost");
+    addInvocation(legitimateZero, {
+      sessionId: "provider-zero",
+      provider: "opencode",
+      model: "unknown/zero",
+      rawUsageJson: { cost: 0 },
+    });
+    await expect(getStats(legitimateZero.project.id)).resolves.toMatchObject({
+      usage: {
+        totalCostUsd: 0,
+        costCoverage: {
+          providerReportedCostInvocationCount: 1,
+          unpricedInvocationCount: 0,
+          providerReportedCostUsd: 0,
+        },
+      },
+    });
+
+    const fullyUnpriced = createScope("Fully Unpriced Cost");
+    addInvocation(fullyUnpriced, { sessionId: "unpriced", provider: "jules", model: "default" });
+    await expect(getStats(fullyUnpriced.project.id)).resolves.toMatchObject({
+      usage: {
+        totalCostUsd: 0,
+        costCoverage: {
+          configuredPricingInvocationCount: 0,
+          providerReportedCostInvocationCount: 0,
+          unpricedInvocationCount: 1,
+          providerReportedCostUsd: 0,
+        },
+      },
+    });
+
+    const mixed = createScope("Partially Unpriced Cost");
+    const firstRun = executionRepository.createSprintRun({
+      projectId: mixed.project.id,
+      sprintId: mixed.sprint.id,
+      status: "completed",
+    });
+    const secondRun = executionRepository.createSprintRun({
+      projectId: mixed.project.id,
+      sprintId: mixed.sprint.id,
+      status: "completed",
+    });
+    addInvocation(mixed, {
+      sessionId: "mixed-configured",
+      provider: "codex",
+      model: "gpt-5.5",
+      sprintRunId: firstRun.id,
+    });
+    addInvocation(mixed, {
+      sessionId: "mixed-unpriced",
+      provider: "jules",
+      model: "default",
+      sprintRunId: secondRun.id,
+    });
+    const mixedStats = await getStats(mixed.project.id);
+    expect(mixedStats.usage.costCoverage).toEqual({
+      configuredPricingInvocationCount: 1,
+      providerReportedCostInvocationCount: 0,
+      unpricedInvocationCount: 1,
+      providerReportedCostUsd: 0,
+    });
+    expect(mixedStats.sprints).toHaveLength(2);
+    expect(mixedStats.costAnalytics.sprints).toEqual([
+      expect.objectContaining({ id: mixed.sprint.id, usage: expect.objectContaining({ totalCostUsd: 3 }) }),
+    ]);
+
+    const empty = createScope("Empty Cost Window");
+    await expect(getStats(empty.project.id)).resolves.toMatchObject({
+      usage: {
+        totalCostUsd: 0,
+        costCoverage: {
+          configuredPricingInvocationCount: 0,
+          providerReportedCostInvocationCount: 0,
+          unpricedInvocationCount: 0,
+          providerReportedCostUsd: 0,
+        },
+      },
+      costAnalytics: { sprints: [] },
+    });
   });
 
   it("supports planning prompt improvement and task generation with overrides and replanning", async () => {
