@@ -23,7 +23,7 @@ All charts, ledgers, and metrics respect the selected timeframe. Recent windows 
 
 ## Analysis Modes
 
-Navigation across the top of the workspace controls the primary analysis lens: **Trend**, **Composition**, **Models**, **Providers**, **Ledgers**, and **System**.
+Navigation across the top of the workspace controls the primary analysis lens in this order: **Trend**, **Composition**, **Cost**, **Models**, **Providers**, **Ledgers**, and **System**. The selected lens is remembered independently for each project.
 
 ### Trend
 A full-width interactive **Usage Graph** displays usage over time for the series included in the project stats snapshot, such as token totals, active time, cost, telemetry source confidence, and Git activity when those series are present.
@@ -44,6 +44,19 @@ The detailed workspace is organized for a top-to-bottom read:
 - **Provider detail** keeps each provider's token flow, calls, cache rate, tokens per call, active time, and cost in a compact ledger.
 
 Data accents stay inside distribution strips, token bars, and small swatches, with the exact values always available as text.
+
+### Cost
+
+Combines the current Stats snapshot into one spend workspace without issuing another request. The summary deck shows **Total spend**, **Average per task**, **Average per sprint**, **Blended cost per million tokens**, and **Pricing coverage**.
+
+The workspace reads from top to bottom:
+
+- **Executive overview and spend trend** show adaptive-precision totals and rates, pricing confidence, keyboard-focusable time buckets, and an exact data table.
+- **Token allocation** separates input, cached input, output, and reasoning volume. **Spend allocation** separately reconciles input, cached-input, output, and provider-reported fallback dollars.
+- **Model and purpose allocation** ranks cost, token volume, shares, calls, and cost per call.
+- **Task and sprint ledgers** support search and bidirectional sorting. Sprint rows use the canonical sprint projection, so reruns of one conceptual sprint remain one cost entity even though the general Sprint Telemetry ledger stays run-oriented.
+
+Task and sprint averages include distinct entities with provider invocations. A fully covered `$0.00` task or sprint remains in the denominator; an entity with no provider usage does not. Coverage is based on invocation sources, not the dollar total: configured model pricing and valid provider-reported fallback are covered, missing usable pricing is unpriced, and older telemetry without coverage metadata is unknown. Partial totals are priced minimums. `Unpriced`, `Coverage unknown`, and `Unavailable` never mean free; only fully covered usage can legitimately display `$0.00`.
 
 ### Models
 Ranks model activity by token volume and tracks invocation volume, latency, reliability, cache efficiency, reasoning share, pricing signals, output velocity, and low-data states for each model used during the active timeframe.
@@ -70,17 +83,19 @@ Exposes administrative invocation telemetry without leaving Stats:
 
 ## Cost Metrics and Pricing
 
-Cost data is visualized directly within the Usage Graph and Composition views, fueled by provider configurations.
-- You can set `Token pricing` (input / output) on a per-provider-instance basis in **Settings -> Integrations**.
+Cost data appears in the dedicated Cost lens and in supporting Usage Graph and Composition context, fueled by model pricing and valid provider-reported fallbacks.
+- Review or override per-model input and output prices in **Settings → Model Pricing**. Confirm whether the active scope is System or Project before saving; use the narrowest scope that should own the override.
 - The Stats page applies these settings retroactively to the raw token telemetry for the selected window.
 - Configured model pricing is authoritative. When it is unavailable, Stats uses a valid provider-reported cost as fallback, including a legitimate reported `$0.00` value.
 - Cost coverage distinguishes configured-pricing calls, provider-reported fallback calls, and unpriced calls. A zero-dollar covered call is different from an invocation that has no usable pricing source, and an empty window reports zero calls in every category.
 - Current pricing settings recalculate historical Stats projections when the snapshot is requested; changing pricing does not rewrite stored invocation telemetry.
+- Pricing changes affect Code UX estimates, not provider invoices. After saving a price, refresh Stats and confirm the coverage card moves only when the selected window contains matching model invocations; leave genuinely unknown models unset instead of entering a zero price.
 - Cost analytics group multiple runs of the same conceptual sprint into one canonical sprint row. The existing Sprint Telemetry ledger remains run-oriented.
 - Cost allocation separates input, cached input, output, reasoning, and provider-reported fallback lanes with exact values and percentages. Ranked model and execution-purpose rows include spend, tokens, shares, calls, and cost per call; dense collections keep six leaders visible and reconcile the remainder in one bounded `Other` group.
 - Allocation patterns and text labels duplicate color meaning, rows support keyboard scanning and long provider/model names, and empty, unpriced, partial, covered zero-dollar, and unknown-coverage windows remain visibly different.
 - Cost totals, per-call and per-token rates, task/sprint averages, breakdowns, and detail rows share one deterministic calculation model. Invalid negative or non-finite telemetry is treated as zero, breakdowns reconcile to the normalized totals, and equal rankings use stable labels and identities.
 - Small proven costs retain sub-cent precision. Fully covered zero-price usage displays as `$0.00`; partially priced, unpriced, legacy unknown-coverage, and empty telemetry use distinct states so missing pricing is never presented as free usage.
+- The Cost overview pairs total spend, task/sprint averages, per-call and per-million-token rates with pricing-coverage provenance. Its spend-over-time chart exposes every bucket through keyboard focus, exact focused detail, and a screen-reader data table; peak and selected buckets also use non-color markers.
 - The Cost ledger switches between task and canonical-sprint views, searches status and context, and sorts in either direction by spend, tokens, calls, cost per call, recency, or name. Each row includes spend share, token mix, status, activity, and pricing provenance; large result sets load progressively while totals use every filtered match and the comparison average stays anchored to the complete task or canonical-sprint collection.
 
 ## Underlying telemetry

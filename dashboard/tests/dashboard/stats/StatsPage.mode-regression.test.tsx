@@ -126,7 +126,7 @@ afterEach(() => {
 });
 
 describe("TopCardsModeRenderer mode regression", () => {
-  it("keeps the trend, composition, models, reliability, and ledgers labels stable", () => {
+  it("keeps the trend, composition, cost, models, reliability, and ledgers labels stable", () => {
     render(<TopCardsModeRenderer mode="trend" {...baseProps} />);
     expect(screen.getByText("Total Tokens")).toBeInTheDocument();
     expect(screen.getByText("Active Time")).toBeInTheDocument();
@@ -139,6 +139,23 @@ describe("TopCardsModeRenderer mode regression", () => {
     expect(screen.getByText("Provider Share")).toBeInTheDocument();
     expect(screen.getByText("Token Anatomy")).toBeInTheDocument();
     expect(screen.getByText("Purpose Activity")).toBeInTheDocument();
+
+    cleanup();
+    render(<TopCardsModeRenderer mode="cost" {...baseProps} stats={{
+      ...mockStats,
+      range: { label: "7d" },
+      buckets: [],
+      tasks: [],
+      sprints: [],
+      chartSeries: [],
+      tokenSources: [],
+      usage: { ...mockStats.usage, invocationCount: 0, totalTokens: 0, totalCostUsd: 0 },
+    } as any} />);
+    expect(screen.getByText("Total Spend")).toBeInTheDocument();
+    expect(screen.getByText("Average per Task")).toBeInTheDocument();
+    expect(screen.getByText("Average per Sprint")).toBeInTheDocument();
+    expect(screen.getByText("Blended Cost / 1M Tokens")).toBeInTheDocument();
+    expect(screen.getByText("Pricing Coverage")).toBeInTheDocument();
 
     cleanup();
     render(<TopCardsModeRenderer mode="models" {...baseProps} />);

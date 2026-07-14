@@ -11,6 +11,7 @@ const VISUAL_MODE_STORAGE_PREFIX = "codeux_stats_visual_mode";
 const VALID_VISUAL_MODES: StatsVisualMode[] = [
   "trend",
   "composition",
+  "cost",
   "models",
   "reliability",
   "ledgers",

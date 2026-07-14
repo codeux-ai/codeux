@@ -13,6 +13,7 @@ import {
 import { SystemStudio } from "./system/SystemStudio.js";
 import { ModelsStudio } from "./ModelsStudio.js";
 import { TelemetryLedgerTabs } from "./TelemetryLedgerTabs.js";
+import { CostStudio } from "./cost/CostStudio.js";
 
 interface StudioMetadata {
   label: string;
@@ -33,6 +34,12 @@ const STUDIO_METADATA: Record<StatsVisualMode, StudioMetadata> = {
     eyebrow: "Usage mix",
     description: "Provider, token, purpose, and source mix for the current telemetry window.",
     emptyMessage: "Select a time window to see Composition data.",
+  },
+  cost: {
+    label: "Cost",
+    eyebrow: "Spend intelligence",
+    description: "Spend, pricing coverage, allocation, and entity-level cost detail for the selected range.",
+    emptyMessage: "Select a time window to see Cost data.",
   },
   models: {
     label: "Models",
@@ -147,6 +154,14 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
             <CompositionStudio stats={stats} providerSegments={providerSegments} tokenSegments={tokenSegments} />
           </div>
         ) : renderEmptyState(STUDIO_METADATA.composition)
+      ) : null}
+
+      {visualMode === "cost" ? (
+        stats ? (
+          <div className={loading ? "pointer-events-none opacity-60 transition-opacity motion-reduce:transition-none" : "transition-opacity motion-reduce:transition-none"}>
+            <CostStudio stats={stats} />
+          </div>
+        ) : renderEmptyState(STUDIO_METADATA.cost)
       ) : null}
 
       {visualMode === "models" ? (
