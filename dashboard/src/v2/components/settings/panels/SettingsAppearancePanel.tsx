@@ -64,6 +64,7 @@ export const SettingsAppearancePanel: FunctionComponent<{
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
       <SectionCard
+        sectionId="display-settings"
         title={translate(settingsShellMessages, "displaySettings")}
         watermark="UI"
         icon={<Monitor strokeWidth={2.4} />}

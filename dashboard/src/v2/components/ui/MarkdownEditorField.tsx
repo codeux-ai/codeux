@@ -2,6 +2,8 @@ import type { JSX } from "preact";
 import { useState, useEffect, useRef } from "preact/hooks";
 import { PenLine, Eye } from "lucide-preact";
 import { renderMarkdown } from "../../../lib/markdown.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { agentsMessages } from "../../i18n/messages/agents.js";
 
 type Mode = "write" | "preview";
 
@@ -38,7 +40,7 @@ export function MarkdownEditorField({
   ariaDescribedBy,
   valid,
   toolbarNote,
-  emptyPreviewHint = "Nothing to preview yet — switch to Write to add content.",
+  emptyPreviewHint,
 }: {
   id?: string;
   value: string;
@@ -56,6 +58,7 @@ export function MarkdownEditorField({
   toolbarNote?: preact.ComponentChildren;
   emptyPreviewHint?: string;
 }) {
+  const { translate } = useOptionalDashboardI18n();
   const [mode, setMode] = useState<Mode>(value.trim() ? "preview" : "write");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -81,13 +84,13 @@ export function MarkdownEditorField({
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2 border-b border-black/[0.05] bg-white/40 px-3 py-2 dark:border-white/[0.06] dark:bg-white/[0.02]">
         <span className="inline-flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-          Markdown
+          {translate(agentsMessages, "markdown")}
         </span>
         <div className="flex items-center gap-2">
           {toolbarNote}
           <div
             role="tablist"
-            aria-label="Markdown Editor Mode"
+            aria-label={translate(agentsMessages, "markdownEditorMode")}
             className="flex items-center gap-0.5 rounded-full border border-black/[0.06] bg-white/50 p-0.5 dark:border-white/[0.06] dark:bg-white/[0.03]"
             onKeyDown={(e) => {
               const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
@@ -126,7 +129,7 @@ export function MarkdownEditorField({
                   }`}
                 >
                   <Icon aria-hidden="true" className="h-3 w-3" strokeWidth={2.4} />
-                  {value_ === "write" ? "Write" : "Preview"}
+                  {translate(agentsMessages, value_)}
                 </button>
               );
             })}
@@ -153,7 +156,7 @@ export function MarkdownEditorField({
         />
         </div>
       ) : (
-        <div role="tabpanel" id="markdown-preview" aria-labelledby="md-tab-preview" tabIndex={0} aria-label="Markdown Preview" className="w-full">
+        <div role="tabpanel" id="markdown-preview" aria-labelledby="md-tab-preview" tabIndex={0} aria-label={translate(agentsMessages, "markdownPreview")} className="w-full">
           {value.trim() ? (
             <div
               className={`overflow-auto px-4 py-3.5 ${minHeightClass} ${MARKDOWN_PROSE_CLASS}`}
@@ -161,7 +164,7 @@ export function MarkdownEditorField({
             />
           ) : (
             <div className={`flex items-center px-4 py-3.5 text-[13px] italic text-slate-400 dark:text-slate-500 ${minHeightClass}`}>
-              {emptyPreviewHint}
+              {emptyPreviewHint ?? translate(agentsMessages, "emptyMarkdownPreview")}
             </div>
           )}
         </div>

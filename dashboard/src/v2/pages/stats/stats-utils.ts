@@ -18,6 +18,7 @@ import {
 } from "lucide-preact";
 import type { ComponentType } from "preact";
 import type { StatsCardAccent } from "./components/StatsCard.js";
+import type { DashboardLocale } from "../../i18n/index.js";
 
 export function isValidCustomRange(from: string, to: string): boolean {
   if (!from || !to) return false;
@@ -48,23 +49,27 @@ export const EMPTY_USAGE: ExecutionUsageTotals = {
   totalCostUsd: 0,
 };
 
-export const NUMBER_FORMATTER = new Intl.NumberFormat("en-US");
+export const createStatsNumberFormatter = (locale: DashboardLocale = "en"): Intl.NumberFormat => (
+  new Intl.NumberFormat(locale)
+);
 
-export function formatTokens(value: number): string {
+/** @deprecated Pass a locale to the presentation helpers instead. */
+export const NUMBER_FORMATTER = createStatsNumberFormatter();
+
+export function formatTokens(value: number, locale: DashboardLocale = "en"): string {
   if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(2)}M`;
+    return `${new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value / 1_000_000)}${locale === "de" ? " Mio." : "M"}`;
   }
   if (value >= 1_000) {
-    return `${(value / 1_000).toFixed(1)}k`;
+    return `${new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value / 1_000)}k`;
   }
-  return NUMBER_FORMATTER.format(value);
+  return createStatsNumberFormatter(locale).format(value);
 }
 
 
-export function formatCost(usd: number | null | undefined): string {
+export function formatCost(usd: number | null | undefined, locale: DashboardLocale = "en"): string {
   if (usd === null || usd === undefined) return "—";
-  if (usd === 0) return "$0.00";
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat(locale, {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 2,
@@ -72,25 +77,30 @@ export function formatCost(usd: number | null | undefined): string {
   }).format(usd);
 }
 
-export function formatStatsDuration(value: number): string {
+export function formatStatsDuration(value: number, locale: DashboardLocale = "en"): string {
   const seconds = Math.max(0, Math.round(value / 1000));
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const remainingSeconds = seconds % 60;
+  const number = createStatsNumberFormatter(locale);
   if (hours > 0) {
-    return `${hours}h ${minutes}m`;
+    return locale === "de" ? `${number.format(hours)} h ${number.format(minutes)} min` : `${number.format(hours)}h ${number.format(minutes)}m`;
   }
   if (minutes > 0) {
-    return `${minutes}m ${remainingSeconds}s`;
+    return locale === "de" ? `${number.format(minutes)} min ${number.format(remainingSeconds)} s` : `${number.format(minutes)}m ${number.format(remainingSeconds)}s`;
   }
-  return `${remainingSeconds}s`;
+  return locale === "de" ? `${number.format(remainingSeconds)} s` : `${number.format(remainingSeconds)}s`;
 }
 
-export function formatPercent(value: number): string {
-  return `${Math.round(value)}%`;
+export function formatPercent(value: number, locale: DashboardLocale = "en", fractionDigits = 0): string {
+  return new Intl.NumberFormat(locale, {
+    style: "percent",
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(value / 100);
 }
 
-export const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
+export const createStatsDateTimeFormatter = (locale: DashboardLocale = "en"): Intl.DateTimeFormat => new Intl.DateTimeFormat(locale, {
   month: "short",
   day: "numeric",
   hour: "2-digit",
@@ -98,15 +108,18 @@ export const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
-export function formatDateTime(value: string | null): string {
+/** @deprecated Pass a locale to formatDateTime instead. */
+export const DATE_TIME_FORMATTER = createStatsDateTimeFormatter();
+
+export function formatDateTime(value: string | null, locale: DashboardLocale = "en"): string {
   if (!value) {
-    return "No activity yet";
+    return locale === "de" ? "Noch keine Aktivität" : "No activity yet";
   }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return DATE_TIME_FORMATTER.format(date);
+  return createStatsDateTimeFormatter(locale).format(date);
 }
 
 export function sumUsage(items: ExecutionStatsEntitySummary[]): ExecutionUsageTotals {
@@ -176,7 +189,7 @@ export function groupSegments(
   return segments.filter((segment) => segment.value > 0);
 }
 
-export function createStatsSegments(stats: ProjectExecutionStatsSnapshot | null, usage: ExecutionUsageTotals): {
+export function createStatsSegments(stats: ProjectExecutionStatsSnapshot | null, usage: ExecutionUsageTotals, locale: DashboardLocale = "en"): {
   providerSegments: SegmentDefinition[];
   sourceSegments: SegmentDefinition[];
   tokenSegments: SegmentDefinition[];
@@ -190,7 +203,7 @@ export function createStatsSegments(stats: ProjectExecutionStatsSnapshot | null,
       "rgba(251,113,133,0.88)",
       "rgba(20,184,166,0.9)",
     ],
-    fallbackLabel: "Other providers",
+    fallbackLabel: locale === "de" ? "Andere Anbieter" : "Other providers",
   });
 
   const sourceSegments: SegmentDefinition[] = (stats?.tokenSources || []).map((entry, index) => ({
@@ -212,25 +225,25 @@ export function createStatsSegments(stats: ProjectExecutionStatsSnapshot | null,
 
   const tokenSegments: SegmentDefinition[] = [
     {
-      label: "Input",
+      label: locale === "de" ? "Eingabe" : "Input",
       value: usage.inputTokens,
       color: "rgb(var(--signal-rgb) / 0.9)",
       textClassName: "text-signal-600 dark:text-signal-400",
     },
     {
-      label: "Cached",
+      label: locale === "de" ? "Im Cache" : "Cached",
       value: usage.cachedInputTokens,
       color: "rgba(0,170,255,0.88)",
       textClassName: "text-cyan-600 dark:text-cyan-400",
     },
     {
-      label: "Output",
+      label: locale === "de" ? "Ausgabe" : "Output",
       value: usage.outputTokens,
       color: "rgba(255,184,0,0.88)",
       textClassName: "text-amber-600 dark:text-amber-400",
     },
     {
-      label: "Reasoning",
+      label: locale === "de" ? "Schlussfolgerung" : "Reasoning",
       value: usage.reasoningOutputTokens,
       color: "rgba(251,113,133,0.9)",
       textClassName: "text-rose-600 dark:text-rose-400",

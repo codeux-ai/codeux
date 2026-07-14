@@ -135,8 +135,8 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
       />
 
       <Card
-        title="AI Models"
-        description="Set provider defaults, invocation routing, model mix, and worker runtime settings this scope should use."
+        title={tr("AI Models")}
+        description={tr("Set provider defaults, invocation routing, model mix, and worker runtime settings this scope should use.")}
         badge={providerSource || workerSource ? sourceLabel(providerSource === workerSource ? (providerSource || "system") : "mixed") : undefined}
       >
         <WorkerPanel
@@ -152,12 +152,12 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
       </Card>
 
       <Card
-        title="Git Flow"
-        description="Branching and PR behavior for orchestrated work."
+        title={tr("Git Flow")}
+        description={tr("Branching and PR behavior for orchestrated work.")}
         badge={gitSource ? sourceLabel(gitSource) : undefined}
       >
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-          <Row label="GitHub mode" description="Local disables PR intelligence, remote enables PR and CI awareness." badge={getBadge("git.githubMode")}>
+          <Row label={tr("GitHub mode")} description={tr("Local disables PR intelligence, remote enables PR and CI awareness.")} badge={getBadge("git.githubMode")}>
             <SelectInput
               value={settings.git.githubMode}
               onChange={(value) => update({
@@ -172,7 +172,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               ]}
             />
           </Row>
-          <Row label="Default branch" description="Base branch used for sprint creation and merge targets." badge={getBadge("git.defaultBranch")}>
+          <Row label={tr("Default branch")} description={tr("Base branch used for sprint creation and merge targets.")} badge={getBadge("git.defaultBranch")}>
             <TextInput
               value={settings.git.defaultBranch}
               onChange={(value) => update({
@@ -184,7 +184,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               mono
             />
           </Row>
-          <Row label="Feature branch prefix" description="Prefix used when feature branches are generated automatically." badge={getBadge("git.featureBranchPrefix")}>
+          <Row label={tr("Feature branch prefix")} description={tr("Prefix used when feature branches are generated automatically.")} badge={getBadge("git.featureBranchPrefix")}>
             <TextInput
               value={settings.git.featureBranchPrefix}
               onChange={(value) => update({
@@ -196,7 +196,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               mono
             />
           </Row>
-          <Row label="Sprint branch scheme" description="Template used when naming sprint branches." badge={getBadge("git.sprintBranchScheme")} info={<InfoIconPopover items={[
+          <Row label={tr("Sprint branch scheme")} description={tr("Template used when naming sprint branches.")} badge={getBadge("git.sprintBranchScheme")} info={<InfoIconPopover items={[
             { key: "{sprint_key_prefix}", desc: "Sprint Key Prefix" },
             { key: "{sprint_number}", desc: "Sprint Number" },
             { key: "{sprint_name}", desc: "Sprint Name" },
@@ -215,7 +215,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               })}
             />
           </Row>
-          <Row label="Task PR title scheme" description="Template used when naming automatically-created task pull requests." badge={getBadge("git.taskPrTitleScheme")}>
+          <Row label={tr("Task PR title scheme")} description={tr("Template used when naming automatically-created task pull requests.")} badge={getBadge("git.taskPrTitleScheme")}>
             <TaskPrTitleSchemeEditor
               value={settings.git.taskPrTitleScheme}
               onChange={(value) => update({
@@ -236,8 +236,8 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             {localGitModeReason}
           </div>
         ) : null}
-        <Row label="Auto-create PRs" description={localGitModeDisabled ? "Open pull requests automatically for remote git workflows. Disabled while GitHub mode is Local." : "Open pull requests automatically for remote git workflows."} badge={getBadge("git.autoCreatePr")}>
-          <Toggle aria-label="Auto-create PRs" aria-description={localGitModeDisabled ? localGitModeReason : "Open pull requests automatically for remote git workflows."} aria-describedby={localGitModeDisabled ? localGitModeReasonId : undefined} value={localGitModeDisabled ? false : settings.git.autoCreatePr}
+        <Row label={tr("Auto-create PRs")} description={localGitModeDisabled ? "Open pull requests automatically for remote git workflows. Disabled while GitHub mode is Local." : "Open pull requests automatically for remote git workflows."} badge={getBadge("git.autoCreatePr")}>
+          <Toggle aria-label={tr("Auto-create PRs")} aria-description={localGitModeDisabled ? localGitModeReason : "Open pull requests automatically for remote git workflows."} aria-describedby={localGitModeDisabled ? localGitModeReasonId : undefined} value={localGitModeDisabled ? false : settings.git.autoCreatePr}
             disabled={localGitModeDisabled}
             onChange={(value) => update({
               git: {
@@ -247,8 +247,8 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             })}
           />
         </Row>
-        <Row label="Auto-close linked issues" description={localGitModeDisabled ? "Close imported GitHub/GitLab issues after the sprint finishes. Disabled while GitHub mode is Local." : "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete."} badge={getBadge("git.autoCloseLinkedIssues")}>
-          <Toggle aria-label="Auto-close linked issues" aria-description={localGitModeDisabled ? localGitModeReason : "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete."} aria-describedby={localGitModeDisabled ? localGitModeReasonId : undefined} value={localGitModeDisabled ? false : settings.git.autoCloseLinkedIssues}
+        <Row label={tr("Auto-close linked issues")} description={localGitModeDisabled ? "Close imported GitHub/GitLab issues after the sprint finishes. Disabled while GitHub mode is Local." : "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete."} badge={getBadge("git.autoCloseLinkedIssues")}>
+          <Toggle aria-label={tr("Auto-close linked issues")} aria-description={localGitModeDisabled ? localGitModeReason : "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete."} aria-describedby={localGitModeDisabled ? localGitModeReasonId : undefined} value={localGitModeDisabled ? false : settings.git.autoCloseLinkedIssues}
             disabled={localGitModeDisabled}
             onChange={(value) => update({
               git: {
@@ -287,12 +287,12 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           </Row>
         ))}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-          <Row label="Feature PR auto-merge" description="Policy for leaving feature work at PR creation or merging after checks and comments are satisfied." badge={getBadge("ciIntelligence.featurePrAutoMergeMode")}>
+          <Row label={tr("Feature PR auto-merge")} description={tr("Policy for leaving feature work at PR creation or merging after checks and comments are satisfied.")} badge={getBadge("ciIntelligence.featurePrAutoMergeMode")}>
             <SelectInput
               value={localGitModeDisabled ? "OFF" : settings.ciIntelligence.featurePrAutoMergeMode}
               disabled={localGitModeDisabled}
               disabledReason={localGitModeDisabled ? localGitModeReason : undefined}
-              aria-label="Feature PR auto-merge"
+              aria-label={tr("Feature PR auto-merge")}
               aria-describedby={localGitModeDisabled ? localGitModeReasonId : undefined}
               onChange={(value) => update({
                 ciIntelligence: {
@@ -308,12 +308,12 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               ]}
             />
           </Row>
-          <Row label="Main branch auto-merge" description="Policy for leaving the final main PR at creation or merging it after checks and comments are satisfied." badge={getBadge("ciIntelligence.mainBranchAutoMergeMode")}>
+          <Row label={tr("Main branch auto-merge")} description={tr("Policy for leaving the final main PR at creation or merging it after checks and comments are satisfied.")} badge={getBadge("ciIntelligence.mainBranchAutoMergeMode")}>
             <SelectInput
               value={localGitModeDisabled ? "OFF" : settings.ciIntelligence.mainBranchAutoMergeMode}
               disabled={localGitModeDisabled}
               disabledReason={localGitModeDisabled ? localGitModeReason : undefined}
-              aria-label="Main branch auto-merge"
+              aria-label={tr("Main branch auto-merge")}
               aria-describedby={localGitModeDisabled ? localGitModeReasonId : undefined}
               onChange={(value) => update({
                 ciIntelligence: {
@@ -333,8 +333,8 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
       </Card>
 
       <Card
-        title="Sprint Loop"
-        description="Enable or disable orchestration phases and tune watch-loop timing."
+        title={tr("Sprint Loop")}
+        description={tr("Enable or disable orchestration phases and tune watch-loop timing.")}
         badge={loopSource ? sourceLabel(loopSource) : undefined}
       >
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
@@ -363,7 +363,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           ))}
         </div>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-          <Row label="Watch loop interval" description="Polling interval in seconds for the orchestration watch loop." badge={getBadge("sprintLoopSteps.watchLoopIntervalSeconds")}>
+          <Row label={tr("Watch loop interval")} description={tr("Polling interval in seconds for the orchestration watch loop.")} badge={getBadge("sprintLoopSteps.watchLoopIntervalSeconds")}>
             <NumberInput
               value={settings.sprintLoopSteps.watchLoopIntervalSeconds}
               min={1}
@@ -376,7 +376,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               })}
             />
           </Row>
-          <Row label="Watch output interval" description="Maximum watch-loop runtime before the server returns progress and rerun guidance." badge={getBadge("sprintLoopSteps.watchLoopOutputIntervalSeconds")}>
+          <Row label={tr("Watch output interval")} description={tr("Maximum watch-loop runtime before the server returns progress and rerun guidance.")} badge={getBadge("sprintLoopSteps.watchLoopOutputIntervalSeconds")}>
             <NumberInput
               value={settings.sprintLoopSteps.watchLoopOutputIntervalSeconds}
               min={60}
@@ -393,12 +393,12 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
       </Card>
 
       <Card
-        title="CLI Workflow"
-        description="Execution environment, cleanup rules, and container credential mount behavior."
+        title={tr("CLI Workflow")}
+        description={tr("Execution environment, cleanup rules, and container credential mount behavior.")}
         badge={cliSource ? sourceLabel(cliSource) : undefined}
       >
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-          <Row label="Execution mode" description="Run provider CLIs on the host or inside a containerized runtime." badge={getBadge("cliWorkflow.executionMode")}>
+          <Row label={tr("Execution mode")} description={tr("Run provider CLIs on the host or inside a containerized runtime.")} badge={getBadge("cliWorkflow.executionMode")}>
             <SelectInput
               value={settings.cliWorkflow.executionMode}
               onChange={(value) => update({
@@ -413,7 +413,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               ]}
             />
           </Row>
-          <Row label="Runtime image mode" description="Use the auto-updating Code UX runtime or an explicit custom image." badge={getBadge("cliWorkflow.containerImageMode")}>
+          <Row label={tr("Runtime image mode")} description={tr("Use the auto-updating Code UX runtime or an explicit custom image.")} badge={getBadge("cliWorkflow.containerImageMode")}>
             <SelectInput
               value={settings.cliWorkflow.containerImageMode}
               onChange={(value) => update({
@@ -428,7 +428,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               ]}
             />
           </Row>
-          <Row label="Custom container image" description="Container image used only in custom mode." badge={getBadge("cliWorkflow.containerImage")}>
+          <Row label={tr("Custom container image")} description={tr("Container image used only in custom mode.")} badge={getBadge("cliWorkflow.containerImage")}>
             <TextInput
               value={settings.cliWorkflow.containerImage}
               disabled={settings.cliWorkflow.containerImageMode !== "custom"}
@@ -441,9 +441,9 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               mono
             />
           </Row>
-          <Row label="Setup script path" description="Optional bootstrap script relative to the repo or runtime root." badge={getBadge("cliWorkflow.containerSetupScriptPath")}>
+          <Row label={tr("Setup script path")} description={tr("Optional bootstrap script relative to the repo or runtime root.")} badge={getBadge("cliWorkflow.containerSetupScriptPath")}>
             <LocalFilePickerField
-              label="Setup script path"
+              label={tr("Setup script path")}
               value={settings.cliWorkflow.containerSetupScriptPath}
               onChange={(value) => update({
                 cliWorkflow: {
@@ -451,12 +451,12 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                   containerSetupScriptPath: value,
                 },
               })}
-              helperText="Type a relative path or browse to an absolute local script."
-              placeholder=".code-ux/container/setup.sh"
+              helperText={tr("Type a relative path or browse to an absolute local script.")}
+              placeholder={tr(".code-ux/container/setup.sh")}
             />
           </Row>
-          <Row label="Cache custom setup extension" description="Build and reuse an extension image for an explicitly configured setup script." badge={getBadge("cliWorkflow.containerCacheSetupScriptImage")}>
-            <Toggle aria-label="Cache setup as image" aria-description="Build and reuse a derived Docker image keyed by the base image and setup script contents." value={settings.cliWorkflow.containerCacheSetupScriptImage}
+          <Row label={tr("Cache custom setup extension")} description={tr("Build and reuse an extension image for an explicitly configured setup script.")} badge={getBadge("cliWorkflow.containerCacheSetupScriptImage")}>
+            <Toggle aria-label={tr("Cache setup as image")} aria-description={tr("Build and reuse a derived Docker image keyed by the base image and setup script contents.")} value={settings.cliWorkflow.containerCacheSetupScriptImage}
               onChange={(value) => update({
                 cliWorkflow: {
                   ...settings.cliWorkflow,
@@ -465,8 +465,8 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               })}
             />
           </Row>
-          <Row label="Preload Playwright browser" description="Download the matched browser into a reusable local Docker volume for coding containers." badge={getBadge("cliWorkflow.containerInstallPlaywrightBrowsers")}>
-            <Toggle aria-label="Preload Playwright browser" aria-description="Download the matched browser into a reusable local Docker volume for coding containers." value={settings.cliWorkflow.containerInstallPlaywrightBrowsers}
+          <Row label={tr("Preload Playwright browser")} description={tr("Download the matched browser into a reusable local Docker volume for coding containers.")} badge={getBadge("cliWorkflow.containerInstallPlaywrightBrowsers")}>
+            <Toggle aria-label={tr("Preload Playwright browser")} aria-description={tr("Download the matched browser into a reusable local Docker volume for coding containers.")} value={settings.cliWorkflow.containerInstallPlaywrightBrowsers}
               onChange={(value) => update({
                 cliWorkflow: {
                   ...settings.cliWorkflow,
@@ -505,7 +505,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           ))}
         </div>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-          <Row label="Rate limit retry delay" description="Seconds to wait before retrying a rate-limited provider call." badge={getBadge("cliWorkflow.rateLimitRetryDelaySeconds")}>
+          <Row label={tr("Rate limit retry delay")} description={tr("Seconds to wait before retrying a rate-limited provider call.")} badge={getBadge("cliWorkflow.rateLimitRetryDelaySeconds")}>
             <NumberInput
               value={settings.cliWorkflow.rateLimitRetryDelaySeconds}
               min={1}
@@ -518,7 +518,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               })}
             />
           </Row>
-          <Row label="Max rate limit retries" description="Maximum rate-limit retries before the invocation fails instead of requeueing again." badge={getBadge("cliWorkflow.maxRateLimitRetries")}>
+          <Row label={tr("Max rate limit retries")} description={tr("Maximum rate-limit retries before the invocation fails instead of requeueing again.")} badge={getBadge("cliWorkflow.maxRateLimitRetries")}>
             <NumberInput
               value={settings.cliWorkflow.maxRateLimitRetries}
               min={1}
@@ -531,7 +531,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               })}
             />
           </Row>
-          <Row label="Max Parsing Retries" description="Maximum number of retry attempts to extract valid JSON from noisy model responses." badge={getBadge("cliWorkflow.maxParsingRetries")}>
+          <Row label={tr("Max Parsing Retries")} description={tr("Maximum number of retry attempts to extract valid JSON from noisy model responses.")} badge={getBadge("cliWorkflow.maxParsingRetries")}>
             <NumberInput
               value={settings.cliWorkflow.maxParsingRetries}
               min={0}
@@ -568,8 +568,8 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
       </Card>
 
       <Card
-        title="Browser Preview"
-        description="Preview runtime controls, browser visibility, rebuild policy, and container limits for the in-app browser."
+        title={tr("Browser Preview")}
+        description={tr("Preview runtime controls, browser visibility, rebuild policy, and container limits for the in-app browser.")}
         badge={sprintPreviewSource ? sourceLabel(sprintPreviewSource) : undefined}
       >
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
@@ -595,7 +595,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           ))}
         </div>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-          <Row label="Maximum active preview containers" description="Stop the oldest active previews before launching another one when this limit is exceeded." badge={getBadge("sprintPreview.maxConcurrentContainers")}>
+          <Row label={tr("Maximum active preview containers")} description={tr("Stop the oldest active previews before launching another one when this limit is exceeded.")} badge={getBadge("sprintPreview.maxConcurrentContainers")}>
             <NumberInput
               value={settings.sprintPreview.maxConcurrentContainers}
               onChange={(value) => update({
@@ -608,7 +608,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               max={100}
             />
           </Row>
-          <Row label="Host port range start" description="Lower bound for localhost preview port allocation." badge={getBadge("sprintPreview.hostPortRangeStart")}>
+          <Row label={tr("Host port range start")} description={tr("Lower bound for localhost preview port allocation.")} badge={getBadge("sprintPreview.hostPortRangeStart")}>
             <NumberInput
               value={settings.sprintPreview.hostPortRangeStart}
               onChange={(value) => update({
@@ -621,7 +621,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               max={65535}
             />
           </Row>
-          <Row label="Host port range end" description="Upper bound for localhost preview port allocation." badge={getBadge("sprintPreview.hostPortRangeEnd")}>
+          <Row label={tr("Host port range end")} description={tr("Upper bound for localhost preview port allocation.")} badge={getBadge("sprintPreview.hostPortRangeEnd")}>
             <NumberInput
               value={settings.sprintPreview.hostPortRangeEnd}
               onChange={(value) => update({
@@ -634,7 +634,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               max={65535}
             />
           </Row>
-          <Row label="Container app port" description="Published container port used by the browser proxy." badge={getBadge("sprintPreview.containerAppPort")}>
+          <Row label={tr("Container app port")} description={tr("Published container port used by the browser proxy.")} badge={getBadge("sprintPreview.containerAppPort")}>
             <NumberInput
               value={settings.sprintPreview.containerAppPort}
               onChange={(value) => update({
@@ -647,7 +647,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               max={65535}
             />
           </Row>
-          <Row label="Startup script path" description="Optional project-relative browser startup override script." badge={getBadge("sprintPreview.startupScriptPath")}>
+          <Row label={tr("Startup script path")} description={tr("Optional project-relative browser startup override script.")} badge={getBadge("sprintPreview.startupScriptPath")}>
             <TextInput
               value={settings.sprintPreview.startupScriptPath}
               onChange={(value) => update({
@@ -659,7 +659,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               mono
             />
           </Row>
-          <Row label="Default startup command" description="Optional command that replaces auto-detected preview startup. Per-container overrides are available in Browser." badge={getBadge("sprintPreview.startupCommand")}>
+          <Row label={tr("Default startup command")} description={tr("Optional command that replaces auto-detected preview startup. Per-container overrides are available in Browser.")} badge={getBadge("sprintPreview.startupCommand")}>
             <TextInput
               value={settings.sprintPreview.startupCommand ?? ""}
               onChange={(value) => update({
@@ -671,7 +671,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               mono
             />
           </Row>
-          <Row label="Default container variables" description="Environment variables injected into every preview container for this scope." badge={getBadge("sprintPreview.environmentVariables")}>
+          <Row label={tr("Default container variables")} description={tr("Environment variables injected into every preview container for this scope.")} badge={getBadge("sprintPreview.environmentVariables")}>
             <PreviewEnvironmentEditor
               variables={settings.sprintPreview.environmentVariables ?? []}
               onChange={(environmentVariables) => update({
@@ -688,8 +688,8 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
       </Card>
 
       <Card
-        title="Skills"
-        description="Enable or disable installed skills available to the orchestration layer."
+        title={tr("Skills")}
+        description={tr("Enable or disable installed skills available to the orchestration layer.")}
         badge={skillsSource ? sourceLabel(skillsSource) : undefined}
       >
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">

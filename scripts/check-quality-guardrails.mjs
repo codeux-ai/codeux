@@ -4,6 +4,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { fileURLToPath } from "node:url";
+import { runDashboardI18nCheck } from "./check-dashboard-i18n.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -1539,6 +1540,7 @@ function printList(items, renderItem) {
 }
 
 async function main() {
+  const dashboardI18nPassed = await runDashboardI18nCheck();
   const [productionFiles, supplyChainScanFiles, workflowFiles, artifactFiles, dependencyFactoryFiles] = await Promise.all([
     collectProductionFiles(),
     collectSupplyChainScanFiles(),
@@ -1634,7 +1636,7 @@ async function main() {
     console.log("\nAdvisory: no broad any patterns found.");
   }
 
-  if (artifactFiles.length > 0 || blockingViolations.length > 0) {
+  if (!dashboardI18nPassed || artifactFiles.length > 0 || blockingViolations.length > 0) {
     process.exit(1);
   }
 }

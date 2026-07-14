@@ -15,6 +15,7 @@ import { AvantgardeSelect } from "./AvantgardeSelect.js";
 import { AgentSelectAvatarIcon } from "../agents/AgentSelectAvatarIcon.js";
 import { useOptionalDashboardI18n } from "../../i18n/context.js";
 import { taskMessages } from "../../i18n/messages/tasks.js";
+import { sprintAuthoringMessages } from "../../i18n/messages/sprint-authoring.js";
 import { getTaskPriorityLabel, getTaskStatusLabel } from "../../lib/tasks-constants.js";
 
 interface TaskComposerProps {
@@ -46,7 +47,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
   const { locale, translate } = useOptionalDashboardI18n();
   const state = useTaskComposerState(sprints, availableTasks, initialTask, initialSprintId, locale);
   const executorOptions: Array<{ value: TaskExecutorType; label: string; description: string }> = [
-    { value: "auto", label: "Auto", description: translate(taskMessages, "executorAutoDescription") },
+    { value: "auto", label: translate(sprintAuthoringMessages, "executorAuto"), description: translate(taskMessages, "executorAutoDescription") },
     { value: "docker_cli", label: "CLI", description: translate(taskMessages, "executorCliDescription") },
     { value: "jules", label: "Jules", description: translate(taskMessages, "executorJulesDescription") },
   ];

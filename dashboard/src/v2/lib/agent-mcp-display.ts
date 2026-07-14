@@ -1,5 +1,8 @@
 import type { AgentMcpAccessConfig, CustomMcpServer } from "../types.js";
 import { TOOL_DEFINITIONS } from "../../../../src/contracts/mcp-tool-definitions.js";
+import type { DashboardLocale } from "../i18n/index.js";
+import { translateDashboardMessage } from "../i18n/index.js";
+import { agentsMessages } from "../i18n/messages/agents.js";
 
 export interface AgentMcpTag {
   id: string;
@@ -81,14 +84,14 @@ export const normalizeAgentMcpAccess = (access: AgentMcpAccessConfig): AgentMcpA
 export const resolveAgentMcpTags = (
   access: AgentMcpAccessConfig | undefined,
   availableServers: CustomMcpServer[],
-  options: { effectiveCodeUxEnabled?: boolean } = {},
+  options: { effectiveCodeUxEnabled?: boolean; locale?: DashboardLocale } = {},
 ): AgentMcpTag[] => {
   const tags: AgentMcpTag[] = [];
   if (access?.codeUxEnabled === true || options.effectiveCodeUxEnabled === true) {
     tags.push({
       id: CODE_UX_TAG_ID,
       label: options.effectiveCodeUxEnabled === true && access?.codeUxEnabled !== true
-        ? "Code UX · Runtime"
+        ? `Code UX · ${translateDashboardMessage(agentsMessages, options.locale ?? "en", "runtime")}`
         : "Code UX",
       kind: "code_ux",
     });

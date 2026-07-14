@@ -723,7 +723,7 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
           className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[1rem] bg-slate-900 px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/20 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-950 sm:w-auto sm:justify-self-end"
         >
           {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Search className="h-4 w-4" aria-hidden="true" />}
-          Search issues
+          {translate(sprintsMessages, "searchIssues")}
         </button>
       </IssueImportFilterSection>
     </div>
