@@ -4,18 +4,21 @@ The **Sprints** page (`/sprints`) is where you plan, manage, and launch sprint r
 
 ## The sprint gallery and ledger
 
-Sprints are viewed either in a visual organic cell gallery or a dense ledger format. Each sprint cell/row shows:
+Sprints are viewed either in a visual organic cell gallery or a dense ledger format. Their hierarchy is intentionally different:
 
-- **Status pill** — `idle`, `running`, `paused`, `completed`, `failed`, `cancelled`.
+- **Gallery workflow badge** — one interactive delivery badge replaces hover-only lifecycle and merge-conflict badges. Activate it for the complete Coding → PR → QA → CI → Merge → Completion flow.
+- **Sprint key** — a blue, unboxed ID lockup keeps keys such as `CODUX-227` crisp without a decorative pill.
+- **Active spectral waves** — running cells use a restrained deep-sea composition of soft blue, cyan, and violet wave fields with slow ambient movement; reduced motion keeps the same composition static.
+- **Ledger lifecycle status** — dense rows retain their direct `idle`, `running`, `paused`, `completed`, `failed`, or `cancelled` label.
 - **Task counters** — completed / total, plus failures.
 - **Goal** — first line of the sprint goal.
 - **Action buttons** — Plan / Orchestrate / Pause / Cancel as appropriate, with inactive pause guidance kept out of the visible row to preserve ledger density.
 
 ### Sprint attention indicators
 
-Failed execution and eligible human intervention receive a red border around the complete gallery cell or ledger row. A failure shows a pulsing exclamation indicator labelled **Sprint execution failed**. A sprint waiting on a person shows a compact person and visible `zZZ` cue labelled **Sprint waiting for human intervention**. Failure takes precedence if both states are available.
+Failed execution keeps the red gallery-cell perimeter and pulsing exclamation indicator labelled **Sprint execution failed**. A sprint genuinely waiting on a person instead shows an amber person and visible `zZZ` cue labelled **Sprint waiting for human intervention**, positioned exactly 10px above the gallery cell without a red perimeter. Failure takes precedence if both states are available.
 
-When reduced motion is enabled, the exclamation stops pulsing and the waiting cue stops bouncing; the red border, indicator, visible context, and semantic label remain. Worker- and system-owned transient pauses are not shown as requests for human action. Normal status, progress, review badges, links, and controls also remain available in both attention states.
+When reduced motion is enabled, optional attention motion stops while the indicator, visible context, and semantic label remain. The waiting cue is limited to human-owned active intervention. Worker- and system-owned items—including merge conflicts a worker can resolve—do not show **Waiting for you**, a separate merge-conflict badge, or a human-attention border. Their operational state remains available through the interactive workflow details.
 
 ## Delivery workflow and QA review details
 
