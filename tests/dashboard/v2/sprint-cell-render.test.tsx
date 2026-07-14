@@ -5,6 +5,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { render, cleanup } from "@testing-library/preact";
 import { SprintCell } from "../../../dashboard/src/v2/components/sprints/SprintCell";
 import { ORGANIC_CELL_SHADOW_CLASS } from "../../../dashboard/src/v2/components/ui/organic-cell-styles";
+import { renderWithI18n } from "../render-with-i18n.js";
 
 afterEach(() => { cleanup(); });
 
@@ -24,7 +25,7 @@ describe("SprintCell DOM structure for Verification", () => {
   };
 
   it("uses the shared organic project-cell shadow underlay", () => {
-    const { container } = render(<SprintCell sprint={defaultSprint} isEven={true} accentColor="text-blue-500" />);
+    const { container } = renderWithI18n(<SprintCell sprint={defaultSprint} isEven={true} accentColor="text-blue-500" />);
     const mainDiv = container.firstChild as HTMLDivElement;
     const shadowShell = container.querySelector("[data-organic-cell-shadow]");
 
