@@ -3,6 +3,8 @@ import { Smile } from "lucide-preact";
 import type { AgentAvatarExpression } from "../../lib/agent-avatar.js";
 import { AGENT_AVATAR_EXPRESSIONS } from "../../lib/agent-avatar.js";
 import { EXPRESSION_META } from "./AgentAvatarStage.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import { agentsMessages } from "../../i18n/messages/agents.js";
 
 interface AgentAvatarExpressionPickerProps {
   value: AgentAvatarExpression;
@@ -17,10 +19,14 @@ export function AgentAvatarExpressionPicker({
   className = "",
   disabled = false,
 }: AgentAvatarExpressionPickerProps) {
+  const { translate } = useDashboardI18n();
+  const expressionLabel = (expression: AgentAvatarExpression): string => translate(agentsMessages, ({
+    happy: "expressionHappy", sad: "expressionSad", angry: "expressionAngry", sleepy: "expressionSleepy", bored: "expressionBored", hyped: "expressionHyped", shake_head: "expressionShakeHead", nod: "expressionNod", curious: "expressionCurious", thinking: "expressionThinking", excited: "expressionExcited", laughing: "expressionLaughing", surprised: "expressionSurprised", wink: "expressionWink", dance: "expressionDance", proud: "expressionProud",
+  } as const)[expression]);
   return (
     <div className={`flex flex-col gap-2 ${className}`}>
       <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-        Expression
+        {translate(agentsMessages, "expression")}
       </span>
       <div className="flex flex-wrap gap-1.5">
         {AGENT_AVATAR_EXPRESSIONS.map((expression) => {
@@ -40,7 +46,7 @@ export function AgentAvatarExpressionPicker({
               }`}
             >
               <meta.Icon className="h-3.5 w-3.5" strokeWidth={2.4} />
-              {meta.label}
+              {expressionLabel(expression)}
             </button>
           );
         })}

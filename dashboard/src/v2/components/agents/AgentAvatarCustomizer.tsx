@@ -11,8 +11,11 @@ import {
   ROBOT_BASE_COLOR_OPTIONS,
   ROBOT_VISOR_COLOR_OPTIONS,
   generateRandomAgentAvatar,
+  getAgentAvatarOptionLabel,
 } from "../../lib/agent-avatar.js";
 import { INTERACTION_CSS_VARIABLES } from "../../lib/motion/tokens.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import { agentsMessages } from "../../i18n/messages/agents.js";
 
 interface AgentAvatarCustomizerProps {
   config: AgentAvatarConfig;
@@ -35,6 +38,7 @@ function PartPicker<T extends { id: string; label: string }>({
   onChange: (id: string) => void;
   disabled?: boolean;
 }) {
+  const { locale, translate } = useDashboardI18n();
   return (
     <div className="flex flex-col gap-2">
       <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
@@ -60,9 +64,9 @@ function PartPicker<T extends { id: string; label: string }>({
                 transitionTimingFunction: INTERACTION_CSS_VARIABLES.selectionMovement.ease,
               }}
             >
-              {opt.label}
+              {getAgentAvatarOptionLabel(opt.label, locale)}
               <span className="ml-1 rounded-full border border-current/20 px-1 py-0.5 text-[8px] uppercase tracking-[0.12em]">
-                {selected ? "Selected" : "Option"}
+                {translate(agentsMessages, selected ? "selected" : "option")}
               </span>
             </button>
           );
@@ -86,6 +90,7 @@ function ColorSwatchPicker({
   onChange: (id: string) => void;
   disabled?: boolean;
 }) {
+  const { locale, translate } = useDashboardI18n();
   const selectedOpt = options.find((o) => o.id === value);
   return (
     <div className="flex flex-col gap-2">
@@ -95,7 +100,7 @@ function ColorSwatchPicker({
         </span>
         {selectedOpt && (
           <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500">
-            {selectedOpt.label}
+            {getAgentAvatarOptionLabel(selectedOpt.label, locale)}
           </span>
         )}
       </div>
@@ -108,8 +113,8 @@ function ColorSwatchPicker({
               type="button"
               disabled={disabled}
               onClick={() => onChange(opt.id)}
-              title={opt.label}
-              aria-label={opt.label}
+              title={getAgentAvatarOptionLabel(opt.label, locale)}
+              aria-label={getAgentAvatarOptionLabel(opt.label, locale)}
               aria-describedby={selected ? `${label}-${opt.id}-selected` : undefined}
               aria-pressed={selected}
               className={`group relative h-8 w-8 rounded-full shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed disabled:opacity-50 ${
@@ -126,7 +131,7 @@ function ColorSwatchPicker({
               )}
               {selected && (
                 <span id={`${label}-${opt.id}-selected`} className="sr-only">
-                  Selected {opt.label}
+                  {translate(agentsMessages, "selected")} {getAgentAvatarOptionLabel(opt.label, locale)}
                 </span>
               )}
             </button>
@@ -173,6 +178,7 @@ export function AgentAvatarCustomizer({
   className = "",
   disabled = false,
 }: AgentAvatarCustomizerProps) {
+  const { translate } = useDashboardI18n();
   const [isRandomizing, setIsRandomizing] = useState(false);
   const handleRandomize = () => {
     setIsRandomizing(true);
@@ -189,17 +195,17 @@ export function AgentAvatarCustomizer({
     <div className={`flex flex-col gap-4 ${className}`}>
       <div className="flex items-center justify-between">
         <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-          Tweak parts and colors — the portrait updates live.
+          {translate(agentsMessages, "avatarCustomizerHint")}
         </p>
         <button
           type="button"
           onClick={handleRandomize}
-          title={disabled ? "Avatar controls are disabled while saving" : "Randomize avatar appearance"}
+          title={translate(agentsMessages, disabled ? "avatarDisabledTitle" : "avatarRandomizeTitle")}
           disabled={disabled}
           className="group/rnd inline-flex shrink-0 items-center gap-1.5 rounded-full border border-black/[0.06] bg-white/60 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-signal-500/[0.1] hover:text-signal-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:text-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
         >
           <RefreshCw className="h-3 w-3 transition-transform duration-500 group-hover/rnd:rotate-180" strokeWidth={2.4} />
-          Randomize
+          {translate(agentsMessages, "randomize")}
         </button>
       </div>
       <div
@@ -214,24 +220,24 @@ export function AgentAvatarCustomizer({
         }`}
       >
         {disabled
-          ? "Avatar controls are disabled while this agent is saving."
+          ? translate(agentsMessages, "avatarControlsDisabled")
           : isRandomizing
-            ? "Avatar randomized. Save Agent to keep it."
-            : "Selected parts are labeled and update the live portrait immediately."}
+            ? translate(agentsMessages, "avatarRandomized")
+            : translate(agentsMessages, "avatarSelectionHint")}
       </div>
 
-      <CustomizerGroup icon={Shapes} title="Form">
-        <PartPicker label="Chassis" options={ROBOT_CHASSIS_OPTIONS} value={config.chassis} onChange={(id) => handleField("chassis", id)} disabled={disabled} />
-        <PartPicker label="Eyes" options={ROBOT_EYE_OPTIONS} value={config.eyes} onChange={(id) => handleField("eyes", id)} disabled={disabled} />
-        <PartPicker label="Antenna" options={ROBOT_ANTENNA_OPTIONS} value={config.antenna} onChange={(id) => handleField("antenna", id)} disabled={disabled} />
-        <PartPicker label="Headphones" options={ROBOT_HEADPHONES_OPTIONS} value={config.headphones} onChange={(id) => handleField("headphones", id)} disabled={disabled} />
-        <PartPicker label="Aura" options={ROBOT_WING_OPTIONS} value={config.wings} onChange={(id) => handleField("wings", id)} disabled={disabled} />
+      <CustomizerGroup icon={Shapes} title={translate(agentsMessages, "form")}>
+        <PartPicker label={translate(agentsMessages, "chassis")} options={ROBOT_CHASSIS_OPTIONS} value={config.chassis} onChange={(id) => handleField("chassis", id)} disabled={disabled} />
+        <PartPicker label={translate(agentsMessages, "eyes")} options={ROBOT_EYE_OPTIONS} value={config.eyes} onChange={(id) => handleField("eyes", id)} disabled={disabled} />
+        <PartPicker label={translate(agentsMessages, "antenna")} options={ROBOT_ANTENNA_OPTIONS} value={config.antenna} onChange={(id) => handleField("antenna", id)} disabled={disabled} />
+        <PartPicker label={translate(agentsMessages, "headphones")} options={ROBOT_HEADPHONES_OPTIONS} value={config.headphones} onChange={(id) => handleField("headphones", id)} disabled={disabled} />
+        <PartPicker label={translate(agentsMessages, "aura")} options={ROBOT_WING_OPTIONS} value={config.wings} onChange={(id) => handleField("wings", id)} disabled={disabled} />
       </CustomizerGroup>
 
-      <CustomizerGroup icon={Palette} title="Palette">
-        <ColorSwatchPicker label="Base Color" options={ROBOT_BASE_COLOR_OPTIONS} value={config.baseColor} onChange={(id) => handleField("baseColor", id)} disabled={disabled} />
-        <ColorSwatchPicker label="Accent Color" options={ROBOT_ACCENT_OPTIONS} value={config.accent} onChange={(id) => handleField("accent", id)} disabled={disabled} />
-        <ColorSwatchPicker label="Visor Color" options={ROBOT_VISOR_COLOR_OPTIONS} value={config.visorColor} onChange={(id) => handleField("visorColor", id)} disabled={disabled} />
+      <CustomizerGroup icon={Palette} title={translate(agentsMessages, "palette")}>
+        <ColorSwatchPicker label={translate(agentsMessages, "baseColor")} options={ROBOT_BASE_COLOR_OPTIONS} value={config.baseColor} onChange={(id) => handleField("baseColor", id)} disabled={disabled} />
+        <ColorSwatchPicker label={translate(agentsMessages, "accentColor")} options={ROBOT_ACCENT_OPTIONS} value={config.accent} onChange={(id) => handleField("accent", id)} disabled={disabled} />
+        <ColorSwatchPicker label={translate(agentsMessages, "visorColor")} options={ROBOT_VISOR_COLOR_OPTIONS} value={config.visorColor} onChange={(id) => handleField("visorColor", id)} disabled={disabled} />
       </CustomizerGroup>
     </div>
   );
