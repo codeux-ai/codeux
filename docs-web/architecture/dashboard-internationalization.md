@@ -33,9 +33,11 @@ const messages = defineDashboardMessages({
 const { translate, translatePlural, formatNumber } = useDashboardI18n();
 ```
 
-English and German must declare exactly the same top-level keys. Interpolation treats replacement values as literal text, plural messages require an `other` form, and locale-aware formatting delegates to the browser's native `Intl` implementation.
+English and German must declare exactly the same top-level keys. Interpolation treats replacement values as literal text, and plural messages require an `other` form. Plural selection receives the raw count, while the reserved `{count}` token is number-formatted for the active locale. Other locale-aware formatting also delegates to the browser's native `Intl` implementation.
 
  Keep each catalog with its owning feature and import it only where the feature is loaded. Translate dashboard-authored interface copy only. Never translate provider output, API responses, stored instructions, project data, runtime diagnostics, or user-authored content.
+
+The Knowledge route is a concrete feature catalog: its headers, document controls and states, ingestion dialogs, search feedback, confirmations, and accessible announcements support English and German. Counts, sizes, dates, and similarity percentages follow the active locale, while document data, paths, names, identifiers, search excerpts, partial-failure diagnostics, and API errors remain verbatim.
 
 The operational Settings catalog covers General, Sprint, QA, Automation, Worker, Browser, and Danger controls and their related dialogs. Localized option captions continue to save the existing enum values, while branch tokens, paths, command examples, default instruction templates, dependency metadata, API errors, and runtime diagnostics are displayed unchanged.
 

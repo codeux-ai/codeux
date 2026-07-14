@@ -39,7 +39,7 @@ translate(messages, "greeting", { name: "Sam" });
 translatePlural(messages, "itemCount", 2);
 ```
 
-Interpolation replaces only named `{variable}` tokens through literal string substitution. Missing variables remain visible, and values are never evaluated or inserted as HTML. Plural selection uses `Intl.PluralRules` for the active locale and falls back to the required `other` form.
+Interpolation replaces only named `{variable}` tokens through literal string substitution. Missing variables remain visible, and values are never evaluated or inserted as HTML. Plural selection uses the raw count with `Intl.PluralRules` for the active locale, while the reserved `{count}` interpolation is formatted with that locale's `Intl.NumberFormat`; the selected message falls back to the required `other` form.
 
 ## Locale-aware formatting
 
@@ -83,6 +83,8 @@ The application shell and File Browser are localized. The File Browser owns `mes
 
 Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged.
 
+The Knowledge route follows this boundary with its feature-owned `messages/knowledge.ts` catalog. Headers, controls, document states, ingestion dialogs, search feedback, confirmations, and accessibility announcements switch between English and German. Document titles and contents, paths, agent and model names, identifiers, search excerpts, ingestion diagnostics, and API errors remain verbatim. Counts, file sizes, update dates, and search-match percentages use the active locale's `Intl` formatting.
+
 Operational Settings categories use a feature-owned catalog for General, Sprint, QA, Automation, Worker, Browser, and Danger controls plus their branch, PR-template, file-picker, and open-source dialogs. Translated captions map back to the existing serialized enum values; branch tokens, paths, command examples, default instruction templates, dependency metadata, API errors, and runtime diagnostics remain verbatim.
 Memory category labels participate in localized text search, but their stored category keys remain unchanged. The route imports its catalog with the feature rather than adding it to the eager shell bundle.
 
@@ -114,6 +116,7 @@ Node localization is presentation-only. Graph JSON, node and edge identities, no
 
 ## Verification
 
+Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization.
 Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. Memory route coverage lives with the page, filter, search, list, inspector, batch-delete, model-browser, and model-card tests. Together they exercise German controls and announcements while asserting persisted knowledge, catalog metadata, identifiers, and API diagnostics remain verbatim.
 Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization. Agents coverage additionally verifies German route chrome and validation while asserting that authored instructions, imported Markdown, server labels, and persisted configuration values are not translated. Overview, project, sprint, browser preview, custom dashboard, Nodes, onboarding, and Settings coverage verifies localized dashboard copy while preserving runtime data and backend-facing values.
 Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. Chat boundary coverage is in `tests/dashboard/v2/chat-i18n.test.tsx` and the focused Chat, widget, cinematic, speech, thread, and accessibility suites. These tests verify German controls and announcements while asserting that provider/runtime payloads and fixed quick-action prompts are unchanged.

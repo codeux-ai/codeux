@@ -426,15 +426,15 @@ describe("TopNav guidance and sprint selectors", () => {
       expect(screen.getByRole("status")).toHaveTextContent("Sprint switched to Build shell");
     });
   });
-  it("reuses the Add Project modal from the global project selector", async () => {
+  it("reuses the translated Add Project modal from the global project selector", async () => {
     const user = userEvent.setup();
     renderTopNav({}, "de");
 
     await user.click(screen.getByRole("button", { name: /Projektauswahl, ausgewähltes Projekt: Alpha/i }));
     await user.click(screen.getByRole("button", { name: "Projekt hinzufügen" }));
 
-    expect(await screen.findByRole("dialog", { name: /Add Project/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/Project Name/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Local Project" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: /Projekt hinzufügen/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Projektname/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lokales Projekt" })).toBeInTheDocument();
   });
 });

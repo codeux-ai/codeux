@@ -9,14 +9,12 @@ import {
   codeUxAgentMcpAccessWithoutScheduler,
   isSchedulerOnlyAgentMcpAccess,
 } from "../../lib/agent-mcp-display.js";
-import { useDashboardI18n } from "../../i18n/index.js";
-import { agentsMessages } from "../../i18n/messages/agents.js";
 
-const CATEGORY_META: Record<McpToolCategory, { labelKey: "orchestration" | "agentsMemory" | "platform" | "advanced"; descriptionKey: "orchestrationBody" | "agentsMemoryBody" | "platformBody" | "advancedBody"; icon: typeof Server }> = {
-  orchestration: { labelKey: "orchestration", descriptionKey: "orchestrationBody", icon: Boxes },
-  agents_memory: { labelKey: "agentsMemory", descriptionKey: "agentsMemoryBody", icon: BrainCircuit },
-  platform: { labelKey: "platform", descriptionKey: "platformBody", icon: SlidersHorizontal },
-  advanced: { labelKey: "advanced", descriptionKey: "advancedBody", icon: Wrench },
+const CATEGORY_META: Record<McpToolCategory, { label: string; description: string; icon: typeof Server }> = {
+  orchestration: { label: "Orchestration", description: "Projects, sprints, and tasks", icon: Boxes },
+  agents_memory: { label: "Agents & Memory", description: "Agent presets and project memory", icon: BrainCircuit },
+  platform: { label: "Platform", description: "Settings, previews, and telemetry", icon: SlidersHorizontal },
+  advanced: { label: "Advanced", description: "Deprecated and low-level tools", icon: Wrench },
 };
 
 const CATEGORY_ORDER: McpToolCategory[] = ["orchestration", "agents_memory", "platform", "advanced"];
@@ -36,9 +34,8 @@ export const AgentMcpManagePanel: FunctionComponent<{
   isDashboardReplyAgent?: boolean;
   disabled?: boolean;
 }> = ({ onClose, value, onChange, availableServers, isDashboardReplyAgent = false, disabled }) => {
-  const { formatNumber, translate } = useDashboardI18n();
   const [statusMessage, setStatusMessage] = useState(
-    translate(agentsMessages, "mcpPending")
+    "MCP access changes are pending until the agent is saved."
   );
   const toolEnabledByName = useMemo(() => {
     const map = new Map<string, boolean>();
@@ -55,8 +52,8 @@ export const AgentMcpManagePanel: FunctionComponent<{
     if (disabled) return;
     if (enabled) {
       setStatusMessage(isDashboardReplyAgent
-        ? translate(agentsMessages, "mcpDashboardEnabled")
-        : translate(agentsMessages, "mcpRiskEnabled")
+        ? "Code UX MCP and scheduler enabled for dashboard chat. Save Agent to persist this access change."
+        : "Risk-gated Code UX access enabled with scheduler off. Save Agent only after reviewing this capability."
       );
       onChange(isDashboardReplyAgent
         ? codeUxAgentMcpAccess(value.linkedServerIds)
@@ -64,15 +61,15 @@ export const AgentMcpManagePanel: FunctionComponent<{
       );
       return;
     }
-    setStatusMessage(translate(agentsMessages, "mcpCodeUxDisabled"));
+    setStatusMessage("Code UX tools disabled. Save Agent to persist this access change.");
     onChange({ ...value, codeUxEnabled: false, codeUxToolToggles: [] });
   };
 
   const setTool = (name: string, enabled: boolean): void => {
     if (disabled) return;
     setStatusMessage(!isDashboardReplyAgent && enabled
-      ? translate(agentsMessages, "mcpRiskToolEnabled", { name })
-      : translate(agentsMessages, "mcpToolChanged", { name, state: translate(agentsMessages, enabled ? "stateEnabled" : "stateDisabled") })
+      ? `Risk-gated ${name} access enabled for a non-chat agent. Save Agent only after reviewing this capability.`
+      : `${name} ${enabled ? "enabled" : "disabled"}. Save Agent to persist tool access.`
     );
     onChange({ ...value, codeUxToolToggles: buildToolToggles((candidate) => (candidate === name ? enabled : isToolEnabled(candidate))) });
   };
@@ -81,8 +78,8 @@ export const AgentMcpManagePanel: FunctionComponent<{
     if (disabled) return;
     const names = new Set(TOOL_DEFINITIONS.filter((def) => def.category === category).map((def) => def.name));
     setStatusMessage(!isDashboardReplyAgent && enabled
-      ? translate(agentsMessages, "mcpRiskCategoryEnabled", { category: translate(agentsMessages, CATEGORY_META[category].labelKey) })
-      : translate(agentsMessages, "mcpCategoryChanged", { category: translate(agentsMessages, CATEGORY_META[category].labelKey), state: translate(agentsMessages, enabled ? "stateEnabled" : "stateDisabled") })
+      ? `Risk-gated ${CATEGORY_META[category].label} tools enabled for a non-chat agent. Save Agent only after reviewing these capabilities.`
+      : `${CATEGORY_META[category].label} tools ${enabled ? "enabled" : "disabled"}. Save Agent to persist tool access.`
     );
     onChange({ ...value, codeUxToolToggles: buildToolToggles((candidate) => (names.has(candidate as never) ? enabled : isToolEnabled(candidate))) });
   };
@@ -92,13 +89,10 @@ export const AgentMcpManagePanel: FunctionComponent<{
     if (disabled) return;
     const server = availableServers.find((entry) => entry.id === id);
     if (server?.enabled === false && linked) {
-      setStatusMessage(translate(agentsMessages, "serverOffLink", { name: server.label || server.name }));
+      setStatusMessage(`${server.label || server.name} is off in Settings. Enable it there before linking this agent.`);
       return;
     }
-    setStatusMessage(translate(agentsMessages, "serverLinkChanged", {
-      name: server?.label || server?.name || "Server",
-      state: translate(agentsMessages, linked ? "stateLinked" : "stateUnlinked"),
-    }));
+    setStatusMessage(`${server?.label || server?.name || "Server"} ${linked ? "linked" : "unlinked"}. Save Agent to persist MCP server access.`);
     onChange({
       ...value,
       linkedServerIds: linked
@@ -120,17 +114,17 @@ export const AgentMcpManagePanel: FunctionComponent<{
           </span>
           <div>
             <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">
-              {translate(agentsMessages, "mcpAccess")}
+              MCP Access
             </div>
             <h2 className="font-display text-base font-semibold tracking-tight text-slate-900 dark:text-white">
-              {translate(agentsMessages, "connectedServers")}
+              Connected Servers
             </h2>
           </div>
         </div>
         <button
           type="button"
           onClick={onClose}
-          aria-label={translate(agentsMessages, "close")}
+          aria-label="Close"
           disabled={disabled}
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-black/[0.08] bg-white/60 text-slate-500 transition-colors hover:bg-white hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
         >
@@ -149,7 +143,7 @@ export const AgentMcpManagePanel: FunctionComponent<{
               : "border-black/[0.05] bg-white/35 text-slate-500 dark:border-white/[0.05] dark:bg-white/[0.02] dark:text-slate-400"
           }`}
         >
-          {disabled ? translate(agentsMessages, "mcpLocked") : statusMessage}
+          {disabled ? "MCP controls are disabled while this agent is saving." : statusMessage}
         </div>
         {/* Built-in code_ux */}
         <section className="rounded-2xl border border-black/[0.06] bg-white/40 p-5 backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.02]">
@@ -159,18 +153,16 @@ export const AgentMcpManagePanel: FunctionComponent<{
                 <Server className="h-4.5 w-4.5" strokeWidth={2.2} />
               </span>
               <div>
-                <div className="text-sm font-bold text-slate-800 dark:text-slate-100">{translate(agentsMessages, "codeUxBuiltIn")}</div>
+                <div className="text-sm font-bold text-slate-800 dark:text-slate-100">Code UX (built-in)</div>
                 <p className="text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
-                  {value.codeUxEnabled
-                    ? translate(agentsMessages, "toolsEnabledCount", { enabled: formatNumber(enabledToolCount), total: formatNumber(TOOL_DEFINITIONS.length) })
-                    : translate(agentsMessages, "disabledForAgent")}
+                  {value.codeUxEnabled ? `${enabledToolCount}/${TOOL_DEFINITIONS.length} tools enabled` : "Disabled for this agent"}
                 </p>
               </div>
             </div>
             <Toggle
               value={value.codeUxEnabled}
               onChange={setCodeUxEnabled}
-              aria-label={translate(agentsMessages, "enableCodeUx")}
+              aria-label="Enable Code UX for this agent"
               aria-describedby="agent-codeux-risk-note"
               danger={!isDashboardReplyAgent && !value.codeUxEnabled}
               disabled={disabled}
@@ -193,15 +185,15 @@ export const AgentMcpManagePanel: FunctionComponent<{
             <span>
               {!value.codeUxEnabled
                 ? isDashboardReplyAgent
-                  ? translate(agentsMessages, "codeUxDisabledDashboardNote")
-                  : translate(agentsMessages, "codeUxDisabledRiskNote")
+                  ? "Code UX built-in tools are disabled in this saved preset, but dashboard chat turns receive the Code UX MCP surface plus scheduler at runtime."
+                  : "Code UX built-in tools are disabled by default for this agent. Enabling them is risk-gated because non-chat agents can affect runtime state."
                 : schedulerOnly
                   ? isDashboardReplyAgent
-                    ? translate(agentsMessages, "schedulerOnlyDashboardNote")
-                    : translate(agentsMessages, "schedulerOnlyRiskNote")
+                    ? "This saved preset is scheduler-only, but dashboard chat runtime will still attach the full Code UX MCP surface plus scheduler."
+                    : "Scheduler-only is active for a non-chat agent. Scheduler is off by default for non-dashboard agents; keep this only when the agent must create its own wakeups or task reruns."
                   : isDashboardReplyAgent
-                    ? translate(agentsMessages, "dashboardCodeUxNote")
-                    : translate(agentsMessages, "nonChatCodeUxNote")}
+                    ? "Dashboard chat receives Code UX MCP plus scheduler. Review each category before saving preset changes."
+                    : "This non-chat agent has Code UX tools enabled. Scheduler stays off by default unless explicitly enabled below."}
             </span>
           </div>
 
@@ -219,15 +211,15 @@ export const AgentMcpManagePanel: FunctionComponent<{
                       <div className="flex items-center gap-2.5">
                         <Icon className="h-4 w-4 text-slate-500 dark:text-slate-400" strokeWidth={2.2} />
                         <div>
-                          <div className="text-[12px] font-bold text-slate-700 dark:text-slate-200">{translate(agentsMessages, meta.labelKey)}</div>
-                          <div className="text-[10px] text-slate-400 dark:text-slate-500">{translate(agentsMessages, meta.descriptionKey)}</div>
+                          <div className="text-[12px] font-bold text-slate-700 dark:text-slate-200">{meta.label}</div>
+                          <div className="text-[10px] text-slate-400 dark:text-slate-500">{meta.description}</div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="rounded-full border border-current/20 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
-                          {translate(agentsMessages, allEnabled ? "allEnabled" : "someDisabled")}
+                          {allEnabled ? "All enabled" : "Some disabled"}
                         </span>
-                        <Toggle value={allEnabled} onChange={(enabled) => setCategory(category, enabled)} aria-label={translate(agentsMessages, "enableAllCategoryTools", { category: translate(agentsMessages, meta.labelKey) })} disabled={disabled} />
+                        <Toggle value={allEnabled} onChange={(enabled) => setCategory(category, enabled)} aria-label={`Enable all ${meta.label} tools`} disabled={disabled} />
                       </div>
                     </div>
                     <div className="mt-2.5 flex flex-col gap-1.5 border-t border-black/[0.04] pt-2.5 dark:border-white/[0.04]">
@@ -239,9 +231,9 @@ export const AgentMcpManagePanel: FunctionComponent<{
                           </div>
                           <div className="flex shrink-0 items-center gap-2">
                             <span className="rounded-full border border-current/20 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
-                              {translate(agentsMessages, isToolEnabled(def.name) ? "enabled" : "disabled")}
+                              {isToolEnabled(def.name) ? "Enabled" : "Disabled"}
                             </span>
-                            <Toggle value={isToolEnabled(def.name)} onChange={(enabled) => setTool(def.name, enabled)} aria-label={translate(agentsMessages, "enableTool", { name: def.name })} disabled={disabled} />
+                            <Toggle value={isToolEnabled(def.name)} onChange={(enabled) => setTool(def.name, enabled)} aria-label={`Enable ${def.name}`} disabled={disabled} />
                           </div>
                         </div>
                       ))}
@@ -256,12 +248,12 @@ export const AgentMcpManagePanel: FunctionComponent<{
         {/* Custom servers */}
         <section className="flex flex-col gap-2.5">
           <div className="flex items-center justify-between px-1">
-            <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">{translate(agentsMessages, "customMcpServers")}</h3>
-            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">{translate(agentsMessages, "linkedServerSummary", { linked: formatNumber(linkedServerCount), total: formatNumber(availableServers.length) })}</span>
+            <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">Custom MCP servers</h3>
+            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">{linkedServerCount}/{availableServers.length} linked</span>
           </div>
           {availableServers.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-black/[0.08] bg-white/30 px-5 py-6 text-center text-[12px] leading-relaxed text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.02] dark:text-slate-500">
-              {translate(agentsMessages, "noCustomServers")}
+              No custom MCP servers configured. Add them in Settings → MCP, then link them here.
             </div>
           ) : (
             availableServers.map((server) => (
@@ -281,7 +273,7 @@ export const AgentMcpManagePanel: FunctionComponent<{
                       </span>
                       {server.enabled === false && (
                         <span className="inline-flex h-5 shrink-0 items-center rounded-full border border-amber-400/20 bg-amber-400/[0.08] px-2 text-[8px] font-bold uppercase tracking-[0.14em] text-amber-600 dark:text-amber-400">
-                          {translate(agentsMessages, "offInSettings")}
+                          Off in settings
                         </span>
                       )}
                     </div>
@@ -292,9 +284,9 @@ export const AgentMcpManagePanel: FunctionComponent<{
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <span className="rounded-full border border-current/20 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
-                    {translate(agentsMessages, isLinked(server.id) ? "linked" : server.enabled === false ? "disabled" : "unlinked")}
+                    {isLinked(server.id) ? "Linked" : server.enabled === false ? "Disabled" : "Unlinked"}
                   </span>
-                  <Toggle value={isLinked(server.id)} onChange={(linked) => setLinked(server.id, linked)} aria-label={translate(agentsMessages, "linkServer", { name: server.label || server.name })} disabled={disabled || (server.enabled === false && !isLinked(server.id))} />
+                  <Toggle value={isLinked(server.id)} onChange={(linked) => setLinked(server.id, linked)} aria-label={`Link ${server.label || server.name}`} disabled={disabled || (server.enabled === false && !isLinked(server.id))} />
                 </div>
               </div>
             ))
@@ -311,7 +303,7 @@ export const AgentMcpManagePanel: FunctionComponent<{
           className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] text-white dark:text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:scale-[1.03] hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
-          {translate(agentsMessages, "done")}
+          Done
         </button>
       </div>
     </div>

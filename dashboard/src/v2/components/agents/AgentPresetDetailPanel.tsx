@@ -26,9 +26,6 @@ import { MARKDOWN_PROSE_CLASS } from "../ui/MarkdownEditorField.js";
 import { estimateTokens, formatTokenCount } from "../../lib/token-estimate.js";
 import { renderMarkdown } from "../../../lib/markdown.js";
 import { PersistentSkillStorageChip } from "./PersistentSkillStorageChip.js";
-import { useDashboardI18n } from "../../i18n/index.js";
-import { agentsMessages } from "../../i18n/messages/agents.js";
-import type { DashboardTextMessageKey } from "../../i18n/index.js";
 
 const INSTRUCTION_EXCERPT_CHARS = 320;
 const INSTRUCTION_EXCERPT_LINES = 6;
@@ -42,11 +39,11 @@ export interface AgentUsageSummary {
   totalCostCents: number;
 }
 
-function formatCost(cents: number, locale: "en" | "de"): string {
-  if (cents <= 0) return new Intl.NumberFormat(locale, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(0);
+function formatCost(cents: number): string {
+  if (cents <= 0) return "$0";
   const dollars = cents / 100;
-  if (dollars < 0.01) return `<${new Intl.NumberFormat(locale, { style: "currency", currency: "USD", minimumFractionDigits: 2 }).format(0.01)}`;
-  return new Intl.NumberFormat(locale, {
+  if (dollars < 0.01) return "<$0.01";
+  return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: dollars >= 10 ? 2 : 3,
@@ -54,11 +51,15 @@ function formatCost(cents: number, locale: "en" | "de"): string {
   }).format(dollars);
 }
 
-function formatSuccessRate(summary: AgentUsageSummary | null | undefined, locale: "en" | "de", noRuns: string, running: string): string {
-  if (!summary) return noRuns;
+function formatCount(value: number): string {
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
+}
+
+function formatSuccessRate(summary?: AgentUsageSummary | null): string {
+  if (!summary) return "No runs";
   const finished = summary.completedCount + summary.failedCount;
-  if (finished === 0) return summary.runningCount > 0 ? running : noRuns;
-  return new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 0 }).format(summary.completedCount / finished);
+  if (finished === 0) return summary.runningCount > 0 ? "Running" : "No runs";
+  return `${Math.round((summary.completedCount / finished) * 100)}%`;
 }
 
 function makeExcerpt(raw: string): { excerpt: string; truncated: boolean } {
@@ -95,6 +96,12 @@ const syncStatusDisplay = (preset: AgentPreset) => {
   }
 };
 
+const formatContainerRootMode = (value: boolean | null | undefined): string => {
+  if (value === true) return "Force root";
+  if (value === false) return "Force non-root";
+  return "Inherits setting";
+};
+
 /* ── Quick-fact stat tile ── */
 const StatTile: FunctionComponent<{
   label: string;
@@ -120,7 +127,6 @@ const StatTile: FunctionComponent<{
 
 /* ── Knowledge subscriptions summary (read-only) ── */
 const AgentKnowledgeSummary: FunctionComponent<{ preset: AgentPreset }> = ({ preset }) => {
-  const { formatNumber, translate } = useDashboardI18n();
   const [docs, setDocs] = useState<KnowledgeDocument[] | null>(null);
 
   useEffect(() => {
@@ -141,7 +147,7 @@ const AgentKnowledgeSummary: FunctionComponent<{ preset: AgentPreset }> = ({ pre
 
   return (
     <div className="flex flex-col gap-3">
-      <SectionHeader icon={Library} title={translate(agentsMessages, "knowledgeBaseCount", { count: formatNumber(docs.length) })} />
+      <SectionHeader icon={Library} title={`Knowledge Base · ${docs.length}`} />
       <div className="flex flex-wrap items-center gap-2">
         {docs.map((doc) => (
           <span
@@ -214,7 +220,6 @@ export const AgentPresetDetailPanel: FunctionComponent<{
   pushingToFile,
   canPushToFile,
 }) => {
-  const { formatNumber, locale, translate, translatePlural } = useDashboardI18n();
   const panelRef = useRef<HTMLDivElement>(null);
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
   const [activeExpression, setActiveExpression] = useState<AgentAvatarExpression>("happy");
@@ -223,18 +228,9 @@ export const AgentPresetDetailPanel: FunctionComponent<{
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const accentHex = getAccentHex(preset.avatarConfig?.accent);
   const sync = syncStatusDisplay(preset);
-  const localizedSyncLabel = translate(agentsMessages, {
-    "Out of Sync": "outOfSync",
-    "Source Missing": "sourceMissing",
-    Project: "project",
-    Default: "default",
-    Home: "home",
-    "Database Only": "databaseOnly",
-  }[sync.label] as "outOfSync" | "sourceMissing" | "project" | "default" | "home" | "databaseOnly");
   const selectedProvider = providerOptions.find((option) => option.value === preset.providerConfigId) || null;
   const mcpTags = resolveAgentMcpTags(preset.mcpAccess, availableMcpServers, {
     effectiveCodeUxEnabled: isDashboardReplyAgent,
-    locale,
   });
   const visibleMcpTags = mcpTags.slice(0, 6);
   const hiddenMcpTagCount = mcpTags.length - visibleMcpTags.length;
@@ -242,19 +238,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
     .map((storageId) => availableSkillStorages.find((storage) => storage.id === storageId) ?? null)
     .filter((storage): storage is SkillStorageRecord => Boolean(storage));
   const persistentSkillsActive = Boolean(preset.persistentSkillStorage?.enabled && attachedSkillStorages.length > 0);
-  const containerRootModeLabel = translate(agentsMessages, preset.containerRunAsRoot === true
-    ? "forceRoot"
-    : preset.containerRunAsRoot === false ? "forceNonRoot" : "inheritsSetting");
-  const routeTagLabel = (tag: string): string => {
-    const keys: Record<string, DashboardTextMessageKey<typeof agentsMessages>> = {
-      Planning: "routePlanning", "Coding Roster": "routeCodingRoster", Coding: "routeCoding",
-      "CI Fix": "routeCiFix", "Merge Conflict": "routeMergeConflict", "Dashboard Reply": "routeDashboardReply",
-      "Clarification Reply": "routeClarificationReply", "QA Task": "routeQaTask", "QA Sprint": "routeQaSprint",
-      "QA No PR": "routeQaNoPr",
-    };
-    const key = keys[tag];
-    return key ? translate(agentsMessages, key) : tag;
-  };
+  const containerRootModeLabel = formatContainerRootMode(preset.containerRunAsRoot);
 
   useLayoutEffect(() => {
     if (!panelRef.current) return;
@@ -313,7 +297,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-signal-500/60" />
                     <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-signal-500" />
                   </span>
-                  {translate(agentsMessages, "agentProfile")}
+                  Agent Profile
                 </span>
                 <h2 className="font-display text-2xl font-semibold tracking-tight text-slate-900 md:text-3xl dark:text-white">
                   {preset.name}
@@ -330,7 +314,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
                 className="inline-flex shrink-0 items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-signal-500/15 transition-all hover:scale-[1.03] hover:bg-signal-400 hover:shadow-signal-500/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-void-900"
               >
                 <Edit2 className="h-4 w-4" strokeWidth={2.5} />
-                {translate(agentsMessages, "edit")}
+                Edit
               </button>
             </div>
 
@@ -342,70 +326,66 @@ export const AgentPresetDetailPanel: FunctionComponent<{
                   className="inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em]"
                   style={{ backgroundColor: `${accentHex}10`, color: accentHex }}
                 >
-                  {routeTagLabel(tag)}
+                  {tag}
                 </span>
               ))}
               {routeTags.length === 0 && (
                 <span className="inline-flex items-center rounded-full border border-black/[0.06] bg-white/50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-500">
-                  {translate(agentsMessages, "noAssignedRoutes")}
+                  No assigned routes
                 </span>
               )}
               <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${sync.cls}`}>
                 {preset.syncStatus === "out_of_sync" && <AlertTriangle className="h-3 w-3" strokeWidth={2.2} />}
-                {localizedSyncLabel}
+                {sync.label}
               </span>
             </div>
 
             {/* Quick facts */}
             <div className="mt-auto grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <StatTile
-                label={translate(agentsMessages, "provider")}
-                value={selectedProvider?.label || translate(agentsMessages, "routeDefault")}
+                label="Provider"
+                value={selectedProvider?.label || "Route default"}
                 rawIcon={!!selectedProvider}
                 iconNode={selectedProvider
                   ? <ProviderBrandIcon id={selectedProvider.provider} disabled={!selectedProvider.enabled} className="h-10 w-10 rounded-xl" imageClassName="h-5 w-5" />
                   : <Route className="h-4 w-4" strokeWidth={2.2} />}
               />
               <StatTile
-                label={translate(agentsMessages, "model")}
-                value={preset.model || translate(agentsMessages, "providerDefault")}
+                label="Model"
+                value={preset.model || "Provider default"}
                 iconNode={<Cpu className="h-4 w-4" strokeWidth={2.2} />}
               />
               <StatTile
-                label={translate(agentsMessages, "connectedMcps")}
-                value={mcpTags.length === 0
-                  ? translate(agentsMessages, "none")
-                  : translatePlural(agentsMessages, "serverCount", mcpTags.length, { count: formatNumber(mcpTags.length) })}
+                label="Connected MCPs"
+                value={mcpTags.length === 0 ? "None" : `${mcpTags.length} server${mcpTags.length !== 1 ? "s" : ""}`}
                 iconNode={<Server className="h-4 w-4" strokeWidth={2.2} />}
                 accent={mcpTags.length > 0}
               />
               <StatTile
-                label={translate(agentsMessages, "dockerRoot")}
+                label="Docker Root"
                 value={containerRootModeLabel}
                 iconNode={<ShieldCheck className="h-4 w-4" strokeWidth={2.2} />}
                 accent={preset.containerRunAsRoot === true}
               />
               <StatTile
-                label={translate(agentsMessages, "systemPrompt")}
-                value={preset.instructionMarkdown
-                  ? `~${formatTokenCount(instructionTokens, locale)} ${translate(agentsMessages, "tokens")}`
-                  : translate(agentsMessages, "empty")}
+                label="System Prompt"
+                value={preset.instructionMarkdown ? `~${formatTokenCount(instructionTokens)} tok` : "Empty"}
                 iconNode={<FileText className="h-4 w-4" strokeWidth={2.2} />}
               />
               <StatTile
-                label={translate(agentsMessages, "totalUsage")}
-                value={usageLoading ? translate(agentsMessages, "loading") : formatCost(usageSummary?.totalCostCents ?? 0, locale)}
+                label="Total Usage"
+                value={usageLoading ? "Loading" : formatCost(usageSummary?.totalCostCents ?? 0)}
                 iconNode={<DollarSign className="h-4 w-4" strokeWidth={2.2} />}
                 accent={(usageSummary?.totalCostCents ?? 0) > 0}
               />
               <StatTile
-                label={translate(agentsMessages, "tokens")}
-                value={usageLoading ? translate(agentsMessages, "loading") : formatTokenCount(usageSummary?.totalTokens ?? 0, locale)}
+                label="Tokens"
+                value={usageLoading ? "Loading" : formatTokenCount(usageSummary?.totalTokens ?? 0)}
                 iconNode={<BarChart3 className="h-4 w-4" strokeWidth={2.2} />}
               />
               <StatTile
-                label={translate(agentsMessages, "runs")}
-                value={usageLoading ? translate(agentsMessages, "loading") : `${formatNumber(usageSummary?.invocationCount ?? 0)} · ${formatSuccessRate(usageSummary, locale, translate(agentsMessages, "noRuns"), translate(agentsMessages, "running"))}`}
+                label="Runs"
+                value={usageLoading ? "Loading" : `${formatCount(usageSummary?.invocationCount ?? 0)} · ${formatSuccessRate(usageSummary)}`}
                 iconNode={<CheckCircle2 className="h-4 w-4" strokeWidth={2.2} />}
                 accent={(usageSummary?.completedCount ?? 0) > 0}
               />
@@ -417,7 +397,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
 
         {/* Connected MCPs */}
         <div className="flex flex-col gap-3">
-          <SectionHeader icon={Server} title={translate(agentsMessages, "connectedMcps")} />
+          <SectionHeader icon={Server} title="Connected MCPs" />
           <div className="flex flex-wrap items-center gap-2">
             {visibleMcpTags.map((tag) => (
               <span
@@ -435,11 +415,11 @@ export const AgentPresetDetailPanel: FunctionComponent<{
               </span>
             ))}
             {hiddenMcpTagCount > 0 && (
-              <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">+{formatNumber(hiddenMcpTagCount)}</span>
+              <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">+{hiddenMcpTagCount}</span>
             )}
             {mcpTags.length === 0 && (
               <span className="inline-flex items-center rounded-full border border-black/[0.06] bg-white/50 px-2.5 py-1 text-[11px] font-bold text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-500">
-                {translate(agentsMessages, "noMcpServers")}
+                No MCP servers
               </span>
             )}
           </div>
@@ -450,20 +430,20 @@ export const AgentPresetDetailPanel: FunctionComponent<{
 
         {/* Persistent skills */}
         <div className="flex flex-col gap-3">
-          <SectionHeader icon={Library} title={translate(agentsMessages, "persistentSkills")} />
+          <SectionHeader icon={Library} title="Persistent Skills" />
           <div className="rounded-2xl border border-black/[0.05] bg-white/40 p-4 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                {translate(agentsMessages, "persistentSkillsSeparation")}
+                Persistent skill retrieval is separate from memory and knowledge documents.
               </div>
               <span className={`w-fit rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${persistentSkillsActive ? "border-signal-500/25 bg-signal-500/[0.08] text-signal-700 dark:text-signal-200" : "border-black/[0.06] bg-black/[0.03] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"}`}>
-                {translate(agentsMessages, persistentSkillsActive ? "enabled" : "defaultOff")}
+                {persistentSkillsActive ? "Enabled" : "Default off"}
               </span>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               {attachedSkillStorages.length === 0 ? (
                 <span className="inline-flex rounded-full border border-black/[0.06] bg-white/50 px-2.5 py-1 text-[11px] font-bold text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-500">
-                  {translate(agentsMessages, "noStorageAttached")}
+                  No storage attached
                 </span>
               ) : attachedSkillStorages.map((storage) => (
                 <PersistentSkillStorageChip key={storage.id} storage={storage} />
@@ -476,10 +456,10 @@ export const AgentPresetDetailPanel: FunctionComponent<{
         <div className="flex flex-col gap-2">
           <SectionHeader
             icon={FileText}
-            title={translate(agentsMessages, "systemInstructions")}
+            title="System Instructions"
             action={preset.instructionMarkdown ? (
               <span className="inline-flex items-center gap-1 rounded-md border border-black/[0.06] bg-white/60 px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400">
-                ~{formatTokenCount(instructionTokens, locale)} {translate(agentsMessages, "tokens")}
+                ~{formatTokenCount(instructionTokens)} tok
               </span>
             ) : undefined}
           />
@@ -499,12 +479,12 @@ export const AgentPresetDetailPanel: FunctionComponent<{
                   {instructionExpanded ? (
                     <>
                       <ChevronUp className="h-3 w-3" strokeWidth={2.5} />
-                      {translate(agentsMessages, "showLess")}
+                      Show less
                     </>
                   ) : (
                     <>
                       <ChevronDown className="h-3 w-3" strokeWidth={2.5} />
-                      {translate(agentsMessages, "showFullCharacters", { count: formatNumber(preset.instructionMarkdown.length) })}
+                      Show full ({preset.instructionMarkdown.length.toLocaleString()} chars)
                     </>
                   )}
                 </button>
@@ -512,7 +492,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
             </div>
           ) : (
             <div className="rounded-2xl border border-black/[0.05] bg-white/40 p-5 text-sm italic leading-relaxed text-slate-400 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02] dark:text-slate-500">
-              {translate(agentsMessages, "noInstructions")}
+              No instructions provided.
             </div>
           )}
         </div>
@@ -522,11 +502,11 @@ export const AgentPresetDetailPanel: FunctionComponent<{
           <div className="flex flex-col gap-2">
             <SectionHeader
               icon={BrainCircuit}
-              title={translate(agentsMessages, "memoryTemplateOverride")}
+              title="Memory Template Override"
               tone="violet"
               action={(
                 <span className="inline-flex items-center gap-1 rounded-md border border-violet-500/20 bg-violet-500/[0.06] px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-violet-600 dark:text-violet-400">
-                  ~{formatTokenCount(memoryTokens, locale)} {translate(agentsMessages, "tokens")}
+                  ~{formatTokenCount(memoryTokens)} tok
                 </span>
               )}
             />
@@ -544,12 +524,12 @@ export const AgentPresetDetailPanel: FunctionComponent<{
                 {memoryExpanded ? (
                   <>
                     <ChevronUp className="h-3 w-3" strokeWidth={2.5} />
-                    {translate(agentsMessages, "showLess")}
+                    Show less
                   </>
                 ) : (
                   <>
                     <ChevronDown className="h-3 w-3" strokeWidth={2.5} />
-                    {translate(agentsMessages, "showFullCharacters", { count: formatNumber(preset.memoryTemplateMarkdown.length) })}
+                    Show full ({preset.memoryTemplateMarkdown.length.toLocaleString()} chars)
                   </>
                 )}
               </button>
@@ -564,7 +544,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
               <FolderGit2 className="h-4 w-4" strokeWidth={2.2} />
             </span>
             <div className="min-w-0">
-              <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">{translate(agentsMessages, "markdownSource")}</span>
+              <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Markdown Source</span>
               <div className="break-all font-mono text-[11px] text-slate-500 dark:text-slate-400">{preset.sourcePath}</div>
             </div>
           </div>
@@ -580,7 +560,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
               className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/8 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 transition-colors hover:bg-signal-500/15 disabled:cursor-not-allowed disabled:opacity-50 dark:text-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
             >
               {importing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.2} /> : <FileDown className="h-3.5 w-3.5" strokeWidth={2.2} />}
-              {translate(agentsMessages, "import")}
+              Import
             </button>
           )}
           <button
@@ -590,7 +570,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
             className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/8 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 transition-colors hover:bg-signal-500/15 disabled:cursor-not-allowed disabled:opacity-50 dark:text-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
           >
             {pushingToFile ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.2} /> : <FileUp className="h-3.5 w-3.5" strokeWidth={2.2} />}
-            {translate(agentsMessages, "pushToFile")}
+            Push to file
           </button>
           <button
             ref={deleteButtonRef}
@@ -600,7 +580,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
             className="inline-flex items-center gap-2 rounded-full border border-status-red/20 bg-status-red/8 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-status-red transition-colors hover:border-status-red/30 hover:bg-status-red/20 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30"
           >
             {deleting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.2} /> : <Trash2 className="h-3.5 w-3.5" strokeWidth={2.2} />}
-            {translate(agentsMessages, "delete")}
+            Delete
           </button>
           <span className="ml-auto font-mono text-[10px] text-slate-400 dark:text-slate-600">
             {preset.id}
@@ -611,10 +591,10 @@ export const AgentPresetDetailPanel: FunctionComponent<{
     <ConfirmDialog
       isOpen={deleteConfirmOpen}
       options={{
-        title: translate(agentsMessages, "deletePresetTitle"),
-        body: translate(agentsMessages, "deletePresetBody"),
-        confirmLabel: translate(agentsMessages, "deletePreset"),
-        cancelLabel: translate(agentsMessages, "keepPreset"),
+        title: "Delete this agent preset?",
+        body: "This removes the preset from the dashboard and cannot be undone from this screen. Export or sync first if you need a recoverable copy.",
+        confirmLabel: "Delete preset",
+        cancelLabel: "Keep preset",
         destructive: true,
       }}
       onConfirm={() => {

@@ -1,21 +1,29 @@
 /** @vitest-environment happy-dom */
 /** @jsx h */
-import { h } from "preact";
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { h, type ComponentChildren } from "preact";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { cleanup, fireEvent, render as testingRender, screen, waitFor, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import userEvent from "@testing-library/user-event";
 import { ProjectsPage } from "../../../dashboard/src/v2/ProjectsPage.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
 import { useToast } from "../../../dashboard/src/v2/components/feedback/ToastProvider.js";
 import { startProjectSetup } from "../../../dashboard/src/v2/lib/project-api.js";
+import { fetchProjectInvocations } from "../../../dashboard/src/v2/lib/invocation-api.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+import type { DashboardLocale } from "../../../dashboard/src/v2/i18n/locales.js";
 
 expect.extend(matchers);
+
+const render = (children: ComponentChildren, locale: DashboardLocale = "en") => testingRender(
+  <DashboardI18nProvider initialLocale={locale} storage={null}>{children}</DashboardI18nProvider>,
+);
 
 const navigateMock = vi.fn();
 const selectProjectMock = vi.fn(() => Promise.resolve());
 const deleteProjectMock = vi.fn(() => Promise.resolve());
 const createProjectMock = vi.fn(() => Promise.resolve({}));
+const addToastMock = vi.fn();
 
 vi.mock("gsap", () => ({
   default: {
@@ -138,6 +146,10 @@ const createProject = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("ProjectsPage", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     cleanup();
     window.history.replaceState({}, "", "/projects");
@@ -149,7 +161,7 @@ describe("ProjectsPage", () => {
       invocationId: "invocation-1",
       agentId: "agent-1",
     });
-    vi.mocked(useToast).mockReturnValue({ addToast: vi.fn() } as any);
+    vi.mocked(useToast).mockReturnValue({ addToast: addToastMock } as any);
     vi.mocked(useProjectData).mockReturnValue({
       projects: [createProject()],
       selectedProjectId: "project-1",
@@ -244,7 +256,10 @@ describe("ProjectsPage", () => {
     expect(navigateMock).toHaveBeenCalledWith({ to: "/config" });
 
     fireEvent.click(screen.getByRole("button", { name: "Delete project" }));
-    expect(deleteProjectMock).toHaveBeenCalledOnce();
+    const deleteDialog = screen.getByRole("dialog", { name: "Delete Widget Service?" });
+    expect(deleteProjectMock).not.toHaveBeenCalled();
+    fireEvent.click(within(deleteDialog).getByRole("button", { name: "Delete project" }));
+    await waitFor(() => expect(deleteProjectMock).toHaveBeenCalledOnce());
     expect(selectProjectMock).toHaveBeenCalledTimes(2);
   });
 
@@ -545,5 +560,80 @@ describe("ProjectsPage", () => {
         docs: true,
       }),
     }));
+  });
+
+  it("keeps German project selection and deletion confirmation operable", async () => {
+    render(<ProjectsPage />, "de");
+
+    expect(screen.getByRole("heading", { name: "Projekte verwalten" })).toBeInTheDocument();
+    expect(screen.getByText("https://github.com/acme/widget-service.git")).toBeInTheDocument();
+    expect(screen.getByText("4. Jan. 2026, 5:06")).toBeInTheDocument();
+    expect(screen.getByText("completed")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ausgewähltes Projekt: Widget Service" }));
+    expect(selectProjectMock).toHaveBeenCalledWith("project-1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Projekt löschen" }));
+    const dialog = screen.getByRole("dialog", { name: "Widget Service löschen?" });
+    expect(deleteProjectMock).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Abbrechen" }));
+    expect(screen.queryByRole("dialog", { name: "Widget Service löschen?" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Projekt löschen" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Widget Service löschen?" })).getByRole("button", { name: "Projekt löschen" }));
+    await waitFor(() => expect(deleteProjectMock).toHaveBeenCalledWith("project-1"));
+  });
+
+  it("renders the German Projects header count for a small collection", () => {
+    const projects = Array.from({ length: 2 }, (_, index) => createProject({
+      id: `project-${index}`,
+      name: `Project ${index}`,
+    }));
+    vi.mocked(useProjectData).mockReturnValue({
+      projects,
+      selectedProjectId: "project-0",
+      loading: false,
+      error: null,
+      refreshProjects: vi.fn(),
+      selectProject: selectProjectMock,
+      createProject: createProjectMock,
+      updateProject: vi.fn(),
+      deleteProject: deleteProjectMock,
+      selectedProject: projects[0],
+    } as any);
+
+    render(<ProjectsPage />, "de");
+
+    expect(screen.getByText("2 insgesamt")).toBeInTheDocument();
+  });
+
+  it("localizes setup progress and preserves a provider failure verbatim", async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetchProjectInvocations).mockResolvedValue([{
+      id: "invocation-1",
+      status: "failed",
+      lastErrorMessage: "provider diagnostic 42",
+    } as any]);
+    render(<ProjectsPage />, "de");
+
+    fireEvent.click(screen.getByRole("button", { name: "Projekt einrichten" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Widget Service einrichten" })).getByRole("button", { name: "Projekt einrichten" }));
+    await vi.runAllTimersAsync();
+
+    expect(startProjectSetup).toHaveBeenCalledWith("project-1", {
+      enabled: true,
+      options: expect.objectContaining({ techstack: true, docs: false }),
+    });
+    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining("wird gestartet"),
+    }));
+    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining("Aufruf invocati"),
+    }));
+    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({
+      type: "error",
+      message: expect.stringContaining("provider diagnostic 42"),
+    }));
+    vi.useRealTimers();
   });
 });

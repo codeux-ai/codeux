@@ -1,11 +1,9 @@
 /** @vitest-environment jsdom */
 import { h } from "preact";
-import { cleanup, fireEvent, screen } from "@testing-library/preact";
-import userEvent from "@testing-library/user-event";
+import { cleanup, render, fireEvent, screen } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { AgentAvatarCustomizer } from "../AgentAvatarCustomizer.js";
-import { renderWithI18n, renderWithI18n as render } from "./render-with-i18n.js";
 import type { AgentAvatarConfig } from "../../../types.js";
 
 const config: AgentAvatarConfig = {
@@ -44,16 +42,5 @@ describe("AgentAvatarCustomizer", () => {
 
     expect(screen.getByText("Avatar randomized. Save Agent to keep it.")).toBeInTheDocument();
     expect(onChange).toHaveBeenCalledTimes(1);
-  });
-
-  test("supports German keyboard controls without changing avatar configuration values", async () => {
-    const onChange = vi.fn();
-    renderWithI18n(<AgentAvatarCustomizer config={config} onChange={onChange} />, "de");
-
-    expect(screen.getByText("Gehäuse")).toBeInTheDocument();
-    const option = screen.getByRole("button", { name: /Klassisch/ });
-    option.focus();
-    await userEvent.keyboard("{Enter}");
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ chassis: "classic" }));
   });
 });

@@ -1,23 +1,13 @@
 /** @vitest-environment jsdom */
 /// <reference types="@testing-library/jest-dom" />
 import { h } from "preact";
-import { cleanup, fireEvent, render as baseRender, screen, waitFor } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SkillStorageContentsResponse } from "../../../src/contracts/skill-types.js";
 import type { SkillStorageRecord } from "../../../dashboard/src/v2/types.js";
 import { fetchSkillStorageContents } from "../../../dashboard/src/v2/lib/agent-preset-api.js";
 import { PersistentSkillStorageChip } from "../../../dashboard/src/v2/components/agents/PersistentSkillStorageChip.js";
-import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
-
-const render: typeof baseRender = (ui, options) => baseRender(ui, {
-  ...options,
-  wrapper: ({ children }) => (
-    <DashboardI18nProvider initialLocale="en" storage={null}>
-      {children}
-    </DashboardI18nProvider>
-  ),
-});
 
 expect.extend(matchers);
 
@@ -89,7 +79,7 @@ describe("PersistentSkillStorageChip", () => {
     expect(fetchSkillStorageContents).toHaveBeenCalledWith("project-test", "storage-shared");
     expect(screen.getByText("6+ skills")).toBeInTheDocument();
     expect(screen.getByText("Preview truncated")).toBeInTheDocument();
-    expect(screen.getByText("+1 tag")).toBeInTheDocument();
+    expect(screen.getByText("+1 tags")).toBeInTheDocument();
     expect(screen.getByText("2 more loaded skills hidden from this preview.")).toBeInTheDocument();
     expect(screen.getByText("More skills are available beyond this bounded response.")).toBeInTheDocument();
     expect(screen.queryByText("Skill 5")).not.toBeInTheDocument();
