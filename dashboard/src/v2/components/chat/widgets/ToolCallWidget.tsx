@@ -22,6 +22,8 @@ import {
   classifyToolHumorCategory,
   selectAgentHumorMessage,
 } from "../../../lib/agent-humor-messages.js";
+import { useDashboardI18n } from "../../../i18n/context.js";
+import { chatMessages } from "../../../i18n/messages/chat.js";
 
 export interface ToolCallWidgetProps {
   toolName?: string | null;
@@ -98,24 +100,25 @@ const truncateOutput = (output: string): { text: string; truncated: boolean } =>
 };
 
 const StatusBadge: FunctionComponent<{ status?: string | null }> = ({ status }) => {
+  const { translate } = useDashboardI18n();
   const normalized = (status || "").toLowerCase();
   if (normalized === "failed" || normalized === "error") {
     return (
       <span class="inline-flex items-center gap-1 rounded-full bg-status-red/10 px-2 py-0.5 text-[10px] font-medium text-status-red">
-        <AlertCircle size={11} /> failed
+        <AlertCircle size={11} /> {status}
       </span>
     );
   }
   if (normalized === "running" || normalized === "in_progress" || normalized === "pending") {
     return (
       <span class="inline-flex items-center gap-1 rounded-full bg-signal-500/10 px-2 py-0.5 text-[10px] font-medium text-signal-500">
-        <Loader2 size={11} class="motion-safe:animate-spin" /> running
+        <Loader2 size={11} class="motion-safe:animate-spin" /> {status}
       </span>
     );
   }
   return (
     <span class="inline-flex items-center gap-1 rounded-full bg-status-green/10 px-2 py-0.5 text-[10px] font-medium text-status-green">
-      <CheckCircle2 size={11} /> done
+      <CheckCircle2 size={11} /> {translate(chatMessages, "done")}
     </span>
   );
 };
@@ -128,6 +131,7 @@ export const ToolCallWidget: FunctionComponent<ToolCallWidgetProps> = ({
   tokens,
   callId,
 }) => {
+  const { locale, translate } = useDashboardI18n();
   const [expanded, setExpanded] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
@@ -153,6 +157,7 @@ export const ToolCallWidget: FunctionComponent<ToolCallWidgetProps> = ({
     category: humorCategory,
     seed: `${name}|${callId ?? ""}|${status ?? ""}`,
     nowMs: HUMOR_MESSAGE_NOW_MS,
+    locale,
   });
   const summary = summarize(name, args);
   const totalTokens = tokens?.total ?? ((tokens?.input ?? 0) + (tokens?.output ?? 0));
@@ -185,7 +190,7 @@ export const ToolCallWidget: FunctionComponent<ToolCallWidgetProps> = ({
         </span>
         {totalTokens > 0 && (
           <span class="inline-flex shrink-0 items-center gap-1 rounded-full bg-black/[0.04] px-2 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-white/[0.05] dark:text-slate-400">
-            <Hash size={10} /> {formatTokenCount(totalTokens)}
+            <Hash size={10} /> {formatTokenCount(totalTokens, locale)}
           </span>
         )}
         {callId && (
@@ -206,7 +211,7 @@ export const ToolCallWidget: FunctionComponent<ToolCallWidgetProps> = ({
         <div class="space-y-3 border-t border-black/[0.04] px-3 py-3 dark:border-white/[0.04]">
           {args && args.trim() && (
             <div>
-              <div class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Input</div>
+              <div class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{translate(chatMessages, "input")}</div>
               <pre class="max-h-72 overflow-auto rounded-lg bg-black/[0.04] p-2.5 font-mono text-[11px] leading-relaxed text-slate-600 dark:bg-black/30 dark:text-slate-300">
                 {args}
               </pre>
@@ -214,7 +219,7 @@ export const ToolCallWidget: FunctionComponent<ToolCallWidgetProps> = ({
           )}
           {output && output.trim() && (
             <div>
-              <div class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Output</div>
+              <div class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{translate(chatMessages, "output")}</div>
               <pre class="max-h-80 overflow-auto rounded-lg bg-black/[0.04] p-2.5 font-mono text-[11px] leading-relaxed text-slate-600 dark:bg-black/30 dark:text-slate-300">
                 {isEdit
                   ? clippedOutput.split("\n").map((line, idx) => (
@@ -232,7 +237,7 @@ export const ToolCallWidget: FunctionComponent<ToolCallWidgetProps> = ({
                       </div>
                     ))
                   : clippedOutput}
-                {truncated && <div class="mt-1 text-slate-400">… output truncated</div>}
+                {truncated && <div class="mt-1 text-slate-400">… {translate(chatMessages, "outputTruncated")}</div>}
               </pre>
             </div>
           )}

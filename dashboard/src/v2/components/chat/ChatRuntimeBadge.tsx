@@ -1,4 +1,6 @@
 import { type FunctionComponent } from "preact";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { chatMessages } from "../../i18n/messages/chat.js";
 
 export type ExecutionStatus = "queued" | "running" | "completed" | "failed";
 
@@ -8,6 +10,7 @@ export interface ChatRuntimeBadgeProps {
 }
 
 export const ChatRuntimeBadge: FunctionComponent<ChatRuntimeBadgeProps> = ({ status, label }) => {
+  const { translate } = useDashboardI18n();
   const getStatusColor = () => {
     switch (status) {
       case "queued":
@@ -24,7 +27,8 @@ export const ChatRuntimeBadge: FunctionComponent<ChatRuntimeBadgeProps> = ({ sta
   };
 
   const getAriaLabel = () => {
-    return label ? `${label}: ${status}` : status;
+    const statusLabel = translate(chatMessages, status);
+    return label ? `${label}: ${statusLabel}` : statusLabel;
   };
 
   return (

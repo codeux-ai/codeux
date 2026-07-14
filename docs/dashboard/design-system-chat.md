@@ -3,6 +3,12 @@
 ## Overview
 The chat and invocation design system for the Code UX dashboard defines the layout, visual hierarchy, and interaction patterns for conversational components. It aims to create a highly readable, coherent, and professional interface for users to interact with AI agents and inspect runtime transcripts.
 
+## Localization boundary
+
+All dashboard-authored Chat controls and presentation copy are available in English and German through the feature-owned Chat catalog. This includes thread and invocation chrome, composers, quick actions, widgets, cinematic cues, speech controls, confirmation and retry feedback, humor, and accessible names/live announcements. Counts, times, retry timestamps, durations, percentages, and token estimates use the active locale's native `Intl` formatting.
+
+Conversation and execution evidence is never translated: user and assistant messages, reasoning, prompts, quick-action request payloads, tool names/arguments/output, invocation logs, scheduled instructions, provider errors, runtime status values, entity names, and speech transcripts render verbatim. Components localize only the frame and labels around those values. Deterministic humor retains its existing seed, deck exhaustion, and cadence behavior when the locale changes.
+
 ## Layout and Hierarchy
 - **Page Shell**: The `ChatPageShell` acts as the root container, orchestrating the global layout. On large screens (`lg`), it uses a CSS Grid structure with a fixed-width side rail (`360px`) and a fluid main conversation area. This prevents content shifting and maintains a stable rhythm. The shell, split pane, rail, and detail panel are height-bounded with internal scrolling so switching through invocation transcripts cannot grow the `/chat` page or create blank page-level overflow. Container panels use standard `rounded-3xl` for high-level structure and `rounded-2xl` for internal boundaries like the composer.
 - **Side Rail (`ChatRail`)**: Houses lists of active threads or invocations, allowing quick navigation between contexts. Its width is consistent across views, and long lists scroll inside the rail rather than the browser/page viewport.

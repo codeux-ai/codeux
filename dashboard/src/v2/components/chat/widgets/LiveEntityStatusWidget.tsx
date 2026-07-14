@@ -7,6 +7,8 @@ import { getStatusConfig } from "../../../lib/status-labels.js";
 import type { ChatLiveEntityWidget, ChatLiveSprintWidget, ChatLiveTaskWidget } from "../../../lib/chat-live-entities.js";
 import type { SprintStatus, TaskStatus } from "../../../types.js";
 import { clampSprintCompletion, formatSprintCompletion } from "../../../lib/sprint-progress-display.js";
+import { useDashboardI18n } from "../../../i18n/context.js";
+import { chatMessages } from "../../../i18n/messages/chat.js";
 
 export interface LiveEntityStatusWidgetProps {
   entities: readonly ChatLiveEntityWidget[];
@@ -15,13 +17,21 @@ export interface LiveEntityStatusWidgetProps {
 const TASK_STATUSES: readonly TaskStatus[] = ["pending", "in_progress", "coding_completed", "completed", "QA_REVIEW_FAILED"];
 const SPRINT_STATUSES: readonly SprintStatus[] = ["running", "paused", "completed", "failed", "cancelled", "idle"];
 
-const sprintStatusLabels: Record<SprintStatus, string> = {
-  running: "Running",
-  paused: "Paused",
-  completed: "Completed",
-  failed: "Failed",
-  cancelled: "Cancelled",
-  idle: "Idle",
+const sprintStatusKeys = {
+  running: "running",
+  paused: "paused",
+  completed: "completed",
+  failed: "failed",
+  cancelled: "cancelled",
+  idle: "idle",
+} as const;
+
+const taskStatusKeys: Record<TaskStatus, "queued" | "inProgress" | "codingCompleted" | "completed" | "qaFailed"> = {
+  pending: "queued",
+  in_progress: "inProgress",
+  coding_completed: "codingCompleted",
+  completed: "completed",
+  QA_REVIEW_FAILED: "qaFailed",
 };
 
 const taskStatusSet = new Set<string>(TASK_STATUSES);
@@ -39,12 +49,6 @@ const formatUnknownStatus = (status: string): string => {
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 };
-
-const getTaskStatusLabel = (status: string): string => getStatusConfig(status).label;
-
-const getSprintStatusLabel = (status: string): string => (
-  isSprintStatus(status) ? sprintStatusLabels[status] : formatUnknownStatus(status)
-);
 
 const getDotStatus = (entity: ChatLiveEntityWidget): TaskStatus | SprintStatus => {
   if (entity.kind === "task" && isTaskStatus(entity.status)) {
@@ -76,8 +80,6 @@ const getSprintHref = (entity: ChatLiveSprintWidget): string => {
   return entity.href;
 };
 
-const formatTaskCount = (count: number): string => `${count} task${count === 1 ? "" : "s"}`;
-
 const EntityMetaChip: FunctionComponent<{ label: string; value: string }> = ({ label, value }) => (
   <span className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-md border border-black/[0.06] bg-white/70 px-2 py-1 text-[11px] font-medium text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300">
     <span className="shrink-0 text-slate-400">{label}</span>
@@ -86,11 +88,14 @@ const EntityMetaChip: FunctionComponent<{ label: string; value: string }> = ({ l
 );
 
 const SprintEntityCard: FunctionComponent<{ entity: ChatLiveSprintWidget }> = ({ entity }) => {
+  const { formatNumber, translate, translatePlural } = useDashboardI18n();
   const completion = clampSprintCompletion(entity.completion);
   const completionLabel = formatSprintCompletion(completion);
-  const statusLabel = getSprintStatusLabel(entity.status);
-  const taskCountLabel = formatTaskCount(entity.tasksCount);
-  const ariaLabel = `Open sprint ${entity.displayKey}: ${entity.name}. Live status: ${statusLabel}.`;
+  const statusLabel = isSprintStatus(entity.status)
+    ? translate(chatMessages, sprintStatusKeys[entity.status])
+    : formatUnknownStatus(entity.status);
+  const taskCountLabel = translatePlural(chatMessages, "taskCount", entity.tasksCount, { count: formatNumber(entity.tasksCount) });
+  const ariaLabel = translate(chatMessages, "openSprint", { key: entity.displayKey, name: entity.name, status: statusLabel });
 
   return (
     <a
@@ -126,12 +131,12 @@ const SprintEntityCard: FunctionComponent<{ entity: ChatLiveSprintWidget }> = ({
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between gap-3 text-[11px] text-slate-500 dark:text-slate-400">
-            <span>{completionLabel} complete</span>
-            <span>{entity.completedTasks}/{entity.tasksCount} complete</span>
+            <span>{translate(chatMessages, "percentComplete", { percent: completionLabel })}</span>
+            <span>{translate(chatMessages, "completedOfTotal", { completed: formatNumber(entity.completedTasks), total: formatNumber(entity.tasksCount) })}</span>
           </div>
           <div
             role="progressbar"
-            aria-label={`Sprint completion for ${entity.displayKey}`}
+            aria-label={translate(chatMessages, "sprintCompletion", { key: entity.displayKey })}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={completion}
@@ -142,21 +147,27 @@ const SprintEntityCard: FunctionComponent<{ entity: ChatLiveSprintWidget }> = ({
         </div>
 
         <div className="flex min-w-0 flex-wrap gap-1.5">
-          <EntityMetaChip label="Tasks" value={taskCountLabel} />
-          <EntityMetaChip label="Done" value={String(entity.completedTasks)} />
+          <EntityMetaChip label={translate(chatMessages, "tasks")} value={taskCountLabel} />
+          <EntityMetaChip label={translate(chatMessages, "doneLabel")} value={formatNumber(entity.completedTasks)} />
         </div>
-        <span className="sr-only">Sprint {entity.displayKey}, {entity.name}, status {statusLabel}.</span>
+        <span className="sr-only">{translate(chatMessages, "sprintEntitySummary", { key: entity.displayKey, name: entity.name, status: statusLabel })}</span>
       </article>
     </a>
   );
 };
 
 const TaskEntityCard: FunctionComponent<{ entity: ChatLiveTaskWidget }> = ({ entity }) => {
-  const statusLabel = getTaskStatusLabel(entity.status);
-  const priorityLabel = PRIORITY_CFG[entity.priority]?.label ?? formatUnknownStatus(entity.priority);
-  const executorLabel = EXECUTOR_LABEL[entity.executorType] ?? formatUnknownStatus(entity.executorType);
-  const mergeLabel = entity.mergeIndicator ?? (entity.isMerged ? "Merged" : null);
-  const ariaLabel = `Open task ${entity.displayKey}: ${entity.name}. Live status: ${statusLabel}.`;
+  const { translate } = useDashboardI18n();
+  const statusLabel = isTaskStatus(entity.status)
+    ? translate(chatMessages, taskStatusKeys[entity.status])
+    : getStatusConfig(entity.status).label;
+  const priorityKey = entity.priority === "critical" ? "critical" : entity.priority === "high" ? "high" : entity.priority === "medium" ? "medium" : "low";
+  const priorityLabel = PRIORITY_CFG[entity.priority] ? translate(chatMessages, priorityKey) : formatUnknownStatus(entity.priority);
+  const executorLabel = entity.executorType === "auto"
+    ? translate(chatMessages, "automatic")
+    : EXECUTOR_LABEL[entity.executorType] ?? formatUnknownStatus(entity.executorType);
+  const mergeLabel = entity.mergeIndicator ?? (entity.isMerged ? translate(chatMessages, "merged") : null);
+  const ariaLabel = translate(chatMessages, "openTask", { key: entity.displayKey, name: entity.name, status: statusLabel });
 
   return (
     <a
@@ -197,8 +208,8 @@ const TaskEntityCard: FunctionComponent<{ entity: ChatLiveTaskWidget }> = ({ ent
         </div>
 
         <div className="flex min-w-0 flex-wrap gap-1.5">
-          <EntityMetaChip label="Priority" value={priorityLabel} />
-          <EntityMetaChip label="Executor" value={executorLabel} />
+          <EntityMetaChip label={translate(chatMessages, "priority")} value={priorityLabel} />
+          <EntityMetaChip label={translate(chatMessages, "executor")} value={executorLabel} />
           {mergeLabel ? (
             <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
               <GitMerge className="h-3 w-3 shrink-0" aria-hidden="true" />
@@ -206,13 +217,14 @@ const TaskEntityCard: FunctionComponent<{ entity: ChatLiveTaskWidget }> = ({ ent
             </span>
           ) : null}
         </div>
-        <span className="sr-only">Task {entity.displayKey}, {entity.name}, status {statusLabel}.</span>
+        <span className="sr-only">{translate(chatMessages, "taskEntitySummary", { key: entity.displayKey, name: entity.name, status: statusLabel })}</span>
       </article>
     </a>
   );
 };
 
 export const LiveEntityStatusWidget: FunctionComponent<LiveEntityStatusWidgetProps> = ({ entities }) => {
+  const { formatNumber, translate, translatePlural } = useDashboardI18n();
   if (entities.length === 0) {
     return null;
   }
@@ -223,13 +235,13 @@ export const LiveEntityStatusWidget: FunctionComponent<LiveEntityStatusWidgetPro
       header={
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-[12px] font-semibold text-slate-700 dark:text-slate-200">Live sprint context</div>
-            <div className="text-[11px] text-slate-500 dark:text-slate-400">{entities.length} linked entit{entities.length === 1 ? "y" : "ies"}</div>
+            <div className="text-[12px] font-semibold text-slate-700 dark:text-slate-200">{translate(chatMessages, "liveSprintContext")}</div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400">{translatePlural(chatMessages, "linkedEntities", entities.length, { count: formatNumber(entities.length) })}</div>
           </div>
         </div>
       }
     >
-      <div className="grid min-w-0 gap-2" aria-label="Live sprint and task status">
+      <div className="grid min-w-0 gap-2" aria-label={translate(chatMessages, "liveSprintAndTaskStatus")}>
         {entities.map((entity) => (
           entity.kind === "sprint"
             ? <SprintEntityCard key={`${entity.kind}:${entity.recordId}`} entity={entity} />

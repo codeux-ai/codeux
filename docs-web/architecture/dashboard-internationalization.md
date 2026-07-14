@@ -34,3 +34,7 @@ const { translate, translatePlural, formatNumber } = useDashboardI18n();
 English and German must declare exactly the same top-level keys. Interpolation treats replacement values as literal text, plural messages require an `other` form, and locale-aware formatting delegates to the browser's native `Intl` implementation.
 
 Keep each catalog with its owning feature and import it only where the feature is loaded. Translate dashboard-authored interface copy only. Never translate provider output, API responses, stored instructions, project data, runtime diagnostics, or user-authored content.
+
+Chat uses the feature-owned `messages/chat.ts` catalog for its thread and invocation chrome, composers, quick actions, rich widgets, cinematic cues, speech controls, feedback, humor, and accessibility announcements. Pure Chat helpers accept an explicit locale, and mounted components bind to the provider locale. Time, relative-time, count, percentage, duration, token, and retry displays use native `Intl` formatting.
+
+The boundary is intentionally strict: message bodies, prompts and quick-action request payloads, reasoning, tool names/arguments/output, invocation logs, scheduled instructions, provider errors, runtime status values, entity names, and speech transcripts remain unchanged. German tests assert both the translated frame and the verbatim payload.

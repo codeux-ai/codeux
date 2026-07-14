@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { AgentResponseAnimation } from "../../../../../../src/contracts/connection-chat-types.js";
 import type { AgentAvatarExpression } from "../../../lib/agent-avatar.js";
 import type { ChatMessageRecord } from "../../../types.js";
+import { useDashboardI18n } from "../../../i18n/context.js";
+import { chatMessages, type ChatTextMessageKey } from "../../../i18n/messages/chat.js";
 
 export type AgentMood =
   | "greeting"
@@ -59,6 +61,15 @@ const WELCOME_BACK_CUE: AgentAmbientCue = {
   showNotes: false,
 };
 
+const AMBIENT_CUE_LABEL_KEYS: Record<AgentAmbientCueKind, ChatTextMessageKey> = {
+  wink: "cueStillWithYou",
+  dance: "cueStretchBreak",
+  sing: "cueHumming",
+  curious: "cueExploreNext",
+  greeting: "cueReady",
+  welcome_back: "cueWelcomeBack",
+};
+
 const MOOD_EXPRESSION: Record<AgentMood, AgentAvatarExpression> = {
   greeting: "happy",
   idle: "happy",
@@ -99,6 +110,11 @@ export const useAgentMood = ({
   ambientPaused = false,
   returnGreetingAfterMs = AGENT_RETURN_GREETING_AFTER_MS,
 }: UseAgentMoodOptions): AgentMoodState => {
+  const { translate } = useDashboardI18n();
+  const localizeCue = (cue: AgentAmbientCue): AgentAmbientCue => ({
+    ...cue,
+    label: translate(chatMessages, AMBIENT_CUE_LABEL_KEYS[cue.kind]),
+  });
   const [celebrating, setCelebrating] = useState(false);
   const [idleMood, setIdleMood] = useState<"idle" | "bored" | "sleepy">("idle");
   const [pagePresent, setPagePresent] = useState(() => typeof document === "undefined" || !document.hidden);
@@ -162,7 +178,7 @@ export const useAgentMood = ({
       awayAtRef.current = null;
       setPagePresent(true);
       if (!ambientSuppressed && (awayFor >= returnGreetingAfterMs || idleFor >= returnGreetingAfterMs)) {
-        setAmbientCue(WELCOME_BACK_CUE);
+        setAmbientCue(localizeCue(WELCOME_BACK_CUE));
       }
     };
     const visibilityChanged = (): void => document.hidden ? leave() : enter();
@@ -183,7 +199,7 @@ export const useAgentMood = ({
     const timer = window.setTimeout(() => {
       const cue = IDLE_CUES[nextCueIndexRef.current % IDLE_CUES.length];
       nextCueIndexRef.current += 1;
-      setAmbientCue(cue);
+      setAmbientCue(localizeCue(cue));
     }, AGENT_IDLE_CUE_GAP_MS);
     return () => window.clearTimeout(timer);
   }, [ambientMotionEnabled, celebrating, userEngaged, idleMood, ambientCue]);
@@ -203,36 +219,36 @@ export const useAgentMood = ({
 
     if (error) {
       mood = "error";
-      caption = "Hit a snag — the details are in the banner above.";
+      caption = translate(chatMessages, "moodError");
     } else if (sending) {
       mood = "routing";
-      caption = "Got it — routing your message.";
+      caption = translate(chatMessages, "moodRouting");
     } else if (hasWorkingReply) {
       mood = "thinking";
-      caption = workingPhase === "starting" ? "Spinning up a workspace for this…" : "Thinking it through…";
+      caption = translate(chatMessages, workingPhase === "starting" ? "moodStarting" : "moodThinking");
     } else if (celebrating) {
       mood = "celebrating";
-      caption = "Fresh answer, just landed.";
+      caption = translate(chatMessages, "moodFreshAnswer");
     } else if (userEngaged) {
       mood = "listening";
-      caption = "Listening…";
+      caption = translate(chatMessages, "moodListening");
     } else if (messages.length === 0) {
       mood = "greeting";
-      caption = "Ready when you are.";
+      caption = translate(chatMessages, "cueReady");
     } else if (idleMood === "sleepy") {
       mood = "sleepy";
-      caption = "Snoozing — say anything to wake me.";
+      caption = translate(chatMessages, "moodSnoozing");
     } else if (idleMood === "bored") {
       mood = "bored";
-      caption = "Standing by.";
+      caption = translate(chatMessages, "moodStandingBy");
     } else {
       mood = "idle";
-      caption = `${agentName} is up to date on this thread.`;
+      caption = translate(chatMessages, "moodUpToDate", { name: agentName });
     }
 
     const expression = ambientCue && (mood === "idle" || mood === "greeting")
       ? ambientCue.expression
       : MOOD_EXPRESSION[mood];
     return { mood, expression, caption, ambientCue, ambientMotionEnabled };
-  }, [error, sending, hasWorkingReply, workingPhase, celebrating, userEngaged, messages.length, idleMood, agentName, ambientCue, ambientMotionEnabled]);
+  }, [error, sending, hasWorkingReply, workingPhase, celebrating, userEngaged, messages.length, idleMood, agentName, ambientCue, ambientMotionEnabled, translate]);
 };

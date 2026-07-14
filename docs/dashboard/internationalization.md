@@ -47,10 +47,12 @@ Interpolation replaces only named `{variable}` tokens through literal string sub
 
 ## Translation scope
 
-The initial application bundle translates only root-owned shell copy: the skip link, main landmark label, route loading announcement, and hidden footer. Route catalogs should be imported with their route when those features are localized.
+The root bundle owns shell copy, while route catalogs are imported with their features. Chat owns `messages/chat.ts`, which covers page and thread chrome, composers, quick actions, invocation metadata labels, rich-widget frames, cinematic activity, speech controls, empty/error/confirmation feedback, humor, and accessible announcements. Pure Chat presentation helpers accept an explicit locale so tests and non-component consumers use the same catalog as mounted components.
 
-Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged.
+Localization applies only to dashboard-authored interface copy. Chat message bodies, prompts, quick-action request payloads, reasoning, tool names and arguments/output, provider transcripts and errors, runtime status values, scheduled instructions, entity names, and speech transcripts remain byte-for-byte display data. Localized labels may surround those values, but must never rewrite them.
+
+Chat uses the locale-bound `Intl` formatters for timestamps, relative time, counts, percentages, token estimates, durations, and retry timestamps. Deterministic humor keeps the same seed, deck, and cadence across locales; locale only selects the message catalog.
 
 ## Verification
 
-Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization.
+Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. Chat boundary coverage is in `tests/dashboard/v2/chat-i18n.test.tsx` and the focused Chat, widget, cinematic, speech, thread, and accessibility suites. These tests verify German controls and announcements while asserting that provider/runtime payloads and fixed quick-action prompts are unchanged.

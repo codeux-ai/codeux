@@ -1,5 +1,7 @@
 import type { DashboardCreateAppQuickactionKind } from "../types.js";
 import { CREATE_APP_QUICKACTION_CATALOG } from "../../../../src/domain/chat/create-app-quickaction-catalog.js";
+import type { DashboardLocale } from "../i18n/locales.js";
+import { translateChatMessage } from "../i18n/messages/chat.js";
 
 export type CinematicQuickActionZone = "create" | "insight" | "workflow";
 
@@ -88,7 +90,29 @@ export function isInitialProjectCreateAppQuickaction(kind: DashboardCreateAppQui
   return INITIAL_ONLY_APP_KINDS.has(kind);
 }
 
-export function buildCinematicQuickActions(options: CinematicQuickActionOptions): CinematicQuickAction[] {
+const CREATE_ACTION_LABEL_KEYS: Record<DashboardCreateAppQuickactionKind, Parameters<typeof translateChatMessage>[1]> = {
+  web_app: "createWebApp",
+  desktop_app: "createDesktopApp",
+  online_shop: "createOnlineShop",
+  portfolio: "createPortfolio",
+  game: "createGame",
+};
+
+const PROMPT_ACTION_LABEL_KEYS: Record<string, Parameters<typeof translateChatMessage>[1]> = {
+  "status-report": "statusReport",
+  "sprint-progress": "sprintProgress",
+  "whats-failing": "whatsFailing",
+  "plan-next-steps": "planNextSteps",
+  "add-nodes-workflow": "addNodesWorkflow",
+  "add-dashboard": "addDashboard",
+  "create-skill": "createSkill",
+  "list-skills": "listSkills",
+};
+
+export function buildCinematicQuickActions(
+  options: CinematicQuickActionOptions,
+  locale: DashboardLocale = "en",
+): CinematicQuickAction[] {
   if (!options.hasProject) {
     return [];
   }
@@ -100,7 +124,7 @@ export function buildCinematicQuickActions(options: CinematicQuickActionOptions)
     ))
     .map(({ kind, displayLabel }, index) => ({
       id: `create-${kind}`,
-      label: displayLabel,
+      label: locale === "en" ? displayLabel : translateChatMessage(locale, CREATE_ACTION_LABEL_KEYS[kind]),
       zone: "create",
       actionType: "create_app",
       appKind: kind,
@@ -109,6 +133,7 @@ export function buildCinematicQuickActions(options: CinematicQuickActionOptions)
 
   const promptActions: CinematicQuickAction[] = PROMPT_QUICK_ACTIONS.map((action, index) => ({
     ...action,
+    label: translateChatMessage(locale, PROMPT_ACTION_LABEL_KEYS[action.id]),
     actionType: "send_prompt",
     animationDelay: `${(createActions.length + index) * 0.18}s`,
   }));

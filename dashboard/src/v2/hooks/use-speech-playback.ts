@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { synthesizeSpeech } from "../lib/speech-api.js";
 import { speechTextFromMarkdown, splitSpeechPlaybackText } from "../lib/speech-playback.js";
+import { useDashboardI18n } from "../i18n/context.js";
+import { chatMessages } from "../i18n/messages/chat.js";
 
 const SPEECH_PREFETCH_AHEAD = 2;
 
@@ -40,7 +42,10 @@ const cancelPlaybackRun = (run: SpeechPlaybackRun): void => {
   }
 };
 
-const playAudioBlob = (run: SpeechPlaybackRun, blob: Blob): Promise<AudioOutcome> => (
+const playAudioBlob = (run: SpeechPlaybackRun, blob: Blob, errors: {
+  blocked: string;
+  couldNotPlay: string;
+}): Promise<AudioOutcome> => (
   new Promise<AudioOutcome>((resolve) => {
     const url = URL.createObjectURL(blob);
     run.activeUrl = url;
@@ -63,16 +68,16 @@ const playAudioBlob = (run: SpeechPlaybackRun, blob: Blob): Promise<AudioOutcome
 
     run.settleAudio = cancelAudio;
     audio.onended = () => finish(true);
-    audio.onerror = () => finish(false, "The browser could not play the generated audio.");
+    audio.onerror = () => finish(false, errors.couldNotPlay);
     try {
       void audio.play().catch((error: unknown) => finish(
         false,
-        readPlaybackError(error, "The browser blocked audio playback. Use the voice button and try again."),
+        readPlaybackError(error, errors.blocked),
       ));
     } catch (error) {
       finish(
         false,
-        readPlaybackError(error, "The browser blocked audio playback. Use the voice button and try again."),
+        readPlaybackError(error, errors.blocked),
       );
     }
   })
@@ -94,6 +99,7 @@ export interface SpeechPlaybackController {
 /** Owns one audio channel for a transcript surface. Starting another clip
  * cancels in-flight synthesis and stops the previous clip before playback. */
 export const useSpeechPlayback = (): SpeechPlaybackController => {
+  const { translate } = useDashboardI18n();
   const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const currentRunRef = useRef<SpeechPlaybackRun | null>(null);
@@ -141,7 +147,7 @@ export const useSpeechPlayback = (): SpeechPlaybackController => {
       ).then(
         (blob): SynthesisOutcome => ({ blob }),
         (synthesisError): SynthesisOutcome => {
-          failRun(synthesisError, "Speech synthesis failed.");
+          failRun(synthesisError, translate(chatMessages, "speechSynthesisFailed"));
           return { error: synthesisError };
         },
       );
@@ -166,24 +172,27 @@ export const useSpeechPlayback = (): SpeechPlaybackController => {
         synthesisByIndex.delete(index);
         if (!isCurrentRun() || !synthesisOutcome.blob) return;
 
-        const audioOutcomePromise = playAudioBlob(run, synthesisOutcome.blob);
+        const audioOutcomePromise = playAudioBlob(run, synthesisOutcome.blob, {
+          blocked: translate(chatMessages, "browserBlockedAudio"),
+          couldNotPlay: translate(chatMessages, "browserCouldNotPlayAudio"),
+        });
         prefetchAfter(index);
         const audioOutcome = await audioOutcomePromise;
         if (!isCurrentRun()) return;
         if (!audioOutcome.completed) {
-          failRun(audioOutcome.error, "The browser could not play the generated audio.");
+          failRun(audioOutcome.error, translate(chatMessages, "browserCouldNotPlayAudio"));
           return;
         }
       }
     } catch (playbackError) {
-      failRun(playbackError, "Speech playback failed.");
+      failRun(playbackError, translate(chatMessages, "speechPlaybackFailed"));
     } finally {
       if (currentRunRef.current === run) {
         currentRunRef.current = null;
         setActiveMessageId(null);
       }
     }
-  }, [stop]);
+  }, [stop, translate]);
 
   useEffect(() => () => {
     const currentRun = currentRunRef.current;

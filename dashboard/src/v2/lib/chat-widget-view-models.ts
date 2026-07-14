@@ -16,6 +16,8 @@ import {
   CREATE_APP_QUICKACTION_CATALOG,
   getCreateAppQuickactionSpec,
 } from "../../../../src/domain/chat/create-app-quickaction-catalog.js";
+import type { DashboardLocale } from "../i18n/locales.js";
+import { translateChatMessage, translateChatPlural } from "../i18n/messages/chat.js";
 
 export type ChatWidgetType = "planning" | "app_creation_progress" | "external_reference" | "none";
 
@@ -474,6 +476,26 @@ const formatStatusLabel = (value: string | null | undefined): string => {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 };
 
+const formatLocalizedStatusLabel = (value: string | null | undefined, locale: DashboardLocale): string => {
+  const normalized = readString(value)?.toLowerCase().replace(/[\s-]+/g, "_");
+  const keys = {
+    pending: "pending",
+    queued: "queued",
+    running: "running",
+    in_progress: "inProgress",
+    completed: "completed",
+    failed: "failed",
+    blocked: "blocked",
+    cancelled: "cancelled",
+    canceled: "cancelled",
+    paused: "paused",
+    idle: "idle",
+  } as const;
+  return normalized && normalized in keys
+    ? translateChatMessage(locale, keys[normalized as keyof typeof keys])
+    : formatStatusLabel(value);
+};
+
 const normalizeWidgetExecutionStatus = (value: unknown, fallback: ExecutionStatus): ExecutionStatus => {
   const normalized = readString(value)?.toLowerCase().replace(/[\s-]+/g, "_") ?? "";
   switch (normalized) {
@@ -519,21 +541,24 @@ const normalizeAppCreationKind = (value: unknown): AppCreationKind => {
   return "unknown";
 };
 
-const formatAppCreationKindLabel = (kind: AppCreationKind): string => {
-  return kind === "unknown" ? "App" : getCreateAppQuickactionSpec(kind).appKindLabel;
+const formatAppCreationKindLabel = (kind: AppCreationKind, locale: DashboardLocale): string => {
+  if (kind === "unknown") return translateChatMessage(locale, "app");
+  if (locale === "en") return getCreateAppQuickactionSpec(kind).appKindLabel;
+  const keys = { web_app: "webApp", desktop_app: "desktopApp", online_shop: "onlineShop", portfolio: "portfolio", game: "game" } as const;
+  return translateChatMessage(locale, keys[kind]);
 };
 
-const formatAppCreationStatusLabel = (status: ExecutionStatus, appKindLabel: string): string => {
+const formatAppCreationStatusLabel = (status: ExecutionStatus, appKindLabel: string, locale: DashboardLocale): string => {
   switch (status) {
     case "queued":
-      return `${appKindLabel} sprint is queued.`;
+      return translateChatMessage(locale, "appSprintQueued", { appKind: appKindLabel });
     case "completed":
-      return `${appKindLabel} sprint is ready.`;
+      return translateChatMessage(locale, "appSprintReady", { appKind: appKindLabel });
     case "failed":
-      return `${appKindLabel} sprint setup needs attention.`;
+      return translateChatMessage(locale, "appSprintAttention", { appKind: appKindLabel });
     case "running":
     default:
-      return `${appKindLabel} sprint is being planned.`;
+      return translateChatMessage(locale, "appSprintPlanning", { appKind: appKindLabel });
   }
 };
 
@@ -595,13 +620,13 @@ const canonicalAppCreationStageId = (value: string): string => {
   return normalized || "stage";
 };
 
-const DEFAULT_APP_CREATION_STAGE_DEFS: Array<Pick<AppCreationProgressStageState, "id" | "label">> = [
-  { id: "planning", label: "Planning" },
-  { id: "plan", label: "Plan" },
-  { id: "showing_tasks", label: "Showing each Task" },
-  { id: "start", label: "Start" },
-  { id: "finish", label: "Finish" },
-];
+const DEFAULT_APP_CREATION_STAGE_DEFS = [
+  { id: "planning", labelKey: "purposePlanning" },
+  { id: "plan", labelKey: "plan" },
+  { id: "showing_tasks", labelKey: "showingEachTask" },
+  { id: "start", labelKey: "start" },
+  { id: "finish", labelKey: "finish" },
+] as const;
 
 const defaultAppCreationStageStatus = (
   stageId: string,
@@ -636,6 +661,7 @@ const buildAppCreationStageState = (
 const normalizeAppCreationStages = (
   widgetMetadata: Record<string, unknown>,
   widgetStatus: ExecutionStatus,
+  locale: DashboardLocale,
 ): AppCreationProgressStageState[] => {
   const suppliedStages = readArray(widgetMetadata.planningStages ?? widgetMetadata.stages ?? widgetMetadata.stageList)
     .map(readRecord)
@@ -651,7 +677,7 @@ const normalizeAppCreationStages = (
   const suppliedById = new Map(suppliedStages.map((stage) => [stage.id, stage]));
   const defaultStages = DEFAULT_APP_CREATION_STAGE_DEFS.map((stage) => (
     suppliedById.get(stage.id)
-    ?? buildAppCreationStageState(stage.id, stage.label, defaultAppCreationStageStatus(stage.id, widgetStatus))
+    ?? buildAppCreationStageState(stage.id, translateChatMessage(locale, stage.labelKey), defaultAppCreationStageStatus(stage.id, widgetStatus))
   ));
   const defaultIds = new Set(defaultStages.map((stage) => stage.id));
   const customStages = suppliedStages.filter((stage) => !defaultIds.has(stage.id));
@@ -668,7 +694,7 @@ const normalizeAppCreationStages = (
   ];
 };
 
-const readStackFieldValue = (stackSummary: Record<string, unknown> | null, keys: string[]): string | null => {
+const readStackFieldValue = (stackSummary: Record<string, unknown> | null, keys: readonly string[]): string | null => {
   for (const key of keys) {
     const value = readString(stackSummary?.[key]);
     if (value) {
@@ -702,7 +728,7 @@ const readExecutionPlanTaskSummaries = (
     executionPlan.tasks,
     executionPlan.createdTasks,
     executionPlan.created_tasks,
-  ];
+  ] as const;
   const rawTasks = candidates.find((candidate) => readArray(candidate).length > 0);
   return readArray(rawTasks)
     .map((entry, index): PlanningExecutionPlanTaskSummaryState | null => {
@@ -745,11 +771,13 @@ const formatExecutionPlanTaskSummaryLabel = (
   taskCount: number,
   createdTaskIds: string[],
   tasks: PlanningExecutionPlanTaskSummaryState[],
+  locale: DashboardLocale,
 ): string => {
   const effectiveTaskCount = taskCount || tasks.length || createdTaskIds.length;
-  const plannedLabel = `${effectiveTaskCount} planned task${effectiveTaskCount === 1 ? "" : "s"}`;
+  const number = new Intl.NumberFormat(locale).format(effectiveTaskCount);
+  const plannedLabel = translateChatPlural(locale, "plannedTasks", effectiveTaskCount, { count: number });
   if (createdTaskIds.length > 0 && createdTaskIds.length !== effectiveTaskCount) {
-    return `${plannedLabel}, ${createdTaskIds.length} created`;
+    return `${plannedLabel}, ${translateChatMessage(locale, "createdCount", { count: new Intl.NumberFormat(locale).format(createdTaskIds.length) })}`;
   }
   return plannedLabel;
 };
@@ -757,6 +785,7 @@ const formatExecutionPlanTaskSummaryLabel = (
 const readExecutionPlanState = (
   metadata: Record<string, unknown> | null | undefined,
   widgetMetadata: Record<string, unknown> | null,
+  locale: DashboardLocale,
 ): PlanningExecutionPlanWidgetState | null => {
   const executionPlan = readRecord(metadata?.executionPlan)
     ?? readRecord(metadata?.execution_plan)
@@ -784,7 +813,7 @@ const readExecutionPlanState = (
     : tasks.length || createdTaskIds.length;
   const sprintName = readFirstString(executionPlan.sprintName, executionPlan.sprint_name)
     ?? sprintKey
-    ?? "Execution Plan";
+    ?? translateChatMessage(locale, "executionPlan");
 
   const hasPlanDetails = Boolean(
     sprintId
@@ -801,8 +830,8 @@ const readExecutionPlanState = (
     return null;
   }
 
-  const taskSummaryLabel = formatExecutionPlanTaskSummaryLabel(taskCount, createdTaskIds, tasks);
-  const ariaParts = ["Planning execution plan", formatExecutionPlanName({
+  const taskSummaryLabel = formatExecutionPlanTaskSummaryLabel(taskCount, createdTaskIds, tasks, locale);
+  const ariaParts = [translateChatMessage(locale, "planningExecutionPlan"), formatExecutionPlanName({
     sprintId,
     sprintNumber,
     sprintKey,
@@ -815,7 +844,7 @@ const readExecutionPlanState = (
     ariaLabel: "",
   })];
   if (goal) {
-    ariaParts.push(`Goal ${goal}`);
+    ariaParts.push(translateChatMessage(locale, "goalLabel", { goal }));
   }
   ariaParts.push(taskSummaryLabel);
 
@@ -918,14 +947,14 @@ const normalizeExternalReferenceKind = (
   return "issue";
 };
 
-const formatExternalKindLabel = (kind: ExternalReferenceKind): string => {
+const formatExternalKindLabel = (kind: ExternalReferenceKind, locale: DashboardLocale): string => {
   switch (kind) {
     case "pull_request":
-      return "Pull request";
+      return translateChatMessage(locale, "pullRequest");
     case "merge_request":
-      return "Merge request";
+      return translateChatMessage(locale, "mergeRequest");
     case "issue":
-      return "Issue";
+      return translateChatMessage(locale, "issue");
   }
 };
 
@@ -972,48 +1001,49 @@ const readFirstDisplayName = (...values: unknown[]): string | null => {
   return null;
 };
 
-const normalizeAppCreationStackSummary = (value: unknown): AppCreationStackSummaryState => {
+const normalizeAppCreationStackSummary = (value: unknown, locale: DashboardLocale): AppCreationStackSummaryState => {
   const stackSummary = readRecord(value);
-  const fieldDefs: Array<{ key: string; label: string; keys: string[] }> = [
-    { key: "techstackName", label: "Stack", keys: ["techstackName", "techstack_name", "stackName", "stack_name"] },
-    { key: "framework", label: "Framework", keys: ["framework"] },
-    { key: "language", label: "Language", keys: ["language"] },
-    { key: "runtime", label: "Runtime", keys: ["runtime"] },
-    { key: "packageManager", label: "Package", keys: ["packageManager", "package_manager"] },
-    { key: "styling", label: "Styling", keys: ["styling"] },
-    { key: "testFramework", label: "Tests", keys: ["testFramework", "test_framework"] },
-    { key: "techstackId", label: "Stack ID", keys: ["techstackId", "techstack_id"] },
-  ];
+  const fieldDefs = [
+    { key: "techstackName", labelKey: "stack", keys: ["techstackName", "techstack_name", "stackName", "stack_name"] },
+    { key: "framework", labelKey: "framework", keys: ["framework"] },
+    { key: "language", labelKey: "language", keys: ["language"] },
+    { key: "runtime", labelKey: "runtime", keys: ["runtime"] },
+    { key: "packageManager", labelKey: "package", keys: ["packageManager", "package_manager"] },
+    { key: "styling", labelKey: "styling", keys: ["styling"] },
+    { key: "testFramework", labelKey: "tests", keys: ["testFramework", "test_framework"] },
+    { key: "techstackId", labelKey: "stackId", keys: ["techstackId", "techstack_id"] },
+  ] as const;
 
   const fields = fieldDefs.flatMap((field): AppCreationStackSummaryFieldState[] => {
     const fieldValue = readStackFieldValue(stackSummary, field.keys);
-    return fieldValue ? [{ key: field.key, label: field.label, value: fieldValue }] : [];
+    return fieldValue ? [{ key: field.key, label: translateChatMessage(locale, field.labelKey), value: fieldValue }] : [];
   });
 
   return {
     fields,
-    emptyLabel: "Project stack defaults",
+    emptyLabel: translateChatMessage(locale, "projectStackDefaults"),
   };
 };
 
 const buildAppCreationProgressWidgetState = (
   metadata: Record<string, unknown> | null | undefined,
   widgetMetadata: Record<string, unknown>,
+  locale: DashboardLocale,
 ): ChatWidgetState => {
   const status = normalizeWidgetExecutionStatus(widgetMetadata.status ?? metadata?.status, "running");
   const appKind = normalizeAppCreationKind(widgetMetadata.appKind ?? widgetMetadata.app_kind ?? widgetMetadata.kind ?? metadata?.appKind);
-  const appKindLabel = formatAppCreationKindLabel(appKind);
+  const appKindLabel = formatAppCreationKindLabel(appKind, locale);
   const sprintLabel = readMetadataString(metadata, widgetMetadata, ["sprintName", "sprint_name", "sprintLabel", "sprint_label", "title"])
-    || "App creation sprint";
+    || translateChatMessage(locale, "appCreationSprint");
   const progress: AppCreationProgressWidgetState = {
     status,
-    statusLabel: formatAppCreationStatusLabel(status, appKindLabel),
+    statusLabel: formatAppCreationStatusLabel(status, appKindLabel, locale),
     appKind,
     appKindLabel,
     sprintId: readMetadataString(metadata, widgetMetadata, ["sprintId", "sprint_id"]),
     sprintLabel,
-    stackSummary: normalizeAppCreationStackSummary(widgetMetadata.stackSummary ?? widgetMetadata.stack_summary ?? metadata?.stackSummary),
-    stages: normalizeAppCreationStages(widgetMetadata, status),
+    stackSummary: normalizeAppCreationStackSummary(widgetMetadata.stackSummary ?? widgetMetadata.stack_summary ?? metadata?.stackSummary, locale),
+    stages: normalizeAppCreationStages(widgetMetadata, status, locale),
     suggestionTags: readStringList(widgetMetadata.suggestionTags ?? widgetMetadata.suggestion_tags ?? metadata?.suggestionTags, 6),
     quickactionRequestId: readMetadataString(metadata, widgetMetadata, ["quickactionRequestId", "quickaction_request_id", "requestId", "request_id"]),
     clientRequestId: readMetadataString(metadata, widgetMetadata, ["clientRequestId", "client_request_id"]),
@@ -1111,7 +1141,10 @@ const collectExternalReferenceCandidates = (
   return candidates;
 };
 
-const buildExternalReferenceState = (source: Record<string, unknown>): { status: ExecutionStatus; reference: ExternalReferenceWidgetState } | null => {
+const buildExternalReferenceState = (
+  source: Record<string, unknown>,
+  locale: DashboardLocale = "en",
+): { status: ExecutionStatus; reference: ExternalReferenceWidgetState } | null => {
   const fields = readRecord(source.fields);
   const url = readFirstString(
     source.webUrl,
@@ -1177,7 +1210,7 @@ const buildExternalReferenceState = (source: Record<string, unknown>): { status:
     source.summary,
   ));
   const providerLabel = formatExternalProviderLabel(provider);
-  const kindLabel = formatExternalKindLabel(kind);
+  const kindLabel = formatExternalKindLabel(kind, locale);
   const pathParts = provider === "github"
     ? { repositoryPath: path, projectPath: null }
     : { repositoryPath: null, projectPath: path };
@@ -1216,9 +1249,10 @@ const buildExternalReferenceState = (source: Record<string, unknown>): { status:
 const extractExternalReferenceWidgetState = (
   metadata: Record<string, unknown> | null | undefined,
   bodyMarkdown?: string,
+  locale: DashboardLocale = "en",
 ): { status: ExecutionStatus; reference: ExternalReferenceWidgetState; fromJsonBody: boolean } | null => {
   for (const candidate of collectExternalReferenceCandidates(metadata)) {
-    const result = buildExternalReferenceState(candidate);
+    const result = buildExternalReferenceState(candidate, locale);
     if (result) {
       return { ...result, fromJsonBody: false };
     }
@@ -1229,7 +1263,7 @@ const extractExternalReferenceWidgetState = (
     return null;
   }
   for (const candidate of collectExternalReferenceCandidates(bodyRecord)) {
-    const result = buildExternalReferenceState(candidate);
+    const result = buildExternalReferenceState(candidate, locale);
     if (result) {
       return { ...result, fromJsonBody: true };
     }
@@ -1262,15 +1296,15 @@ const normalizeReflectionPurpose = (value: unknown): SelfReflectionPurpose => {
   return "unknown";
 };
 
-const formatReflectionPurposeLabel = (purpose: SelfReflectionPurpose): string => {
+const formatReflectionPurposeLabel = (purpose: SelfReflectionPurpose, locale: DashboardLocale): string => {
   switch (purpose) {
     case "planning":
-      return "Planning self-reflection";
+      return translateChatMessage(locale, "planningReflection");
     case "qa":
-      return "QA self-reflection";
+      return translateChatMessage(locale, "qaReflection");
     case "unknown":
     default:
-      return "Self-reflection";
+      return translateChatMessage(locale, "selfReflection");
   }
 };
 
@@ -1302,12 +1336,16 @@ const normalizeReflectionScore = (value: unknown): number | null => {
   return Math.max(0, Math.min(10, numeric));
 };
 
-const formatScoreLabel = (score: number | null): string => (
-  score === null ? "No score" : `${score.toFixed(score % 1 === 0 ? 0 : 1)}/10`
+const formatScoreLabel = (score: number | null, locale: DashboardLocale): string => (
+  score === null
+    ? translateChatMessage(locale, "noScore")
+    : `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(score)}/10`
 );
 
-const formatThresholdLabel = (threshold: number | null): string => (
-  threshold === null ? "Threshold not set" : `Threshold ${threshold.toFixed(threshold % 1 === 0 ? 0 : 1)}/10`
+const formatThresholdLabel = (threshold: number | null, locale: DashboardLocale): string => (
+  threshold === null
+    ? translateChatMessage(locale, "thresholdNotSet")
+    : translateChatMessage(locale, "threshold", { score: new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(threshold) })
 );
 
 const buildReflectionCriterionKey = (entry: Record<string, unknown>, index: number): string => (
@@ -1318,6 +1356,7 @@ const buildReflectionCriterionState = (
   base: Record<string, unknown>,
   scoreEntry: Record<string, unknown> | null,
   index: number,
+  locale: DashboardLocale,
 ): SelfReflectionCriterionState => {
   const id = buildReflectionCriterionKey(scoreEntry ?? base, index);
   const label = readString(scoreEntry?.label) || readString(base.label) || readString(base.name) || formatStatusLabel(id);
@@ -1326,7 +1365,7 @@ const buildReflectionCriterionState = (
   const explicitPassed = readBoolean(scoreEntry?.passed ?? base.passed);
   const passed = explicitPassed ?? (score !== null && threshold !== null ? score >= threshold : null);
   const starRating = score === null ? null : Math.max(0, Math.min(5, Math.round(score / 2)));
-  const scoreLabel = formatScoreLabel(score);
+  const scoreLabel = formatScoreLabel(score, locale);
 
   return {
     id,
@@ -1334,11 +1373,13 @@ const buildReflectionCriterionState = (
     score,
     scoreLabel,
     starRating,
-    starLabel: starRating === null ? `Rating unavailable for ${label}` : `Rating ${starRating} of 5 stars for ${label}; score ${scoreLabel}`,
+    starLabel: starRating === null
+      ? translateChatMessage(locale, "ratingUnavailable", { label })
+      : translateChatMessage(locale, "ratingStars", { rating: starRating, label, score: scoreLabel }),
     threshold,
-    thresholdLabel: formatThresholdLabel(threshold),
+    thresholdLabel: formatThresholdLabel(threshold, locale),
     passed,
-    stateLabel: passed === null ? "Not evaluated" : passed ? "Passed" : "Needs improvement",
+    stateLabel: translateChatMessage(locale, passed === null ? "notEvaluated" : passed ? "passed" : "needsImprovement"),
     rationale: readString(scoreEntry?.rationale) || readString(base.rationale),
     improvementInstructions: readString(scoreEntry?.improvementInstructions)
       || readString(scoreEntry?.improvement_instructions)
@@ -1350,6 +1391,7 @@ const buildReflectionCriterionState = (
 const mergeReflectionCriteria = (
   criteria: unknown[],
   scores: unknown[],
+  locale: DashboardLocale,
 ): SelfReflectionCriterionState[] => {
   const baseEntries = criteria
     .map(readRecord)
@@ -1367,44 +1409,49 @@ const mergeReflectionCriteria = (
   effectiveScores.forEach((scoreEntry, index) => {
     const key = buildReflectionCriterionKey(scoreEntry, index);
     seen.add(key);
-    result.push(buildReflectionCriterionState(baseById.get(key) ?? {}, scoreEntry, index));
+    result.push(buildReflectionCriterionState(baseById.get(key) ?? {}, scoreEntry, index, locale));
   });
 
   baseEntries.forEach((base, index) => {
     const key = buildReflectionCriterionKey(base, index);
     if (!seen.has(key)) {
-      result.push(buildReflectionCriterionState(base, null, result.length));
+      result.push(buildReflectionCriterionState(base, null, result.length, locale));
     }
   });
 
   return result;
 };
 
-const resolveTaskStatus = (phase: string | undefined): Pick<LivePlanningTaskState, "statusKind" | "statusLabel" | "detailLabel"> => {
+const resolveTaskStatus = (
+  phase: string | undefined,
+  locale: DashboardLocale,
+): Pick<LivePlanningTaskState, "statusKind" | "statusLabel" | "detailLabel"> => {
   if (!phase) {
-    return { statusKind: "unknown", statusLabel: "Unknown", detailLabel: null };
+    return { statusKind: "unknown", statusLabel: translateChatMessage(locale, "unknown"), detailLabel: null };
   }
   if (phase.startsWith("PENDING_cap_")) {
     const [, , currentCount, limit] = phase.split("_");
-    const detailLabel = currentCount && limit ? `Provider cap ${currentCount}/${limit}` : "Provider cap";
-    return { statusKind: "queued", statusLabel: "Queued", detailLabel };
+    const detailLabel = currentCount && limit
+      ? translateChatMessage(locale, "providerCapCount", { current: new Intl.NumberFormat(locale).format(Number(currentCount)), limit: new Intl.NumberFormat(locale).format(Number(limit)) })
+      : translateChatMessage(locale, "providerCap");
+    return { statusKind: "queued", statusLabel: translateChatMessage(locale, "queuedLabel"), detailLabel };
   }
 
   switch (phase) {
     case "PENDING":
-      return { statusKind: "queued", statusLabel: "Queued", detailLabel: null };
+      return { statusKind: "queued", statusLabel: translateChatMessage(locale, "queuedLabel"), detailLabel: null };
     case "RUNNING":
-      return { statusKind: "running", statusLabel: "Running", detailLabel: null };
+      return { statusKind: "running", statusLabel: translateChatMessage(locale, "running"), detailLabel: null };
     case "CODING_COMPLETED":
-      return { statusKind: "review", statusLabel: "Review", detailLabel: "Code complete" };
+      return { statusKind: "review", statusLabel: translateChatMessage(locale, "review"), detailLabel: translateChatMessage(locale, "codeComplete") };
     case "COMPLETED":
-      return { statusKind: "completed", statusLabel: "Completed", detailLabel: null };
+      return { statusKind: "completed", statusLabel: translateChatMessage(locale, "completed"), detailLabel: null };
     case "FAILED":
-      return { statusKind: "failed", statusLabel: "Failed", detailLabel: null };
+      return { statusKind: "failed", statusLabel: translateChatMessage(locale, "failed"), detailLabel: null };
     case "BLOCKED":
-      return { statusKind: "blocked", statusLabel: "Blocked", detailLabel: null };
+      return { statusKind: "blocked", statusLabel: translateChatMessage(locale, "blocked"), detailLabel: null };
     case "QUOTA":
-      return { statusKind: "quota", statusLabel: "Quota wait", detailLabel: null };
+      return { statusKind: "quota", statusLabel: translateChatMessage(locale, "quotaWait"), detailLabel: null };
     default:
       return { statusKind: "unknown", statusLabel: formatStatusLabel(phase), detailLabel: null };
   }
@@ -1415,6 +1462,7 @@ const buildLivePlanningWidgetState = (
   fallbackStatus: ExecutionStatus,
   fallbackPlanName: string,
   liveData?: ChatWidgetLiveData,
+  locale: DashboardLocale = "en",
 ): LivePlanningWidgetState | null => {
   if (
     !liveData?.execution
@@ -1441,7 +1489,7 @@ const buildLivePlanningWidgetState = (
   const taskStates = liveTasks.map((task): LivePlanningTaskState => ({
     id: task.id,
     title: task.title,
-    ...resolveTaskStatus(task.status),
+    ...resolveTaskStatus(task.status, locale),
   }));
   const completedTasks = taskStates.filter((task) => task.statusKind === "completed").length;
   const queuedTasks = taskStates.filter((task) => task.statusKind === "queued").length;
@@ -1455,8 +1503,8 @@ const buildLivePlanningWidgetState = (
     sprintTasks[0]?.sprint ||
     fallbackPlanName;
   const runStatus = sprintRun?.status ?? null;
-  const requestLabel = formatStatusLabel(fallbackStatus);
-  const runLabel = sprintRun ? formatStatusLabel(sprintRun.status) : "Awaiting run";
+  const requestLabel = formatLocalizedStatusLabel(fallbackStatus, locale);
+  const runLabel = sprintRun ? formatLocalizedStatusLabel(sprintRun.status, locale) : translateChatMessage(locale, "awaitingRun");
 
   return {
     sprintId,
@@ -1467,10 +1515,12 @@ const buildLivePlanningWidgetState = (
     completedTasks,
     queuedTasks,
     percentComplete,
-    progressLabel: `${completedTasks}/${totalTasks} · ${percentComplete}%`,
+    progressLabel: `${new Intl.NumberFormat(locale).format(completedTasks)}/${new Intl.NumberFormat(locale).format(totalTasks)} · ${new Intl.NumberFormat(locale).format(percentComplete)}%`,
     materialization: {
       requestLabel,
-      taskRecordsLabel: totalTasks > 0 ? `${totalTasks} task${totalTasks === 1 ? "" : "s"} materialized` : "Awaiting task records",
+      taskRecordsLabel: totalTasks > 0
+        ? translateChatPlural(locale, "materializedTasks", totalTasks, { count: new Intl.NumberFormat(locale).format(totalTasks) })
+        : translateChatMessage(locale, "awaitingTaskRecords"),
       runLabel,
     },
     tasks: taskStates,
@@ -1481,21 +1531,22 @@ const extractWidgetStateFromMetadata = (
   metadata: Record<string, unknown> | null | undefined,
   bodyMarkdown?: string,
   liveData?: ChatWidgetLiveData,
+  locale: DashboardLocale = "en",
 ): ChatWidgetState => {
   const widgetMetadata = getWidgetMetadata(metadata);
-  const executionPlan = readExecutionPlanState(metadata, widgetMetadata);
+  const executionPlan = readExecutionPlanState(metadata, widgetMetadata, locale);
 
   if (widgetMetadata && readString(widgetMetadata.type) === "app_progress") {
-    return buildAppCreationProgressWidgetState(metadata, widgetMetadata);
+    return buildAppCreationProgressWidgetState(metadata, widgetMetadata, locale);
   }
 
   if (widgetMetadata && widgetMetadata.type === "planning_request") {
     const status = (widgetMetadata.status as ExecutionStatus) || (metadata?.status as ExecutionStatus) || "completed";
     const planName = executionPlan
       ? formatExecutionPlanName(executionPlan)
-      : (widgetMetadata.route_path as string) || (metadata?.planName as string) || (metadata?.title as string) || "Execution Plan";
+      : (widgetMetadata.route_path as string) || (metadata?.planName as string) || (metadata?.title as string) || translateChatMessage(locale, "executionPlan");
     const targetWorker = widgetMetadata.target_worker as string | undefined;
-    const liveStatus = executionPlan ? null : buildLivePlanningWidgetState(metadata, status, planName, liveData);
+    const liveStatus = executionPlan ? null : buildLivePlanningWidgetState(metadata, status, planName, liveData, locale);
     return {
       type: "planning",
       status: liveStatus ? mapSprintRunStatusToExecutionStatus(liveStatus.runStatus, status) : status,
@@ -1506,7 +1557,7 @@ const extractWidgetStateFromMetadata = (
     };
   }
 
-  const externalReference = extractExternalReferenceWidgetState(metadata, bodyMarkdown);
+  const externalReference = extractExternalReferenceWidgetState(metadata, bodyMarkdown, locale);
   if (externalReference) {
     const hasJsonBody = externalReference.fromJsonBody || hasExternalReferenceJsonBody(bodyMarkdown);
     return {
@@ -1529,8 +1580,8 @@ const extractWidgetStateFromMetadata = (
     const status = (metadata.status as ExecutionStatus) || "completed";
     const planName = executionPlan
       ? formatExecutionPlanName(executionPlan)
-      : (metadata.planName as string) || (metadata.title as string) || "Execution Plan";
-    const liveStatus = executionPlan ? null : buildLivePlanningWidgetState(metadata, status, planName, liveData);
+      : (metadata.planName as string) || (metadata.title as string) || translateChatMessage(locale, "executionPlan");
+    const liveStatus = executionPlan ? null : buildLivePlanningWidgetState(metadata, status, planName, liveData, locale);
     return {
       type: "planning",
       status: liveStatus ? mapSprintRunStatusToExecutionStatus(liveStatus.runStatus, status) : status,
@@ -1552,6 +1603,7 @@ export const resolveRichWidget = (input: {
   metadata?: Record<string, unknown> | null;
   content?: string;
   toolCallsJson?: Record<string, unknown> | null;
+  locale?: DashboardLocale;
 }): RichWidgetDescriptor => {
   const metadata = input.metadata ?? null;
   const kind = readString(metadata?.kind);
@@ -1576,7 +1628,7 @@ export const resolveRichWidget = (input: {
     };
   }
 
-  const widgetState = extractWidgetStateFromMetadata(metadata, input.content);
+  const widgetState = extractWidgetStateFromMetadata(metadata, input.content, undefined, input.locale ?? "en");
   if (widgetState.type === "planning") {
     return {
       kind: "planning",
@@ -1589,12 +1641,20 @@ export const resolveRichWidget = (input: {
   return { kind: "none" };
 };
 
-export const getChatWidgetData = (message: ChatMessageRecord, liveData?: ChatWidgetLiveData): ChatWidgetState => {
-  return extractWidgetStateFromMetadata(message.metadata, message.bodyMarkdown, liveData);
+export const getChatWidgetData = (
+  message: ChatMessageRecord,
+  liveData?: ChatWidgetLiveData,
+  locale: DashboardLocale = "en",
+): ChatWidgetState => {
+  return extractWidgetStateFromMetadata(message.metadata, message.bodyMarkdown, liveData, locale);
 };
 
-export const getInvocationWidgetData = (message: ExecutionInvocationMessageRecord, liveData?: ChatWidgetLiveData): ChatWidgetState => {
-  return extractWidgetStateFromMetadata(message.metadata, message.contentMarkdown, liveData);
+export const getInvocationWidgetData = (
+  message: ExecutionInvocationMessageRecord,
+  liveData?: ChatWidgetLiveData,
+  locale: DashboardLocale = "en",
+): ChatWidgetState => {
+  return extractWidgetStateFromMetadata(message.metadata, message.contentMarkdown, liveData, locale);
 };
 
 const metaKind = (message: { metadata?: Record<string, unknown> | null }): string | undefined =>
@@ -1625,8 +1685,9 @@ const buildReasoningAriaLabel = (
   modelLabel: string | null,
   tokens: ParsedTurnTokens | null,
   createdAtLabel: string,
+  locale: DashboardLocale,
 ): string => {
-  const parts = ["Reasoning turn"];
+  const parts = [translateChatMessage(locale, "reasoningTurn")];
 
   if (providerLabel) {
     parts.push(providerLabel);
@@ -1638,7 +1699,7 @@ const buildReasoningAriaLabel = (
 
   const tokenCount = reasoningTokenCount(tokens);
   if (tokenCount !== null) {
-    parts.push(`${TOKEN_COUNT_FORMATTER.format(tokenCount)} tokens`);
+    parts.push(translateChatMessage(locale, "tokens", { count: new Intl.NumberFormat(locale).format(tokenCount) }));
   }
 
   if (createdAtLabel) {
@@ -1648,14 +1709,17 @@ const buildReasoningAriaLabel = (
   return parts.join(" · ");
 };
 
-export const getReasoningWidgetData = (message: ExecutionInvocationMessageRecord): ReasoningWidgetState => {
+export const getReasoningWidgetData = (
+  message: ExecutionInvocationMessageRecord,
+  locale: DashboardLocale = "en",
+): ReasoningWidgetState => {
   const metadata = message.metadata ?? null;
   const providerLabel = typeof metadata?.provider === "string" ? metadata.provider : null;
   const modelLabel = typeof metadata?.model === "string" ? metadata.model : null;
   const tokens = metadata && typeof metadata.tokens === "object" && metadata.tokens !== null
     ? (metadata.tokens as ParsedTurnTokens)
     : null;
-  const createdAtLabel = formatChatTime(message.createdAt);
+  const createdAtLabel = formatChatTime(message.createdAt, locale);
 
   return {
     text: sanitizeInvocationOutputText(message.contentMarkdown || ""),
@@ -1663,12 +1727,13 @@ export const getReasoningWidgetData = (message: ExecutionInvocationMessageRecord
     modelLabel,
     tokens,
     createdAtLabel,
-    ariaLabel: buildReasoningAriaLabel(providerLabel, modelLabel, tokens, createdAtLabel),
+    ariaLabel: buildReasoningAriaLabel(providerLabel, modelLabel, tokens, createdAtLabel, locale),
   };
 };
 
 export const getSelfReflectionWidgetData = (
   message: ExecutionInvocationMessageRecord,
+  locale: DashboardLocale = "en",
 ): SelfReflectionWidgetState | null => {
   const reflection = readRecord(message.metadata?.reflection);
   if (!reflection) {
@@ -1676,11 +1741,12 @@ export const getSelfReflectionWidgetData = (
   }
 
   const purpose = normalizeReflectionPurpose(reflection.purpose);
-  const purposeLabel = formatReflectionPurposeLabel(purpose);
+  const purposeLabel = formatReflectionPurposeLabel(purpose, locale);
   const attempt = readNumber(reflection.attempt);
   const criteria = mergeReflectionCriteria(
     readArray(reflection.criteria),
     readArray(reflection.scores),
+    locale,
   );
   const explicitPassed = readBoolean(reflection.passed);
   const passed = explicitPassed ?? (criteria.length > 0 && criteria.every((criterion) => criterion.passed === true)
@@ -1690,18 +1756,18 @@ export const getSelfReflectionWidgetData = (
       : null);
   const errorMessage = readString(reflection.errorMessage) || readString(reflection.error_message);
   const stateLabel = errorMessage
-    ? "Reflection error"
+    ? translateChatMessage(locale, "reflectionError")
     : passed === null
-      ? "Not evaluated"
+      ? translateChatMessage(locale, "notEvaluated")
       : passed
-        ? "Passed"
-        : "Needs improvement";
+        ? translateChatMessage(locale, "passed")
+        : translateChatMessage(locale, "needsImprovement");
   const finalDecision = readString(reflection.finalDecision) || readString(reflection.final_decision);
   const finalDecisionLabel = formatReflectionDecisionLabel(finalDecision);
-  const attemptLabel = attempt === null ? null : `Attempt ${attempt + 1}`;
+  const attemptLabel = attempt === null ? null : translateChatMessage(locale, "attempt", { count: attempt + 1 });
   const ariaParts = [purposeLabel, stateLabel];
   if (finalDecisionLabel) {
-    ariaParts.push(`Decision ${finalDecisionLabel}`);
+    ariaParts.push(translateChatMessage(locale, "decision", { decision: finalDecisionLabel }));
   }
   if (attemptLabel) {
     ariaParts.push(attemptLabel);
@@ -1870,9 +1936,9 @@ export function formatStatusContext(
 /**
  * Formats token counts, e.g., producing clean numbers or values.
  */
-export function formatTokenCount(tokens: number | null | undefined): string {
+export function formatTokenCount(tokens: number | null | undefined, locale: DashboardLocale = "en"): string {
   if (tokens === undefined || tokens === null) return "0";
-  return TOKEN_COUNT_FORMATTER.format(tokens);
+  return new Intl.NumberFormat(locale).format(tokens);
 }
 
 /**

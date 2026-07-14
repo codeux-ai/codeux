@@ -22,21 +22,23 @@ import type { ChatWidgetLiveData, RichWidgetDescriptor } from "../../lib/chat-wi
 import type { ChatLiveEntityWidget } from "../../lib/chat-live-entities.js";
 import type { AgentAvatarConfig } from "../../types.js";
 import { SpeechReplayButton } from "../speech/SpeechReplayButton.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { chatMessages } from "../../i18n/messages/chat.js";
 
 const asString = (value: unknown): string | null => (typeof value === "string" ? value : null);
 
-const formatErrorCategory = (value: unknown): string | null => {
+const formatErrorCategory = (value: unknown, translate: ReturnType<typeof useDashboardI18n>["translate"]): string | null => {
   switch (value) {
     case "RATE_LIMITED":
-      return "Rate limit";
+      return translate(chatMessages, "rateLimit");
     case "QUOTA_EXHAUSTED":
-      return "Quota";
+      return translate(chatMessages, "quota");
     case "AUTH_FAILURE":
-      return "Auth failure";
+      return translate(chatMessages, "authFailure");
     case "PROVIDER_NOT_FOUND":
-      return "Provider missing";
+      return translate(chatMessages, "providerMissing");
     case "UNKNOWN":
-      return "Error";
+      return translate(chatMessages, "error");
     default:
       return null;
   }
@@ -61,23 +63,25 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
   onReplay,
   replaying = false,
 }) => {
+  const { locale, translate } = useDashboardI18n();
   const fromUser = message.role === "user";
   const fromTool = message.role === "tool";
   const fromSystem = message.role === "system";
-  const widgetData = getInvocationWidgetData(message, widgetLiveData);
+  const widgetData = getInvocationWidgetData(message, widgetLiveData, locale);
   const richWidget: RichWidgetDescriptor = resolveRichWidget({
     metadata: message.metadata,
     content: message.contentMarkdown,
     toolCallsJson: message.toolCallsJson,
+    locale,
   });
   const metadataKind = asString(message.metadata?.kind);
-  const reflectionWidgetData = getSelfReflectionWidgetData(message);
+  const reflectionWidgetData = getSelfReflectionWidgetData(message, locale);
 
   // Reasoning and tool turns render as compact, full-width activity cards
   // rather than chat bubbles, so the transcript reads like the real session.
   switch (richWidget.kind) {
     case "reasoning": {
-      const reasoningWidgetData = getReasoningWidgetData(message);
+      const reasoningWidgetData = getReasoningWidgetData(message, locale);
       return (
         <div class="flex justify-start">
           <div class="w-full max-w-full lg:max-w-[760px] min-w-0 pl-11">
@@ -127,14 +131,14 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
     role = "jules";
   }
 
-  const senderName = (fromUser || fromTool) ? "User" : agentName || (message.metadata?.agentName as string) || "Assistant";
+  const senderName = (fromUser || fromTool) ? translate(chatMessages, "user") : agentName || (message.metadata?.agentName as string) || translate(chatMessages, "assistant");
   const providerLabel = message.metadata?.provider as string | undefined;
   const modelLabel = message.metadata?.model as string | undefined;
   const rawStatus = typeof message.metadata?.status === "string" ? message.metadata.status : null;
   const hasInvocationResponse = Boolean(message.metadata?.response);
   const displayStatus = rawStatus === "queued" && hasInvocationResponse ? "processed" : rawStatus;
-  const errorLabel = formatErrorCategory(message.metadata?.errorCategory);
-  const createdAtLabel = formatChatTime(message.createdAt);
+  const errorLabel = formatErrorCategory(message.metadata?.errorCategory, translate);
+  const createdAtLabel = formatChatTime(message.createdAt, locale);
   const isExternalApi = Boolean(message.metadata?.isExternalApi);
   const hasPrimaryWidget = richWidget.kind === "planning"
     || (widgetData.type === "external_reference" && Boolean(widgetData.externalReference));
@@ -146,13 +150,14 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
     ? resolveAgentMoodAsideText({
         metadata: message.metadata,
         seed: buildAgentMoodAsideSeed([message.id, message.contentMarkdown, senderName]),
+        locale,
       })
     : null;
 
   return (
     <div className={`flex ${fromUser || fromTool ? "justify-end" : "justify-start"}`}>
       <span className="sr-only">
-        From {senderName} at {createdAtLabel}. {displayStatus ? `Status: ${displayStatus}.` : ""} {errorLabel ? `Error: ${errorLabel}.` : ""}
+        {translate(chatMessages, "fromSenderAtTime", { sender: senderName, time: createdAtLabel, status: displayStatus ?? "—" })} {errorLabel ? `${translate(chatMessages, "error")}: ${errorLabel}.` : ""}
       </span>
       <div className={`flex min-w-0 max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-[760px] items-start w-full gap-3 ${fromUser || fromTool ? "flex-row-reverse" : "flex-row"}`}>
         <div className="mt-1 shrink-0 w-8 h-8 flex items-center justify-center">
@@ -199,7 +204,7 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
             {message.role === "assistant" && onReplay && !widgetData.suppressBodyMarkdown && message.contentMarkdown.trim() && (
               <SpeechReplayButton
                 busy={replaying}
-                label={`Replay message from ${senderName}`}
+                label={translate(chatMessages, "replayMessageFrom", { sender: senderName })}
                 onReplay={() => onReplay(message)}
               />
             )}
@@ -209,7 +214,7 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
           {!widgetData.suppressBodyMarkdown && (
             <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-800 dark:text-slate-200 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit prose-pre:overflow-x-auto prose-code:overflow-x-auto break-words overflow-wrap-anywhere min-w-0"
               dangerouslySetInnerHTML={{
-                __html: renderMarkdown(sanitizeInvocationOutputText(message.contentMarkdown || "*(No message content)*")),
+                __html: renderMarkdown(sanitizeInvocationOutputText(message.contentMarkdown || `*${translate(chatMessages, "noMessageContent")}*`)),
               }}
             />
           )}

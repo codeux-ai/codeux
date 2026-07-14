@@ -2,6 +2,8 @@
 
 The **Chat** page (`/chat`) is a thread-based conversation surface that lets you talk to agents for project-backed Q&A, inspect execution invocation transcripts and MCP tool invocations, and get local onboarding help before any project exists.
 
+When the dashboard language is German, all Chat-owned controls, empty states, confirmations, status cues, widgets, speech controls, and accessible announcements use German. Times, counts, percentages, token estimates, durations, and retry timestamps follow German number and date conventions. Your messages, agent replies, prompts sent by quick actions, reasoning, tool traces, invocation logs, scheduled instructions, provider/runtime errors and statuses, entity names, and speech transcripts remain exactly as received.
+
 ## Layout
 
 - **No-project assistant** — When no project is selected, `/chat` shows a local onboarding assistant instead of a project-required empty state. It presents the Code UX assistant avatar, five quick bubbles, local replies, and explicit buttons for Add Project, Projects, Settings, onboarding, and docs. It does not create conversation threads, persist messages, or call project-scoped chat APIs.

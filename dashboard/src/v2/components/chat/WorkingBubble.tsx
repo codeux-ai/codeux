@@ -8,6 +8,8 @@ import { getWorkingBubbleData } from "../../lib/chat-widget-view-models.js";
 import { STATUS_MESSAGE_MIN_INTERVAL_MS, selectAgentHumorMessage } from "../../lib/agent-humor-messages.js";
 import { PlanningRequestWidget } from "./widgets/PlanningRequestWidget.js";
 import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { chatMessages } from "../../i18n/messages/chat.js";
 
 export interface WorkingBubbleProps {
   displayName: string | null;
@@ -37,12 +39,13 @@ const useStatusMessageNowMs = (nowMs: number | null | undefined): number => {
 };
 
 export const WorkingBubble: FunctionComponent<WorkingBubbleProps> = ({ displayName, runtimeState, phase, nowMs }) => {
+  const { locale, translate } = useDashboardI18n();
   const data = getWorkingBubbleData(runtimeState);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
   const resolvedPhase = phase === "starting" ? "starting" : "working";
-  const phaseLabel = resolvedPhase === "starting" ? "Starting" : "Working";
-  const agentLabel = displayName || "Listener";
+  const phaseLabel = translate(chatMessages, resolvedPhase === "starting" ? "starting" : "working");
+  const agentLabel = displayName || translate(chatMessages, "listener");
   const providerLabel = data.providerLabel ?? runtimeState?.virtualProvider ?? null;
   const modelLabel = data.modelLabel ?? null;
   const statusNowMs = useStatusMessageNowMs(nowMs);
@@ -50,8 +53,9 @@ export const WorkingBubble: FunctionComponent<WorkingBubbleProps> = ({ displayNa
     category: resolvedPhase,
     seed: ["working-bubble", agentLabel, providerLabel ?? "", modelLabel ?? "", resolvedPhase].join("|"),
     nowMs: statusNowMs,
+    locale,
   });
-  const metadataLabel = [providerLabel, modelLabel].filter(Boolean).join(" · ") || "Active reply";
+  const metadataLabel = [providerLabel, modelLabel].filter(Boolean).join(" · ") || translate(chatMessages, "activeReply");
 
   useLayoutEffect(() => {
     if (!bubbleRef.current) return;
@@ -73,11 +77,11 @@ export const WorkingBubble: FunctionComponent<WorkingBubbleProps> = ({ displayNa
     <div ref={bubbleRef} className="flex justify-start">
       <div className="flex max-w-[760px] w-full items-start gap-3">
         <div className="mt-1 flex shrink-0 w-8 h-8 items-center justify-center">
-          <ChatAvatar role={role} provider={data.providerLabel} agentName={displayName || "Assistant"} />
+          <ChatAvatar role={role} provider={data.providerLabel} agentName={displayName || translate(chatMessages, "assistant")} />
         </div>
         <div className="space-y-2 w-full max-w-[calc(100%-3rem)]">
           {data.isPlanning ? (
-            <PlanningRequestWidget status="running" planName={data.planName || "Execution Plan"} />
+            <PlanningRequestWidget status="running" planName={data.planName || translate(chatMessages, "executionPlan")} />
           ) : (
             <div className="flex flex-col w-full rounded-2xl border bg-slate-100/80 backdrop-blur-md p-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] rounded-tl-sm border-slate-200/60 text-slate-800 dark:bg-white/5 dark:border-white/10 dark:text-slate-200">
               <div className="flex flex-wrap items-center gap-2">

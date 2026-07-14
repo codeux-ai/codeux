@@ -49,7 +49,18 @@ export interface DashboardI18nProviderProps {
   storage?: DashboardLocaleStorage | null;
 }
 
-const DashboardI18nContext = createContext<DashboardI18nContextValue | null>(null);
+const fallbackFormatters = createDashboardFormatters("en");
+const FALLBACK_DASHBOARD_I18N: DashboardI18nContextValue = {
+  locale: "en",
+  setLocale: () => undefined,
+  translate: (bundle, key, variables) => translateDashboardMessage(bundle, "en", key, variables),
+  translatePlural: (bundle, key, count, variables, options) => (
+    translateDashboardPlural(bundle, "en", key, count, variables, options)
+  ),
+  ...fallbackFormatters,
+};
+
+const DashboardI18nContext = createContext<DashboardI18nContextValue>(FALLBACK_DASHBOARD_I18N);
 
 export const syncDashboardDocumentLocale = (locale: DashboardLocale): void => {
   if (typeof document !== "undefined") {
@@ -126,9 +137,5 @@ export const DashboardI18nProvider: FunctionComponent<DashboardI18nProviderProps
 };
 
 export const useDashboardI18n = (): DashboardI18nContextValue => {
-  const context = useContext(DashboardI18nContext);
-  if (!context) {
-    throw new Error("useDashboardI18n must be used within DashboardI18nProvider");
-  }
-  return context;
+  return useContext(DashboardI18nContext);
 };
