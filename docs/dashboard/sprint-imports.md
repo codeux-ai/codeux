@@ -52,6 +52,8 @@ The importer result list shows the current sort, active filter chips, visible re
 
 Result cards preserve the imported issue title, preview body, repository, issue key, labels, assignees, source link, and provider metadata such as authors, milestones, timestamps, and comment counts when the provider returns those fields.
 
+Importer chrome follows the active dashboard locale, including field labels, filters, validation, selection summaries, empty/loading states, and accessible announcements. Provider names and all imported records remain unchanged. Backend warnings, partial-import warnings, and API error messages are displayed verbatim inside the localized error presentation so operators can correlate them with provider logs and issue keys.
+
 The shared importer primitives provide compact provider-neutral summaries for all issue import modals. The view-model layer builds ordered filter chips, active-filter counts, default sort labels, and selected-result labels without depending on GitHub, GitLab, or Jira payload shapes. The shell supports a concise header, a compact summary rail, an optional collapsed advanced-filter region, a responsive content width, and an `aria-live` result/status slot so provider-specific modals can progressively simplify their default views without changing backend search payloads.
 
 Importer forms can use the shared field primitives under `dashboard/src/v2/components/sprints/importer/` for text, date, number, select, multi-select wrapper, and textarea controls. These wrappers keep label typography, hints, disabled states, responsive sizing, and provider focus rings consistent with the Warm Void design system while leaving provider-specific search state in the modal.

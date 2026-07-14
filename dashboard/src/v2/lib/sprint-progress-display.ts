@@ -1,3 +1,6 @@
+import { createDashboardFormatters } from "../i18n/formatters.js";
+import type { DashboardLocale } from "../i18n/locales.js";
+
 const SPRINT_COMPLETION_PRECISION = 10;
 
 export const clampSprintCompletion = (completion: number): number => {
@@ -10,6 +13,9 @@ export const clampSprintCompletion = (completion: number): number => {
   return Math.round(completion * SPRINT_COMPLETION_PRECISION) / SPRINT_COMPLETION_PRECISION;
 };
 
-export const formatSprintCompletion = (completion: number): string => (
-  `${clampSprintCompletion(completion)}%`
+export const formatSprintCompletion = (completion: number, locale: DashboardLocale = "en"): string => (
+  createDashboardFormatters(locale).formatNumber(clampSprintCompletion(completion) / 100, {
+    style: "percent",
+    maximumFractionDigits: 1,
+  })
 );

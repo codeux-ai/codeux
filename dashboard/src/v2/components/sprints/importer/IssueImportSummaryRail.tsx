@@ -1,6 +1,8 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
 import { Filter } from "lucide-preact";
 import type { IssueImportProviderMetadata } from "../../../lib/issue-import-view-models.js";
+import { useDashboardI18n } from "../../../i18n/index.js";
+import { sprintsMessages } from "../../../i18n/messages/sprints.js";
 
 export interface IssueImportSummaryRailItem {
   label: string;
@@ -21,14 +23,17 @@ interface IssueImportSummaryRailProps {
 
 export const IssueImportSummaryRail: FunctionComponent<IssueImportSummaryRailProps> = ({
   provider,
-  eyebrow = "Backlog Browser",
+  eyebrow,
   title,
   description,
   items,
   footer,
   compact = false,
   status,
-}) => (
+}) => {
+  const { translate } = useDashboardI18n();
+  const resolvedEyebrow = eyebrow ?? translate(sprintsMessages, "backlogBrowser");
+  return (
   <aside className={`relative hidden shrink-0 flex-col justify-between overflow-hidden bg-void-950 text-white xl:flex ${compact ? "w-64 p-5" : "w-72 p-7"}`}>
     <span className="pointer-events-none absolute -left-5 -top-3 select-none font-display text-[7.4rem] font-black leading-none tracking-tighter text-white/[0.035]">
       {provider.label.toUpperCase()}
@@ -38,7 +43,7 @@ export const IssueImportSummaryRail: FunctionComponent<IssueImportSummaryRailPro
     <div className="relative z-10">
       <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${provider.accent.badgeClassName}`}>
         <Filter className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden="true" />
-        {eyebrow}
+        {resolvedEyebrow}
       </div>
       <h2 className="mt-6 font-display text-2xl font-semibold leading-[0.95] tracking-tight">
         {title}
@@ -70,4 +75,5 @@ export const IssueImportSummaryRail: FunctionComponent<IssueImportSummaryRailPro
       {footer}
     </div>
   </aside>
-);
+  );
+};

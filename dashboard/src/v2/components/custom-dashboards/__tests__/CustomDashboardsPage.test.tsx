@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 /** @jsx h */
 import { h } from "preact";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CustomDashboardsPage } from "../../../CustomDashboardsPage.js";
@@ -24,6 +24,8 @@ import {
   startCustomDashboardValidation,
   updateCustomDashboardDraft,
 } from "../../../lib/custom-dashboard-api.js";
+import { DashboardI18nProvider } from "../../../i18n/context.js";
+import type { DashboardLocale } from "../../../i18n/locales.js";
 
 vi.mock("../../../lib/custom-dashboard-api.js", () => ({
   archiveCustomDashboard: vi.fn(),
@@ -75,60 +77,14 @@ vi.mock("../../ui/ActionFeedbackRegion.js", async () => {
 vi.mock("../../ui/ConfirmDialog.js", async () => {
   const { h: createElement } = await vi.importActual<typeof import("preact")>("preact");
   return {
-    ConfirmDialog: ({ isOpen }: { isOpen: boolean }) => {
-    return isOpen ? createElement("div", { role: "dialog", "aria-label": "Confirm archive" }) : null;
-    },
-  };
-});
-
-vi.mock("../CustomDashboardList.js", async () => {
-  const { h: createElement } = await vi.importActual<typeof import("preact")>("preact");
-  return {
-    CustomDashboardList: ({ dashboards, selectedDashboardId, onSelect, onCreate }: any) => {
-    return createElement(
-      "section",
-      { "aria-label": "Custom dashboards" },
-      dashboards.map((dashboard: CustomDashboardRecord) => createElement(
-        "button",
-        {
-          key: dashboard.id,
-          type: "button",
-          "aria-pressed": dashboard.id === selectedDashboardId,
-          onClick: () => onSelect(dashboard.id),
-        },
-        dashboard.title,
-      )),
-      createElement("button", { type: "button", onClick: onCreate }, "New"),
-    );
-    },
-  };
-});
-
-vi.mock("../CustomDashboardEditorPanel.js", async () => {
-  const { h: createElement } = await vi.importActual<typeof import("preact")>("preact");
-  return {
-    CustomDashboardEditorPanel: () => {
-    return createElement("section", { "aria-label": "Custom dashboard editor" }, "Editor");
-    },
-  };
-});
-
-vi.mock("../CustomDashboardValidationPanel.js", async () => {
-  const { h: createElement } = await vi.importActual<typeof import("preact")>("preact");
-  return {
-    CustomDashboardValidationPanel: ({ selectedRevision, validationSession, logs, onStartValidation, onPublish }: any) => {
-    const canPublish = Boolean(
-      selectedRevision?.validationStatus === "passed"
-        || (validationSession?.status === "passed" && validationSession.revisionId === selectedRevision?.id),
-    );
-    return createElement(
-      "aside",
-      { "aria-label": "Custom dashboard validation and publication" },
-      createElement("button", { type: "button", onClick: onStartValidation }, "Validate"),
-      createElement("button", { type: "button", disabled: !canPublish, onClick: onPublish }, "Publish"),
-      logs ? createElement("pre", null, logs) : null,
-      validationSession ? createElement("a", { href: `/api/custom-dashboard-validations/${validationSession.id}/proxy/` }, "Open validation preview") : null,
-    );
+    ConfirmDialog: ({ isOpen, options, onConfirm, onCancel }: any) => {
+    return isOpen ? createElement(
+      "div",
+      { role: "dialog", "aria-label": options.title },
+      createElement("p", null, options.body),
+      createElement("button", { type: "button", onClick: onConfirm }, options.confirmLabel),
+      createElement("button", { type: "button", onClick: onCancel }, options.cancelLabel),
+    ) : null;
     },
   };
 });
@@ -187,6 +143,13 @@ const passedSession: CustomDashboardValidationSessionRecord = {
   updatedAt: "2026-07-07T00:00:01.000Z",
 };
 
+const passedRevision: CustomDashboardRevisionRecord = {
+  ...revision,
+  validationStatus: "passed",
+  validationReport: { valid: true, summary: "Passed", issues: [] },
+  validatedAt: "2026-07-07T00:00:01.000Z",
+};
+
 const projectContext = {
   projects: [{ id: "project-1", name: "Approved Test Project", status: "ready" }],
   selectedProjectId: "project-1",
@@ -200,10 +163,15 @@ const projectContext = {
   deleteProject: vi.fn(),
 };
 
-const renderPage = (context: typeof projectContext | any = projectContext) => render(
-  <ProjectDataContext.Provider value={context}>
-    <CustomDashboardsPage />
-  </ProjectDataContext.Provider>,
+const renderPage = (
+  context: typeof projectContext | any = projectContext,
+  locale: DashboardLocale = "en",
+) => render(
+  <DashboardI18nProvider initialLocale={locale} storage={null}>
+    <ProjectDataContext.Provider value={context}>
+      <CustomDashboardsPage />
+    </ProjectDataContext.Provider>
+  </DashboardI18nProvider>,
 );
 
 describe("CustomDashboardsPage", () => {
@@ -261,5 +229,127 @@ describe("CustomDashboardsPage", () => {
     await waitFor(() => {
       expect(publishCustomDashboardRevision).toHaveBeenCalledWith("dashboard-1", "revision-1", "session-1");
     });
+  });
+
+  it("supports the German create, edit, revision, validation, publish, and archive flow", async () => {
+    renderPage(projectContext, "de");
+
+    expect(await screen.findByText("Dashboard-Arbeitsbereich")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("Release health")).toBeInTheDocument();
+    expect(screen.getByText("Delivery Pulse")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Neu" }));
+    await waitFor(() => expect(createCustomDashboard).toHaveBeenCalledTimes(1));
+
+    const titleInput = await screen.findByLabelText("Titel");
+    fireEvent.input(titleInput, { target: { value: "Lieferstatus – Benutzerinhalt" } });
+    fireEvent.input(screen.getByLabelText("Beschreibung"), { target: { value: "Beschreibung bleibt exakt" } });
+    fireEvent.click(screen.getByRole("button", { name: "Entwurf speichern" }));
+    await waitFor(() => {
+      expect(updateCustomDashboardDraft).toHaveBeenCalledWith(
+        "dashboard-1",
+        expect.objectContaining({
+          title: "Lieferstatus – Benutzerinhalt",
+          description: "Beschreibung bleibt exakt",
+        }),
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Revision erstellen" }));
+    await waitFor(() => expect(createCustomDashboardRevision).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole("button", { name: "Validieren" }));
+    await waitFor(() => expect(startCustomDashboardValidation).toHaveBeenCalledWith("dashboard-1", "revision-1", "project-1"));
+    await waitFor(() => expect(screen.getByLabelText("Validierungsprotokolle").textContent).toBe("build ok\nhealth ok"));
+    expect(screen.getByRole("link", { name: "Validierungsvorschau öffnen" })).toHaveAttribute(
+      "href",
+      "/api/custom-dashboard-validations/session-1/proxy/",
+    );
+
+    const publishButton = screen.getByRole("button", { name: "Veröffentlichen" });
+    await waitFor(() => expect(publishButton).toBeEnabled());
+    fireEvent.click(publishButton);
+    await waitFor(() => expect(publishCustomDashboardRevision).toHaveBeenCalledWith("dashboard-1", "revision-1", "session-1"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Archivieren" }));
+    const dialog = await screen.findByRole("dialog", { name: "Benutzerdefiniertes Dashboard archivieren?" });
+    expect(dialog).toHaveTextContent("Beim Archivieren wird die aktive Veröffentlichung aufgehoben");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Archivieren" }));
+    await waitFor(() => expect(archiveCustomDashboard).toHaveBeenCalledWith("dashboard-1"));
+  });
+
+  it("rolls back to an earlier validated revision and restores revision-menu focus", async () => {
+    const olderRevision = { ...passedRevision, id: "revision-older", revisionNumber: 1 };
+    const newerRevision = { ...passedRevision, id: "revision-newer", revisionNumber: 2 };
+    const publishedDashboard = { ...dashboard, status: "published" as const, publishedRevisionId: newerRevision.id };
+    vi.mocked(fetchCustomDashboards).mockResolvedValue({ dashboards: [publishedDashboard] });
+    vi.mocked(fetchCustomDashboard).mockResolvedValue({ dashboard: publishedDashboard, revisions: [olderRevision, newerRevision] });
+    vi.mocked(publishCustomDashboardRevision).mockResolvedValue({ ...publishedDashboard, publishedRevisionId: olderRevision.id });
+
+    renderPage(projectContext, "de");
+
+    const menuTrigger = await screen.findByRole("button", { name: "Revisionsmenü öffnen" });
+    menuTrigger.focus();
+    fireEvent.click(menuTrigger);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Revision 1 · Validiert" }));
+    await waitFor(() => expect(menuTrigger).toHaveFocus());
+
+    fireEvent.click(screen.getByRole("button", { name: "Veröffentlichen" }));
+    await waitFor(() => expect(publishCustomDashboardRevision).toHaveBeenCalledWith(
+      "dashboard-1",
+      "revision-older",
+      undefined,
+    ));
+  });
+
+  it("keeps network, stale-revision, build-log, filename, and source diagnostics verbatim in German", async () => {
+    const longPath = `src/${"sehr-langer-dateiname-".repeat(8)}.tsx`;
+    const rawNetworkError = "HTTP 503 upstream-dashboard-service";
+    const rawBuildLog = `${"vite:warn unveränderte-ausgabe ".repeat(20)}\n/path/Datei.tsx:17`;
+    const failedSession: CustomDashboardValidationSessionRecord = {
+      ...passedSession,
+      status: "failed",
+      validationReport: {
+        valid: false,
+        summary: "docker build exited 17",
+        issues: [{ field: "runtime", code: "validation_failed", message: "docker build exited 17" }],
+      },
+    };
+    const longFileDashboard = {
+      ...dashboard,
+      fileBundle: { files: [{ path: longPath, content: "export const BenutzerCode = 'UNCHANGED';", contentType: "text/typescript-jsx" }] },
+    };
+    vi.mocked(fetchCustomDashboards).mockRejectedValueOnce(new Error(rawNetworkError)).mockResolvedValue({ dashboards: [longFileDashboard] });
+    vi.mocked(fetchCustomDashboard).mockResolvedValue({ dashboard: longFileDashboard, revisions: [revision] });
+    vi.mocked(startCustomDashboardValidation).mockResolvedValue(failedSession);
+    vi.mocked(fetchCustomDashboardValidationLogs).mockResolvedValue({ logs: rawBuildLog });
+
+    renderPage(projectContext, "de");
+
+    expect(await screen.findByText(rawNetworkError)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Aktualisieren" }));
+    expect(await screen.findByText("Delivery Pulse")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Dateien" }));
+    expect(screen.getByText(longPath)).toBeInTheDocument();
+    expect(screen.getByLabelText("Inhalt der ausgewählten Datei")).toHaveValue("export const BenutzerCode = 'UNCHANGED';");
+
+    fireEvent.click(screen.getByRole("button", { name: "Validieren" }));
+    await waitFor(() => expect(screen.getByLabelText("Validierungsprotokolle").textContent).toBe(rawBuildLog));
+    expect(screen.getByRole("button", { name: "Veröffentlichen" })).toBeDisabled();
+  });
+
+  it("shows stale publication API errors verbatim while keeping German controls", async () => {
+    const staleError = "Revision revision-1 is stale; expected revision-2.";
+    vi.mocked(fetchCustomDashboard).mockResolvedValue({ dashboard, revisions: [passedRevision] });
+    vi.mocked(publishCustomDashboardRevision).mockRejectedValue(new Error(staleError));
+
+    renderPage(projectContext, "de");
+    const publishButton = await screen.findByRole("button", { name: "Veröffentlichen" });
+    expect(publishButton).toBeEnabled();
+    fireEvent.click(publishButton);
+
+    expect(await screen.findByText(staleError)).toBeInTheDocument();
+    expect(screen.queryByText(/Revision revision-1 ist veraltet/)).not.toBeInTheDocument();
   });
 });

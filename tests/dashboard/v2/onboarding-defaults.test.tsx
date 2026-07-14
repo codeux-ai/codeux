@@ -1,15 +1,21 @@
 /** @vitest-environment happy-dom */
 /** @jsx h */
 /** @jsxFrag Fragment */
-import { h, Fragment } from "preact";
+import { h, Fragment, type ComponentChild } from "preact";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent, within } from "@testing-library/preact";
+import { render as testingRender, screen, waitFor, fireEvent, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { OnboardingExperience } from "../../../dashboard/src/v2/components/onboarding/OnboardingExperience.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import * as settingsApi from "../../../dashboard/src/v2/lib/settings-api.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+import type { DashboardLocale } from "../../../dashboard/src/v2/i18n/locales.js";
 
 expect.extend(matchers);
+
+const render = (ui: ComponentChild, locale: DashboardLocale = "en") => testingRender(
+  <DashboardI18nProvider initialLocale={locale}>{ui}</DashboardI18nProvider>,
+);
 
 vi.mock("gsap", () => ({
   default: {

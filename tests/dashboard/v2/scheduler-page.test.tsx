@@ -38,6 +38,8 @@ import {
   deleteSchedulerEntry,
 } from "../../../dashboard/src/v2/lib/scheduler-api.js";
 import { subscribeToDashboardRealtime } from "../../../dashboard/src/lib/realtime/dashboard-realtime-client.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+import type { DashboardLocale } from "../../../dashboard/src/v2/i18n/locales.js";
 
 // Mock API modules
 vi.mock("../../../dashboard/src/v2/lib/project-api.js", () => ({
@@ -49,12 +51,18 @@ vi.mock("../../../dashboard/src/v2/lib/node-flow-api.js", () => ({
 vi.mock("../../../dashboard/src/v2/lib/quicksprint-api.js", () => ({
   fetchQuicksprintTemplates: vi.fn().mockResolvedValue([]),
 }));
-vi.mock("../../../dashboard/src/v2/lib/scheduler-api.js", () => ({
-  fetchProjectSchedule: vi.fn().mockResolvedValue({ entries: [], occurrences: [] }),
-  createSchedulerEntry: vi.fn().mockResolvedValue({ id: "entry-1" }),
-  updateSchedulerEntry: vi.fn().mockResolvedValue({ id: "entry-1" }),
-  deleteSchedulerEntry: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock("../../../dashboard/src/v2/lib/scheduler-api.js", async () => {
+  const actual = await vi.importActual<typeof import("../../../dashboard/src/v2/lib/scheduler-api.js")>(
+    "../../../dashboard/src/v2/lib/scheduler-api.js",
+  );
+  return {
+    ...actual,
+    fetchProjectSchedule: vi.fn().mockResolvedValue({ entries: [], occurrences: [] }),
+    createSchedulerEntry: vi.fn().mockResolvedValue({ id: "entry-1" }),
+    updateSchedulerEntry: vi.fn().mockResolvedValue({ id: "entry-1" }),
+    deleteSchedulerEntry: vi.fn().mockResolvedValue(undefined),
+  };
+});
 vi.mock("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js", () => ({
   subscribeToDashboardRealtime: vi.fn().mockReturnValue(vi.fn()),
 }));
@@ -66,11 +74,16 @@ const mockProjectData = {
   loadProjects: vi.fn(),
 };
 
-const renderSchedulerPage = (projectContextValue: any = mockProjectData) => {
+const renderSchedulerPage = (
+  projectContextValue: any = mockProjectData,
+  locale: DashboardLocale = "en",
+) => {
   return render(
-    <ProjectDataContext.Provider value={projectContextValue}>
-      <SchedulerPage />
-    </ProjectDataContext.Provider>
+    <DashboardI18nProvider initialLocale={locale} storage={null}>
+      <ProjectDataContext.Provider value={projectContextValue}>
+        <SchedulerPage />
+      </ProjectDataContext.Provider>
+    </DashboardI18nProvider>
   );
 };
 
@@ -78,6 +91,7 @@ describe("SchedulerPage", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    window.confirm = vi.fn(() => true);
   });
 
   it("renders project placeholder when no project is selected", () => {
@@ -882,7 +896,7 @@ describe("SchedulerPage", () => {
     expect(screen.getByText("Edit entry")).toBeInTheDocument();
     expect(screen.getByLabelText(/after another sprint ends/i)).toBeChecked();
     expect(screen.getByText("Target Sprint")).toBeInTheDocument();
-    expect(screen.getByText("Source Sprint (completed)")).toBeInTheDocument();
+    expect(screen.getByText("Source Sprint (Completed)")).toBeInTheDocument();
 
     const offsetInput = screen.getByLabelText(/offset minutes/i) as HTMLInputElement;
     expect(offsetInput.value).toBe("10");
@@ -950,5 +964,274 @@ describe("SchedulerPage", () => {
 
     // Verify updateSchedulerEntry was NOT called
     expect(updateSchedulerEntry).not.toHaveBeenCalled();
+  });
+
+  it("creates a German one-time schedule without localizing persisted target values", async () => {
+    vi.mocked(fetchSprints).mockResolvedValue({
+      sprints: [{ id: "sprint-1", name: "Morgenprüfung – unverändert", status: "active" }],
+    } as any);
+    vi.mocked(fetchProjectSchedule).mockResolvedValue({ entries: [], occurrences: [] } as any);
+
+    renderSchedulerPage(mockProjectData, "de");
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Ereignisse planen" })).toBeInTheDocument();
+    expect(screen.getByText(/Zeitzone: /)).toBeInTheDocument();
+
+    const scheduleValue = "2026-10-25T02:30";
+    fireEvent.input(screen.getByLabelText(/^Datum und Uhrzeit/i), { target: { value: scheduleValue } });
+    const scheduleButton = screen.getByRole("button", { name: "Planen" });
+    fireEvent.click(scheduleButton);
+    fireEvent.click(scheduleButton);
+
+    await waitFor(() => expect(createSchedulerEntry).toHaveBeenCalledTimes(1));
+    expect(createSchedulerEntry).toHaveBeenCalledWith("proj-1", expect.objectContaining({
+      title: "Run Morgenprüfung – unverändert",
+      targetType: "sprint",
+      scheduledFor: new Date(scheduleValue).toISOString(),
+      sprintTarget: { sprintId: "sprint-1" },
+      recurrence: { frequency: "none", interval: 1, endMode: "never" },
+      timezone: expect.any(String),
+    }));
+  });
+
+  it("formats German recurring entries in their stored timezone and preserves names", async () => {
+    vi.mocked(fetchSprints).mockResolvedValue({
+      sprints: [{ id: "sprint-1", name: "Release & Prüfung", status: "active" }],
+    } as any);
+    vi.mocked(fetchProjectSchedule).mockResolvedValue({
+      entries: [{
+        id: "entry-de",
+        projectId: "proj-1",
+        title: "Benutzerdefinierter Titel",
+        targetType: "sprint",
+        status: "scheduled",
+        scheduledFor: "2026-06-01T12:00:00.000Z",
+        timezone: "Europe/Berlin",
+        sprintTarget: { sprintId: "sprint-1" },
+        recurrence: {
+          frequency: "daily",
+          interval: 1,
+          endMode: "on_date",
+          until: "2026-06-03T12:00:00.000Z",
+        },
+        nextRunAt: "2026-06-01T12:00:00.000Z",
+        lastRunAt: null,
+        runCount: 0,
+        lastError: null,
+      }],
+      occurrences: [],
+    } as any);
+
+    renderSchedulerPage(mockProjectData, "de");
+
+    const row = await screen.findByTestId("scheduler-entry-entry-de");
+    expect(row).toHaveTextContent("Benutzerdefinierter Titel");
+    expect(row).toHaveTextContent("Sprint: Release & Prüfung");
+    expect(row).toHaveTextContent(/Alle täglich bis/);
+    expect(row).toHaveTextContent("Europe/Berlin");
+    expect(row).toHaveTextContent(/14:00/);
+    expect(row).toHaveTextContent("geplant");
+  });
+
+  it("localizes German sprint statuses before rendering anchored schedule choices", async () => {
+    const localizedSprints = [
+      { id: "sprint-running", name: "Laufender Sprint", status: "running" },
+      { id: "sprint-paused", name: "Pausierter Sprint", status: "paused" },
+      { id: "sprint-completed", name: "Abgeschlossener Sprint", status: "completed" },
+      { id: "sprint-failed", name: "Fehlgeschlagener Sprint", status: "failed" },
+      { id: "sprint-cancelled", name: "Abgebrochener Sprint", status: "cancelled" },
+      { id: "sprint-idle", name: "Entwurfs-Sprint", status: "idle" },
+    ];
+    vi.mocked(fetchSprints).mockResolvedValue({ sprints: localizedSprints } as any);
+    vi.mocked(fetchProjectSchedule).mockResolvedValue({ entries: [], occurrences: [] } as any);
+
+    renderSchedulerPage(mockProjectData, "de");
+
+    await screen.findByText("Laufzeit-Zeitplaner");
+    await screen.findByText("Laufender Sprint");
+    fireEvent.click(screen.getByLabelText(/nachdem ein anderer Sprint endet/i));
+    const sourceSprintLabel = await screen.findByText("Laufender Sprint (Läuft)");
+    fireEvent.click(sourceSprintLabel.closest("button")!);
+
+    expect(await screen.findByRole("option", { name: "Pausierter Sprint (Pausiert)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Abgeschlossener Sprint (Abgeschlossen)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Fehlgeschlagener Sprint (Fehlgeschlagen)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Abgebrochener Sprint (Abgebrochen)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Entwurfs-Sprint (Entwurf)" })).toBeInTheDocument();
+    expect(screen.queryByText(/\((running|paused|completed|failed|cancelled|idle)\)/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("option", { name: "Fehlgeschlagener Sprint (Fehlgeschlagen)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Planen" }));
+
+    await waitFor(() => expect(createSchedulerEntry).toHaveBeenCalledWith("proj-1", expect.objectContaining({
+      targetType: "sprint",
+      sprintTarget: { sprintId: "sprint-running" },
+      scheduleAnchor: {
+        mode: "after_sprint_end",
+        sourceSprintId: "sprint-failed",
+        offsetMinutes: 0,
+      },
+    })));
+    expect(localizedSprints.map((sprint) => [sprint.id, sprint.name, sprint.status])).toEqual([
+      ["sprint-running", "Laufender Sprint", "running"],
+      ["sprint-paused", "Pausierter Sprint", "paused"],
+      ["sprint-completed", "Abgeschlossener Sprint", "completed"],
+      ["sprint-failed", "Fehlgeschlagener Sprint", "failed"],
+      ["sprint-cancelled", "Abgebrochener Sprint", "cancelled"],
+      ["sprint-idle", "Entwurfs-Sprint", "idle"],
+    ]);
+  });
+
+  it("falls back to locale formatting when a persisted timezone ID is invalid", async () => {
+    vi.mocked(fetchSprints).mockResolvedValue({
+      sprints: [{ id: "sprint-1", name: "Zeitzonenprüfung", status: "running" }],
+    } as any);
+    vi.mocked(fetchProjectSchedule).mockResolvedValue({
+      entries: [{
+        id: "entry-invalid-timezone",
+        projectId: "proj-1",
+        title: "Ungültige Zeitzone bleibt sichtbar",
+        targetType: "sprint",
+        status: "scheduled",
+        scheduledFor: "2026-06-01T12:00:00.000Z",
+        timezone: "Mars/Olympus_Mons",
+        sprintTarget: { sprintId: "sprint-1" },
+        recurrence: {
+          frequency: "daily",
+          interval: 1,
+          endMode: "on_date",
+          until: "2026-06-03T12:00:00.000Z",
+        },
+        nextRunAt: "2026-06-01T12:00:00.000Z",
+        lastRunAt: "2026-05-31T12:00:00.000Z",
+        runCount: 1,
+        lastError: null,
+      }],
+      occurrences: [],
+    } as any);
+
+    renderSchedulerPage(mockProjectData, "de");
+
+    const row = await screen.findByTestId("scheduler-entry-entry-invalid-timezone");
+    expect(row).toHaveTextContent("Ungültige Zeitzone bleibt sichtbar");
+    expect(row).toHaveTextContent("Mars/Olympus_Mons");
+    expect(row).toHaveTextContent(/Alle täglich bis/);
+    expect(row).toHaveTextContent(/Zuletzt ausgeführt:/);
+  });
+
+  it("reports invalid German schedule dates and recurrence windows before submitting", async () => {
+    vi.mocked(fetchSprints).mockResolvedValue({
+      sprints: [{ id: "sprint-1", name: "Sprint 1", status: "active" }],
+    } as any);
+    vi.mocked(fetchProjectSchedule).mockResolvedValue({ entries: [], occurrences: [] } as any);
+    const { container } = renderSchedulerPage(mockProjectData, "de");
+
+    await screen.findByText("Laufzeit-Zeitplaner");
+    const dateInputs = () => Array.from(container.querySelectorAll<HTMLInputElement>('input[type="datetime-local"]'));
+    fireEvent.input(dateInputs()[0]!, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Planen" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Wählen Sie ein gültiges Zeitplandatum");
+    expect(createSchedulerEntry).not.toHaveBeenCalled();
+
+    fireEvent.input(dateInputs()[0]!, { target: { value: "2026-08-10T10:00" } });
+    fireEvent.click(within(screen.getByTestId("scheduler-form-panel")).getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Unbegrenzt" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Enddatum/-uhrzeit" }));
+    fireEvent.input(dateInputs()[1]!, { target: { value: "2026-08-09T10:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Planen" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("muss nach der ersten geplanten Ausführung liegen");
+    expect(createSchedulerEntry).not.toHaveBeenCalled();
+  });
+
+  it("configures German AI remediation while keeping the API enum unchanged", async () => {
+    vi.mocked(fetchProjectSchedule).mockResolvedValue({ entries: [], occurrences: [] } as any);
+    renderSchedulerPage(mockProjectData, "de");
+
+    await screen.findByText("Laufzeit-Zeitplaner");
+    fireEvent.click(screen.getByRole("button", { name: "Speicher" }));
+    const remediationMode = screen.getByLabelText(/^Modus der Langzeitspeicher-Bereinigung/i) as HTMLSelectElement;
+    fireEvent.input(remediationMode, { target: { value: "ai" } });
+    expect(remediationMode.value).toBe("ai");
+    expect(screen.getByText(/Im KI-Modus werden Kandidaten/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Planen" }));
+
+    await waitFor(() => expect(createSchedulerEntry).toHaveBeenCalledWith("proj-1", expect.objectContaining({
+      targetType: "memory_remediation",
+      memoryRemediationTarget: { mode: "ai" },
+    })));
+  });
+
+  it("keeps server errors verbatim and retries a failed German refresh", async () => {
+    vi.mocked(fetchProjectSchedule)
+      .mockRejectedValueOnce(new Error("SERVER_DIAGNOSTIC_42"))
+      .mockResolvedValueOnce({ entries: [], occurrences: [] } as any);
+    renderSchedulerPage(mockProjectData, "de");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("SERVER_DIAGNOSTIC_42");
+    fireEvent.click(screen.getByRole("button", { name: "Aktualisieren" }));
+
+    await waitFor(() => expect(fetchProjectSchedule).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+    expect(screen.getByText(/0 sichtbare Ausführungen/)).toBeInTheDocument();
+  });
+
+  it("refreshes from realtime events and supports keyboard tab navigation", async () => {
+    let realtimeListener: ((message: any) => void) | undefined;
+    vi.mocked(subscribeToDashboardRealtime).mockImplementation((_scopes, listener) => {
+      realtimeListener = listener;
+      return vi.fn();
+    });
+    vi.mocked(fetchProjectSchedule).mockResolvedValue({ entries: [], occurrences: [] } as any);
+    renderSchedulerPage(mockProjectData, "de");
+
+    const calendarTab = await screen.findByRole("tab", { name: "Kalender" });
+    const dayTab = screen.getByRole("tab", { name: "24 Stunden" });
+    fireEvent.keyDown(calendarTab.closest('[role="tablist"]')!, { key: "End" });
+    await waitFor(() => expect(dayTab).toHaveFocus());
+    expect(dayTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "scheduler-view-tab-day");
+
+    realtimeListener?.({ type: "snapshot_required" });
+    await waitFor(() => expect(fetchProjectSchedule).toHaveBeenCalledTimes(2));
+  });
+
+  it("uses the localized single-day calendar layout on mobile", async () => {
+    const matchMediaSpy = vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
+      matches: query === "(max-width: 767px)",
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(() => true),
+    }));
+    vi.mocked(fetchProjectSchedule).mockResolvedValue({ entries: [], occurrences: [] } as any);
+    const { container } = renderSchedulerPage(mockProjectData, "de");
+
+    await screen.findByText("Kalenderansicht");
+    expect(container.querySelectorAll('button[aria-label*="Ausführung"]')).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Zurück" }).length).toBeGreaterThan(1);
+    matchMediaSpy.mockRestore();
+  });
+
+  it("requires confirmation before deleting a schedule", async () => {
+    vi.mocked(fetchProjectSchedule).mockResolvedValue({
+      entries: [{
+        id: "entry-confirm",
+        title: "Confirm delete",
+        targetType: "sprint",
+        status: "scheduled",
+        recurrence: { frequency: "none", interval: 1, endMode: "never" },
+        runCount: 0,
+      }],
+      occurrences: [],
+    } as any);
+    vi.mocked(window.confirm).mockReturnValue(false);
+    renderSchedulerPage(mockProjectData, "de");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Zeitplaneintrag löschen" }));
+    expect(window.confirm).toHaveBeenCalledWith("Diesen Zeitplaneintrag löschen? Dies kann nicht rückgängig gemacht werden.");
+    expect(deleteSchedulerEntry).not.toHaveBeenCalled();
   });
 });
