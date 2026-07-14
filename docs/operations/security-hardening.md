@@ -92,7 +92,7 @@ While Code UX trusts the developer and any connected systems, several specific p
 - **Dashboard Login Port Binding:** Interactive dashboard-login containers do not use Docker host networking by default. Codex and Claude Code OAuth callback ports are published only on host loopback as `127.0.0.1:<port>:<port>`; other provider login containers publish no host ports unless a provider-specific flow explicitly requires it. Public dashboard binding does not change this callback-port rule.
 
 ### Subprocess & Settings Mutation Safety
-- **Shell-Free Command Execution:** Shared subprocess execution validates command names, argument null bytes, stdin file paths, and working directories immediately before spawning. Working directories must resolve to existing real directories before either the inline or helper-process boundary, and commands run with `shell: false` so arguments are not reinterpreted by a shell.
+- **Shell-Free Command Execution:** Shared subprocess execution validates command names, argument null bytes, stdin file paths, and working directories immediately before spawning. Working directories must resolve to existing real directories inside the user home, application directory, OS temporary directory, or an explicit `CODE_UX_DIRECTORY_BROWSER_ROOTS` entry before either the inline or helper-process boundary. Commands run with `shell: false` so arguments are not reinterpreted by a shell.
 - **Prototype Pollution Guards:** Dotted settings paths are parsed through a safe-key validator before clone-on-write mutation. `__proto__`, `constructor`, `prototype`, and empty path segments are rejected before any assignment.
 
 ## Trust Model & Limitations

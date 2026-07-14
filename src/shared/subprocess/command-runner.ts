@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import { createReadStream } from "fs";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 import { createHash } from "crypto";
 import {
   DockerHelperContainerPool,
@@ -14,6 +15,7 @@ import {
 import type { SpawnerCommandOptions, SpawnerRawResult } from "./command-spawner-protocol.js";
 import { isRuntimeShutdownInProgress } from "../../services/shutdown-state.js";
 import { BoundedTextBuffer } from "./bounded-text-buffer.js";
+import { expandHomePath } from "../config/home-path.js";
 
 declare const spawnCommandBrand: unique symbol;
 declare const spawnArgumentBrand: unique symbol;
@@ -390,18 +392,41 @@ export class CommandRunner {
       // workspace. Canonicalize it immediately before dispatch so relative
       // segments and symlink aliases cannot change the directory boundary
       // observed by the child process.
-      // codeql[js/path-injection]
       canonical = fs.realpathSync(resolved);
     } catch {
       throw new Error(`cwd is not an existing directory: ${resolved}`);
     }
-    // canonical is the existing real path returned above; confirm its type
-    // before it crosses either subprocess boundary.
-    // codeql[js/path-injection]
-    if (!fs.statSync(canonical).isDirectory()) {
-      throw new Error(`cwd is not an existing directory: ${canonical}`);
+
+    const trustedRoots = [
+      os.homedir(),
+      process.cwd(),
+      os.tmpdir(),
+      ...(process.env.CODE_UX_DIRECTORY_BROWSER_ROOTS ?? "").split(","),
+    ].filter((root) => root.trim().length > 0).map((root) => {
+      const resolvedRoot = path.resolve(expandHomePath(root.trim()));
+      try {
+        return fs.realpathSync(resolvedRoot);
+      } catch {
+        return resolvedRoot;
+      }
+    });
+    for (const root of trustedRoots) {
+      // Keep the filesystem check and the returned value in the branch guarded
+      // by the normalized absolute-path prefix check. The relative-path test
+      // then enforces the separator boundary so sibling prefixes do not match.
+      if (canonical.startsWith(root)) {
+        const relative = path.relative(root, canonical);
+        const isInsideRoot = relative === ""
+          || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+        if (isInsideRoot) {
+          if (!fs.statSync(canonical).isDirectory()) {
+            throw new Error(`cwd is not an existing directory: ${canonical}`);
+          }
+          return canonical as SpawnPath;
+        }
+      }
     }
-    return canonical as SpawnPath;
+    throw new Error("cwd must be inside the home, application, temporary, or configured local roots");
   }
 
   private validateStdinFile(stdinFile: string, cwd?: string): SpawnPath {
@@ -453,7 +478,6 @@ export class CommandRunner {
       const child = spawn(spawnCommand, spawnArgs, {
         // safeCwd is the canonical existing directory returned by
         // validateSpawnCwd immediately above.
-        // codeql[js/path-injection]
         cwd: safeCwd,
         env,
         shell: false,

@@ -80,6 +80,27 @@ describe("CommandRunner", () => {
     }
   });
 
+  it("requires working directories outside standard local roots to be explicitly configured", async () => {
+    const filesystemRoot = path.parse(process.cwd()).root;
+    const previousRoots = process.env.CODE_UX_DIRECTORY_BROWSER_ROOTS;
+    delete process.env.CODE_UX_DIRECTORY_BROWSER_ROOTS;
+    try {
+      await expect(runner.run(node, ["-e", "process.exit(0)"], { cwd: filesystemRoot }))
+        .rejects.toThrow(/configured local roots/i);
+
+      process.env.CODE_UX_DIRECTORY_BROWSER_ROOTS = filesystemRoot;
+      const result = await runner.run(node, ["-e", "process.stdout.write(process.cwd())"], { cwd: filesystemRoot });
+      expect(result.ok).toBe(true);
+      expect(result.stdout).toBe(await fsPromises.realpath(filesystemRoot));
+    } finally {
+      if (previousRoots === undefined) {
+        delete process.env.CODE_UX_DIRECTORY_BROWSER_ROOTS;
+      } else {
+        process.env.CODE_UX_DIRECTORY_BROWSER_ROOTS = previousRoots;
+      }
+    }
+  });
+
   it("should handle error exit code", async () => {
     const result = await runner.run(node, ["-e", "process.exit(1)"]);
     expect(result.ok).toBe(false);
