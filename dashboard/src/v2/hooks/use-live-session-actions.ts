@@ -60,7 +60,7 @@ export function useLiveSessionActions(
             rerunningIdsRef.current = next;
             setRerunningIds(next);
         }
-    }, [refreshRuntimeStatus, refreshGitStatus, addToast]);
+    }, [refreshRuntimeStatus, refreshGitStatus, addToast, t]);
 
     const runControlAction = useCallback(async (actionId: string, operation: () => Promise<void>) => {
         if (pendingActionIdsRef.current.has(actionId)) {
@@ -95,7 +95,7 @@ export function useLiveSessionActions(
             pendingActionIdsRef.current = next;
             setPendingActionIds(next);
         }
-    }, [refreshRuntimeStatus, refreshGitStatus, addToast]);
+    }, [refreshRuntimeStatus, refreshGitStatus, addToast, t]);
 
     const handleOrchestrateSprint = useCallback(async (projectId: string, sprintId: string) => {
         await runControlAction(`sprint-start:${sprintId}`, async () => {
@@ -125,7 +125,7 @@ export function useLiveSessionActions(
         await runControlAction(`sprint-cancel:${sprintRunId}`, async () => {
             await cancelSprintRun(sprintRunId);
         });
-    }, [requestConfirm, runControlAction]);
+    }, [requestConfirm, runControlAction, t]);
 
     const handleCancelTaskDispatch = useCallback(async (dispatchId: string, targetLabel = dispatchId) => {
         if (pendingActionIdsRef.current.has(`dispatch-cancel:${dispatchId}`)) {
@@ -143,7 +143,7 @@ export function useLiveSessionActions(
         await runControlAction(`dispatch-cancel:${dispatchId}`, async () => {
             await cancelTaskDispatch(dispatchId);
         });
-    }, [requestConfirm, runControlAction]);
+    }, [requestConfirm, runControlAction, t]);
 
     const handleForceCancelSprintRun = useCallback(async (sprintRunId: string, targetLabel = sprintRunId) => {
         if (pendingActionIdsRef.current.has(`sprint-force-cancel:${sprintRunId}`)) {
@@ -161,7 +161,7 @@ export function useLiveSessionActions(
         await runControlAction(`sprint-force-cancel:${sprintRunId}`, async () => {
             await forceCancelSprintRun(sprintRunId);
         });
-    }, [requestConfirm, runControlAction]);
+    }, [requestConfirm, runControlAction, t]);
 
     const handleForceCancelTaskDispatch = useCallback(async (dispatchId: string, targetLabel = dispatchId) => {
         if (pendingActionIdsRef.current.has(`dispatch-force-cancel:${dispatchId}`)) {
@@ -179,7 +179,7 @@ export function useLiveSessionActions(
         await runControlAction(`dispatch-force-cancel:${dispatchId}`, async () => {
             await forceCancelTaskDispatch(dispatchId);
         });
-    }, [requestConfirm, runControlAction]);
+    }, [requestConfirm, runControlAction, t]);
 
     const handleRetryTaskDispatch = useCallback(async (dispatchId: string) => {
         await runControlAction(`dispatch-retry:${dispatchId}`, async () => {
@@ -203,7 +203,7 @@ export function useLiveSessionActions(
                 claimReason: "dashboard_claimed",
             });
         });
-    }, [runControlAction, requestConfirm]);
+    }, [runControlAction, requestConfirm, t]);
 
     const handleResolveAttentionItem = useCallback(async (projectId: string, attentionItemId: string) => {
         const confirmed = await requestConfirm({
@@ -222,7 +222,7 @@ export function useLiveSessionActions(
                 reason: "dashboard_resolved",
             });
         });
-    }, [runControlAction, requestConfirm]);
+    }, [runControlAction, requestConfirm, t]);
 
     const handleDismissAttentionItem = useCallback(async (projectId: string, attentionItemId: string) => {
         const confirmed = await requestConfirm({
@@ -241,7 +241,7 @@ export function useLiveSessionActions(
                 reason: "dashboard_dismissed",
             });
         });
-    }, [runControlAction, requestConfirm]);
+    }, [runControlAction, requestConfirm, t]);
 
     return {
         rerunningIds,

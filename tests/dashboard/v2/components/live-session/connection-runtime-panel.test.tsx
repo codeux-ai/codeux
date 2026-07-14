@@ -11,6 +11,7 @@ expect.extend(matchers);
 import gsap from "gsap";
 import { ConnectionRuntimePanel, ExecutionRuntimePanel } from "../../../../../dashboard/src/v2/components/live-session/ExecutionRuntimePanel.js";
 import { useExecutionTimeline } from "../../../../../dashboard/src/hooks/ExecutionTimelineContext.js";
+import { DashboardI18nProvider } from "../../../../../dashboard/src/v2/i18n/context.js";
 import type { ExecutionDashboardSnapshot, ExecutionRuntimeEventSummary } from "../../../../../dashboard/src/types.js";
 
 vi.mock("../../../../../dashboard/src/hooks/ExecutionTimelineContext.js", () => ({
@@ -200,6 +201,47 @@ describe("ConnectionRuntimePanel", () => {
         expect(toggle).toHaveAttribute("aria-expanded", "true");
         expect(document.activeElement).toBe(toggle);
         expect(document.getElementById(panelId ?? "")).not.toHaveAttribute("aria-hidden");
+    });
+
+    it("localizes German connection roles while preserving runtime-authored connection details", () => {
+        vi.mocked(useExecutionTimeline).mockReturnValue({
+            execution: {
+                ...createExecutionSnapshot(),
+                connections: [{
+                    id: "conn-listener",
+                    role: "listener",
+                    status: "listening",
+                    listenMode: true,
+                    displayName: "KEEP connection name verbatim",
+                    transport: "KEEP_transport_verbatim",
+                    model: "KEEP-model-verbatim",
+                    connectionKey: "KEEP-connection-key-verbatim",
+                    lastHeartbeatAt: null,
+                    pendingInboxCount: 0,
+                    activeDispatchCount: 0,
+                    threadCount: 0,
+                    tasksRunCount: 0,
+                    labels: [],
+                    instruction: "KEEP runtime instruction verbatim",
+                    machineName: null,
+                    platform: null,
+                    arch: null,
+                    localExecutionRuntime: null,
+                }],
+            },
+        } as never);
+
+        render(
+            <DashboardI18nProvider initialLocale="de" storage={null}>
+                <ConnectionRuntimePanel />
+            </DashboardI18nProvider>,
+        );
+
+        expect(screen.getByText("Live-Verbindungen")).toBeInTheDocument();
+        expect(screen.getByText("Empfänger")).toBeInTheDocument();
+        expect(screen.getByText("KEEP connection name verbatim")).toBeInTheDocument();
+        expect(screen.getByText("KEEP_transport_verbatim")).toBeInTheDocument();
+        expect(screen.getByText("KEEP runtime instruction verbatim")).toBeInTheDocument();
     });
 
     it("renders pending runtime action labels with busy state", () => {

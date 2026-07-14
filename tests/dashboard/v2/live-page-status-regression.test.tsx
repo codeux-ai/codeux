@@ -270,6 +270,10 @@ describe("LiveSessionPage Status Regression", () => {
     expect(screen.getByRole("button", { name: "Aufgabe T-100 bearbeiten" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Aufgabe T-100 zwangsweise abschließen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Aufgabe T-100 erneut ausführen" })).toBeInTheDocument();
+
+    const statsTab = screen.getByRole("tab", { name: "Statistik" });
+    fireEvent.keyDown(statsTab, { key: "ArrowRight" });
+    expect(screen.getByRole("tab", { name: "Rennen" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("keeps recovered live task data in the task pipeline", () => {
@@ -304,7 +308,12 @@ describe("LiveSessionPage Status Regression", () => {
       execution: liveExecution({ recentEvents: [gateEvent()] }),
     }));
 
-    const { rerender } = render(<LiveSessionPage />);
+    const renderGermanPage = () => (
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <LiveSessionPage />
+      </DashboardI18nProvider>
+    );
+    const { rerender } = render(renderGermanPage());
     expect(screen.getByRole("button", { name: /CI status: CI running/i })).toBeInTheDocument();
 
     vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
@@ -325,7 +334,7 @@ describe("LiveSessionPage Status Regression", () => {
         ],
       }),
     }));
-    rerender(<LiveSessionPage />);
+    rerender(renderGermanPage());
 
     expect(screen.getByRole("button", { name: /CI status: CI passed/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /CI status: CI failed/i })).not.toBeInTheDocument();
@@ -333,6 +342,11 @@ describe("LiveSessionPage Status Regression", () => {
   });
 
   it("replays active CI attention through reconnects without inventing disconnect failures", () => {
+    const renderGermanPage = () => (
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <LiveSessionPage />
+      </DashboardI18nProvider>
+    );
     const execution = liveExecution({
       attentionItems: [ciAttention()],
       recentEvents: [gateEvent({ payload: { state: "ready_for_merge", prNumber: 100 } })],
@@ -344,7 +358,7 @@ describe("LiveSessionPage Status Regression", () => {
       execution,
     }));
 
-    const { rerender } = render(<LiveSessionPage />);
+    const { rerender } = render(renderGermanPage());
     expect(screen.getByRole("button", { name: /CI status: CI failed/i })).toBeInTheDocument();
 
     vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
@@ -353,17 +367,17 @@ describe("LiveSessionPage Status Regression", () => {
       tasksWithLiveActivities: taskSnapshot,
       execution,
     }));
-    rerender(<LiveSessionPage />);
+    rerender(renderGermanPage());
 
     expect(screen.getByRole("button", { name: /CI status: CI failed/i })).toBeInTheDocument();
-    expect(screen.getAllByText("Reconnecting").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Verbindung wird wiederhergestellt").length).toBeGreaterThan(0);
 
     vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
       transportState: "disconnected",
       tasksWithLiveActivities: taskSnapshot,
       execution: liveExecution({ attentionItems: [], recentEvents: [] }),
     }));
-    rerender(<LiveSessionPage />);
+    rerender(renderGermanPage());
 
     expect(screen.queryByRole("button", { name: /CI status: CI failed/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /CI status: CI running/i })).toBeInTheDocument();

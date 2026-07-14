@@ -12,12 +12,6 @@ import type { ExecutionSnapshotSurfaceState } from "../../../hooks/ExecutionTime
 import { RuntimeSnapshotSurfaceBadge, RuntimeSnapshotSurfaceNotice } from "./ExecutionRuntimePanel.js";
 import { useLiveI18n } from "../../i18n/messages/live.js";
 
-const CONNECTION_ROLE_LABELS: Record<string, string> = {
-  listener: "Listener",
-  worker: "Worker",
-  project_manager: "Manager",
-};
-
 const statusTone = (value: string | null): string => {
   if (!value) return "text-slate-400";
   const normalized = value.toUpperCase();
@@ -32,6 +26,13 @@ const statusTone = (value: string | null): string => {
 
 const ConnectionRow: FunctionComponent<{ connection: ExecutionDashboardSnapshot["connections"][0] }> = memo(({ connection }) => {
   const { t, formatNumber, formatTime } = useLiveI18n();
+  const roleLabel = connection.role === "listener"
+    ? t("listener")
+    : connection.role === "worker"
+      ? t("worker")
+      : connection.role === "project_manager"
+        ? t("manager")
+        : connection.role;
   const rowRef = useRef<HTMLElement>(null);
   const isReducedMotion = useReducedMotion();
   const highlightDuration = useResolvedMotionDuration(parseFloat(INTERACTION_TOKENS.controlFeedback.duration) / 1000);
@@ -80,7 +81,7 @@ const ConnectionRow: FunctionComponent<{ connection: ExecutionDashboardSnapshot[
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="min-w-0 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">{connection.displayName}</span>
             <span className="rounded-full border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
-              {CONNECTION_ROLE_LABELS[connection.role] || connection.role}
+              {roleLabel}
             </span>
             {connection.listenMode && (
               <span className="rounded-full border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-500 motion-reduce:ring-1 motion-reduce:ring-signal-500/20">

@@ -59,4 +59,4 @@ Numbers, timestamps, durations, percentages, token totals, and plural counts use
 
 ## Verification
 
-Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. Live-route regressions additionally exercise German reconnecting, recovery, stale, and error states and verify that runtime-authored payload text remains unchanged. Existing Live suites continue to cover replay, duplicate suppression, selected-sprint scoping, action failures, reduced motion, keyboard interaction, and responsive surfaces.
+Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. Live-route regressions additionally exercise German reconnecting, recovery, stale, action-failure, cancellation, role-label, duration, percentage, and error presentation while verifying that runtime-authored payload text remains unchanged. The Live action hook binds callbacks to the active locale, so confirmations and retry controls also update immediately after a locale change. Existing Live suites continue to cover replay, duplicate suppression, selected-sprint scoping, reduced motion, keyboard interaction, and responsive surfaces.

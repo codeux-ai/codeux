@@ -47,6 +47,7 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
 }) => {
     const { t, formatNumber, formatTime } = useLiveI18n();
     const headerRef = useRef<HTMLDivElement>(null);
+    const prefersReducedMotion = useReducedMotion();
     const pausedIntervention = pausedInterventionRun?.humanIntervention || null;
     const sprintStatusPresentation = getSprintStatusPresentation({
       state: hasLiveSprint ? "running" : pausedInterventionRun?.status ?? "unknown",
@@ -72,13 +73,18 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
 
     useLayoutEffect(() => {
         if (headerRef.current) {
-            gsap.fromTo(
-                Array.from(headerRef.current.children),
-                { opacity: 0, y: 40 },
-                { opacity: 1, y: 0, stagger: 0.1, duration: 0.9, ease: "power4.out", delay: 0.05 },
-            );
+            const children = Array.from(headerRef.current.children);
+            if (prefersReducedMotion) {
+                gsap.set(children, { opacity: 1, y: 0 });
+            } else {
+                gsap.fromTo(
+                    children,
+                    { opacity: 0, y: 40 },
+                    { opacity: 1, y: 0, stagger: 0.1, duration: 0.9, ease: "power4.out", delay: 0.05 },
+                );
+            }
         }
-    }, []);
+    }, [prefersReducedMotion]);
 
     const btnStatsRef = useRef<HTMLButtonElement>(null);
     const btnRaceRef = useRef<HTMLButtonElement>(null);
