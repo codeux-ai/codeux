@@ -20,7 +20,11 @@ const ColumnHeader: FunctionComponent<{ status: TaskStatus; count: number }> = m
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-black/[0.05] bg-white/65 dark:border-white/[0.05] dark:bg-white/[0.035]">
           <Icon className={`h-4 w-4 ${cfg.color}`} strokeWidth={2} aria-hidden="true" />
         </div>
-        <h2 id={headingId} className={`truncate font-display text-base font-bold tracking-tight ${cfg.color}`}>
+        <h2
+          id={headingId}
+          aria-label={`${cfg.label} lane, ${count} ${count === 1 ? "task" : "tasks"}`}
+          className={`truncate font-display text-base font-bold tracking-tight ${cfg.color}`}
+        >
           {cfg.label}
           <span className="sr-only"> lane, {count} {count === 1 ? "task" : "tasks"}</span>
         </h2>
