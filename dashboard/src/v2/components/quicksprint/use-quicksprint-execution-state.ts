@@ -5,6 +5,8 @@ import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js
 import type { ProviderId, AgentPreset } from "../../types.js";
 import { getCombinedPrompt } from "../../lib/quicksprint-panel-state.js";
 import type { QuicksprintTemplateRecord } from "../../../../../src/contracts/quicksprint-types.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { sprintAuthoringMessages } from "../../i18n/messages/sprint-authoring.js";
 
 interface VirtualProviderOption {
   id?: string;
@@ -48,6 +50,7 @@ export function useQuicksprintExecutionState({
   onError?: (message: string) => void;
   onStatus?: (message: string) => void;
 }) {
+  const { translate } = useDashboardI18n();
   const [executingMode, setExecutingMode] = useState<"plan_only" | "plan_and_start" | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [isOverlayDismissed, setIsOverlayDismissed] = useState(false);
@@ -86,7 +89,7 @@ export function useQuicksprintExecutionState({
     async (mode: "plan_only" | "plan_and_start") => {
       if (!selectedTemplate) return;
       if (executingMode || activeRequestRef.current) {
-        onStatus?.("A quicksprint planning request is already running. Duplicate submission blocked.");
+        onStatus?.(translate(sprintAuthoringMessages, "duplicatePlanningShort"));
         return;
       }
 
@@ -129,7 +132,7 @@ export function useQuicksprintExecutionState({
         if (!(err instanceof DOMException && err.name === "AbortError")) {
           console.error("Quicksprint execute failed:", err);
           const templateName = selectedTemplate.name;
-          onError?.(`Planning failed for ${templateName}. Review the route and try again.`);
+          onError?.(translate(sprintAuthoringMessages, "planningFailedNamed", { name: templateName }));
         }
       } finally {
         clearInterval(timer);
@@ -145,7 +148,7 @@ export function useQuicksprintExecutionState({
         }
       }
     },
-    [onExecute, selectedTemplate, executingMode, taskCount, noTaskLimit, additionalPrompt, routeOverride, modelOverride, onClose, onError, onStatus],
+    [onExecute, selectedTemplate, executingMode, taskCount, noTaskLimit, additionalPrompt, routeOverride, modelOverride, onClose, onError, onStatus, translate],
   );
 
   const detachCurrentRequest = useCallback(() => {

@@ -6,6 +6,7 @@ import { WaveFluid } from "../WaveFluid.js";
 import { BorderTrace } from "../BorderTrace.js";
 import { ContainerShip } from "../PlanningShip.js";
 import { PlanningProgressOverlay } from "../PlanningProgressOverlay.js";
+import { DashboardI18nProvider } from "../../../i18n/context.js";
 import { LiveDurationBadge } from "../LiveDurationBadge.js";
 import { CanvasBackground } from "../../CanvasBackground.js";
 import { RuntimeEventFeed } from "../../RuntimeEventFeed.js";
@@ -108,15 +109,17 @@ describe("Reduced Motion Visuals", () => {
     it("PlanningProgressOverlay renders a static legible ship course when reduced motion is enabled", () => {
         const feedback = { ...getPlanningFeedback("plan_only", 10_000), text: "Static planning state" };
         const { container, getByTestId, getByRole } = render(
-            <PlanningProgressOverlay
-                isBusy
-                feedback={feedback}
-                planningEta={60_000}
-                elapsedMs={10_000}
-                isDark={false}
-                actionType="plan_only"
-                onDismiss={() => {}}
-            />
+            <DashboardI18nProvider initialLocale="en" storage={null}>
+                <PlanningProgressOverlay
+                    isBusy
+                    feedback={feedback}
+                    planningEta={60_000}
+                    elapsedMs={10_000}
+                    isDark={false}
+                    actionType="plan_only"
+                    onDismiss={() => {}}
+                />
+            </DashboardI18nProvider>
         );
 
         expect(getByRole("progressbar", { name: "Static planning state" })).toBeInTheDocument();

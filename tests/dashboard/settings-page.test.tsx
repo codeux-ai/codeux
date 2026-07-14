@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { render, screen, cleanup, waitFor } from "@testing-library/preact";
+import { render as testingLibraryRender, screen, cleanup, waitFor } from "@testing-library/preact";
 import { fireEvent } from "@testing-library/preact";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { ProjectSettingsEditor } from "../../dashboard/src/v2/components/settings/ProjectSettingsEditor.jsx";
@@ -13,7 +13,16 @@ import { DEFAULT_DASHBOARD_SETTINGS } from "../../src/repositories/settings-defa
 import * as matchers from '@testing-library/jest-dom/matchers';
 import type { SettingsPageState } from "../../dashboard/src/v2/hooks/use-settings-page-state.js";
 import type { ProjectSettings, SystemSettings } from "../../dashboard/src/types.js";
+import { DashboardI18nProvider } from "../../dashboard/src/v2/i18n/context.js";
 expect.extend(matchers);
+
+const render = (ui: Parameters<typeof testingLibraryRender>[0]) => {
+  const wrap = (content: Parameters<typeof testingLibraryRender>[0]) => (
+    <DashboardI18nProvider initialLocale="en" storage={null}>{content}</DashboardI18nProvider>
+  );
+  const result = testingLibraryRender(wrap(ui));
+  return { ...result, rerender: (nextUi: Parameters<typeof testingLibraryRender>[0]) => result.rerender(wrap(nextUi)) };
+};
 
 vi.mock("../../dashboard/src/v2/lib/project-api.js", () => ({
   fetchLocalFiles: vi.fn(),

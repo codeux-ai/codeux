@@ -47,10 +47,12 @@ Interpolation replaces only named `{variable}` tokens through literal string sub
 
 ## Translation scope
 
-The initial application bundle translates only root-owned shell copy: the skip link, main landmark label, route loading announcement, and hidden footer. Route catalogs should be imported with their route when those features are localized.
+The root catalog owns shell copy, while `messages/sprint-authoring.ts` owns Sprint Composer, task and sprint modals, Quicksprint browsing/editing/execution, planning progress, Markdown transfer, and sprint settings-override chrome. Presentation helpers accept an explicit locale where they are also used outside components, keeping their output deterministic in tests and non-component consumers.
 
 Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged.
 
+Sprint authoring treats this as a strict data boundary: sprint goals, task prompts, template Markdown, combined planning prompts, provider/model identifiers, agent names, schedule targets, and settings keys and values are never passed through the translator. Only the labels, descriptions, validation, progress text, and accessible announcements surrounding those values are localized.
+
 ## Verification
 
-Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization.
+Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. Feature coverage additionally exercises German sprint validation and planning modes, Quicksprint execution and cancellation, provider failures, Markdown round-trips, settings override save/reset, and keyboard/focus behavior. These tests assert both localized chrome and verbatim authoring payloads.

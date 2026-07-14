@@ -4,6 +4,8 @@ import type { LucideProps } from "lucide-preact";
 import type { QuicksprintTemplateRecord } from "../../../../../src/contracts/quicksprint-types.js";
 import { buildInteractionTransition, useInteractionTokens } from "../../lib/motion/tokens.js";
 import { CHIP_CLASS, CONTROL_FOCUS_CLASS, PANEL_CLASS } from "../../pages/stats/components/stats-ui-primitives.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { sprintAuthoringMessages } from "../../i18n/messages/sprint-authoring.js";
 
 export const SUBTASK_SLIDER_MIN = 1;
 export const SUBTASK_SLIDER_MAX = 30;
@@ -86,13 +88,15 @@ export const TemplateCard: FunctionComponent<{
   onDelete?: (trigger: HTMLElement) => void;
   selected?: boolean;
 }> = ({ template, onSelect, onEdit, onDelete, selected = false }) => {
+  const { translate } = useDashboardI18n();
+  const t = (key: keyof typeof sprintAuthoringMessages.en, variables?: Record<string, string>): string => translate(sprintAuthoringMessages, key, variables);
   const Icon = IconMap[template.icon] || Zap;
   const tagColor = template.categoryColor || "slate";
   const tagStyles = getTagStyles(tagColor);
   const tagAccentStyle = tagStyles.style?.["--accent"]
     ? { color: "var(--accent)", ...tagStyles.style }
     : undefined;
-  const sourceDetail = template.isBuiltIn ? "Default Template" : "Custom Template";
+  const sourceDetail = template.isBuiltIn ? t("defaultTemplate") : t("customTemplate");
   const descriptionId = `quicksprint-template-${template.id}-description`;
   const metaId = `quicksprint-template-${template.id}-meta`;
 
@@ -144,7 +148,7 @@ export const TemplateCard: FunctionComponent<{
             <span className="truncate">{template.category}</span>
           </span>
           <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] ${CHIP_CLASS}`}>
-            {template.defaultTaskCount} subtask{template.defaultTaskCount !== 1 ? "s" : ""}
+            {translate(sprintAuthoringMessages, template.defaultTaskCount === 1 ? "subtaskValueOne" : "subtaskValue", { count: template.defaultTaskCount })}
           </span>
         </div>
 
@@ -157,8 +161,8 @@ export const TemplateCard: FunctionComponent<{
             onClick={(event) => { event.stopPropagation(); onSelect(); }}
             className={`inline-flex min-h-11 min-w-0 flex-1 items-center justify-between gap-3 rounded-[var(--stats-control-radius)] border border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active)] px-3.5 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-control-text-active)] shadow-[var(--stats-control-shadow)] transition-[background-color,border-color,box-shadow,color] hover:bg-[color:var(--stats-surface-control-active-strong)] hover:text-[color:var(--stats-control-text-active-strong)] ${CONTROL_FOCUS_CLASS}`}
           >
-            <span className="min-w-0 truncate">Launch</span>
-            <span className="shrink-0 text-[color:var(--stats-detail-color)]">Enter</span>
+            <span className="min-w-0 truncate">{t("launch")}</span>
+            <span className="shrink-0 text-[color:var(--stats-detail-color)]">{t("enter")}</span>
           </button>
           {(onEdit || onDelete) && (
             <div className="flex shrink-0 items-center gap-1 rounded-[var(--stats-control-radius)] border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-chip)] p-1.5 shadow-[var(--stats-subpanel-shadow)]">
@@ -166,9 +170,9 @@ export const TemplateCard: FunctionComponent<{
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onEdit(); }}
-                  aria-label={`Edit ${template.name} template`}
+                  aria-label={t("editTemplateNamed", { name: template.name })}
                   className={`inline-flex min-h-8 min-w-8 items-center justify-center rounded-[calc(var(--stats-control-radius)-0.25rem)] text-[color:var(--stats-detail-color)] transition-colors hover:bg-[color:var(--stats-surface-control-active)] hover:text-[color:var(--stats-control-text-active)] ${CONTROL_FOCUS_CLASS}`}
-                  title="Edit template"
+                  title={t("editTemplateAction")}
                 >
                   <Settings2 className="h-3.5 w-3.5" />
                 </button>
@@ -177,9 +181,9 @@ export const TemplateCard: FunctionComponent<{
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onDelete(e.currentTarget); }}
-                  aria-label={`Delete ${template.name} template`}
+                  aria-label={t("deleteTemplateNamed", { name: template.name })}
                   className={`inline-flex min-h-8 min-w-8 items-center justify-center rounded-[calc(var(--stats-control-radius)-0.25rem)] text-[color:var(--stats-detail-color)] transition-colors hover:bg-[color:var(--stats-accent-rose-fill)] hover:text-[color:var(--stats-negative-text)] ${CONTROL_FOCUS_CLASS}`}
-                  title="Delete template"
+                  title={t("delete")}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -200,6 +204,7 @@ export const SubtaskSlider: FunctionComponent<{
   onChange: (v: number) => void;
   disabled?: boolean;
 }> = ({ value, onChange, disabled = false }) => {
+  const { translate } = useDashboardI18n();
   const displayValue = clampSubtaskSliderValue(value);
   const pct = ((displayValue - SUBTASK_SLIDER_MIN) / (SUBTASK_SLIDER_MAX - SUBTASK_SLIDER_MIN)) * 100;
   const interactionTokens = useInteractionTokens();
@@ -225,7 +230,7 @@ export const SubtaskSlider: FunctionComponent<{
           {String(displayValue).padStart(2, "0")}
         </span>
         <span className={`text-sm font-medium ${disabled ? "text-slate-400 dark:text-slate-500" : "text-slate-400"}`}>
-          subtask{displayValue !== 1 ? "s" : ""}
+          {translate(sprintAuthoringMessages, displayValue === 1 ? "subtask" : "subtasks")}
         </span>
       </div>
 
@@ -240,8 +245,8 @@ export const SubtaskSlider: FunctionComponent<{
           step="1"
           value={displayValue}
           disabled={disabled}
-          aria-label="Subtask count"
-          aria-valuetext={`${displayValue} subtask${displayValue === 1 ? "" : "s"}`}
+          aria-label={translate(sprintAuthoringMessages, "subtaskCount")}
+          aria-valuetext={translate(sprintAuthoringMessages, displayValue === 1 ? "subtaskValueOne" : "subtaskValue", { count: displayValue })}
           onInput={(e) => onChange(clampSubtaskSliderValue(parseInt((e.target as HTMLInputElement).value, 10)))}
           className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
         />

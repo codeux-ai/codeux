@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/pr
 import "@testing-library/jest-dom/vitest";
 
 import { ExecutionTimelineProvider } from "../../../../hooks/ExecutionTimelineContext.js";
+import { DashboardI18nProvider } from "../../../i18n/context.js";
 import type { QuicksprintTemplateRecord } from "../../../../../../src/contracts/quicksprint-types.js";
 import type { PlanningRouteOption } from "../../../lib/sprint-composer-state.js";
 import { QuicksprintPanel } from "../QuicksprintPanel.js";
@@ -50,15 +51,17 @@ describe("QuicksprintPanel", () => {
     });
 
     render(
-      <ExecutionTimelineProvider execution={null}>
-        <QuicksprintPanel
+      <DashboardI18nProvider initialLocale="en" storage={null}>
+        <ExecutionTimelineProvider execution={null}>
+          <QuicksprintPanel
           projectId="project-1"
           onClose={vi.fn()}
           onExecute={onExecute}
           templates={[makeTemplate("1")]}
           loading={false}
-        />
-      </ExecutionTimelineProvider>,
+          />
+        </ExecutionTimelineProvider>
+      </DashboardI18nProvider>,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Template 1" }));
@@ -80,8 +83,9 @@ describe("QuicksprintPanel", () => {
     const onSchedule = vi.fn().mockResolvedValue(undefined);
 
     render(
-      <ExecutionTimelineProvider execution={null}>
-        <QuicksprintPanel
+      <DashboardI18nProvider initialLocale="en" storage={null}>
+        <ExecutionTimelineProvider execution={null}>
+          <QuicksprintPanel
           projectId="project-1"
           onClose={vi.fn()}
           onExecute={vi.fn()}
@@ -89,8 +93,9 @@ describe("QuicksprintPanel", () => {
           scheduleAnchorSprintOptions={[{ id: "source-sprint-1", label: "Release prep" }]}
           templates={[makeTemplate("1")]}
           loading={false}
-        />
-      </ExecutionTimelineProvider>,
+          />
+        </ExecutionTimelineProvider>
+      </DashboardI18nProvider>,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Template 1" }));
@@ -123,5 +128,41 @@ describe("QuicksprintPanel", () => {
         },
       },
     });
+  });
+
+  it("executes a template from German chrome without translating execution inputs", async () => {
+    const onExecute = vi.fn().mockResolvedValue(undefined);
+    render(
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <ExecutionTimelineProvider execution={null}>
+          <QuicksprintPanel
+            projectId="project-1"
+            onClose={vi.fn()}
+            onExecute={onExecute}
+            templates={[makeTemplate("1")]}
+            loading={false}
+          />
+        </ExecutionTimelineProvider>
+      </DashboardI18nProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Template 1" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Template 1 ausgewählt. Konfigurieren Sie den Quicksprint vor der Planung.");
+    fireEvent.input(screen.getByPlaceholderText(/Zusätzlichen Kontext/), {
+      target: { value: "Preserve `npm test -- --runInBand` exactly." },
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: "Planen & starten" }).pop()!);
+
+    await waitFor(() => expect(onExecute).toHaveBeenCalledTimes(1));
+    expect(onExecute).toHaveBeenCalledWith(
+      "1",
+      5,
+      "plan_and_start",
+      "Preserve `npm test -- --runInBand` exactly.",
+      null,
+      null,
+      expect.any(AbortSignal),
+      expect.any(Object),
+    );
   });
 });

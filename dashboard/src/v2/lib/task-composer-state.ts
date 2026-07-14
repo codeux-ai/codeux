@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from "preact/hooks";
 import type { Task, TaskExecutorType, TaskPriority, TaskStatus, Sprint } from "../types.js";
+import { sprintAuthoringMessages } from "../i18n/messages/sprint-authoring.js";
+import { DEFAULT_DASHBOARD_LOCALE, translateDashboardMessage, type DashboardLocale } from "../i18n/locales.js";
 
 export interface TaskDraft {
   sprintId: string;
@@ -68,7 +70,8 @@ export const useTaskComposerState = (
   sprints: Sprint[],
   availableTasks: Task[],
   initialTask?: Task | null,
-  initialSprintId?: string | null
+  initialSprintId?: string | null,
+  locale: DashboardLocale = DEFAULT_DASHBOARD_LOCALE,
 ): TaskComposerState => {
   const defaultSprintId = initialTask?.sprintId || initialSprintId || sprints[0]?.id || "";
 
@@ -97,29 +100,30 @@ export const useTaskComposerState = (
 
   const validationErrors = useMemo(() => {
     const errors: Record<string, string> = {};
-    if (!sprintId) errors.sprintId = "Sprint selection is required.";
+    const t = (key: keyof typeof sprintAuthoringMessages.en): string => translateDashboardMessage(sprintAuthoringMessages, locale, key);
+    if (!sprintId) errors.sprintId = t("sprintRequired");
     if (!title.trim()) {
-      errors.title = "Task title is required.";
+      errors.title = t("taskTitleRequired");
     } else if (title.trim().length < 3) {
-      errors.title = "Task title must be at least 3 characters long.";
+      errors.title = t("taskTitleMinLength");
     }
     if (!description.trim()) {
-      errors.description = "Task details are required.";
+      errors.description = t("taskDetailsRequired");
     }
     if (!promptMarkdown.trim()) {
-      errors.promptMarkdown = "Execution prompt is required.";
+      errors.promptMarkdown = t("executionPromptRequired");
     }
     if (!executorType) {
-      errors.executorType = "Executor selection is required.";
+      errors.executorType = t("executorRequired");
     }
     if (!priority) {
-      errors.priority = "Priority selection is required.";
+      errors.priority = t("priorityRequired");
     }
     if (!status) {
-      errors.status = "Status selection is required.";
+      errors.status = t("statusRequired");
     }
     return errors;
-  }, [sprintId, title, description, promptMarkdown, executorType, priority, status]);
+  }, [sprintId, title, description, promptMarkdown, executorType, priority, status, locale]);
 
   useEffect(() => {
     if (initialTask) {

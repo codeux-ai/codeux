@@ -15,6 +15,8 @@ import { getPlanningFeedback } from "../../lib/sprint-planning-feedback.js";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { QuicksprintTemplateRecord } from "../../../../../src/contracts/quicksprint-types.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { sprintAuthoringMessages } from "../../i18n/messages/sprint-authoring.js";
 
 export const QuicksprintExecutionView: FunctionComponent<{
   setPhase: (phase: "browse" | "configure" | "editor") => void;
@@ -81,6 +83,8 @@ export const QuicksprintExecutionView: FunctionComponent<{
   planningEta,
   announcePhaseStatus,
 }) => {
+  const { locale, translate } = useDashboardI18n();
+  const t = (key: keyof typeof sprintAuthoringMessages.en, variables?: Record<string, string | number>): string => translate(sprintAuthoringMessages, key, variables);
   const toDateTimeLocalValue = (date: Date): string => {
     const pad = (value: number): string => String(value).padStart(2, "0");
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
@@ -111,8 +115,8 @@ export const QuicksprintExecutionView: FunctionComponent<{
   const routeStatusId = selectedTemplateId ? `quicksprint-route-status-${selectedTemplateId}` : "quicksprint-route-status";
   const interactionTokens = useInteractionTokens();
   const feedback = useMemo(
-    () => isBusy ? getPlanningFeedback(executingMode === "plan_and_start" ? "plan_and_start" : "plan_only", elapsedMs) : null,
-    [isBusy, executingMode, elapsedMs],
+    () => isBusy ? getPlanningFeedback(executingMode === "plan_and_start" ? "plan_and_start" : "plan_only", elapsedMs, locale) : null,
+    [isBusy, executingMode, elapsedMs, locale],
   );
   const isDark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
 
@@ -120,18 +124,18 @@ export const QuicksprintExecutionView: FunctionComponent<{
   const modelProviderId = routeOverride?.iconProviderId;
 
   const defaultModelLabel = routeOverride?.effectiveModel
-    ? `Default (${routeOverride.effectiveModel})`
+    ? `${t("defaultPriority")} (${routeOverride.effectiveModel})`
     : defaultModelOptionLabel;
   const isSubmitBlocked = isBusy || pendingExecuteMode !== null || isCancelPending || isSchedulePending;
   const controlsDisabled = isSubmitBlocked;
   const submitBlockedReason = isBusy
-    ? "A quicksprint planning request is already running. Cancel it or wait for it to finish before submitting again."
+    ? t("duplicatePlanning")
     : pendingExecuteMode
-      ? "Planning is starting. Duplicate submissions are blocked until the request state is ready."
+      ? t("duplicateStarting")
       : isSchedulePending
-        ? "Schedule creation is in progress. Duplicate submissions are blocked until it finishes."
+        ? t("duplicateSchedule")
       : isCancelPending
-        ? "Cancellation is already in progress. Duplicate cancellation and submit requests are blocked until the request settles."
+        ? t("duplicateCancellation")
       : "";
 
   const publishStatus = (message: string) => {
@@ -154,7 +158,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
     if (!selectedTemplate || isBusy || statusMessage) {
       return;
     }
-    setStatusMessage(`${selectedTemplate.name} selected. Configure the quicksprint before planning.`);
+    setStatusMessage(t("templateSelected", { name: selectedTemplate.name }));
   }, [isBusy, selectedTemplateId, selectedTemplate, statusMessage]);
 
   useEffect(() => {
@@ -164,8 +168,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
       setIsCancelPending(false);
       return;
     }
-    const actionLabel = executingMode === "plan_and_start" ? "Plan and start" : "Plan only";
-    const message = `${actionLabel} request started for ${selectedTemplate.name}.`;
+    const message = t(executingMode === "plan_and_start" ? "planStartRequestStarted" : "planOnlyRequestStarted", { name: selectedTemplate.name });
     publishStatus(message);
   }, [announcePhaseStatus, executingMode, selectedTemplate]);
 
@@ -186,20 +189,20 @@ export const QuicksprintExecutionView: FunctionComponent<{
   const tagColor = selectedTemplate.categoryColor || "slate";
   const handlePlanningExecute = (mode: "plan_only" | "plan_and_start") => {
     if (isBusy || pendingExecuteClickRef.current || pendingExecuteMode) {
-      publishStatus(submitBlockedReason || "Planning is already in progress. Duplicate submission blocked.");
+      publishStatus(submitBlockedReason || t("duplicatePlanningShort"));
       return;
     }
     pendingExecuteClickRef.current = true;
     setPendingExecuteMode(mode);
-    publishStatus(`${mode === "plan_and_start" ? "Plan and start" : "Plan only"} request queued for ${selectedTemplate.name}.`);
+    publishStatus(t(mode === "plan_and_start" ? "planStartRequestQueued" : "planOnlyRequestQueued", { name: selectedTemplate.name }));
     handleExecute(mode);
   };
   const announceCancel = () => {
     if (isCancelPending) {
-      publishStatus(`Cancellation is already in progress for ${selectedTemplate.name}.`);
+      publishStatus(t("cancellationAlready", { name: selectedTemplate.name }));
       return;
     }
-    const message = `Cancelled ${executingMode === "plan_and_start" ? "plan and start" : "plan only"} request for ${selectedTemplate.name}.`;
+    const message = t(executingMode === "plan_and_start" ? "cancelledPlanStartNamed" : "cancelledPlanOnlyNamed", { name: selectedTemplate.name });
     setIsCancelPending(true);
     handleCancelExecute();
     pendingExecuteClickRef.current = false;
@@ -210,28 +213,28 @@ export const QuicksprintExecutionView: FunctionComponent<{
   const announceNewQuicksprint = () => {
     handleNewQuicksprint();
     setPhase("browse");
-    const message = `Opened a new quicksprint while the previous ${executingMode === "plan_and_start" ? "plan and start" : "plan only"} request continues in the background.`;
+    const message = t(executingMode === "plan_and_start" ? "openedNewPlanStart" : "openedNewPlanOnly");
     pendingExecuteClickRef.current = false;
     setPendingExecuteMode(null);
     publishStatus(message);
   };
   const handleSchedule = async () => {
     if (!onSchedule || !selectedTemplate || isSubmitBlocked) {
-      publishStatus(submitBlockedReason || "Schedule request is already in progress. Duplicate submission blocked.");
+      publishStatus(submitBlockedReason || t("duplicateScheduleShort"));
       return;
     }
     if (scheduleConfig.mode === "after_sprint_end" && !scheduleConfig.sourceSprintId) {
-      publishStatus("Choose the source sprint for the after-sprint-end schedule.");
+      publishStatus(t("chooseSourceSprint"));
       return;
     }
     if (scheduleConfig.mode === "absolute" && !Number.isFinite(new Date(scheduleConfig.scheduledFor).getTime())) {
-      publishStatus("Choose a valid schedule date and time.");
+      publishStatus(t("chooseValidSchedule"));
       return;
     }
 
     scheduleFocusRef.current = document.activeElement as HTMLElement | null;
     setIsSchedulePending(true);
-    publishStatus(`Scheduling ${selectedTemplate.name}.`);
+    publishStatus(t("schedulingNamed", { name: selectedTemplate.name }));
     try {
       await onSchedule({
         templateId: selectedTemplate.id,
@@ -244,13 +247,13 @@ export const QuicksprintExecutionView: FunctionComponent<{
         schedule: toSprintSchedulePayload(scheduleConfig),
         title: `Run ${selectedTemplate.name}`,
       });
-      publishStatus(`${selectedTemplate.name} scheduled.`);
+      publishStatus(t("scheduledNamed", { name: selectedTemplate.name }));
       setTimeout(() => {
         scheduleFocusRef.current?.focus({ preventScroll: true });
       }, 0);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      publishStatus(`Could not schedule ${selectedTemplate.name}: ${message}`);
+      publishStatus(t("scheduleNamedFailed", { name: selectedTemplate.name, message }));
       setTimeout(() => {
         scheduleFocusRef.current?.focus({ preventScroll: true });
       }, 0);
@@ -272,13 +275,13 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   disabled={controlsDisabled}
                   aria-describedby={controlsDisabled ? duplicateSubmitDescriptionId : undefined}
                   className="inline-flex min-h-[44px] min-w-[44px] h-8 w-8 items-center justify-center rounded-full border border-black/[0.06] text-slate-400 transition-colors duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transition-none dark:border-white/[0.06] dark:hover:text-white"
-                  aria-label="Back to quicksprint templates"
+                  aria-label={t("backToTemplates")}
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
                 <div className="inline-flex items-center gap-2 rounded-full border border-ember-500/15 bg-ember-500/[0.07] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-ember-600 dark:text-ember-400">
                   <Zap className="h-3.5 w-3.5" strokeWidth={2.3} />
-                  Configure Quicksprint
+                  {t("configureQuicksprint")}
                 </div>
               </div>
 
@@ -297,16 +300,17 @@ export const QuicksprintExecutionView: FunctionComponent<{
               {/* Planning Route + Model Override */}
               <div data-qs-stagger className="mt-8 grid gap-4 sm:grid-cols-2">
                 <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Planning Route</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{t("planningRoute")}</div>
                   <div className="mt-2">
                     <AvantgardeSelect
                       variant="compact"
+                      aria-label={t("planningRoute")}
                       disabled={controlsDisabled}
                       value={routeOverride?.id || ""}
                       onChange={(id) => {
                         const opt = routeOptions.find((o) => o.id === id);
                         setRouteOverride(opt || null);
-                        publishStatus(`Planning route changed to ${opt?.label || defaultRouteOptionLabel}.`);
+                        publishStatus(t("planningRouteChanged", { route: opt?.label || defaultRouteOptionLabel }));
                       }}
                       aria-describedby={controlsDisabled ? duplicateSubmitDescriptionId : routeStatusId}
                       options={[
@@ -337,16 +341,17 @@ export const QuicksprintExecutionView: FunctionComponent<{
                     ? "translate-y-0 border-signal-500/20 bg-signal-500/[0.04] opacity-100 dark:bg-signal-500/[0.08]"
                     : "translate-y-0 border-black/[0.06] bg-black/[0.025] opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03]"
                 }`}>
-                  <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Model Override</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{t("modelOverride")}</div>
                   <div className="mt-2">
                     <AvantgardeSelect
                       variant="compact"
+                      aria-label={t("modelOverride")}
                       disabled={!showModelOverride || controlsDisabled}
                       value={modelOverride || ""}
                       onChange={(val) => {
                         const opt = modelOptions.find((option) => option.value === val);
                         setModelOverride(val || null);
-                        publishStatus(`Model override changed to ${opt?.label || defaultModelLabel}.`);
+                        publishStatus(t("modelOverrideChanged", { model: opt?.label || defaultModelLabel }));
                       }}
                       aria-describedby={controlsDisabled ? duplicateSubmitDescriptionId : routeStatusId}
                       options={[
@@ -373,16 +378,16 @@ export const QuicksprintExecutionView: FunctionComponent<{
 
               {/* Additional prompt for this run */}
               <div data-qs-stagger className="mt-8 space-y-2">
-                <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Additional Instructions (optional)</label>
+                <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{t("additionalInstructionsOptional")}</label>
                 <textarea
                   value={additionalPrompt}
                   onInput={(e) => {
                     setAdditionalPrompt((e.target as HTMLTextAreaElement).value);
-                    publishStatus("Additional instructions updated for this quicksprint.");
+                    publishStatus(t("additionalInstructionsUpdated"));
                   }}
                   disabled={controlsDisabled}
                   aria-describedby={controlsDisabled ? duplicateSubmitDescriptionId : undefined}
-                  placeholder="Add extra context or requirements for this specific run — e.g. 'Focus only on the auth module' or 'Include migration scripts'..."
+                  placeholder={t("additionalInstructionsPlaceholder")}
                   rows={4}
                   className="w-full rounded-[1.7rem] border border-black/[0.06] bg-black/[0.025] p-5 text-sm leading-relaxed text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:border-ember-500/40 focus:shadow-[0_0_0_1px_rgba(255,107,0,0.16),0_0_30px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:placeholder:text-slate-600 resize-y"
                 />
@@ -394,7 +399,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   onClick={() => {
                     const nextShowPrompt = !showPrompt;
                     setShowPrompt(nextShowPrompt);
-                    publishStatus(nextShowPrompt ? "Combined prompt preview expanded." : "Combined prompt preview collapsed.");
+                    publishStatus(t(nextShowPrompt ? "combinedPromptExpanded" : "combinedPromptCollapsed"));
                   }}
                   aria-expanded={showPrompt}
                   aria-controls={promptRegionId}
@@ -405,13 +410,13 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   }`}
                 >
                   {showPrompt ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                  {showPrompt ? "Hide Combined Prompt" : "View Combined Prompt"}
+                  {showPrompt ? t("hideCombinedPrompt") : t("viewCombinedPrompt")}
                 </button>
 
                 <div
                   id={promptRegionId}
                   role="region"
-                  aria-label="Combined quicksprint prompt"
+                  aria-label={t("combinedQuicksprintPrompt")}
                   data-motion-contract="expansionCollapse"
                   className={`overflow-hidden transition-[max-height,opacity,margin-top] duration-[var(--interaction-expansion-collapse-duration)] ease-[var(--interaction-expansion-collapse-ease)] motion-reduce:transition-none ${
                     showPrompt ? "mt-4 max-h-[600px] opacity-100" : "max-h-0 opacity-0"
@@ -434,7 +439,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
             <div className="flex flex-col p-6 sm:p-8">
               {/* Subtask count */}
               <div data-qs-stagger>
-                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-4">Subtask Count</div>
+                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-4">{t("subtaskCount")}</div>
                 <label
                   className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors ${
                     noTaskLimit
@@ -450,18 +455,18 @@ export const QuicksprintExecutionView: FunctionComponent<{
                     onChange={(e) => {
                       const checked = (e.target as HTMLInputElement).checked;
                       setNoTaskLimit(checked);
-                      publishStatus(checked ? "Subtask limit removed for this quicksprint." : `Subtask count set to ${taskCount}.`);
+                      publishStatus(checked ? t("subtaskLimitRemoved") : t("subtaskCountSet", { count: taskCount }));
                     }}
                     className="h-4 w-4 rounded border-black/20 text-ember-600 focus:ring-ember-500/30"
                   />
-                  No limit
+                  {t("noLimit")}
                 </label>
                 <div className="mt-5">
                   <SubtaskSlider
                     value={taskCount}
                     onChange={(value) => {
                       setTaskCount(value);
-                      publishStatus(`Subtask count set to ${value}.`);
+                      publishStatus(t("subtaskCountSet", { count: value }));
                     }}
                     disabled={noTaskLimit || controlsDisabled}
                   />
@@ -472,13 +477,13 @@ export const QuicksprintExecutionView: FunctionComponent<{
               <div data-qs-stagger className="mt-8 rounded-[1.35rem] border border-signal-500/18 bg-signal-500/[0.045] p-4">
                 <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-700 dark:text-white">
                   <CalendarClock className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.1} />
-                  Schedule
+                  {t("schedule")}
                 </div>
                 <div className="mt-4 grid gap-3">
-                  <div className="grid grid-cols-2 gap-2" role="group" aria-label="Scheduled quicksprint submit mode">
+                  <div className="grid grid-cols-2 gap-2" role="group" aria-label={t("scheduledSubmitMode")}>
                     {[
-                      { value: "plan_and_start" as const, label: "Start Later" },
-                      { value: "plan_only" as const, label: "Plan Later" },
+                      { value: "plan_and_start" as const, label: t("startLater") },
+                      { value: "plan_only" as const, label: t("planLater") },
                     ].map((option) => (
                       <button
                         key={option.value}
@@ -487,7 +492,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                         aria-pressed={scheduleSubmitMode === option.value}
                         onClick={() => {
                           setScheduleSubmitMode(option.value);
-                          publishStatus(`Scheduled quicksprint submit mode set to ${option.label}.`);
+                          publishStatus(t("scheduledModeSet", { mode: option.label }));
                         }}
                         className={`min-h-[38px] rounded-full border px-3 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                           scheduleSubmitMode === option.value
@@ -499,10 +504,10 @@ export const QuicksprintExecutionView: FunctionComponent<{
                       </button>
                     ))}
                   </div>
-                  <div className="grid grid-cols-2 gap-2" role="group" aria-label="Schedule timing mode">
+                  <div className="grid grid-cols-2 gap-2" role="group" aria-label={t("scheduleTimingMode")}>
                     {[
-                      { value: "absolute" as const, label: "Absolute" },
-                      { value: "after_sprint_end" as const, label: "After End" },
+                      { value: "absolute" as const, label: t("absolute") },
+                      { value: "after_sprint_end" as const, label: t("afterEnd") },
                     ].map((option) => (
                       <button
                         key={option.value}
@@ -511,7 +516,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                         aria-pressed={scheduleConfig.mode === option.value}
                         onClick={() => {
                           setScheduleConfig((current) => ({ ...current, mode: option.value }));
-                          publishStatus(`Schedule timing set to ${option.label}.`);
+                          publishStatus(t("scheduleTimingSet", { mode: option.label }));
                         }}
                         className={`min-h-[38px] rounded-full border px-3 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                           scheduleConfig.mode === option.value
@@ -525,7 +530,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   </div>
                   {scheduleConfig.mode === "absolute" ? (
                     <label className="block">
-                      <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Date and Time</span>
+                      <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">{t("dateAndTime")}</span>
                       <input
                         type="datetime-local"
                         value={scheduleConfig.scheduledFor}
@@ -537,22 +542,22 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   ) : (
                     <div className="grid gap-3">
                       <label className="block">
-                        <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Source Sprint</span>
+                        <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">{t("sourceSprint")}</span>
                         <AvantgardeSelect
                           variant="compact"
-                          aria-label="Quicksprint Source Sprint"
+                          aria-label={t("quicksprintSourceSprint")}
                           disabled={controlsDisabled}
                           value={scheduleConfig.sourceSprintId}
                           onChange={(value) => setScheduleConfig((current) => ({ ...current, sourceSprintId: value }))}
                           options={[
-                            { value: "", label: "Choose sprint" },
+                            { value: "", label: t("chooseSprint") },
                             ...scheduleAnchorSprintOptions.map((option) => ({ value: option.id, label: option.label })),
                           ]}
-                          placeholder="Choose sprint"
+                          placeholder={t("chooseSprint")}
                         />
                       </label>
                       <label className="block">
-                        <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Offset Minutes</span>
+                        <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">{t("offsetMinutes")}</span>
                         <input
                           type="number"
                           min={0}
@@ -584,14 +589,14 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className="font-bold uppercase tracking-[0.14em] text-ember-600 dark:text-ember-400">
-                        {executingMode === "plan_and_start" ? "Planning then starting" : "Planning only"}
+                        {executingMode === "plan_and_start" ? t("planningThenStarting") : t("planningOnly")}
                       </span>
                       <span className="font-mono text-slate-500">
                         {String(Math.floor(elapsedMs / 60000)).padStart(2, "0")}:{String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, "0")}
                       </span>
                     </div>
                     <p className="mt-2">
-                      {feedback?.text || "Planning is in progress."} You can start another quicksprint while this request continues in the background.
+                      {t("backgroundPlanningHint", { status: feedback?.text || t("planningInProgress") })}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
@@ -600,7 +605,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                         className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-slate-900 bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition-colors duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] hover:bg-slate-800 motion-reduce:transition-none dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
                       >
                         <Zap className="h-3.5 w-3.5" />
-                        New Quicksprint
+                        {t("newQuicksprint")}
                       </button>
                       <button
                         type="button"
@@ -610,12 +615,12 @@ export const QuicksprintExecutionView: FunctionComponent<{
                         className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-status-red/20 bg-status-red/[0.06] px-4 py-2 text-xs font-semibold text-status-red transition-colors duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] hover:bg-status-red/[0.12] motion-reduce:transition-none"
                       >
                         <X className="h-3.5 w-3.5" />
-                        Cancel Request
+                        {t("cancelRequest")}
                       </button>
                     </div>
                     {isCancelPending && (
                       <p className="mt-3 font-semibold text-status-amber">
-                        Cancellation requested. The planner is stopping this quicksprint request.
+                        {t("cancellationRequested")}
                       </p>
                     )}
                   </div>
@@ -632,7 +637,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   id={routeStatusId}
                   className="rounded-[1.1rem] border border-black/[0.06] bg-black/[0.025] px-4 py-3 text-xs font-semibold leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"
                 >
-                  {statusMessage || `Ready to plan ${selectedTemplate.name}.`}
+                  {statusMessage || t("readyToPlan", { name: selectedTemplate.name })}
                 </p>
                 <button
                   type="button"
@@ -643,7 +648,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   className="flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-[1.35rem] border border-signal-500/25 bg-signal-500/[0.1] px-5 py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] text-signal-700 transition-colors hover:bg-signal-500/[0.16] disabled:cursor-not-allowed disabled:opacity-50 dark:text-signal-300"
                 >
                   <CalendarClock className={`h-4 w-4 ${isSchedulePending ? "motion-safe:animate-pulse" : ""}`} />
-                  {isSchedulePending ? "Scheduling..." : "Schedule"}
+                  {isSchedulePending ? t("scheduling") : t("schedule")}
                 </button>
                 <button
                   type="button"
@@ -654,7 +659,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   className="flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-[1.35rem] bg-ember-600 px-5 py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_0_20px_rgba(255,107,0,0.25)] transition-all hover:bg-ember-500 hover:shadow-[0_0_28px_rgba(255,107,0,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Rocket className={`h-4 w-4 ${executingMode === "plan_and_start" ? "motion-safe:animate-pulse" : ""}`} />
-                  Plan & Start
+                  {t("planAndStart")}
                 </button>
                 <button
                   type="button"
@@ -665,7 +670,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   className="flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-[1.35rem] border border-black/[0.08] bg-white/66 px-5 py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-black/[0.04] disabled:opacity-50 disabled:cursor-not-allowed dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06]"
                 >
                   <ClipboardList className={`h-4 w-4 ${executingMode === "plan_only" ? "motion-safe:animate-pulse" : ""}`} />
-                  Plan Only
+                  {t("planOnly")}
                 </button>
               </div>
             </div>
@@ -684,7 +689,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
           themeAccent="ember"
           onDismiss={() => setIsOverlayDismissed(true)}
           onCancel={announceCancel}
-          secondaryActionLabel="New Quicksprint"
+          secondaryActionLabel={t("newQuicksprint")}
           onSecondaryAction={announceNewQuicksprint}
         />
       )}

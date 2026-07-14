@@ -2,14 +2,23 @@
 /** @jsx h */
 import { h } from "preact";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, fireEvent, screen, cleanup, waitFor } from "@testing-library/preact";
+import { render as testingLibraryRender, fireEvent, screen, cleanup, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { SprintsPage } from "../../../dashboard/src/v2/pages/sprints/SprintsPage";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
 
 // @ts-expect-error Types are not required for test
 import { useSprintsPageData } from "../../../dashboard/src/v2/pages/sprints/use-sprints-page-data";
 
 expect.extend(matchers);
+
+const render = (ui: Parameters<typeof testingLibraryRender>[0]) => {
+  const wrap = (content: Parameters<typeof testingLibraryRender>[0]) => (
+    <DashboardI18nProvider initialLocale="en" storage={null}>{content}</DashboardI18nProvider>
+  );
+  const result = testingLibraryRender(wrap(ui));
+  return { ...result, rerender: (nextUi: Parameters<typeof testingLibraryRender>[0]) => result.rerender(wrap(nextUi)) };
+};
 
 vi.mock("../../../dashboard/src/v2/hooks/use-project-effective-settings.js", () => ({
   useProjectEffectiveSettings: vi.fn().mockReturnValue({ data: null, loading: false, error: null, refresh: vi.fn() }),

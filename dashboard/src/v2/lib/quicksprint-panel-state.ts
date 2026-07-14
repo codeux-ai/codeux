@@ -1,5 +1,7 @@
 import type { QuicksprintTemplateRecord } from "../../../../src/contracts/quicksprint-types.js";
 import type { AgentPreset } from "../types.js";
+import { sprintAuthoringMessages } from "../i18n/messages/sprint-authoring.js";
+import { DEFAULT_DASHBOARD_LOCALE, translateDashboardMessage, type DashboardLocale } from "../i18n/locales.js";
 
 export type BuiltinPurposeOption = {
   value: string;
@@ -15,7 +17,10 @@ export function getCustomTemplates(templates: QuicksprintTemplateRecord[]): Quic
   return templates.filter((t) => !t.isBuiltIn);
 }
 
-export function getBuiltinPurposeOptions(builtinTemplates: QuicksprintTemplateRecord[]): BuiltinPurposeOption[] {
+export function getBuiltinPurposeOptions(
+  builtinTemplates: QuicksprintTemplateRecord[],
+  locale: DashboardLocale = DEFAULT_DASHBOARD_LOCALE,
+): BuiltinPurposeOption[] {
   const purposes = new Map<string, BuiltinPurposeOption>();
   for (const template of builtinTemplates) {
     const value = template.purpose || "general";
@@ -24,7 +29,7 @@ export function getBuiltinPurposeOptions(builtinTemplates: QuicksprintTemplateRe
     }
     purposes.set(value, {
       value,
-      label: template.purposeLabel || "General",
+      label: template.purposeLabel || translateDashboardMessage(sprintAuthoringMessages, locale, "general"),
       description: template.purposeDescription,
     });
   }

@@ -1,9 +1,9 @@
-import type { FunctionComponent, ComponentChildren } from "preact";
+import type { FunctionComponent, ComponentChildren, ComponentProps } from "preact";
 import { useId } from "preact/hooks";
 import type { ProjectSettings, SettingsValueSource, ThinkingMode } from "../../../types.js";
-import { PreviewEnvironmentEditor } from "../browser/PreviewEnvironmentEditor.js";
-import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
-import { TextInput, TextAreaInput, NumberInput, SelectInput, Toggle } from "./SettingsFormFields.js";
+import { PreviewEnvironmentEditor as BasePreviewEnvironmentEditor } from "../browser/PreviewEnvironmentEditor.js";
+import { AvantgardeSelect as BaseAvantgardeSelect } from "../ui/AvantgardeSelect.js";
+import { TextInput, TextAreaInput, NumberInput, SelectInput as BaseSelectInput, Toggle as BaseToggle } from "./SettingsFormFields.js";
 import {
   getFieldSource,
   getFieldSourceLabel,
@@ -16,13 +16,65 @@ import {
   providerLabels,
   type SettingsEditorScope,
 } from "../../lib/settings-view-models.js";
-import { Card, OverrideBadge, Row } from "./panels/SharedPanelComponents.js";
+import { Card as BaseCard, OverrideBadge, Row as BaseRow } from "./panels/SharedPanelComponents.js";
 import { AutomationPanel } from "./panels/AutomationPanel.js";
 import { ProviderPanel } from "./panels/ProviderPanel.js";
 import { WorkerPanel } from "./panels/WorkerPanel.js";
-import { InfoIconPopover } from "../ui/InfoIconPopover.js";
+import { InfoIconPopover as BaseInfoIconPopover } from "../ui/InfoIconPopover.js";
 import { BranchNameSchemeEditor, TaskPrTitleSchemeEditor } from "./BranchNameSchemeEditor.js";
-import { LocalFilePickerField } from "./LocalFilePickerField.js";
+import { LocalFilePickerField as BaseLocalFilePickerField } from "./LocalFilePickerField.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { translateProjectSettingsLiteral } from "../../i18n/messages/sprint-authoring.js";
+
+const useSettingsLiteral = (): ((value: string) => string) => {
+  const { locale } = useDashboardI18n();
+  return (value: string): string => translateProjectSettingsLiteral(locale, value);
+};
+
+const Card: FunctionComponent<ComponentProps<typeof BaseCard>> = (props) => {
+  const tr = useSettingsLiteral();
+  return <BaseCard {...props} title={tr(props.title)} description={props.description ? tr(props.description) : props.description} badge={props.badge ? tr(props.badge) : props.badge} />;
+};
+
+const Row: FunctionComponent<ComponentProps<typeof BaseRow>> = (props) => {
+  const tr = useSettingsLiteral();
+  return <BaseRow {...props} label={tr(props.label)} description={props.description ? tr(props.description) : props.description} badge={props.badge ? tr(props.badge) : props.badge} />;
+};
+
+const Toggle: FunctionComponent<ComponentProps<typeof BaseToggle>> = (props) => {
+  const tr = useSettingsLiteral();
+  const ariaDescription = props["aria-description"];
+  const localizedDescription = typeof ariaDescription === "string" ? tr(ariaDescription) : ariaDescription;
+  if ("aria-label" in props) {
+    return <BaseToggle {...props} aria-label={tr(props["aria-label"])} aria-description={localizedDescription} />;
+  }
+  return <BaseToggle {...props} aria-labelledby={props["aria-labelledby"]} aria-description={localizedDescription} />;
+};
+
+const SelectInput: FunctionComponent<ComponentProps<typeof BaseSelectInput>> = (props) => {
+  const tr = useSettingsLiteral();
+  return <BaseSelectInput {...props} aria-label={props["aria-label"] ? tr(props["aria-label"]) : props["aria-label"]} disabledReason={props.disabledReason ? tr(props.disabledReason) : props.disabledReason} options={props.options.map((option) => ({ ...option, label: tr(option.label) }))} />;
+};
+
+const AvantgardeSelect: FunctionComponent<ComponentProps<typeof BaseAvantgardeSelect>> = (props) => {
+  const tr = useSettingsLiteral();
+  return <BaseAvantgardeSelect {...props} aria-label={props["aria-label"] ? tr(props["aria-label"]) : props["aria-label"]} placeholder={props.placeholder ? tr(props.placeholder) : props.placeholder} options={props.options.map((option) => ({ ...option, label: tr(option.label) }))} />;
+};
+
+const LocalFilePickerField: FunctionComponent<ComponentProps<typeof BaseLocalFilePickerField>> = (props) => {
+  const tr = useSettingsLiteral();
+  return <BaseLocalFilePickerField {...props} label={tr(props.label)} helperText={props.helperText ? tr(props.helperText) : props.helperText} placeholder={props.placeholder ? tr(props.placeholder) : props.placeholder} />;
+};
+
+const PreviewEnvironmentEditor: FunctionComponent<ComponentProps<typeof BasePreviewEnvironmentEditor>> = (props) => {
+  const tr = useSettingsLiteral();
+  return <BasePreviewEnvironmentEditor {...props} addLabel={props.addLabel ? tr(props.addLabel) : props.addLabel} valueLabel={props.valueLabel ? tr(props.valueLabel) : props.valueLabel} />;
+};
+
+const InfoIconPopover: FunctionComponent<ComponentProps<typeof BaseInfoIconPopover>> = (props) => {
+  const tr = useSettingsLiteral();
+  return <BaseInfoIconPopover {...props} items={props.items?.map((item) => ({ ...item, desc: tr(item.desc) }))} />;
+};
 
 
 export interface ProjectSettingsEditorProps {
@@ -38,16 +90,18 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
   sources,
   editingScope = "project",
 }) => {
+  const tr = useSettingsLiteral();
   const update = (patch: Partial<ProjectSettings>) => onChange({ ...settings, ...patch });
   const virtualWorkerModeEnabled = settings.workers.executionMode === "VIRTUAL";
   const localGitModeReasonId = useId();
   const localGitModeDisabled = settings.git.githubMode === "LOCAL";
-  const localGitModeReason = "Local Git mode keeps orchestration repo-local, so pull request, linked issue, and CI automation controls are disabled until GitHub mode is Remote.";
+  const localGitModeReason = tr("Local Git mode keeps orchestration repo-local, so pull request, linked issue, and CI automation controls are disabled until GitHub mode is Remote.");
   const getBadge = (path: string): string | undefined => {
     if (!sources) {
       return undefined;
     }
-    return getFieldSourceLabel(getFieldSource(sources, path), editingScope) ?? undefined;
+    const label = getFieldSourceLabel(getFieldSource(sources, path), editingScope);
+    return label ? tr(label) : undefined;
   };
 
   const automationSource = sources ? getSectionSource(sources, "automationLevel") : undefined;

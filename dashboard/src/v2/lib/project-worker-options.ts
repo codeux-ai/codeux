@@ -11,6 +11,8 @@ import {
   DEFAULT_PROVIDER_CONFIG_NAMES,
   PUBLIC_VIRTUAL_WORKER_PROVIDERS,
 } from "../../../../src/repositories/settings-defaults.js";
+import { sprintAuthoringMessages } from "../i18n/messages/sprint-authoring.js";
+import { DEFAULT_DASHBOARD_LOCALE, translateDashboardMessage, type DashboardLocale } from "../i18n/locales.js";
 
 const LIVE_WORKER_STATUSES = new Set(["connected", "listening", "idle", "paused"]);
 
@@ -60,7 +62,9 @@ export function getProjectWorkerOptions(
   routing: WorkerRoutingPreference | null,
   loading: boolean = false,
   systemSettings: SystemSettings | null = null,
+  locale: DashboardLocale = DEFAULT_DASHBOARD_LOCALE,
 ): ProjectWorkerOptionsResult {
+  const t = (key: keyof typeof sprintAuthoringMessages.en): string => translateDashboardMessage(sprintAuthoringMessages, locale, key);
   const connections = (execution?.connections || []).filter((connection) => connection.role === "worker");
   const primaryAssignedWorker = execution?.primaryAssignedWorker || null;
   const overflowAssignedWorkers = execution?.overflowAssignedWorkers || [];
@@ -77,7 +81,7 @@ export function getProjectWorkerOptions(
     options.push({
       id: assignedWorker.workerEndpointId || assignedWorker.connectionId || assignedWorker.assignmentId,
       label: assignedWorker.workerDisplayName,
-      subLabel: assignedWorker.assignmentRole === "primary" ? "Assigned Worker" : "Overflow Worker",
+      subLabel: assignedWorker.assignmentRole === "primary" ? t("assignedWorker") : t("overflowWorker"),
       status: assignedWorker.workerStatus || assignedWorker.status,
       isPrimary: !isVirtualMode && assignedWorker.assignmentRole === "primary",
       type: "endpoint",
@@ -113,7 +117,7 @@ export function getProjectWorkerOptions(
     options.push({
       id: `virtual:${virtualWorker.providerConfigId}`,
       label: virtualWorker.displayLabel,
-      subLabel: "On-demand CLI",
+      subLabel: t("onDemandCli"),
       status: "available",
       isPrimary: selectedVirtualProvider === virtualWorker.providerConfigId || selectedVirtualProvider === virtualWorker.provider,
       type: "virtual",
