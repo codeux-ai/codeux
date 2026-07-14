@@ -50,6 +50,7 @@ The redesigned Stats page uses a stable top-to-bottom shell:
 5. Feedback states
    - No-project, first-load loading, first-load error, empty, refresh, and reduced-data states preserve the shell rhythm.
    - Loading states use polite status semantics. Error states use alert semantics and expose retry when recovery is available.
+   - First-load and retained-window descriptions reuse the visible, locale-formatted window label, including UTC custom-range boundaries; they never expose the internal `custom` query identifier as presentation copy.
 - Refresh states keep existing analytics visible where cached data exists. Mark the affected chart, table, transcript, or page region with `aria-busy` and add visible/polite status text instead of using animation alone.
 - Background refresh states for mode workspaces and invocation ledgers keep cached rows/cards on screen. They add visible polite copy that says the data is updating from cache, while first-load states may still use skeleton or empty loading panels.
 
@@ -101,6 +102,7 @@ Models compares model activity, latency, reliability, and efficiency.
 - Model pricing stats use `usage.totalCostUsd` and should show total cost, cost per invocation, and blended cost per million tokens only when a positive cost signal exists.
 - Missing model arrays, zero model usage, zero duration samples, and low invocation counts render as explicit low-data states.
 - Long model and provider names must wrap within stable cards and rows; chips and metrics cannot force horizontal page overflow.
+- Model metric labels, including reasoning share, output/input ratio, and per-million-token cost, follow the active dashboard locale while model and provider identifiers remain verbatim.
 
 ### Providers
 

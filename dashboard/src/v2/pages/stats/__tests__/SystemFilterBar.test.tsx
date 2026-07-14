@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { SystemFilterBar } from "../components/system/SystemFilterBar.js";
 import type { SystemFilters } from "../hooks/use-system-view-data.js";
+import { StatsI18nProvider } from "../stats-i18n.js";
 
 expect.extend(matchers);
 
@@ -71,11 +72,11 @@ describe("SystemFilterBar", () => {
     fireEvent.click(runningButton);
     expect(runningButton).toHaveAttribute("aria-pressed", "true");
 
-    const taskCodingButton = getByRole("button", { name: "Cli Task Coding" });
+    const taskCodingButton = getByRole("button", { name: "cli_task_coding" });
     fireEvent.click(taskCodingButton);
     expect(taskCodingButton).toHaveAttribute("aria-pressed", "true");
 
-    const codexButton = getByRole("button", { name: "Codex" });
+    const codexButton = getByRole("button", { name: "codex" });
     fireEvent.click(codexButton);
     expect(codexButton).toHaveAttribute("aria-pressed", "true");
 
@@ -124,6 +125,23 @@ describe("SystemFilterBar", () => {
     expect(screen.getByRole("button", { name: "Prev" })).not.toBeDisabled();
   });
 
+  it("localizes German controls while preserving raw purpose and provider identifiers", () => {
+    render(
+      <StatsI18nProvider locale="de">
+        <Harness initialFilters={{ status: [], purpose: [], provider: [], errorCategories: [] }} />
+      </StatsI18nProvider>,
+    );
+
+    expect(screen.getByRole("searchbox", { name: "Systemstatistiken durchsuchen" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Status Filter" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Anbieter Filter" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Fehlerkategorie Filter" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Laufend" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "cli_task_coding" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "codex" })).toBeTruthy();
+    expect(screen.getByText("7 von 24 angezeigt")).toBeTruthy();
+  });
+
   it("renders without purpose or provider chips when those arrays are empty", () => {
     const { queryByText } = render(
       <Harness
@@ -146,8 +164,8 @@ describe("SystemFilterBar", () => {
       />
     );
 
-    const purpose = screen.getByRole("button", { name: "Cli Task Coding With A Long Operational Label" });
-    const provider = screen.getByRole("button", { name: "Provider With A Long Gateway Identifier" });
+    const purpose = screen.getByRole("button", { name: "cli_task_coding_with_a_long_operational_label" });
+    const provider = screen.getByRole("button", { name: "provider_with_a_long_gateway_identifier" });
 
     expect(purpose.className).toContain("max-w-full");
     expect(purpose.className).toContain("min-w-0");
@@ -155,7 +173,7 @@ describe("SystemFilterBar", () => {
     expect(provider.className).toContain("min-w-0");
     expect(purpose.querySelector("span")?.className).toContain("truncate");
     expect(provider.querySelector("span")?.className).toContain("truncate");
-    expect(screen.getByText("Cli Task Coding With A Long Operational Label")).toBeTruthy();
-    expect(screen.getByText("Provider With A Long Gateway Identifier")).toBeTruthy();
+    expect(screen.getByText("cli_task_coding_with_a_long_operational_label")).toBeTruthy();
+    expect(screen.getByText("provider_with_a_long_gateway_identifier")).toBeTruthy();
   });
 });

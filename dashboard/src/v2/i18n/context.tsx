@@ -132,3 +132,11 @@ export const useDashboardI18n = (): DashboardI18nContextValue => {
   }
   return context;
 };
+
+/**
+ * Feature-owned, lazy route providers can use this optional variant to retain
+ * their English test/story fallback when rendered outside the dashboard root.
+ */
+export const useOptionalDashboardI18n = (): DashboardI18nContextValue | null => (
+  useContext(DashboardI18nContext)
+);

@@ -2,7 +2,6 @@
  * @vitest-environment happy-dom
  */
 import { act, renderHook, waitFor } from "@testing-library/preact";
-import { DashboardI18nTestWrapper } from "../helpers/dashboard-i18n-test-utils.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useMemoryPageData } from "../../../dashboard/src/v2/hooks/use-memory-page-data.js";
 import {
@@ -86,7 +85,7 @@ const renderMemoryHook = (initialSprintId: string) => renderHook(
     "short_term",
     sprintId,
   ),
-  { initialProps: { sprintId: initialSprintId }, wrapper: DashboardI18nTestWrapper },
+  { initialProps: { sprintId: initialSprintId } },
 );
 
 describe("useMemoryPageData", () => {
@@ -203,7 +202,7 @@ describe("useMemoryPageData", () => {
       "skills",
       undefined,
       "agent-1",
-    ), { wrapper: DashboardI18nTestWrapper });
+    ));
 
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(fetchSkillCatalog).toHaveBeenCalledWith("project-1", "agent-1");

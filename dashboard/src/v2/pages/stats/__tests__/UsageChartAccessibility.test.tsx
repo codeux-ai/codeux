@@ -11,6 +11,7 @@ import { useUsageChartState } from "../use-usage-chart-state.js";
 import { UsageGraphEmpty, UsageGraphLoading, UsageGraphError } from "../components/UsageGraphStates.js";
 import { groupChartSeries } from "../chart-view-models.js";
 import gsap from "gsap";
+import { StatsI18nProvider } from "../stats-i18n.js";
 
 expect.extend(matchers);
 
@@ -56,6 +57,12 @@ const Wrapper = () => {
   const chartState = useUsageChartState("test", mockStats as any);
   return <InteractiveUsageChart stats={mockStats as any} loading={false} error={null} refresh={async () => {}} chartState={chartState} />;
 };
+
+const GermanWrapper = () => (
+  <StatsI18nProvider locale="de">
+    <Wrapper />
+  </StatsI18nProvider>
+);
 
 const ZoomedWrapper = () => {
   const chartState = useUsageChartState("test", mockStats as any);
@@ -246,6 +253,46 @@ describe("UsageChartAccessibility", () => {
     cleanup();
     const { container: errorContainer } = render(<UsageGraphError />);
     expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+
+  it("localizes German chart summaries, tooltip values, and legend accessibility", () => {
+    render(<GermanWrapper />);
+
+    expect(screen.getByText(/3 sichtbare Intervalle in Last 7 Days/)).toBeInTheDocument();
+    expect(screen.getByText(/Token-Spitze 200/)).toBeInTheDocument();
+    const slider = screen.getByLabelText("Diagrammdaten im Zeitverlauf erkunden");
+    fireEvent.input(slider, { target: { value: "1" } });
+    expect(screen.getAllByText("Kosten").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/0,20\s*\$/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Aufrufe").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Filter" }));
+    expect(screen.getByRole("dialog", { name: "Diagrammfilter" })).toBeInTheDocument();
+    expect(screen.getAllByRole("group", { name: "Reihenschalter des Nutzungsdiagramms" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("switch", { name: /Tokens, tokens-Reihe, aktiviert/ }).length).toBeGreaterThan(0);
+  });
+
+  it("localizes German chart loading, empty, and retry states", () => {
+    const { rerender } = render(
+      <StatsI18nProvider locale="de">
+        <UsageGraphLoading />
+      </StatsI18nProvider>,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(/Telemetrie-Trenddaten werden geladen/);
+
+    rerender(
+      <StatsI18nProvider locale="de">
+        <UsageGraphEmpty onReset={vi.fn()} />
+      </StatsI18nProvider>,
+    );
+    expect(screen.getByText("Zeitraum zurücksetzen")).toBeInTheDocument();
+
+    rerender(
+      <StatsI18nProvider locale="de">
+        <UsageGraphError onRetry={vi.fn()} />
+      </StatsI18nProvider>,
+    );
+    expect(screen.getByText("Erneut versuchen")).toBeInTheDocument();
   });
 
   it("keeps chart geometry static for reduced motion", () => {

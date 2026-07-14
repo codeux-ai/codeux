@@ -3,16 +3,14 @@ import { useEffect, useState } from "preact/hooks";
 import { Search, X } from "lucide-preact";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { searchQuerySignal } from "./memoryState.js";
-import { useMemoryI18n } from "../../i18n/messages/memory.js";
 
 const SEARCH_DEBOUNCE_MS = 180;
 
-export const MemorySearch: FunctionComponent<{ entityLabel?: "memory" | "skill" }> = ({ entityLabel = "memory" }) => {
+export const MemorySearch: FunctionComponent = () => {
     const committedQuery = searchQuerySignal.value;
     const [inputValue, setInputValue] = useState(committedQuery);
     const [announcement, setAnnouncement] = useState("");
     const interactionTokens = useInteractionTokens();
-    const { t } = useMemoryI18n();
     const searchPending = inputValue !== committedQuery;
     const asyncFeedbackStyle = {
         transitionDuration: interactionTokens.asyncFeedback.duration,
@@ -31,17 +29,17 @@ export const MemorySearch: FunctionComponent<{ entityLabel?: "memory" | "skill" 
         const trimmedInput = inputValue.trim();
         const timeoutId = window.setTimeout(() => {
             searchQuerySignal.value = inputValue;
-            setAnnouncement(trimmedInput ? t("searchApplied", { query: trimmedInput }) : t("searchCleared"));
+            setAnnouncement(trimmedInput ? `Search applied for ${trimmedInput}` : "Search cleared");
         }, SEARCH_DEBOUNCE_MS);
 
         return () => {
             window.clearTimeout(timeoutId);
         };
-    }, [committedQuery, inputValue, t]);
+    }, [committedQuery, inputValue]);
 
     const clearSearch = () => {
         if (inputValue || searchQuerySignal.value) {
-            setAnnouncement(t("searchCleared"));
+            setAnnouncement("Search cleared");
         }
         setInputValue("");
         searchQuerySignal.value = "";
@@ -49,7 +47,7 @@ export const MemorySearch: FunctionComponent<{ entityLabel?: "memory" | "skill" 
 
     return (
         <div className="relative group w-full min-w-0">
-            <label htmlFor="memory-search" className="sr-only">{t(entityLabel === "skill" ? "searchSkills" : "searchMemories")}</label>
+            <label htmlFor="memory-search" className="sr-only">Search memories</label>
             <div className="relative">
                 <Search
                     className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 transition-colors motion-reduce:duration-0 group-focus-within:text-signal-500"
@@ -63,7 +61,7 @@ export const MemorySearch: FunctionComponent<{ entityLabel?: "memory" | "skill" 
                     aria-keyshortcuts="Escape"
                     aria-busy={searchPending}
                     type="text"
-                    placeholder={t(entityLabel === "skill" ? "searchPlaceholderSkills" : "searchPlaceholderMemories")}
+                    placeholder="Search memories by name or category"
                     value={inputValue}
                     onKeyDown={(e) => {
                         if (e.key === "Escape") {
@@ -79,7 +77,7 @@ export const MemorySearch: FunctionComponent<{ entityLabel?: "memory" | "skill" 
                 {inputValue && (
                     <button
                         type="button"
-                        aria-label={t("clearSearch")}
+                        aria-label="Clear search"
                         onClick={clearSearch}
                         className="absolute right-3 top-1/2 flex min-h-8 min-w-8 -translate-y-1/2 items-center justify-center gap-1.5 rounded-md px-1.5 py-1 text-slate-400 transition-[background-color,color,box-shadow] motion-reduce:duration-0 hover:bg-black/[0.05] hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-1 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 dark:focus-visible:ring-offset-void-900"
                         style={{ transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }}
@@ -90,21 +88,21 @@ export const MemorySearch: FunctionComponent<{ entityLabel?: "memory" | "skill" 
                 )}
             </div>
             <p id="memory-search-hint" className="sr-only">
-                {t(entityLabel === "skill" ? "searchHintSkills" : "searchHintMemories")}
+                Type to filter memories. Search is applied after a short pause. Press Escape to clear the search.
             </p>
             <div id="memory-search-status" className="mt-1 min-h-4 text-[11px] font-medium text-slate-500 transition-colors dark:text-slate-400" style={asyncFeedbackStyle}>
                 {searchPending
-                    ? t("searchTyping")
+                    ? "Typing. Search applies after a short pause."
                     : committedQuery.trim()
-                        ? t("searchActive", { query: committedQuery.trim() })
-                        : t("searchClear")}
+                        ? `Search active: ${committedQuery.trim()}`
+                        : "Search is clear"}
             </div>
             <div className="sr-only" aria-live="polite" aria-atomic="true">
                 {announcement}
             </div>
             {searchPending && (
                 <div className="absolute right-10 top-1/2 hidden -translate-y-1/2 rounded-md border border-signal-500/20 bg-signal-500/[0.08] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-[background-color,border-color,color] dark:text-signal-400 sm:block" style={asyncFeedbackStyle}>
-                    {t("pending")}
+                    Pending
                 </div>
             )}
         </div>

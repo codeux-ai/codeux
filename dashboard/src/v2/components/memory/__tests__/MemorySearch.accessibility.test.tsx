@@ -1,7 +1,6 @@
 /** @vitest-environment jsdom */
 import { h } from "preact";
-import { act, fireEvent } from "@testing-library/preact";
-import { renderWithDashboardI18n as render } from "../../../../../../tests/dashboard/helpers/dashboard-i18n-test-utils.js";
+import { act, render, fireEvent } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { expect, test, describe, afterEach, vi } from "vitest";
 import { MemorySearch } from "../MemorySearch.js";
@@ -89,20 +88,5 @@ describe("MemorySearch Accessibility", () => {
         });
         expect(searchQuerySignal.value).toBe("architecture");
         expect(getByText("Search applied for architecture")).toBeInTheDocument();
-    });
-
-    test("announces a German search without changing the query", async () => {
-        vi.useFakeTimers();
-        const { getByRole, getByText } = render(<MemorySearch />, "de");
-        const input = getByRole("textbox", { name: "Erinnerungen durchsuchen" });
-
-        await fireEvent.input(input, { target: { value: "Architektur API-v2" } });
-        expect(getByText("Eingabe läuft. Die Suche wird nach einer kurzen Pause angewendet.")).toBeInTheDocument();
-
-        act(() => {
-            vi.advanceTimersByTime(180);
-        });
-        expect(searchQuerySignal.value).toBe("Architektur API-v2");
-        expect(getByText("Suche nach Architektur API-v2 angewendet")).toBeInTheDocument();
     });
 });

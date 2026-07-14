@@ -1,7 +1,6 @@
 /** @vitest-environment jsdom */
 import { h } from "preact";
-import { fireEvent, waitFor } from "@testing-library/preact";
-import { renderWithDashboardI18n as render } from "../../../../../../tests/dashboard/helpers/dashboard-i18n-test-utils.js";
+import { render, fireEvent, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { expect, test, describe, vi, afterEach } from "vitest";
 import { AddMemoryModal } from "../AddMemoryModal.js";
@@ -139,22 +138,5 @@ describe("AddMemoryModal Accessibility and Validation", () => {
         });
         expect(getByRole("dialog", { name: "Add Memory" })).toBeInTheDocument();
         expect(onClose).not.toHaveBeenCalled();
-    });
-
-    test("localizes German validation but keeps API diagnostics verbatim", async () => {
-        vi.mocked(createMemory).mockRejectedValue(new Error("Embedding runtime unavailable: model API-v2"));
-        const { getByRole, getByText } = render(
-            <AddMemoryModal open={true} scope="project" projectId="test-proj" onClose={vi.fn()} onCreated={vi.fn()} />,
-            "de",
-        );
-
-        fireEvent.click(getByRole("button", { name: "Erinnerung hinzufügen" }));
-        expect(await waitFor(() => getByText("Inhalt ist erforderlich"))).toBeInTheDocument();
-
-        fireEvent.input(getByRole("textbox", { name: /Erinnerungsinhalt/i }), { target: { value: "Persisted English memory content" } });
-        await act(async () => {
-            fireEvent.click(getByRole("button", { name: "Erinnerung hinzufügen" }));
-        });
-        expect(await waitFor(() => getByText("Embedding runtime unavailable: model API-v2"))).toBeInTheDocument();
     });
 });

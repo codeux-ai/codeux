@@ -1,7 +1,6 @@
 /** @vitest-environment jsdom */
 import { h } from "preact";
-import { fireEvent, within } from "@testing-library/preact";
-import { renderWithDashboardI18n as render } from "../../../../../../tests/dashboard/helpers/dashboard-i18n-test-utils.js";
+import { render, fireEvent, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { expect, test, describe, vi, afterEach } from "vitest";
 import { MemoryCard } from "../MemoryCard.js";

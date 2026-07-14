@@ -7,6 +7,7 @@ import type { ExecutionInvocationRecord } from "../../../../../types.js";
 import { fetchInvocationMessages } from "../../../../../lib/invocation-api.js";
 import { InvocationsTable } from "../../../components/system/InvocationsTable.js";
 import type { SystemSort } from "../../../hooks/use-system-view-data.js";
+import { StatsI18nProvider } from "../../../stats-i18n.js";
 
 vi.mock("../../../../../lib/invocation-api.js", () => ({
   fetchInvocationMessages: vi.fn(),
@@ -203,7 +204,7 @@ describe("InvocationsTable", () => {
     );
 
     const root = container as HTMLElement;
-    expect(root.textContent).toContain("provider with unusually long gateway identifier");
+    expect(root.textContent).toContain("provider_with_unusually_long_gateway_identifier");
     expect(root.textContent).toContain(longModel);
     expect(root.textContent).toContain(longError);
     expect(root.textContent).toContain(longTaskKey);
@@ -304,5 +305,34 @@ describe("InvocationsTable", () => {
     expect(screen.getByRole("alert", { name: "Invocation records failed to load" })).toBeTruthy();
     expect(screen.getByText("Failed to load invocation records")).toBeTruthy();
     expect(screen.getByText("network down")).toBeTruthy();
+  });
+
+  it("localizes German table presentation while preserving invocation identifiers and errors", () => {
+    const providerError = "upstream gateway returned provider_error_42";
+    render(
+      <StatsI18nProvider locale="de">
+        <InvocationsTable
+          invocations={[createInvocation({
+            id: "inv-de",
+            provider: "provider_raw_id",
+            model: "model/raw-id",
+            status: "failed",
+            lastErrorMessage: providerError,
+          })]}
+          sort={{ key: "inputTokens", dir: "desc" }}
+          onSortChange={vi.fn()}
+          expandedId={null}
+          onRowExpand={vi.fn()}
+        />
+      </StatsI18nProvider>,
+    );
+
+    expect(screen.getByRole("columnheader", { name: /Eingabe/ }).getAttribute("aria-sort")).toBe("descending");
+    expect(screen.getByRole("columnheader", { name: /Ausgabe/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Aufrufe nach Eingabe-Tokens sortieren, aktuell absteigend/ })).toBeTruthy();
+    expect(screen.getByText("1,5k")).toBeTruthy();
+    expect(screen.getByText("provider_raw_id")).toBeTruthy();
+    expect(screen.getByText("model/raw-id")).toBeTruthy();
+    expect(screen.getByText(providerError)).toBeTruthy();
   });
 });

@@ -1,6 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/preact";
-import { renderWithDashboardI18n as render } from "../helpers/dashboard-i18n-test-utils.js";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import userEvent from "@testing-library/user-event";
 import { useState } from "preact/hooks";

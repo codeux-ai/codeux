@@ -4,20 +4,19 @@ import { CheckCircle2, Download, ExternalLink, HardDrive, Loader2, Power, Refres
 import { useInteractionTokens } from "../../lib/motion/index.js";
 import { getSafeUrl } from "../../lib/safe-url.js";
 import type { EmbeddingModelWithStatus } from "../../lib/memory-api.js";
-import { useMemoryI18n, type MemoryTextKey } from "../../i18n/messages/memory.js";
 
-function formatBytes(bytes: number, formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string): string {
-  if (bytes < 1e6) return `${formatNumber(bytes / 1024, { maximumFractionDigits: 0 })} KB`;
-  if (bytes < 1e9) return `${formatNumber(bytes / 1e6, { maximumFractionDigits: 0 })} MB`;
-  return `${formatNumber(bytes / 1e9, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} GB`;
+function formatBytes(bytes: number): string {
+  if (bytes < 1e6) return `${(bytes / 1024).toFixed(0)} KB`;
+  if (bytes < 1e9) return `${(bytes / 1e6).toFixed(0)} MB`;
+  return `${(bytes / 1e9).toFixed(1)} GB`;
 }
 
-function getStatusKey(model: EmbeddingModelWithStatus): MemoryTextKey {
-  if (model.error) return "modelStatusUnavailable";
-  if (model.downloading) return "modelStatusDownloading";
-  if (model.active) return "modelStatusActive";
-  if (model.downloaded) return "modelStatusDownloaded";
-  return "modelStatusAvailable";
+function getStatusLabel(model: EmbeddingModelWithStatus): string {
+  if (model.error) return "Unavailable";
+  if (model.downloading) return "Downloading";
+  if (model.active) return "Active";
+  if (model.downloaded) return "Downloaded";
+  return "Available";
 }
 
 function getStatusClass(model: EmbeddingModelWithStatus): string {
@@ -52,11 +51,10 @@ export const ModelCard: FunctionComponent<{
   actionBlocked?: boolean;
 }> = ({ model, onDownload, onSelect, onDelete, onReembed, reembedding, staleCount, actionPending = null, actionBlocked = false }) => {
   const interactionTokens = useInteractionTokens();
-  const { formatNumber, t, tp } = useMemoryI18n();
   const [localPendingAction, setLocalPendingAction] = useState<"download" | "select" | "delete" | "reembed" | null>(null);
   const activationLockRef = useRef(false);
   const progress = Math.max(0, Math.min(100, Math.round(model.downloadProgress * 100)));
-  const statusLabel = t(getStatusKey(model));
+  const statusLabel = getStatusLabel(model);
   const pendingAction = actionPending ?? localPendingAction;
   const hasPendingAction = Boolean(pendingAction);
   const isBlockedByOtherAction = actionBlocked && !hasPendingAction;
@@ -76,23 +74,23 @@ export const ModelCard: FunctionComponent<{
   const actionReasonId = `model-action-reason-${model.id}`;
   const sourceUrl = getHuggingFaceUrl(model);
   const activePendingLabel = pendingAction === "download"
-    ? t("downloadRequestPending")
+    ? "Download request pending."
     : pendingAction === "select"
-      ? t("activationRequestPending")
+      ? "Activation request pending."
       : pendingAction === "delete"
-        ? t("deleteRequestPending")
+        ? "Delete confirmation or request pending."
         : pendingAction === "reembed"
-          ? t("reembedRequestPending")
+          ? "Re-embed request pending."
           : "";
   const disabledReason = model.downloading
-    ? t("modelDownloadInProgress")
+    ? "Model download is in progress."
     : reembedding
-      ? t("memoryReembeddingInProgress")
+      ? "Memory re-embedding is in progress."
       : isBlockedByOtherAction
-        ? t("anotherModelActionPending")
+        ? "Another model action is pending."
         : activePendingLabel;
   const cardActionCopy = model.active && model.downloaded
-    ? t("activeModelActionCopy")
+    ? "Active embedding model. Re-embed is available; deletion is disabled until another model is active."
     : disabledReason;
 
   const runAction = async (action: "download" | "select" | "delete" | "reembed", callback: () => void | Promise<void>): Promise<void> => {
@@ -154,20 +152,20 @@ export const ModelCard: FunctionComponent<{
         <div className="min-w-0">
           <dl className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] leading-5 text-slate-500 dark:text-slate-400">
             <div className="inline-flex gap-1">
-              <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">{t("dim")}</dt>
-              <dd className="font-mono font-semibold text-slate-700 dark:text-slate-200">{formatNumber(model.dimension)}d</dd>
+              <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">Dim</dt>
+              <dd className="font-mono font-semibold text-slate-700 dark:text-slate-200">{model.dimension}d</dd>
             </div>
             <div className="inline-flex gap-1">
-              <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">{t("size")}</dt>
-              <dd className="font-mono font-semibold text-slate-700 dark:text-slate-200">{formatBytes(model.sizeBytes, formatNumber)}</dd>
+              <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">Size</dt>
+              <dd className="font-mono font-semibold text-slate-700 dark:text-slate-200">{formatBytes(model.sizeBytes)}</dd>
             </div>
             <div className="inline-flex min-w-0 gap-1">
-              <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">{t("lang")}</dt>
+              <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">Lang</dt>
               <dd className="truncate font-mono font-semibold text-slate-700 dark:text-slate-200">{model.language}</dd>
             </div>
             <div className="inline-flex gap-1">
-              <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">{t("source")}</dt>
-              <dd className="font-mono font-semibold text-slate-700 dark:text-slate-200">{t(model.source === "custom" ? "customHf" : "builtIn")}</dd>
+              <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">Source</dt>
+              <dd className="font-mono font-semibold text-slate-700 dark:text-slate-200">{model.source === "custom" ? "Custom HF" : "Built-in"}</dd>
             </div>
           </dl>
           {sourceUrl && (
@@ -185,7 +183,7 @@ export const ModelCard: FunctionComponent<{
 
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <a href={model.license.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[10px] font-bold text-signal-600 hover:underline dark:text-signal-300">
-            <ExternalLink className="h-3 w-3" /> {model.license.name} · {t(model.source === "custom" ? "operatorAsserted" : "commercialUse")}
+            <ExternalLink className="h-3 w-3" /> {model.license.name} · {model.source === "custom" ? "operator asserted" : "commercial use"}
           </a>
         </div>
 
@@ -201,7 +199,7 @@ export const ModelCard: FunctionComponent<{
               style={controlTransitionStyle}
               className={signalButtonClass}>
               {pendingAction === "download" ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none" strokeWidth={2.5} /> : <Download className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />}
-              <span className={actionLabelClass}>{t(pendingAction === "download" ? "starting" : "download")}</span>
+              <span className={actionLabelClass}>{pendingAction === "download" ? "Starting" : "Download"}</span>
             </button>
           )}
           {model.downloaded && !model.active && (
@@ -215,7 +213,7 @@ export const ModelCard: FunctionComponent<{
               style={controlTransitionStyle}
               className={quietSignalButtonClass}>
               {pendingAction === "select" ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none" strokeWidth={2.5} /> : <Power className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />}
-              <span className={actionLabelClass}>{t(pendingAction === "select" ? "activating" : "activate")}</span>
+              <span className={actionLabelClass}>{pendingAction === "select" ? "Activating" : "Activate"}</span>
             </button>
           )}
           {model.active && !reembedding && (
@@ -229,24 +227,24 @@ export const ModelCard: FunctionComponent<{
               style={controlTransitionStyle}
               className={staleCount > 0 ? emberButtonClass : quietSignalButtonClass}>
               <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${pendingAction === "reembed" ? "animate-spin motion-reduce:animate-none" : ""}`} strokeWidth={2.5} />
-              <span className={actionLabelClass}>{pendingAction === "reembed" ? t("starting") : staleCount > 0 ? t("reembedCount", { count: formatNumber(staleCount) }) : t("reembedAllShort")}</span>
+              <span className={actionLabelClass}>{pendingAction === "reembed" ? "Starting" : `Re-embed${staleCount > 0 ? ` ${staleCount}` : " All"}`}</span>
             </button>
           )}
           {model.active && reembedding && (
             <span className={`${baseButtonClass} border border-signal-500/20 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300`} aria-busy="true" style={controlTransitionStyle}>
               <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none" strokeWidth={2.5} />
-              <span className={actionLabelClass}>{t("reembedding")}</span>
+              <span className={actionLabelClass}>Re-embedding</span>
             </span>
           )}
           {model.downloaded && (
             <button type="button" onClick={() => { void runAction("delete", () => onDelete(model.id)); }}
               data-model-action="delete"
               disabled={deleteDisabled}
-              aria-label={t(model.active ? "deleteActiveDisabled" : "deleteNamedModel", { name: model.displayName })}
+              aria-label={model.active ? `Delete ${model.displayName} disabled while active` : `Delete ${model.displayName}`}
               aria-disabled={deleteDisabled}
               aria-busy={pendingAction === "delete"}
               aria-describedby={actionReasonId}
-              title={deleteDisabled ? (model.active ? t("activeCannotDelete") : disabledReason) : t("deleteDownloadedConfirm")}
+              title={deleteDisabled ? (model.active ? "Active models cannot be deleted. Activate another model before deleting this one." : disabledReason) : "Delete this downloaded model after confirmation."}
               style={controlTransitionStyle}
               className={deleteButtonClass}>
               {pendingAction === "delete" ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" strokeWidth={2} /> : <Trash2 className="h-4 w-4" strokeWidth={2} />}
@@ -258,15 +256,15 @@ export const ModelCard: FunctionComponent<{
       <div id={cardStatusId} className="min-h-5" aria-live="polite" aria-atomic="true">
         {model.downloading && (
           <div className="flex items-center gap-2 text-[11px] font-semibold text-signal-700 dark:text-signal-300">
-            <div className="h-1.5 min-w-[6rem] flex-1 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.08]" role="progressbar" aria-label={t("modelDownloadProgress", { name: model.displayName })} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
+            <div className="h-1.5 min-w-[6rem] flex-1 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.08]" role="progressbar" aria-label={`${model.displayName} download progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
               <div className="h-full rounded-full bg-signal-500 transition-[width]" style={{ ...asyncTransitionStyle, width: `${progress}%` }} />
             </div>
-            <span className="font-mono">{formatNumber(progress / 100, { style: "percent", maximumFractionDigits: 0 })}</span>
+            <span className="font-mono">{progress}%</span>
           </div>
         )}
         {model.active && staleCount > 0 && !model.downloading && (
           <p className="text-[11px] font-bold leading-5 text-ember-600 dark:text-ember-400">
-            {tp("staleMemoriesShort", staleCount, { formattedCount: formatNumber(staleCount) })}
+            {staleCount} {staleCount === 1 ? "stale memory" : "stale memories"} need re-embedding.
           </p>
         )}
         {model.error && !model.downloading && (
@@ -276,7 +274,7 @@ export const ModelCard: FunctionComponent<{
         )}
       </div>
       <p id={actionReasonId} className="min-h-4 text-[10px] font-semibold leading-4 text-slate-400 dark:text-slate-500">
-        {cardActionCopy || t(model.downloaded ? "keyboardActions" : "downloadFetchProgress")}
+        {cardActionCopy || (model.downloaded ? "Keyboard actions are available; destructive actions ask for confirmation." : "Download starts a local model fetch and reports durable progress.")}
       </p>
     </article>
   );

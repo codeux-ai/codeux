@@ -22,6 +22,8 @@ import {
   type StatsVisualMode,
 } from "./StatsShared.js";
 import styles from "../StatsPage.module.css";
+import type { DashboardLocale } from "../../../i18n/index.js";
+import { useStatsI18n } from "../stats-i18n.js";
 
 export const WINDOW_PRESETS = ["1h", "24h", "7d", "30d", "all", "custom"] as const;
 
@@ -58,36 +60,56 @@ const ContextBadge: FunctionComponent<{
   </div>
 );
 
-export function getRelativeTime(isoString: string): string {
+export function getRelativeTime(isoString: string, locale: DashboardLocale = "en"): string {
   const diff = Date.now() - new Date(isoString).getTime();
   if (Number.isNaN(diff)) return "";
   const sec = Math.floor(Math.max(0, diff) / 1000);
-  if (sec < 60) return "just now";
+  if (sec < 60) return locale === "de" ? "gerade eben" : "just now";
   const min = Math.floor(sec / 60);
-  if (min < 60) return `${min} min ago`;
+  if (min < 60) return locale === "de" ? `vor ${min} Min.` : `${min} min ago`;
   const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr} hr ago`;
+  if (hr < 24) return locale === "de" ? `vor ${hr} Std.` : `${hr} hr ago`;
   const day = Math.floor(hr / 24);
-  return `${day} day${day > 1 ? "s" : ""} ago`;
+  return locale === "de" ? `vor ${day} Tag${day === 1 ? "" : "en"}` : `${day} day${day > 1 ? "s" : ""} ago`;
 }
 
-function formatWindowLabel(activeQuery: ProjectStatsQuery): string {
+function formatWindowBoundary(
+  value: string | null | undefined,
+  fallback: string,
+  formatDate: (value: Date, options?: Intl.DateTimeFormatOptions) => string,
+): string {
+  if (!value) {
+    return fallback;
+  }
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime())
+    ? value
+    : formatDate(date, { dateStyle: "medium", timeZone: "UTC" });
+}
+
+function formatWindowLabel(
+  activeQuery: ProjectStatsQuery,
+  allTime: string,
+  start: string,
+  end: string,
+  formatDate: (value: Date, options?: Intl.DateTimeFormatOptions) => string,
+): string {
   if (activeQuery.window !== "custom") {
-    return activeQuery.window === "all" ? "All time" : activeQuery.window;
+    return activeQuery.window === "all" ? allTime : activeQuery.window;
   }
 
-  const from = activeQuery.from || "Start";
-  const to = activeQuery.to || "End";
+  const from = formatWindowBoundary(activeQuery.from, start, formatDate);
+  const to = formatWindowBoundary(activeQuery.to, end, formatDate);
   return `${from} → ${to}`;
 }
 
-function getCustomRangeMessage(from: string, to: string): string {
+function getCustomRangeMessage(from: string, to: string, chooseBothDates: string, endAfterStart: string): string {
   if (!from || !to) {
-    return "Choose both dates before applying a custom range.";
+    return chooseBothDates;
   }
 
   if (!isValidCustomRange(from, to)) {
-    return "End date must be after start date.";
+    return endAfterStart;
   }
 
   return "";
@@ -121,6 +143,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
   visualMode,
   setVisualMode,
 }) => {
+  const { locale, text, formatDate } = useStatsI18n();
   const [customRangeError, setCustomRangeError] = useState<string>("");
   const [customRangeStatus, setCustomRangeStatus] = useState<string>("");
   const [customRangeAttempted, setCustomRangeAttempted] = useState(activeQuery.window === "custom");
@@ -128,7 +151,9 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
   const customFromRef = useRef<HTMLInputElement>(null);
   const customToRef = useRef<HTMLInputElement>(null);
 
-  const customRangeMessage = customControlsOpen && customRangeAttempted ? getCustomRangeMessage(customFrom, customTo) : "";
+  const customRangeMessage = customControlsOpen && customRangeAttempted
+    ? getCustomRangeMessage(customFrom, customTo, text("chooseBothDates"), text("endAfterStart"))
+    : "";
   const rangeMessage = customRangeError || customRangeMessage;
   const rangeHasError = Boolean(rangeMessage);
   const startHasError = rangeHasError && !customFrom;
@@ -137,11 +162,23 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
     ? "stats-custom-range-help stats-custom-range-error stats-custom-range-status"
     : "stats-custom-range-help stats-custom-range-status";
   const canApplyCustomRange = isValidCustomRange(customFrom, customTo);
-  const selectedProjectLabel = selectedProject?.name || "No project selected";
-  const generatedLabel = stats?.generatedAt ? formatDateTime(stats.generatedAt) : "No snapshot";
-  const rangeScopeLabel = stats?.range?.label || formatWindowLabel(activeQuery);
-  const activeModeLabel = MODE_LABELS[visualMode];
-  const activeModeDescription = MODE_DESCRIPTIONS[visualMode];
+  const selectedProjectLabel = selectedProject?.name || text("noProjectSelected");
+  const generatedLabel = stats?.generatedAt ? formatDateTime(stats.generatedAt, locale) : text("noSnapshot");
+  const rangeScopeLabel = stats?.range?.label || formatWindowLabel(
+    activeQuery,
+    text("allTime"),
+    text("start"),
+    text("end"),
+    formatDate,
+  );
+  const activeModeLabel = {
+    trend: text("trend"), composition: text("composition"), models: text("models"),
+    reliability: text("providers"), ledgers: text("ledgers"), system: text("system"),
+  }[visualMode];
+  const activeModeDescription = {
+    trend: text("trendDescription"), composition: text("compositionDescription"), models: text("modelsDescription"),
+    reliability: text("reliabilityDescription"), ledgers: text("ledgersDescription"), system: text("systemDescription"),
+  }[visualMode];
 
   useEffect(() => {
     if (activeQuery.window === "custom") {
@@ -152,7 +189,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
 
   const handleApplyCustom = () => {
     if (!canApplyCustomRange) {
-      const nextMessage = getCustomRangeMessage(customFrom, customTo);
+      const nextMessage = getCustomRangeMessage(customFrom, customTo, text("chooseBothDates"), text("endAfterStart"));
       setCustomRangeAttempted(true);
       setCustomRangeError(nextMessage);
       setCustomRangeStatus("");
@@ -166,7 +203,10 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
 
     setCustomRangeError("");
     setCustomRangeAttempted(true);
-    setCustomRangeStatus(`Custom range applied: ${customFrom} to ${customTo}.`);
+    setCustomRangeStatus(text("customRangeApplied", {
+      from: formatWindowBoundary(customFrom, text("start"), formatDate),
+      to: formatWindowBoundary(customTo, text("end"), formatDate),
+    }));
     applyCustomRange();
   };
 
@@ -181,7 +221,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
 
     setCustomControlsOpen(false);
     setCustomRangeAttempted(false);
-    setCustomRangeStatus(`Time window changed to ${window === "all" ? "All time" : window}.`);
+    setCustomRangeStatus(text("timeWindowChanged", { window: window === "all" ? text("allTime") : window }));
     applyPresetWindow(window);
   };
 
@@ -191,53 +231,53 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
         <div className={styles.heroIntro}>
           <div className={styles.heroTitleBlock}>
             <div className={styles.heroHeader}>
-              <div className={styles.heroKicker}>Project analytics</div>
+              <div className={styles.heroKicker}>{text("projectAnalytics")}</div>
               <div className={styles.heroTitleRow}>
-                <h1 id="stats-hero-title" className={styles.heroTitle}>Stats</h1>
+                <h1 id="stats-hero-title" className={styles.heroTitle}>{text("stats")}</h1>
               </div>
               <p className={styles.heroSubtitle}>
-                Telemetry, usage movement, and operational ledgers for the selected project.
+                {text("heroSubtitle")}
               </p>
             </div>
 
-            <div className={styles.heroSignalRow} aria-label="Stats active lens">
+            <div className={styles.heroSignalRow} aria-label={text("statsActiveLens")}>
               <div className={styles.heroSignalBadge}>
-                <span>Window</span>
+                <span>{text("window")}</span>
                 <strong>{rangeScopeLabel}</strong>
               </div>
               <div className={styles.heroSignalBadge}>
-                <span>Mode</span>
+                <span>{text("mode")}</span>
                 <strong>{activeModeLabel}</strong>
               </div>
             </div>
 
-            <div className={styles.heroContextGrid} aria-label="Stats project context">
-              <ContextBadge icon={Layers3} label="Project" value={selectedProjectLabel} />
-              <ContextBadge icon={Clock3} label="Generated" value={generatedLabel} />
+            <div className={styles.heroContextGrid} aria-label={text("statsProjectContext")}>
+              <ContextBadge icon={Layers3} label={text("project")} value={selectedProjectLabel} />
+              <ContextBadge icon={Clock3} label={text("generated")} value={generatedLabel} />
               <ContextBadge
                 icon={CalendarDays}
-                label="Sprint"
-                value={stats?.activeSprint ? `#${stats.activeSprint.sprintNumber ?? "?"}` : "Historical lens"}
+                label={text("sprint")}
+                value={stats?.activeSprint ? `#${stats.activeSprint.sprintNumber ?? "?"}` : text("historicalLens")}
               />
             </div>
           </div>
         </div>
 
-        <div className={`${SUBPANEL_CLASS} ${styles.heroControls}`} aria-label="Stats command controls">
+        <div className={`${SUBPANEL_CLASS} ${styles.heroControls}`} aria-label={text("statsCommandControls")}>
           <div className={styles.heroControlSection}>
             <div className={styles.heroControlHeader}>
               <div className={styles.heroControlHeaderText}>
                 <div className={styles.heroControlEyebrow}>
-                  Snapshot window
+                  {text("snapshotWindow")}
                 </div>
                 <div className={styles.heroControlDescription}>
-                  Set the range for every analysis view.
+                  {text("setRangeForViews")}
                 </div>
               </div>
               <CalendarDays className={styles.heroControlIcon} strokeWidth={2.2} aria-hidden="true" />
             </div>
 
-            <div role="group" aria-label="Time window presets" className={`${CHIP_CLASS} flex-wrap ${styles.heroPresetGroup}`}>
+            <div role="group" aria-label={text("timeWindowPresets")} className={`${CHIP_CLASS} flex-wrap ${styles.heroPresetGroup}`}>
               {WINDOW_PRESETS.map((window) => {
                 const isActive = window === "custom" ? customControlsOpen : activeQuery.window === window;
                 return (
@@ -250,7 +290,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                     aria-controls={window === "custom" ? "stats-custom-range-controls" : undefined}
                     className={`${styles.heroPresetButton} ${isActive ? styles.heroPresetButtonActive : ""}`}
                   >
-                    {window === "all" ? "All time" : window === "custom" ? "Custom" : window}
+                    {window === "all" ? text("allTime") : window === "custom" ? text("custom") : window}
                   </button>
                 );
               })}
@@ -259,12 +299,12 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
             {customControlsOpen ? (
               <div id="stats-custom-range-controls" className={styles.customRangeControls}>
                 <label className={styles.customRangeField}>
-                  <span className={styles.customRangeLabel}>Start</span>
+                  <span className={styles.customRangeLabel}>{text("start")}</span>
                   <input
                     id="stats-custom-start"
                     ref={customFromRef}
                     type="date"
-                    aria-label="Custom start date"
+                    aria-label={text("customStartDate")}
                     value={customFrom}
                     onInput={(event) => {
                       setCustomFrom((event.currentTarget as HTMLInputElement).value);
@@ -278,12 +318,12 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                   />
                 </label>
                 <label className={styles.customRangeField}>
-                  <span className={styles.customRangeLabel}>End</span>
+                  <span className={styles.customRangeLabel}>{text("end")}</span>
                   <input
                     id="stats-custom-end"
                     ref={customToRef}
                     type="date"
-                    aria-label="Custom end date"
+                    aria-label={text("customEndDate")}
                     value={customTo}
                     onInput={(event) => {
                       setCustomTo((event.currentTarget as HTMLInputElement).value);
@@ -302,7 +342,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                   aria-disabled={!canApplyCustomRange ? "true" : undefined}
                   className={styles.customRangeApply}
                 >
-                  Apply
+                  {text("applyRange")}
                 </button>
                 <div id="stats-custom-range-help" className={styles.customRangeHelp} aria-live="polite">
                   {rangeHasError ? (
@@ -310,7 +350,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                       {rangeMessage}
                     </span>
                   ) : (
-                    <span>Custom ranges apply only when both dates are valid.</span>
+                    <span>{text("customRangeHelp")}</span>
                   )}
                 </div>
               </div>
@@ -330,7 +370,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
             <div className={styles.heroControlHeader}>
               <div className={styles.heroControlHeaderText}>
                 <div className={styles.heroControlEyebrow}>
-                  Analysis view
+                  {text("analysisMode")}
                 </div>
                 <div className={styles.heroControlDescription}>
                   {activeModeDescription}
@@ -341,7 +381,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
             <ViewToggle
               value={visualMode}
               onChange={setVisualMode}
-              ariaLabel="Analytics modes"
+              ariaLabel={text("statsAnalysisModes")}
               className={styles.heroViewToggle}
               controlsId="stats-analysis-panel"
             />

@@ -21,6 +21,7 @@ import {
   SUBPANEL_CLASS,
 } from "./stats-ui-primitives.js";
 import { InteractiveUsageChart } from "./InteractiveUsageChart.js";
+import { useStatsI18n } from "../stats-i18n.js";
 
 const TrendSignalCard: FunctionComponent<{
   icon: LucideIcon;
@@ -53,14 +54,15 @@ export const TrendStudio: FunctionComponent<{
   planningUsage: _planningUsage,
   chartState,
 }) => {
+  const { locale, formatNumber } = useStatsI18n();
   const statusCounts = stats.statusCounts;
   const finishedCount = statusCounts
     ? statusCounts.completed + statusCounts.failed + statusCounts.cancelled
     : 0;
 
   const outputVelocity = stats.usage.activeTimeMs > 0
-    ? `${Math.round((stats.usage.outputTokens || 0) / Math.max(1, stats.usage.activeTimeMs / 1000))} tok/s`
-    : "0 tok/s";
+    ? `${formatNumber(Math.round((stats.usage.outputTokens || 0) / Math.max(1, stats.usage.activeTimeMs / 1000)))} Tok./s`
+    : `0 Tok./s`;
 
   const purposeRows = [...stats.purposes]
     .sort((a, b) => (b.usage?.totalTokens || 0) - (a.usage?.totalTokens || 0));
@@ -71,17 +73,17 @@ export const TrendStudio: FunctionComponent<{
       <TrendSignalCard
         icon={TimerReset}
         label="Median"
-        value={stats.duration && stats.duration.sampleCount > 0 ? formatStatsDuration(stats.duration.p50Ms) : "No samples"}
+        value={stats.duration && stats.duration.sampleCount > 0 ? formatStatsDuration(stats.duration.p50Ms, locale) : locale === "de" ? "Keine Stichproben" : "No samples"}
       />
       <TrendSignalCard
         icon={Hash}
-        label="Velocity"
+        label={locale === "de" ? "Geschwindigkeit" : "Velocity"}
         value={outputVelocity}
       />
       <TrendSignalCard
         icon={Clock3}
-        label="Success"
-        value={finishedCount > 0 ? formatPercent((statusCounts!.completed / finishedCount) * 100) : "No runs"}
+        label={locale === "de" ? "Erfolg" : "Success"}
+        value={finishedCount > 0 ? formatPercent((statusCounts!.completed / finishedCount) * 100, locale) : locale === "de" ? "Keine Läufe" : "No runs"}
       />
     </div>
     <InteractiveUsageChart
@@ -94,13 +96,13 @@ export const TrendStudio: FunctionComponent<{
     <div className={`${SUBPANEL_CLASS} p-3`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">Purpose Activity</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">{locale === "de" ? "Zweckaktivität" : "Purpose Activity"}</div>
           <div className="mt-2 text-sm leading-relaxed text-[var(--stats-detail-color)]">
-            Token volume, invocation count, and active time by purpose over the selected window.
+            {locale === "de" ? "Token-Volumen, Aufrufzahl und aktive Zeit nach Zweck im ausgewählten Zeitraum." : "Token volume, invocation count, and active time by purpose over the selected window."}
           </div>
         </div>
         <div className={`px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] ${CHIP_CLASS}`}>
-          {stats.purposes.length} purposes
+          {formatNumber(stats.purposes.length)} {locale === "de" ? "Zwecke" : "purposes"}
         </div>
       </div>
       <div className="mt-3 grid gap-2">
@@ -108,26 +110,26 @@ export const TrendStudio: FunctionComponent<{
           <div key={purpose.id} className={`${LEDGER_ROW_MODERN_CLASS} grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center`}>
             <div className="min-w-0">
               <div className="break-words text-sm font-bold capitalize text-[color:var(--stats-value-color)]">
-                {purpose.label.replace(/_/g, " ")}
+                {purpose.label}
               </div>
               <div className="mt-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]">
-                {formatTokens(purpose.usage?.totalTokens || 0)} tokens
+                {formatTokens(purpose.usage?.totalTokens || 0, locale)} Tokens
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm text-[color:var(--stats-detail-color)] sm:min-w-[18rem]">
               <div>
-                <span className="block font-medium text-[color:var(--stats-value-color)]">{(purpose.usage?.invocationCount || 0).toLocaleString()}</span>
-                <span className="text-[10px] font-bold uppercase tracking-[0.12em]">invocations</span>
+                <span className="block font-medium text-[color:var(--stats-value-color)]">{formatNumber(purpose.usage?.invocationCount || 0)}</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.12em]">{locale === "de" ? "Aufrufe" : "invocations"}</span>
               </div>
               <div>
-                <span className="block font-medium text-[color:var(--stats-value-color)]">{formatStatsDuration(purpose.usage?.activeTimeMs || 0)}</span>
-                <span className="text-[10px] font-bold uppercase tracking-[0.12em]">active time</span>
+                <span className="block font-medium text-[color:var(--stats-value-color)]">{formatStatsDuration(purpose.usage?.activeTimeMs || 0, locale)}</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.12em]">{locale === "de" ? "aktive Zeit" : "active time"}</span>
               </div>
             </div>
           </div>
         )) : (
           <div className="rounded-[1.05rem] border border-dashed border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/50 px-4 py-6 text-sm leading-relaxed text-[var(--stats-detail-color)]">
-            No purpose activity is available for this range.
+            {locale === "de" ? "Für diesen Zeitraum ist keine Zweckaktivität verfügbar." : "No purpose activity is available for this range."}
           </div>
         )}
       </div>

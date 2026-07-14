@@ -6,13 +6,12 @@ import { useInteractionTokens } from "../../lib/motion/index.js";
 import type { MemoryStats } from "../../lib/memory-api.js";
 import type { MemoryScope } from "../../memory-types.js";
 import type { SprintRecord, AgentPreset } from "../../types.js";
-import { useMemoryI18n } from "../../i18n/messages/memory.js";
 
 type MemTier = "short_term" | "long_term" | "skills";
-const TIER_TABS: { key: MemTier; labelKey: "shortTerm" | "longTerm" | "skills"; scope: MemoryScope }[] = [
-    { key: "short_term", labelKey: "shortTerm", scope: "sprint" },
-    { key: "long_term",  labelKey: "longTerm",  scope: "project" },
-    { key: "skills", labelKey: "skills", scope: "project" },
+const TIER_TABS: { key: MemTier; label: string; scope: MemoryScope }[] = [
+    { key: "short_term", label: "Short Term", scope: "sprint" },
+    { key: "long_term",  label: "Long Term",  scope: "project" },
+    { key: "skills", label: "Skills", scope: "project" },
 ];
 
 export const MemoryFilters: FunctionComponent<{
@@ -32,13 +31,13 @@ export const MemoryFilters: FunctionComponent<{
     const selectedSprintId = selectedSprintIdSignal.value;
     const selectedAgentPresetId = selectedAgentPresetIdSignal.value;
     const interactionTokens = useInteractionTokens();
-    const { formatNumber, t, tp } = useMemoryI18n();
     const [announcement, setAnnouncement] = useState("");
-    const activeTierLabel = t(activeTier === "short_term" ? "shortTerm" : activeTier === "long_term" ? "longTerm" : "skills");
+    const activeTierLabel = activeTier === "short_term" ? "Short Term" : activeTier === "long_term" ? "Long Term" : "Skills";
     const shortTermCount = stats.sprint + stats.agent;
     const longTermCount = stats.project;
     const activeTierCount = activeTier === "short_term" ? shortTermCount : activeTier === "long_term" ? longTermCount : skillsCount;
     const totalCount = shortTermCount + longTermCount + skillsCount;
+    const activeItemNoun = activeTier === "skills" ? "skill" : "memory";
     const selectedSprint = sprints.find((sprint) => sprint.id === selectedSprintId);
     const selectedAgent = agentPresets.find((agent) => agent.id === selectedAgentPresetId);
     const hasSprintFilters = sprints.length > 0;
@@ -48,34 +47,35 @@ export const MemoryFilters: FunctionComponent<{
     const showAgentFilter = hasAgentFilters && hasShortTermFilterData;
     const hasScopeFilters = showSprintFilter || showAgentFilter;
     const sprintLabel = selectedSprint
-        ? t("sprintNumber", { number: selectedSprint.number ?? "?" })
+        ? `Sprint ${selectedSprint.number ?? "?"}`
         : activeTier === "short_term" && shortTermCount === 0
-            ? t("noShortTermMemories")
-            : hasSprintFilters ? t("allSprints") : t("noSprintsAvailable");
-    const agentLabel = selectedAgent?.name ?? t("allAgents");
-    const activeTierCountLabel = tp(activeTier === "skills" ? "skill" : "memory", activeTierCount, { formattedCount: formatNumber(activeTierCount) });
+            ? "No short-term memories"
+            : hasSprintFilters ? "All Sprints" : "No sprints available";
+    const agentLabel = selectedAgent?.name ?? "All Agents";
+    const activeItemPlural = activeTier === "skills" ? "skills" : "memories";
+    const activeTierCountLabel = `${activeTierCount} ${activeTierCount === 1 ? activeItemNoun : activeItemPlural}`;
     const memoryTotal = shortTermCount + longTermCount;
     const totalCountLabel = skillsCount > 0
-        ? t("indexedItems", { countLabel: tp("item", totalCount, { formattedCount: formatNumber(totalCount) }) })
-        : tp("memory", memoryTotal, { formattedCount: formatNumber(memoryTotal) });
+        ? `${totalCount} indexed items`
+        : `${memoryTotal} ${memoryTotal === 1 ? "memory" : "memories"}`;
     const currentScopeParts = [
-        activeTier === "short_term" ? sprintLabel : activeTier === "skills" ? t("versionedSkillStorages") : t("projectWide"),
+        activeTier === "short_term" ? sprintLabel : activeTier === "skills" ? "Versioned skill storages" : "Project-wide",
         agentLabel,
     ];
     const currentScopeCopy = activeTier === "skills"
-        ? t("showingSkillsScope", { tier: activeTierLabel, activeCount: activeTierCountLabel, scope: currentScopeParts.join(" · ") })
-        : t("showingScope", { tier: activeTierLabel, activeCount: activeTierCountLabel, totalCount: totalCountLabel, scope: currentScopeParts.join(" · ") });
+        ? `${activeTierLabel}: showing ${activeTierCountLabel} · ${currentScopeParts.join(" · ")}`
+        : `${activeTierLabel}: showing ${activeTierCountLabel} of ${totalCountLabel} · ${currentScopeParts.join(" · ")}`;
     const unavailableScopeCopy = activeTier === "short_term"
         ? shortTermCount === 0
-            ? t("noShortTermFilters")
+            ? "No short-term memory filters are available for this tier."
             : hasAgentFilters
-                ? t("noSprintFilters")
-                : t("noSprintOrAgentFilters")
-        : t("noAgentFilters");
+                ? "No sprint filters are available for this tier."
+                : "No sprint or agent filters are available for this tier."
+        : "No agent filters are available for this tier.";
     const unavailablePartialScopeCopy = activeTier === "short_term" && !showSprintFilter && shortTermCount > 0
-        ? t("noSprintFilters")
+        ? "No sprint filters are available for this tier."
         : !showAgentFilter && hasScopeFilters
-            ? t("noAgentFilters")
+            ? "No agent filters are available for this tier."
             : "";
     const controlTransitionStyle = {
         transitionDuration: interactionTokens.controlFeedback.duration,
@@ -91,8 +91,8 @@ export const MemoryFilters: FunctionComponent<{
     };
 
     useEffect(() => {
-        setAnnouncement(t("tierSelected", { tier: activeTierLabel, countLabel: activeTierCountLabel }));
-    }, [activeTierCountLabel, activeTierLabel, t]);
+        setAnnouncement(`${activeTierLabel} tier selected. ${activeTierCount} ${activeTierCount === 1 ? activeItemNoun : activeItemPlural}.`);
+    }, [activeItemNoun, activeItemPlural, activeTierCount, activeTierLabel]);
 
     useEffect(() => {
         if (selectedSprintId && ((activeTier === "short_term" && shortTermCount === 0) || !sprints.some((sprint) => sprint.id === selectedSprintId))) {
@@ -113,31 +113,31 @@ export const MemoryFilters: FunctionComponent<{
     const handleDangerToggle = () => {
         handleLobotomizeToggle();
         setAnnouncement(lobotomize
-            ? t("dangerModeOffAnnouncement")
-            : t("dangerModeArmedAnnouncement"));
+            ? "Danger delete mode is off. Single-memory delete buttons are hidden."
+            : "Danger delete mode armed. Single-memory deletes happen immediately.");
     };
 
     const handleSprintChange = (value: string) => {
         selectedSprintIdSignal.value = value || undefined;
         const sprint = sprints.find((item) => item.id === value);
-        setAnnouncement(sprint ? t("sprintFilterSet", { number: sprint.number ?? "?" }) : t("sprintFilterCleared"));
+        setAnnouncement(sprint ? `Sprint filter set to Sprint ${sprint.number ?? "?"}.` : "Sprint filter cleared.");
     };
 
     const handleAgentChange = (value: string) => {
         selectedAgentPresetIdSignal.value = value || undefined;
         const agent = agentPresets.find((item) => item.id === value);
-        setAnnouncement(agent ? t("agentFilterSet", { name: agent.name }) : t("agentFilterAll"));
+        setAnnouncement(agent ? `Agent filter set to ${agent.name}.` : "Agent filter set to all agents.");
     };
 
     return (
         <div className="flex w-full min-w-0 max-w-full flex-col gap-3 overflow-hidden rounded-2xl border border-black/[0.06] bg-white/70 p-3 shadow-[0_18px_54px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.045] dark:shadow-[0_18px_54px_rgba(0,0,0,0.28)] lg:w-[min(52rem,52vw)] xl:w-[52rem]">
             <div className="flex w-full min-w-0 flex-col gap-2">
-                <div className="flex w-full min-w-0 flex-wrap items-stretch gap-2" role="tablist" aria-label={t("memoryTier")} aria-describedby="memory-filter-status">
+                <div className="flex w-full min-w-0 flex-wrap items-stretch gap-2" role="tablist" aria-label="Memory Tier" aria-describedby="memory-filter-status">
                     {TIER_TABS.map(tab => {
                         const count = tab.key === "short_term"
                             ? shortTermCount
                             : tab.key === "long_term" ? longTermCount : skillsCount;
-                        const tabCountLabel = tp(tab.key === "skills" ? "skill" : "memory", count, { formattedCount: formatNumber(count) });
+                        const tabNoun = tab.key === "skills" ? "skill" : "memory";
                         return (
                             <button
                                 key={tab.key}
@@ -178,9 +178,9 @@ export const MemoryFilters: FunctionComponent<{
                                     }
                                 }}
                             >
-                                <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em]">{t(tab.labelKey)}</span>
+                                <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em]">{tab.label}</span>
                                 <span id={`tab-${tab.key}-count`} className="text-base font-bold font-display text-slate-900 dark:text-white">
-                                    {tabCountLabel}
+                                    {count} {count === 1 ? tabNoun : tab.key === "skills" ? "skills" : "memories"}
                                 </span>
                             </button>
                         );
@@ -191,25 +191,25 @@ export const MemoryFilters: FunctionComponent<{
                 </div>
             </div>
             <div className="sr-only" aria-live="polite" aria-atomic="true">{announcement}</div>
-            <div className="flex w-full min-w-0 flex-wrap items-start gap-2.5 rounded-xl border border-black/[0.05] bg-black/[0.025] p-2 dark:border-white/[0.06] dark:bg-black/[0.12]" role="group" aria-label={t("memoryScopeFilters")}>
+            <div className="flex w-full min-w-0 flex-wrap items-start gap-2.5 rounded-xl border border-black/[0.05] bg-black/[0.025] p-2 dark:border-white/[0.06] dark:bg-black/[0.12]" role="group" aria-label="Memory scope filters">
                 {/* Sprint selector — only for Short Term */}
                 {showSprintFilter && (
                     <div className="flex min-w-0 flex-[1_1_12rem] flex-col gap-1 sm:max-w-[18rem]">
-                        <label htmlFor="sprint-selector" className="sr-only">{t("filterBySprint")}</label>
+                        <label htmlFor="sprint-selector" className="sr-only">Filter by Sprint</label>
                         <select
                             id="sprint-selector"
-                            aria-label={t("filterMemoryBySprint")}
+                            aria-label="Filter memory by Sprint"
                             aria-describedby="sprint-selector-status"
-                            title={t("filterMemoryBySprint")}
+                            title="Filter memory by Sprint"
                             value={selectedSprintId ?? ""}
                             onChange={(e) => handleSprintChange((e.target as HTMLSelectElement).value)}
                             style={controlTransitionStyle}
                             className="h-9 w-full min-w-0 max-w-full truncate rounded-lg border border-black/[0.08] bg-white/70 px-3 text-[11px] font-mono font-bold text-slate-600 transition-[background-color,border-color,box-shadow,color] motion-reduce:duration-0 cursor-pointer hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08]
                                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-void-900">
-                            <option value="">{t("allSprints")}</option>
+                            <option value="">All Sprints</option>
                             {sprints.map(s => (
                                 <option key={s.id} value={s.id}>
-                                    {t("sprintNumber", { number: s.number ?? "?" })} — {s.name || s.goal?.slice(0, 40) || s.id.slice(0, 8)}
+                                    Sprint {s.number ?? "?"} — {s.name || s.goal?.slice(0, 40) || s.id.slice(0, 8)}
                                 </option>
                             ))}
                         </select>
@@ -221,18 +221,18 @@ export const MemoryFilters: FunctionComponent<{
                 {/* Agent selector — both tiers */}
                 {showAgentFilter && (
                     <div className="flex min-w-0 flex-[1_1_12rem] flex-col gap-1 sm:max-w-[18rem]">
-                        <label htmlFor="agent-selector" className="sr-only">{t("filterByAgentPreset")}</label>
+                        <label htmlFor="agent-selector" className="sr-only">Filter by Agent Preset</label>
                         <select
                             id="agent-selector"
-                            aria-label={t("filterMemoryByAgentPreset")}
+                            aria-label="Filter memory by Agent Preset"
                             aria-describedby="agent-selector-status"
-                            title={t("filterMemoryByAgentPreset")}
+                            title="Filter memory by Agent Preset"
                             value={selectedAgentPresetId ?? ""}
                             onChange={(e) => handleAgentChange((e.target as HTMLSelectElement).value)}
                             style={controlTransitionStyle}
                             className="h-9 w-full min-w-0 max-w-full truncate rounded-lg border border-black/[0.08] bg-white/70 px-3 text-[11px] font-mono font-bold text-slate-600 transition-[background-color,border-color,box-shadow,color] motion-reduce:duration-0 cursor-pointer hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08]
                                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-void-900">
-                            <option value="">{t("allAgents")}</option>
+                            <option value="">All Agents</option>
                             {agentPresets.map(a => (
                                 <option key={a.id} value={a.id}>{a.name}</option>
                             ))}
@@ -253,22 +253,22 @@ export const MemoryFilters: FunctionComponent<{
                     </p>
                 )}
             </div>
-            {activeTier !== "skills" && <div className="flex w-full min-w-0 flex-wrap items-start justify-between gap-2.5" role="group" aria-label={t("memoryActions")}>
+            {activeTier !== "skills" && <div className="flex w-full min-w-0 flex-wrap items-start justify-between gap-2.5" role="group" aria-label="Memory actions">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <button type="button" onClick={() => setShowAddModal(true)}
-                        aria-label={t("addMemory")}
+                        aria-label="Add Memory"
                         style={controlTransitionStyle}
                         className="flex min-h-9 min-w-0 flex-[1_1_8.5rem] items-center justify-center gap-1.5 whitespace-normal rounded-xl px-4 py-2 text-xs font-bold leading-tight
                                    bg-signal-500/10 text-signal-500 hover:bg-signal-500/20
                                    border border-signal-500/20
                                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                                    transition-[background-color,border-color,box-shadow,color] motion-reduce:duration-0 sm:flex-none">
-                        <Plus className="w-3.5 h-3.5" strokeWidth={2.5} /> {t("addMemory")}
+                        <Plus className="w-3.5 h-3.5" strokeWidth={2.5} /> Add Memory
                     </button>
                 </div>
                 <div className="flex min-w-0 flex-col items-start gap-1 sm:items-end">
                     <button type="button" aria-pressed={lobotomize} onClick={handleDangerToggle}
-                        aria-label={t(lobotomize ? "disableDangerDelete" : "enableDangerDelete")}
+                        aria-label={lobotomize ? "Disable danger delete mode" : "Enable danger delete mode"}
                         aria-describedby="danger-delete-mode-copy"
                         style={controlTransitionStyle}
                         className={`flex min-h-9 min-w-0 flex-[1_1_12rem] items-center justify-center gap-2.5 whitespace-normal rounded-xl px-4 py-2 text-xs font-bold leading-tight border
@@ -279,7 +279,7 @@ export const MemoryFilters: FunctionComponent<{
                                        : "bg-black/[0.04] dark:bg-white/[0.04] border-black/[0.08] dark:border-white/[0.08] text-slate-600 dark:text-slate-400 hover:border-status-red/50 hover:text-status-red hover:bg-status-red/[0.04] active:bg-status-red/10 active:border-status-red/60"
                                    }`}>
                         <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.5} />
-                        <span>{t(lobotomize ? "dangerDeleteArmed" : "dangerDeleteOff")}</span>
+                        <span>{lobotomize ? "Danger Delete Armed" : "Danger Delete Off"}</span>
                     </button>
                 </div>
             </div>}
@@ -289,8 +289,8 @@ export const MemoryFilters: FunctionComponent<{
                 style={inlineValidationStyle}
             >
                 {lobotomize
-                    ? t("dangerDeleteArmedDescription")
-                    : t("dangerDeleteOffDescription")}
+                    ? "Danger delete mode is armed. Single-memory deletes skip confirmation until turned off."
+                    : "Danger delete mode is off. Toggle only when immediate single-memory deletion is intentional."}
             </p>}
         </div>
     );

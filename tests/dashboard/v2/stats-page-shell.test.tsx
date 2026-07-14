@@ -7,6 +7,7 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import gsap from "gsap";
 import { StatsPage } from "../../../dashboard/src/v2/pages/stats/StatsPage.js";
 import { useReducedMotion } from "../../../dashboard/src/v2/hooks/use-reduced-motion.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
 import { useStatsPageData } from "../../../dashboard/src/v2/pages/stats/use-stats-page-data.js";
 
 expect.extend(matchers);
@@ -336,6 +337,35 @@ describe("StatsPage Shell", () => {
     expect(screen.getByRole("status", { name: "Loading telemetry field" })).toHaveAttribute("aria-live", "polite");
   });
 
+  it("uses the locale-formatted custom window in German loading and retained-error descriptions", () => {
+    const customWindow = {
+      activeQuery: { window: "custom", from: "2026-06-26", to: "2026-07-03" },
+      customFrom: "2026-06-26",
+      customTo: "2026-07-03",
+      stats: null,
+    };
+    const renderGermanPage = () => (
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <StatsPage />
+      </DashboardI18nProvider>
+    );
+    mockStatsPageData({ ...customWindow, loading: true, error: null });
+
+    const view = render(renderGermanPage());
+
+    expect(screen.getByRole("status", { name: "Telemetriedaten werden geladen" })).toHaveTextContent(
+      "Telemetriedaten für Telemetry Redesign im Zeitraum 26.06.2026 → 03.07.2026 werden abgerufen.",
+    );
+
+    mockStatsPageData({ ...customWindow, loading: false, error: "Provider API error." });
+    view.rerender(renderGermanPage());
+
+    expect(screen.getByRole("alert", { name: "Provider API error." })).toHaveTextContent(
+      "Telemetry Redesign bleibt für den Zeitraum 26.06.2026 → 03.07.2026 ausgewählt.",
+    );
+    expect(screen.getByRole("alert", { name: "Provider API error." })).toHaveTextContent("Provider API error.");
+  });
+
   it("keeps previous stats visible while a refresh is loading", () => {
     mockStatsPageData({ loading: true, visualMode: "reliability" });
 
@@ -422,7 +452,7 @@ describe("StatsPage Shell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 
     expect(applyCustomRange).toHaveBeenCalledTimes(1);
-    expect(screen.getAllByRole("status").some((status) => status.textContent === "Custom range applied: 2026-06-26 to 2026-07-03.")).toBe(true);
+    expect(screen.getAllByRole("status").some((status) => status.textContent === "Custom range applied: Jun 26, 2026 to Jul 3, 2026.")).toBe(true);
   });
 
   it("calls visual mode switches from the hero and renders active content for three modes", () => {

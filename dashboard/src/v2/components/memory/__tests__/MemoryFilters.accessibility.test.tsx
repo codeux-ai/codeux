@@ -1,7 +1,6 @@
 /** @vitest-environment jsdom */
 import { h } from "preact";
-import { cleanup, fireEvent, within } from "@testing-library/preact";
-import { renderWithDashboardI18n as render } from "../../../../../../tests/dashboard/helpers/dashboard-i18n-test-utils.js";
+import { cleanup, render, fireEvent, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { expect, test, describe, afterEach, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
@@ -196,28 +195,5 @@ describe("MemoryFilters Accessibility", () => {
         await fireEvent.click(getByRole("button", { name: "Enable danger delete mode" }));
         expect(handleDanger).toHaveBeenCalledTimes(1);
         expect(getByText("Danger delete mode armed. Single-memory deletes happen immediately.")).toBeInTheDocument();
-    });
-
-    test("localizes German tier and filter controls while preserving agent names", async () => {
-        const user = userEvent.setup();
-        const { getByRole, getByText } = render(
-            <MemoryFilters
-                stats={{ sprint: 5, agent: 2, project: 10, activeModel: "test", staleEmbeddings: 0 }}
-                sprints={[{ id: "2", number: 2, goal: "Untranslated sprint goal", name: "", repoPath: "" } as any]}
-                agentPresets={[{ id: "agent2", name: "Agent Omega", description: "", modelName: "" } as any]}
-                setShowAddModal={() => {}}
-                lobotomize={false}
-                handleLobotomizeToggle={() => {}}
-            />,
-            "de",
-        );
-
-        expect(getByRole("tab", { name: /Kurzzeit/ })).toHaveAttribute("aria-selected", "true");
-        expect(getByRole("tab", { name: /Langzeit/ })).toBeInTheDocument();
-        expect(getByRole("tab", { name: /Fähigkeiten/ })).toBeInTheDocument();
-        expect(getByRole("group", { name: "Filter für den Erinnerungsumfang" })).toBeInTheDocument();
-        await user.selectOptions(getByRole("combobox", { name: "Erinnerungen nach Agentenvorlage filtern" }), "agent2");
-        expect(getByText("Agentenfilter auf Agent Omega gesetzt.")).toBeInTheDocument();
-        expect(getByText(/Kurzzeit:.*Agent Omega/)).toBeInTheDocument();
     });
 });

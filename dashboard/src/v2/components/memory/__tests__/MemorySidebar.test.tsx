@@ -1,7 +1,6 @@
 /** @vitest-environment jsdom */
 import { h } from "preact";
-import { fireEvent } from "@testing-library/preact";
-import { renderWithDashboardI18n as render } from "../../../../../../tests/dashboard/helpers/dashboard-i18n-test-utils.js";
+import { fireEvent, render } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import MemorySidebar from "../MemorySidebar.js";

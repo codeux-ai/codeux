@@ -20,7 +20,6 @@ import type { SprintRecord, AgentPreset } from "./types.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
 import { PageHeader } from "./components/layout/PageHeader.js";
 import { MEMORY_CAMERA, focusCameraOnPoint, zoomCameraTowardPoint, type CameraState } from "./lib/memory-camera.js";
-import { MEMORY_CATEGORY_MESSAGE_KEYS, translateMemory, useMemoryI18n } from "./i18n/messages/memory.js";
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
@@ -28,12 +27,22 @@ interface Pulse { edgeIdx: number; progress: number; speed: number }
 
 /* ─── Config ─────────────────────────────────────────────────────────────── */
 
-const CAT: Record<string, { hex: string; r: number; g: number; b: number }> = {
-    architecture: { hex: "#00E0A0", r: 0, g: 224, b: 160 }, codebase: { hex: "#FFB800", r: 255, g: 184, b: 0 },
-    context: { hex: "#8B5CF6", r: 139, g: 92, b: 246 }, preferences: { hex: "#94A3B8", r: 148, g: 163, b: 184 },
-    patterns: { hex: "#F59E0B", r: 245, g: 158, b: 11 }, decision: { hex: "#64748B", r: 100, g: 116, b: 139 },
-    error: { hex: "#F43F5E", r: 244, g: 63, b: 94 }, learning: { hex: "#33FFB8", r: 51, g: 255, b: 184 },
+const CAT: Record<string, { label: string; hex: string; r: number; g: number; b: number }> = {
+    architecture: { label: "Architecture", hex: "#00E0A0", r: 0,   g: 224, b: 160 },
+    codebase:     { label: "Codebase",     hex: "#FFB800", r: 255, g: 184, b: 0   },
+    context:      { label: "Context",      hex: "#8B5CF6", r: 139, g: 92,  b: 246 },
+    preferences:  { label: "Preferences",  hex: "#94A3B8", r: 148, g: 163, b: 184 },
+    patterns:     { label: "Patterns",     hex: "#F59E0B", r: 245, g: 158, b: 11  },
+    decision:     { label: "Decision",     hex: "#64748B", r: 100, g: 116, b: 139 },
+    error:        { label: "Error",        hex: "#F43F5E", r: 244, g: 63,  b: 94  },
+    learning:     { label: "Learning",     hex: "#33FFB8", r: 51,  g: 255, b: 184 },
 };
+
+type MemTier = "short_term" | "long_term";
+const TIER_TABS: { key: MemTier; label: string; scope: MemoryScope }[] = [
+    { key: "short_term", label: "Short Term", scope: "sprint" },
+    { key: "long_term",  label: "Long Term",  scope: "project" },
+];
 
 const CATEGORIES: MemoryCategory[] = ["architecture", "codebase", "context", "preferences", "patterns", "decision", "error", "learning"];
 const AMBIENT_LABEL_MIN_ZOOM = 0.9;
@@ -212,9 +221,6 @@ function drawFocusedLabel(
 /* ─── Memory Page ────────────────────────────────────────────────────────── */
 
 export const MemoryPage: FunctionComponent = () => {
-    const { formatNumber, locale, t, tp } = useMemoryI18n();
-    const localeRef = useRef(locale);
-    localeRef.current = locale;
     const { selectedProject } = useProjectData();
     const pid = selectedProject?.id || "";
     const headerRef = useRef<HTMLDivElement>(null);
@@ -319,11 +325,10 @@ export const MemoryPage: FunctionComponent = () => {
     const activeMemory = activeMemoryIdSignal.value
         ? graphNodes.find((node) => node.id === activeMemoryIdSignal.value && node.alive)
         : null;
-    const activeMemoryCategory = activeMemory ? t(MEMORY_CATEGORY_MESSAGE_KEYS[activeMemory.category] ?? "categoryContext") : null;
-    const activeEntity = t(skillsActive ? "skillNoun" : "memoryNoun");
+    const activeMemoryCategory = activeMemory ? (CAT[activeMemory.category] || CAT.context).label : null;
     const selectionStatus = activeMemory
-        ? t("selectedEntity", { category: activeMemoryCategory ?? "", entity: activeEntity, content: activeMemory.content })
-        : t("noEntitySelected", { entity: activeEntity });
+        ? `Selected ${activeMemoryCategory} ${skillsActive ? "skill" : "memory"}: ${activeMemory.content}`
+        : `No ${skillsActive ? "skill" : "memory"} selected`;
 
     /* ── Fetch agent presets on project change ─────────────── */
     useEffect(() => {
@@ -547,7 +552,7 @@ export const MemoryPage: FunctionComponent = () => {
                     ctx.fillStyle = lob
                         ? `rgba(227,0,15,${dark ? 0.28 : 0.2})`
                         : `rgba(${c.r},${c.g},${c.b},${dark ? 0.32 : 0.22})`;
-                    ctx.fillText(translateMemory(localeRef.current, MEMORY_CATEGORY_MESSAGE_KEYS[cat as MemoryCategory] ?? "categoryContext").toLocaleUpperCase(localeRef.current), centroid.x, centroid.y);
+                    ctx.fillText(c.label.toUpperCase(), centroid.x, centroid.y);
                 }
             }
 
@@ -710,7 +715,7 @@ export const MemoryPage: FunctionComponent = () => {
                     drawFocusedLabel(
                         ctx,
                         n,
-                        translateMemory(localeRef.current, MEMORY_CATEGORY_MESSAGE_KEYS[n.category] ?? "categoryContext"),
+                        cc.label,
                         dark,
                         lob,
                         cam.zoom,
@@ -730,7 +735,7 @@ export const MemoryPage: FunctionComponent = () => {
             ctx.textAlign = "center";
             ctx.font = `700 9px "JetBrains Mono", monospace`;
             ctx.fillStyle = lob ? "rgba(227,0,15,0.5)" : "rgba(0,224,160,0.5)";
-            ctx.fillText(translateMemory(localeRef.current, lob ? "lobotomizeCanvas" : "neuralCoreCanvas"), scx, scy + 32 * cam.zoom);
+            ctx.fillText(lob ? "LOBOTOMIZE" : "NEURAL CORE", scx, scy + 32 * cam.zoom);
 
             scheduleDraw();
         }
@@ -880,11 +885,10 @@ export const MemoryPage: FunctionComponent = () => {
             return;
         }
         // Local text filter
-        const lower = q.toLocaleLowerCase(localeRef.current);
+        const lower = q.toLowerCase();
         const matches = new Set<number>();
         s.graph.nodes.forEach((n, i) => {
-            const localizedCategory = translateMemory(localeRef.current, MEMORY_CATEGORY_MESSAGE_KEYS[n.category] ?? "categoryContext").toLocaleLowerCase(localeRef.current);
-            if (n.alive && (n.content.toLocaleLowerCase(localeRef.current).includes(lower) || n.category.includes(lower) || localizedCategory.includes(lower)))
+            if (n.alive && (n.content.toLowerCase().includes(lower) || n.category.includes(lower)))
                 matches.add(i);
         });
         s.searchMatch = matches;
@@ -906,7 +910,7 @@ export const MemoryPage: FunctionComponent = () => {
 
     useEffect(() => {
         handleSearch(searchQuerySignal.value);
-    }, [graphData, handleSearch, locale]);
+    }, [graphData, handleSearch]);
 
     /* ── Lobotomize toggle ────────────────────────────────────────────── */
     const handleLobotomizeToggle = useCallback(() => {
@@ -971,7 +975,7 @@ export const MemoryPage: FunctionComponent = () => {
 
     /* ─── Render ──────────────────────────────────────────────────────── */
     return (
-        <PageContainer aria-label={t("pageLabel")} padding="section" className="gap-8">
+        <PageContainer aria-label="Memory" padding="section" className="gap-8">
 
             <div aria-hidden className="fixed inset-0 pointer-events-none -z-10">
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_40%,rgba(0,224,160,0.04)_0%,transparent_70%)]
@@ -982,11 +986,11 @@ export const MemoryPage: FunctionComponent = () => {
             <PageHeader
                 containerRef={headerRef}
                 icon={Brain}
-                eyebrow={t("pageEyebrow")}
-                title={t("pageTitle")}
+                eyebrow="Neural Memory"
+                title="Memory Map"
                 subtitle={skillsActive
-                    ? t("skillsSubtitle")
-                    : t("pageSubtitle")}
+                    ? "Explore the versioned skill catalog available to your agents. Filter by agent, inspect skill nodes, and discover related capabilities."
+                    : "Explore the neural landscape of your agents' persistent memory. Click nodes to inspect. Scroll to zoom. Drag to pan."}
                 actions={
                     <MemoryFilters
                         stats={stats}
@@ -1007,8 +1011,8 @@ export const MemoryPage: FunctionComponent = () => {
                     style={{ animation: "lobotomize-pulse 2s ease-in-out infinite" }}>
                     <AlertTriangle className="w-4 h-4 shrink-0" strokeWidth={2.5} />
                     <p className="text-xs font-bold">
-                        <span className="uppercase tracking-[0.14em]">{t("warningLobotomize")}</span>
-                        {" "}{t("lobotomizeInstructions")}
+                        <span className="uppercase tracking-[0.14em]">Warning — Lobotomize mode active.</span>
+                        {" "}Single-click a graph node to delete it immediately. Inspector deletion is immediate; sidebar cards must be armed before deleting.
                     </p>
                 </div>
             )}
@@ -1018,7 +1022,7 @@ export const MemoryPage: FunctionComponent = () => {
                 className="flex flex-col lg:flex-row w-full overflow-hidden rounded-[2rem] bg-white/50 dark:bg-void-800/40 backdrop-blur-2xl border border-black/[0.05] dark:border-white/[0.05] shadow-[0_8px_48px_rgba(0,0,0,0.06)] dark:shadow-[0_8px_48px_rgba(0,0,0,0.4)] h-[calc(100dvh-12rem)] min-h-[500px]"
             >
                 <div ref={wrapRef} className="flex-1 relative overflow-hidden">
-                    <canvas ref={canvasRef} aria-label={t(skillsActive ? "skillMapCanvas" : "memoryMapCanvas")} className="absolute inset-0 w-full h-full" />
+                    <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
 
                     {/* Zoom controls */}
                     <div
@@ -1029,11 +1033,11 @@ export const MemoryPage: FunctionComponent = () => {
                         }`}
                     >
                     {[
-                        { icon: ZoomIn, fn: zoomIn, title: t("zoomIn") },
-                        { icon: ZoomOut, fn: zoomOut, title: t("zoomOut") },
-                        { icon: Maximize2, fn: zoomReset, title: t("resetView") },
+                        { icon: ZoomIn, fn: zoomIn, title: "Zoom in" },
+                        { icon: ZoomOut, fn: zoomOut, title: "Zoom out" },
+                        { icon: Maximize2, fn: zoomReset, title: "Reset view" },
                     ].map(({ icon: Icon, fn, title }) => (
-                        <button key={title} onClick={fn} title={title} aria-label={title}
+                        <button key={title} onClick={fn} title={title}
                             className="w-9 h-9 rounded-xl flex items-center justify-center
                                        bg-white/80 dark:bg-void-800/80 backdrop-blur-2xl
                                        border border-black/[0.06] dark:border-white/[0.06]
@@ -1060,12 +1064,12 @@ export const MemoryPage: FunctionComponent = () => {
                         aria-atomic="true"
                     >
                         <span className="block text-[9px] font-bold uppercase tracking-[0.14em] opacity-70">
-                            {t("selection")}
+                            Selection
                         </span>
                         <span className="mt-0.5 line-clamp-2 break-words">
                             {activeMemory
                                 ? `${activeMemoryCategory}: ${activeMemory.content}`
-                                : t("noEntitySelected", { entity: activeEntity })}
+                                : `No ${skillsActive ? "skill" : "memory"} selected`}
                         </span>
                     </div>
 
@@ -1077,12 +1081,12 @@ export const MemoryPage: FunctionComponent = () => {
                                 : "bottom-5 left-5"
                         }`}
                     >
-                    {Object.entries(CAT).map(([key, cfg]) => (
-                        <div key={key} className="flex items-center gap-1.5">
+                    {Object.entries(CAT).map(([, cfg]) => (
+                        <div key={cfg.label} className="flex items-center gap-1.5">
                             <div className="w-2 h-2 rounded-full" style={{ background: cfg.hex, boxShadow: `0 0 6px ${cfg.hex}` }} />
                             <span className="text-[9px] font-bold uppercase tracking-[0.14em]
                                            text-slate-400/80 dark:text-slate-500/80">
-                                {t(MEMORY_CATEGORY_MESSAGE_KEYS[key as MemoryCategory] ?? "categoryContext")}
+                                {cfg.label}
                             </span>
                         </div>
                     ))}
@@ -1097,9 +1101,7 @@ export const MemoryPage: FunctionComponent = () => {
                         }`}
                     >
                     <span className="text-[9px] font-mono text-slate-300 dark:text-slate-600">
-                        {skillsActive
-                            ? t("entityNodes", { countLabel: formatNumber(memoryCount), entity: t("skillNoun") })
-                            : tp("node", memoryCount, { formattedCount: formatNumber(memoryCount) })}
+                        {memoryCount} {skillsActive ? "skill nodes" : "nodes"}
                     </span>
                     <span className="sr-only">{selectionStatus}</span>
                     </div>
@@ -1109,12 +1111,12 @@ export const MemoryPage: FunctionComponent = () => {
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 pointer-events-none z-20">
                         <Brain className="w-12 h-12 text-signal-500/20" strokeWidth={1.5} />
                         <p className="text-base font-semibold font-display tracking-tight text-slate-400/60">
-                            {t(skillsActive ? "noSkillsIndexed" : "noMemoriesYet")}
+                            {skillsActive ? "No skills indexed yet" : "No memories yet"}
                         </p>
                         <p className="text-xs font-mono text-slate-400/50">
                             {skillsActive
-                                ? t("emptySkillsMap")
-                                : t("emptyMemoryMap")}
+                                ? "Create or attach a persistent skill storage to visualize its catalog."
+                                : "Memories will appear here as sprints capture them, or add one manually."}
                         </p>
                     </div>
                 )}
@@ -1129,8 +1131,8 @@ export const MemoryPage: FunctionComponent = () => {
                         <div className="flex items-center gap-3 rounded-xl border border-signal-500/15 bg-white/75 px-4 py-3 text-xs font-bold text-signal-700 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:bg-void-800/75 dark:text-signal-300">
                             <Loader2 className="w-4 h-4 text-signal-500/70 motion-safe:animate-spin" strokeWidth={1.8} aria-hidden="true" />
                             <span>{memoryCount > 0
-                                ? t("refreshingMap", { mapName: t(skillsActive ? "skillCatalog" : "memoryMap") })
-                                : t("loadingMap", { mapName: t(skillsActive ? "skillCatalog" : "memoryMap") })}</span>
+                                ? `Refreshing ${skillsActive ? "skill catalog" : "memory map"}. Current nodes remain visible.`
+                                : `Loading ${skillsActive ? "skill catalog" : "memory map"}...`}</span>
                         </div>
                     </div>
                 )}
@@ -1171,10 +1173,10 @@ export const MemoryPage: FunctionComponent = () => {
                                        shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.2)]">
                             <div className="flex items-center justify-between">
                                 <div className="w-2 h-2 rounded-full" style={{ background: cfg.hex, boxShadow: `0 0 8px ${cfg.hex}` }} />
-                                <span className="text-[9px] font-mono text-slate-400">{formatNumber(alive)}/{formatNumber(total)}</span>
+                                <span className="text-[9px] font-mono text-slate-400">{alive}/{total}</span>
                             </div>
                             <span className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: cfg.hex }}>
-                                {t(MEMORY_CATEGORY_MESSAGE_KEYS[key as MemoryCategory] ?? "categoryContext")}
+                                {cfg.label}
                             </span>
                             <div className="h-0.5 w-full bg-black/[0.06] dark:bg-white/[0.06] rounded-full overflow-hidden">
                                 <div className="h-full rounded-full transition-all duration-700"

@@ -4,8 +4,7 @@ import { h } from "preact";
 // @ts-ignore
 globalThis.React = { createElement: h };
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { screen, act, waitFor, fireEvent } from "@testing-library/preact";
-import { renderWithDashboardI18n as render } from "../helpers/dashboard-i18n-test-utils.js";
+import { render, screen, act, waitFor, fireEvent } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { MemoryPage, getNodeScreenRadius, getWheelZoomTarget, inverseZoomScreenSize } from "../../../dashboard/src/v2/MemoryPage.js";
 import { ProjectDataContext } from "../../../dashboard/src/v2/context/project-data.js";
@@ -92,7 +91,7 @@ describe("memory map canvas helpers", () => {
     });
 });
 
-const renderMemoryPage = (locale: "en" | "de" = "en") => {
+const renderMemoryPage = () => {
     return render(
         <ProjectDataContext.Provider value={{
             projects: [{ id: "proj-1", name: "Project 1", isActive: true }],
@@ -102,7 +101,7 @@ const renderMemoryPage = (locale: "en" | "de" = "en") => {
         }}>
             <MemoryPage />
         </ProjectDataContext.Provider>
-    , locale);
+    );
 };
 
 const memoryRecord = (overrides: Partial<MemoryRecord> = {}): MemoryRecord => ({
@@ -218,25 +217,6 @@ describe("MemoryPage destructive mode", () => {
         unmount();
     });
 
-    it("renders German map controls while preserving loaded memory content", async () => {
-        memorySidebarExpandedSignal.value = true;
-        vi.mocked(api.listMemories).mockResolvedValue([
-            memoryRecord({ content: "Persisted API contract remains English", category: "architecture" }),
-        ]);
-
-        const { unmount } = renderMemoryPage("de");
-
-        await waitFor(() => {
-            expect(screen.getByText("Persisted API contract remains English")).toBeInTheDocument();
-        });
-        expect(screen.getByRole("heading", { name: "Erinnerungskarte" })).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "Vergrößern" })).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "Verkleinern" })).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "Ansicht zurücksetzen" })).toBeInTheDocument();
-        expect(screen.getByText("1 Knoten")).toBeInTheDocument();
-        unmount();
-    });
-
     it("stops scheduling canvas frames when the document becomes hidden", async () => {
         const originalGlobalRaf = Object.getOwnPropertyDescriptor(globalThis, "requestAnimationFrame");
         const originalGlobalCancel = Object.getOwnPropertyDescriptor(globalThis, "cancelAnimationFrame");
@@ -307,7 +287,7 @@ describe("MemoryPage destructive mode", () => {
         const { container, unmount } = renderMemoryPage();
 
         await waitFor(() => {
-            expect(screen.getByText("1 node")).toBeInTheDocument();
+            expect(screen.getByText("1 nodes")).toBeInTheDocument();
         });
         await waitFor(() => {
             expect(screen.getByText("Long Term: showing 1 memory of 1 memory · Project-wide · All Agents")).toBeInTheDocument();

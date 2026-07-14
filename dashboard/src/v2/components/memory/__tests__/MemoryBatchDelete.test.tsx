@@ -1,7 +1,6 @@
 /** @vitest-environment jsdom */
 import { h } from "preact";
-import { act, fireEvent, renderHook, screen, waitFor } from "@testing-library/preact";
-import { DashboardI18nHookTestWrapper, renderWithDashboardI18n as render } from "../../../../../../tests/dashboard/helpers/dashboard-i18n-test-utils.js";
+import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { MemoryList } from "../MemoryList.js";
@@ -174,33 +173,6 @@ describe("Memory batch delete", () => {
         });
     });
 
-    test("localizes German batch deletion without changing selected IDs", async () => {
-        const removeMemories = vi.fn().mockResolvedValue([]);
-        memoryMutationsSignal.value.removeMemories = removeMemories;
-        activeTierSignal.value = "long_term";
-        selectedMemoryIdsSignal.value = ["memory-alpha", "memory-beta"];
-
-        const { getByRole } = render(
-            <MemoryList
-                nodes={[
-                    buildNode({ id: "memory-alpha", content: "Stored API claim" }),
-                    buildNode({ id: "memory-beta", content: "Stored evidence filename.md" }),
-                ]}
-                onSelectNode={vi.fn()}
-            />,
-            "de",
-        );
-
-        fireEvent.click(await screen.findByRole("button", { name: "2 ausgewählte löschen" }));
-        expect(screen.getByRole("dialog", { name: "Ausgewählte Erinnerungen löschen" })).toBeInTheDocument();
-        expect(screen.getByText(/2 ausgewählte Erinnerungen aus dem sichtbaren Umfang löschen/)).toBeInTheDocument();
-
-        fireEvent.click(getByRole("button", { name: "Erinnerungen löschen" }));
-        await waitFor(() => {
-            expect(removeMemories).toHaveBeenCalledWith(["memory-alpha", "memory-beta"]);
-        });
-    });
-
     test("shows pending mutation feedback while deleting selected memories", () => {
         memoryMutationsSignal.value = {
             ...memoryMutationsSignal.value,
@@ -274,7 +246,7 @@ describe("Memory batch delete", () => {
             { memoryId: "memory-2", ok: false, error: "network timeout" },
         ]);
 
-        const { result } = renderHook(() => useMemoryPageData("project-1", "project", "long_term", undefined, undefined, true), { wrapper: DashboardI18nHookTestWrapper });
+        const { result } = renderHook(() => useMemoryPageData("project-1", "project", "long_term", undefined, undefined, true));
 
         await waitFor(() => {
             expect(result.current.loading).toBe(false);

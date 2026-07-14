@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/preact";
 import { ModelsStudio } from "../components/ModelsStudio.js";
 import type { ExecutionModelStatsSummary, ExecutionUsageTotals } from "../../../types.js";
+import { StatsI18nProvider } from "../stats-i18n.js";
 
 afterEach(() => {
   cleanup();
@@ -200,5 +201,25 @@ describe("ModelsStudio", () => {
   it("tolerates snapshots without a models field", () => {
     render(<ModelsStudio stats={{} as any} />);
     expect(screen.getByText("No model telemetry yet")).toBeTruthy();
+  });
+
+  it("renders German model comparisons with locale formatting and verbatim model identifiers", () => {
+    render(
+      <StatsI18nProvider locale="de">
+        <ModelsStudio stats={{ models: [model] } as any} />
+      </StatsI18nProvider>,
+    );
+
+    expect(screen.getByText("Modellleistung und Effizienz")).toBeTruthy();
+    expect(screen.getByText("Modellrangliste")).toBeTruthy();
+    expect(screen.getAllByText("claude-opus-4-8").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("claude-opus-4-8, Rang 1 der Modellrangliste")).toBeTruthy();
+    expect(screen.getAllByText(/55,41\s*\$/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Sortierung: Tokens absteigend")).toBeTruthy();
+    expect(screen.getByText("$ / 1 Mio. Tok.")).toBeTruthy();
+    expect(screen.getAllByText("Schlussfolgerung").length).toBeGreaterThan(0);
+    expect(screen.getByText("Ausgabe / Eingabe")).toBeTruthy();
+    expect(screen.queryByText("Reasoning")).toBeNull();
+    expect(screen.queryByText("Output / Input")).toBeNull();
   });
 });

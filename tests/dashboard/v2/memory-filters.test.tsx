@@ -1,7 +1,6 @@
 /** @vitest-environment jsdom */
 import { h } from "preact";
-import { cleanup, fireEvent, screen, within } from "@testing-library/preact";
-import { renderWithDashboardI18n as render } from "../helpers/dashboard-i18n-test-utils.js";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
