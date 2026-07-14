@@ -2,7 +2,7 @@
 /** @jsx h */
 import { h } from "preact";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, fireEvent, screen, cleanup, waitFor } from "@testing-library/preact";
+import { fireEvent, screen, cleanup, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { SprintsPage } from "../../../dashboard/src/v2/pages/sprints/SprintsPage";
 import { renderWithI18n } from "../render-with-i18n.js";

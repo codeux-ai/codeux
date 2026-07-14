@@ -1,6 +1,8 @@
 import { useState, useEffect } from "preact/hooks";
 import { Rocket, ClipboardList, Save, RefreshCw, ListPlus, Clock3 } from "lucide-preact";
 import type { AgentRoutingMode, PlanningOverrides, ProviderId, Sprint, ScheduleAnchor } from "../types.js";
+import { sprintAuthoringMessages } from "../i18n/messages/sprint-authoring.js";
+import { DEFAULT_DASHBOARD_LOCALE, translateDashboardMessage, type DashboardLocale } from "../i18n/locales.js";
 
 export type SprintSubmitMode = "plan_and_start" | "plan_only" | "draft" | "replan" | "append_tasks" | "schedule";
 
@@ -25,32 +27,18 @@ export interface CreateMode {
   icon: any;
 }
 
-export const CREATE_MODES: CreateMode[] = [
-  {
-    id: "plan_and_start",
-    label: "Plan & Start",
-    description: "Create the sprint, let the Planning agent build subtasks, then launch immediately.",
-    icon: Rocket,
-  },
-  {
-    id: "plan_only",
-    label: "Plan Only",
-    description: "Create the sprint and have the Planning agent generate subtasks without starting execution.",
-    icon: ClipboardList,
-  },
-  {
-    id: "draft",
-    label: "Save Draft",
-    description: "Store the sprint only and keep planning for later.",
-    icon: Save,
-  },
-  {
-    id: "schedule",
-    label: "Schedule",
-    description: "Save the sprint and create a scheduler entry without starting planning now.",
-    icon: Clock3,
-  },
+const t = (locale: DashboardLocale, key: keyof typeof sprintAuthoringMessages.en): string => (
+  translateDashboardMessage(sprintAuthoringMessages, locale, key)
+);
+
+export const getCreateModes = (locale: DashboardLocale = DEFAULT_DASHBOARD_LOCALE): CreateMode[] => [
+  { id: "plan_and_start", label: t(locale, "planAndStart"), description: t(locale, "createModePlanStartDescription"), icon: Rocket },
+  { id: "plan_only", label: t(locale, "planOnly"), description: t(locale, "createModePlanOnlyDescription"), icon: ClipboardList },
+  { id: "draft", label: t(locale, "saveDraft"), description: t(locale, "createModeDraftDescription"), icon: Save },
+  { id: "schedule", label: t(locale, "schedule"), description: t(locale, "createModeScheduleDescription"), icon: Clock3 },
 ];
+
+export const CREATE_MODES: CreateMode[] = getCreateModes();
 
 export interface PlanningRouteOption {
   type: 'connected' | 'virtual';
@@ -151,33 +139,37 @@ export interface SprintComposerState {
   availableModes: CreateMode[];
 }
 
-export const getAvailableModes = (isEditing: boolean, hasTasks: boolean): CreateMode[] => {
-  if (!isEditing) return CREATE_MODES;
+export const getAvailableModes = (
+  isEditing: boolean,
+  hasTasks: boolean,
+  locale: DashboardLocale = DEFAULT_DASHBOARD_LOCALE,
+): CreateMode[] => {
+  if (!isEditing) return getCreateModes(locale);
   
   if (hasTasks) {
     return [
       {
         id: "replan",
-        label: "Replan",
-        description: "Discard existing subtasks and have the Planning agent generate a new plan.",
+        label: t(locale, "replan"),
+        description: t(locale, "editModeReplanDescription"),
         icon: RefreshCw,
       },
       {
         id: "append_tasks",
-        label: "Add Tasks",
-        description: "Append manual tasks to this sprint without affecting existing ones.",
+        label: t(locale, "addTasks"),
+        description: t(locale, "editModeAddTasksDescription"),
         icon: ListPlus,
       },
       {
         id: "draft",
-        label: "Save Changes",
-        description: "Update the sprint definition without triggering planning.",
+        label: t(locale, "saveChanges"),
+        description: t(locale, "editModeSaveDescription"),
         icon: Save,
       },
       {
         id: "schedule",
-        label: "Schedule",
-        description: "Save changes and schedule this sprint to start later.",
+        label: t(locale, "schedule"),
+        description: t(locale, "editModeScheduleDescription"),
         icon: Clock3,
       },
     ];
@@ -186,26 +178,26 @@ export const getAvailableModes = (isEditing: boolean, hasTasks: boolean): Create
   return [
     {
       id: "plan_and_start",
-      label: "Plan & Start",
-      description: "Trigger planning and launch execution immediately.",
+      label: t(locale, "planAndStart"),
+      description: t(locale, "editEmptyPlanStartDescription"),
       icon: Rocket,
     },
     {
       id: "plan_only",
-      label: "Plan Only",
-      description: "Trigger planning to generate subtasks without starting execution.",
+      label: t(locale, "planOnly"),
+      description: t(locale, "editEmptyPlanOnlyDescription"),
       icon: ClipboardList,
     },
     {
       id: "draft",
-      label: "Save Changes",
-      description: "Update the sprint definition without triggering planning.",
+      label: t(locale, "saveChanges"),
+      description: t(locale, "editModeSaveDescription"),
       icon: Save,
     },
     {
       id: "schedule",
-      label: "Schedule",
-      description: "Save changes and schedule this sprint to start later.",
+      label: t(locale, "schedule"),
+      description: t(locale, "editModeScheduleDescription"),
       icon: Clock3,
     },
   ];
@@ -219,6 +211,7 @@ export const useSprintComposerState = (
     agentRoutingMode?: AgentRoutingMode;
     workerAgentPresetId?: string | null;
   } = {},
+  locale: DashboardLocale = DEFAULT_DASHBOARD_LOCALE,
 ): SprintComposerState => {
   const [name, setName] = useState(initialSprint?.name || "");
   const [goal, setGoal] = useState(initialSprint?.goal || "");
@@ -252,7 +245,7 @@ export const useSprintComposerState = (
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSprint?.id]);
 
-  const availableModes = getAvailableModes(isEditing, hasTasks);
+  const availableModes = getAvailableModes(isEditing, hasTasks, locale);
 
   return {
     name, setName,

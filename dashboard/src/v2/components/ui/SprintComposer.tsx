@@ -26,10 +26,10 @@ import {
 import { getProviderModelOptions } from "../../lib/settings-view-models.js";
 import {
   getPlanningCancelledMessage,
+  getPlanningActionLabel,
   getPlanningFeedback,
   getPlanningPendingMessage,
   type PlanningActionType,
-  PLANNING_ACTION_LABELS,
 } from "../../lib/sprint-planning-feedback.js";
 import { PlanningProgressOverlay } from "./PlanningProgressOverlay.js";
 import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
@@ -45,6 +45,8 @@ import { getSafeUrl } from "../../lib/safe-url.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import type { ProviderId } from "../../types.js";
 import { LinkedIssueTag } from "../sprint/LinkedIssueTag.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { sprintAuthoringMessages } from "../../i18n/messages/sprint-authoring.js";
 
 interface VirtualProviderOption {
   id?: string;
@@ -101,13 +103,6 @@ interface SprintComposerProps {
   clearImportedTaskError?: () => void;
 }
 
-const IMPORTED_TASK_KIND_LABELS: Record<SprintImportedTaskInput["kind"], string> = {
-  security: "Security",
-  quality: "Quality",
-  merge_conflict: "Merge Conflict",
-  failed_ci: "Failed CI",
-};
-
 const IMPORTED_TASK_KIND_TONES: Record<SprintImportedTaskInput["kind"], string> = {
   security: "border-status-red/20 bg-status-red/10 text-status-red",
   quality: "border-signal-500/20 bg-signal-500/10 text-signal-600 dark:text-signal-300",
@@ -124,11 +119,11 @@ const getImportedTaskKey = (task: SprintImportedTaskInput): string => (
   ].join("::")
 );
 
-const formatImportedTaskPriority = (priority?: SprintImportedTaskInput["priority"]): string => {
+const formatImportedTaskPriority = (priority: SprintImportedTaskInput["priority"] | undefined, labels: Record<string, string>, defaultLabel: string): string => {
   if (!priority) {
-    return "Default";
+    return defaultLabel;
   }
-  return `${priority.charAt(0).toUpperCase()}${priority.slice(1)}`;
+  return labels[priority] || priority;
 };
 
 const toDateTimeLocalValue = (date: Date): string => {
@@ -185,6 +180,14 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   onClearImportedTaskFeedback,
   clearImportedTaskError,
 }) => {
+  const { locale, translate } = useDashboardI18n();
+  const t = (key: keyof typeof sprintAuthoringMessages.en, variables?: Record<string, string | number>): string => translate(sprintAuthoringMessages, key, variables);
+  const importedTaskKindLabels: Record<SprintImportedTaskInput["kind"], string> = {
+    security: t("security"), quality: t("quality"), merge_conflict: t("mergeConflict"), failed_ci: t("failedCi"),
+  };
+  const priorityLabels: Record<string, string> = { critical: t("critical"), high: t("high"), medium: t("medium"), low: t("low") };
+  const resolvedDefaultRouteOptionLabel = defaultRouteOptionLabel === "Default Route" ? t("defaultRoute") : defaultRouteOptionLabel;
+  const resolvedDefaultModelOptionLabel = defaultModelOptionLabel === "Default Model" ? t("defaultModel") : defaultModelOptionLabel;
   const cardRef = useRef<HTMLDivElement>(null);
   const fieldsRef = useRef<HTMLFormElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -217,7 +220,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     planningAgentPresetId: defaultPlanningAgentPresetId,
     agentRoutingMode: defaultAgentRoutingMode,
     workerAgentPresetId: defaultWorkerAgentPresetId,
-  });
+  }, locale);
   const visibleLinkedIssues = linkedIssues ?? initialSprint?.linkedIssues ?? [];
   const visibleImportedTasks = importedTasks ?? [];
   const agentPresetOptions = agentPresets ?? planningPresets;
@@ -347,8 +350,8 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
 
   const feedback = useMemo(() => {
     if (!busyAction) return null;
-    return getPlanningFeedback(busyAction, elapsedMs);
-  }, [busyAction, elapsedMs]);
+    return getPlanningFeedback(busyAction, elapsedMs, locale);
+  }, [busyAction, elapsedMs, locale]);
 
   useLayoutEffect(() => {
     const timeline = gsap.timeline();
@@ -404,7 +407,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     activeRequestRef.current = null;
     setIsImproving(false);
     setIsSubmitting(false);
-    setWarning(getPlanningCancelledMessage(actionType), { autoDismiss: false });
+    setWarning(getPlanningCancelledMessage(actionType, locale), { autoDismiss: false });
     if (previousFocusRef.current) {
       const el = previousFocusRef.current;
       setTimeout(() => el.focus(), 0);
@@ -459,7 +462,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     };
     setIsImproving(true);
     clearFeedback();
-    setPending(getPlanningPendingMessage("improve"));
+    setPending(getPlanningPendingMessage("improve", locale));
     try {
       const improvedGoal = await onImprovePrompt({
         name: state.name.trim(),
@@ -471,7 +474,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       if (shouldHandleResult()) {
         state.setGoal(improvedGoal);
         state.setOriginalPrompt(rawPrompt);
-        setSuccess("Prompt refined");
+        setSuccess(t("promptRefined"));
       }
     } catch (error) {
       const activeRequest = activeRequestRef.current;
@@ -484,7 +487,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       ) return;
       if (!isUnmountedRef.current) {
         const message = error instanceof Error ? error.message : String(error);
-        setError(`Prompt improvement failed: ${message}`, { retryAction: handleImprovePrompt, retryLabel: "Retry Improve", autoDismiss: false });
+        setError(t("promptImproveFailed", { message }), { retryAction: handleImprovePrompt, retryLabel: t("retryImprove"), autoDismiss: false });
       }
     } finally {
       if (abortRef.current === controller) {
@@ -517,19 +520,19 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     if (state.submitMode === "schedule") {
       if (scheduleConfig.mode === "after_sprint_end" && !scheduleConfig.sourceSprintId) {
         state.setHasAttemptedSubmit(true);
-        setError("Choose the source sprint for the after-sprint-end schedule.", { autoDismiss: false });
+        setError(t("chooseSourceSprint"), { autoDismiss: false });
         return;
       }
       if (scheduleConfig.mode === "absolute" && !Number.isFinite(new Date(scheduleConfig.scheduledFor).getTime())) {
         state.setHasAttemptedSubmit(true);
-        setError("Choose a valid schedule date and time.", { autoDismiss: false });
+        setError(t("chooseValidSchedule"), { autoDismiss: false });
         return;
       }
       schedule = toSprintSchedulePayload(scheduleConfig);
     }
 
     if (state.submitMode === "append_tasks" && onAppendTasks) {
-      setPending(getPlanningPendingMessage("append_tasks"), { autoDismiss: true });
+      setPending(getPlanningPendingMessage("append_tasks", locale), { autoDismiss: true });
       onAppendTasks();
       return;
     }
@@ -550,7 +553,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     setIsSubmitting(true);
     clearFeedback();
     const actionType = submitActionType();
-    setPending(getPlanningPendingMessage(actionType));
+    setPending(getPlanningPendingMessage(actionType, locale));
     try {
       await onSubmit({
         name: state.name.trim(),
@@ -583,7 +586,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       ) return;
       if (!isUnmountedRef.current) {
         const message = error instanceof Error ? error.message : String(error);
-        setError(`Sprint request failed: ${message}`, { retryAction: () => fieldsRef.current?.requestSubmit(), retryLabel: "Retry Request", autoDismiss: false });
+        setError(t("sprintRequestFailed", { message }), { retryAction: () => fieldsRef.current?.requestSubmit(), retryLabel: t("retryRequest"), autoDismiss: false });
       }
     } finally {
       if (abortRef.current === controller) {
@@ -621,8 +624,8 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const modelProviderId = currentRoute?.iconProviderId;
   const modelOptions = modelProviderId ? getProviderModelOptions(modelProviderId) : [];
   const defaultModelLabel = currentRoute?.effectiveModel
-    ? `Default Model (${currentRoute.effectiveModel})`
-    : defaultModelOptionLabel;
+    ? t("defaultModelWithName", { model: currentRoute.effectiveModel })
+    : resolvedDefaultModelOptionLabel;
   const renderProviderIcon = (providerId: ProviderId) => (
     <ProviderBrandIcon id={providerId} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
   );
@@ -661,12 +664,12 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         themeAccent="signal"
         onCancel={handleCancel}
         onDismiss={() => setIsOverlayDismissed(true)}
-        secondaryActionLabel="New Sprint"
+        secondaryActionLabel={t("newSprint")}
         onSecondaryAction={handleStartNewSprint}
       />
 
       <div aria-live="polite" className="sr-only">
-        {isBusy ? PLANNING_ACTION_LABELS[busyAction!] || "Planning in progress" : actionFeedback.status === "error" ? actionFeedback.message : ""}
+        {isBusy && busyAction ? getPlanningActionLabel(busyAction, locale) || t("planningInProgressShort") : actionFeedback.status === "error" ? actionFeedback.message : ""}
       </div>
 
       <form
@@ -675,7 +678,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         noValidate
         className="relative z-10 flex min-h-0 flex-1 flex-col"
         tabIndex={-1}
-        aria-label="Sprint composer"
+        aria-label={t("sprintComposerAria")}
         aria-busy={isBusy ? "true" : "false"}
       >
         <div className="flex-1 min-h-0 overflow-y-auto">
@@ -688,16 +691,16 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/15 bg-signal-500/[0.07] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-600 dark:text-signal-300">
                 <Target className="h-3.5 w-3.5" strokeWidth={2.3} />
-                {state.isEditing ? (state.hasTasks ? "Edit Planned Sprint" : "Edit Draft Sprint") : "Sprint Composer"}
+                {state.isEditing ? (state.hasTasks ? t("editPlannedSprint") : t("editDraftSprint")) : t("sprintComposer")}
               </div>
               <div className="space-y-3">
                 <h2 className="font-display text-2xl font-semibold leading-none tracking-tight text-slate-900 dark:text-white sm:text-3xl">
-                  {state.isEditing ? "Refine The Sprint." : "Compose The Next Sprint."}
+                  {state.isEditing ? t("refineSprint") : t("composeSprint")}
                 </h2>
                 <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400 sm:text-[15px]">
                   {state.isEditing
-                    ? "Adjust the sprint definition. If tasks already exist, you can choose to Replan them."
-                    : "The showcase folds away while you write. Define the sprint once, improve the prompt if needed, and let the Planning agent take the first pass at subtasks."}
+                    ? t("editSprintDescription")
+                    : t("composeSprintDescription")}
                 </p>
               </div>
             </div>
@@ -706,7 +709,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
               type="button"
               onClick={isBusy ? handleDetachAndClose : onClose}
               className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/78 text-slate-400 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:hover:text-white"
-              aria-label="Close sprint composer"
+              aria-label={t("closeSprintComposer")}
             >
               <X className="h-4 w-4" />
             </button>
@@ -714,7 +717,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
 
           <div data-composer-stagger className="mt-8 grid gap-4 sm:grid-cols-3">
             <div className="group rounded-xl border border-black/[0.06] bg-black/[0.025] p-3 transition-colors focus-within:bg-white dark:border-white/[0.06] dark:bg-white/[0.03] dark:focus-within:bg-black/[0.05]">
-              <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint Key</div>
+              <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{t("sprintKey")}</div>
               <input
                 type="text"
                 value={state.sprintKeyOverride}
@@ -722,18 +725,18 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                 disabled={isBusy}
                 className="mt-2 w-full min-w-0 bg-transparent font-mono text-2xl font-semibold tracking-tight text-slate-900 outline-none transition-colors hover:bg-black/[0.03] focus:bg-white dark:text-white dark:hover:bg-white/[0.03] dark:focus:bg-transparent disabled:cursor-not-allowed"
                 placeholder={defaultSprintKey}
-                aria-label="Sprint Key Override"
+                aria-label={t("sprintKeyOverride")}
               />
             </div>
 
             <div className={`rounded-xl border p-3 transition-all ${
               isBusy ? "border-black/[0.06] bg-black/[0.025] opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03]" : "border-black/[0.06] bg-black/[0.025] dark:border-white/[0.06] dark:bg-white/[0.03]"
             }`}>
-              <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Planning Route</div>
+              <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{t("planningRoute")}</div>
               <div className="mt-2">
                 <AvantgardeSelect
                   variant="compact"
-                  aria-label="Planning Route"
+                  aria-label={t("planningRoute")}
                   disabled={isBusy}
                   value={state.routeOverride?.id || ""}
                   onChange={(id) => {
@@ -743,7 +746,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                   options={[
                     {
                       value: "",
-                      label: defaultRouteOptionLabel,
+                      label: resolvedDefaultRouteOptionLabel,
                       icon: defaultRouteIconProviderId
                         ? () => renderProviderIcon(defaultRouteIconProviderId)
                         : undefined,
@@ -758,7 +761,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                           : undefined,
                     })),
                   ]}
-                  placeholder={defaultRouteOptionLabel}
+                  placeholder={resolvedDefaultRouteOptionLabel}
                 />
               </div>
             </div>
@@ -768,14 +771,14 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                 ? "border-black/[0.06] bg-black/[0.025] opacity-40 dark:border-white/[0.06] dark:bg-white/[0.03]"
                 : "border-signal-500/20 bg-signal-500/[0.04] dark:bg-signal-500/[0.08]"
             }`}>
-              <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Model Override</div>
+              <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{t("modelOverride")}</div>
               <div className="mt-2">
                 {(() => {
                   const showModelError = (state.hasAttemptedSubmit || state.hasAttemptedImprove) && showModelOverride && !state.modelOverride;
                   return (
                     <AvantgardeSelect
                       variant="compact"
-                      aria-label="Model Override"
+                      aria-label={t("modelOverride")}
                       disabled={!showModelOverride || isBusy}
                       invalid={showModelError}
                       value={state.modelOverride || ""}
@@ -805,7 +808,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
           </div>
 
           <label data-composer-stagger className="mt-8 block space-y-2">
-            <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint Name</span>
+            <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{t("sprintName")}</span>
             {(() => {
               const showNameError = (touchedName || state.hasAttemptedSubmit) && !state.name.trim();
               return (
@@ -818,7 +821,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                     onBlur={() => setTouchedName(true)}
                     disabled={isBusy}
                     aria-invalid={showNameError ? "true" : "false"}
-                    placeholder="Runtime hardening"
+                    placeholder={t("sprintNamePlaceholderComposer")}
                     className={`w-full border-0 border-b-2 bg-transparent pb-3 font-display text-xl font-semibold leading-none tracking-tight outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:text-[1.9rem] ${
                       showNameError
                         ? "border-ember-500 text-ember-600 placeholder:text-ember-300 focus:border-ember-500 dark:border-ember-500 dark:text-ember-400 dark:placeholder:text-ember-800"
@@ -828,7 +831,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                     autoFocus
                   />
                   {showNameError && (
-                    <div className="absolute -bottom-6 left-0 text-[11px] font-bold text-ember-600 dark:text-ember-400">Sprint name is required</div>
+                    <div className="absolute -bottom-6 left-0 text-[11px] font-bold text-ember-600 dark:text-ember-400">{t("sprintNameRequired")}</div>
                   )}
                 </div>
               );
@@ -837,7 +840,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
 
           <div data-composer-stagger className="mt-8 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint Prompt</label>
+              <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{t("sprintPrompt")}</label>
               <button
                 type="button"
                 onClick={() => { void handleImprovePrompt(); }}
@@ -845,8 +848,8 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                 aria-busy={isImproving}
                 className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 transition-colors hover:bg-signal-500/[0.14] disabled:cursor-not-allowed disabled:opacity-50 dark:text-signal-300"
               >
-                {isImproving ? <><Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" /><span className="sr-only">Loading</span></> : <Sparkles className="h-3.5 w-3.5" strokeWidth={2.2} />}
-                {isImproving ? PLANNING_ACTION_LABELS.improve : "Plan ahead with AI"}
+                {isImproving ? <><Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" /><span className="sr-only">{t("loading")}</span></> : <Sparkles className="h-3.5 w-3.5" strokeWidth={2.2} />}
+                {isImproving ? getPlanningActionLabel("improve", locale) : t("planAheadAi")}
               </button>
             </div>
 
@@ -855,10 +858,10 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                   <div className="inline-flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">
                     <LinkIcon className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
-                    Linked Issues
+                    {t("linkedIssues")}
                   </div>
                   <div className="rounded-full border border-signal-500/18 bg-signal-500/[0.08] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-300">
-                    {visibleLinkedIssues.length} imported
+                    {t("importedCount", { count: visibleLinkedIssues.length })}
                   </div>
                 </div>
                 <div className="grid gap-3 lg:grid-cols-2">
@@ -880,10 +883,10 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                   <div className="inline-flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">
                     <Sparkles className="h-3.5 w-3.5 text-ember-500" strokeWidth={2.2} />
-                    Special Imported Tasks
+                    {t("specialImportedTasks")}
                   </div>
                   <div className="rounded-full border border-ember-500/18 bg-ember-500/[0.08] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-ember-600 dark:text-ember-300">
-                    {visibleImportedTasks.length} queued
+                    {t("queuedCount", { count: visibleImportedTasks.length })}
                   </div>
                 </div>
                 {importedTaskFeedback && importedTaskFeedback.status !== "idle" && importedTaskFeedback.message && (
@@ -898,7 +901,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                 )}
                 <div className="grid gap-3 lg:grid-cols-2">
                   {visibleImportedTasks.map((task) => {
-                    const sourceLabel = task.sourceUrl || task.sourcePath || "Unknown source";
+                    const sourceLabel = task.sourceUrl || task.sourcePath || t("unknownSource");
                     return (
                       <article
                         key={getImportedTaskKey(task)}
@@ -907,7 +910,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                         <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-ember-500 via-signal-500 to-slate-300 opacity-70" />
                         <div className="flex items-start gap-3">
                           <div className={`inline-flex h-9 shrink-0 items-center rounded-[0.85rem] border px-2.5 text-[10px] font-bold uppercase tracking-[0.12em] ${IMPORTED_TASK_KIND_TONES[task.kind]}`}>
-                            {IMPORTED_TASK_KIND_LABELS[task.kind]}
+                            {importedTaskKindLabels[task.kind]}
                           </div>
                           <div className="min-w-0 flex-1">
                             <h3 className="line-clamp-2 min-w-0 text-sm font-semibold leading-snug text-slate-900 dark:text-white">
@@ -915,7 +918,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                             </h3>
                             <div className="mt-2 grid gap-2 text-[11px] text-slate-500 dark:text-slate-400">
                               <div className="break-all">
-                                <span className="font-bold uppercase tracking-[0.12em] text-slate-400">Source:</span>{" "}
+                                <span className="font-bold uppercase tracking-[0.12em] text-slate-400">{t("source")}</span>{" "}
                                 {task.sourceUrl ? (
                                   <a
                                     href={getSafeUrl(task.sourceUrl)}
@@ -931,12 +934,12 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                               </div>
                               <div className="flex flex-wrap gap-x-4 gap-y-1">
                                 <span>
-                                  <span className="font-bold uppercase tracking-[0.12em] text-slate-400">Priority:</span>{" "}
-                                  <span className="font-medium text-slate-700 dark:text-slate-200">{formatImportedTaskPriority(task.priority)}</span>
+                                  <span className="font-bold uppercase tracking-[0.12em] text-slate-400">{t("priority")}:</span>{" "}
+                                  <span className="font-medium text-slate-700 dark:text-slate-200">{formatImportedTaskPriority(task.priority, priorityLabels, t("defaultPriority"))}</span>
                                 </span>
                                 {task.repository && (
                                   <span className="truncate">
-                                    <span className="font-bold uppercase tracking-[0.12em] text-slate-400">Repo:</span>{" "}
+                                    <span className="font-bold uppercase tracking-[0.12em] text-slate-400">{t("repo")}</span>{" "}
                                     <span className="font-medium text-slate-700 dark:text-slate-200">{task.repository}</span>
                                   </span>
                                 )}
@@ -954,7 +957,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                             }}
                             className="mt-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 transition-colors hover:text-status-red"
                           >
-                            Remove Task
+                            {t("removeTask")}
                           </button>
                         )}
                       </article>
@@ -983,7 +986,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                         onBlur={() => setTouchedGoal(true)}
                         disabled={isBusy}
                         aria-invalid={showGoalError ? "true" : "false"}
-                        placeholder="Describe the outcome, affected systems, and what done looks like when this sprint lands."
+                        placeholder={t("sprintPromptPlaceholder")}
                         className={`min-h-[220px] w-full resize-none rounded-[1.7rem] bg-transparent px-4 py-4 text-sm leading-relaxed outline-none disabled:cursor-not-allowed sm:min-h-[260px] sm:px-5 ${
                           showGoalError
                             ? "text-ember-600 placeholder:text-ember-300 dark:text-ember-400 dark:placeholder:text-ember-800"
@@ -991,7 +994,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                         } ${showGoalError && !reducedMotion ? "animate-form-shake" : ""}`}
                       />
                       {showGoalError && (
-                        <div className="absolute bottom-2 right-4 text-[11px] font-bold text-ember-600 dark:text-ember-400">Prompt is required to plan</div>
+                        <div className="absolute bottom-2 right-4 text-[11px] font-bold text-ember-600 dark:text-ember-400">{t("sprintPromptRequired")}</div>
                       )}
                     </div>
                   );
@@ -1000,7 +1003,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
 
               {state.originalPrompt && (
                 <div className="flex flex-col rounded-[1.7rem] border border-black/[0.05] bg-black/[0.01] p-5 dark:border-white/[0.05] dark:bg-white/[0.015]">
-                  <div className="mb-3 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Original Prompt</div>
+                  <div className="mb-3 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{t("originalPrompt")}</div>
                   <div className="max-h-[220px] overflow-y-auto text-xs italic leading-relaxed text-slate-400 dark:text-slate-500 sm:max-h-[260px]">
                     {state.originalPrompt}
                   </div>
@@ -1013,19 +1016,19 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         <aside className="flex flex-col gap-4 p-6 sm:p-8">
           <div data-composer-stagger>
             <div className={`transition-all ${isBusy ? "opacity-50" : ""}`}>
-              <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Agent Routing</div>
+              <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{t("agentRouting")}</div>
               <div className="mt-3">
                 <AvantgardeSelect
                   variant="card"
-                  aria-label="Agent Routing"
+                  aria-label={t("agentRouting")}
                   disabled={isBusy}
                   value={state.agentRoutingMode}
                   onChange={(val) => state.setAgentRoutingMode(val === "ORCHESTRATOR" ? "ORCHESTRATOR" : "MANUAL")}
                   options={[
-                    { value: "MANUAL", label: "Manual", icon: routingSelectIcon },
-                    { value: "ORCHESTRATOR", label: "Orchestrator", icon: routingSelectIcon },
+                    { value: "MANUAL", label: t("manual"), icon: routingSelectIcon },
+                    { value: "ORCHESTRATOR", label: t("orchestrator"), icon: routingSelectIcon },
                   ]}
-                  placeholder="Manual"
+                  placeholder={t("manual")}
                 />
               </div>
             </div>
@@ -1033,19 +1036,19 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
 
           <div data-composer-stagger>
             <div className={`transition-all ${isBusy ? "opacity-50" : ""}`}>
-              <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Planning Agent</div>
+              <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{t("planningAgent")}</div>
               <div className="mt-3">
                 <AvantgardeSelect
                   variant="card"
-                  aria-label="Planning Agent"
+                  aria-label={t("planningAgent")}
                   disabled={isBusy}
                   value={state.planningAgentPresetId || ""}
                   onChange={(val) => state.setPlanningAgentPresetId(val || null)}
                   options={[
-                    { value: "", label: "Built-in Planning agent", icon: () => <AgentSelectAvatarIcon seed="built-in:planning" /> },
+                    { value: "", label: t("builtinPlanningAgent"), icon: () => <AgentSelectAvatarIcon seed="built-in:planning" /> },
                     ...agentSelectOptions,
                   ]}
-                  placeholder="Built-in Planning agent"
+                  placeholder={t("builtinPlanningAgent")}
                 />
               </div>
             </div>
@@ -1054,19 +1057,19 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
           {state.agentRoutingMode === "MANUAL" && (
             <div data-composer-stagger>
               <div className={`transition-all ${isBusy ? "opacity-50" : ""}`}>
-                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Worker Agent</div>
+                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{t("workerAgent")}</div>
                 <div className="mt-3">
                   <AvantgardeSelect
                     variant="card"
-                    aria-label="Worker Agent"
+                    aria-label={t("workerAgent")}
                     disabled={isBusy}
                     value={state.workerAgentPresetId || ""}
                     onChange={(val) => state.setWorkerAgentPresetId(val || null)}
                     options={[
-                      { value: "", label: "Built-in Worker agent", icon: () => <AgentSelectAvatarIcon seed="built-in:worker" /> },
+                      { value: "", label: t("builtinWorkerAgent"), icon: () => <AgentSelectAvatarIcon seed="built-in:worker" /> },
                       ...agentSelectOptions,
                     ]}
-                    placeholder="Built-in Worker agent"
+                    placeholder={t("builtinWorkerAgent")}
                   />
                 </div>
               </div>
@@ -1074,7 +1077,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
           )}
 
           <div data-composer-stagger>
-            <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Execution Mode</div>
+            <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{t("executionMode")}</div>
             <div className="mt-3 grid gap-3">
               {state.availableModes.map((mode) => {
                 const ModeIcon = mode.icon;
@@ -1110,13 +1113,13 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
             <div data-composer-stagger className={`rounded-[1.35rem] border border-signal-500/20 bg-signal-500/[0.045] p-4 transition-all ${isBusy ? "opacity-50" : ""}`}>
               <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-700 dark:text-white">
                 <CalendarClock className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.1} />
-                Schedule Timing
+                {t("scheduleTiming")}
               </div>
               <div className="mt-4 grid gap-3">
-                <div className="grid grid-cols-2 gap-2" role="group" aria-label="Schedule timing mode">
+                <div className="grid grid-cols-2 gap-2" role="group" aria-label={t("scheduleTimingMode")}>
                   {[
-                    { value: "absolute" as const, label: "Absolute" },
-                    { value: "after_sprint_end" as const, label: "After End" },
+                    { value: "absolute" as const, label: t("absolute") },
+                    { value: "after_sprint_end" as const, label: t("afterEnd") },
                   ].map((option) => (
                     <button
                       key={option.value}
@@ -1137,7 +1140,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
 
                 {scheduleConfig.mode === "absolute" ? (
                   <label className="block">
-                    <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Date and Time</span>
+                    <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">{t("dateAndTime")}</span>
                     <input
                       type="datetime-local"
                       value={scheduleConfig.scheduledFor}
@@ -1149,22 +1152,22 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                 ) : (
                   <div className="grid gap-3">
                     <label className="block">
-                      <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Source Sprint</span>
+                      <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">{t("sourceSprint")}</span>
                       <AvantgardeSelect
                         variant="compact"
-                        aria-label="Source Sprint"
+                        aria-label={t("sourceSprint")}
                         disabled={isBusy}
                         value={scheduleConfig.sourceSprintId}
                         onChange={(value) => setScheduleConfig((current) => ({ ...current, sourceSprintId: value }))}
                         options={[
-                          { value: "", label: "Choose sprint" },
+                          { value: "", label: t("chooseSprint") },
                           ...scheduleAnchorSprintOptions.map((option) => ({ value: option.id, label: option.label })),
                         ]}
-                        placeholder="Choose sprint"
+                        placeholder={t("chooseSprint")}
                       />
                     </label>
                     <label className="block">
-                      <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Offset Minutes</span>
+                      <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">{t("offsetMinutes")}</span>
                       <input
                         type="number"
                         min={0}
@@ -1192,13 +1195,13 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                 onClick={() => setIsOverlayDismissed(false)}
                 className="flex min-w-0 flex-1 items-center gap-3 text-left"
               >
-                <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-signal-500" /><span className="sr-only">Loading</span></>
+                <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-signal-500" /><span className="sr-only">{t("loading")}</span></>
                 <div className="min-w-0">
                   <div className="text-xs font-bold text-signal-700 dark:text-signal-300">
-                    {PLANNING_ACTION_LABELS[busyAction!] || "Planning in progress..."}
+                    {busyAction ? getPlanningActionLabel(busyAction, locale) : t("planningInProgress")}
                   </div>
                   <div className="mt-0.5 text-[10px] text-signal-600/70 dark:text-signal-400/70">
-                    {feedback.text} · {String(Math.floor(elapsedMs / 60000)).padStart(2, "0")}:{String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, "0")} elapsed · Cancel remains available
+                    {feedback.text} · {String(Math.floor(elapsedMs / 60000)).padStart(2, "0")}:{String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, "0")} {t("elapsed")} · {t("cancelRemainsAvailable")}
                   </div>
                 </div>
               </button>
@@ -1208,14 +1211,14 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                   onClick={handleStartNewSprint}
                   className="inline-flex min-h-[38px] items-center justify-center rounded-full border border-slate-900 bg-slate-900 px-3 py-1.5 text-[11px] font-bold text-white transition-colors hover:bg-slate-800 dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
                 >
-                  New Sprint
+                  {t("newSprint")}
                 </button>
                 <button
                   type="button"
                   onClick={handleCancel}
                   className="inline-flex min-h-[38px] items-center justify-center rounded-full border border-status-red/20 bg-status-red/[0.06] px-3 py-1.5 text-[11px] font-bold text-status-red transition-colors hover:bg-status-red/[0.12]"
                 >
-                  Cancel
+                  {t("cancel")}
                 </button>
               </div>
             </div>
@@ -1229,7 +1232,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                 : "border-black/[0.06] bg-white/66 text-slate-500 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-300 dark:hover:text-white"
             }`}
           >
-            {isBusy ? "Close Composer" : "Cancel"}
+            {isBusy ? t("closeComposer") : t("cancel")}
           </button>
           <button
             type="submit"
@@ -1237,10 +1240,10 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
             aria-busy={isSubmitting}
             className="inline-flex items-center justify-center gap-2.5 rounded-[1.2rem] bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.16)] transition-all hover:-translate-y-px hover:opacity-92 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-void-900 w-full sm:w-auto"
           >
-            {isSubmitting ? <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /><span className="sr-only">Loading</span></> : <SubmitIcon className="h-4 w-4" strokeWidth={2.3} />}
+            {isSubmitting ? <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /><span className="sr-only">{t("loading")}</span></> : <SubmitIcon className="h-4 w-4" strokeWidth={2.3} />}
             {isSubmitting
-              ? PLANNING_ACTION_LABELS[state.submitMode as PlanningActionType] || "Processing..."
-              : state.submitMode === 'draft' ? (state.isEditing ? "Save Changes" : "Save Draft") : activeMode.label}
+              ? getPlanningActionLabel(state.submitMode as PlanningActionType, locale) || t("processing")
+              : state.submitMode === 'draft' ? (state.isEditing ? t("saveChanges") : t("saveDraft")) : activeMode.label}
           </button>
         </div>
       </form>

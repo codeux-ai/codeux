@@ -2,6 +2,8 @@ import { useState, useCallback } from "preact/hooks";
 import type { QuicksprintTemplateRecord } from "../../../../../src/contracts/quicksprint-types.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { clampSubtaskSliderValue } from "./quicksprint-shared.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { sprintAuthoringMessages } from "../../i18n/messages/sprint-authoring.js";
 
 export function useQuicksprintEditorState({
   templates,
@@ -38,6 +40,7 @@ export function useQuicksprintEditorState({
   onStatus?: (message: string) => void;
   onError?: (message: string) => void;
 }) {
+  const { translate } = useDashboardI18n();
   const [editorTemplate, setEditorTemplate] = useState<QuicksprintTemplateRecord | null>(null);
   const [edName, setEdName] = useState("");
   const [edDescription, setEdDescription] = useState("");
@@ -51,31 +54,31 @@ export function useQuicksprintEditorState({
     setShowIconPicker(open);
     if (open) {
       setShowColorPicker(false);
-      onStatus?.("Icon picker opened. Choose an icon or press Escape to keep the current icon.");
+      onStatus?.(translate(sprintAuthoringMessages, "iconPickerOpened"));
     } else {
-      onStatus?.("Icon picker closed.");
+      onStatus?.(translate(sprintAuthoringMessages, "iconPickerClosed"));
     }
-  }, [onStatus]);
+  }, [onStatus, translate]);
 
   const updateShowColorPicker = useCallback((open: boolean) => {
     setShowColorPicker(open);
     if (open) {
       setShowIconPicker(false);
-      onStatus?.("Color picker opened. Choose a tag color or press Escape to keep the current color.");
+      onStatus?.(translate(sprintAuthoringMessages, "colorPickerOpened"));
     } else {
-      onStatus?.("Color picker closed.");
+      onStatus?.(translate(sprintAuthoringMessages, "colorPickerClosed"));
     }
-  }, [onStatus]);
+  }, [onStatus, translate]);
 
   const updateEditorIcon = useCallback((value: string) => {
     setEdIcon(value);
-    onStatus?.(`Template icon changed to ${value}.`);
-  }, [onStatus]);
+    onStatus?.(translate(sprintAuthoringMessages, "templateIconChanged", { value }));
+  }, [onStatus, translate]);
 
   const updateEditorCategoryColor = useCallback((value: string) => {
     setEdCategoryColor(value);
-    onStatus?.(`Template tag color changed to ${value}.`);
-  }, [onStatus]);
+    onStatus?.(translate(sprintAuthoringMessages, "templateColorChanged", { value }));
+  }, [onStatus, translate]);
 
   const iconPickerRef = useFocusTrap(showIconPicker, { onClose: () => updateShowIconPicker(false), restoreFocus: true });
   const colorPickerRef = useFocusTrap(showColorPicker, { onClose: () => updateShowColorPicker(false), restoreFocus: true });
@@ -106,7 +109,9 @@ export function useQuicksprintEditorState({
   const handleEditorSave = useCallback(async () => {
     try {
       setEdSaving(true);
-      onStatus?.(editorTemplate ? `Saving changes to ${edName}.` : `Creating ${edName || "template"}.`);
+      onStatus?.(editorTemplate
+        ? translate(sprintAuthoringMessages, "savingTemplateChanges", { name: edName })
+        : translate(sprintAuthoringMessages, "creatingTemplateNamed", { name: edName || translate(sprintAuthoringMessages, "template") }));
       if (editorTemplate) {
         await onUpdateTemplate?.(editorTemplate.id, {
           name: edName,
@@ -130,11 +135,17 @@ export function useQuicksprintEditorState({
           agentPresetId: edAgentPresetId || undefined,
         });
       }
-      onStatus?.(editorTemplate ? `${edName} saved.` : `${edName} created.`);
+      onStatus?.(translate(
+        sprintAuthoringMessages,
+        editorTemplate ? "templateSavedNamed" : "templateCreatedNamed",
+        { name: edName },
+      ));
       onCancel();
     } catch (err) {
       console.error("Failed to save template", err);
-      onError?.(`Could not save ${edName || "template"}. Check the required fields and try again.`);
+      onError?.(translate(sprintAuthoringMessages, "templateSaveFailed", {
+        name: edName || translate(sprintAuthoringMessages, "template"),
+      }));
     } finally {
       setEdSaving(false);
     }
@@ -153,28 +164,29 @@ export function useQuicksprintEditorState({
     onCancel,
     onStatus,
     onError,
+    translate,
   ]);
 
   const handleEditorDelete = useCallback(async () => {
     if (!editorTemplate) return;
     if (!edConfirmDelete) {
       setEdConfirmDelete(true);
-      onStatus?.(`Confirm deletion for ${editorTemplate.name}.`);
+      onStatus?.(translate(sprintAuthoringMessages, "confirmDeletionStatus", { name: editorTemplate.name }));
       return;
     }
     try {
       setEdSaving(true);
-      onStatus?.(`Deleting ${editorTemplate.name}.`);
+      onStatus?.(translate(sprintAuthoringMessages, "deletingTemplateStatus", { name: editorTemplate.name }));
       await onDeleteTemplate?.(editorTemplate.id);
-      onStatus?.(`${editorTemplate.name} deleted.`);
+      onStatus?.(translate(sprintAuthoringMessages, "deletedTemplateStatus", { name: editorTemplate.name }));
       onCancel();
     } catch (err) {
       console.error("Failed to delete template", err);
-      onError?.(`Could not delete ${editorTemplate.name}. Try again or check the project template files.`);
+      onError?.(translate(sprintAuthoringMessages, "deleteTemplateFailed", { name: editorTemplate.name }));
     } finally {
       setEdSaving(false);
     }
-  }, [editorTemplate, edConfirmDelete, onDeleteTemplate, onCancel, onStatus, onError]);
+  }, [editorTemplate, edConfirmDelete, onDeleteTemplate, onCancel, onStatus, onError, translate]);
 
   return {
     editorTemplate, setEditorTemplate,

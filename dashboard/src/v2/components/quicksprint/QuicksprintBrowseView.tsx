@@ -5,6 +5,8 @@ import type { QuicksprintTemplateRecord } from "../../../../../src/contracts/qui
 import { TemplateCard } from "./quicksprint-shared.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import type { BuiltinPurposeOption } from "../../lib/quicksprint-panel-state.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { sprintAuthoringMessages } from "../../i18n/messages/sprint-authoring.js";
 
 const RAIL_SCROLL_STEP_RATIO = 0.88;
 const RAIL_MIN_SCROLL_STEP = 320;
@@ -86,6 +88,8 @@ const TemplateRail: FunctionComponent<TemplateRailProps> = ({
   selectedTemplateId = null,
   fallbackFocusRef,
 }) => {
+  const { translate } = useDashboardI18n();
+  const t = (key: keyof typeof sprintAuthoringMessages.en, variables?: Record<string, string>): string => translate(sprintAuthoringMessages, key, variables);
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasPotentialOverflow = templates.length > RAIL_ROWS;
   const [scrollState, setScrollState] = useState({
@@ -206,7 +210,7 @@ const TemplateRail: FunctionComponent<TemplateRailProps> = ({
           type="button"
           onClick={() => scrollByDirection(-1)}
           disabled={!scrollState.canScrollLeft}
-          aria-label={`Scroll ${ariaLabel} left`}
+          aria-label={t("scrollLeft", { rail: ariaLabel })}
           className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-black/[0.08] bg-white/85 text-slate-500 shadow-sm transition hover:border-black/[0.12] hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-35 dark:border-white/[0.08] dark:bg-void-900/55 dark:text-slate-400 dark:hover:text-white dark:focus-visible:ring-offset-void-800"
         >
           <ChevronLeft className="h-4.5 w-4.5" strokeWidth={2.6} />
@@ -215,7 +219,7 @@ const TemplateRail: FunctionComponent<TemplateRailProps> = ({
           type="button"
           onClick={() => scrollByDirection(1)}
           disabled={!scrollState.canScrollRight}
-          aria-label={`Scroll ${ariaLabel} right`}
+          aria-label={t("scrollRight", { rail: ariaLabel })}
           className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-black/[0.08] bg-white/85 text-slate-500 shadow-sm transition hover:border-black/[0.12] hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-35 dark:border-white/[0.08] dark:bg-void-900/55 dark:text-slate-400 dark:hover:text-white dark:focus-visible:ring-offset-void-800"
         >
           <ChevronRight className="h-4.5 w-4.5" strokeWidth={2.6} />
@@ -274,7 +278,7 @@ export const QuicksprintBrowseView: FunctionComponent<{
   selectedBuiltinPurpose,
   setSelectedBuiltinPurpose,
   announcePhaseStatus,
-  phaseStatus = "Choose a quicksprint template.",
+  phaseStatus,
   handleSelectTemplate,
   activeBuiltinPurpose,
   loading,
@@ -284,6 +288,9 @@ export const QuicksprintBrowseView: FunctionComponent<{
   selectedTemplateId = null,
   fallbackFocusRef,
 }) => {
+  const { translate } = useDashboardI18n();
+  const t = (key: keyof typeof sprintAuthoringMessages.en, variables?: Record<string, string>): string => translate(sprintAuthoringMessages, key, variables);
+  const resolvedPhaseStatus = phaseStatus || t("chooseQuicksprintTemplate");
   const hasTemplates = templates.length > 0;
   const headingRef = useRef<HTMLHeadingElement>(null);
 
@@ -309,13 +316,13 @@ export const QuicksprintBrowseView: FunctionComponent<{
               tabIndex={-1}
               className="font-display text-2xl font-semibold leading-none tracking-tight text-slate-900 outline-none dark:text-white sm:text-3xl"
             >
-              Launch A Quicksprint.
+              {t("launchQuicksprint")}
             </h2>
             <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400 sm:text-[15px]">
-              Browse default and custom templates together to spin up a focused sprint fast.
+              {t("quicksprintDescription")}
             </p>
             <p className="max-w-2xl rounded-[1.1rem] border border-black/[0.06] bg-black/[0.025] px-4 py-3 text-xs font-semibold leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
-              {phaseStatus}
+              {resolvedPhaseStatus}
             </p>
           </div>
         </div>
@@ -323,7 +330,7 @@ export const QuicksprintBrowseView: FunctionComponent<{
           type="button"
           onClick={onClose}
           className="inline-flex min-h-[44px] min-w-[44px] h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/78 text-slate-400 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:hover:text-white"
-          aria-label="Close quicksprint"
+          aria-label={t("closeQuicksprint")}
         >
           <X className="h-4 w-4" />
         </button>
@@ -338,30 +345,30 @@ export const QuicksprintBrowseView: FunctionComponent<{
           <div data-qs-stagger className="mt-10">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
               <div className="space-y-2">
-                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Templates</div>
+                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">{t("templates")}</div>
                 <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                  Default templates and project templates share one browse rail. The purpose filter narrows the default set while keeping custom templates nearby.
+                  {t("templatesDescription")}
                 </p>
               </div>
               <div className="flex w-full flex-col gap-3 sm:max-w-xl sm:flex-row sm:items-end sm:justify-end">
                 {builtinPurposeOptions.length > 0 && (
                 <div className="w-full rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03] sm:max-w-xs">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Default Purpose</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">{t("defaultPurpose")}</div>
                   <div className="mt-2">
                     <AvantgardeSelect
-                      aria-label="Default template purpose"
+                      aria-label={t("defaultTemplatePurpose")}
                       variant="compact"
                       value={activeBuiltinPurpose?.value || ""}
                       onChange={(purpose) => {
                         setSelectedBuiltinPurpose(purpose);
                         const option = builtinPurposeOptions.find((item) => item.value === purpose);
-                        announcePhaseStatus?.(`Default template purpose changed to ${option?.label || "General"}.`);
+                        announcePhaseStatus?.(t("purposeChanged", { purpose: option?.label || t("general") }));
                       }}
                       options={builtinPurposeOptions.map((option) => ({
                         value: option.value,
                         label: option.label,
                       }))}
-                      placeholder="Select Purpose"
+                      placeholder={t("selectPurpose")}
                     />
                   </div>
                 </div>
@@ -372,7 +379,7 @@ export const QuicksprintBrowseView: FunctionComponent<{
                   className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-full border border-ember-500/20 bg-ember-500/[0.06] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-ember-600 transition-colors hover:bg-ember-500/[0.12] dark:text-ember-400"
                 >
                   <Plus className="h-3 w-3" strokeWidth={2.5} />
-                  New Template
+                  {t("newTemplate")}
                 </button>
               </div>
             </div>
@@ -391,13 +398,13 @@ export const QuicksprintBrowseView: FunctionComponent<{
                 <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-ember-500/10">
                   <Plus className="h-5 w-5 text-ember-500" />
                 </div>
-                <div className="text-sm font-semibold text-slate-500 dark:text-slate-400">Create your first custom template</div>
-                <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Combine agent presets with custom prompts for reusable sprint flows</div>
+                <div className="text-sm font-semibold text-slate-500 dark:text-slate-400">{t("createFirstTemplate")}</div>
+                <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">{t("createFirstTemplateDescription")}</div>
               </button>
             ) : (
               <TemplateRail
                 railId="quicksprint-template-rail"
-                ariaLabel="quicksprint templates"
+                ariaLabel={t("quicksprintTemplates")}
                 templates={templates}
                 onSelectTemplate={handleSelectTemplate}
                 onEditTemplate={openEditor}

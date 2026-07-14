@@ -45,6 +45,8 @@ The operational Settings catalog covers General, Sprint, QA, Automation, Worker,
 
 The Settings feature localizes each `SectionCard` title and its purpose summary, controlled-functions guidance, recommendation, and risk notes. Stable subcategory ids, English lookup aliases, documentation routes, provider names, technical values, and backend-facing data remain locale-neutral, and the linked long-form documentation remains English.
 
+Sprint authoring uses `messages/sprint-authoring.ts` for Sprint Composer, sprint/task modals, Quicksprint, planning progress, Markdown transfer, and sprint settings-override chrome. Its boundary is intentionally presentation-only: sprint goals, task prompts, template Markdown, combined prompts, provider/model IDs, agent names, schedule targets, and settings keys and values pass through unchanged. The sprint settings editor localizes dashboard-authored card, row, and ARIA descriptions. Generated descriptions resolve known lowercased settings labels without applying case-insensitive translation to standalone or user-authored values.
+
 ## Nodes route
 
 The feature-gated Nodes route imports its own `messages/nodes.ts` catalog. English and German cover its library, palettes, canvas and minimap controls, inspectors, governance review, validation summaries, run debugger, scheduling entry point, empty/error states, and accessible names. Locale-explicit helpers serve the pure node view models and dashboard-generated canvas and agent-command validation explanations.

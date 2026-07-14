@@ -50,6 +50,8 @@ Adding a new `.md` file to a resolved template directory is enough for it to app
 
 ## Dashboard Behavior
 
+Quicksprint interface chrome follows the dashboard locale. German localizes template browsing and editing controls, planning modes and progress, scheduling labels, validation, failures, and accessible announcements. Template names, descriptions, agent instruction Markdown, agent names, provider/model identifiers, extra run instructions, and the combined prompt remain verbatim; changing locale never changes a persisted template or planning request.
+
 The Quicksprint panel presents default and custom templates in one shared browse rail. Template cards use the same stats-surface design language as the dashboard telemetry cards, with taller premium surfaces, high-contrast titles, category/subtask chips, a dedicated launch control, and separate icon controls for edit/delete actions. Cards label their source as `Default Template` or `Custom Template`; custom cards can still be edited, and both sources can be removed from the current project's catalog.
 
 Default templates are organized by `purpose`. The purpose selector narrows the visible default templates while custom/project templates remain in the same rail.

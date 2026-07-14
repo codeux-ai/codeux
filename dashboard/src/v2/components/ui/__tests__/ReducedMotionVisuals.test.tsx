@@ -6,6 +6,7 @@ import { WaveFluid } from "../WaveFluid.js";
 import { BorderTrace } from "../BorderTrace.js";
 import { ContainerShip } from "../PlanningShip.js";
 import { PlanningProgressOverlay } from "../PlanningProgressOverlay.js";
+import { DashboardI18nProvider } from "../../../i18n/context.js";
 import { LiveDurationBadge } from "../LiveDurationBadge.js";
 import { CanvasBackground } from "../../CanvasBackground.js";
 import { RuntimeEventFeed } from "../../RuntimeEventFeed.js";
@@ -108,15 +109,17 @@ describe("Reduced Motion Visuals", () => {
     it("PlanningProgressOverlay renders a static legible ship course when reduced motion is enabled", () => {
         const feedback = { ...getPlanningFeedback("plan_only", 10_000), text: "Static planning state" };
         const { container, getByTestId, getByRole } = render(
-            <PlanningProgressOverlay
-                isBusy
-                feedback={feedback}
-                planningEta={60_000}
-                elapsedMs={10_000}
-                isDark={false}
-                actionType="plan_only"
-                onDismiss={() => {}}
-            />
+            <DashboardI18nProvider initialLocale="en" storage={null}>
+                <PlanningProgressOverlay
+                    isBusy
+                    feedback={feedback}
+                    planningEta={60_000}
+                    elapsedMs={10_000}
+                    isDark={false}
+                    actionType="plan_only"
+                    onDismiss={() => {}}
+                />
+            </DashboardI18nProvider>
         );
 
         expect(getByRole("progressbar", { name: "Static planning state" })).toBeInTheDocument();
@@ -124,6 +127,28 @@ describe("Reduced Motion Visuals", () => {
         expect(getByTestId("planning-ship-traveler")).toHaveAttribute("data-ship-phase", "crossing");
         expect(getByTestId("planning-ship-traveler")).toHaveStyle({ visibility: "visible" });
         expect(container.querySelector("animate")).toBeNull();
+    });
+
+    it("PlanningProgressOverlay localizes German controls and keeps supplied progress text intact", () => {
+        const feedback = { ...getPlanningFeedback("plan_only", 10_000, "de"), text: "provider_id=codex-primary wartet" };
+        const { getByRole, getByText } = render(
+            <DashboardI18nProvider initialLocale="de" storage={null}>
+                <PlanningProgressOverlay
+                    isBusy
+                    feedback={feedback}
+                    planningEta={60_000}
+                    elapsedMs={10_000}
+                    isDark={false}
+                    actionType="plan_only"
+                    onCancel={() => {}}
+                    onDismiss={() => {}}
+                />
+            </DashboardI18nProvider>
+        );
+
+        expect(getByRole("progressbar", { name: "provider_id=codex-primary wartet" })).toBeInTheDocument();
+        expect(getByText("Voraussicht")).toBeInTheDocument();
+        expect(getByRole("button", { name: "Aktive Anfrage abbrechen" })).toBeInTheDocument();
     });
 
     it("CanvasBackground skips GSAP loops and resolves ambient transitions through motion tokens", () => {
