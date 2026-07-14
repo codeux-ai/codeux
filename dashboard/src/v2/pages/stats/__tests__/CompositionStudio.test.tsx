@@ -5,7 +5,6 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { CompositionStudio } from "../components/CompositionStudio.js";
-import { StatsI18nProvider } from "../stats-i18n.js";
 
 expect.extend(matchers);
 
@@ -189,42 +188,5 @@ describe("CompositionStudio", () => {
     expect(screen.getAllByText("No provider data for this window.")).toHaveLength(2);
     expect(screen.getByText("No purpose data for this window.")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "No token flow data available." })).toBeInTheDocument();
-  });
-
-  it("renders German composition comparisons with locale values and verbatim entity labels", () => {
-    const providerUsage = {
-      inputTokens: 800,
-      cachedInputTokens: 200,
-      outputTokens: 500,
-      reasoningOutputTokens: 100,
-      totalTokens: 1600,
-      invocationCount: 4,
-      activeTimeMs: 120000,
-      wallTimeMs: 150000,
-      inputCostUsd: 0,
-      outputCostUsd: 0,
-      cachedInputCostUsd: 0,
-      totalCostUsd: 12.3456,
-    };
-    render(
-      <StatsI18nProvider locale="de">
-        <CompositionStudio
-          stats={{
-            usage: providerUsage,
-            providers: [{ id: "provider_raw_id", label: "Provider Raw Label", secondaryLabel: "model_raw_id", usage: providerUsage }],
-            purposes: [{ id: "purpose_raw_id", label: "Purpose Raw Label", usage: providerUsage }],
-          } as any}
-          providerSegments={[{ label: "Provider Raw Label", value: 1600, color: "#00E0A0", textClassName: "text-slate-900" }]}
-          tokenSegments={[{ label: "Eingabe", value: 800, color: "#00E0A0", textClassName: "text-slate-900" }]}
-        />
-      </StatsI18nProvider>,
-    );
-
-    expect(screen.getByRole("heading", { name: "Wie der Zeitraum genutzt wurde" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Wo die Nutzung anfiel" })).toBeInTheDocument();
-    expect(screen.getAllByText("Provider Raw Label").length).toBeGreaterThan(0);
-    expect(screen.getByText("Purpose Raw Label")).toBeInTheDocument();
-    expect(screen.getAllByText(/12,35\s*\$/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("2 min 0 s").length).toBeGreaterThan(0);
   });
 });

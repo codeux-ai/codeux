@@ -2,8 +2,7 @@ import type {
   ExecutionUsageBucketSummary,
   ProjectExecutionStatsChartSeries,
 } from '../../../types.js';
-import { EMPTY_USAGE, formatStatsDuration, formatTokens, formatCost } from './stats-utils.js';
-import type { DashboardLocale } from '../../i18n/index.js';
+import { EMPTY_USAGE, formatStatsDuration, formatTokens, NUMBER_FORMATTER, formatCost } from './stats-utils.js';
 import {
   buildPoints,
   buildSmoothPath,
@@ -23,47 +22,36 @@ const SERIES_GROUP_ORDER = [
   "Purpose time",
   "Purpose calls",
   "Git",
-  "Kern",
-  "Nutzung",
-  "Summen",
-  "Token-Details",
-  "Quellenvertrauen",
-  "Anbieter",
-  "Anbieterkosten",
-  "Modelle",
-  "Modellkosten",
-  "Zweckzeit",
-  "Zweckaufrufe",
 ];
 
-function normalizeSeriesGroupLabel(grouping: string | undefined, locale: DashboardLocale = "en"): string {
+function normalizeSeriesGroupLabel(grouping: string | undefined): string {
   const rawGrouping = grouping?.trim() || "Core";
   const normalized = rawGrouping.toLowerCase().replace(/[\s-]+/g, "_");
 
   switch (normalized) {
     case "core":
-      return locale === "de" ? "Kern" : "Core";
+      return "Core";
     case "usage":
-      return locale === "de" ? "Nutzung" : "Usage";
+      return "Usage";
     case "totals":
-      return locale === "de" ? "Summen" : "Totals";
+      return "Totals";
     case "details":
-      return locale === "de" ? "Token-Details" : "Token details";
+      return "Token details";
     case "reliability":
-      return locale === "de" ? "Quellenvertrauen" : "Source confidence";
+      return "Source confidence";
     case "providers":
-      return locale === "de" ? "Anbieter" : "Providers";
+      return "Providers";
     case "providers_cost":
-      return locale === "de" ? "Anbieterkosten" : "Provider costs";
+      return "Provider costs";
     case "models":
-      return locale === "de" ? "Modelle" : "Models";
+      return "Models";
     case "models_cost":
-      return locale === "de" ? "Modellkosten" : "Model costs";
+      return "Model costs";
     case "purposes":
     case "purposes_time":
-      return locale === "de" ? "Zweckzeit" : "Purpose time";
+      return "Purpose time";
     case "purposes_invocations":
-      return locale === "de" ? "Zweckaufrufe" : "Purpose calls";
+      return "Purpose calls";
     case "git":
       return "Git";
     default:
@@ -137,23 +125,22 @@ export function normalizeChartSeries(
   viewStart: number,
   width: number,
   height: number,
-  padding: number,
-  locale: DashboardLocale = "en",
+  padding: number
 ): NormalizedChartSeries[] {
   return chartSeries.map((series, idx) => {
     const fallbackColors = ['#F43F5E', '#8B5CF6', '#10B981', '#F59E0B', '#3B82F6', '#EC4899', '#14B8A6'];
     const accentHex = series.color || fallbackColors[idx % fallbackColors.length]!;
 
     const formatter = series.formatter === 'duration'
-      ? (val: number) => formatStatsDuration(val, locale)
+      ? formatStatsDuration
       : series.formatter === 'number'
         ? (val: number) => {
-            if (series.id.includes('cost')) return formatCost(val, locale);
-            return new Intl.NumberFormat(locale).format(val);
+            if (series.id.includes('cost')) return formatCost(val);
+            return NUMBER_FORMATTER.format(val);
           }
         : series.formatter === 'percent'
-          ? (val: number) => new Intl.NumberFormat(locale, { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(val / 100)
-          : (val: number) => formatTokens(val, locale);
+          ? (val: number) => `${val.toFixed(1)}%`
+          : formatTokens;
 
     const values = visibleBuckets.map((_, bucketIdx) => series.data[viewStart + bucketIdx] || 0);
     const points = buildPoints(values.length > 0 ? values : [0], width, height, padding);
@@ -161,7 +148,7 @@ export function normalizeChartSeries(
       ...series,
       accentHex,
       formatter,
-      signalLabel: series.signalLabel || (locale === "de" ? "Kennzahl" : "Metric"),
+      signalLabel: series.signalLabel || 'Metric',
       values,
       points,
       path: buildSmoothPath(points),
@@ -173,11 +160,10 @@ export function normalizeChartSeries(
 
 export function groupChartSeries(
   chartSeries: ProjectExecutionStatsChartSeries[],
-  enabledSeries: Record<string, boolean> = {},
-  locale: DashboardLocale = "en",
+  enabledSeries: Record<string, boolean> = {}
 ): GroupedChartSeriesSection[] {
   const grouped = chartSeries.reduce((acc, series) => {
-    const grouping = normalizeSeriesGroupLabel(series.grouping, locale);
+    const grouping = normalizeSeriesGroupLabel(series.grouping);
     (acc[grouping] ??= []).push(series);
     return acc;
   }, {} as Record<string, ProjectExecutionStatsChartSeries[]>);
@@ -241,27 +227,18 @@ export function calculateChartMetrics(visibleBuckets: ExecutionUsageBucketSummar
 export function describeChartMetrics(
   metrics: ChartMetrics,
   activeSeriesLabels: string[],
-  zoomRangeLabel: string,
-  locale: DashboardLocale = "en",
+  zoomRangeLabel: string
 ): string {
   const seriesLabel = activeSeriesLabels.length > 0
     ? activeSeriesLabels.join(", ")
-    : locale === "de" ? "Keine aktiven Reihen" : "No active series";
+    : "No active series";
 
-  const number = new Intl.NumberFormat(locale);
-  return locale === "de" ? [
-    `${number.format(metrics.bucketCount)} sichtbare Intervalle in ${zoomRangeLabel}.`,
-    `Token-Spitze ${formatTokens(metrics.peakTokens, locale)}.`,
-    `Spitze der aktiven Zeit ${formatStatsDuration(metrics.peakActiveTimeMs, locale)}.`,
-    `Durchschnittliche Tokens ${formatTokens(metrics.averageTokens, locale)}.`,
-    `Aufrufspitze ${number.format(metrics.peakInvocations)}.`,
-    `Aktive Reihen: ${seriesLabel}.`,
-  ].join(" ") : [
-    `${number.format(metrics.bucketCount)} visible buckets in ${zoomRangeLabel}.`,
-    `Peak tokens ${formatTokens(metrics.peakTokens, locale)}.`,
-    `Peak active time ${formatStatsDuration(metrics.peakActiveTimeMs, locale)}.`,
-    `Average tokens ${formatTokens(metrics.averageTokens, locale)}.`,
-    `Invocation peak ${number.format(metrics.peakInvocations)}.`,
+  return [
+    `${metrics.bucketCount} visible buckets in ${zoomRangeLabel}.`,
+    `Peak tokens ${formatTokens(metrics.peakTokens)}.`,
+    `Peak active time ${formatStatsDuration(metrics.peakActiveTimeMs)}.`,
+    `Average tokens ${formatTokens(metrics.averageTokens)}.`,
+    `Invocation peak ${NUMBER_FORMATTER.format(metrics.peakInvocations)}.`,
     `Active series: ${seriesLabel}.`,
   ].join(" ");
 }

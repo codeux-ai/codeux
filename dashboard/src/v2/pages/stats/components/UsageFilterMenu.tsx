@@ -10,7 +10,6 @@ import styles from './UsageFilterMenu.module.css';
 import { UsageGraphLegend } from './UsageGraphLegend.js';
 import type { GroupedChartSeriesSection } from '../chart-view-models.js';
 import { CHIP_CLASS, CONTROL_FOCUS_CLASS } from './stats-ui-primitives.js';
-import { useStatsI18n } from '../stats-i18n.js';
 
 interface UsageFilterMenuProps {
   isOpen: boolean;
@@ -35,7 +34,6 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
   seriesGroups,
   onStatusChange,
 }) => {
-  const { locale, formatNumber } = useStatsI18n();
   const menuRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
@@ -110,7 +108,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
 
   const handleResetFilters = () => {
     resetEnabledSeries();
-    onStatusChange?.(locale === 'de' ? `Diagrammfilter zurückgesetzt. ${formatNumber(resetActiveCount)} Reihen aktiv.` : `Graph filters reset. ${formatNumber(resetActiveCount)} series active.`);
+    onStatusChange?.(`Graph filters reset. ${resetActiveCount} series active.`);
   };
 
   const handleEnableDefaultSeries = () => {
@@ -134,7 +132,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
     const nextActiveCount = activeSeriesCount + seriesGroups.reduce((count, group) => (
       count + group.series.filter((series) => series.defaultEnabled && !enabledSeries[series.id]).length
     ), 0);
-    onStatusChange?.(locale === 'de' ? `Standardreihen aktiviert. ${formatNumber(Math.max(nextActiveCount, resetActiveCount))} Reihen aktiv.` : `Default series enabled. ${formatNumber(Math.max(nextActiveCount, resetActiveCount))} series active.`);
+    onStatusChange?.(`Default series enabled. ${Math.max(nextActiveCount, resetActiveCount)} series active.`);
   };
 
   return (
@@ -148,21 +146,21 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
     >
       <div className={styles.content}>
         <div className={`${styles.header} flex items-start justify-between gap-3`}>
-          <div id="usage-graph-filter-menu-count" aria-live="polite" className="sr-only">{locale === 'de' ? `${formatNumber(activeSeriesCount)} Filter angezeigt` : `Showing ${formatNumber(activeSeriesCount)} filter${activeSeriesCount !== 1 ? 's' : ''}`}</div>
-          <div id="usage-graph-filter-menu-help" className="sr-only">{locale === 'de' ? 'Mindestens eine Diagrammreihe muss aktiviert bleiben.' : 'At least one chart series must remain enabled.'}</div>
+          <div id="usage-graph-filter-menu-count" aria-live="polite" className="sr-only">Showing {activeSeriesCount} filter{activeSeriesCount !== 1 ? 's' : ''}</div>
+          <div id="usage-graph-filter-menu-help" className="sr-only">At least one chart series must remain enabled.</div>
           <div className="min-w-0">
             <span id="usage-graph-filter-menu-title" className="text-[11px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-value-color)]">
-              {locale === 'de' ? 'Diagrammfilter' : 'Graph Filters'}
+              Graph Filters
             </span>
             <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
               <button
                 type="button"
                 data-usage-filter-reset
-                aria-label={locale === 'de' ? 'Filter zurücksetzen' : 'Reset filters'}
+                aria-label="Reset filters"
                 onClick={handleResetFilters}
                 className={`${CHIP_CLASS} px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--stats-detail-color)] hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}
               >
-                {locale === 'de' ? 'Standards zurücksetzen' : 'Reset defaults'}
+                Reset defaults
               </button>
               {defaultEnabledCount > 0 ? (
                 <button
@@ -170,7 +168,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
                   onClick={handleEnableDefaultSeries}
                   className={`${CHIP_CLASS} px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--stats-detail-color)] hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}
                 >
-                  {locale === 'de' ? 'Standards aktivieren' : 'Enable defaults'}
+                  Enable defaults
                 </button>
               ) : null}
             </div>
@@ -179,7 +177,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
             ref={closeButtonRef}
             type="button"
             onClick={closeAndRestoreFocus}
-            aria-label={locale === 'de' ? 'Diagrammfilter schließen' : 'Close graph filters'}
+            aria-label="Close graph filters"
             className={`rounded-[var(--stats-control-radius)] p-1 text-[var(--stats-detail-color)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[var(--stats-value-color)] motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`}
           >
             <X className="h-4 w-4" />
@@ -190,8 +188,8 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
           <div className={styles.section}>
             <div className={styles.sectionHeader}>
               <div>
-                <div className={styles.label}>{locale === 'de' ? 'Kennzahlreihen' : 'Metric Series'}</div>
-                <div className={styles.sectionCopy}>{formatNumber(activeSeriesCount)} {locale === 'de' ? 'von' : 'of'} {formatNumber(totalSeriesCount)} {locale === 'de' ? 'Reihen aktiv' : 'series active'}</div>
+                <div className={styles.label}>Metric Series</div>
+                <div className={styles.sectionCopy}>{activeSeriesCount} of {totalSeriesCount} series active</div>
               </div>
             </div>
             <div className={styles.scrollArea}>
@@ -201,13 +199,13 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
                 activeSeriesCount={activeSeriesCount}
                 onToggleSeries={(id) => {
                   if (activeSeriesCount === 1 && enabledSeries[id]) {
-                    onStatusChange?.(locale === 'de' ? "Mindestens eine Reihe muss aktiviert bleiben. Die letzte aktive Reihe kann nicht deaktiviert werden." : "Keep at least one series enabled. The last active series cannot be turned off.");
+                    onStatusChange?.("Keep at least one series enabled. The last active series cannot be turned off.");
                     return;
                   }
                   setEnabledSeries((curr) => ({ ...curr, [id]: !curr[id] }));
                   const seriesLabel = stats.chartSeries.find((series) => series.id === id)?.label ?? id;
                   const nextEnabled = !enabledSeries[id];
-                  onStatusChange?.(locale === 'de' ? `${seriesLabel}-Reihe ${nextEnabled ? "aktiviert" : "deaktiviert"}. ${formatNumber(activeSeriesCount + (nextEnabled ? 1 : -1))} Reihen aktiv.` : `${seriesLabel} series ${nextEnabled ? "enabled" : "disabled"}. ${formatNumber(activeSeriesCount + (nextEnabled ? 1 : -1))} series active.`);
+                  onStatusChange?.(`${seriesLabel} series ${nextEnabled ? "enabled" : "disabled"}. ${activeSeriesCount + (nextEnabled ? 1 : -1)} series active.`);
                 }}
               />
             </div>

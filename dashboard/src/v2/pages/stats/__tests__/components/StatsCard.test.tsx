@@ -21,7 +21,6 @@ import {
   ViewToggle,
 } from "../../components/stats-ui-primitives.js";
 import { Activity } from "lucide-preact";
-import { StatsI18nProvider } from "../../stats-i18n.js";
 
 expect.extend(matchers);
 
@@ -173,22 +172,6 @@ describe("StatsCard", () => {
     fireEvent.click(screen.getByRole("button", { name: /Throughput/i }));
 
     expect(onToggle).toHaveBeenCalledTimes(1);
-  });
-
-  it("localizes every shared Stats mode label in German without changing mode ids", () => {
-    const onChange = vi.fn();
-    render(
-      <StatsI18nProvider locale="de">
-        <ViewToggle value="reliability" onChange={onChange} ariaLabel="Statistikmodi" />
-      </StatsI18nProvider>,
-    );
-
-    const group = screen.getByRole("group", { name: "Statistikmodi" });
-    expect(within(group).getByRole("button", { name: "Zusammensetzung" })).toBeTruthy();
-    expect(within(group).getByRole("button", { name: "Modelle" })).toBeTruthy();
-    expect(within(group).getByRole("button", { name: "Anbieter" })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(within(group).getByRole("button", { name: "Protokolle" }));
-    expect(onChange).toHaveBeenCalledWith("ledgers");
   });
 
   it("keeps shared stats surfaces on warm void tokens instead of blue flat cards", () => {

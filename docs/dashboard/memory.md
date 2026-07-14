@@ -2,6 +2,12 @@
 
 Code UX uses semantic embeddings to retrieve relevant project context ("memories") during tasks. This guide outlines memory search, embedding provider selection, and remediation.
 
+## Dashboard localization boundary
+
+The Memory route follows the dashboard's active English or German locale. Page and map controls, tier and scope filters, search status, cards and inspectors, confirmations, validation, empty/loading/error guidance, accessible announcements, and embedding-model actions are translated. Dates, counts, strengths, percentages, sizes, and plural forms use locale-aware formatting, and localized category terms participate in text search without changing the stable stored category key.
+
+Localization is a presentation-only boundary. Memory content, claims, evidence, tags, agent names, model IDs and descriptions, language and license metadata, URLs, filenames, and server/API diagnostics remain verbatim. No memory schema, embedding data, vector operation, API route, camera calculation, or deletion behavior depends on the selected locale.
+
 ## Embedding Providers
 
 Memory embeddings can run through either backend:

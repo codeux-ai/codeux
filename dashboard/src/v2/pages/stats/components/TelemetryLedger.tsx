@@ -30,7 +30,6 @@ import {
   type ExecutionStatsEntityWithDuration,
 } from "./StatsShared.js";
 import { useInteractionTokens } from "../../../lib/motion/index.js";
-import { useStatsI18n } from "../stats-i18n.js";
 
 export function getStatusChipTone(status: string): string {
   const normalized = status.toLowerCase();
@@ -78,28 +77,27 @@ const LedgerComparisonCard: FunctionComponent<{
     totalTokens: number;
   };
 }> = ({ kindLabel, filteredItems, totals }) => {
-  const { locale, formatNumber } = useStatsI18n();
   const topItem = filteredItems[0] ?? null;
 
   return (
     <div className="border-y border-[color:var(--stats-border-hairline)] px-1 py-4 lg:col-span-2">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">{locale === "de" ? "Token-Fluss-Vergleich" : "Token flow comparison"}</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">Token flow comparison</div>
           <div className="mt-1 text-sm font-semibold text-[color:var(--stats-value-color)]">
-            {locale === "de" ? `Gefilterte ${kindLabel === "tasks" ? "Aufgaben" : "Sprints"} gegenüber dem führenden Bereich` : `Filtered ${kindLabel} vs leading lane`}
+            Filtered {kindLabel} vs leading lane
           </div>
         </div>
         <div className="text-xs font-medium text-[color:var(--stats-detail-color)]">
-          {formatNumber(filteredItems.length)} {locale === "de" ? "sichtbar" : "visible"}
+          {filteredItems.length.toLocaleString()} visible
         </div>
       </div>
 
       <div className="mt-4 space-y-4">
         <div>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
-            <span>{locale === "de" ? "Gefilterter Mix" : "Filtered mix"}</span>
-            <span>{formatTokens(totals.filteredTokens, locale)} {locale === "de" ? "Tokens gesamt" : "total tokens"}</span>
+            <span>Filtered mix</span>
+            <span>{formatTokens(totals.filteredTokens)} total tokens</span>
           </div>
           <TokenFlowBar
             input={totals.filteredInputTokens}
@@ -109,14 +107,14 @@ const LedgerComparisonCard: FunctionComponent<{
             total={Math.max(1, totals.filteredTokens)}
           />
           <div className="mt-2 text-[11px] text-[color:var(--stats-detail-color)]">
-            {locale === "de" ? "Kombinierter gefilterter Durchsatz der aktuellen Ansicht." : "Combined filtered throughput across the current view."}
+            Combined filtered throughput across the current view.
           </div>
         </div>
 
         <div>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
-            <span>{locale === "de" ? "Führender Bereich" : "Top lane"}</span>
-            <span>{topItem ? topItem.label : locale === "de" ? "Noch kein Bereich" : "No lane yet"}</span>
+            <span>Top lane</span>
+            <span>{topItem ? topItem.label : "No lane yet"}</span>
           </div>
           {topItem ? (
             <>
@@ -128,12 +126,12 @@ const LedgerComparisonCard: FunctionComponent<{
                 total={topItem.usage.totalTokens}
               />
               <div className="mt-2 text-[11px] text-[color:var(--stats-detail-color)]">
-                {formatTokens(topItem.usage.totalTokens, locale)} Tokens, {formatPercent(totals.totalTokens > 0 ? (topItem.usage.totalTokens / totals.totalTokens) * 100 : 0, locale)} {locale === "de" ? "aller Tokens im Zeitraum." : "of all window tokens."}
+                {formatTokens(topItem.usage.totalTokens)} tokens, {formatPercent(totals.totalTokens > 0 ? (topItem.usage.totalTokens / totals.totalTokens) * 100 : 0)} of all window tokens.
               </div>
             </>
           ) : (
           <div className={`${DASHED_EMPTY_CLASS} py-5 text-left text-sm`}>
-              {locale === "de" ? "Noch kein führender Bereich zum Vergleichen." : "No top lane to compare yet."}
+              No top lane to compare yet.
             </div>
           )}
         </div>
@@ -157,7 +155,6 @@ export const TelemetryLedger: FunctionComponent<{
   emptyLabel,
   defaultSortKey = "tokens",
 }) => {
-  const { locale, formatNumber } = useStatsI18n();
   const interactionTokens = useInteractionTokens();
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<LedgerSortKey>(defaultSortKey);
@@ -269,21 +266,19 @@ export const TelemetryLedger: FunctionComponent<{
   const averageCalls = items.length > 0 ? overallTotals.invocationCount / items.length : 0;
   const filteredShare = overallTotals.totalTokens > 0 ? (totals.totalTokens / overallTotals.totalTokens) * 100 : 0;
   const singularKind = kindLabel.replace(/s$/, "");
-  const displayKind = locale === "de" ? (kindLabel === "tasks" ? "Aufgaben" : "Sprints") : kindLabel;
-  const displaySingularKind = locale === "de" ? (kindLabel === "tasks" ? "Aufgabe" : "Sprint") : singularKind;
   const sortLabelByKey: Record<LedgerSortKey, string> = {
-    last: locale === "de" ? "Neueste" : "Latest",
+    last: "Latest",
     tokens: "Tokens",
-    active: locale === "de" ? "Aktiv" : "Active",
-    input: locale === "de" ? "Eingabe" : "Input",
-    output: locale === "de" ? "Ausgabe" : "Output",
-    name: locale === "de" ? "Name" : "Name",
+    active: "Active",
+    input: "Input",
+    output: "Output",
+    name: "Name",
     p50: "p50",
     p95: "p95",
   };
   const ledgerStatus = queryIsActive
-    ? (locale === "de" ? `${formatNumber(filteredItems.length)} von ${formatNumber(items.length)} ${displayKind} passend zu ${query.trim()}, sortiert nach ${sortLabelByKey[sortKey]} ${sortDir === "desc" ? "absteigend" : "aufsteigend"}.` : `Showing ${formatNumber(filteredItems.length)} of ${formatNumber(items.length)} ${kindLabel} matching ${query.trim()}, sorted by ${sortLabelByKey[sortKey]} ${sortDir === "desc" ? "descending" : "ascending"}.`)
-    : (locale === "de" ? `${formatNumber(filteredItems.length)} von ${formatNumber(items.length)} ${displayKind}, sortiert nach ${sortLabelByKey[sortKey]} ${sortDir === "desc" ? "absteigend" : "aufsteigend"}.` : `Showing ${formatNumber(filteredItems.length)} of ${formatNumber(items.length)} ${kindLabel}, sorted by ${sortLabelByKey[sortKey]} ${sortDir === "desc" ? "descending" : "ascending"}.`);
+    ? `Showing ${filteredItems.length.toLocaleString()} of ${items.length.toLocaleString()} ${kindLabel} matching ${query.trim()}, sorted by ${sortLabelByKey[sortKey]} ${sortDir === "desc" ? "descending" : "ascending"}.`
+    : `Showing ${filteredItems.length.toLocaleString()} of ${items.length.toLocaleString()} ${kindLabel}, sorted by ${sortLabelByKey[sortKey]} ${sortDir === "desc" ? "descending" : "ascending"}.`;
 
   return (
     <div className="stats-surface-panel overflow-hidden rounded-[var(--stats-panel-radius)]">
@@ -293,12 +288,12 @@ export const TelemetryLedger: FunctionComponent<{
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">{eyebrow}</div>
             <div className="mt-1.5 font-display text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">{title}</div>
             <div className="mt-1.5 max-w-3xl text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
-              {locale === "de" ? `${displayKind} nach Aktualität, Tokens, aktiver Zeit und gerichtetem Token-Fluss durchsuchen, sortieren und vergleichen.` : `Search, sort, and compare ${kindLabel} by recency, tokens, active time, and directional token flow.`}
+              Search, sort, and compare {kindLabel} by recency, tokens, active time, and directional token flow.
             </div>
           </div>
           <div aria-live="polite" aria-atomic="true" className={`inline-flex items-center gap-2 text-xs font-medium ${TEXT_DETAIL_CLASS}`}>
             <Hash className="h-3.5 w-3.5 text-[color:var(--stats-signal-text)]" strokeWidth={2.2} />
-            {formatNumber(filteredItems.length)} {locale === "de" ? "sichtbar" : "visible"} / {formatNumber(items.length)} {locale === "de" ? "gesamt" : "total"}
+            {filteredItems.length.toLocaleString()} visible / {items.length.toLocaleString()} total
           </div>
           <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
             {ledgerStatus}
@@ -309,53 +304,53 @@ export const TelemetryLedger: FunctionComponent<{
           <div className="grid gap-px border-y border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-border-hairline)] sm:grid-cols-2 xl:grid-cols-6">
             <LedgerSummaryTile
               icon={Hash}
-              label={locale === "de" ? "Einträge" : "Entities"}
-              value={formatNumber(items.length)}
-              detail={displayKind}
+              label="Entities"
+              value={items.length.toLocaleString()}
+              detail={kindLabel}
             />
             <LedgerSummaryTile
               icon={Database}
-              label={locale === "de" ? "Tokens gesamt" : "Total Tokens"}
-              value={formatTokens(overallTotals.totalTokens, locale)}
-              detail={`${formatNumber(overallTotals.invocationCount)} ${locale === "de" ? "Aufrufe" : "calls"} · ${formatCost(overallTotals.totalCostUsd, locale)}`}
+              label="Total Tokens"
+              value={formatTokens(overallTotals.totalTokens)}
+              detail={`${overallTotals.invocationCount.toLocaleString()} calls · ${formatCost(overallTotals.totalCostUsd)}`}
               tone="text-[color:var(--stats-accent-cyan)]"
             />
             <LedgerSummaryTile
               icon={Zap}
-              label={locale === "de" ? "Ø Tokens" : "Avg Tokens"}
-              value={formatTokens(averageTokens, locale)}
-              detail={`${locale === "de" ? "pro" : "per"} ${displaySingularKind}`}
+              label="Avg Tokens"
+              value={formatTokens(averageTokens)}
+              detail={`per ${singularKind}`}
             />
             <LedgerSummaryTile
               icon={Clock3}
-              label={locale === "de" ? "Ø aktiv" : "Avg Active"}
-              value={formatStatsDuration(averageActiveTime, locale)}
-              detail={`${formatNumber(averageCalls, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ${locale === "de" ? "Aufrufe" : "calls"}/${displaySingularKind}`}
+              label="Avg Active"
+              value={formatStatsDuration(averageActiveTime)}
+              detail={`${averageCalls.toFixed(1)} calls/${singularKind}`}
             />
             <LedgerSummaryTile
               icon={Activity}
-              label={locale === "de" ? "Neueste Aktivität" : "Most Recent"}
-              value={overallTotals.newestActivityAt ? formatDateTime(overallTotals.newestActivityAt, locale) : "—"}
-              detail={locale === "de" ? "letzte Aktivität" : "last activity"}
+              label="Most Recent"
+              value={overallTotals.newestActivityAt ? formatDateTime(overallTotals.newestActivityAt) : "—"}
+              detail="last activity"
             />
             <LedgerSummaryTile
               icon={Brain}
-              label={locale === "de" ? "Führender Beitrag" : "Top Contributor"}
+              label="Top Contributor"
               value={topItem ? topItem.label : "—"}
-              detail={topItem ? `${formatTokens(topItem.usage.totalTokens, locale)} Tokens` : locale === "de" ? "keine Führung" : "no leader"}
+              detail={topItem ? `${formatTokens(topItem.usage.totalTokens)} tokens` : "no leader"}
               tone="text-[color:var(--stats-signal-text)]"
             />
           </div>
         ) : (
           <div className="border-y border-[color:var(--stats-border-hairline)] px-4 py-8 text-center text-sm text-[color:var(--stats-label-color)]">
-            {locale === "de" ? `In diesem Zeitraum ist noch keine ${displayKind}-Telemetrie verfügbar.` : `No ${kindLabel} telemetry is available in this window yet.`}
+            No {kindLabel} telemetry is available in this window yet.
           </div>
         )}
 
         <div className="sticky top-3 z-20 grid gap-3 border-b border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-panel)] px-4 py-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center md:px-5">
           <div className="relative">
             <label htmlFor={`${kindLabel}-ledger-search`} className="sr-only">
-              {locale === "de" ? `${displayKind} durchsuchen` : `Search ${kindLabel}`}
+              Search {kindLabel}
             </label>
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--stats-detail-color)]" strokeWidth={2} />
             <input
@@ -363,27 +358,27 @@ export const TelemetryLedger: FunctionComponent<{
               type="text"
               value={query}
               onInput={(event) => setQuery((event.currentTarget as HTMLInputElement).value)}
-              placeholder={locale === "de" ? `${displayKind} durchsuchen` : `Search ${kindLabel}`}
+              placeholder={`Search ${kindLabel}`}
               className={`${INPUT_CLASS} w-full pl-10 pr-10`}
             />
             {queryIsActive ? (
               <button
                 type="button"
                 onClick={() => setQuery("")}
-                aria-label={locale === "de" ? "Suche leeren" : "Clear search"}
+                aria-label="Clear search"
                 className={`absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[color:var(--stats-label-color)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[color:var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}
               >
                 <X className="h-4 w-4" />
               </button>
             ) : null}
           </div>
-          <div className="flex max-w-full flex-wrap gap-2 pr-1 lg:justify-end" role="group" aria-label={locale === "de" ? `Sortiersteuerung für ${title}` : `${title} sort controls`}>
+          <div className="flex max-w-full flex-wrap gap-2 pr-1 lg:justify-end" role="group" aria-label={`${title} sort controls`}>
             {([
-              ["last", locale === "de" ? "Neueste" : "Latest"],
+              ["last", "Latest"],
               ["tokens", "Tokens"],
-              ["active", locale === "de" ? "Aktiv" : "Active"],
-              ["input", locale === "de" ? "Eingabe" : "Input"],
-              ["output", locale === "de" ? "Ausgabe" : "Output"],
+              ["active", "Active"],
+              ["input", "Input"],
+              ["output", "Output"],
               ["name", "Name"],
               ["p50", "p50"],
               ["p95", "p95"],
@@ -417,23 +412,23 @@ export const TelemetryLedger: FunctionComponent<{
               <div className="grid gap-px overflow-hidden rounded-[var(--stats-control-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-border-hairline)] sm:grid-cols-3 xl:col-span-2">
                 <LedgerSummaryTile
                   icon={Activity}
-                  label={locale === "de" ? "Suchergebnisse" : "Search Results"}
-                  value={formatNumber(filteredItems.length)}
-                  detail={queryIsActive ? (locale === "de" ? `passend zu „${query.trim()}“` : `matching "${query.trim()}"`) : locale === "de" ? "alle sichtbar" : "all visible"}
+                  label="Search Results"
+                  value={filteredItems.length.toLocaleString()}
+                  detail={queryIsActive ? `matching "${query.trim()}"` : "all visible"}
                   tone="text-[color:var(--stats-warning-text)]"
                 />
                 <LedgerSummaryTile
                   icon={Brain}
-                  label={locale === "de" ? "Führender Bereich" : "Top Lane"}
+                  label="Top Lane"
                   value={topItem ? topItem.label : "—"}
-                  detail={topItem ? `${formatTokens(topItem.usage.totalTokens, locale)} Tokens` : locale === "de" ? "noch kein Bereich" : "no lane yet"}
+                  detail={topItem ? `${formatTokens(topItem.usage.totalTokens)} tokens` : "no lane yet"}
                   tone="text-[color:var(--stats-signal-text)]"
                 />
                 <LedgerSummaryTile
                   icon={Database}
-                  label={locale === "de" ? "Sichtbarer Anteil" : "Visible Share"}
-                  value={totals.totalTokens > 0 ? formatPercent(filteredShare, locale) : "—"}
-                  detail={locale === "de" ? "der Tokens im aktuellen Zeitraum" : "of current window tokens"}
+                  label="Visible Share"
+                  value={totals.totalTokens > 0 ? formatPercent(filteredShare) : "—"}
+                  detail="of current window tokens"
                   tone="text-[color:var(--stats-accent-cyan)]"
                 />
               </div>
@@ -448,28 +443,28 @@ export const TelemetryLedger: FunctionComponent<{
                 const shareOfTotal = totals.totalTokens > 0 ? (item.usage.totalTokens / totals.totalTokens) * 100 : 0;
                 const shareOfLeader = totals.leaderTokens > 0 ? (item.usage.totalTokens / totals.leaderTokens) * 100 : 0;
                 const tokenPerCall = item.usage.invocationCount > 0 ? item.usage.totalTokens / item.usage.invocationCount : 0;
-                const providerLabel = item.provider ? String(item.provider) : locale === "de" ? "Kein Anbieter" : "No provider";
-                const purposeLabel = item.purpose ? item.purpose : locale === "de" ? "Kein Zweck" : "No purpose";
-                const statusLabel = item.status ? item.status : locale === "de" ? "Kein Status" : "No status";
+                const providerLabel = item.provider ? String(item.provider) : "No provider";
+                const purposeLabel = item.purpose ? item.purpose.replace(/_/g, " ") : "No purpose";
+                const statusLabel = item.status ? item.status.replace(/_/g, " ") : "No status";
                 const duration = (item as ExecutionStatsEntityWithDuration).duration ?? null;
                 const hasPercentiles = duration?.p50Ms != null || duration?.p95Ms != null;
                 const percentileSummary = hasPercentiles
-                  ? `p50 ${formatStatsDuration(duration?.p50Ms ?? 0, locale)} · p95 ${formatStatsDuration(duration?.p95Ms ?? 0, locale)}`
-                  : locale === "de" ? "Keine Perzentile" : "No percentiles";
+                  ? `p50 ${formatStatsDuration(duration?.p50Ms ?? 0)} · p95 ${formatStatsDuration(duration?.p95Ms ?? 0)}`
+                  : "No percentiles";
 
                 return (
-                  <div key={item.id} role="article" className={`${LEDGER_ROW_MODERN_CLASS} stats-ledger-row-joined`} aria-label={locale === "de" ? `${item.label}, Telemetriezeile für ${displaySingularKind}` : `${item.label} ${kindLabel} telemetry row`}>
+                  <div key={item.id} role="article" className={`${LEDGER_ROW_MODERN_CLASS} stats-ledger-row-joined`} aria-label={`${item.label} ${kindLabel} telemetry row`}>
                     <div className="flex flex-col gap-3">
                       <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
                           <div className="flex h-9 w-9 shrink-0 flex-col items-center justify-center rounded-[var(--stats-control-radius)] border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-subpanel)] text-[10px] font-semibold uppercase leading-none text-[color:var(--stats-value-color)]">
-                            <span className="text-[8px] tracking-[0.12em] text-[color:var(--stats-label-color)]">{locale === "de" ? "Rang" : "Rank"}</span>
-                            <span className="mt-0.5 text-xs">{formatNumber(index + 1)}</span>
+                            <span className="text-[8px] tracking-[0.12em] text-[color:var(--stats-label-color)]">Rank</span>
+                            <span className="mt-0.5 text-xs">{index + 1}</span>
                           </div>
                           <div className="min-w-0">
                             <div className="break-words text-sm font-semibold tracking-tight text-[color:var(--stats-value-color)] [overflow-wrap:anywhere]">{item.label}</div>
                             <div className="mt-0.5 text-xs text-[color:var(--stats-detail-color)]">
-                              {formatTokens(tokenPerCall, locale)}/{locale === "de" ? "Aufruf" : "call"} · {locale === "de" ? "zuletzt" : "last"} {formatDateTime(item.lastActivityAt, locale)}
+                              {formatTokens(tokenPerCall)}/call · last {formatDateTime(item.lastActivityAt)}
                             </div>
                             <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[color:var(--stats-detail-color)]">
                               {item.provider ? (() => {
@@ -485,7 +480,7 @@ export const TelemetryLedger: FunctionComponent<{
                               {item.purpose ? (
                                 <span className="inline-flex items-center gap-1.5 capitalize">
                                   <Activity className="h-3 w-3" strokeWidth={2} />
-                                  {item.purpose}
+                                  {item.purpose.replace(/_/g, " ")}
                                 </span>
                               ) : null}
                               {item.secondaryLabel ? (
@@ -495,7 +490,7 @@ export const TelemetryLedger: FunctionComponent<{
                               ) : null}
                               {item.status ? (
                                 <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${getStatusChipTone(item.status)}`}>
-                                  {item.status}
+                                  {item.status.replace(/_/g, " ")}
                                 </span>
                               ) : null}
                             </div>
@@ -503,28 +498,28 @@ export const TelemetryLedger: FunctionComponent<{
                         </div>
                         <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3 xl:w-auto xl:min-w-[40rem] xl:grid-cols-6 xl:text-right">
                           <div>
-                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">{locale === "de" ? "Token" : "Tokens"}</div>
-                            <div className="mt-1 font-mono text-sm font-semibold text-[color:var(--stats-value-color)]">{formatTokens(item.usage.totalTokens, locale)}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Tokens</div>
+                            <div className="mt-1 font-mono text-sm font-semibold text-[color:var(--stats-value-color)]">{formatTokens(item.usage.totalTokens)}</div>
                           </div>
                           <div>
-                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">{locale === "de" ? "Aktiv" : "Active"}</div>
-                            <div className="mt-1 font-mono text-sm font-semibold text-[color:var(--stats-value-color)]">{formatStatsDuration(item.usage.activeTimeMs, locale)}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Active</div>
+                            <div className="mt-1 font-mono text-sm font-semibold text-[color:var(--stats-value-color)]">{formatStatsDuration(item.usage.activeTimeMs)}</div>
                           </div>
                           <div>
-                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">{locale === "de" ? "Aufrufe" : "Calls"}</div>
-                            <div className="mt-1 font-mono text-sm font-semibold text-[color:var(--stats-value-color)]">{formatNumber(item.usage.invocationCount)}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Calls</div>
+                            <div className="mt-1 font-mono text-sm font-semibold text-[color:var(--stats-value-color)]">{item.usage.invocationCount.toLocaleString()}</div>
                           </div>
                           <div>
-                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">{locale === "de" ? "Anteil" : "Share"}</div>
-                            <div className="mt-1 font-mono text-sm font-semibold text-[color:var(--stats-value-color)]">{formatPercent(shareOfTotal, locale)}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Share</div>
+                            <div className="mt-1 font-mono text-sm font-semibold text-[color:var(--stats-value-color)]">{formatPercent(shareOfTotal)}</div>
                           </div>
                           <div>
-                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">{locale === "de" ? "Führung" : "Leader"}</div>
-                            <div className="mt-1 font-mono text-sm font-semibold text-[color:var(--stats-value-color)]">{formatPercent(shareOfLeader, locale)}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Leader</div>
+                            <div className="mt-1 font-mono text-sm font-semibold text-[color:var(--stats-value-color)]">{formatPercent(shareOfLeader)}</div>
                           </div>
                           <div>
-                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">{locale === "de" ? "Kosten" : "Cost"}</div>
-                            <div className="mt-1 font-mono text-sm font-semibold text-[color:var(--stats-value-color)]">{formatCost(item.usage.totalCostUsd, locale)}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Cost</div>
+                            <div className="mt-1 font-mono text-sm font-semibold text-[color:var(--stats-value-color)]">{formatCost(item.usage.totalCostUsd)}</div>
                           </div>
                         </div>
                       </div>
@@ -539,7 +534,7 @@ export const TelemetryLedger: FunctionComponent<{
                         />
                         <div
                           role="img"
-                          aria-label={locale === "de" ? `${item.label} trägt ${formatPercent(shareOfLeader, locale)} zum Token-Volumen der führenden ${displaySingularKind} bei.` : `${item.label} contributes ${formatPercent(shareOfLeader, locale)} of the leading ${singularKind} token volume.`}
+                          aria-label={`${item.label} contributes ${formatPercent(shareOfLeader)} of the leading ${singularKind} token volume.`}
                           className={`h-1 rounded-full ${TRACK_CLASS}`}
                         >
                           <div
@@ -550,12 +545,12 @@ export const TelemetryLedger: FunctionComponent<{
                         </div>
                         <div className="flex flex-wrap items-center justify-between gap-3 text-xs leading-relaxed text-[color:var(--stats-detail-color)]">
                           <div className="flex flex-wrap gap-x-4 gap-y-1">
-                            <span><strong className="font-semibold text-[color:var(--stats-value-color)]">{locale === "de" ? "Eingabe" : "Input"}</strong> {formatTokens(item.usage.inputTokens, locale)}</span>
-                            <span><strong className="font-semibold text-[color:var(--stats-value-color)]">{locale === "de" ? "Im Cache" : "Cached"}</strong> {formatTokens(item.usage.cachedInputTokens, locale)}</span>
-                            <span><strong className="font-semibold text-[color:var(--stats-value-color)]">{locale === "de" ? "Ausgabe" : "Output"}</strong> {formatTokens(item.usage.outputTokens, locale)}</span>
-                            <span><strong className="font-semibold text-[color:var(--stats-value-color)]">{locale === "de" ? "Schlussfolgerung" : "Reasoning"}</strong> {formatTokens(item.usage.reasoningOutputTokens, locale)}</span>
-                            <span><strong className="font-semibold text-[color:var(--stats-value-color)]">p50</strong> {duration?.p50Ms != null ? formatStatsDuration(duration.p50Ms, locale) : "—"}</span>
-                            <span><strong className="font-semibold text-[color:var(--stats-value-color)]">p95</strong> {duration?.p95Ms != null ? formatStatsDuration(duration.p95Ms, locale) : "—"}</span>
+                            <span><strong className="font-semibold text-[color:var(--stats-value-color)]">Input</strong> {formatTokens(item.usage.inputTokens)}</span>
+                            <span><strong className="font-semibold text-[color:var(--stats-value-color)]">Cached</strong> {formatTokens(item.usage.cachedInputTokens)}</span>
+                            <span><strong className="font-semibold text-[color:var(--stats-value-color)]">Output</strong> {formatTokens(item.usage.outputTokens)}</span>
+                            <span><strong className="font-semibold text-[color:var(--stats-value-color)]">Reasoning</strong> {formatTokens(item.usage.reasoningOutputTokens)}</span>
+                            <span><strong className="font-semibold text-[color:var(--stats-value-color)]">p50</strong> {duration?.p50Ms != null ? formatStatsDuration(duration.p50Ms) : "—"}</span>
+                            <span><strong className="font-semibold text-[color:var(--stats-value-color)]">p95</strong> {duration?.p95Ms != null ? formatStatsDuration(duration.p95Ms) : "—"}</span>
                           </div>
                           <div className="max-w-full text-xs text-[color:var(--stats-detail-color)]">
                             {providerLabel} · {purposeLabel} · {statusLabel} · {percentileSummary}
@@ -568,7 +563,7 @@ export const TelemetryLedger: FunctionComponent<{
               })}
               {visibleItems.length < filteredItems.length ? (
                 <div ref={sentinelRef} className={`${DASHED_EMPTY_CLASS} py-4 text-[11px] font-bold uppercase tracking-[0.16em]`}>
-                  {locale === "de" ? "Weitere Telemetriebereiche werden geladen …" : "Loading more telemetry lanes..."}
+                  Loading more telemetry lanes...
                 </div>
               ) : null}
             </div>
@@ -576,13 +571,13 @@ export const TelemetryLedger: FunctionComponent<{
         ) : items.length > 0 && queryIsActive ? (
           <div className={`${DASHED_EMPTY_CLASS} py-12`}>
             <div className="space-y-3">
-              <div>{locale === "de" ? `Keine ${displayKind} passen zu „${query.trim()}“. ` : `No ${kindLabel} match “${query.trim()}”.`}</div>
+              <div>No {kindLabel} match “{query.trim()}”.</div>
               <button
                 type="button"
                 onClick={() => setQuery("")}
                 className={`inline-flex items-center rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] transition-colors hover:text-[color:var(--stats-value-color)] ${CHIP_CLASS} ${CONTROL_FOCUS_CLASS}`}
               >
-                {locale === "de" ? "Suche leeren" : "Clear search"}
+                Clear search
               </button>
             </div>
           </div>

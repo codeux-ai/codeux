@@ -4,7 +4,6 @@ import type {
   ProjectExecutionStatsSnapshot,
 } from "../../../types.js";
 import type { LedgerSortKey } from "./stats-ui-primitives.js";
-import type { DashboardLocale } from "../../../i18n/index.js";
 
 export interface LedgerDurationStats {
   p50Ms?: number | null;
@@ -15,67 +14,50 @@ export interface ExecutionStatsEntityWithDuration extends ExecutionStatsEntitySu
   duration?: LedgerDurationStats | null;
 }
 
-export const createDayFormatter = (locale: DashboardLocale = "en"): Intl.DateTimeFormat => new Intl.DateTimeFormat(locale, {
+export const DAY_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
   timeZone: "UTC",
 });
 
-const createShortDateFormatter = (locale: DashboardLocale = "en"): Intl.DateTimeFormat => new Intl.DateTimeFormat(locale, {
+const SHORT_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
   timeZone: "UTC",
 });
 
-/** @deprecated Pass a locale to formatDay instead. */
-export const DAY_FORMATTER = createDayFormatter();
-
-export function formatDay(_value: string, locale: DashboardLocale = "en"): string {
+export function formatDay(_value: string): string {
   const date = new Date(_value);
   if (Number.isNaN(date.getTime())) {
     return _value;
   }
-  return createDayFormatter(locale).format(date);
+  return DAY_FORMATTER.format(date);
 }
 
-export function formatHourTick(value: string, locale: DashboardLocale = "en"): string {
+export function formatHourTick(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  const bucketHour = new Date(Date.UTC(
-    date.getUTCFullYear(),
-    date.getUTCMonth(),
-    date.getUTCDate(),
-    date.getUTCHours(),
-  ));
-  return new Intl.DateTimeFormat(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-    timeZone: "UTC",
-  }).format(bucketHour);
+  return `${date.getHours()}:00`;
 }
 
-export function formatMinuteTick(value: string, locale: DashboardLocale = "en"): string {
+export function formatMinuteTick(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return new Intl.DateTimeFormat(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-    timeZone: "UTC",
-  }).format(date);
+  const hours = date.getHours().toString().padStart(2, "0");
+  const minutes = date.getMinutes().toString().padStart(2, "0");
+  return `${hours}:${minutes}`;
 }
 
-export function formatShortDate(value: string, locale: DashboardLocale = "en"): string {
+export function formatShortDate(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return createShortDateFormatter(locale).format(date);
+  return SHORT_DATE_FORMATTER.format(date);
 }
 
 export function toTimestamp(value: string | null): number {
@@ -99,17 +81,17 @@ export function getAxisLabelStep(stats: ProjectExecutionStatsSnapshot["range"]):
   return stats.bucketCount > 20 ? 5 : 1;
 }
 
-export function formatAxisLabel(bucket: ExecutionUsageBucketSummary, range: ProjectExecutionStatsSnapshot["range"], locale: DashboardLocale = "en"): string {
+export function formatAxisLabel(bucket: ExecutionUsageBucketSummary, range: ProjectExecutionStatsSnapshot["range"]): string {
   if (range.resolution === "5min") {
-    return formatMinuteTick(bucket.bucketStart, locale);
+    return formatMinuteTick(bucket.bucketStart);
   }
   if (range.resolution === "hour") {
-    return formatHourTick(bucket.bucketStart, locale);
+    return formatHourTick(bucket.bucketStart);
   }
   if (range.resolution === "week") {
     return bucket.label;
   }
-  return formatShortDate(bucket.bucketStart, locale);
+  return formatShortDate(bucket.bucketStart);
 }
 
 export function getLedgerSortValue(item: ExecutionStatsEntitySummary, key: LedgerSortKey): number | string {

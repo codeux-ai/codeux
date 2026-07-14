@@ -47,7 +47,6 @@ import {
   getPurposeConfig,
 } from "../stats-utils.js";
 import { useInteractionTokens } from "../../../lib/motion/tokens.js";
-import { useStatsI18n } from "../stats-i18n.js";
 
 import type { DonutSliceGeometry, ChartPoint } from "./stats-geometry.js";
 export type StatsVisualMode = "trend" | "composition" | "models" | "reliability" | "ledgers" | "system";
@@ -140,9 +139,7 @@ export const RangeToggle: FunctionComponent<{
   onCustomFromChange,
   onCustomToChange,
   onApplyCustom,
-}) => {
-  const { text } = useStatsI18n();
-  return (
+}) => (
   <div className="flex flex-col gap-4">
     <div className={`inline-flex flex-wrap gap-1 p-1 ${CHIP_CLASS}`}>
       {(["1h", "24h", "7d", "30d", "all"] as const).map((value) => (
@@ -157,7 +154,7 @@ export const RangeToggle: FunctionComponent<{
               : CONTROL_IDLE_CLASS
           }`}
         >
-          {value === "all" ? text("allTime") : value}
+          {value === "all" ? "All time" : value}
         </button>
       ))}
       <button
@@ -170,20 +167,18 @@ export const RangeToggle: FunctionComponent<{
             : CONTROL_IDLE_CLASS
         }`}
       >
-        {text("custom")}
+        Custom
       </button>
     </div>
     <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
       <input
         type="date"
-        aria-label={text("customStartDate")}
         value={customFrom}
         onInput={(event) => onCustomFromChange((event.currentTarget as HTMLInputElement).value)}
         className={INPUT_CLASS}
       />
       <input
         type="date"
-        aria-label={text("customEndDate")}
         value={customTo}
         onInput={(event) => onCustomToChange((event.currentTarget as HTMLInputElement).value)}
         className={INPUT_CLASS}
@@ -193,12 +188,11 @@ export const RangeToggle: FunctionComponent<{
         onClick={onApplyCustom}
         className={`inline-flex h-11 items-center justify-center rounded-[var(--stats-control-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-control-active)] px-4 text-[11px] font-bold uppercase tracking-[0.12em] text-[color:var(--stats-control-text-active)] transition-[background-color,border-color,color] duration-150 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-control-active-strong)] motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`}
       >
-        {text("applyRange")}
+        Apply
       </button>
     </div>
   </div>
-  );
-};
+);
 
 export const ViewToggle: FunctionComponent<{
   value: StatsVisualMode;
@@ -207,16 +201,15 @@ export const ViewToggle: FunctionComponent<{
   className?: string;
   controlsId?: string;
 }> = ({ value, onChange, ariaLabel = "Analytics modes", className = "", controlsId }) => {
-  const { text } = useStatsI18n();
   const tokens = useInteractionTokens();
   const buttonRefs = useRef<Partial<Record<StatsVisualMode, HTMLButtonElement | null>>>({});
   const modes: Array<{ id: StatsVisualMode; label: string; accessibleLabel: string; icon: LucideIcon }> = [
-    { id: "trend", label: text("trend"), accessibleLabel: text("trend"), icon: BarChart3 },
-    { id: "composition", label: text("composition"), accessibleLabel: text("composition"), icon: PieChart },
-    { id: "models", label: text("models"), accessibleLabel: text("models"), icon: Cpu },
-    { id: "reliability", label: text("providers"), accessibleLabel: text("providers"), icon: ShieldCheck },
-    { id: "ledgers", label: text("ledgers"), accessibleLabel: text("ledgers"), icon: Layers3 },
-    { id: "system", label: text("system"), accessibleLabel: text("system"), icon: Terminal },
+    { id: "trend", label: "Trend", accessibleLabel: "Trend", icon: BarChart3 },
+    { id: "composition", label: "Composition", accessibleLabel: "Composition", icon: PieChart },
+    { id: "models", label: "Models", accessibleLabel: "Models", icon: Cpu },
+    { id: "reliability", label: "Providers", accessibleLabel: "Providers", icon: ShieldCheck },
+    { id: "ledgers", label: "Ledgers", accessibleLabel: "Ledgers", icon: Layers3 },
+    { id: "system", label: "System", accessibleLabel: "System", icon: Terminal },
   ];
   const focusMode = (index: number) => {
     const nextMode = modes[index];
@@ -258,7 +251,7 @@ export const ViewToggle: FunctionComponent<{
       className={`flex w-full max-w-full min-w-0 flex-wrap gap-1 p-1 ${CHIP_CLASS} ${className}`.trim()}
     >
       <span className="sr-only" aria-live="polite">
-        {text("selectedAnalyticsMode")}: {modes.find((mode) => mode.id === value)?.accessibleLabel ?? value}.
+        Selected analytics mode: {modes.find((mode) => mode.id === value)?.accessibleLabel ?? value}.
       </span>
       {modes.map((mode) => {
         const Icon = mode.icon;
@@ -331,20 +324,17 @@ export const TokenChip: FunctionComponent<{
   label: string;
   value: number | string;
   tone: string;
-}> = ({ icon: Icon, label, value, tone }) => {
-  const { locale } = useStatsI18n();
-  return (
-    <div className={`relative inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-[var(--stats-chip-radius)] border px-3 py-1.5 transition-[background-color,border-color,color] duration-150 motion-reduce:transition-none ${tone}`}>
-      <div className="relative flex min-w-0 items-center gap-1.5 opacity-85">
-        <Icon className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden="true" />
-        <span className="truncate text-[10px] font-bold uppercase tracking-[0.14em]">{label}</span>
-      </div>
-      <div className="relative shrink-0 text-[11px] font-semibold text-[color:var(--stats-value-color)]">
-        {typeof value === "number" ? formatTokens(value, locale) : value}
-      </div>
+}> = ({ icon: Icon, label, value, tone }) => (
+  <div className={`relative inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-[var(--stats-chip-radius)] border px-3 py-1.5 transition-[background-color,border-color,color] duration-150 motion-reduce:transition-none ${tone}`}>
+    <div className="relative flex min-w-0 items-center gap-1.5 opacity-85">
+      <Icon className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden="true" />
+      <span className="truncate text-[10px] font-bold uppercase tracking-[0.14em]">{label}</span>
     </div>
-  );
-};
+    <div className="relative shrink-0 text-[11px] font-semibold text-[color:var(--stats-value-color)]">
+      {typeof value === "number" ? formatTokens(value) : value}
+    </div>
+  </div>
+);
 
 export function getProviderIcon(provider: string | null | undefined): { icon: ComponentType<any>; bg: string; text: string } {
   const p = (provider || "").toLowerCase();
@@ -365,10 +355,9 @@ export const TokenFlowBar: FunctionComponent<{
   reasoning: number;
   total: number;
 }> = ({ input, cached, output, reasoning, total }) => {
-  const { locale, formatNumber } = useStatsI18n();
   const summary = total > 0
-    ? locale === "de" ? `Eingabe ${formatTokens(input, locale)}; im Cache ${formatTokens(cached, locale)}; Ausgabe ${formatTokens(output, locale)}; Schlussfolgerung ${formatTokens(reasoning, locale)}; gesamt ${formatTokens(total, locale)}.` : `Input ${formatTokens(input, locale)}; cached ${formatTokens(cached, locale)}; output ${formatTokens(output, locale)}; reasoning ${formatTokens(reasoning, locale)}; total ${formatTokens(total, locale)}.`
-    : locale === "de" ? "Keine Token-Flussdaten verfügbar." : "No token flow data available.";
+    ? `Input ${formatTokens(input)}; cached ${formatTokens(cached)}; output ${formatTokens(output)}; reasoning ${formatTokens(reasoning)}; total ${formatTokens(total)}.`
+    : "No token flow data available.";
 
   if (total <= 0) return <div role="img" aria-label={summary} className={`h-2 w-full rounded-full ${TRACK_CLASS}`} />;
   const inPct = (input / total) * 100;
@@ -378,10 +367,10 @@ export const TokenFlowBar: FunctionComponent<{
 
   return (
     <div role="img" aria-label={summary} className={`flex h-2 w-full overflow-hidden rounded-full ${TRACK_CLASS}`}>
-      {inPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-signal-text)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${inPct}%` }} title={`${locale === "de" ? "Eingabe" : "Input"}: ${formatNumber(inPct, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`} />}
-      {cachedPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-accent-cyan)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${cachedPct}%` }} title={`${locale === "de" ? "Im Cache" : "Cached"}: ${formatNumber(cachedPct, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`} />}
-      {outPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-warning-text)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${outPct}%` }} title={`${locale === "de" ? "Ausgabe" : "Output"}: ${formatNumber(outPct, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`} />}
-      {reasonPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-negative-text)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${reasonPct}%` }} title={`${locale === "de" ? "Schlussfolgerung" : "Reasoning"}: ${formatNumber(reasonPct, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`} />}
+      {inPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-signal-text)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${inPct}%` }} title={`Input: ${inPct.toFixed(1)}%`} />}
+      {cachedPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-accent-cyan)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${cachedPct}%` }} title={`Cached: ${cachedPct.toFixed(1)}%`} />}
+      {outPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-warning-text)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${outPct}%` }} title={`Output: ${outPct.toFixed(1)}%`} />}
+      {reasonPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-negative-text)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${reasonPct}%` }} title={`Reasoning: ${reasonPct.toFixed(1)}%`} />}
     </div>
   );
 };
@@ -390,11 +379,10 @@ export const ChurnFlowBar: FunctionComponent<{
   insertions: number;
   deletions: number;
 }> = ({ insertions, deletions }) => {
-  const { locale, formatNumber } = useStatsI18n();
   const total = insertions + deletions;
   const summary = total > 0
-    ? locale === "de" ? `Codeänderungsmix: ${formatNumber(insertions)} Einfügungen, ${formatNumber(deletions)} Löschungen, ${formatNumber(total)} geänderte Zeilen insgesamt.` : `Code churn mix: ${formatNumber(insertions)} insertions, ${formatNumber(deletions)} deletions, ${formatNumber(total)} total changed lines.`
-    : locale === "de" ? "Keine Codeänderungsdaten verfügbar." : "No code churn data available.";
+    ? `Code churn mix: ${insertions.toLocaleString()} insertions, ${deletions.toLocaleString()} deletions, ${total.toLocaleString()} total changed lines.`
+    : "No code churn data available.";
 
   if (total <= 0) return <div role="img" aria-label={summary} className={`h-2 w-full rounded-full ${TRACK_CLASS}`} />;
   const inPct = (insertions / total) * 100;
@@ -402,8 +390,8 @@ export const ChurnFlowBar: FunctionComponent<{
 
   return (
     <div role="img" aria-label={summary} className={`flex h-2 w-full overflow-hidden rounded-full ${TRACK_CLASS}`}>
-      {inPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-positive-text)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${inPct}%` }} title={`${locale === "de" ? "Einfügungen" : "Insertions"}: ${formatNumber(inPct, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`} />}
-      {delPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-negative-text)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${delPct}%` }} title={`${locale === "de" ? "Löschungen" : "Deletions"}: ${formatNumber(delPct, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`} />}
+      {inPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-positive-text)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${inPct}%` }} title={`Insertions: ${inPct.toFixed(1)}%`} />}
+      {delPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-negative-text)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${delPct}%` }} title={`Deletions: ${delPct.toFixed(1)}%`} />}
     </div>
   );
 };
@@ -446,7 +434,6 @@ export const DonutCard: FunctionComponent<{
   centerLabel: string;
   segments: SegmentDefinition[];
 }> = ({ title, eyebrow, description, centerValue, centerLabel, segments }) => {
-  const { locale, formatNumber } = useStatsI18n();
   const cardRef = useRef<HTMLDivElement>(null);
   const wheelRef = useRef<SVGSVGElement>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -549,13 +536,13 @@ export const DonutCard: FunctionComponent<{
               <div className="pointer-events-none absolute inset-[24%] rounded-full border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-panel)]" />
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                 <div className="text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">
-                  {activeSegment ? formatTokens(activeSegment.value, locale) : centerValue}
+                  {activeSegment ? formatTokens(activeSegment.value) : centerValue}
                 </div>
                 <div className="mt-1 max-w-[7.5rem] break-words text-center text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
                   {activeSegment ? activeSegment.label : centerLabel}
                 </div>
                 <div className="mt-2 text-[11px] font-mono text-[color:var(--stats-detail-color)]">
-                  {activeSegment ? `${formatPercent(activeSegment.share, locale)} ${locale === "de" ? "des sichtbaren Volumens" : "of visible volume"}` : `${formatNumber(segments.length)} ${locale === "de" ? "Bereiche" : "lanes"}`}
+                  {activeSegment ? `${formatPercent(activeSegment.share)} of visible volume` : `${segments.length} lanes`}
                 </div>
               </div>
             </div>
@@ -563,7 +550,7 @@ export const DonutCard: FunctionComponent<{
           <div className="space-y-3">
             {segments.length === 0 ? (
               <div className={DASHED_EMPTY_CLASS}>
-                {locale === "de" ? "In dieser Zusammensetzung ist noch keine Telemetrie eingegangen." : "No telemetry landed in this composition yet."}
+                No telemetry landed in this composition yet.
               </div>
             ) : slices.map((segment, index) => {
               return (
@@ -582,12 +569,12 @@ export const DonutCard: FunctionComponent<{
                         <span className={`min-w-0 break-words text-sm font-semibold ${segment.textClassName}`} title={segment.label}>{segment.label}</span>
                       </div>
                       <div className="mt-1 text-[11px] font-mono text-[color:var(--stats-detail-color)]">
-                        {formatPercent(segment.share, locale)} {locale === "de" ? "des sichtbaren Volumens" : "of visible volume"}
+                        {formatPercent(segment.share)} of visible volume
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm font-semibold text-[color:var(--stats-value-color)]">{formatTokens(segment.value, locale)}</div>
-                      <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">{locale === "de" ? "Token" : "tokens"}</div>
+                      <div className="text-sm font-semibold text-[color:var(--stats-value-color)]">{formatTokens(segment.value)}</div>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">tokens</div>
                     </div>
                   </div>
                   <div className={`mt-3 h-1.5 rounded-full ${TRACK_CLASS}`}>
@@ -615,7 +602,6 @@ export const PurposeRibbon: FunctionComponent<{
   totalTokens?: number;
   dominantPurposeId?: string | null;
 }> = ({ purposes, totalTokens = 0, dominantPurposeId = null }) => {
-  const { locale, text, formatNumber } = useStatsI18n();
   const rankedPurposes = [...purposes].sort((left, right) => {
     const delta = right.usage.totalTokens - left.usage.totalTokens;
     return delta !== 0 ? delta : left.label.localeCompare(right.label);
@@ -624,7 +610,7 @@ export const PurposeRibbon: FunctionComponent<{
   if (rankedPurposes.length === 0) {
     return (
       <div className={DASHED_EMPTY_CLASS}>
-        {locale === "de" ? "Keine Zweckdaten für diesen Zeitraum." : "No purpose data for this window."}
+        No purpose data for this window.
       </div>
     );
   }
@@ -648,11 +634,11 @@ export const PurposeRibbon: FunctionComponent<{
           <div key={purpose.id} className={`${SUBPANEL_CLASS} flex min-h-[9rem] flex-col justify-between p-4`}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="break-words text-sm font-semibold text-[color:var(--stats-value-color)]" title={purpose.label}>
-                  {purpose.label}
+                <div className="break-words text-sm font-semibold capitalize text-[color:var(--stats-value-color)]" title={purpose.label.replace(/_/g, " ")}>
+                  {purpose.label.replace(/_/g, " ")}
                 </div>
                 <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">
-                  {formatNumber(purpose.usage.invocationCount)} {locale === "de" ? "Aufrufe" : "calls"} / {formatStatsDuration(purpose.usage.activeTimeMs, locale)} {locale === "de" ? "aktiv" : "active"}
+                  {purpose.usage.invocationCount.toLocaleString()} calls / {formatStatsDuration(purpose.usage.activeTimeMs)} active
                 </div>
               </div>
               <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-chip)] ${accentTextClass[config.accent]}`}>
@@ -662,20 +648,20 @@ export const PurposeRibbon: FunctionComponent<{
             <div>
               <div className="mt-4 flex flex-wrap items-end justify-between gap-2">
                 <div>
-                  <div className="text-lg font-semibold text-[color:var(--stats-value-color)]">{formatTokens(purpose.usage.totalTokens, locale)}</div>
+                  <div className="text-lg font-semibold text-[color:var(--stats-value-color)]">{formatTokens(purpose.usage.totalTokens)}</div>
                   <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">
-                    {tokenShare !== null ? `${formatPercent(tokenShare, locale)} ${locale === "de" ? "Token-Anteil" : "token share"}` : locale === "de" ? "Kein Token-Anteil" : "No token share"}
+                    {tokenShare !== null ? `${formatPercent(tokenShare)} token share` : "No token share"}
                   </div>
                 </div>
                 {isDominant ? (
                   <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
-                    {locale === "de" ? "Dominant" : "Dominant"}
+                    Dominant
                   </div>
                 ) : null}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <TokenChip icon={ArrowDownRight} label={text("input")} value={purpose.usage.inputTokens} tone={STATUS_TONE_CLASS.neutral} />
-                <TokenChip icon={ArrowUpRight} label={text("output")} value={purpose.usage.outputTokens} tone={STATUS_TONE_CLASS.neutral} />
+                <TokenChip icon={ArrowDownRight} label="In" value={purpose.usage.inputTokens} tone={STATUS_TONE_CLASS.neutral} />
+                <TokenChip icon={ArrowUpRight} label="Out" value={purpose.usage.outputTokens} tone={STATUS_TONE_CLASS.neutral} />
               </div>
             </div>
           </div>
@@ -710,8 +696,7 @@ export const SortButton: FunctionComponent<{
   direction?: "asc" | "desc" | null;
   onClick: () => void;
 }> = ({ label, active, direction = null, onClick }) => {
-  const { locale } = useStatsI18n();
-  const directionLabel = active && direction ? `, ${locale === "de" ? "sortiert" : "sorted"} ${direction === "asc" ? (locale === "de" ? "aufsteigend" : "ascending") : (locale === "de" ? "absteigend" : "descending")}` : locale === "de" ? ", nicht sortiert" : ", not sorted";
+  const directionLabel = active && direction ? `, sorted ${direction === "asc" ? "ascending" : "descending"}` : ", not sorted";
   return (
   <button
     type="button"

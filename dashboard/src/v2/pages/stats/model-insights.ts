@@ -4,7 +4,6 @@ import type {
   SegmentDefinition,
   TokenUsageSource,
 } from "../../types.js";
-import type { DashboardLocale } from "../../i18n/index.js";
 
 export interface ModelEfficiencyMetrics {
   cacheHitRate: number | null;
@@ -102,37 +101,36 @@ export function buildTelemetrySourceMix(usage: Pick<ExecutionUsageTotals, "repor
   };
 }
 
-export function buildTelemetrySourceSummary(usage: Pick<ExecutionUsageTotals, "reportedInvocationCount" | "estimatedInvocationCount" | "unavailableInvocationCount" | "unsupportedInvocationCount">, locale: DashboardLocale = "en"): TelemetrySourceSummary {
+export function buildTelemetrySourceSummary(usage: Pick<ExecutionUsageTotals, "reportedInvocationCount" | "estimatedInvocationCount" | "unavailableInvocationCount" | "unsupportedInvocationCount">): TelemetrySourceSummary {
   const mix = buildTelemetrySourceMix(usage);
   const dominant = mix.dominant;
 
   if (mix.total === 0) {
     return {
-      label: locale === "de" ? "Nicht verfügbar" : "Unavailable",
+      label: "Unavailable",
       tone: "neutral",
-      detail: locale === "de" ? "Für diesen Zeitraum wurden keine Telemetriezahlen erfasst." : "No telemetry counts were recorded for this window.",
-      caveat: locale === "de" ? "Es gibt noch keine Aufrufquellen-Telemetrie zum Vergleichen." : "There is no invocation-source telemetry to compare yet.",
+      detail: "No telemetry counts were recorded for this window.",
+      caveat: "There is no invocation-source telemetry to compare yet.",
       mix,
     };
   }
 
-  const number = new Intl.NumberFormat(locale);
-  const reportedLabel = locale === "de" ? `${number.format(mix.reported)} gemeldet` : `${number.format(mix.reported)} reported`;
+  const reportedLabel = `${mix.reported} reported`;
   const fallbackLabel = [
-    mix.estimated > 0 ? (locale === "de" ? `${number.format(mix.estimated)} geschätzt` : `${number.format(mix.estimated)} estimated`) : null,
-    mix.unavailable > 0 ? (locale === "de" ? `${number.format(mix.unavailable)} nicht verfügbar` : `${number.format(mix.unavailable)} unavailable`) : null,
-    mix.unsupported > 0 ? (locale === "de" ? `${number.format(mix.unsupported)} nicht unterstützt` : `${number.format(mix.unsupported)} unsupported`) : null,
+    mix.estimated > 0 ? `${mix.estimated} estimated` : null,
+    mix.unavailable > 0 ? `${mix.unavailable} unavailable` : null,
+    mix.unsupported > 0 ? `${mix.unsupported} unsupported` : null,
   ].filter(Boolean).join(", ");
 
   const label = dominant === "reported"
-    ? (locale === "de" ? "Gemeldet" : "Reported")
+    ? "Reported"
     : dominant === "estimated"
-      ? (locale === "de" ? "Geschätzt" : "Estimated")
+      ? "Estimated"
       : dominant === "unavailable"
-        ? (locale === "de" ? "Nicht verfügbar" : "Unavailable")
+        ? "Unavailable"
         : dominant === "unsupported"
-          ? (locale === "de" ? "Nicht unterstützt" : "Unsupported")
-          : (locale === "de" ? "Unbekannt" : "Unknown");
+          ? "Unsupported"
+          : "Unknown";
 
   const tone = mix.reportedShare !== null && mix.reportedShare >= 0.8 && mix.unavailable === 0 && mix.unsupported === 0
     ? "strong"
@@ -151,26 +149,21 @@ export function buildTelemetrySourceSummary(usage: Pick<ExecutionUsageTotals, "r
     : reportedLabel;
 
   const caveat = mix.reportedShare === null
-    ? (locale === "de" ? "Für diesen Zeitraum fehlen Telemetriezahlen." : "Telemetry counts are missing for this window.")
+    ? "Telemetry counts are missing for this window."
     : mix.reportedShare === 1
-      ? (locale === "de" ? "Alle gezählten Aufrufe wurden direkt gemeldet." : "All counted invocations were reported directly.")
+      ? "All counted invocations were reported directly."
       : mix.estimated > 0 || mix.unavailable > 0 || mix.unsupported > 0
-        ? (locale === "de" ? "Ersatzwerte und nicht unterstützte Quellen sind enthalten; die gemeldete Qualität ist daher nur teilweise vollständig." : "Fallback and unsupported sources are included in the count, so reported quality is only partial.")
-        : (locale === "de" ? "Gemeldete Werte dominieren diesen Zeitraum." : "Reported counts dominate this window.");
+        ? "Fallback and unsupported sources are included in the count, so reported quality is only partial."
+        : "Reported counts dominate this window.";
 
   return { label, tone, detail, caveat, mix };
 }
 
-export function formatSuccessRate(successRate: number | null, locale: DashboardLocale = "en"): string {
+export function formatSuccessRate(successRate: number | null): string {
   if (successRate === null) {
     return "—";
   }
-  const fractionDigits = successRate >= 0.995 && successRate < 1 ? 1 : 0;
-  return new Intl.NumberFormat(locale, {
-    style: "percent",
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits,
-  }).format(successRate);
+  return `${(successRate * 100).toFixed(successRate >= 0.995 && successRate < 1 ? 1 : 0)}%`;
 }
 
 export function getSuccessTone(successRate: number | null): "strong" | "warn" | "critical" | "neutral" {
@@ -188,7 +181,7 @@ export function getSuccessTone(successRate: number | null): "strong" | "warn" | 
 
 const MIN_HIGHLIGHT_CALLS = 3;
 
-export function buildModelHighlights(models: ExecutionModelStatsSummary[], locale: DashboardLocale = "en"): ModelHighlights {
+export function buildModelHighlights(models: ExecutionModelStatsSummary[]): ModelHighlights {
   const eligible = models.filter((model) => model.usage.invocationCount >= MIN_HIGHLIGHT_CALLS);
   const pool = eligible.length > 0 ? eligible : models;
 
@@ -222,33 +215,33 @@ export function buildModelHighlights(models: ExecutionModelStatsSummary[], local
     busiest: busiest
       ? {
           model: busiest,
-          value: locale === "de" ? `${formatCompactTokens(busiest.usage.totalTokens, locale)} Tokens` : `${formatCompactTokens(busiest.usage.totalTokens, locale)} tokens`,
-          detail: locale === "de" ? `${new Intl.NumberFormat(locale).format(busiest.usage.invocationCount)} Aufrufe` : `${new Intl.NumberFormat(locale).format(busiest.usage.invocationCount)} calls`,
+          value: `${formatCompactTokens(busiest.usage.totalTokens)} tokens`,
+          detail: `${busiest.usage.invocationCount.toLocaleString()} calls`,
         }
       : null,
     fastest: fastest
       ? {
           model: fastest,
-          value: `${formatCompactDuration(fastest.duration.p50Ms, locale)} ${locale === "de" ? "Median" : "median"}`,
-          detail: `p95 ${formatCompactDuration(fastest.duration.p95Ms, locale)}`,
+          value: `${formatCompactDuration(fastest.duration.p50Ms)} median`,
+          detail: `p95 ${formatCompactDuration(fastest.duration.p95Ms)}`,
         }
       : null,
     mostReliable: mostReliable
       ? {
           model: mostReliable,
-          value: locale === "de" ? `${formatSuccessRate(mostReliable.successRate, locale)} erfolgreich` : `${formatSuccessRate(mostReliable.successRate, locale)} success`,
-          detail: locale === "de" ? `${new Intl.NumberFormat(locale).format(mostReliable.statusCounts.failed)} fehlgeschlagen` : `${new Intl.NumberFormat(locale).format(mostReliable.statusCounts.failed)} failed`,
+          value: `${formatSuccessRate(mostReliable.successRate)} success`,
+          detail: `${mostReliable.statusCounts.failed.toLocaleString()} failed`,
         }
       : null,
     bestCache: bestCache
       ? {
           model: bestCache,
-          value: locale === "de" ? `${new Intl.NumberFormat(locale, { style: "percent" }).format(computeUsageEfficiency(bestCache.usage).cacheHitRate ?? 0)} Cache-Treffer` : `${new Intl.NumberFormat(locale, { style: "percent" }).format(computeUsageEfficiency(bestCache.usage).cacheHitRate ?? 0)} cache hits`,
-          detail: locale === "de" ? `${formatCompactTokens(bestCache.usage.cachedInputTokens, locale)} im Cache` : `${formatCompactTokens(bestCache.usage.cachedInputTokens, locale)} cached`,
+          value: `${Math.round((computeUsageEfficiency(bestCache.usage).cacheHitRate ?? 0) * 100)}% cache hits`,
+          detail: `${formatCompactTokens(bestCache.usage.cachedInputTokens)} cached`,
         }
       : null,
-    highestVelocity: buildVelocityHighlight(pool, locale),
-    strongestReasoning: buildReasoningHighlight(pool, locale),
+    highestVelocity: buildVelocityHighlight(pool),
+    strongestReasoning: buildReasoningHighlight(pool),
   };
 }
 
@@ -268,7 +261,7 @@ const MODEL_SEGMENT_TEXT = [
   "text-violet-600 dark:text-violet-400",
 ];
 
-export function buildVelocityHighlight(models: ExecutionModelStatsSummary[], locale: DashboardLocale = "en"): ModelHighlight | null {
+export function buildVelocityHighlight(models: ExecutionModelStatsSummary[]): ModelHighlight | null {
   const eligible = models.filter((model) => model.usage.invocationCount >= MIN_HIGHLIGHT_CALLS);
   const pool = eligible.length > 0 ? eligible : models;
 
@@ -287,10 +280,10 @@ export function buildVelocityHighlight(models: ExecutionModelStatsSummary[], loc
   });
 
   const velocity = Math.round(computeUsageEfficiency(best.usage).outputTokensPerSecond ?? 0);
-  return { model: best, value: `${new Intl.NumberFormat(locale).format(velocity)} ${locale === "de" ? "Tok./s" : "tok/s"}`, detail: `${formatCompactDuration(best.usage.activeTimeMs, locale)} ${locale === "de" ? "aktiv" : "active"}` };
+  return { model: best, value: `${velocity} tok/s`, detail: `${formatCompactDuration(best.usage.activeTimeMs)} active` };
 }
 
-export function buildReasoningHighlight(models: ExecutionModelStatsSummary[], locale: DashboardLocale = "en"): ModelHighlight | null {
+export function buildReasoningHighlight(models: ExecutionModelStatsSummary[]): ModelHighlight | null {
   const eligible = models.filter((model) => model.usage.invocationCount >= MIN_HIGHLIGHT_CALLS);
   const pool = eligible.length > 0 ? eligible : models;
 
@@ -309,11 +302,10 @@ export function buildReasoningHighlight(models: ExecutionModelStatsSummary[], lo
   });
 
   const share = Math.round((computeUsageEfficiency(best.usage).reasoningShare ?? 0) * 100);
-  const formattedShare = new Intl.NumberFormat(locale, { style: "percent" }).format(share / 100);
-  return { model: best, value: locale === "de" ? `${formattedShare} Schlussfolgerung` : `${formattedShare} reasoning`, detail: locale === "de" ? `${formatCompactTokens(best.usage.reasoningOutputTokens, locale)} Schlussfolgerungs-Tokens` : `${formatCompactTokens(best.usage.reasoningOutputTokens, locale)} reasoning tokens` };
+  return { model: best, value: `${share}% reasoning`, detail: `${formatCompactTokens(best.usage.reasoningOutputTokens)} reasoning tokens` };
 }
 
-export function buildModelSegments(models: ExecutionModelStatsSummary[], top = 5, locale: DashboardLocale = "en"): SegmentDefinition[] {
+export function buildModelSegments(models: ExecutionModelStatsSummary[], top = 5): SegmentDefinition[] {
   const sorted = [...models].sort((left, right) => {
     const tokenDelta = right.usage.totalTokens - left.usage.totalTokens;
     return tokenDelta !== 0 ? tokenDelta : left.label.localeCompare(right.label);
@@ -330,7 +322,7 @@ export function buildModelSegments(models: ExecutionModelStatsSummary[], top = 5
 
   if (tail.length > 0) {
     segments.push({
-      label: locale === "de" ? "Andere Modelle" : "Other models",
+      label: "Other models",
       value: tail.reduce((sum, model) => sum + model.usage.totalTokens, 0),
       color: "rgba(148,163,184,0.46)",
       textClassName: "text-slate-600 dark:text-slate-300",
@@ -340,26 +332,26 @@ export function buildModelSegments(models: ExecutionModelStatsSummary[], top = 5
   return segments.filter((segment) => segment.value > 0);
 }
 
-function formatCompactTokens(value: number, locale: DashboardLocale): string {
+function formatCompactTokens(value: number): string {
   if (value >= 1_000_000) {
-    return `${new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value / 1_000_000)}${locale === "de" ? " Mio." : "M"}`;
+    return `${(value / 1_000_000).toFixed(2)}M`;
   }
   if (value >= 1_000) {
-    return `${new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value / 1_000)}k`;
+    return `${(value / 1_000).toFixed(1)}k`;
   }
-  return new Intl.NumberFormat(locale).format(value);
+  return String(value);
 }
 
-function formatCompactDuration(value: number, locale: DashboardLocale): string {
+function formatCompactDuration(value: number): string {
   const seconds = Math.max(0, Math.round(value / 1000));
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const remainingSeconds = seconds % 60;
   if (hours > 0) {
-    return locale === "de" ? `${hours} Std. ${minutes} Min.` : `${hours}h ${minutes}m`;
+    return `${hours}h ${minutes}m`;
   }
   if (minutes > 0) {
-    return locale === "de" ? `${minutes} Min. ${remainingSeconds} Sek.` : `${minutes}m ${remainingSeconds}s`;
+    return `${minutes}m ${remainingSeconds}s`;
   }
-  return locale === "de" ? `${remainingSeconds} Sek.` : `${remainingSeconds}s`;
+  return `${remainingSeconds}s`;
 }

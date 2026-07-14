@@ -14,8 +14,6 @@ import {
 } from "./StatsShared.js";
 import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
 import { useGsapInteractionTokens, useInteractionTokens } from "../../../lib/motion/index.js";
-import { useStatsI18n } from "../stats-i18n.js";
-import type { DashboardLocale } from "../../../i18n/index.js";
 
 export interface TelemetryLedgerTabsProps {
   stats: ProjectExecutionStatsSnapshot;
@@ -23,18 +21,17 @@ export interface TelemetryLedgerTabsProps {
 
 type LedgerTab = "tasks" | "sprints" | "git";
 
-function formatCompactCount(value: number, locale: DashboardLocale): string {
+function formatCompactCount(value: number): string {
   if (value >= 1_000_000) {
-    return `${new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value / 1_000_000)}${locale === "de" ? " Mio." : "M"}`;
+    return `${(value / 1_000_000).toFixed(1)}M`;
   }
   if (value >= 1_000) {
-    return `${new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value / 1_000)}k`;
+    return `${(value / 1_000).toFixed(1)}k`;
   }
-  return new Intl.NumberFormat(locale).format(value);
+  return value.toLocaleString();
 }
 
 export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = ({ stats }) => {
-  const { locale, formatNumber } = useStatsI18n();
   const [activeTab, setActiveTab] = useState<LedgerTab>("tasks");
   const contentRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef<Record<LedgerTab, HTMLButtonElement | null>>({
@@ -54,11 +51,11 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
     const gitCount = gitStats ? gitStats.tasks.length + gitStats.sprints.length : 0;
 
     return [
-      { id: "tasks" as const, label: locale === "de" ? "Aufgabentelemetrie" : "Task Telemetry", detail: locale === "de" ? "Anbieter-Arbeitsbereiche" : "Provider work lanes", icon: ListTodo, count: taskCount },
-      { id: "sprints" as const, label: locale === "de" ? "Sprint-Telemetrie" : "Sprint Telemetry", detail: locale === "de" ? "Sprint-Zusammenfassungen" : "Sprint rollups", icon: Rows3, count: sprintCount },
-      ...(gitStats ? [{ id: "git" as const, label: locale === "de" ? "Git-Telemetrie" : "Git Telemetry", detail: locale === "de" ? "PR- und Änderungsbereiche" : "PR and churn lanes", icon: GitBranch, count: gitCount }] : []),
+      { id: "tasks" as const, label: "Task Telemetry", detail: "Provider work lanes", icon: ListTodo, count: taskCount },
+      { id: "sprints" as const, label: "Sprint Telemetry", detail: "Sprint rollups", icon: Rows3, count: sprintCount },
+      ...(gitStats ? [{ id: "git" as const, label: "Git Telemetry", detail: "PR and churn lanes", icon: GitBranch, count: gitCount }] : []),
     ];
-  }, [locale, stats]);
+  }, [stats]);
 
   useLayoutEffect(() => {
     if (!contentRef.current || prevTab.current === activeTab) return;
@@ -90,13 +87,13 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
     <div className="flex flex-col gap-4">
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {activeTabDetails
-          ? (locale === "de" ? `${activeTabDetails.label} ausgewählt, ${formatNumber(activeTabDetails.count)} ${activeTabDetails.count === 1 ? "Eintrag" : "Einträge"}.` : `${activeTabDetails.label} selected, ${formatNumber(activeTabDetails.count)} ${activeTabDetails.count === 1 ? "entry" : "entries"}.`)
-          : locale === "de" ? "Telemetrieprotokoll ausgewählt." : "Telemetry ledger selected."}
+          ? `${activeTabDetails.label} selected, ${activeTabDetails.count.toLocaleString()} ${activeTabDetails.count === 1 ? "entry" : "entries"}.`
+          : "Telemetry ledger selected."}
       </div>
       <div
         role="tablist"
         aria-orientation="horizontal"
-        aria-label={locale === "de" ? "Telemetrieprotokolle" : "Telemetry ledgers"}
+        aria-label="Telemetry ledgers"
         className="stats-surface-subpanel grid w-full max-w-full min-w-0 grid-cols-1 gap-1 rounded-[var(--stats-control-radius)] p-1 sm:grid-cols-2 xl:grid-cols-3"
         onKeyDown={(e) => {
           if (tabs.length === 0) {
@@ -139,7 +136,7 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
               aria-controls={`tabpanel-${tab.id}`}
               tabIndex={isActive ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
-              aria-label={locale === "de" ? `${tab.label}, ${formatNumber(tab.count)} ${tab.count === 1 ? "Eintrag" : "Einträge"}` : `${tab.label}, ${formatNumber(tab.count)} ${tab.count === 1 ? "entry" : "entries"}`}
+              aria-label={`${tab.label}, ${tab.count.toLocaleString()} ${tab.count === 1 ? "entry" : "entries"}`}
               className={`grid min-h-11 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[calc(var(--stats-control-radius)-0.125rem)] px-3 py-2 text-left transition-[background-color,border-color,color] motion-reduce:transition-none ${CONTROL_FOCUS_CLASS} ${
                 isActive ? TAB_ACTIVE_CLASS : TAB_IDLE_CLASS
               }`}
@@ -152,7 +149,7 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
               <span className={`inline-flex min-w-8 justify-center px-1.5 py-0.5 font-mono text-[10px] font-semibold tabular-nums ${
                 isActive ? TAB_COUNT_ACTIVE_CLASS : TAB_COUNT_IDLE_CLASS
               }`}>
-                {formatCompactCount(tab.count, locale)}
+                {formatCompactCount(tab.count)}
               </span>
             </button>
           );
@@ -171,19 +168,19 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
           <GitTelemetryTab gitStats={stats.git} />
         ) : activeTab === "sprints" ? (
           <TelemetryLedger
-            title={locale === "de" ? "Sprint-Telemetrie" : "Sprint Telemetry"}
-            eyebrow={locale === "de" ? "Sprint-Protokoll" : "Sprint Ledger"}
+            title="Sprint Telemetry"
+            eyebrow="Sprint Ledger"
             items={stats.sprints}
             kindLabel="sprints"
-            emptyLabel={locale === "de" ? "Keine aktive Sprint-Telemetrie in diesem Zeitraum." : "No sprint telemetry active in this window."}
+            emptyLabel="No sprint telemetry active in this window."
           />
         ) : (
           <TelemetryLedger
-            title={locale === "de" ? "Aufgabentelemetrie" : "Task Telemetry"}
-            eyebrow={locale === "de" ? "Aufgabenprotokoll" : "Task Ledger"}
+            title="Task Telemetry"
+            eyebrow="Task Ledger"
             items={stats.tasks}
             kindLabel="tasks"
-            emptyLabel={locale === "de" ? "Noch keine Aufgabentelemetrie in diesem Zeitraum." : "No task telemetry landed in this window yet."}
+            emptyLabel="No task telemetry landed in this window yet."
           />
         )}
       </div>

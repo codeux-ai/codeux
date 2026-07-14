@@ -2,7 +2,6 @@ import type { FunctionComponent } from 'preact';
 import type { ExecutionUsageBucketSummary } from '../../../types.js';
 import { formatCost, formatStatsDuration, formatTokens } from '../stats-utils.js';
 import { DASHED_EMPTY_CLASS, SUBPANEL_CLASS } from './stats-ui-primitives.js';
-import { useStatsI18n } from '../stats-i18n.js';
 
 export type UsageGraphInspectionState = 'idle' | 'focused' | 'pinned';
 
@@ -30,34 +29,33 @@ export const UsageGraphTooltip: FunctionComponent<UsageGraphTooltipProps> = ({
   inspectionState,
   activeSeries,
 }) => {
-  const { locale, formatNumber } = useStatsI18n();
   const state = inspectionState ?? (visible ? 'focused' : 'idle');
   const date = new Date(bucketStart);
   let formattedDate = bucketStart;
   if (!Number.isNaN(date.getTime())) {
     const isHourlyOrDaily = date.getMinutes() === 0 && date.getSeconds() === 0;
     formattedDate = isHourlyOrDaily
-      ? new Intl.DateTimeFormat(locale, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC' }).format(date)
-      : new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC' }).format(date);
+      ? new Intl.DateTimeFormat('en-US', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' }).format(date).replace('24:00', '00:00')
+      : new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' }).format(date).replace('24:00', '00:00');
   }
   const usage = bucket?.usage;
   const detailRows = usage ? [
-    { label: locale === 'de' ? 'Kosten' : 'Cost', value: formatCost(usage.totalCostUsd || 0, locale) },
-    { label: 'Tokens', value: formatTokens(usage.totalTokens || 0, locale) },
-    { label: locale === 'de' ? 'Aktive Zeit' : 'Active time', value: formatStatsDuration(usage.activeTimeMs || 0, locale) },
-    { label: locale === 'de' ? 'Aufrufe' : 'Invocations', value: formatNumber(usage.invocationCount || 0) },
+    { label: 'Cost', value: formatCost(usage.totalCostUsd || 0) },
+    { label: 'Tokens', value: formatTokens(usage.totalTokens || 0) },
+    { label: 'Active time', value: formatStatsDuration(usage.activeTimeMs || 0) },
+    { label: 'Invocations', value: (usage.invocationCount || 0).toLocaleString() },
   ] : [];
   const stateCopy = state === 'pinned'
-    ? (locale === 'de' ? 'Fixiertes Intervall' : 'Pinned bucket')
+    ? 'Pinned bucket'
     : state === 'focused'
-      ? (locale === 'de' ? 'Fokussiertes Intervall' : 'Focused bucket')
-      : (locale === 'de' ? 'Inaktiv' : 'Idle');
-  const dateCopy = visible ? formattedDate : locale === 'de' ? 'Kein Intervall ausgewählt' : 'No bucket selected';
+      ? 'Focused bucket'
+      : 'Idle';
+  const dateCopy = visible ? formattedDate : 'No bucket selected';
   const helperCopy = state === 'pinned'
-    ? (locale === 'de' ? 'Über Tastatur oder Zeitraumsteuerung fixiert. Exakte Werte bleiben bis zum Fokuswechsel sichtbar.' : 'Pinned from keyboard or range control. Exact values stay visible until focus changes.')
+    ? 'Pinned from keyboard or range control. Exact values stay visible until focus changes.'
     : state === 'focused'
-      ? (locale === 'de' ? 'Über Zeiger oder Tastatur fokussiert. Exakte Intervallwerte werden unten angezeigt.' : 'Focused from pointer or keyboard inspection. Exact bucket values are shown below.')
-      : (locale === 'de' ? 'Zeigen Sie auf ein Intervall, fokussieren Sie das Diagramm oder verschieben Sie den Zeitraumregler, um exakte Werte zu prüfen.' : 'Hover a bucket, tab into the chart, or move the range slider to inspect exact values.');
+      ? 'Focused from pointer or keyboard inspection. Exact bucket values are shown below.'
+      : 'Hover a bucket, tab into the chart, or move the range slider to inspect exact values.';
   const markerLeft = Math.min(92, Math.max(8, left));
 
   return (
@@ -75,13 +73,13 @@ export const UsageGraphTooltip: FunctionComponent<UsageGraphTooltipProps> = ({
           <div className="mt-1 text-xs leading-relaxed text-[var(--stats-detail-color)]">{helperCopy}</div>
         </div>
         <div className="shrink-0 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)] sm:text-right">
-          {visible ? stateCopy : locale === 'de' ? 'Inaktiv' : 'Idle'}
+          {visible ? stateCopy : 'Idle'}
         </div>
       </div>
       <div
         className="mt-3 h-1 rounded-full bg-[color:var(--stats-quiet-track)]"
         role="img"
-        aria-label={visible ? (locale === 'de' ? `${stateCopy}-Markierung bei ${formatNumber(Math.round(markerLeft))} Prozent des sichtbaren Diagrammzeitraums.` : `${stateCopy} marker at ${formatNumber(Math.round(markerLeft))} percent of the visible chart window.`) : locale === 'de' ? 'Inaktive Markierung wartet auf Diagrammfokus.' : 'Idle marker waiting for chart focus.'}
+        aria-label={visible ? `${stateCopy} marker at ${Math.round(markerLeft)} percent of the visible chart window.` : 'Idle marker waiting for chart focus.'}
       >
         <span
           className="block h-full w-3 rounded-full bg-[color:var(--stats-signal-text)]"
@@ -99,7 +97,7 @@ export const UsageGraphTooltip: FunctionComponent<UsageGraphTooltipProps> = ({
         </dl>
       ) : visible ? (
           <div className={`${DASHED_EMPTY_CLASS} mt-3 text-sm leading-relaxed text-[var(--stats-detail-color)]`}>
-          {locale === 'de' ? 'Für dieses Intervall sind keine Nutzungssummen für die aktive Reihe verfügbar.' : 'This bucket has no usage totals available for the active series.'}
+          This bucket has no usage totals available for the active series.
         </div>
       ) : null}
       <div className="mt-3 grid gap-2">
@@ -113,7 +111,7 @@ export const UsageGraphTooltip: FunctionComponent<UsageGraphTooltipProps> = ({
           </div>
         )) : (
           <div className={`${DASHED_EMPTY_CLASS} text-sm leading-relaxed text-[var(--stats-detail-color)]`}>
-            {locale === 'de' ? 'Bewegen Sie den Zeiger, fokussieren Sie ein Intervall oder verwenden Sie den Zeitraumregler, um hier exakte Werte zu fixieren.' : 'Move the pointer, focus a bucket, or use the range slider to pin exact values here.'}
+            Move the pointer, focus a bucket, or use the range slider to pin exact values here.
           </div>
         )}
       </div>

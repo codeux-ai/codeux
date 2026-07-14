@@ -9,7 +9,6 @@ import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { TelemetryLedgerTabs } from "../components/TelemetryLedgerTabs.js";
 import type { ExecutionStatsEntitySummary, ProjectExecutionStatsSnapshot } from "../../../types.js";
-import { StatsI18nProvider } from "../stats-i18n.js";
 
 expect.extend(matchers);
 
@@ -292,20 +291,5 @@ describe("TelemetryLedgerTabs", () => {
 
     expect(screen.getAllByRole("tab")).toHaveLength(2);
     expect(screen.queryByRole("tab", { name: /Git Telemetry/ })).not.toBeInTheDocument();
-  });
-
-  it("localizes German ledger navigation and formatting while preserving entity labels", () => {
-    render(
-      <StatsI18nProvider locale="de">
-        <TelemetryLedgerTabs stats={mockStats} />
-      </StatsI18nProvider>,
-    );
-
-    expect(screen.getByRole("tablist", { name: "Telemetrieprotokolle" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Aufgabentelemetrie, 2 Einträge" })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Aufgaben durchsuchen")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Eingabe, nicht sortiert" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Alpha migration, Telemetriezeile für Aufgabe")).toBeInTheDocument();
-    expect(screen.getAllByText(/0,02\s*\$/).length).toBeGreaterThan(0);
   });
 });

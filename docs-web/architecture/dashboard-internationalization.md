@@ -37,6 +37,18 @@ English and German must declare exactly the same top-level keys. Interpolation t
 
 Keep each catalog with its owning feature and import it only where the feature is loaded. Translate dashboard-authored interface copy only. Never translate provider output, API responses, stored instructions, project data, runtime diagnostics, or user-authored content.
 
+## Nodes route
+
+The feature-gated Nodes route imports its own `messages/nodes.ts` catalog. English and German cover its library, palettes, canvas and minimap controls, inspectors, governance review, validation summaries, run debugger, scheduling entry point, empty/error states, and accessible names. Locale-explicit helpers serve the pure node view models and dashboard-generated canvas and agent-command validation explanations.
+
+This boundary is presentation-only: graph serialization, ids and types, schema keys, command names, configuration values, migration markers, skill names, API errors, policy/provider diagnostics, run logs, and execution payloads remain unchanged. Known status values are mapped to localized display text without changing the underlying contract value.
+
+## Memory route boundary
+
+The Memory route has a feature-owned English and German catalog covering map controls, tier and scope filters, search, cards, the inspector, add/delete and batch actions, accessible announcements, and the embedding-model catalog and custom-model form. Locale-aware `Intl` formatting handles counts, plurals, percentages, dates, strengths, and file sizes without changing numeric values or filter/sort behavior. Localized category labels can be searched while the persisted category keys remain stable.
+
+The localization boundary deliberately excludes memory titles and content, claims, evidence, tags, agent names, model IDs, catalog descriptions, languages, licenses, URLs, filenames, and server/API diagnostics. Those values are rendered exactly as supplied.
+
 ## Agents route boundary
 
 The lazy `/agents` route imports its own `messages/agents.ts` catalog. English and German cover the roster, preset detail/editor, validation, avatar customization, instruction files, memory and MCP configuration, repository push feedback, compatibility updates, loading and empty states, and accessibility labels. Dates, counts, token estimates, byte sizes, and plural messages use the active locale.

@@ -5,7 +5,6 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
 import { afterEach, describe, expect, it } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { GitTelemetryTab } from "../components/GitTelemetryTab.js";
-import { StatsI18nProvider } from "../stats-i18n.js";
 
 expect.extend(matchers);
 
@@ -109,22 +108,5 @@ describe("GitTelemetryTab", () => {
     fireEvent.click(screen.getByRole("tab", { name: /Sprint Leaderboard/i }));
     expect(screen.getByRole("tab", { name: /Sprint Leaderboard/i })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Sprint Git Telemetry")).toBeTruthy();
-  });
-
-  it("renders German Git ledgers while preserving task and sprint names", () => {
-    render(
-      <StatsI18nProvider locale="de">
-        <GitTelemetryTab gitStats={mockGitStats} />
-      </StatsI18nProvider>,
-    );
-
-    expect(screen.getByRole("region", { name: "Git-Telemetrieübersicht" })).toBeTruthy();
-    expect(screen.getByText("Codeänderungen, Pull Requests und Merge-Druck")).toBeTruthy();
-    expect(screen.getAllByText("TASK-1").length).toBeGreaterThan(0);
-    expect(screen.getByText(/Jun 1/)).toBeTruthy();
-    expect(screen.getByRole("tab", { name: /Aufgabenrangliste/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole("tab", { name: /Sprintrangliste/ }));
-    expect(screen.getByText("Git-Telemetrie nach Sprint")).toBeTruthy();
-    expect(screen.getAllByText("Sprint 1").length).toBeGreaterThan(0);
   });
 });

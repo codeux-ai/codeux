@@ -3,7 +3,6 @@ import { useMemo, useRef, useState } from "preact/hooks";
 import type { ExecutionUsageBucketSummary } from "../../../types.js";
 import { CONTROL_FOCUS_CLASS, SUBPANEL_CLASS, type ChartZoomRange } from "./stats-ui-primitives.js";
 import { buildSmoothAreaPath, buildSmoothPath, buildPoints } from "./stats-geometry.js";
-import { useStatsI18n } from "../stats-i18n.js";
 
 const MINIMAP_WIDTH = 1000;
 const MINIMAP_HEIGHT = 72;
@@ -21,7 +20,6 @@ export const UsageChartMinimap: FunctionComponent<{
   onStatusChange?: (message: string) => void;
   accentHex?: string;
 }> = ({ buckets, zoomRange, onZoomChange, onStatusChange, accentHex = "var(--stats-accent-signal)" }) => {
-  const { locale, formatNumber } = useStatsI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const [dragStart, setDragStart] = useState<number | null>(null);
   const [dragCurrent, setDragCurrent] = useState<number | null>(null);
@@ -45,9 +43,9 @@ export const UsageChartMinimap: FunctionComponent<{
       : MINIMAP_PADDING + (index / lastIndex) * (MINIMAP_WIDTH - MINIMAP_PADDING * 2);
 
   const describeRange = (start: number, end: number): string => {
-    const startLabel = buckets[start]?.label ?? `${locale === "de" ? "Intervall" : "bucket"} ${formatNumber(start + 1)}`;
-    const endLabel = buckets[end]?.label ?? `${locale === "de" ? "Intervall" : "bucket"} ${formatNumber(end + 1)}`;
-    return locale === "de" ? `Übersicht auf ${startLabel} bis ${endLabel} gezoomt, ${formatNumber(end - start + 1)} von ${formatNumber(buckets.length)} Intervallen.` : `Zoomed overview to ${startLabel} through ${endLabel}, ${formatNumber(end - start + 1)} of ${formatNumber(buckets.length)} buckets.`;
+    const startLabel = buckets[start]?.label ?? `bucket ${start + 1}`;
+    const endLabel = buckets[end]?.label ?? `bucket ${end + 1}`;
+    return `Zoomed overview to ${startLabel} through ${endLabel}, ${end - start + 1} of ${buckets.length} buckets.`;
   };
 
   const clientXToIndex = (clientX: number): number => {
@@ -97,7 +95,7 @@ export const UsageChartMinimap: FunctionComponent<{
     } else if (start === end) {
       // A simple click clears the zoom and restores the full window.
       onZoomChange(null);
-      onStatusChange?.(locale === "de" ? `Zoom auf den gesamten Zeitraum mit ${formatNumber(buckets.length)} Intervallen zurückgesetzt.` : `Zoom reset to the full ${formatNumber(buckets.length)}-bucket range.`);
+      onStatusChange?.(`Zoom reset to the full ${buckets.length}-bucket range.`);
     }
   };
 
@@ -106,7 +104,7 @@ export const UsageChartMinimap: FunctionComponent<{
       if (event.key === "Escape" || event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         onZoomChange(null);
-        onStatusChange?.(locale === "de" ? 'Ansicht mit einem Intervall. Zoom ist erst mit weiteren Intervallen verfügbar.' : 'Single-bucket view. Zoom is unavailable until more buckets exist.');
+        onStatusChange?.('Single-bucket view. Zoom is unavailable until more buckets exist.');
       }
       return;
     }
@@ -114,7 +112,7 @@ export const UsageChartMinimap: FunctionComponent<{
     if (event.key === "Escape") {
       event.preventDefault();
       onZoomChange(null);
-      onStatusChange?.(locale === "de" ? `Zoom auf den gesamten Zeitraum mit ${formatNumber(buckets.length)} Intervallen zurückgesetzt.` : `Zoom reset to the full ${formatNumber(buckets.length)}-bucket range.`);
+      onStatusChange?.(`Zoom reset to the full ${buckets.length}-bucket range.`);
       return;
     }
 
@@ -122,7 +120,7 @@ export const UsageChartMinimap: FunctionComponent<{
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         onZoomChange({ start: 0, end: lastIndex });
-        onStatusChange?.(locale === "de" ? `Übersicht auf den gesamten Zeitraum mit ${formatNumber(buckets.length)} Intervallen fixiert.` : `Pinned overview to the full ${formatNumber(buckets.length)}-bucket range.`);
+        onStatusChange?.(`Pinned overview to the full ${buckets.length}-bucket range.`);
       }
       return;
     }
@@ -155,15 +153,15 @@ export const UsageChartMinimap: FunctionComponent<{
     <div className="mt-3">
       <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
         <div id="usage-chart-minimap-help" className="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color,theme(colors.slate.400))]">
-          {locale === "de" ? "Übersicht – zum Zoomen ziehen, mit Pfeiltasten verschieben, mit Escape zurücksetzen" : "Overview - drag to zoom, arrow keys to pan, escape to reset"}
+          Overview - drag to zoom, arrow keys to pan, escape to reset
         </div>
         {zoomRange ? (
           <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-signal-text)]">
-            {formatNumber(zoomRange.end - zoomRange.start + 1)} {locale === "de" ? "von" : "of"} {formatNumber(buckets.length)} {locale === "de" ? "Intervallen" : "buckets"}
+            {zoomRange.end - zoomRange.start + 1} of {buckets.length} buckets
           </div>
         ) : !hasZoomableRange ? (
           <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
-            {locale === "de" ? "Ansicht mit einem Intervall" : "Single-bucket view"}
+            Single-bucket view
           </div>
         ) : null}
       </div>
@@ -172,8 +170,8 @@ export const UsageChartMinimap: FunctionComponent<{
         data-testid="usage-chart-minimap"
         role="region"
         aria-label={zoomRange
-          ? (locale === "de" ? `Zoomregion der Diagramm-Minimap, Intervalle ${formatNumber(zoomRange.start + 1)} bis ${formatNumber(zoomRange.end + 1)} von ${formatNumber(buckets.length)}` : `Chart minimap zoom region, showing buckets ${formatNumber(zoomRange.start + 1)} through ${formatNumber(zoomRange.end + 1)} of ${formatNumber(buckets.length)}`)
-          : (locale === "de" ? `Zoomregion der Diagramm-Minimap, gesamter Zeitraum mit ${formatNumber(buckets.length)} Intervallen` : `Chart minimap zoom region, full range of ${formatNumber(buckets.length)} bucket${buckets.length === 1 ? '' : 's'}`)}
+          ? `Chart minimap zoom region, showing buckets ${zoomRange.start + 1} through ${zoomRange.end + 1} of ${buckets.length}`
+          : `Chart minimap zoom region, full range of ${buckets.length} bucket${buckets.length === 1 ? '' : 's'}`}
         aria-describedby="usage-chart-minimap-help"
         aria-disabled={!hasZoomableRange ? "true" : undefined}
         tabIndex={0}
@@ -185,13 +183,13 @@ export const UsageChartMinimap: FunctionComponent<{
       >
         <div className="sr-only" aria-live="polite">
           {zoomRange
-            ? (locale === "de" ? `${formatNumber(zoomRange.end - zoomRange.start + 1)} von ${formatNumber(buckets.length)} Intervallen, ${buckets[zoomRange.start]?.label ?? "Start"} bis ${buckets[zoomRange.end]?.label ?? "Ende"}.` : `Showing ${formatNumber(zoomRange.end - zoomRange.start + 1)} of ${formatNumber(buckets.length)} buckets, ${buckets[zoomRange.start]?.label ?? "start"} through ${buckets[zoomRange.end]?.label ?? "end"}.`)
+            ? `Showing ${zoomRange.end - zoomRange.start + 1} of ${buckets.length} buckets, ${buckets[zoomRange.start]?.label ?? "start"} through ${buckets[zoomRange.end]?.label ?? "end"}.`
             : hasZoomableRange
-              ? (locale === "de" ? `Gesamter Zeitraum mit ${formatNumber(buckets.length)} Intervallen angezeigt. Zum Zoomen ziehen oder die Eingabetaste drücken, um den Zeitraum zu fixieren.` : `Full ${formatNumber(buckets.length)}-bucket range shown. Drag to zoom or press Enter to pin the full range.`)
-              : (locale === "de" ? 'Ansicht mit einem Intervall. Zoom ist erst mit weiteren Intervallen verfügbar.' : 'Single-bucket view. Zoom is unavailable until more buckets exist.')}
+              ? `Full ${buckets.length}-bucket range shown. Drag to zoom or press Enter to pin the full range.`
+              : 'Single-bucket view. Zoom is unavailable until more buckets exist.'}
         </div>
         <div className="sr-only">
-          {locale === "de" ? "Intervallreihenfolge der Minimap" : "Minimap bucket order"}: {buckets.map((bucket, index) => `${formatNumber(index + 1)}. ${bucket.label}, ${formatNumber(bucket.usage.totalTokens)} Tokens`).join("; ")}.
+          Minimap bucket order: {buckets.map((bucket, index) => `${index + 1}. ${bucket.label}, ${bucket.usage.totalTokens.toLocaleString()} tokens`).join("; ")}.
         </div>
         <svg
           aria-hidden="true"
@@ -241,7 +239,7 @@ export const UsageChartMinimap: FunctionComponent<{
         </svg>
         {!hasZoomableRange ? (
           <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
-            {locale === "de" ? "Zoom wird verfügbar, sobald das nächste Intervall eintrifft." : "Zoom becomes available after the next bucket lands."}
+            Zoom becomes available after the next bucket lands.
           </div>
         ) : null}
       </div>

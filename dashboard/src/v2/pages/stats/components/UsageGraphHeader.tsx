@@ -8,7 +8,6 @@ import {
   TAB_ACTIVE_CLASS,
   TAB_IDLE_CLASS,
 } from './stats-ui-primitives.js';
-import { useStatsI18n } from '../stats-i18n.js';
 
 export const UsageGraphHeader: FunctionComponent<{
   title: string;
@@ -35,14 +34,13 @@ export const UsageGraphHeader: FunctionComponent<{
   onToggleFilters,
   onResetZoom,
 }) => {
-  const { locale, formatNumber } = useStatsI18n();
   return (
     <div className="flex flex-col gap-4">
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
         <div className="min-w-0">
           <div className={`${CHIP_CLASS} inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)]`}>
             <Activity className="h-3.5 w-3.5 text-[color:var(--stats-signal-text)]" strokeWidth={2.2} />
-            {locale === 'de' ? 'Nutzungsdiagramm' : 'Usage Graph'}
+            Usage Graph
           </div>
           <div className="mt-3 text-xl font-semibold leading-tight text-[var(--stats-value-color)] md:text-2xl">
             {title}
@@ -64,7 +62,7 @@ export const UsageGraphHeader: FunctionComponent<{
             }`}
           >
             <Filter className={`h-3.5 w-3.5 transition-colors motion-reduce:transition-none ${isFiltersOpen ? 'text-[color:var(--stats-signal-text)]' : 'text-[var(--stats-detail-color)] group-hover:text-[color:var(--stats-signal-text)]'}`} strokeWidth={2.2} />
-            {locale === 'de' ? 'Filter' : 'Filters'}
+            Filters
             <span aria-hidden="true" className="rounded-[var(--stats-chip-radius)] border border-current/20 px-1.5 py-0.5 text-[9px] leading-none">
               {activeSeriesCount}
             </span>
@@ -76,34 +74,34 @@ export const UsageGraphHeader: FunctionComponent<{
               className={`inline-flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] ${CONTROL_FOCUS_CLASS} ${CHIP_CLASS} ${STATUS_TONE_CLASS.signal}`}
             >
               <RotateCcw className="h-3.5 w-3.5" strokeWidth={2.2} />
-              {locale === 'de' ? 'Zoom zurücksetzen' : 'Reset zoom'} <span className="sr-only">{locale === 'de' ? 'auf' : 'to'} {rangeLabel}</span>
+              Reset zoom <span className="sr-only">to {rangeLabel}</span>
             </button>
           ) : null}
           <span id="usage-graph-filter-summary" className="sr-only">
-            {formatNumber(activeSeriesCount)} {locale === 'de' ? 'aktive Reihen.' : 'active series.'}
+            {activeSeriesCount} active series.
           </span>
         </div>
       </div>
 
       <div
         role="toolbar"
-        aria-label={locale === 'de' ? 'Steuerung des Nutzungsdiagramms' : 'Usage graph controls'}
+        aria-label="Usage graph controls"
         className={`${SUBPANEL_CLASS} relative z-40 flex flex-col gap-3 p-3 sm:flex-row sm:flex-wrap sm:items-center`}
       >
         <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 sm:grid-cols-none sm:auto-cols-max sm:grid-flow-col">
           <div className={`${CHIP_CLASS} min-w-0 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]`}>
-            <span className="sr-only">{locale === 'de' ? 'Ausgewählter Zeitraum: ' : 'Selected range: '}</span>
+            <span className="sr-only">Selected range: </span>
             <span className="block truncate">{rangeLabel}</span>
           </div>
           <div className={`${CHIP_CLASS} px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]`}>
-            {formatNumber(bucketCount)} {locale === 'de' ? 'Intervalle' : 'buckets'}
+            {bucketCount.toLocaleString()} buckets
           </div>
           <div className={`${CHIP_CLASS} px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]`}>
             {resolutionLabel}
           </div>
           <div className={`${CHIP_CLASS} min-w-0 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]`}>
-            <span className="sr-only">{locale === 'de' ? 'Aktiver Zoom: ' : 'Active zoom: '}</span>
-            <span className="block truncate">{isZoomed ? zoomLabel : locale === 'de' ? 'Gesamter Zeitraum' : 'Full range'}</span>
+            <span className="sr-only">Active zoom: </span>
+            <span className="block truncate">{isZoomed ? zoomLabel : 'Full range'}</span>
           </div>
         </div>
       </div>

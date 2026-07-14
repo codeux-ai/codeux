@@ -2,8 +2,6 @@
 
 The **Stats** page (`/stats`) is the analytics surface for the active project. It shows project execution, usage, cost, Git, provider/model, ledger, and invocation telemetry in one flat Analysis Studio with responsive layouts and light/dark mode support.
 
-Stats follows the dashboard language setting in English or German. Interface labels and accessibility descriptions are translated, while numbers, US-dollar costs, percentages, dates, times, durations, and count wording use the active locale. Chart buckets and custom-range boundaries remain UTC, so changing language never changes the underlying timeframe or calculation. Project data, provider/model/purpose identifiers, Git refs, invocation messages, provider errors, server labels, and API errors are shown exactly as recorded.
-
 Stats metric cards, chips, filters, tables, and ledger rows use warm void surfaces, hairline borders, compact typography, subtle depth, and quiet selected states. Data colors are reserved for telemetry meaning such as chart series, status, source confidence, and token/churn breakdowns.
 
 Stats uses the same page width and spacing rhythm as the rest of the dashboard. An unboxed introduction shows the selected project, generated snapshot time, and sprint lens; one compact command rail holds the time-window and analysis-mode controls. On wide screens the window and view controls sit side by side, while narrow screens wrap them into a readable vertical flow.
@@ -21,9 +19,7 @@ A selector at the top lets you pick the analysis window:
 - **All time**
 - **Custom range** — pick start and end dates explicitly.
 
-All charts, ledgers, and metrics respect the selected timeframe. Custom date inputs retain UTC calendar-day values, while the visible range summary and confirmation use the dashboard language's date notation. Recent windows include the freshest available bucket: **Last 1 hour** includes the current 5-minute bucket, and **Last 24 hours** includes the current partial hour.
-
-Loading and recovery messages use that same localized window summary. For a custom range, the UTC date boundaries remain visible in the active dashboard language instead of exposing the internal query value.
+All charts, ledgers, and metrics respect the selected timeframe. Recent windows include the freshest available bucket: **Last 1 hour** includes the current 5-minute bucket, and **Last 24 hours** includes the current partial hour.
 
 ## Analysis Modes
 
@@ -51,8 +47,6 @@ Data accents stay inside distribution strips, token bars, and small swatches, wi
 
 ### Models
 Ranks model activity by token volume and tracks invocation volume, latency, reliability, cache efficiency, reasoning share, pricing signals, output velocity, and low-data states for each model used during the active timeframe.
-
-Leaderboard metric labels, including reasoning, output/input ratio, and per-million-token cost, follow the dashboard language. Recorded model and provider identifiers remain unchanged.
 
 ### Providers
 Focuses on provider reliability, telemetry confidence, fallback usage, failure pressure, provider coverage, duration coverage, latency signals, pricing, provider-specific risk, and audit notes when the selected snapshot includes those fields.

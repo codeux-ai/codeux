@@ -38,8 +38,6 @@ import {
   formatSuccessRate,
   getSuccessTone,
 } from "../model-insights.js";
-import { useStatsI18n } from "../stats-i18n.js";
-import type { DashboardLocale } from "../../../i18n/locales.js";
 
 type ReliabilitySource = TokenUsageSource | "unknown";
 type SourceTone = "strong" | "fallback" | "critical" | "neutral";
@@ -126,8 +124,8 @@ const FLAT_BADGE_CLASS = `inline-flex items-center gap-2 rounded-[var(--stats-ch
 const SECTION_TITLE_CLASS = "text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]";
 const SECTION_COPY_CLASS = "mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]";
 
-const formatPricingValue = (value: number | null, locale: DashboardLocale = "en"): string => (
-  value === null || value <= 0 ? "—" : formatCost(value, locale)
+const formatPricingValue = (value: number | null): string => (
+  value === null || value <= 0 ? "—" : formatCost(value)
 );
 
 function getUsageSourceCount(usage: ExecutionUsageTotals, source: TokenUsageSource): number {
@@ -137,7 +135,7 @@ function getUsageSourceCount(usage: ExecutionUsageTotals, source: TokenUsageSour
   return usage.unsupportedInvocationCount || 0;
 }
 
-function buildSourceRows(usage: ExecutionUsageTotals, locale: DashboardLocale = "en"): SourceRow[] {
+function buildSourceRows(usage: ExecutionUsageTotals): SourceRow[] {
   const knownCount = getUsageSourceCount(usage, "reported")
     + getUsageSourceCount(usage, "estimated")
     + getUsageSourceCount(usage, "unavailable")
@@ -147,27 +145,20 @@ function buildSourceRows(usage: ExecutionUsageTotals, locale: DashboardLocale = 
 
   return (["reported", "estimated", "unavailable", "unsupported", "unknown"] as const).map((source) => {
     const meta = SOURCE_META[source];
-    const german = {
-      reported: ["Gemeldet", "Provider-native Zählwerte"],
-      estimated: ["Geschätzt", "Berechneter Ersatzwert"],
-      unavailable: ["Nicht verfügbar", "Provider lief ohne nutzbare Zählwerte"],
-      unsupported: ["Nicht unterstützt", "Telemetrie wird nicht unterstützt"],
-      unknown: ["Unbekannt", "Kein Quellenzähler wurde erfasst"],
-    }[source];
     const count = source === "unknown" ? unknownCount : getUsageSourceCount(usage, source);
     return {
       source,
-      label: locale === "de" ? german[0] : meta.label,
+      label: meta.label,
       count,
       share: total > 0 ? count / total : null,
       tone: meta.tone,
-      detail: locale === "de" ? german[1] : meta.detail,
+      detail: meta.detail,
       icon: meta.icon,
     };
   });
 }
 
-function summarizeSourceRows(rows: SourceRow[], locale: DashboardLocale = "en"): {
+function summarizeSourceRows(rows: SourceRow[]): {
   label: string;
   detail: string;
   tone: SourceTone;
@@ -186,8 +177,8 @@ function summarizeSourceRows(rows: SourceRow[], locale: DashboardLocale = "en"):
 
   if (total === 0) {
     return {
-      label: locale === "de" ? "Kein Quellensignal" : "No source signal",
-      detail: locale === "de" ? "Keine Aufrufquellenzähler" : "No invocation source counters",
+      label: "No source signal",
+      detail: "No invocation source counters",
       tone: "neutral",
       total,
       fallbackCount,
@@ -197,8 +188,8 @@ function summarizeSourceRows(rows: SourceRow[], locale: DashboardLocale = "en"):
 
   if (reported === total) {
     return {
-      label: locale === "de" ? "Gemeldet" : "Reported",
-      detail: `${new Intl.NumberFormat(locale).format(reported)} ${locale === "de" ? "gemeldete Aufrufe" : "reported calls"}`,
+      label: "Reported",
+      detail: `${reported.toLocaleString()} reported calls`,
       tone: "strong",
       total,
       fallbackCount,
@@ -208,8 +199,8 @@ function summarizeSourceRows(rows: SourceRow[], locale: DashboardLocale = "en"):
 
   if (failureRiskCount > 0 && reported === 0 && estimated === 0) {
     return {
-      label: locale === "de" ? "Nicht verfügbar" : "Unavailable",
-      detail: `${new Intl.NumberFormat(locale).format(failureRiskCount)} ${locale === "de" ? "nicht verfügbar oder nicht unterstützt" : "unavailable or unsupported"}`,
+      label: "Unavailable",
+      detail: `${failureRiskCount.toLocaleString()} unavailable or unsupported`,
       tone: "critical",
       total,
       fallbackCount,
@@ -219,8 +210,8 @@ function summarizeSourceRows(rows: SourceRow[], locale: DashboardLocale = "en"):
 
   if (failureRiskCount > 0) {
     return {
-      label: locale === "de" ? "Gemischte Quellen" : "Mixed sources",
-      detail: `${new Intl.NumberFormat(locale).format(reported)} ${locale === "de" ? "gemeldet" : "reported"} · ${new Intl.NumberFormat(locale).format(fallbackCount)} ${locale === "de" ? "Ersatzwerte" : "fallback"} · ${new Intl.NumberFormat(locale).format(failureRiskCount)} ${locale === "de" ? "nicht verfügbar" : "unavailable"}`,
+      label: "Mixed sources",
+      detail: `${reported.toLocaleString()} reported · ${fallbackCount.toLocaleString()} fallback · ${failureRiskCount.toLocaleString()} unavailable`,
       tone: "critical",
       total,
       fallbackCount,
@@ -230,8 +221,8 @@ function summarizeSourceRows(rows: SourceRow[], locale: DashboardLocale = "en"):
 
   if (fallbackCount > 0) {
     return {
-      label: reported > 0 ? (locale === "de" ? "Gemeldet + Ersatzwerte" : "Reported + fallback") : (locale === "de" ? "Geschätzt" : "Estimated"),
-      detail: `${new Intl.NumberFormat(locale).format(reported)} ${locale === "de" ? "gemeldet" : "reported"} · ${new Intl.NumberFormat(locale).format(fallbackCount)} ${locale === "de" ? "Ersatzwerte" : "fallback"}`,
+      label: reported > 0 ? "Reported + fallback" : "Estimated",
+      detail: `${reported.toLocaleString()} reported · ${fallbackCount.toLocaleString()} fallback`,
       tone: "fallback",
       total,
       fallbackCount,
@@ -240,8 +231,8 @@ function summarizeSourceRows(rows: SourceRow[], locale: DashboardLocale = "en"):
   }
 
   return {
-    label: locale === "de" ? "Unbekannt" : "Unknown",
-    detail: `${new Intl.NumberFormat(locale).format(unknown)} ${locale === "de" ? "unbekannte Aufrufe" : "unknown calls"}`,
+    label: "Unknown",
+    detail: `${unknown.toLocaleString()} unknown calls`,
     tone: "neutral",
     total,
     fallbackCount,
@@ -264,7 +255,7 @@ function combineProviderDuration(models: ProjectExecutionStatsSnapshot["models"]
   };
 }
 
-function buildProviderRows(stats: ProjectExecutionStatsSnapshot, locale: DashboardLocale = "en"): ProviderReliabilityRow[] {
+function buildProviderRows(stats: ProjectExecutionStatsSnapshot): ProviderReliabilityRow[] {
   return [...(stats.providers || [])].map((provider) => {
     const providerModels = (stats.models || []).filter((model) => model.provider === provider.id);
     const completedCount = providerModels.reduce((sum, model) => sum + model.statusCounts.completed, 0);
@@ -273,8 +264,8 @@ function buildProviderRows(stats: ProjectExecutionStatsSnapshot, locale: Dashboa
     const runningCount = providerModels.reduce((sum, model) => sum + model.statusCounts.running, 0);
     const finishedCount = completedCount + failedCount + cancelledCount;
     const successRate = finishedCount > 0 ? completedCount / finishedCount : null;
-    const sourceRows = buildSourceRows(provider.usage, locale);
-    const sourceSummary = summarizeSourceRows(sourceRows, locale);
+    const sourceRows = buildSourceRows(provider.usage);
+    const sourceSummary = summarizeSourceRows(sourceRows);
     const failureRate = finishedCount > 0 ? failedCount / finishedCount : 0;
     const sourceUncertaintyRate = sourceSummary.total > 0
       ? (sourceSummary.fallbackCount * 0.45 + sourceSummary.failureRiskCount) / sourceSummary.total
@@ -337,7 +328,6 @@ const EmptyTelemetryPanel: FunctionComponent<{
 const SourceCountCard: FunctionComponent<{
   row: SourceRow;
 }> = ({ row }) => {
-  const { locale, formatNumber } = useStatsI18n();
   const Icon = row.icon;
   return (
     <div className={`${SUBPANEL_CLASS} p-4`}>
@@ -347,10 +337,10 @@ const SourceCountCard: FunctionComponent<{
           {row.label}
         </div>
         <div className="text-[11px] font-mono text-[color:var(--stats-label-color)]">
-          {row.share !== null ? formatPercent(row.share * 100, locale) : "—"}
+          {row.share !== null ? formatPercent(row.share * 100) : "—"}
         </div>
       </div>
-      <div className="mt-3 text-xl font-semibold text-[color:var(--stats-value-color)]">{formatNumber(row.count)}</div>
+      <div className="mt-3 text-xl font-semibold text-[color:var(--stats-value-color)]">{row.count.toLocaleString()}</div>
       <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">{row.detail}</div>
       <div className={`mt-3 h-1.5 overflow-hidden rounded-full ${TRACK_CLASS}`}>
         <div
@@ -371,7 +361,6 @@ const SourceCountCard: FunctionComponent<{
 const ProviderReliabilityCard: FunctionComponent<{
   row: ProviderReliabilityRow;
 }> = ({ row }) => {
-  const { locale, formatNumber } = useStatsI18n();
   const { provider } = row;
   const { icon: Icon, bg, text } = getProviderIcon(provider.provider);
   const successTone = getSuccessTone(row.successRate);
@@ -394,13 +383,13 @@ const ProviderReliabilityCard: FunctionComponent<{
           </div>
           <div className="min-w-0">
             <div className="break-words text-base font-semibold text-[color:var(--stats-value-color)]" title={provider.label}>{provider.label}</div>
-            <div className="mt-1 break-words text-sm text-[color:var(--stats-detail-color)]">{provider.secondaryLabel ?? (locale === "de" ? "Keine sekundäre Bezeichnung" : "No secondary label")}</div>
+            <div className="mt-1 break-words text-sm text-[color:var(--stats-detail-color)]">{provider.secondaryLabel ?? "No secondary label"}</div>
             <div className="mt-2 flex flex-wrap gap-2">
               <div className={FLAT_BADGE_CLASS}>
                 {row.sourceSummaryLabel}
               </div>
               <div className={FLAT_BADGE_CLASS}>
-                {locale === "de" ? ({ high: "Hohes Risiko", medium: "Mittleres Risiko", low: "Niedriges Risiko" } as const)[riskLevel] : `${riskLevel} risk`}
+                {riskLevel} risk
               </div>
             </div>
           </div>
@@ -408,83 +397,83 @@ const ProviderReliabilityCard: FunctionComponent<{
         <div className="flex flex-wrap items-center gap-2">
           <div className={FLAT_BADGE_CLASS}>
             <span className="text-base font-semibold normal-case tracking-tight text-[color:var(--stats-value-color)]">
-              {provider.usage.totalTokens > 0 ? formatTokens(provider.usage.totalTokens, locale) : "—"}
+              {provider.usage.totalTokens > 0 ? formatTokens(provider.usage.totalTokens) : "—"}
             </span>
-            <span className="text-[color:var(--stats-label-color)]">{locale === "de" ? "Token" : "tokens"}</span>
+            <span className="text-[color:var(--stats-label-color)]">tokens</span>
           </div>
           <div className={FLAT_BADGE_CLASS}>
             <span className="text-base font-semibold normal-case tracking-tight text-[color:var(--stats-value-color)]">
-              {formatNumber(provider.usage.invocationCount)}
+              {provider.usage.invocationCount.toLocaleString()}
             </span>
-            <span className="text-[color:var(--stats-label-color)]">{locale === "de" ? "Aufrufe" : "calls"}</span>
+            <span className="text-[color:var(--stats-label-color)]">calls</span>
           </div>
           <div className={FLAT_BADGE_CLASS}>
             <DollarSign className="h-3.5 w-3.5 text-[color:var(--stats-positive-text)]" strokeWidth={2.2} aria-hidden="true" />
             <span className="text-base font-semibold normal-case tracking-tight text-[color:var(--stats-value-color)]">
-              {formatPricingValue(hasCost ? provider.usage.totalCostUsd : null, locale)}
+              {formatPricingValue(hasCost ? provider.usage.totalCostUsd : null)}
             </span>
-            <span className="text-[color:var(--stats-label-color)]">{locale === "de" ? "Kosten" : "cost"}</span>
+            <span className="text-[color:var(--stats-label-color)]">cost</span>
           </div>
         </div>
       </div>
 
       <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StudioMetricTile
-          label={locale === "de" ? "Fehler" : "Failures"}
-          value={formatNumber(row.failedCount)}
-          detail={`${formatNumber(row.completedCount)} ${locale === "de" ? "abgeschlossen" : "completed"} · ${formatNumber(row.runningCount)} ${locale === "de" ? "laufend" : "running"} · ${formatNumber(row.cancelledCount)} ${locale === "de" ? "abgebrochen" : "cancelled"}`}
+          label="Failures"
+          value={row.failedCount.toLocaleString()}
+          detail={`${row.completedCount.toLocaleString()} completed · ${row.runningCount.toLocaleString()} running · ${row.cancelledCount.toLocaleString()} cancelled`}
           toneClass={row.failedCount > 0 ? "text-[color:var(--stats-negative-text)]" : "text-[color:var(--stats-positive-text)]"}
           icon={row.failedCount > 0 ? AlertTriangle : CheckCircle2}
         />
         <div className={`${SUBPANEL_CLASS} p-4`}>
           <div className="flex items-center justify-between gap-3">
-            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">{locale === "de" ? "Erfolgsrate" : "Success Rate"}</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">Success Rate</div>
             <ShieldCheck className="h-3.5 w-3.5 text-[color:var(--stats-label-color)]" strokeWidth={2.2} aria-hidden="true" />
           </div>
           <div className="mt-2">
             <span className={`inline-flex rounded-[var(--stats-chip-radius)] border px-3 py-1.5 text-base font-semibold ${SUCCESS_TONE_CLASS[successTone]}`}>
-              {formatSuccessRate(row.successRate, locale)}
+              {formatSuccessRate(row.successRate)}
             </span>
           </div>
           <div className="mt-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">
-            {row.finishedCount > 0 ? `${formatNumber(row.finishedCount)} ${locale === "de" ? "beendete Modellläufe" : "finished model runs"}` : locale === "de" ? "Keine beendeten Modellläufe" : "No finished model runs"}
+            {row.finishedCount > 0 ? `${row.finishedCount.toLocaleString()} finished model runs` : "No finished model runs"}
           </div>
         </div>
         <StudioMetricTile
-          label={locale === "de" ? "Token-Volumen" : "Token Volume"}
-          value={formatTokens(provider.usage.totalTokens, locale)}
-          detail={provider.usage.invocationCount > 0 ? `${formatTokens(Math.round(provider.usage.totalTokens / provider.usage.invocationCount), locale)}/${locale === "de" ? "Aufruf" : "call"}` : locale === "de" ? "Noch keine Aufrufe" : "No calls yet"}
+          label="Token Volume"
+          value={formatTokens(provider.usage.totalTokens)}
+          detail={provider.usage.invocationCount > 0 ? `${formatTokens(Math.round(provider.usage.totalTokens / provider.usage.invocationCount))}/call` : "No calls yet"}
           toneClass="text-[color:var(--stats-signal-text)]"
         />
         <StudioMetricTile
-          label={locale === "de" ? "Kosten" : "Cost"}
-          value={formatPricingValue(hasCost ? provider.usage.totalCostUsd : null, locale)}
-          detail={costPerCall !== null ? `${formatCost(costPerCall, locale)}/${locale === "de" ? "Aufruf" : "call"}` : locale === "de" ? "Kein Preissignal" : "No pricing signal"}
+          label="Cost"
+          value={formatPricingValue(hasCost ? provider.usage.totalCostUsd : null)}
+          detail={costPerCall !== null ? `${formatCost(costPerCall)}/call` : "No pricing signal"}
           toneClass="text-[color:var(--stats-positive-text)]"
           icon={DollarSign}
         />
         <StudioMetricTile
           label="$ / 1M Tok"
-          value={formatPricingValue(costPerMillionTokens, locale)}
-          detail={costPerMillionTokens !== null ? (locale === "de" ? "Gemischter Token-Satz" : "Blended token rate") : (locale === "de" ? "Preise nicht verfügbar" : "Pricing unavailable")}
+          value={formatPricingValue(costPerMillionTokens)}
+          detail={costPerMillionTokens !== null ? "Blended token rate" : "Pricing unavailable"}
           toneClass="text-[color:var(--stats-positive-text)]"
         />
         <StudioMetricTile
-          label={locale === "de" ? "Aktive Zeit" : "Active Time"}
-          value={formatStatsDuration(provider.usage.activeTimeMs, locale)}
-          detail={providerActiveVsWall !== null ? `${formatPercent(providerActiveVsWall * 100, locale)} ${locale === "de" ? "aktive Auslastung" : "active utilization"}` : locale === "de" ? "Gesamtzeit nicht erfasst" : "Wall time not tracked"}
+          label="Active Time"
+          value={formatStatsDuration(provider.usage.activeTimeMs)}
+          detail={providerActiveVsWall !== null ? `${formatPercent(providerActiveVsWall * 100)} active utilization` : "Wall time not tracked"}
           toneClass="text-[color:var(--stats-warning-text)]"
           icon={TimerReset}
         />
         <StudioMetricTile
-          label={locale === "de" ? "Dauer" : "Duration"}
-          value={row.duration.sampleCount > 0 ? formatStatsDuration(row.duration.p50Ms, locale) : "—"}
-          detail={row.duration.sampleCount > 0 ? `${formatNumber(row.duration.sampleCount)} ${locale === "de" ? "Stichproben" : "samples"} · p95 ${formatStatsDuration(row.duration.p95Ms, locale)}` : locale === "de" ? "Keine Dauerstichproben" : "No duration samples"}
+          label="Duration"
+          value={row.duration.sampleCount > 0 ? formatStatsDuration(row.duration.p50Ms) : "—"}
+          detail={row.duration.sampleCount > 0 ? `${row.duration.sampleCount.toLocaleString()} samples · p95 ${formatStatsDuration(row.duration.p95Ms)}` : "No duration samples"}
           toneClass="text-[color:var(--stats-accent-cyan)]"
           icon={Clock3}
         />
         <StudioMetricTile
-          label={locale === "de" ? "Quellenvertrauen" : "Source Confidence"}
+          label="Source Confidence"
           value={row.sourceSummaryLabel}
           detail={row.sourceSummaryDetail}
           toneClass={SOURCE_TEXT_CLASS[row.sourceTone]}
@@ -495,7 +484,7 @@ const ProviderReliabilityCard: FunctionComponent<{
         {row.sourceRows.map((sourceRow) => (
           <div key={sourceRow.source} className={`${CHIP_CLASS} rounded-[var(--stats-chip-radius)] px-3 py-2 text-[color:var(--stats-detail-color)]`}>
             <div className="text-[9px] font-bold uppercase tracking-[0.14em]">{sourceRow.label}</div>
-            <div className="mt-1 text-sm font-semibold text-[color:var(--stats-value-color)]">{formatNumber(sourceRow.count)}</div>
+            <div className="mt-1 text-sm font-semibold text-[color:var(--stats-value-color)]">{sourceRow.count.toLocaleString()}</div>
           </div>
         ))}
       </div>
@@ -518,11 +507,10 @@ export const ReliabilityStudio: FunctionComponent<{
   providerSegments: SegmentDefinition[];
   sourceSegments: SegmentDefinition[];
 }> = ({ stats, providerSegments, sourceSegments }) => {
-  const { locale, formatNumber } = useStatsI18n();
-  const sourceSummary = buildTelemetrySourceSummary(stats.usage, locale);
-  const sourceRows = buildSourceRows(stats.usage, locale);
-  const sourceAudit = summarizeSourceRows(sourceRows, locale);
-  const providerRows = buildProviderRows(stats, locale);
+  const sourceSummary = buildTelemetrySourceSummary(stats.usage);
+  const sourceRows = buildSourceRows(stats.usage);
+  const sourceAudit = summarizeSourceRows(sourceRows);
+  const providerRows = buildProviderRows(stats);
   const finishedCount = stats.statusCounts.completed + stats.statusCounts.failed + stats.statusCounts.cancelled;
   const successRate = finishedCount > 0 ? stats.statusCounts.completed / finishedCount : null;
   const successTone = getSuccessTone(successRate);
@@ -548,55 +536,55 @@ export const ReliabilityStudio: FunctionComponent<{
               <ShieldCheck className="h-5 w-5" strokeWidth={2.2} aria-hidden="true" />
             </div>
             <div className="min-w-0">
-              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">{locale === "de" ? "Zuverlässigkeitsmodus" : "Reliability Mode"}</div>
-              <div className="mt-1 break-words text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">{locale === "de" ? "Provider-Vertrauen und Fehlerrisiko" : "Provider confidence & failure risk"}</div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">Reliability Mode</div>
+              <div className="mt-1 break-words text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">Provider confidence & failure risk</div>
               <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
-                {locale === "de" ? "Telemetrievertrauen, Quellenmix, Provider-Zustand, Ersatzwertnutzung und Fehlerdruck für den ausgewählten Statistikzeitraum." : "Telemetry confidence, source mix, provider health, fallback usage, and failure pressure for the selected Stats window."}
+                Telemetry confidence, source mix, provider health, fallback usage, and failure pressure for the selected Stats window.
               </div>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <div className={FLAT_BADGE_CLASS}>
-              {sourceSummary.label} {locale === "de" ? "Vertrauen" : "confidence"}
+              {sourceSummary.label} confidence
             </div>
             <div className={FLAT_BADGE_CLASS}>
-              {formatSuccessRate(successRate, locale)} {locale === "de" ? "Erfolg" : "success"}
+              {formatSuccessRate(successRate)} success
             </div>
           </div>
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <StudioMetricTile
-            label={locale === "de" ? "Telemetrievertrauen" : "Telemetry Confidence"}
+            label="Telemetry Confidence"
             value={sourceSummary.label}
             detail={sourceSummary.detail}
             toneClass={SOURCE_TEXT_CLASS[sourceAudit.tone]}
             icon={ShieldCheck}
           />
           <StudioMetricTile
-            label={locale === "de" ? "Ersatzwertnutzung" : "Fallback Usage"}
-            value={formatNumber(fallbackCount)}
-            detail={`${formatNumber(sourceRows.find((row) => row.source === "estimated")!.count)} ${locale === "de" ? "geschätzt" : "estimated"} · ${formatNumber(sourceRows.find((row) => row.source === "unknown")!.count)} ${locale === "de" ? "unbekannt" : "unknown"}`}
+            label="Fallback Usage"
+            value={fallbackCount.toLocaleString()}
+            detail={`${sourceRows.find((row) => row.source === "estimated")!.count.toLocaleString()} estimated · ${sourceRows.find((row) => row.source === "unknown")!.count.toLocaleString()} unknown`}
             toneClass="text-[color:var(--stats-warning-text)]"
             icon={Sparkles}
           />
           <StudioMetricTile
-            label={locale === "de" ? "Fehlerdruck" : "Failure Pressure"}
-            value={formatNumber(stats.statusCounts.failed)}
-            detail={`${formatNumber(failureRiskCount)} ${locale === "de" ? "nicht verfügbare oder nicht unterstützte Quellenzähler" : "unavailable or unsupported source counts"}`}
+            label="Failure Pressure"
+            value={stats.statusCounts.failed.toLocaleString()}
+            detail={`${failureRiskCount.toLocaleString()} unavailable or unsupported source counts`}
             toneClass={stats.statusCounts.failed > 0 || failureRiskCount > 0 ? "text-[color:var(--stats-negative-text)]" : "text-[color:var(--stats-positive-text)]"}
             icon={stats.statusCounts.failed > 0 || failureRiskCount > 0 ? AlertTriangle : CheckCircle2}
           />
           <StudioMetricTile
-            label={locale === "de" ? "Provider-Abdeckung" : "Provider Coverage"}
-            value={providerRows.length > 0 ? `${formatNumber(providerRows.length)} ${locale === "de" ? "Anbieter" : "providers"}` : locale === "de" ? "Keine Anbieter" : "No providers"}
-            detail={highestRiskProvider ? `${locale === "de" ? "Höchstes Risiko" : "Highest risk"}: ${highestRiskProvider.provider.label}` : locale === "de" ? "Keine Provider-Telemetrie eingegangen" : "No provider telemetry landed"}
+            label="Provider Coverage"
+            value={providerRows.length > 0 ? `${providerRows.length.toLocaleString()} providers` : "No providers"}
+            detail={highestRiskProvider ? `Highest risk: ${highestRiskProvider.provider.label}` : "No provider telemetry landed"}
             toneClass="text-[color:var(--stats-accent-cyan)]"
           />
           <StudioMetricTile
-            label={locale === "de" ? "Provider-Kosten" : "Provider Cost"}
-            value={formatPricingValue(providerCost, locale)}
-            detail={highestCostProvider && highestCostProvider.usage.totalCostUsd > 0 ? `${locale === "de" ? "Höchste Kosten" : "Highest cost"}: ${highestCostProvider.label}` : locale === "de" ? "Kein Preissignal" : "No pricing signal"}
+            label="Provider Cost"
+            value={formatPricingValue(providerCost)}
+            detail={highestCostProvider && highestCostProvider.usage.totalCostUsd > 0 ? `Highest cost: ${highestCostProvider.label}` : "No pricing signal"}
             toneClass="text-[color:var(--stats-positive-text)]"
             icon={DollarSign}
           />
@@ -606,48 +594,48 @@ export const ReliabilityStudio: FunctionComponent<{
       <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1.02fr_0.98fr]">
         {sourceSegments.length > 0 ? (
           <DonutCard
-            title={locale === "de" ? "Telemetriequellenmix" : "Telemetry Source Mix"}
-            eyebrow={locale === "de" ? "Quellenvertrauen" : "Source Confidence"}
-            description={locale === "de" ? "Gemeldete, geschätzte, nicht verfügbare, nicht unterstützte und unbekannte Aufrufquellenzähler in diesem Zeitraum." : "Reported, estimated, unavailable, unsupported, and unknown invocation-source counts across this window."}
-            centerValue={formatNumber(sourceAudit.total)}
-            centerLabel={locale === "de" ? "Quellenzähler" : "source counts"}
+            title="Telemetry Source Mix"
+            eyebrow="Source Confidence"
+            description="Reported, estimated, unavailable, unsupported, and unknown invocation-source counts across this window."
+            centerValue={String(sourceAudit.total)}
+            centerLabel="source counts"
             segments={sourceSegments}
           />
         ) : (
           <div className={`${PANEL_CLASS} p-6`}>
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">{locale === "de" ? "Quellenvertrauen" : "Source Confidence"}</div>
-            <div className="mt-2 text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">{locale === "de" ? "Telemetriequellenmix" : "Telemetry Source Mix"}</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Source Confidence</div>
+            <div className="mt-2 text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">Telemetry Source Mix</div>
             <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
-              {locale === "de" ? "Gemeldete, geschätzte, nicht verfügbare, nicht unterstützte und unbekannte Aufrufquellenzähler in diesem Zeitraum." : "Reported, estimated, unavailable, unsupported, and unknown invocation-source counts across this window."}
+              Reported, estimated, unavailable, unsupported, and unknown invocation-source counts across this window.
             </div>
             <div className="mt-6">
               <EmptyTelemetryPanel
-                title={locale === "de" ? "Keine Telemetriequellensegmente für diesen Zeitraum." : "No telemetry source segments for this window."}
-                detail={locale === "de" ? "Provider-Aufrufzahlen können dennoch vorhanden sein, aber der Snapshot enthält keine darstellbaren Quellensegmente." : "Provider invocation counts may still exist, but the snapshot did not include source-segment lanes to chart."}
+                title="No telemetry source segments for this window."
+                detail="Provider invocation counts may still exist, but the snapshot did not include source-segment lanes to chart."
               />
             </div>
           </div>
         )}
         {providerSegments.length > 0 ? (
           <DonutCard
-            title={locale === "de" ? "Provider-Anteil" : "Provider Share"}
-            eyebrow={locale === "de" ? "Volumenkontext" : "Volume Context"}
-            description={locale === "de" ? "Token-Volumen nach Provider neben Vertrauens- und Risikosignalen, damit Provider mit hohem Volumen leicht priorisiert werden können." : "Token volume by provider, shown beside confidence and risk signals so high-volume providers stay easy to triage."}
-            centerValue={formatTokens(stats.usage.totalTokens, locale)}
-            centerLabel={locale === "de" ? "Token-Volumen" : "token volume"}
+            title="Provider Share"
+            eyebrow="Volume Context"
+            description="Token volume by provider, shown beside confidence and risk signals so high-volume providers stay easy to triage."
+            centerValue={formatTokens(stats.usage.totalTokens)}
+            centerLabel="token volume"
             segments={providerSegments}
           />
         ) : (
           <div className={`${PANEL_CLASS} p-6`}>
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">{locale === "de" ? "Volumenkontext" : "Volume Context"}</div>
-            <div className="mt-2 text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">{locale === "de" ? "Provider-Anteil" : "Provider Share"}</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Volume Context</div>
+            <div className="mt-2 text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">Provider Share</div>
             <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
-              {locale === "de" ? "Das Token-Volumen nach Provider erscheint hier, wenn der ausgewählte Zeitraum Provider-Segmente enthält." : "Token volume by provider appears here when the selected window includes provider segments."}
+              Token volume by provider appears here when the selected window includes provider segments.
             </div>
             <div className="mt-6">
               <EmptyTelemetryPanel
-                title={locale === "de" ? "Keine Provider-Segmente für diesen Zeitraum." : "No provider segments for this window."}
-                detail={locale === "de" ? "Provider-Zuverlässigkeitskarten erscheinen weiterhin unten, wenn Provider-Zeilen ohne darstellbaren Token-Anteil vorhanden sind." : "Provider reliability cards will still appear below when provider rows exist without chartable token share."}
+                title="No provider segments for this window."
+                detail="Provider reliability cards will still appear below when provider rows exist without chartable token share."
               />
             </div>
           </div>
@@ -657,13 +645,13 @@ export const ReliabilityStudio: FunctionComponent<{
       <div className={`${PANEL_CLASS} p-6`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className={SECTION_TITLE_CLASS}>{locale === "de" ? "Vertrauensübersicht" : "Confidence Board"}</div>
+            <div className={SECTION_TITLE_CLASS}>Confidence Board</div>
             <div className={SECTION_COPY_CLASS}>
-              {locale === "de" ? "Aufrufquellenzähler werden getrennt, damit geschätzte und unbekannte Daten klar erkennbar sind, ohne Ersatzschätzungen als Fehler zu behandeln." : "Invocation-source counts are separated so estimated and unknown data are clear without treating fallback estimates as failures."}
+              Invocation-source counts are separated so estimated and unknown data are clear without treating fallback estimates as failures.
             </div>
           </div>
           <div className={FLAT_BADGE_CLASS}>
-            {formatNumber(sourceAudit.total)} {locale === "de" ? "gezählt" : "counted"}
+            {sourceAudit.total.toLocaleString()} counted
           </div>
         </div>
         <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5" data-testid="reliability-confidence-board">
@@ -674,19 +662,19 @@ export const ReliabilityStudio: FunctionComponent<{
       <div className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className={SECTION_TITLE_CLASS}>{locale === "de" ? "Provider-Aufschlüsselung" : "Provider Breakdown"}</div>
+            <div className={SECTION_TITLE_CLASS}>Provider Breakdown</div>
             <div className={SECTION_COPY_CLASS}>
-              {locale === "de" ? "Provider-Zeilen ordnen Fehlerrisiko, Quellenvertrauen, Token-Volumen, Latenz und Preissignale zur Priorisierung." : "Provider rows rank failure risk, source confidence, token volume, latency, and pricing signals for triage."}
+              Provider rows rank failure risk, source confidence, token volume, latency, and pricing signals for triage.
             </div>
           </div>
           <div className={FLAT_BADGE_CLASS}>
-            {formatNumber(providerRows.length)} {locale === "de" ? "Anbieter" : "Provider"}
+            {providerRows.length.toLocaleString()} providers
           </div>
         </div>
         {providerRows.length === 0 ? (
           <EmptyTelemetryPanel
-            title={locale === "de" ? "Keine Provider-Telemetrie für diesen Zeitraum." : "No provider telemetry for this window."}
-            detail={locale === "de" ? "Provider-Zuverlässigkeit erscheint, sobald erfasste Aufrufe Provider-Nutzung oder Statuszusammenfassungen enthalten." : "Provider reliability appears after tracked invocations record provider usage or status summaries."}
+            title="No provider telemetry for this window."
+            detail="Provider reliability appears after tracked invocations record provider usage or status summaries."
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -698,31 +686,31 @@ export const ReliabilityStudio: FunctionComponent<{
       <div className={`${PANEL_CLASS} p-6`}>
         <div className="flex items-center gap-3">
           <AlertTriangle className="h-4 w-4 text-[color:var(--stats-detail-color)]" strokeWidth={2} aria-hidden="true" />
-          <div className={SECTION_TITLE_CLASS}>{locale === "de" ? "Prüfhinweise" : "Audit Notes"}</div>
+          <div className={SECTION_TITLE_CLASS}>Audit Notes</div>
         </div>
         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className={SUBPANEL_CLASS}>
-            <div className="text-sm font-semibold text-[color:var(--stats-value-color)]">{locale === "de" ? "Ersatzwertmix" : "Fallback mix"}</div>
+            <div className="text-sm font-semibold text-[color:var(--stats-value-color)]">Fallback mix</div>
             <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
               {fallbackCount > 0
-                ? locale === "de" ? `${formatNumber(fallbackCount)} Aufrufe nutzten geschätzte oder unbekannte Quellenzähler. Schätzungen bleiben nutzbar, sind aber weniger präzise als Provider-Meldungen.` : `${formatNumber(fallbackCount)} invocations relied on estimated or unknown source counters. Estimates remain usable, but precision is lower than provider-reported counts.`
-                : locale === "de" ? "In diesem Zeitraum wurden keine geschätzten oder unbekannten Aufrufquellenzähler erfasst." : "No estimated or unknown invocation-source counts were recorded in this window."}
+                ? `${fallbackCount.toLocaleString()} invocations relied on estimated or unknown source counters. Estimates remain usable, but precision is lower than provider-reported counts.`
+                : "No estimated or unknown invocation-source counts were recorded in this window."}
             </div>
           </div>
           <div className={SUBPANEL_CLASS}>
-            <div className="text-sm font-semibold text-[color:var(--stats-value-color)]">{locale === "de" ? "Fehlerrisiko" : "Failure risk"}</div>
+            <div className="text-sm font-semibold text-[color:var(--stats-value-color)]">Failure risk</div>
             <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
               {stats.statusCounts.failed > 0 || failureRiskCount > 0
-                ? locale === "de" ? `${formatNumber(stats.statusCounts.failed)} Aufrufe schlugen fehl und ${formatNumber(failureRiskCount)} Quellenzähler waren nicht verfügbar oder nicht unterstützt.` : `${formatNumber(stats.statusCounts.failed)} invocations failed and ${formatNumber(failureRiskCount)} source counts were unavailable or unsupported.`
-                : locale === "de" ? "In diesem Zeitraum wurden keine fehlgeschlagenen Aufrufe oder nicht verfügbaren Quellenzähler erfasst." : "No failed invocations or unavailable source counts were recorded in this window."}
+                ? `${stats.statusCounts.failed.toLocaleString()} invocations failed and ${failureRiskCount.toLocaleString()} source counts were unavailable or unsupported.`
+                : "No failed invocations or unavailable source counts were recorded in this window."}
             </div>
           </div>
           <div className={SUBPANEL_CLASS}>
-            <div className="text-sm font-semibold text-[color:var(--stats-value-color)]">{locale === "de" ? "Dauerabdeckung" : "Duration coverage"}</div>
+            <div className="text-sm font-semibold text-[color:var(--stats-value-color)]">Duration coverage</div>
             <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
               {stats.duration.sampleCount > 0
-                ? locale === "de" ? `Die Latenz basiert auf ${formatNumber(stats.duration.sampleCount)} Stichproben: p50 ${formatStatsDuration(stats.duration.p50Ms, locale)}, p95 ${formatStatsDuration(stats.duration.p95Ms, locale)}.` : `Latency is backed by ${formatNumber(stats.duration.sampleCount)} samples: p50 ${formatStatsDuration(stats.duration.p50Ms, locale)}, p95 ${formatStatsDuration(stats.duration.p95Ms, locale)}.`
-                : locale === "de" ? "Es wurden keine Dauerstichproben erfasst; die Latenz bleibt daher nicht verfügbar, statt abgeleitet zu werden." : "No duration samples were recorded, so latency remains unavailable rather than inferred."}
+                ? `Latency is backed by ${stats.duration.sampleCount.toLocaleString()} samples: p50 ${formatStatsDuration(stats.duration.p50Ms)}, p95 ${formatStatsDuration(stats.duration.p95Ms)}.`
+                : "No duration samples were recorded, so latency remains unavailable rather than inferred."}
             </div>
           </div>
         </div>

@@ -7,7 +7,6 @@ import { Sparkline } from "../../components/ui/Sparkline.js";
 import { CHIP_CLASS } from "../../pages/stats/components/stats-ui-primitives.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
-import { useStatsI18n } from "../../pages/stats/stats-i18n.js";
 
 export interface StatsMetricCardProps {
   label: string;
@@ -39,7 +38,6 @@ export const StatsMetricCard: FunctionComponent<StatsMetricCardProps> = ({
   sparkline = [],
   signalLabel,
 }) => {
-  const { locale, text, formatNumber } = useStatsI18n();
   const contentRef = useRef<HTMLDivElement>(null);
   const previousStateKey = useRef(`${label}:${value}:${detail}:${sparkline.join(",")}`);
   const reducedMotion = useReducedMotion();
@@ -47,14 +45,8 @@ export const StatsMetricCard: FunctionComponent<StatsMetricCardProps> = ({
   const accent = resolveAccent(accentHex);
   const hasSparkline = sparkline.some((point) => point > 0);
   const sparklineSummary = hasSparkline
-    ? text("pointsHighLow", {
-        label,
-        signal: locale === "de" ? signalLabel : signalLabel.toLowerCase(),
-        points: formatNumber(sparkline.length),
-        high: formatNumber(Math.max(...sparkline)),
-        low: formatNumber(Math.min(...sparkline)),
-      })
-    : text("noSparklineSummary", { label, signal: locale === "de" ? signalLabel : signalLabel.toLowerCase() });
+    ? `${label} ${signalLabel.toLowerCase()} sparkline across the selected window. ${sparkline.length.toLocaleString()} points; high ${Math.max(...sparkline).toLocaleString()}; low ${Math.min(...sparkline).toLocaleString()}.`
+    : `${label} has no ${signalLabel.toLowerCase()} sparkline data for the selected window.`;
 
   useLayoutEffect(() => {
     const stateKey = `${label}:${value}:${detail}:${sparkline.join(",")}`;
@@ -116,7 +108,7 @@ export const StatsMetricCard: FunctionComponent<StatsMetricCardProps> = ({
               role="img"
               aria-label={sparklineSummary}
             >
-              {text("noSparklineData")}
+              No sparkline data
             </div>
           )}
         </div>

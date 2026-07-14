@@ -36,7 +36,6 @@ import { UsageGraphTooltip } from './UsageGraphTooltip.js';
 import { UsageGraphEmpty, UsageGraphError } from './UsageGraphStates.js';
 import { Activity } from 'lucide-preact';
 import { useGsapInteractionTokens, useInteractionTokens } from '../../../lib/motion/index.js';
-import { useStatsI18n } from '../stats-i18n.js';
 
 export const InteractiveUsageChart: FunctionComponent<{
   stats: ProjectExecutionStatsSnapshot;
@@ -51,13 +50,12 @@ export const InteractiveUsageChart: FunctionComponent<{
   refresh,
   chartState,
 }) => {
-  const { locale, formatNumber } = useStatsI18n();
   const panelRef = useRef<HTMLDivElement>(null);
   const svgContainerRef = useRef<HTMLDivElement>(null);
   const { isFiltersOpen, toggleFilters, closeFilters } = useUsageFilters();
   const gsapTokens = useGsapInteractionTokens();
   const interactionTokens = useInteractionTokens();
-  const [chartStatus, setChartStatus] = useState(locale === 'de' ? "Trendtelemetrie bereit." : "Trend telemetry ready.");
+  const [chartStatus, setChartStatus] = useState("Trend telemetry ready.");
 
   const handleSliderChange = (e: JSX.TargetedEvent<HTMLInputElement>) => {
     const val = parseInt(e.currentTarget.value, 10);
@@ -102,8 +100,8 @@ export const InteractiveUsageChart: FunctionComponent<{
   const visibleBuckets = useMemo(() => getVisibleBuckets(buckets, viewStart, viewEnd), [buckets, viewStart, viewEnd]);
 
   const chartData = useMemo(() => {
-    return normalizeChartSeries(stats.chartSeries, visibleBuckets, viewStart, dimensions.width, dimensions.height, padding, locale);
-  }, [stats.chartSeries, visibleBuckets, viewStart, dimensions.width, dimensions.height, padding, locale]);
+    return normalizeChartSeries(stats.chartSeries, visibleBuckets, viewStart, dimensions.width, dimensions.height, padding);
+  }, [stats.chartSeries, visibleBuckets, viewStart, dimensions.width, dimensions.height, padding]);
 
   useLayoutEffect(() => {
     if (!svgContainerRef.current || typeof ResizeObserver === 'undefined') return;
@@ -158,7 +156,7 @@ export const InteractiveUsageChart: FunctionComponent<{
     }
     : null;
   const zoomLabel = zoomRange
-    ? `${formatDateTime(buckets[zoomRange.start]?.bucketStart || null, locale)} ${locale === 'de' ? 'bis' : 'to'} ${formatDateTime(buckets[zoomRange.end]?.bucketEnd || null, locale)}`
+    ? `${formatDateTime(buckets[zoomRange.start]?.bucketStart || null)} to ${formatDateTime(buckets[zoomRange.end]?.bucketEnd || null)}`
     : stats.range.label;
   const axisLabelStep = getAxisLabelStep(stats.range);
 
@@ -168,10 +166,9 @@ export const InteractiveUsageChart: FunctionComponent<{
     () => describeChartMetrics(
       visibleMetrics,
       activeSeriesLabels,
-      zoomLabel,
-      locale,
+      zoomLabel
     ),
-    [activeSeriesLabels, locale, visibleMetrics, zoomLabel]
+    [activeSeriesLabels, visibleMetrics, zoomLabel]
   );
   const defaultSeriesCount = useMemo(
     () => seriesGroups.reduce((count, group) => count + group.defaultEnabledCount, 0),
@@ -188,11 +185,11 @@ export const InteractiveUsageChart: FunctionComponent<{
       : 0;
 
   const describeZoomRange = (start: number, end: number): string => {
-    const startLabel = buckets[start]?.label ?? `${locale === 'de' ? 'Intervall' : 'bucket'} ${formatNumber(start + 1)}`;
-    const endLabel = buckets[end]?.label ?? `${locale === 'de' ? 'Intervall' : 'bucket'} ${formatNumber(end + 1)}`;
+    const startLabel = buckets[start]?.label ?? `bucket ${start + 1}`;
+    const endLabel = buckets[end]?.label ?? `bucket ${end + 1}`;
     return start === end
-      ? (locale === 'de' ? `${startLabel} fixiert.` : `Pinned ${startLabel}.`)
-      : (locale === 'de' ? `Auf ${startLabel} bis ${endLabel} gezoomt, ${formatNumber(end - start + 1)} Intervalle.` : `Zoomed to ${startLabel} through ${endLabel}, ${formatNumber(end - start + 1)} buckets.`);
+      ? `Pinned ${startLabel}.`
+      : `Zoomed to ${startLabel} through ${endLabel}, ${end - start + 1} buckets.`;
   };
 
   const applyZoomRange = (range: { start: number; end: number } | null, status: string) => {
@@ -268,28 +265,28 @@ export const InteractiveUsageChart: FunctionComponent<{
 
   useEffect(() => {
     if (error) {
-      setChartStatus(`${locale === 'de' ? 'Fehler der Trendtelemetrie' : 'Trend telemetry error'}: ${error}`);
+      setChartStatus(`Trend telemetry error: ${error}`);
     } else if (loading) {
-      setChartStatus(locale === 'de' ? "Trendtelemetrie wird aus dem Cache aktualisiert. Bestehende Diagrammdaten bleiben sichtbar." : "Refreshing trend telemetry from cache. Existing chart data remains visible.");
+      setChartStatus("Refreshing trend telemetry from cache. Existing chart data remains visible.");
     } else {
-      setChartStatus(locale === 'de' ? "Trendtelemetrie bereit." : "Trend telemetry ready.");
+      setChartStatus("Trend telemetry ready.");
     }
-  }, [error, loading, locale]);
+  }, [error, loading]);
 
   const onToggleSeries = (id: string) => {
     if (activeSeriesCount === 1 && enabledSeries[id]) {
-      setChartStatus(locale === 'de' ? "Mindestens eine Reihe muss aktiviert bleiben. Die letzte aktive Reihe kann nicht deaktiviert werden." : "Keep at least one series enabled. The last active series cannot be turned off.");
+      setChartStatus("Keep at least one series enabled. The last active series cannot be turned off.");
       return;
     }
     const seriesLabel = stats.chartSeries.find((series) => series.id === id)?.label ?? id;
     const nextEnabled = !enabledSeries[id];
     setEnabledSeries((curr: Record<string, boolean>) => ({ ...curr, [id]: !curr[id] }));
-    setChartStatus(locale === 'de' ? `${seriesLabel}-Reihe ${nextEnabled ? "aktiviert" : "deaktiviert"}. ${formatNumber(activeSeriesCount + (nextEnabled ? 1 : -1))} Reihen aktiv.` : `${seriesLabel} series ${nextEnabled ? "enabled" : "disabled"}. ${formatNumber(activeSeriesCount + (nextEnabled ? 1 : -1))} series active.`);
+    setChartStatus(`${seriesLabel} series ${nextEnabled ? "enabled" : "disabled"}. ${activeSeriesCount + (nextEnabled ? 1 : -1)} series active.`);
   };
 
   const onResetSeriesDefaults = () => {
     resetEnabledSeries();
-    setChartStatus(locale === 'de' ? `Diagrammfilter zurückgesetzt. ${formatNumber(resetSeriesCount)} Reihen aktiv.` : `Graph filters reset. ${formatNumber(resetSeriesCount)} series active.`);
+    setChartStatus(`Graph filters reset. ${resetSeriesCount} series active.`);
   };
 
   const onEnableDefaultSeries = () => {
@@ -307,7 +304,7 @@ export const InteractiveUsageChart: FunctionComponent<{
     const newlyEnabledDefaults = seriesGroups.reduce((count, group) => (
       count + group.series.filter((series) => series.defaultEnabled && !enabledSeries[series.id]).length
     ), 0);
-    setChartStatus(locale === 'de' ? `Standardreihen aktiviert. ${formatNumber(Math.max(activeSeriesCount + newlyEnabledDefaults, resetSeriesCount))} Reihen aktiv.` : `Default series enabled. ${formatNumber(Math.max(activeSeriesCount + newlyEnabledDefaults, resetSeriesCount))} series active.`);
+    setChartStatus(`Default series enabled. ${Math.max(activeSeriesCount + newlyEnabledDefaults, resetSeriesCount)} series active.`);
   };
 
   return (
@@ -315,16 +312,16 @@ export const InteractiveUsageChart: FunctionComponent<{
       <div className="relative flex flex-col gap-4">
         {/* Screen reader summary */}
         <div className="sr-only" aria-live="polite" aria-atomic="true">
-          <h2 id="chart-summary-heading" className="sr-only">{locale === 'de' ? 'Datenvisualisierung für' : 'Data Visualization for'} {zoomRange ? (locale === 'de' ? "gezoomten Zeitraum" : "zoomed timeframe") : stats.range.label}</h2>
+          <h2 id="chart-summary-heading" className="sr-only">Data Visualization for {zoomRange ? "zoomed timeframe" : stats.range.label}</h2>
           <p>
             {chartSummaryText}
-            {activeBucket ? (locale === 'de' ? `Fokussiertes Intervall: ${activeBucket.label}. Tokens: ${formatNumber(activeBucket.usage.totalTokens)}` : `Focused bucket: ${activeBucket.label}. Tokens: ${formatNumber(activeBucket.usage.totalTokens)}`) : locale === 'de' ? "Kein Intervall fokussiert." : "No bucket focused."}
+            {activeBucket ? `Focused bucket: ${activeBucket.label}. Tokens: ${activeBucket.usage.totalTokens}` : "No bucket focused."}
           </p>
           <table className="sr-only">
-            <caption>{locale === 'de' ? 'Nutzungsdiagrammdaten für' : 'Usage chart data for'} {zoomLabel}</caption>
+            <caption>Usage chart data for {zoomLabel}</caption>
             <thead>
               <tr>
-                <th>{locale === 'de' ? 'Zeit' : 'Time'}</th>
+                <th>Time</th>
                 {visibleSeries.map(s => (
                   <th key={s.id}>{s.label}</th>
                 ))}
@@ -343,8 +340,8 @@ export const InteractiveUsageChart: FunctionComponent<{
           </table>
         </div>
         <UsageGraphHeader
-          title={zoomRange ? (locale === 'de' ? "Gezoomter Telemetriezeitraum" : "Zoomed telemetry window") : stats.range.label}
-          description={locale === 'de' ? "Normalisierte Telemetrielinien zeigen den Verlauf, ohne Tokens, Dauer und Aufrufzahlen in eine gemeinsame Skala zu zwingen. Ziehen Sie über das Diagramm oder die Übersicht, um einen Zeitraum zu zoomen, zeigen Sie für exakte Intervallwerte darauf und verwenden Sie Filter zum Fokussieren." : "Normalized telemetry lines reveal shape instead of forcing tokens, duration, and invocation counts into one scale. Drag across the plot or the overview strip to zoom a timeframe, hover for exact bucket values, and use filters to focus the graph."}
+          title={zoomRange ? "Zoomed telemetry window" : stats.range.label}
+          description="Normalized telemetry lines reveal shape instead of forcing tokens, duration, and invocation counts into one scale. Drag across the plot or the overview strip to zoom a timeframe, hover for exact bucket values, and use filters to focus the graph."
           rangeLabel={stats.range.label}
           bucketCount={visibleBuckets.length}
           resolutionLabel={stats.range.resolutionLabel}
@@ -353,7 +350,7 @@ export const InteractiveUsageChart: FunctionComponent<{
           isFiltersOpen={isFiltersOpen}
           activeSeriesCount={activeSeriesCount}
           onToggleFilters={toggleFilters}
-          onResetZoom={() => applyZoomRange(null, locale === 'de' ? `Zoom auf ${stats.range.label} zurückgesetzt.` : `Zoom reset to ${stats.range.label}.`)}
+          onResetZoom={() => applyZoomRange(null, `Zoom reset to ${stats.range.label}.`)}
         />
 
         <div className="relative z-50">
@@ -377,13 +374,13 @@ export const InteractiveUsageChart: FunctionComponent<{
           <div className="flex min-w-0 flex-col gap-3">
             <div id="usage-chart-instructions" className={`${SUBPANEL_CLASS} flex flex-wrap items-center justify-between gap-3 px-3 py-2.5`}>
               <div className="min-w-0">
-                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">{locale === 'de' ? 'Interaktives Diagramm' : 'Interactive plot'}</div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Interactive plot</div>
                 <div className="mt-1 text-xs leading-relaxed text-[var(--stats-detail-color)]">
-                  {locale === 'de' ? 'Ziehen Sie im Diagramm oder der Minimap zum Zoomen. Zeigen Sie darauf, fokussieren Sie oder verwenden Sie den Regler, um ein Intervall zu prüfen.' : 'Drag the plot or minimap to zoom. Hover, focus, or use the slider to inspect a bucket.'}
+                  Drag the plot or minimap to zoom. Hover, focus, or use the slider to inspect a bucket.
                 </div>
               </div>
               <div className={`${CHIP_CLASS} px-3 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]`}>
-                {formatNumber(visibleSeries.length)} {locale === 'de' ? 'sichtbare Reihen' : 'visible series'}
+                {visibleSeries.length} visible series
               </div>
             </div>
 
@@ -395,16 +392,16 @@ export const InteractiveUsageChart: FunctionComponent<{
                   </div>
                 ) : null}
                 {loading && !error ? (
-                  <div className={`${CHIP_CLASS} absolute right-3 top-3 z-20 flex items-center gap-2 px-3 py-1.5`} role="status" aria-live="polite" aria-busy="true" aria-label={locale === 'de' ? 'Neue Diagrammdaten werden geladen' : 'Loading new chart data'}>
+                  <div className={`${CHIP_CLASS} absolute right-3 top-3 z-20 flex items-center gap-2 px-3 py-1.5`} role="status" aria-live="polite" aria-busy="true" aria-label="Loading new chart data">
                     <Activity className="h-3.5 w-3.5 animate-pulse text-[color:var(--stats-signal-text)] motion-reduce:animate-none" aria-hidden="true" />
                     <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
-                      {locale === 'de' ? 'Synchronisierung' : 'Syncing'}
+                      Syncing
                     </span>
                   </div>
                 ) : null}
                 {buckets.length === 0 ? (
                   <div className={`absolute inset-0 h-full w-full transition-opacity motion-reduce:transition-none ${loading ? "opacity-60 pointer-events-none" : "opacity-100"}`} style={{ transitionDuration: interactionTokens.asyncFeedback.duration, transitionTimingFunction: interactionTokens.asyncFeedback.ease }}>
-                    <UsageGraphEmpty onReset={() => applyZoomRange(null, locale === 'de' ? `Zoom auf ${stats.range.label} zurückgesetzt.` : `Zoom reset to ${stats.range.label}.`)} />
+                    <UsageGraphEmpty onReset={() => applyZoomRange(null, `Zoom reset to ${stats.range.label}.`)} />
                   </div>
                 ) : (
                   <svg role="img" aria-labelledby="chart-summary-heading" aria-busy={loading ? "true" : "false"} viewBox={`0 0 ${width} ${height}`} className={`absolute inset-0 h-full w-full overflow-visible transition-opacity motion-reduce:transition-none ${loading ? "opacity-60 pointer-events-none" : "opacity-100"}`} style={{ transitionDuration: interactionTokens.asyncFeedback.duration, transitionTimingFunction: interactionTokens.asyncFeedback.ease }}>
@@ -523,8 +520,8 @@ export const InteractiveUsageChart: FunctionComponent<{
                           }}
                           aria-describedby="usage-chart-instructions"
                           aria-label={buckets[absoluteIndex]
-                            ? `${buckets[absoluteIndex].label} ${locale === 'de' ? 'Intervall' : 'bucket'}: ${visibleSeries.map((series) => `${series.label} ${series.formatter(series.values[index] ?? 0)}`).join(", ")}`
-                            : locale === 'de' ? "Telemetrieintervall" : "Telemetry bucket"}
+                            ? `${buckets[absoluteIndex].label} bucket: ${visibleSeries.map((series) => `${series.label} ${series.formatter(series.values[index] ?? 0)}`).join(", ")}`
+                            : "Telemetry bucket"}
                           onMouseMove={() => {
                             if (dragStartIndex !== null) {
                               setDragCurrentIndex(absoluteIndex);
@@ -555,7 +552,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                           textAnchor="middle"
                           className="fill-[var(--stats-detail-color)] text-[9px] font-bold uppercase tracking-[0.14em]"
                         >
-                          {formatAxisLabel(bucket, stats.range, locale)}
+                          {formatAxisLabel(bucket, stats.range)}
                         </text>
                       ) : null
                     ))}
@@ -577,13 +574,13 @@ export const InteractiveUsageChart: FunctionComponent<{
             <div className={`${SUBPANEL_CLASS} flex h-full min-h-full flex-col overflow-y-auto p-3`}>
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">{locale === 'de' ? 'Fokussiertes Intervall' : 'Focused bucket'}</div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Focused bucket</div>
                   <div className="mt-1 text-sm font-semibold text-[var(--stats-value-color)]">
-                    {activeBucket ? activeBucket.label : locale === 'de' ? "Kein Intervall fokussiert" : "No bucket focused"}
+                    {activeBucket ? activeBucket.label : "No bucket focused"}
                   </div>
                 </div>
                 <div className={`${CHIP_CLASS} px-3 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]`}>
-                  {formatNumber(visibleSeries.length)} {locale === 'de' ? 'sichtbar' : 'visible'}
+                  {visibleSeries.length} visible
                 </div>
               </div>
               <UsageGraphTooltip
@@ -602,13 +599,13 @@ export const InteractiveUsageChart: FunctionComponent<{
               />
               <div className={`${SUBPANEL_CLASS} mt-4 p-4`}>
                 <div className="flex items-center justify-between gap-3">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">{locale === 'de' ? 'Zeitraumfokus' : 'Range focus'}</div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">Range focus</div>
                   <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]">
-                    {activeBucket ? formatDateTime(activeBucket.bucketStart, locale) : locale === 'de' ? "Fokus zum Prüfen verschieben" : "Move focus to inspect"}
+                    {activeBucket ? formatDateTime(activeBucket.bucketStart) : "Move focus to inspect"}
                   </div>
                 </div>
                 <label htmlFor="bucket-focus-slider" className="mt-3 block text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
-                  {locale === 'de' ? 'Diagrammdaten im Zeitverlauf erkunden' : 'Explore chart data across time'}
+                  Explore chart data across time
                 </label>
                 <input
                   id="bucket-focus-slider"
@@ -620,12 +617,12 @@ export const InteractiveUsageChart: FunctionComponent<{
                   onChange={handleSliderChange}
                   onKeyDown={handleSliderKeyDown}
                   aria-describedby="usage-chart-tooltip usage-chart-instructions"
-                  aria-valuetext={activeBucket ? `${activeBucket.label}, ${visibleSeries.map((s) => `${s.label}: ${s.formatter(s.values[activeIndex] ?? 0)}`).join(', ')}` : locale === 'de' ? 'Kein Intervall fokussiert' : 'No bucket focused'}
+                  aria-valuetext={activeBucket ? `${activeBucket.label}, ${visibleSeries.map((s) => `${s.label}: ${s.formatter(s.values[activeIndex] ?? 0)}`).join(', ')}` : 'No bucket focused'}
                   className="mt-3 w-full accent-[color:var(--stats-focus-ring)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)]"
                   disabled={visibleBuckets.length === 0}
                 />
                 <div className="mt-2 text-[11px] leading-relaxed text-[var(--stats-detail-color)]">
-                  {locale === 'de' ? 'Verwenden Sie Pfeiltasten, Ziehen oder Zeigen, um den aktiven Zeitraum zu durchlaufen. Drücken Sie die Eingabetaste, um das fokussierte Intervall zu zoomen.' : 'Use arrow keys, drag, or hover to move through the active window. Press Enter to zoom the focused bucket.'}
+                  Use arrow keys, drag, or hover to move through the active window. Press Enter to zoom the focused bucket.
                 </div>
               </div>
             </div>
@@ -636,19 +633,19 @@ export const InteractiveUsageChart: FunctionComponent<{
         <div className={`${SUBPANEL_CLASS} p-3`}>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">{locale === 'de' ? 'Reihenschalter' : 'Series switches'}</div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Series switches</div>
               <div className="mt-1 text-xs leading-relaxed text-[var(--stats-detail-color)]">
-                {locale === 'de' ? 'Schalten Sie Diagrammlinien nach Kategorie um, ohne das Nutzungsdiagramm zu verlassen.' : 'Toggle chart lines by category without leaving the usage graph.'}
+                Toggle chart lines by category without leaving the usage graph.
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                aria-label={locale === 'de' ? 'Standardreihen zurücksetzen' : 'Reset series defaults'}
+                aria-label="Reset series defaults"
                 onClick={onResetSeriesDefaults}
                 className={`${CHIP_CLASS} px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)] hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}
               >
-                {locale === 'de' ? 'Standards zurücksetzen' : 'Reset defaults'}
+                Reset defaults
               </button>
               {defaultSeriesCount > 0 ? (
                 <button
@@ -656,11 +653,11 @@ export const InteractiveUsageChart: FunctionComponent<{
                   onClick={onEnableDefaultSeries}
                   className={`${CHIP_CLASS} px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)] hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}
                 >
-                  {locale === 'de' ? 'Standards aktivieren' : 'Enable defaults'}
+                  Enable defaults
                 </button>
               ) : null}
               <div className={`${CHIP_CLASS} px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]`}>
-                {formatNumber(activeSeriesCount)}/{formatNumber(totalSeriesCount)} {locale === 'de' ? 'aktiv' : 'active'}
+                {activeSeriesCount}/{totalSeriesCount} active
               </div>
             </div>
           </div>

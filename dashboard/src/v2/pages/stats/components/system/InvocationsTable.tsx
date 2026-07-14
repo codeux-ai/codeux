@@ -30,7 +30,6 @@ import {
   CONTROL_FOCUS_CLASS,
 } from "../StatsShared.js";
 import { InvocationMessagesPanel } from "./InvocationMessagesPanel.js";
-import { useStatsI18n } from "../../stats-i18n.js";
 
 export interface InvocationsTableProps {
   invocations: ExecutionInvocationRecord[];
@@ -109,14 +108,6 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   loading,
   error,
   }) => {
-  const { locale, formatNumber } = useStatsI18n();
-  const sortLabels: Record<SystemSortKey, string> = {
-    startedAt: locale === "de" ? "Zeit" : "time",
-    inputTokens: locale === "de" ? "Eingabe-Tokens" : "input tokens",
-    outputTokens: locale === "de" ? "Ausgabe-Tokens" : "output tokens",
-    totalTokens: locale === "de" ? "Gesamt-Tokens" : "total tokens",
-    durationMs: locale === "de" ? "durchschnittlicher Dauer" : "average duration",
-  };
   const expandedInvocation = expandedId === null
     ? null
     : invocations.find((invocation) => invocation.id === expandedId) ?? null;
@@ -141,10 +132,10 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
 
   const getSortButtonLabel = (label: string, key: SystemSortKey): string => {
     if (sort.key !== key) {
-      return locale === "de" ? `Aufrufe nach ${label} sortieren` : `Sort invocations by ${label}`;
+      return `Sort invocations by ${label}`;
     }
 
-    return locale === "de" ? `Aufrufe nach ${label} sortieren, aktuell ${sort.dir === "asc" ? "aufsteigend" : "absteigend"}` : `Sort invocations by ${label}, currently sorted ${sort.dir === "asc" ? "ascending" : "descending"}`;
+    return `Sort invocations by ${label}, currently sorted ${sort.dir === "asc" ? "ascending" : "descending"}`;
   };
 
   const renderSortIcon = (key: SystemSortKey) => {
@@ -163,7 +154,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
           <div className={`${CHIP_CLASS} flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${STATUS_TONE_CLASS.signal}`}>
             <div className="h-2 w-2 rounded-full bg-[color:var(--stats-signal-text)]" />
             <Loader2 className="h-3 w-3 animate-spin" />
-            {locale === "de" ? "Laufend" : "Running"}
+            Running
           </div>
         );
       case "completed":
@@ -171,7 +162,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
           <div className={`${CHIP_CLASS} flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${STATUS_TONE_CLASS.positive}`}>
             <div className="h-2 w-2 rounded-full bg-[color:var(--stats-positive-text)]" />
             <CheckCircle2 className="h-3 w-3" />
-            {locale === "de" ? "Abgeschlossen" : "Completed"}
+            Completed
           </div>
         );
       case "failed":
@@ -179,7 +170,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
           <div className={`${CHIP_CLASS} flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${STATUS_TONE_CLASS.negative}`}>
             <div className="h-2 w-2 rounded-full bg-[color:var(--stats-negative-text)]" />
             <XCircle className="h-3 w-3" />
-            {locale === "de" ? "Fehlgeschlagen" : "Failed"}
+            Failed
           </div>
         );
       case "cancelled":
@@ -187,7 +178,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
           <div className={`${CHIP_CLASS} flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${STATUS_TONE_CLASS.neutral}`}>
             <div className="h-2 w-2 rounded-full bg-[color:var(--stats-detail-color)]" />
             <MinusCircle className="h-3 w-3" />
-            {locale === "de" ? "Abgebrochen" : "Cancelled"}
+            Cancelled
           </div>
         );
       case "paused":
@@ -195,7 +186,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
           <div className={`${CHIP_CLASS} flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${STATUS_TONE_CLASS.warning}`}>
             <div className="h-2 w-2 rounded-full bg-[color:var(--stats-warning-text)]" />
             <PauseCircle className="h-3 w-3" />
-            {locale === "de" ? "Pausiert" : "Paused"}
+            Paused
           </div>
         );
       default:
@@ -207,6 +198,11 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
     }
   };
 
+  const formatLabel = (value: string | null | undefined): string => {
+    const label = (value || "unknown").replace(/[_-]/g, " ").trim();
+    return label.length > 0 ? label : "unknown";
+  };
+
   const cellClass = "block min-w-0 break-words px-3 py-2 align-middle [overflow-wrap:anywhere] lg:table-cell lg:px-2 lg:py-3";
   const mobileLabelClass = "mb-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)] lg:hidden";
 
@@ -214,10 +210,10 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
     return (
       <SystemFeedbackState
         icon={Loader2}
-        title={locale === "de" ? "Aufrufdatensätze werden geladen" : "Loading invocation records"}
-        detail={locale === "de" ? "Ledger-Zeilen und Ziele für die Protokollerweiterung werden aktualisiert." : "Refreshing the ledger rows and transcript expansion targets."}
+        title="Loading invocation records"
+        detail="Refreshing the ledger rows and transcript expansion targets."
         role="status"
-        ariaLabel={locale === "de" ? "Aufrufdatensätze werden geladen" : "Loading invocation records"}
+        ariaLabel="Loading invocation records"
         tone="signal"
         busy
       >
@@ -234,10 +230,10 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
     return (
       <SystemFeedbackState
         icon={AlertTriangle}
-        title={locale === "de" ? "Aufrufdatensätze konnten nicht geladen werden" : "Failed to load invocation records"}
+        title="Failed to load invocation records"
         detail={error}
         role="alert"
-        ariaLabel={locale === "de" ? "Aufrufdatensätze konnten nicht geladen werden" : "Invocation records failed to load"}
+        ariaLabel="Invocation records failed to load"
         tone="negative"
       />
     );
@@ -247,10 +243,10 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
     return (
       <SystemFeedbackState
         icon={Inbox}
-        title={locale === "de" ? "Keine Aufrufdatensätze anzuzeigen" : "No invocation records to show"}
-        detail={locale === "de" ? "Keine Datensätze entsprechen den aktuellen Filtern oder der Datensatzansicht." : "No records match the current filters or record view."}
+        title="No invocation records to show"
+        detail="No records match the current filters or record view."
         role="status"
-        ariaLabel={locale === "de" ? "Keine Aufrufdatensätze" : "No invocation records"}
+        ariaLabel="No invocation records"
       />
     );
   }
@@ -260,15 +256,15 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
       {loading ? (
         <div role="status" aria-live="polite" aria-atomic="true" className={`${SUBPANEL_CLASS} mb-3 flex items-center gap-2 p-3 text-[11px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)]`}>
           <Loader2 className="h-3.5 w-3.5 text-[color:var(--stats-signal-text)] motion-safe:animate-spin" aria-hidden="true" />
-          {locale === "de" ? "Aufrufdatensätze werden aktualisiert. Zwischengespeicherte Zeilen werden angezeigt, während das aktuelle Ledger lädt." : "Updating invocation records. Showing cached rows while the latest ledger loads."}
+          Updating invocation records. Showing cached rows while the latest ledger loads.
         </div>
       ) : null}
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-        {locale === "de" ? `${formatNumber(Math.min(visibleCount, invocations.length))} von ${formatNumber(invocations.length)} Aufrufdatensätzen werden angezeigt.` : `Showing ${formatNumber(Math.min(visibleCount, invocations.length))} of ${formatNumber(invocations.length)} invocation records.`}
+        Showing {Math.min(visibleCount, invocations.length).toLocaleString()} of {invocations.length.toLocaleString()} invocation records.
       </div>
       <table className="block w-full border-separate border-spacing-y-2 lg:table">
         <caption className="sr-only">
-          {locale === "de" ? "Aufruf-Ledger mit sortierbaren Zeit-, Token- und Dauerspalten. Zeilen enthalten Status, Typ, Modell, Token-Zahlen, Kontext und Steuerelemente zur Protokollerweiterung." : "Invocation ledger with sortable time, token, and duration columns. Rows include status, type, model, token counts, context, and transcript expansion controls."}
+          Invocation ledger with sortable time, token, and duration columns. Rows include status, type, model, token counts, context, and transcript expansion controls.
         </caption>
         <thead className="sticky top-0 z-10 hidden bg-[color:var(--stats-surface-panel)] lg:table-header-group">
           <tr className="text-left text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">
@@ -276,58 +272,58 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <button
                 type="button"
                 onClick={() => handleSort("startedAt")}
-                aria-label={getSortButtonLabel(sortLabels.startedAt, "startedAt")}
+                aria-label={getSortButtonLabel("time", "startedAt")}
                 className={`flex items-center ${TAB_IDLE_CLASS}`}
               >
-                {locale === "de" ? "Zeit" : "Time"} {renderSortIcon("startedAt")}
+                Time {renderSortIcon("startedAt")}
               </button>
             </th>
             <th id="invocations-status" scope="col" className="pb-2">Status</th>
-            <th id="invocations-type" scope="col" className="pb-2">{locale === "de" ? "Typ" : "Type"}</th>
-            <th id="invocations-model" scope="col" className="pb-2">{locale === "de" ? "Modell" : "Model"}</th>
+            <th id="invocations-type" scope="col" className="pb-2">Type</th>
+            <th id="invocations-model" scope="col" className="pb-2">Model</th>
             <th id="invocations-input" scope="col" aria-sort={getAriaSort("inputTokens")} className="pb-2">
               <button
                 type="button"
                 onClick={() => handleSort("inputTokens")}
-                aria-label={getSortButtonLabel(sortLabels.inputTokens, "inputTokens")}
+                aria-label={getSortButtonLabel("input tokens", "inputTokens")}
                 className={`flex items-center ${TAB_IDLE_CLASS}`}
               >
-                {locale === "de" ? "Eingabe" : "In"} {renderSortIcon("inputTokens")}
+                In {renderSortIcon("inputTokens")}
               </button>
             </th>
             <th id="invocations-output" scope="col" aria-sort={getAriaSort("outputTokens")} className="pb-2">
               <button
                 type="button"
                 onClick={() => handleSort("outputTokens")}
-                aria-label={getSortButtonLabel(sortLabels.outputTokens, "outputTokens")}
+                aria-label={getSortButtonLabel("output tokens", "outputTokens")}
                 className={`flex items-center ${TAB_IDLE_CLASS}`}
               >
-                {locale === "de" ? "Ausgabe" : "Out"} {renderSortIcon("outputTokens")}
+                Out {renderSortIcon("outputTokens")}
               </button>
             </th>
-            <th id="invocations-cached" scope="col" className="pb-2">{locale === "de" ? "Im Cache" : "Cached"}</th>
+            <th id="invocations-cached" scope="col" className="pb-2">Cached</th>
             <th id="invocations-total" scope="col" aria-sort={getAriaSort("totalTokens")} className="pb-2">
               <button
                 type="button"
                 onClick={() => handleSort("totalTokens")}
-                aria-label={getSortButtonLabel(sortLabels.totalTokens, "totalTokens")}
+                aria-label={getSortButtonLabel("total tokens", "totalTokens")}
                 className={`flex items-center ${TAB_IDLE_CLASS}`}
               >
-                {locale === "de" ? "Gesamt" : "Total"} {renderSortIcon("totalTokens")}
+                Total {renderSortIcon("totalTokens")}
               </button>
             </th>
             <th id="invocations-duration" scope="col" aria-sort={getAriaSort("durationMs")} className="pb-2">
               <button
                 type="button"
                 onClick={() => handleSort("durationMs")}
-                aria-label={getSortButtonLabel(sortLabels.durationMs, "durationMs")}
+                aria-label={getSortButtonLabel("average duration", "durationMs")}
                 className={`flex items-center ${TAB_IDLE_CLASS}`}
               >
-                {locale === "de" ? "Durchschn. Dauer" : "Avg Duration"} {renderSortIcon("durationMs")}
+                Avg Duration {renderSortIcon("durationMs")}
               </button>
             </th>
-            <th id="invocations-context" scope="col" className="pb-2">{locale === "de" ? "Kontext" : "Context"}</th>
-            <th id="invocations-expand" scope="col" className="pb-2 pr-6 text-right">{locale === "de" ? "Erweitern" : "Expand"}</th>
+            <th id="invocations-context" scope="col" className="pb-2">Context</th>
+            <th id="invocations-expand" scope="col" className="pb-2 pr-6 text-right">Expand</th>
           </tr>
         </thead>
         <tbody className="block lg:table-row-group">
@@ -335,8 +331,8 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
             const isExpanded = expandedId === invocation.id;
             const { icon: ProviderIcon, bg: providerBg, text: providerText } = getProviderIcon(invocation.provider);
             const duration = invocation.finishedAt
-              ? formatStatsDuration(Date.parse(invocation.finishedAt) - Date.parse(invocation.startedAt), locale)
-              : locale === "de" ? "laufend" : "running";
+              ? formatStatsDuration(Date.parse(invocation.finishedAt) - Date.parse(invocation.startedAt))
+              : "running";
 
             return (
               <Fragment key={invocation.id}>
@@ -351,8 +347,8 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                   }`}
                 >
                   <td headers="invocations-time" className={`${cellClass} lg:pl-6`}>
-                    <div className={mobileLabelClass}>{locale === "de" ? "Zeit" : "Time"}</div>
-                    <div className="text-[11px] font-mono text-[color:var(--stats-label-color)]">{formatDateTime(invocation.startedAt, locale)}</div>
+                    <div className={mobileLabelClass}>Time</div>
+                    <div className="text-[11px] font-mono text-[color:var(--stats-label-color)]">{formatDateTime(invocation.startedAt)}</div>
                   </td>
                   <td headers="invocations-status" className={cellClass}>
                     <div className={mobileLabelClass}>Status</div>
@@ -365,48 +361,48 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                     ) : null}
                   </td>
                   <td headers="invocations-type" className={cellClass}>
-                    <div className={mobileLabelClass}>{locale === "de" ? "Typ" : "Type"}</div>
+                    <div className={mobileLabelClass}>Type</div>
                     <div className={`${CHIP_CLASS} max-w-full px-2 py-0.5 text-[10px] font-medium capitalize text-[color:var(--stats-detail-color)]`}>
-                      <span className="block truncate">{invocation.type || (locale === "de" ? "unbekannt" : "unknown")}</span>
+                      <span className="block truncate">{formatLabel(invocation.type)}</span>
                     </div>
                   </td>
                   <td headers="invocations-model" className={cellClass}>
-                    <div className={mobileLabelClass}>{locale === "de" ? "Modell" : "Model"}</div>
+                    <div className={mobileLabelClass}>Model</div>
                     <div className="flex min-w-0 items-center gap-2 text-[11px] text-[color:var(--stats-detail-color)]">
                       <div className={`shrink-0 rounded-lg p-1.5 ${providerBg} ${providerText}`}>
                         <ProviderIcon className="h-3 w-3" strokeWidth={2.5} />
                       </div>
                       <span className="min-w-0 break-words [overflow-wrap:anywhere]">
-                        <span className="font-bold text-[color:var(--stats-value-color)]">{invocation.provider || (locale === "de" ? "unbekannt" : "unknown")}</span>
+                        <span className="font-bold capitalize text-[color:var(--stats-value-color)]">{formatLabel(invocation.provider)}</span>
                         <span className="mx-1 text-[color:var(--stats-label-color)]">·</span>
                         {invocation.model || "—"}
                       </span>
                     </div>
                   </td>
                   <td headers="invocations-input" className={cellClass}>
-                    <div className={mobileLabelClass}>{locale === "de" ? "Eingabe" : "In"}</div>
-                    <div className="text-[11px] text-[color:var(--stats-detail-color)]">{formatTokens(invocation.inputTokens ?? 0, locale)}</div>
+                    <div className={mobileLabelClass}>In</div>
+                    <div className="text-[11px] text-[color:var(--stats-detail-color)]">{formatTokens(invocation.inputTokens ?? 0)}</div>
                   </td>
                   <td headers="invocations-output" className={cellClass}>
-                    <div className={mobileLabelClass}>{locale === "de" ? "Ausgabe" : "Out"}</div>
-                    <div className="text-[11px] text-[color:var(--stats-detail-color)]">{formatTokens(invocation.outputTokens ?? 0, locale)}</div>
+                    <div className={mobileLabelClass}>Out</div>
+                    <div className="text-[11px] text-[color:var(--stats-detail-color)]">{formatTokens(invocation.outputTokens ?? 0)}</div>
                   </td>
                   <td headers="invocations-cached" className={cellClass}>
-                    <div className={mobileLabelClass}>{locale === "de" ? "Im Cache" : "Cached"}</div>
-                    <div className="text-[11px] text-[color:var(--stats-detail-color)]">{formatTokens(invocation.cachedInputTokens ?? 0, locale)}</div>
+                    <div className={mobileLabelClass}>Cached</div>
+                    <div className="text-[11px] text-[color:var(--stats-detail-color)]">{formatTokens(invocation.cachedInputTokens ?? 0)}</div>
                   </td>
                   <td headers="invocations-total" className={cellClass}>
-                    <div className={mobileLabelClass}>{locale === "de" ? "Gesamt" : "Total"}</div>
-                    <div className="text-[11px] font-bold text-[color:var(--stats-value-color)]">{formatTokens(invocation.totalTokens ?? 0, locale)}</div>
+                    <div className={mobileLabelClass}>Total</div>
+                    <div className="text-[11px] font-bold text-[color:var(--stats-value-color)]">{formatTokens(invocation.totalTokens ?? 0)}</div>
                   </td>
                   <td headers="invocations-duration" className={cellClass}>
-                    <div className={mobileLabelClass}>{locale === "de" ? "Dauer" : "Duration"}</div>
+                    <div className={mobileLabelClass}>Duration</div>
                     <div className={`text-[11px] ${invocation.finishedAt ? "text-[color:var(--stats-detail-color)]" : "text-[color:var(--stats-signal-text)]"}`}>
                       {duration}
                     </div>
                   </td>
                   <td headers="invocations-context" className={cellClass}>
-                    <div className={mobileLabelClass}>{locale === "de" ? "Kontext" : "Context"}</div>
+                    <div className={mobileLabelClass}>Context</div>
                     <div className="flex min-w-0 flex-wrap gap-1">
                       {invocation.sprintNumber !== null && invocation.sprintNumber !== undefined ? (
                         <div className={`${CHIP_CLASS} px-1.5 py-0.5 text-[9px] font-bold text-[color:var(--stats-label-color)]`}>
@@ -424,13 +420,13 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                     </div>
                   </td>
                   <td headers="invocations-expand" className={`${cellClass} lg:pr-6 lg:text-right`}>
-                    <div className={mobileLabelClass}>{locale === "de" ? "Nachrichten" : "Messages"}</div>
+                    <div className={mobileLabelClass}>Messages</div>
                     <button
                       type="button"
                       onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
                       aria-expanded={isExpanded}
                       aria-controls={`invocation-messages-${invocation.id}`}
-                      aria-label={isExpanded ? (locale === "de" ? `Aufruf ${invocation.id} reduzieren` : `Collapse invocation ${invocation.id}`) : (locale === "de" ? `Aufruf ${invocation.id} erweitern` : `Expand invocation ${invocation.id}`)}
+                      aria-label={isExpanded ? `Collapse invocation ${invocation.id}` : `Expand invocation ${invocation.id}`}
                       className={`${CHIP_CLASS} p-2 transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] ${CONTROL_FOCUS_CLASS} ${
                         isExpanded ? "text-[color:var(--stats-signal-text)]" : "text-[color:var(--stats-label-color)]"
                       }`}
@@ -458,10 +454,10 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
           <button
             type="button"
             onClick={revealMore}
-            aria-label={locale === "de" ? `Weitere Aufrufe anzeigen, aktuell ${formatNumber(Math.min(visibleCount, invocations.length))} von ${formatNumber(invocations.length)}` : `Show more invocations, currently showing ${formatNumber(Math.min(visibleCount, invocations.length))} of ${formatNumber(invocations.length)}`}
+            aria-label={`Show more invocations, currently showing ${Math.min(visibleCount, invocations.length).toLocaleString()} of ${invocations.length.toLocaleString()}`}
             className={`${CHIP_CLASS} px-4 py-2 text-xs font-bold text-[color:var(--stats-detail-color)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] ${CONTROL_FOCUS_CLASS}`}
           >
-            {locale === "de" ? "Weitere Aufrufe anzeigen" : "Show more invocations"}
+            Show more invocations
           </button>
         </div>
       )}

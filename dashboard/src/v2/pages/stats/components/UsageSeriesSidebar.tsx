@@ -1,18 +1,16 @@
 import type { FunctionComponent } from "preact";
 import type { NormalizedChartSeries } from "../chart-view-models.js";
 import { DASHED_EMPTY_CLASS, SUBPANEL_CLASS } from "./stats-ui-primitives.js";
-import { useStatsI18n } from "../stats-i18n.js";
 
 export const UsageSeriesSidebar: FunctionComponent<{
   series: NormalizedChartSeries[];
   enabledSeries: Record<string, boolean>;
   activeIndex: number;
 }> = ({ series, enabledSeries, activeIndex }) => {
-  const { locale } = useStatsI18n();
   const visibleSeries = series.filter(s => enabledSeries[s.id]);
 
   return visibleSeries.length > 0 ? (
-    <div className="grid gap-2" role="list" aria-label={locale === "de" ? "Aktuelle Werte aktiver Reihen" : "Current values for active series"}>
+    <div className="grid gap-2" role="list" aria-label="Current values for active series">
       {visibleSeries.map((s) => {
         const currentValue = s.values[activeIndex] || 0;
 
@@ -20,7 +18,7 @@ export const UsageSeriesSidebar: FunctionComponent<{
           <div
             key={s.id}
             role="listitem"
-            aria-label={`${s.label}: ${s.formatter(currentValue)}, ${s.signalLabel || (locale === "de" ? 'Kennzahl' : 'Metric')}`}
+            aria-label={`${s.label}: ${s.formatter(currentValue)}, ${s.signalLabel || 'Metric'}`}
             className={`${SUBPANEL_CLASS} px-3 py-3 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)]`}
           >
             <div className="flex items-start gap-3">
@@ -29,7 +27,7 @@ export const UsageSeriesSidebar: FunctionComponent<{
             </div>
             <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
               <div className="min-w-0 break-words text-base font-semibold leading-tight text-[var(--stats-value-color)]">{s.formatter(currentValue)}</div>
-              <div className="text-right text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)] opacity-80">{s.signalLabel || (locale === "de" ? 'Kennzahl' : 'Metric')}</div>
+              <div className="text-right text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)] opacity-80">{s.signalLabel || 'Metric'}</div>
             </div>
           </div>
         );
@@ -37,7 +35,7 @@ export const UsageSeriesSidebar: FunctionComponent<{
     </div>
   ) : (
     <div className={`${DASHED_EMPTY_CLASS} text-sm leading-relaxed text-[var(--stats-detail-color)]`}>
-      {locale === "de" ? "Mindestens eine Reihe muss aktiviert bleiben, um aktuelle Intervallwerte zu prüfen." : "Keep at least one series enabled to inspect live bucket values."}
+      Keep at least one series enabled to inspect live bucket values.
     </div>
   );
 };

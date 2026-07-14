@@ -25,8 +25,6 @@ import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
-import { useStatsI18n } from "../../pages/stats/stats-i18n.js";
-import type { DashboardLocale } from "../../i18n/index.js";
 
 export interface TopCardsModeRendererProps {
   mode: StatsVisualMode;
@@ -36,29 +34,29 @@ export interface TopCardsModeRendererProps {
   sourceSegments: SegmentDefinition[];
 }
 
-function formatCount(value: number | null | undefined, locale: DashboardLocale): string {
-  return new Intl.NumberFormat(locale).format(value || 0);
+function formatCount(value: number | null | undefined): string {
+  return (value || 0).toLocaleString();
 }
 
-function formatMaybeCount(value: number | null | undefined, hasData: boolean, locale: DashboardLocale): string {
-  return hasData ? formatCount(value, locale) : "—";
+function formatMaybeCount(value: number | null | undefined, hasData: boolean): string {
+  return hasData ? formatCount(value) : "—";
 }
 
-function formatRate(value: number | null, locale: DashboardLocale): string {
-  return value === null ? "—" : new Intl.NumberFormat(locale, { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value / 100);
+function formatRate(value: number | null): string {
+  return value === null ? "—" : `${value.toFixed(1)}%`;
 }
 
-function formatShare(value: number | null, locale: DashboardLocale): string {
-  return value === null ? "—" : new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 0 }).format(value / 100);
+function formatShare(value: number | null): string {
+  return value === null ? "—" : `${Math.round(value)}%`;
 }
 
-function formatTokenVelocity(tokens: number, activeTimeMs: number, locale: DashboardLocale): string {
+function formatTokenVelocity(tokens: number, activeTimeMs: number): string {
   if (tokens <= 0 || activeTimeMs <= 0) return "—";
   const tokensPerMinute = tokens / Math.max(1, activeTimeMs / 60000);
   if (tokensPerMinute >= 1000) {
-    return `${new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(tokensPerMinute / 1000)}k/min`;
+    return `${(tokensPerMinute / 1000).toFixed(1)}k/min`;
   }
-  return `${new Intl.NumberFormat(locale).format(Math.round(tokensPerMinute))}/min`;
+  return `${Math.round(tokensPerMinute).toLocaleString()}/min`;
 }
 
 function calculateCacheRate(stats: ProjectExecutionStatsSnapshot): number {
@@ -112,6 +110,14 @@ function getSegmentShare(segment: SegmentDefinition | null, total: number): numb
   return (segment.value / total) * 100;
 }
 
+function getDataQualityHint(usage: ProjectExecutionStatsSnapshot["usage"]): string {
+  const degraded = (usage.estimatedInvocationCount || 0) + (usage.unavailableInvocationCount || 0) + (usage.unsupportedInvocationCount || 0);
+  if ((usage.reportedInvocationCount || 0) === 0 && degraded === 0) return "No telemetry";
+  if (degraded === 0) return "Reported";
+  if ((usage.unavailableInvocationCount || 0) > 0 || (usage.unsupportedInvocationCount || 0) > 0) return "Partial";
+  return "Estimated mix";
+}
+
 export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> = ({
   mode,
   stats,
@@ -119,7 +125,6 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
   tokenSegments,
   sourceSegments,
 }) => {
-  const { locale, text, plural } = useStatsI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const reducedMotion = useReducedMotion();
   const prevMode = useRef(mode);
@@ -189,68 +194,62 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
   const hasInvocationData = usage.invocationCount > 0 || finishedCount > 0;
   const hasTokenData = usage.totalTokens > 0;
   const hasCostData = usage.totalCostUsd > 0;
-  const tokenVelocity = formatTokenVelocity(usage.totalTokens, usage.activeTimeMs, locale);
-  const qualityHint = (() => {
-    const degraded = usage.estimatedInvocationCount + usage.unavailableInvocationCount + usage.unsupportedInvocationCount;
-    if (usage.reportedInvocationCount === 0 && degraded === 0) return text("noTelemetry");
-    if (degraded === 0) return text("reported");
-    if (usage.unavailableInvocationCount > 0 || usage.unsupportedInvocationCount > 0) return text("partial");
-    return locale === "de" ? "Geschätzter Mix" : "Estimated mix";
-  })();
-  const telemetrySummary = buildTelemetrySourceSummary(usage, locale);
+  const tokenVelocity = formatTokenVelocity(usage.totalTokens, usage.activeTimeMs);
+  const qualityHint = getDataQualityHint(usage);
+  const telemetrySummary = buildTelemetrySourceSummary(usage);
 
   const renderTrendMode = () => {
     return (
       <>
         <StatsMetricCard
-          label={text("invocations")}
-          value={formatMaybeCount(usage.invocationCount, hasInvocationData, locale)}
-          detail={hasInvocationData ? text("finishedRunning", { finished: formatCount(finishedCount, locale), running: formatCount(statusCounts.running, locale) }) : text("noProviderInvocations")}
-          secondaryDetail={text("completedFailed", { completed: formatCount(statusCounts.completed, locale), failed: formatCount(statusCounts.failed, locale) })}
-          qualityHint={successRate === null ? text("noOutcome") : text("successValue", { value: formatShare(successRate, locale) })}
+          label="Invocations"
+          value={formatMaybeCount(usage.invocationCount, hasInvocationData)}
+          detail={hasInvocationData ? `${formatCount(finishedCount)} finished · ${formatCount(statusCounts.running)} running` : "No provider invocations recorded"}
+          secondaryDetail={`${formatCount(statusCounts.completed)} completed · ${formatCount(statusCounts.failed)} failed`}
+          qualityHint={successRate === null ? "No outcome" : `${formatShare(successRate)} success`}
           accentHex={STATS_COLORS.moss}
           sparkline={metricSeries.invocations}
-          signalLabel={text("work")}
+          signalLabel="Work"
         />
         <StatsMetricCard
-          label={text("cost")}
-          value={hasCostData ? formatCost(usage.totalCostUsd, locale) : text("noCost")}
-          detail={hasCostData ? text("inputOutputCost", { input: formatCost(usage.inputCostUsd, locale), output: formatCost(usage.outputCostUsd, locale) }) : text("noSpend")}
-          secondaryDetail={text("cachedInputQuality", { cost: formatCost(usage.cachedInputCostUsd, locale), quality: qualityHint })}
-          qualityHint={hasCostData ? text("priced") : text("unpriced")}
+          label="Cost"
+          value={hasCostData ? formatCost(usage.totalCostUsd) : "No cost"}
+          detail={hasCostData ? `Input ${formatCost(usage.inputCostUsd)} · output ${formatCost(usage.outputCostUsd)}` : "Pricing telemetry has not produced spend"}
+          secondaryDetail={`Cached input ${formatCost(usage.cachedInputCostUsd)} · ${qualityHint}`}
+          qualityHint={hasCostData ? "Priced" : "Unpriced"}
           accentHex={STATS_COLORS.clay}
           sparkline={metricSeries.totalCost}
-          signalLabel={text("spend")}
+          signalLabel="Spend"
         />
         <StatsMetricCard
-          label={text("totalTokens")}
-          value={hasTokenData ? formatTokens(usage.totalTokens, locale) : text("noTokens")}
-          detail={hasTokenData ? text("inputOutputTokens", { input: formatTokens(usage.inputTokens, locale), output: formatTokens(usage.outputTokens, locale) }) : text("noTokenTelemetry")}
-          secondaryDetail={hasTokenData ? text("reasoningCached", { reasoning: formatTokens(usage.reasoningOutputTokens, locale), cached: formatTokens(usage.cachedInputTokens, locale) }) : stats.range.label}
+          label="Total Tokens"
+          value={hasTokenData ? formatTokens(usage.totalTokens) : "No tokens"}
+          detail={hasTokenData ? `Input ${formatTokens(usage.inputTokens)} · output ${formatTokens(usage.outputTokens)}` : "No token telemetry in this window"}
+          secondaryDetail={hasTokenData ? `${formatTokens(usage.reasoningOutputTokens)} reasoning · ${formatTokens(usage.cachedInputTokens)} cached` : stats.range.label}
           qualityHint={qualityHint}
           accentHex={STATS_COLORS.signal}
           sparkline={metricSeries.totalTokens}
-          signalLabel={text("throughput")}
+          signalLabel="Throughput"
         />
         <StatsMetricCard
-          label={text("activeTime")}
-          value={hasInvocationData ? formatStatsDuration(usage.activeTimeMs, locale) : text("noRuns")}
-          detail={hasInvocationData ? text("wallAcrossWindow", { duration: formatStatsDuration(usage.wallTimeMs, locale) }) : text("noRuntimeSamples")}
-          secondaryDetail={duration.sampleCount > 0 ? text("latencySamples", { p50: formatStatsDuration(duration.p50Ms, locale), p95: formatStatsDuration(duration.p95Ms, locale) }) : text("latencyUnavailable")}
-          qualityHint={duration.sampleCount > 0 ? plural("samples", duration.sampleCount, { count: formatCount(duration.sampleCount, locale) }) : text("lowData")}
+          label="Active Time"
+          value={hasInvocationData ? formatStatsDuration(usage.activeTimeMs) : "No runs"}
+          detail={hasInvocationData ? `Wall ${formatStatsDuration(usage.wallTimeMs)} across the selected window` : "No invocation runtime samples yet"}
+          secondaryDetail={duration.sampleCount > 0 ? `p50 ${formatStatsDuration(duration.p50Ms)} · p95 ${formatStatsDuration(duration.p95Ms)}` : "Latency samples unavailable"}
+          qualityHint={duration.sampleCount > 0 ? `${formatCount(duration.sampleCount)} samples` : "Low data"}
           accentHex={STATS_COLORS.ember}
           sparkline={metricSeries.activeTime}
-          signalLabel={text("runtime")}
+          signalLabel="Runtime"
         />
         <StatsMetricCard
-          label={text("cacheRate")}
-          value={hasTokenData ? formatRate(cacheRate, locale) : "—"}
-          detail={hasTokenData ? text("cachedInputTokens", { tokens: formatTokens(usage.cachedInputTokens, locale) }) : text("cacheUnavailable")}
-          secondaryDetail={tokenVelocity !== "—" ? text("tokenVelocity", { velocity: tokenVelocity }) : text("tokenVelocityUnavailable")}
-          qualityHint={cacheRate > 0 ? text("efficiency") : text("lowData")}
+          label="Cache Rate"
+          value={hasTokenData ? formatRate(cacheRate) : "—"}
+          detail={hasTokenData ? `${formatTokens(usage.cachedInputTokens)} cached input tokens` : "Prompt-token cache telemetry unavailable"}
+          secondaryDetail={tokenVelocity !== "—" ? `${tokenVelocity} token velocity` : "Token velocity unavailable"}
+          qualityHint={cacheRate > 0 ? "Efficiency" : "Low data"}
           accentHex={STATS_COLORS.amber}
           sparkline={hasTokenData ? metricSeries.cacheRate : []}
-          signalLabel={text("efficiency")}
+          signalLabel="Efficiency"
         />
       </>
     );
@@ -271,44 +270,44 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
     return (
       <>
         <StatsMetricCard
-          label={text("providerShare")}
-          value={topProvider ? formatShare(topProviderShare, locale) : text("noData")}
-          detail={topProvider ? text("providerLeads", { provider: topProvider.label, count: formatCount(providerCount, locale) }) : text("noProviderRows")}
-          secondaryDetail={topProviderRecord ? text("providerCallsCostShare", { calls: formatCount(topProviderRecord.usage.invocationCount, locale), cost: formatCost(topProviderRecord.usage.totalCostUsd, locale), share: formatShare(topProviderShare, locale) }) : text("providerTelemetryUnavailable")}
-          qualityHint={providerCount > 1 ? text("mixed") : providerCount === 1 ? text("singleProvider") : text("empty")}
+          label="Provider Share"
+          value={topProvider ? formatShare(topProviderShare) : "No data"}
+          detail={topProvider ? `${topProvider.label} leads ${providerCount} provider rows by tokens` : "No provider rows in this window"}
+          secondaryDetail={topProviderRecord ? `${formatCount(topProviderRecord.usage.invocationCount)} calls · ${formatCost(topProviderRecord.usage.totalCostUsd)} · ${formatShare(topProviderShare)} share` : "Provider telemetry unavailable"}
+          qualityHint={providerCount > 1 ? "Mixed" : providerCount === 1 ? "Single provider" : "Empty"}
           accentHex={STATS_COLORS.clay}
           sparkline={topProviderRecord ? extractProviderSeries(stats, topProviderRecord.id) : []}
-          signalLabel={text("mix")}
+          signalLabel="Mix"
         />
         <StatsMetricCard
-          label={text("tokenAnatomy")}
-          value={hasTokenData ? formatTokens(usage.totalTokens, locale) : text("noTokens")}
-          detail={topTokenSegment ? text("segmentLeads", { segment: topTokenSegment.label, share: formatShare(getSegmentShare(topTokenSegment, usage.totalTokens), locale) }) : text("noTokenAnatomy")}
-          secondaryDetail={text("tokenBreakdown", { input: formatTokens(usage.inputTokens, locale), cached: formatTokens(usage.cachedInputTokens, locale), output: formatTokens(usage.outputTokens, locale) })}
-          qualityHint={sortedTokenSegments.length > 0 ? plural("segments", sortedTokenSegments.length, { count: formatCount(sortedTokenSegments.length, locale) }) : text("empty")}
+          label="Token Anatomy"
+          value={hasTokenData ? formatTokens(usage.totalTokens) : "No tokens"}
+          detail={topTokenSegment ? `${topTokenSegment.label} leads at ${formatShare(getSegmentShare(topTokenSegment, usage.totalTokens))}` : "No token anatomy available"}
+          secondaryDetail={`Input ${formatTokens(usage.inputTokens)} · cached ${formatTokens(usage.cachedInputTokens)} · output ${formatTokens(usage.outputTokens)}`}
+          qualityHint={sortedTokenSegments.length > 0 ? `${sortedTokenSegments.length} segments` : "Empty"}
           accentHex={STATS_COLORS.signal}
           sparkline={metricSeries.totalTokens}
-          signalLabel={text("tokens")}
+          signalLabel="Tokens"
         />
         <StatsMetricCard
-          label={text("sourceMix")}
-          value={topSourceSegment ? formatShare(getSegmentShare(topSourceSegment, topSourceTotal), locale) : text("noData")}
-          detail={topSourceSegment ? text("dominantSource", { source: topSourceSegment.label }) : text("noSourceCounts")}
+          label="Source Mix"
+          value={topSourceSegment ? formatShare(getSegmentShare(topSourceSegment, topSourceTotal)) : "No data"}
+          detail={topSourceSegment ? `${topSourceSegment.label} is the dominant telemetry source` : "No source-count telemetry recorded"}
           secondaryDetail={telemetrySummary.detail}
           qualityHint={telemetrySummary.label}
           accentHex={STATS_COLORS.cyanMuted}
           sparkline={[]}
-          signalLabel={text("sources")}
+          signalLabel="Sources"
         />
         <StatsMetricCard
-          label={text("purposeActivity")}
-          value={topPurpose ? topPurpose.label : text("noData")}
-          detail={topPurpose ? text("purposeCallsTokens", { calls: formatCount(topPurpose.usage.invocationCount, locale), tokens: formatTokens(topPurpose.usage.totalTokens, locale) }) : text("noPurposeActivity")}
-          secondaryDetail={topPurpose ? text("purposeActiveCost", { duration: formatStatsDuration(topPurpose.usage.activeTimeMs, locale), cost: formatCost(topPurpose.usage.totalCostUsd, locale) }) : text("purposeSplitUnavailable")}
-          qualityHint={stats.purposes.length > 1 ? plural("purposesCount", stats.purposes.length, { count: formatCount(stats.purposes.length, locale) }) : text("lowData")}
+          label="Purpose Activity"
+          value={topPurpose ? topPurpose.label : "No data"}
+          detail={topPurpose ? `${formatCount(topPurpose.usage.invocationCount)} calls · ${formatTokens(topPurpose.usage.totalTokens)} tokens` : "No purpose activity recorded"}
+          secondaryDetail={topPurpose ? `${formatStatsDuration(topPurpose.usage.activeTimeMs)} active · ${formatCost(topPurpose.usage.totalCostUsd)}` : "Purpose split unavailable"}
+          qualityHint={stats.purposes.length > 1 ? `${stats.purposes.length} purposes` : "Low data"}
           accentHex={STATS_COLORS.moss}
           sparkline={topPurpose ? extractPurposeInvocationSeries(stats, topPurpose.id) : []}
-          signalLabel={text("purpose")}
+          signalLabel="Purpose"
         />
       </>
     );
@@ -322,54 +321,54 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
     return (
       <>
         <StatsMetricCard
-          label={text("telemetryMix")}
-          value={formatRate(reportedRate, locale)}
+          label="Telemetry Mix"
+          value={formatRate(reportedRate)}
           detail={telemetrySummary.detail}
           secondaryDetail={telemetrySummary.caveat}
           qualityHint={telemetrySummary.label}
           accentHex={STATS_COLORS.clay}
           sparkline={[]}
-          signalLabel={text("confidence")}
+          signalLabel="Confidence"
         />
         <StatsMetricCard
-          label={text("telemetryGaps")}
-          value={formatMaybeCount(degradedTelemetry, usage.invocationCount > 0 || degradedTelemetry > 0, locale)}
-          detail={text("unavailableUnsupported", { unavailable: formatCount(usage.unavailableInvocationCount, locale), unsupported: formatCount(usage.unsupportedInvocationCount, locale) })}
-          secondaryDetail={fallbackQuality !== null ? text("fallbackMissingSource", { rate: formatRate(fallbackQuality, locale) }) : text("noSourceDenominator")}
-          qualityHint={degradedTelemetry > 0 ? text("partial") : usage.estimatedInvocationCount > 0 ? text("estimated") : text("reported")}
+          label="Telemetry Gaps"
+          value={formatMaybeCount(degradedTelemetry, usage.invocationCount > 0 || degradedTelemetry > 0)}
+          detail={`${formatCount(usage.unavailableInvocationCount)} unavailable · ${formatCount(usage.unsupportedInvocationCount)} unsupported`}
+          secondaryDetail={fallbackQuality !== null ? `${formatRate(fallbackQuality)} fallback or missing source` : "No invocation-source denominator"}
+          qualityHint={degradedTelemetry > 0 ? "Partial" : usage.estimatedInvocationCount > 0 ? "Estimated" : "Reported"}
           accentHex={STATS_COLORS.wallRuntime}
           sparkline={[]}
-          signalLabel={text("sources")}
+          signalLabel="Sources"
         />
         <StatsMetricCard
-          label={text("providerHealth")}
-          value={formatRate(successRate, locale)}
-          detail={finishedCount > 0 ? text("completedOfFinished", { completed: formatCount(statusCounts.completed, locale), finished: formatCount(finishedCount, locale) }) : text("noFinishedToScore")}
-          secondaryDetail={topProviderEntity ? text("topProviderCalls", { provider: topProviderEntity.label, calls: formatCount(topProviderEntity.usage.invocationCount, locale) }) : text("runningPaused", { running: formatCount(statusCounts.running, locale), paused: formatCount(statusCounts.paused, locale) })}
-          qualityHint={successRate === null ? text("noOutcome") : successRate >= 95 ? text("strong") : successRate >= 80 ? text("watch") : text("atRisk")}
+          label="Provider Health"
+          value={formatRate(successRate)}
+          detail={finishedCount > 0 ? `${formatCount(statusCounts.completed)} completed of ${formatCount(finishedCount)} finished` : "No finished invocations to score"}
+          secondaryDetail={topProviderEntity ? `Top provider ${topProviderEntity.label} · ${formatCount(topProviderEntity.usage.invocationCount)} calls` : `${formatCount(statusCounts.running)} running · ${formatCount(statusCounts.paused)} paused`}
+          qualityHint={successRate === null ? "No outcome" : successRate >= 95 ? "Strong" : successRate >= 80 ? "Watch" : "At risk"}
           accentHex={STATS_COLORS.moss}
           sparkline={metricSeries.invocations}
-          signalLabel={text("health")}
+          signalLabel="Health"
         />
         <StatsMetricCard
-          label={text("failures")}
-          value={formatMaybeCount(statusCounts.failed, finishedCount > 0, locale)}
-          detail={finishedCount > 0 ? text("cancelledWindow", { count: formatCount(statusCounts.cancelled, locale) }) : text("noTerminalFailures")}
-          secondaryDetail={text("finishedOutcomes", { count: formatCount(finishedCount, locale) })}
-          qualityHint={statusCounts.failed > 0 || statusCounts.cancelled > 0 ? text("investigate") : text("clear")}
+          label="Failures"
+          value={formatMaybeCount(statusCounts.failed, finishedCount > 0)}
+          detail={finishedCount > 0 ? `${formatCount(statusCounts.cancelled)} cancelled in this window` : "No terminal failures recorded yet"}
+          secondaryDetail={`${formatCount(finishedCount)} finished outcomes in range`}
+          qualityHint={statusCounts.failed > 0 || statusCounts.cancelled > 0 ? "Investigate" : "Clear"}
           accentHex={STATS_COLORS.rose}
           sparkline={[]}
-          signalLabel={text("errors")}
+          signalLabel="Errors"
         />
         <StatsMetricCard
-          label={text("retrySignals")}
-          value={formatMaybeCount(statusCounts.paused + statusCounts.running, hasInvocationData, locale)}
-          detail={text("runningPaused", { running: formatCount(statusCounts.running, locale), paused: formatCount(statusCounts.paused, locale) })}
-          secondaryDetail={duration.sampleCount > 0 ? text("p95Latency", { duration: formatStatsDuration(duration.p95Ms, locale) }) : text("runtimeDistributionUnavailable")}
-          qualityHint={statusCounts.paused + statusCounts.running > 0 ? text("active") : text("idle")}
+          label="Retry Signals"
+          value={formatMaybeCount(statusCounts.paused + statusCounts.running, hasInvocationData)}
+          detail={`${formatCount(statusCounts.running)} running · ${formatCount(statusCounts.paused)} paused`}
+          secondaryDetail={duration.sampleCount > 0 ? `p95 latency ${formatStatsDuration(duration.p95Ms)}` : "Runtime distribution unavailable"}
+          qualityHint={statusCounts.paused + statusCounts.running > 0 ? "Active" : "Idle"}
           accentHex={STATS_COLORS.amber}
           sparkline={[]}
-          signalLabel={text("queue")}
+          signalLabel="Queue"
         />
       </>
     );
@@ -377,7 +376,7 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
 
   const renderModelsMode = () => {
     const topModel = topModelEntity;
-    const highlights = buildModelHighlights(models, locale);
+    const highlights = buildModelHighlights(models);
     const totalFinished = statusCounts.completed + statusCounts.failed + statusCounts.cancelled;
     const modelSuccessRate = totalFinished > 0 ? (statusCounts.completed / totalFinished) : null;
     const topModelEfficiency = topModel ? computeUsageEfficiency(topModel.usage) : null;
@@ -385,54 +384,54 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
     return (
       <>
         <StatsMetricCard
-          label={text("topModel")}
-          value={topModel ? topModel.label : text("noData")}
-          detail={topModel ? text("tokenCalls", { tokens: formatTokens(topModel.usage.totalTokens, locale), calls: formatCount(topModel.usage.invocationCount, locale) }) : text("noModelTelemetry")}
-          secondaryDetail={topModel && topModelEfficiency?.tokensPerCall !== null && topModelEfficiency?.tokensPerCall !== undefined ? text("tokensPerCallCost", { tokens: formatCount(Math.round(topModelEfficiency.tokensPerCall), locale), cost: formatCost(topModel.usage.totalCostUsd, locale) }) : text("modelMixUnavailable")}
-          qualityHint={topModel?.successRate !== null && topModel?.successRate !== undefined ? text("successValue", { value: formatSuccessRate(topModel.successRate, locale) }) : text("lowData")}
+          label="Top Model"
+          value={topModel ? topModel.label : "No data"}
+          detail={topModel ? `${formatTokens(topModel.usage.totalTokens)} tokens · ${formatCount(topModel.usage.invocationCount)} calls` : "No model telemetry yet"}
+          secondaryDetail={topModel && topModelEfficiency?.tokensPerCall !== null && topModelEfficiency?.tokensPerCall !== undefined ? `${Math.round(topModelEfficiency.tokensPerCall).toLocaleString()} tokens/call · ${formatCost(topModel.usage.totalCostUsd)}` : "Model mix unavailable"}
+          qualityHint={topModel?.successRate !== null && topModel?.successRate !== undefined ? `${formatSuccessRate(topModel.successRate)} success` : "Low data"}
           accentHex={STATS_COLORS.signal}
           sparkline={topModel ? extractModelSeries(stats, topModel.id) : []}
-          signalLabel={text("models")}
+          signalLabel="Models"
         />
         <StatsMetricCard
-          label={text("successRate")}
-          value={formatSuccessRate(modelSuccessRate, locale)}
-          detail={text("completedFailed", { completed: formatCount(statusCounts.completed, locale), failed: formatCount(statusCounts.failed, locale) })}
-          secondaryDetail={highlights.mostReliable ? text("bestModel", { model: highlights.mostReliable.model.label, value: highlights.mostReliable.value }) : text("needCompletedOutcomes")}
-          qualityHint={modelSuccessRate === null ? text("noOutcome") : modelSuccessRate >= 0.95 ? text("strong") : text("watch")}
+          label="Success Rate"
+          value={formatSuccessRate(modelSuccessRate)}
+          detail={`${formatCount(statusCounts.completed)} completed · ${formatCount(statusCounts.failed)} failed`}
+          secondaryDetail={highlights.mostReliable ? `Best: ${highlights.mostReliable.model.label} · ${highlights.mostReliable.value}` : "Need completed model outcomes"}
+          qualityHint={modelSuccessRate === null ? "No outcome" : modelSuccessRate >= 0.95 ? "Strong" : "Watch"}
           accentHex={STATS_COLORS.moss}
           sparkline={[]}
-          signalLabel={text("reliability")}
+          signalLabel="Reliability"
         />
         <StatsMetricCard
-          label={text("activeModels")}
-          value={formatMaybeCount(models.length, models.length > 0, locale)}
-          detail={models.length > 0 ? text("distinctModelRows") : text("noModelWindow")}
-          secondaryDetail={highlights.busiest ? text("busiestModel", { model: highlights.busiest.model.label }) : text("needModelRow")}
-          qualityHint={models.length > 1 ? text("portfolio") : models.length === 1 ? text("singleModel") : text("empty")}
+          label="Active Models"
+          value={formatMaybeCount(models.length, models.length > 0)}
+          detail={models.length > 0 ? "Distinct model rows with usage telemetry" : "No model telemetry in this window"}
+          secondaryDetail={highlights.busiest ? `Busiest: ${highlights.busiest.model.label}` : "Need at least one model row"}
+          qualityHint={models.length > 1 ? "Portfolio" : models.length === 1 ? "Single model" : "Empty"}
           accentHex={STATS_COLORS.clay}
           sparkline={[]}
-          signalLabel={text("active")}
+          signalLabel="Active"
         />
         <StatsMetricCard
-          label={text("medianLatency")}
-          value={duration.sampleCount > 0 ? formatStatsDuration(duration.p50Ms, locale) : "—"}
-          detail={duration.sampleCount > 0 ? text("p95AcrossCalls", { duration: formatStatsDuration(duration.p95Ms, locale), calls: formatCount(duration.sampleCount, locale) }) : text("noFinishedSamples")}
-          secondaryDetail={highlights.fastest ? text("fastestModel", { model: highlights.fastest.model.label, value: highlights.fastest.value }) : text("latencyRankingUnavailable")}
-          qualityHint={duration.sampleCount > 0 ? text("measured") : text("lowData")}
+          label="Median Latency"
+          value={duration.sampleCount > 0 ? formatStatsDuration(duration.p50Ms) : "—"}
+          detail={duration.sampleCount > 0 ? `p95 ${formatStatsDuration(duration.p95Ms)} across ${formatCount(duration.sampleCount)} calls` : "No finished invocation samples"}
+          secondaryDetail={highlights.fastest ? `Fastest: ${highlights.fastest.model.label} · ${highlights.fastest.value}` : "Latency ranking unavailable"}
+          qualityHint={duration.sampleCount > 0 ? "Measured" : "Low data"}
           accentHex={STATS_COLORS.ember}
           sparkline={[]}
-          signalLabel={locale === "de" ? "Latenz" : "Latency"}
+          signalLabel="Latency"
         />
         <StatsMetricCard
-          label={text("cacheHitRate")}
-          value={hasTokenData ? formatRate(cacheRate, locale) : "—"}
-          detail={highlights.bestCache ? text("bestModelAt", { model: highlights.bestCache.model.label, value: highlights.bestCache.value }) : text("cachedPromptShare")}
-          secondaryDetail={highlights.highestVelocity ? text("velocityModel", { model: highlights.highestVelocity.model.label, value: highlights.highestVelocity.value }) : text("velocityRankingUnavailable")}
-          qualityHint={highlights.bestCache ? text("optimized") : text("lowData")}
+          label="Cache Hit Rate"
+          value={hasTokenData ? formatRate(cacheRate) : "—"}
+          detail={highlights.bestCache ? `Best: ${highlights.bestCache.model.label} at ${highlights.bestCache.value}` : "Cached input share of all prompt tokens"}
+          secondaryDetail={highlights.highestVelocity ? `Velocity: ${highlights.highestVelocity.model.label} · ${highlights.highestVelocity.value}` : "Velocity ranking unavailable"}
+          qualityHint={highlights.bestCache ? "Optimized" : "Low data"}
           accentHex={STATS_COLORS.amber}
           sparkline={hasTokenData ? metricSeries.cacheRate : []}
-          signalLabel={text("efficiency")}
+          signalLabel="Efficiency"
         />
       </>
     );
@@ -446,54 +445,54 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
     return (
       <>
         <StatsMetricCard
-          label={text("taskRows")}
-          value={formatMaybeCount(tasks.length, tasks.length > 0, locale)}
-          detail={tasks.length > 0 ? text("tokensAcrossTasks", { tokens: formatTokens(taskTokens, locale) }) : text("noTaskRows")}
-          secondaryDetail={topTask ? text("topTask", { task: topTask.label, cost: formatCost(topTask.usage.totalCostUsd, locale) }) : text("taskScopeUnavailable")}
-          qualityHint={tasks.length > 0 ? text("scoped") : text("empty")}
+          label="Task Rows"
+          value={formatMaybeCount(tasks.length, tasks.length > 0)}
+          detail={tasks.length > 0 ? `${formatTokens(taskTokens)} tokens across task ledgers` : "No task ledger rows in this window"}
+          secondaryDetail={topTask ? `Top task: ${topTask.label} · ${formatCost(topTask.usage.totalCostUsd)}` : "Task scope unavailable"}
+          qualityHint={tasks.length > 0 ? "Scoped" : "Empty"}
           accentHex={STATS_COLORS.signal}
           sparkline={metricSeries.totalTokens}
-          signalLabel={text("tasks")}
+          signalLabel="Tasks"
         />
         <StatsMetricCard
-          label={text("sprintRows")}
-          value={formatMaybeCount(sprints.length, sprints.length > 0, locale)}
-          detail={stats.activeSprint ? text("sprintActive", { sprint: stats.activeSprint.sprintNumber ?? "?" }) : text("historicalWindow")}
-          secondaryDetail={topSprint ? text("topSprint", { sprint: topSprint.label, tokens: formatTokens(sprintTokens, locale) }) : text("noSprintRows")}
-          qualityHint={stats.activeSprint ? text("active") : text("archive")}
+          label="Sprint Rows"
+          value={formatMaybeCount(sprints.length, sprints.length > 0)}
+          detail={stats.activeSprint ? `Sprint ${stats.activeSprint.sprintNumber ?? "?"} active` : "Historical window"}
+          secondaryDetail={topSprint ? `Top sprint: ${topSprint.label} · ${formatTokens(sprintTokens)} total` : "No sprint ledger rows in range"}
+          qualityHint={stats.activeSprint ? "Active" : "Archive"}
           accentHex={STATS_COLORS.clay}
           sparkline={metricSeries.invocations}
-          signalLabel={text("sprints")}
+          signalLabel="Sprints"
         />
         <StatsMetricCard
-          label={text("filesChanged")}
-          value={formatMaybeCount(gitTotals?.filesChanged, Boolean(gitTotals) && (gitTotals?.filesChanged || 0) > 0, locale)}
-          detail={gitTotals && gitTotals.filesChanged > 0 ? text("addedRemoved", { added: formatCount(gitTotals.insertions, locale), removed: formatCount(gitTotals.deletions, locale) }) : text("noFileChanges")}
-          secondaryDetail={gitTotals ? text("prsMerged", { prs: formatCount(gitTotals.prCount, locale), merged: formatCount(gitTotals.mergedCount, locale) }) : text("diffUnavailable")}
-          qualityHint={gitTotals?.filesChanged ? text("diff") : text("empty")}
+          label="Files Changed"
+          value={formatMaybeCount(gitTotals?.filesChanged, Boolean(gitTotals) && (gitTotals?.filesChanged || 0) > 0)}
+          detail={gitTotals && gitTotals.filesChanged > 0 ? `${formatCount(gitTotals.insertions)} added · ${formatCount(gitTotals.deletions)} removed` : "No file-change telemetry in range"}
+          secondaryDetail={gitTotals ? `${formatCount(gitTotals.prCount)} PRs · ${formatCount(gitTotals.mergedCount)} merged` : "Diff scope unavailable"}
+          qualityHint={gitTotals?.filesChanged ? "Diff" : "Empty"}
           accentHex={STATS_COLORS.ember}
           sparkline={metricSeries.gitFilesChanged}
-          signalLabel={text("diff")}
+          signalLabel="Diff"
         />
         <StatsMetricCard
-          label={text("pullRequests")}
-          value={formatMaybeCount(gitTotals?.prCount, Boolean(gitTotals) && (gitTotals?.prCount || 0) > 0, locale)}
-          detail={gitTotals && gitTotals.prCount > 0 ? text("mergedPrs", { count: formatCount(gitTotals.mergedCount, locale) }) : text("noPullRequests")}
-          secondaryDetail={gitTotals ? text("conflictSignals", { count: formatCount(gitTotals.mergeConflictCount, locale) }) : text("gitTotalsUnavailable")}
-          qualityHint={gitTotals?.prCount ? text("git") : text("lowData")}
+          label="Pull Requests"
+          value={formatMaybeCount(gitTotals?.prCount, Boolean(gitTotals) && (gitTotals?.prCount || 0) > 0)}
+          detail={gitTotals && gitTotals.prCount > 0 ? `${formatCount(gitTotals.mergedCount)} merged PRs recorded` : "No pull request telemetry in range"}
+          secondaryDetail={gitTotals ? `${formatCount(gitTotals.mergeConflictCount)} conflict signals` : "Git totals unavailable"}
+          qualityHint={gitTotals?.prCount ? "Git" : "Low data"}
           accentHex={STATS_COLORS.moss}
           sparkline={metricSeries.gitPrs}
           signalLabel="PRs"
         />
         <StatsMetricCard
-          label={text("mergeConflicts")}
-          value={formatMaybeCount(gitTotals?.mergeConflictCount || stats.mergeConflictCount, Boolean(gitTotals) && ((gitTotals?.mergeConflictCount || stats.mergeConflictCount || 0) > 0), locale)}
-          detail={(gitTotals?.mergeConflictCount || stats.mergeConflictCount || 0) > 0 ? text("blockersFound") : text("noMergeBlockers")}
-          secondaryDetail={gitTotals ? text("filesTouched", { count: formatCount(gitTotals.filesChanged, locale) }) : text("gitConflictUnavailable")}
-          qualityHint={(gitTotals?.mergeConflictCount || stats.mergeConflictCount || 0) > 0 ? text("blocked") : text("clear")}
+          label="Merge Conflicts"
+          value={formatMaybeCount(gitTotals?.mergeConflictCount || stats.mergeConflictCount, Boolean(gitTotals) && ((gitTotals?.mergeConflictCount || stats.mergeConflictCount || 0) > 0))}
+          detail={(gitTotals?.mergeConflictCount || stats.mergeConflictCount || 0) > 0 ? "Operational blockers found in git ledgers" : "No merge-conflict blockers recorded"}
+          secondaryDetail={gitTotals ? `${formatCount(gitTotals.filesChanged)} files touched` : "Git conflict scope unavailable"}
+          qualityHint={(gitTotals?.mergeConflictCount || stats.mergeConflictCount || 0) > 0 ? "Blocked" : "Clear"}
           accentHex={STATS_COLORS.rose}
           sparkline={metricSeries.gitMergeConflicts}
-          signalLabel={text("blocks")}
+          signalLabel="Blocks"
         />
       </>
     );
@@ -506,54 +505,54 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
     return (
       <>
         <StatsMetricCard
-          label={text("systemHealth")}
-          value={formatRate(successRate, locale)}
-          detail={hasInvocationData ? text("failedPaused", { failed: formatCount(statusCounts.failed, locale), paused: formatCount(statusCounts.paused, locale) }) : text("noOutcomesScore")}
-          secondaryDetail={text("runningCancelled", { running: formatCount(statusCounts.running, locale), cancelled: formatCount(statusCounts.cancelled, locale) })}
-          qualityHint={successRate === null ? text("noOutcome") : successRate >= 95 ? text("healthy") : text("watch")}
+          label="System Health"
+          value={formatRate(successRate)}
+          detail={hasInvocationData ? `${formatCount(statusCounts.failed)} failed · ${formatCount(statusCounts.paused)} paused` : "No invocation outcomes to score"}
+          secondaryDetail={`${formatCount(statusCounts.running)} running · ${formatCount(statusCounts.cancelled)} cancelled`}
+          qualityHint={successRate === null ? "No outcome" : successRate >= 95 ? "Healthy" : "Watch"}
           accentHex={STATS_COLORS.rose}
           sparkline={[]}
-          signalLabel={text("live")}
+          signalLabel="Live"
         />
         <StatsMetricCard
-          label={text("invocationRows")}
-          value={formatMaybeCount(usage.invocationCount, hasInvocationData, locale)}
-          detail={duration.sampleCount > 0 ? text("durationSamplesAvailable", { count: formatCount(duration.sampleCount, locale) }) : text("noDurationSamples")}
-          secondaryDetail={toolCallCount > 0 ? text("toolCallsCaptured", { count: formatCount(toolCallCount, locale) }) : text("toolCallsUnavailable")}
-          qualityHint={usage.invocationCount > 0 ? text("indexed") : text("empty")}
+          label="Invocation Rows"
+          value={formatMaybeCount(usage.invocationCount, hasInvocationData)}
+          detail={duration.sampleCount > 0 ? `${formatCount(duration.sampleCount)} duration samples available` : "No invocation duration samples yet"}
+          secondaryDetail={toolCallCount > 0 ? `${formatCount(toolCallCount)} tool calls captured` : "Tool-call telemetry unavailable"}
+          qualityHint={usage.invocationCount > 0 ? "Indexed" : "Empty"}
           accentHex={STATS_COLORS.signal}
           sparkline={metricSeries.invocations}
-          signalLabel={text("rows")}
+          signalLabel="Rows"
         />
         <StatsMetricCard
-          label={text("providerRows")}
-          value={formatMaybeCount(providers.length, providers.length > 0, locale)}
-          detail={providers.length > 0 ? text("providerSegmentsDeck", { count: formatCount(sortedProviderSegments.length, locale) }) : text("noProviderSystemRows")}
-          secondaryDetail={topProviderEntity ? text("leadProvider", { provider: topProviderEntity.label, calls: formatCount(topProviderEntity.usage.invocationCount, locale) }) : text("providerHealthUnavailable")}
-          qualityHint={providers.length > 1 ? text("mixed") : providers.length === 1 ? text("single") : text("empty")}
+          label="Provider Rows"
+          value={formatMaybeCount(providers.length, providers.length > 0)}
+          detail={providers.length > 0 ? `${formatCount(sortedProviderSegments.length)} provider segments in the deck` : "No provider rows in the system view"}
+          secondaryDetail={topProviderEntity ? `Lead provider: ${topProviderEntity.label} · ${formatCount(topProviderEntity.usage.invocationCount)} calls` : "Provider health unavailable"}
+          qualityHint={providers.length > 1 ? "Mixed" : providers.length === 1 ? "Single" : "Empty"}
           accentHex={STATS_COLORS.clay}
           sparkline={[]}
-          signalLabel={text("providers")}
+          signalLabel="Providers"
         />
         <StatsMetricCard
-          label={text("modelRows")}
-          value={formatMaybeCount(models.length, models.length > 0, locale)}
-          detail={topModelEntity ? text("modelLeadsWindow", { model: topModelEntity.label }) : text("noTopModel")}
-          secondaryDetail={topModelEntity ? text("modelP50Calls", { duration: formatStatsDuration(topModelEntity.duration.p50Ms, locale), calls: formatCount(topModelEntity.usage.invocationCount, locale) }) : text("modelLatencyUnavailable")}
-          qualityHint={topModelEntity?.successRate !== null && topModelEntity?.successRate !== undefined ? text("successValue", { value: formatSuccessRate(topModelEntity.successRate, locale) }) : text("lowData")}
+          label="Model Rows"
+          value={formatMaybeCount(models.length, models.length > 0)}
+          detail={topModelEntity ? `${topModelEntity.label} leads the current window` : "No top model in the current window"}
+          secondaryDetail={topModelEntity ? `${formatStatsDuration(topModelEntity.duration.p50Ms)} model p50 · ${formatCount(topModelEntity.usage.invocationCount)} calls` : "Model latency unavailable"}
+          qualityHint={topModelEntity?.successRate !== null && topModelEntity?.successRate !== undefined ? `${formatSuccessRate(topModelEntity.successRate)} success` : "Low data"}
           accentHex={STATS_COLORS.ember}
           sparkline={topModelEntity ? extractModelSeries(stats, topModelEntity.id) : []}
-          signalLabel={text("models")}
+          signalLabel="Models"
         />
         <StatsMetricCard
-          label={text("sourceRows")}
-          value={formatMaybeCount(sourceRows, sourceRows > 0, locale)}
-          detail={sourceRows > 0 ? text("tokenSegments", { count: formatCount(tokenSegments.length, locale) }) : text("noSourceQualityRows")}
+          label="Source Rows"
+          value={formatMaybeCount(sourceRows, sourceRows > 0)}
+          detail={sourceRows > 0 ? `${formatCount(tokenSegments.length)} token anatomy segments` : "No source rows for telemetry quality"}
           secondaryDetail={telemetrySummary.detail}
           qualityHint={telemetrySummary.label}
           accentHex={STATS_COLORS.moss}
           sparkline={[]}
-          signalLabel={text("sources")}
+          signalLabel="Sources"
         />
       </>
     );

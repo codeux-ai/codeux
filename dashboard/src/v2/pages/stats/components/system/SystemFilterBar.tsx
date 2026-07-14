@@ -2,7 +2,6 @@ import type { FunctionComponent } from "preact";
 import { ChevronLeft, ChevronRight, Search, SlidersHorizontal, X } from "lucide-preact";
 import { CHIP_CLASS, CONTROL_FOCUS_CLASS, INPUT_CLASS, PANEL_CLASS, STATUS_TONE_CLASS, SUBPANEL_CLASS } from "../StatsShared.js";
 import type { SystemFilters } from "../../hooks/use-system-view-data.js";
-import { useStatsI18n } from "../../stats-i18n.js";
 
 export interface SystemFilterBarProps {
   page?: number;
@@ -54,25 +53,21 @@ const FilterGroup: FunctionComponent<{
   children: import("preact").ComponentChildren;
   icon?: boolean;
   priority?: "primary" | "secondary";
-}> = ({ label, children, icon, priority = "secondary" }) => {
-  const { locale } = useStatsI18n();
-
-  return (
-    <div
-      className={`${SUBPANEL_CLASS} min-w-0 p-3 ${priority === "primary" ? "h-full" : ""}`}
-      role="group"
-      aria-label={`${label} ${locale === "de" ? "Filter" : "filters"}`}
-    >
-      <div className="mb-2 flex min-w-0 items-center gap-2">
-        <div className="inline-flex min-w-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">
-          {icon ? <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" strokeWidth={2.2} /> : null}
-          <span className="truncate">{label}</span>
-        </div>
+}> = ({ label, children, icon, priority = "secondary" }) => (
+  <div
+    className={`${SUBPANEL_CLASS} min-w-0 p-3 ${priority === "primary" ? "h-full" : ""}`}
+    role="group"
+    aria-label={`${label} filters`}
+  >
+    <div className="mb-2 flex min-w-0 items-center gap-2">
+      <div className="inline-flex min-w-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">
+        {icon ? <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" strokeWidth={2.2} /> : null}
+        <span className="truncate">{label}</span>
       </div>
-      <div className="flex min-w-0 flex-wrap items-stretch gap-2">{children}</div>
     </div>
-  );
-};
+    <div className="flex min-w-0 flex-wrap items-stretch gap-2">{children}</div>
+  </div>
+);
 
 export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
   filters,
@@ -87,10 +82,9 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
   onPageChange,
   hasMore,
 }) => {
-  const { locale, formatNumber } = useStatsI18n();
   const hasActiveFilters = filters.status.length > 0 || filters.purpose.length > 0 || filters.provider.length > 0 || (filters.errorCategories && filters.errorCategories.length > 0) || search !== "";
-  const shownCount = formatNumber(filteredCount);
-  const totalShown = formatNumber(totalCount);
+  const shownCount = filteredCount.toLocaleString();
+  const totalShown = totalCount.toLocaleString();
   const activeFilterCount = filters.status.length + filters.purpose.length + filters.provider.length + (filters.errorCategories?.length ?? 0) + (search !== "" ? 1 : 0);
 
   return (
@@ -98,7 +92,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
       <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(16rem,0.9fr)_minmax(0,1.35fr)] xl:items-stretch">
         <div className={`${SUBPANEL_CLASS} flex min-w-0 flex-col justify-center gap-2 p-3`}>
           <label htmlFor="system-filter-search" className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">
-            {locale === "de" ? "Suche" : "Search"}
+            Search
           </label>
           <div className="relative min-w-0">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--stats-detail-color)]" strokeWidth={2} />
@@ -107,15 +101,15 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
               type="search"
               value={search}
               onInput={(event) => onSearchChange((event.currentTarget as HTMLInputElement).value)}
-              placeholder={locale === "de" ? "Systemstatistiken durchsuchen" : "Search system stats"}
-              aria-label={locale === "de" ? "Systemstatistiken durchsuchen" : "Search system stats"}
+              placeholder="Search system stats"
+              aria-label="Search system stats"
               className={`${INPUT_CLASS} w-full pl-10 pr-10`}
             />
             {search !== "" ? (
               <button
                 type="button"
                 onClick={() => onSearchChange("")}
-                aria-label={locale === "de" ? "Suche leeren" : "Clear search"}
+                aria-label="Clear search"
                 className={`absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[color:var(--stats-label-color)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[color:var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}
               >
                 <X className="h-4 w-4" />
@@ -135,7 +129,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
                 onClick={() => onFiltersChange({ ...filters, status: toggleValue(filters.status, status.value) })}
                 className={buildChipClass(active, status.activeClass)}
               >
-                <span className="min-w-0 max-w-full truncate">{locale === "de" ? ({ running: "Laufend", completed: "Abgeschlossen", failed: "Fehlgeschlagen", cancelled: "Abgebrochen", paused: "Pausiert" } as const)[status.value] : status.label}</span>
+                <span className="min-w-0 max-w-full truncate">{status.label}</span>
               </button>
             );
           })}
@@ -144,7 +138,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
 
       <div className="grid min-w-0 gap-3 lg:grid-cols-2 2xl:grid-cols-3">
         {availablePurposes.length > 0 ? (
-          <FilterGroup label={locale === "de" ? "Zwecke" : "Purposes"}>
+          <FilterGroup label="Purposes">
             {availablePurposes.map((purpose) => {
               const active = filters.purpose.includes(purpose);
               return (
@@ -155,7 +149,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
                   onClick={() => onFiltersChange({ ...filters, purpose: toggleValue(filters.purpose, purpose) })}
                   className={buildChipClass(active, STATUS_TONE_CLASS.signal)}
                 >
-                  <span className="min-w-0 max-w-full truncate">{purpose}</span>
+                  <span className="min-w-0 max-w-full truncate">{formatChipLabel(purpose)}</span>
                 </button>
               );
             })}
@@ -163,7 +157,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
         ) : null}
 
         {availableProviders.length > 0 ? (
-          <FilterGroup label={locale === "de" ? "Anbieter" : "Providers"}>
+          <FilterGroup label="Providers">
             {availableProviders.map((provider) => {
               const active = filters.provider.includes(provider);
               return (
@@ -174,14 +168,14 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
                   onClick={() => onFiltersChange({ ...filters, provider: toggleValue(filters.provider, provider) })}
                   className={buildChipClass(active, STATUS_TONE_CLASS.cyan)}
                 >
-                  <span className="min-w-0 max-w-full truncate">{provider}</span>
+                  <span className="min-w-0 max-w-full truncate">{formatChipLabel(provider)}</span>
                 </button>
               );
             })}
           </FilterGroup>
         ) : null}
 
-        <FilterGroup label={locale === "de" ? "Fehlerkategorie" : "Error Category"}>
+        <FilterGroup label="Error Category">
           {["timeout", "rateLimit", "apiError", "modelError", "cancelled"].map((errorCat) => {
             const active = filters.errorCategories?.includes(errorCat) ?? false;
             return (
@@ -192,7 +186,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
                 onClick={() => onFiltersChange({ ...filters, errorCategories: toggleValue(filters.errorCategories || [], errorCat) })}
                 className={buildChipClass(active, STATUS_TONE_CLASS.warning)}
               >
-                <span className="min-w-0 max-w-full truncate">{locale === "de" ? ({ timeout: "Zeitüberschreitung", rateLimit: "Ratenlimit", apiError: "API-Fehler", modelError: "Modellfehler", cancelled: "Abgebrochen" } as Record<string, string>)[errorCat] : formatChipLabel(errorCat)}</span>
+                <span className="min-w-0 max-w-full truncate">{formatChipLabel(errorCat)}</span>
               </button>
             );
           })}
@@ -210,24 +204,24 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
               }}
               className={`inline-flex min-h-8 items-center rounded-[var(--stats-chip-radius)] border border-[color:var(--stats-border-hairline)] px-3 text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)] transition-[background-color,border-color,color] hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[color:var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}
             >
-              {locale === "de" ? "Alle leeren" : "Clear all"}
+              Clear all
             </button>
           ) : null}
           <div className="rounded-[var(--stats-chip-radius)] border border-[color:var(--stats-card-border)] px-3 py-1.5">
-            {locale === "de" ? `${shownCount} von ${totalShown} angezeigt` : `Showing ${shownCount} of ${totalShown}`}
+            Showing {shownCount} of {totalShown}
           </div>
           <div className="rounded-[var(--stats-chip-radius)] border border-[color:var(--stats-card-border)] px-3 py-1.5">
-            {formatNumber(activeFilterCount)} {locale === "de" ? "aktive Filter" : "active filters"}
+            {activeFilterCount.toLocaleString()} active filters
           </div>
           {page !== undefined ? (
             <div className="rounded-[var(--stats-chip-radius)] border border-[color:var(--stats-card-border)] px-3 py-1.5">
-              {locale === "de" ? `Seite ${formatNumber(page + 1)}${hasMore ? " · weitere verfügbar" : ""}` : `Page ${formatNumber(page + 1)}${hasMore ? " · more available" : ""}`}
+              Page {page + 1}{hasMore ? " · more available" : ""}
             </div>
           ) : null}
         </div>
 
         {page !== undefined && onPageChange ? (
-          <div className="grid min-w-0 grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:justify-end" role="group" aria-label={locale === "de" ? "Aufrufseitennavigation" : "Invocation pagination"}>
+          <div className="grid min-w-0 grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:justify-end" role="group" aria-label="Invocation pagination">
             <button
               type="button"
               disabled={page === 0}
@@ -235,7 +229,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
               className={`inline-flex min-h-9 min-w-0 items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold text-[color:var(--stats-detail-color)] transition-colors hover:text-[color:var(--stats-value-color)] disabled:cursor-not-allowed disabled:opacity-50 ${CHIP_CLASS} ${CONTROL_FOCUS_CLASS}`}
             >
               <ChevronLeft className="h-3.5 w-3.5" />
-              <span className="truncate">{locale === "de" ? "Zurück" : "Prev"}</span>
+              <span className="truncate">Prev</span>
             </button>
             <button
               type="button"
@@ -243,7 +237,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
               onClick={() => onPageChange(page + 1)}
               className={`inline-flex min-h-9 min-w-0 items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold text-[color:var(--stats-detail-color)] transition-colors hover:text-[color:var(--stats-value-color)] disabled:cursor-not-allowed disabled:opacity-50 ${CHIP_CLASS} ${CONTROL_FOCUS_CLASS}`}
             >
-              <span className="truncate">{locale === "de" ? "Weiter" : "Next"}</span>
+              <span className="truncate">Next</span>
               <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>

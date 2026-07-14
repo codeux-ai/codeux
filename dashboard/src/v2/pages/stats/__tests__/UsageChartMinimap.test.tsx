@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render } from "@testing-library/preact";
 import type { ExecutionUsageBucketSummary } from "../../../types.js";
 import { UsageChartMinimap } from "../components/UsageChartMinimap.js";
-import { StatsI18nProvider } from "../stats-i18n.js";
 
 afterEach(() => {
   cleanup();
@@ -160,26 +159,5 @@ describe("UsageChartMinimap", () => {
     for (const label of labels) {
       expect(container.textContent).toContain(label);
     }
-  });
-
-  it("localizes German minimap summaries without changing zoom geometry", () => {
-    const onZoomChange = vi.fn();
-    const onStatusChange = vi.fn();
-    const { getByTestId } = render(
-      <StatsI18nProvider locale="de">
-        <UsageChartMinimap
-          buckets={createBuckets(11)}
-          zoomRange={{ start: 2, end: 6 }}
-          onZoomChange={onZoomChange}
-          onStatusChange={onStatusChange}
-        />
-      </StatsI18nProvider>,
-    );
-
-    const strip = getByTestId("usage-chart-minimap") as HTMLElement;
-    expect(strip.getAttribute("aria-label")).toBe("Zoomregion der Diagramm-Minimap, Intervalle 3 bis 7 von 11");
-    fireEvent.keyDown(strip, { key: "ArrowRight" });
-    expect(onZoomChange).toHaveBeenCalledWith({ start: 3, end: 7 });
-    expect(onStatusChange).toHaveBeenCalledWith("\u00dcbersicht auf b3 bis b7 gezoomt, 5 von 11 Intervallen.");
   });
 });

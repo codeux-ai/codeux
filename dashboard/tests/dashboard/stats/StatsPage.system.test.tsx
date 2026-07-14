@@ -185,7 +185,7 @@ describe("SystemStudio and filters", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^System Msgs/ }));
     expect(screen.getByText("Showing 1 of 3")).toBeInTheDocument();
-    expect(screen.getByText("system_message")).toBeInTheDocument();
+    expect(screen.getByText("system message")).toBeInTheDocument();
   });
 
   it("keeps the controlled system filter bar interactive", () => {
