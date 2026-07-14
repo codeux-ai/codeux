@@ -98,7 +98,7 @@ describe("credential key providers", () => {
     await expect(persistence.writeIfAbsent(Buffer.from("different-protected-value"))).resolves.toBe(false);
     await expect(persistence.read()).resolves.toEqual(protectedValue);
     const info = await stat(filePath);
-    expect(info.mode & 0o077).toBe(0);
+    if (process.platform !== "win32") expect(info.mode & 0o077).toBe(0);
   });
 
   it("keeps one recoverable Electron key across competing provider instances", async () => {
@@ -140,8 +140,10 @@ describe("credential key providers", () => {
     const persisted = await readFile(filePath);
     expect(persisted).toHaveLength(32);
     expect(first.key.equals(persisted)).toBe(true);
-    expect((await stat(dirname(filePath))).mode & 0o777).toBe(0o700);
-    expect((await stat(filePath)).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") {
+      expect((await stat(dirname(filePath))).mode & 0o777).toBe(0o700);
+      expect((await stat(filePath)).mode & 0o777).toBe(0o600);
+    }
 
     const restarted = await selectCredentialKeyProvider(selection).getActiveKey();
     expect(restarted.key.equals(first.key)).toBe(true);
@@ -174,16 +176,18 @@ describe("credential key providers", () => {
     expect(malformedHealth.reason).not.toContain(dir);
     expect((await stat(malformedPath)).size).toBe(16);
 
-    const permissivePath = join(dir, "permissive", "credential-root.key");
-    await mkdir(dirname(permissivePath), { recursive: true, mode: 0o700 });
-    await writeFile(permissivePath, Buffer.alloc(32, 8), { mode: 0o600 });
-    await chmod(permissivePath, 0o644);
-    await expect(new LocalFileKeyProvider(permissivePath).health()).resolves.toMatchObject({
-      available: false,
-      secure: false,
-      reason: expect.stringMatching(/0600/),
-    });
-    expect((await stat(permissivePath)).mode & 0o777).toBe(0o644);
+    if (process.platform !== "win32") {
+      const permissivePath = join(dir, "permissive", "credential-root.key");
+      await mkdir(dirname(permissivePath), { recursive: true, mode: 0o700 });
+      await writeFile(permissivePath, Buffer.alloc(32, 8), { mode: 0o600 });
+      await chmod(permissivePath, 0o644);
+      await expect(new LocalFileKeyProvider(permissivePath).health()).resolves.toMatchObject({
+        available: false,
+        secure: false,
+        reason: expect.stringMatching(/0600/),
+      });
+      expect((await stat(permissivePath)).mode & 0o777).toBe(0o644);
+    }
 
     const linkPath = join(dir, "linked", "credential-root.key");
     const targetPath = join(dir, "target.key");

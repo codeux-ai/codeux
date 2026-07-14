@@ -49,7 +49,7 @@ test.describe('task composer validation', () => {
     }
 
     await page.goto(`/tasks?projectId=${encodeURIComponent(project.id)}&sprintId=${encodeURIComponent(sprint.id)}`);
-    await expect(page.getByRole('heading', { level: 1, name: 'Task Board' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Tasks' })).toBeVisible();
 
     await page.getByRole('button', { name: 'New Task' }).click();
     const titleInput = page.getByPlaceholder('Fix navigation layout shift');

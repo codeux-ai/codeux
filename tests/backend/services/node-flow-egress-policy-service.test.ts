@@ -39,4 +39,30 @@ describe("EgressPolicyService", () => {
     expect(response.status).toBe(503);
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
+
+  it.each([0, -1, 120_001, Number.POSITIVE_INFINITY, Number.NaN])(
+    "rejects an unsafe request timeout of %s before dispatch",
+    async (timeoutMs) => {
+      const fetchMock = vi.fn();
+      const service = new EgressPolicyService({ lookup: publicLookup, fetch: fetchMock });
+
+      await expect(service.request({
+        url: "https://api.example.test/x",
+        policy: { timeoutMs },
+      })).rejects.toThrow(/timeout must be between 1 and 120000/i);
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([1, 120_000])("accepts the bounded request timeout %sms", async (timeoutMs) => {
+    const service = new EgressPolicyService({
+      lookup: publicLookup,
+      fetch: vi.fn().mockResolvedValue(new Response("ok", { headers: { "content-type": "text/plain" } })),
+    });
+
+    await expect(service.request({
+      url: "https://api.example.test/x",
+      policy: { timeoutMs },
+    })).resolves.toMatchObject({ status: 200 });
+  });
 });

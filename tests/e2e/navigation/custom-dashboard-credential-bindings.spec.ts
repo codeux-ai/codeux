@@ -122,7 +122,8 @@ test('binds declared build and runtime slots, recovers from conflict, blocks inv
   const panel = page.getByRole('region', { name: 'Dashboard credential slots' });
   await expect(panel.getByText('Credential declarations need attention before the next revision is publication-ready.')).toBeVisible();
   const buildSelect = panel.getByLabel('Compatible credential for Build metrics API');
-  await buildSelect.selectOption(primary.id);
+  await buildSelect.click();
+  await page.getByRole('option', { name: /Primary metrics credential/ }).click();
   const buildBind = panel.getByRole('button', { name: 'Bind credential for Build metrics API', exact: true });
   await buildBind.click();
   await expect(panel.getByText('Compatible binding').first()).toBeVisible();
@@ -136,10 +137,12 @@ test('binds declared build and runtime slots, recovers from conflict, blocks inv
   });
   expect(externallyBound.credentialBindingRevision).toBe(3);
 
-  await buildSelect.selectOption(replacement.id);
+  await buildSelect.click();
+  await page.getByRole('option', { name: /Replacement metrics credential/ }).click();
   await panel.getByRole('button', { name: 'Replace binding for Build metrics API', exact: true }).click();
   await expect(panel.getByRole('alert').filter({ hasText: 'Bindings changed in another session.' })).toBeVisible();
-  await buildSelect.selectOption(replacement.id);
+  await buildSelect.click();
+  await page.getByRole('option', { name: /Replacement metrics credential/ }).click();
   const replaceButton = panel.getByRole('button', { name: 'Replace binding for Build metrics API', exact: true });
   await replaceButton.click();
   await expect(panel.getByText('Replacement metrics credential', { exact: true }).first()).toBeVisible();
@@ -164,7 +167,8 @@ test('binds declared build and runtime slots, recovers from conflict, blocks inv
   expect(blockedBody).toMatch(/requires a binding/i);
   expect(blockedBody).not.toContain(SECRET_CANARY);
 
-  await buildSelect.selectOption(primary.id);
+  await buildSelect.click();
+  await page.getByRole('option', { name: /Primary metrics credential/ }).click();
   await panel.getByRole('button', { name: 'Bind credential for Build metrics API', exact: true }).click();
   await expect(panel.getByText('Credential declarations are ready to be included in the next revision.')).toBeVisible();
 
