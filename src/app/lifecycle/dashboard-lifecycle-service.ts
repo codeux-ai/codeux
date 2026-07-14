@@ -54,6 +54,7 @@ import type { AgentBaseUpdateService } from "../../services/agent-base-update-se
 import type { ExecutionInvocationControlService } from "../../services/execution-invocation-control-service.js";
 import type { ChatThreadRuntimeService } from "../../services/chat-thread-runtime-service.js";
 import type { ChatProviderOutboundService } from "../../services/chat-provider-outbound-service.js";
+import type { ChatProviderSessionRuntimeService } from "../../services/chat-provider-session-runtime-service.js";
 import type { QuicksprintService } from "../../services/quicksprint-service.js";
 import type { ProjectSetupService } from "../../services/project-setup-service.js";
 import type { SchedulerService } from "../../services/scheduler-service.js";
@@ -107,6 +108,9 @@ import type {
 } from "../../services/local-mcp-cli-config-service.js";
 import type { ProjectInitializationStateService } from "../../services/project-initialization-state-service.js";
 import type { CredentialBroker } from "../../services/credentials/credential-broker.js";
+import type { ChatProviderSecretService } from "../../services/chat-provider-secret-service.js";
+import type { ChatProviderVerificationService } from "../../services/chat-provider-verification-service.js";
+import type { ChatConnectorRegistry } from "../../domain/chat-connectors/registry.js";
 
 const updateCheckerService = new UpdateCheckerService();
 
@@ -125,6 +129,9 @@ export interface BootDashboardDeps {
   getDashboardNotifications?: (limit?: number) => ReturnType<ExecutionRepository["getDashboardNotifications"]>;
   connectionChatRepository: ConnectionChatRepository;
   chatProviderRepository: ChatProviderRepository;
+  chatProviderSecretService?: ChatProviderSecretService;
+  chatProviderVerificationService?: ChatProviderVerificationService;
+  chatConnectorRegistry?: ChatConnectorRegistry;
   projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   projectAttentionRepository: ProjectAttentionRepository;
@@ -150,6 +157,7 @@ export interface BootDashboardDeps {
   speechSynthesisService: SpeechSynthesisService;
   speechModelManager: SpeechModelManager;
   chatProviderOutboundService?: ChatProviderOutboundService;
+  chatProviderSessionRuntimeService?: ChatProviderSessionRuntimeService;
   nodeFlowService?: NodeFlowService;
   credentialBroker: CredentialBroker;
   headlessAuthService: HeadlessAuthService;
@@ -480,7 +488,21 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     deps.logger.warn(`Embedding model auto-restore failed: ${error}`);
   });
   deps.schedulerService?.start();
-  deps.chatProviderOutboundService?.start();
+  void Promise.resolve(deps.chatProviderIngressService?.start()).catch((error) => {
+    deps.logger.warn("Chat provider ingress recovery failed without blocking dashboard startup", {
+      providerErrorCode: error instanceof Error ? error.name : "ingress_recovery_error",
+    });
+  });
+  void Promise.resolve(deps.chatProviderSessionRuntimeService?.start()).catch((error) => {
+    deps.logger.warn("Chat provider session recovery failed without blocking dashboard startup", {
+      providerErrorCode: error instanceof Error ? error.name : "session_recovery_error",
+    });
+  });
+  void Promise.resolve(deps.chatProviderOutboundService?.start()).catch((error) => {
+    deps.logger.warn("Chat provider outbound recovery failed without blocking dashboard startup", {
+      providerErrorCode: error instanceof Error ? error.name : "outbound_recovery_error",
+    });
+  });
 
   const instructionFileService = new InstructionFileService({
     projectManagementRepository: deps.projectManagementRepository,
@@ -516,6 +538,10 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     knowledgeService: deps.knowledgeService,
     agentPresetRepository: deps.agentPresetRepository,
     chatProviderRepository: deps.chatProviderRepository,
+    chatProviderSecretService: deps.chatProviderSecretService,
+    chatProviderVerificationService: deps.chatProviderVerificationService,
+    chatProviderOutboundService: deps.chatProviderOutboundService,
+    chatConnectorRegistry: deps.chatConnectorRegistry,
     chatProviderIngressService: deps.chatProviderIngressService,
     speechTranscriptionService: deps.speechTranscriptionService,
     speechSynthesisService: deps.speechSynthesisService,
@@ -953,7 +979,9 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
   return {
     ...handle,
     close: async () => {
-      deps.chatProviderOutboundService?.stop();
+      await deps.chatProviderIngressService?.stop();
+      await deps.chatProviderOutboundService?.stop();
+      await deps.chatProviderSessionRuntimeService?.stop();
       await handle.close?.();
     },
   };

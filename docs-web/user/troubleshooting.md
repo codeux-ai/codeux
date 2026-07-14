@@ -185,6 +185,38 @@ The download failed mid-stream.
 - **Per-task activity** — visible in the dashboard task detail panel; also at `/api/live-activities` and `/api/execution/invocations/:id/messages`.
 - **Cycle telemetry** — `/api/projects/:projectId/execution/invocations` (typed by `type`).
 
+## Chat connector recovery
+
+Start with `/api/chat-providers/health`, the redacted connection/binding, and `/api/chat-providers/deliveries`. Health is persisted diagnostics and makes no provider call.
+
+### Bad credentials
+
+Disable the connection/binding, rotate and replace the write-only credential, run connection verification, and re-enable one test route only after `verified`. Secret/setup/mode changes invalidate old verification. Telegram `getMe`, Slack `auth.test`, and Discord current-user tests need credentials; Meta send testing needs explicit test-number opt-in. A skipped check is not a pass.
+
+Rollback by disabling the changed connection and re-enabling the previously verified managed/custom bridge.
+
+### Provider outage or repeated retries
+
+Honor the persisted `nextAttemptAt`/provider retry delay. Do not repeatedly click retry during throttling or while an unexpired lease owns `sending` work. Disable outbound if the queue grows, cancel stale/unsafe work, and approval-retry one delivery after provider recovery. Reconcile ambiguous outcomes with provider history before resending.
+
+Rollback new traffic to a known-good managed/custom bridge, but preserve failed rows for audit.
+
+### Stale sessions
+
+For Discord reconnect loops, disable the connection; confirm token, intents, privileged `MESSAGE_CONTENT`, and Discord-owned resume host; restart once to resume or re-identify; then correct/reverify if bounded attempts exhaust. For iMessage, repair the operator-selected protocol-v1 bridge. Code UX does not provide AppleScript, Messages-database automation, or an Apple bot sandbox.
+
+### Failed legacy-secret migration
+
+Protect a database backup and matching key-provider version, restore secure key readiness, restart/rerun migration until `pending: 0`, then reverify anything changed. Migration seals and compare-and-set commits before clearing plaintext, so do not manually copy secrets back to `secret_json`. Database rollback requires matching key material.
+
+### Disabled or ambiguous routing
+
+Check active/enabled connection state, stored project authorization, external channel, selectors, and inbound/outbound flags. Shared channels must select exactly one project; Code UX records `disambiguation_needed` rather than guessing. Correct the binding and send a new test message; do not move a historical delivery between projects.
+
+### Cleanup
+
+Keep failed connections disabled until retention review, cancel unwanted pending work, and let leases/sessions settle. Deleting a connection requires approval and cascades bindings/delivery history. Expired replay receipts and sessions are cleaned automatically.
+
 ## Recovery & reset
 
 If state is corrupted or unrecoverable:

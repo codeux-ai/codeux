@@ -38,7 +38,10 @@ backup files appear there.
   - `app-types.ts`, `mcp-tool-definitions.ts`
   - Shared backend contracts and MCP tool definitions.
   - `chat-provider-types.ts`
-  - External chat provider setup schemas, redacted credential contracts, channel binding records, and message delivery state types.
+  - External chat provider setup schemas, redacted credential/verification contracts, channel binding records, delivery leases, replay receipts, and resumable session types.
+- `domain/chat-connectors/`
+  - `registry.ts`, `types.ts`, and `providers/{whatsapp,imessage,telegram,slack,microsoft-teams,discord}.ts`
+  - Side-effect-free typed connector profiles: supported modes, provider/native trust boundaries, ingress authentication/normalization, identity, outbound mapping, verification, official references, and session requirements.
 - `integrations/`
   - `jules-api-client.ts`
   - Jules API HTTP client.
@@ -64,7 +67,7 @@ backup files appear there.
   - `project-runtime/run-event-writes.ts`
   - Focused write module for legacy runtime status-sync task runs and task-run events, including candidate run matching, status-sync event signatures, denormalized `task_run_events.project_id`, and source event key deduplication.
   - `chat-provider-repository.ts`
-  - External chat connector connections, channel bindings, inbound message idempotency, and outbound delivery state.
+  - External chat connector connections, encrypted-envelope metadata, verification invalidation, channel bindings, inbound idempotency/replay receipts, outbound leases, and provider sessions.
   - `settings-repository.ts`
   - `settings-defaults.ts`
   - `settings-sanitizer.ts`
@@ -98,6 +101,12 @@ backup files appear there.
   - Shared downloadable STT/TTS bundle definitions, cache layout, progress, and deletion.
   - `speech-transcription-service.ts`, `speech-synthesis-service.ts`
   - Scoped local ONNX and external API speech input/output runtimes.
+  - `chat-provider-secret-service.ts`, `chat-provider-verification-service.ts`
+  - Connector envelope creation/rotation, resumable legacy-secret sealing, bounded provider verification, sanitized outcomes, and persisted health summaries.
+  - `chat-provider-security.ts`, `chat-provider-ingress-service.ts`, `chat-provider-outbound-service.ts`
+  - Mode-aware ingress authentication/replay control, normalized project routing, atomic inbound delivery, leased outbound retry/cancellation, and restart recovery.
+  - `chat-provider-adapters.ts`, `chat-provider-session-runtime-service.ts`, `chat-providers/`
+  - HTTP/native/provider executors, bounded command/process handling, resumable sessions including Discord reconnect state, and provider-specific authentication clients.
 - `shared/logging/`
   - `logger.ts`
   - `correlation-id.ts`

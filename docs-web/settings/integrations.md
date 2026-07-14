@@ -46,6 +46,16 @@ Unavailable key custody leaves non-secret metadata visible and disables secret-b
 
 Configure provider and importer credentials at system scope and use project overrides only for repository-specific git hosts or importer defaults. Automation credentials follow their own project-aware ownership and allowlist policy rather than Settings inheritance.
 
+### Chat connectors
+
+Chat Connectors are separate from AI model providers. Choose an explicit transport: provider-native `official_api`; operator-selected `managed_bridge`/custom `webhook`; or iMessage's local `native_bridge`. Registry presence is not provider certification or production readiness.
+
+Create connections as draft, save write-only secrets, configure the generated `/api/chat-providers/ingress/:providerConnectionId` URL, run verification, bind an authorized project/channel, then enable one test route. Transport or secret changes invalidate verification.
+
+Live-test eligibility differs: Meta sends require explicit test-number opt-in; Telegram `getMe`, Slack `auth.test`, and Discord current-user checks require test credentials; Teams uses deterministic Emulator-shaped/mocked contract coverage; Apple provides no public personal-iMessage bot sandbox. A skipped credential-gated check is not a pass.
+
+See [External Chat Providers](/docs/architecture-external-chat-providers), [connector profiles](/docs/architecture-chat-connectors-overview), and [troubleshooting](/docs/user-troubleshooting).
+
 For Google Drive, link an existing host-side sync or mount directory and enable the opt-in Docker mount only for projects that need it. The mount defaults to read-only; see [Google Drive Project Mount](./google-drive-mount.md) for access, inheritance, security, and troubleshooting details. This integration does not configure Google Drive API synchronization or credentials.
 
 A practical review flow is:

@@ -3,7 +3,7 @@ import type {
   ChatProviderBridgeSetupSchema,
   ChatProviderChannelBindingRecord,
   ChatProviderKind,
-  ChatProviderMessageDeliveryRecord,
+  ChatProviderPublicDeliveryRecord,
   ChatProviderSetupConfig,
 } from "../types.js";
 import type {
@@ -12,12 +12,12 @@ import type {
 } from "./chat-provider-api.js";
 
 export const CHAT_PROVIDER_KINDS: ChatProviderKind[] = [
+  "discord",
   "whatsapp",
   "imessage",
   "telegram",
   "slack",
   "microsoft-teams",
-  "discord",
 ];
 
 const SETUP_NOTES: Record<ChatProviderKind, string[]> = {
@@ -54,8 +54,12 @@ export interface ChatProviderDeliveryViewModel {
   channelLabel: string;
   attemptLabel: string;
   updatedAtLabel: string;
+  nextRetryLabel: string;
   redactedError: string;
   isRetryable: boolean;
+  isCancellable: boolean;
+  isTerminal: boolean;
+  isAmbiguous: boolean;
 }
 
 export interface ChatProviderConnectionViewModel {
@@ -72,6 +76,7 @@ export interface ChatProviderConnectionViewModel {
   pendingOutboundCount: number;
   failedOutboundCount: number;
   outboundRepliesEnabled: boolean;
+  recentDeliveries: ChatProviderDeliveryViewModel[];
   recentFailedDeliveries: ChatProviderDeliveryViewModel[];
 }
 
@@ -118,9 +123,11 @@ export const getBridgeModeLabel = (bridgeMode: ChatProviderBridgeMode): string =
     case "managed_bridge":
       return "Managed bridge";
     case "webhook":
-      return "Webhook";
+      return "Custom webhook";
     case "native_bridge":
       return "Native bridge";
+    case "official_api":
+      return "Provider-native API";
   }
 };
 
@@ -149,6 +156,7 @@ export const redactChatProviderError = (value: string | null | undefined): strin
   }
 
   return value
+    .replace(/https?:\/\/[^\s)\]}]+/gi, "[redacted URL]")
     .replace(/\b(bearer\s+)[A-Za-z0-9._~+/-]+=*/gi, "$1[redacted]")
     .replace(/\b(token|secret|password|api[_ -]?key)(\s*[=:]\s*)["']?[^"'\s,;]+/gi, "$1$2[redacted]")
     .replace(/\b[A-Za-z0-9_-]{32,}\b/g, "[redacted]")
@@ -161,17 +169,24 @@ const formatStatus = (value: string): string => (
   value.split(/[-_]/g).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ")
 );
 
-const buildDeliveryViewModel = (delivery: ChatProviderMessageDeliveryRecord): ChatProviderDeliveryViewModel => {
-  const isRetryable = delivery.status === "failed" || delivery.status === "pending" || delivery.status === "sending";
+export const buildChatProviderDeliveryViewModel = (delivery: ChatProviderPublicDeliveryRecord): ChatProviderDeliveryViewModel => {
+  const isRetryable = delivery.status === "failed" || delivery.status === "retryable_failure";
+  const isCancellable = delivery.status === "pending" || delivery.status === "sending" || delivery.status === "retryable_failure";
+  const isTerminal = ["delivered", "processed", "failed", "duplicate", "cancelled"].includes(delivery.status);
+  const isAmbiguous = /ambiguous|may have been (?:accepted|sent)|unknown delivery/i.test(delivery.lastError ?? "");
   return {
     id: delivery.id,
     statusLabel: formatStatus(delivery.status),
-    retryLabel: isRetryable ? "Retryable" : "Terminal",
+    retryLabel: isAmbiguous ? "Ambiguous failure" : isRetryable ? "Retryable" : isTerminal ? "Terminal" : "In progress",
     channelLabel: delivery.externalChannelId,
     attemptLabel: `${delivery.attemptCount} attempt${delivery.attemptCount === 1 ? "" : "s"}`,
     updatedAtLabel: delivery.updatedAt,
+    nextRetryLabel: delivery.nextAttemptAt ? `Next retry ${delivery.nextAttemptAt}` : "No retry scheduled",
     redactedError: redactChatProviderError(delivery.lastError),
     isRetryable,
+    isCancellable,
+    isTerminal,
+    isAmbiguous,
   };
 };
 
@@ -196,17 +211,17 @@ export const buildChatProviderCatalogViewModel = (input: {
   definitions: DashboardChatProviderSetupDefinition[];
   connections: DashboardChatProviderConnectionRecord[];
   bindings: ChatProviderChannelBindingRecord[];
-  deliveriesByConnection: Record<string, ChatProviderMessageDeliveryRecord[]>;
+  deliveriesByConnection: Record<string, ChatProviderPublicDeliveryRecord[]>;
 }): ChatProviderCardViewModel[] => (
   input.definitions.map((definition) => {
     const connections = input.connections.filter((connection) => connection.providerKind === definition.kind);
     const connectionViewModels = connections.map((connection) => {
       const bindings = input.bindings.filter((binding) => binding.providerConnectionId === connection.id);
       const deliveries = input.deliveriesByConnection[connection.id] ?? [];
-      const recentFailedDeliveries = deliveries
-        .filter((delivery) => delivery.status === "failed")
+      const recentDeliveries = deliveries
         .slice(0, 5)
-        .map(buildDeliveryViewModel);
+        .map(buildChatProviderDeliveryViewModel);
+      const recentFailedDeliveries = recentDeliveries.filter((delivery) => delivery.statusLabel === "Failed" || delivery.statusLabel === "Retryable Failure");
       return {
         id: connection.id,
         providerKind: connection.providerKind,
@@ -221,6 +236,7 @@ export const buildChatProviderCatalogViewModel = (input: {
         pendingOutboundCount: deliveries.filter((delivery) => delivery.status === "pending" || delivery.status === "sending").length,
         failedOutboundCount: deliveries.filter((delivery) => delivery.status === "failed").length,
         outboundRepliesEnabled: bindings.some((binding) => binding.enabled && binding.outboundEnabled),
+        recentDeliveries,
         recentFailedDeliveries,
       };
     });
@@ -231,7 +247,9 @@ export const buildChatProviderCatalogViewModel = (input: {
       description: getChatProviderDescription(definition.kind),
       setupNotes: getChatProviderSetupNotes(definition.kind),
       connectionCount: connections.length,
-      activeConnectionCount: connections.filter((connection) => connection.enabled && connection.status === "active").length,
+      activeConnectionCount: connections.filter((connection) => (
+        connection.enabled && connection.status === "active" && connection.verificationStatus === "verified"
+      )).length,
       configuredChannelCount: connectionViewModels.reduce((sum, connection) => sum + connection.configuredChannelCount, 0),
       boundProjectCount: uniqueCount(input.bindings
         .filter((binding) => binding.providerKind === definition.kind)

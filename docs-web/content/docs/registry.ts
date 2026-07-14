@@ -110,6 +110,14 @@ export type DocsSlug =
   | 'settings-google-drive-mount'
   | 'user-dashboard-custom-dashboards'
   | 'architecture-card-ci-status-projection'
+  | 'architecture-chat-connector-runtime-reliability'
+  | 'architecture-chat-connectors-discord'
+  | 'architecture-chat-connectors-imessage'
+  | 'architecture-chat-connectors-overview'
+  | 'architecture-chat-connectors-microsoft-teams'
+  | 'architecture-chat-connectors-slack'
+  | 'architecture-chat-connectors-telegram'
+  | 'architecture-chat-connectors-whatsapp'
   | 'architecture-custom-dashboard-foundation'
   | 'architecture-custom-nodes'
   | 'architecture-high-concurrency-orchestration'
@@ -815,8 +823,8 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     id: 'architecture-external-chat-providers',
     path: '/docs/architecture-external-chat-providers',
     section: 'Architecture',
-    title: "External chat connectors",
-    description: "Code UX persists external chat provider configuration separately from MCP listener connections and dashboard conversation messages. The runtime stays adapter-neutral: it records provider setup, bridge mode, channel ro...",
+    title: "External Chat Providers",
+    description: "Code UX connector profiles declare setup, provider-native or bridge transport, ingress authentication, identity, verification, and session requirements. Shared services own encrypted secrets, authorized project routin...",
   },
   'architecture-configuration-resolution': {
     id: 'architecture-configuration-resolution',
@@ -880,6 +888,62 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     section: 'Architecture',
     title: "Card CI Status Projection",
     description: "Task, Sprint, and Live cards expose one compact persisted ciStatus: pending, running, failed, or null after settlement. The projection does not load the large remote Git status snapshot and does not poll GitHub or Git...",
+  },
+  'architecture-chat-connector-runtime-reliability': {
+    id: 'architecture-chat-connector-runtime-reliability',
+    path: '/docs/architecture-chat-connector-runtime-reliability',
+    section: 'Architecture',
+    title: "Chat connector runtime reliability",
+    description: "External connector callbacks and replies cross process, network, and provider boundaries. Code UX separates durable state changes from model, fetch, command, and reconnect work. Provider-specific policy comes from the...",
+  },
+  'architecture-chat-connectors-discord': {
+    id: 'architecture-chat-connectors-discord',
+    path: '/docs/architecture-chat-connectors-discord',
+    section: 'Architecture',
+    title: "Discord Connector Profile",
+    description: "Discord has two independently selected transports. Existing webhook mode preserves custom bot/gateway URLs. Provider-native official_api owns Discord HTTP interaction authentication, Gateway v10 delivery, REST replies...",
+  },
+  'architecture-chat-connectors-imessage': {
+    id: 'architecture-chat-connectors-imessage',
+    path: '/docs/architecture-chat-connectors-imessage',
+    section: 'Architecture',
+    title: "iMessage Connector Architecture",
+    description: "The iMessage profile is a transparent third-party bridge contract. It advertises only managed_bridge and native_bridge; it does not expose official_api, imply Apple endorsement, or verify an Apple provider endpoint.",
+  },
+  'architecture-chat-connectors-overview': {
+    id: 'architecture-chat-connectors-overview',
+    path: '/docs/architecture-chat-connectors-overview',
+    section: 'Architecture',
+    title: "Chat Connector Registry",
+    description: "Code UX registers one typed, independently editable profile for each external chat connector. Profiles own setup schemas, implemented transport modes, authentication and handshake metadata, inbound normalization, exte...",
+  },
+  'architecture-chat-connectors-microsoft-teams': {
+    id: 'architecture-chat-connectors-microsoft-teams',
+    path: '/docs/architecture-chat-connectors-microsoft-teams',
+    section: 'Architecture',
+    title: "Microsoft Teams Connector Profile",
+    description: "Microsoft Teams retains managed_bridge and custom webhook transports and provides a direct official_api profile based on Bot Connector Activities. Managed/custom endpoints remain operator-selected and are not represen...",
+  },
+  'architecture-chat-connectors-slack': {
+    id: 'architecture-chat-connectors-slack',
+    path: '/docs/architecture-chat-connectors-slack',
+    section: 'Architecture',
+    title: "Slack Connector Profile",
+    description: "Slack implements managed_bridge, explicit custom webhook, and direct official_api transports. The custom webhook remains a generic configured bridge URL; only official mode uses Slack APIs, with fixed https://slack.co...",
+  },
+  'architecture-chat-connectors-telegram': {
+    id: 'architecture-chat-connectors-telegram',
+    path: '/docs/architecture-chat-connectors-telegram',
+    section: 'Architecture',
+    title: "Telegram Connector Profile",
+    description: "Telegram implements managed_bridge, webhook, and direct official_api transports. The two legacy modes preserve their existing schemas, bridge URL fallbacks, authentication metadata, response parsing, and retry classif...",
+  },
+  'architecture-chat-connectors-whatsapp': {
+    id: 'architecture-chat-connectors-whatsapp',
+    path: '/docs/architecture-chat-connectors-whatsapp',
+    section: 'Architecture',
+    title: "WhatsApp Connector Profile",
+    description: "WhatsApp implements managed_bridge, webhook, and direct Meta Cloud API official_api transport. The legacy schemas and bridge mappings retain their original meaning; official mode is additive.",
   },
   'architecture-custom-dashboard-foundation': {
     id: 'architecture-custom-dashboard-foundation',
@@ -1075,6 +1139,14 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['settings-google-drive-mount'],
   docsRegistry['user-dashboard-custom-dashboards'],
   docsRegistry['architecture-card-ci-status-projection'],
+  docsRegistry['architecture-chat-connector-runtime-reliability'],
+  docsRegistry['architecture-chat-connectors-discord'],
+  docsRegistry['architecture-chat-connectors-imessage'],
+  docsRegistry['architecture-chat-connectors-overview'],
+  docsRegistry['architecture-chat-connectors-microsoft-teams'],
+  docsRegistry['architecture-chat-connectors-slack'],
+  docsRegistry['architecture-chat-connectors-telegram'],
+  docsRegistry['architecture-chat-connectors-whatsapp'],
   docsRegistry['architecture-custom-dashboard-foundation'],
   docsRegistry['architecture-custom-nodes'],
   docsRegistry['architecture-high-concurrency-orchestration'],

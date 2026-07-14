@@ -138,6 +138,26 @@ export function ensureChatProviderTables(db: DatabaseAdapter): void {
       UNIQUE (provider_connection_id, external_channel_id, project_id)
     )
   `);
+  ensureColumn(db, "chat_provider_connections", "verification_status", "TEXT NOT NULL DEFAULT 'unverified'");
+  ensureColumn(db, "chat_provider_connections", "verification_details_json", "TEXT");
+  ensureColumn(db, "chat_provider_connections", "verified_at", "TEXT");
+  ensureColumn(db, "chat_provider_connections", "secret_version", "INTEGER NOT NULL DEFAULT 0");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_provider_connection_secrets (
+      provider_connection_id TEXT PRIMARY KEY,
+      ciphertext BLOB NOT NULL,
+      nonce BLOB NOT NULL,
+      auth_tag BLOB NOT NULL,
+      wrapped_data_key BLOB NOT NULL,
+      wrap_nonce BLOB NOT NULL,
+      wrap_auth_tag BLOB NOT NULL,
+      key_id TEXT NOT NULL,
+      key_version INTEGER NOT NULL,
+      secret_keys_json TEXT NOT NULL DEFAULT '[]',
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (provider_connection_id) REFERENCES chat_provider_connections(id) ON DELETE CASCADE
+    )
+  `);
   db.exec(`
     CREATE TABLE IF NOT EXISTS chat_provider_message_deliveries (
       id TEXT PRIMARY KEY,
@@ -160,6 +180,37 @@ export function ensureChatProviderTables(db: DatabaseAdapter): void {
       FOREIGN KEY (conversation_message_id) REFERENCES conversation_messages(id) ON DELETE SET NULL
     )
   `);
+  ensureColumn(db, "chat_provider_message_deliveries", "next_attempt_at", "TEXT");
+  ensureColumn(db, "chat_provider_message_deliveries", "lease_owner", "TEXT");
+  ensureColumn(db, "chat_provider_message_deliveries", "lease_expires_at", "TEXT");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_provider_ingress_replay_receipts (
+      id TEXT PRIMARY KEY,
+      provider_connection_id TEXT NOT NULL,
+      receipt_key TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (provider_connection_id) REFERENCES chat_provider_connections(id) ON DELETE CASCADE,
+      UNIQUE (provider_connection_id, receipt_key)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_provider_sessions (
+      id TEXT PRIMARY KEY,
+      provider_connection_id TEXT NOT NULL,
+      channel_binding_id TEXT,
+      external_channel_id TEXT NOT NULL,
+      session_key TEXT NOT NULL,
+      state_json TEXT NOT NULL DEFAULT '{}',
+      version INTEGER NOT NULL DEFAULT 1,
+      expires_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (provider_connection_id) REFERENCES chat_provider_connections(id) ON DELETE CASCADE,
+      FOREIGN KEY (channel_binding_id) REFERENCES chat_provider_channel_bindings(id) ON DELETE CASCADE,
+      UNIQUE (provider_connection_id, session_key)
+    )
+  `);
 
   ensureIndex(db, "idx_chat_provider_connections_kind", "chat_provider_connections", "provider_kind, updated_at DESC");
   ensureIndex(db, "idx_chat_provider_connections_enabled", "chat_provider_connections", "enabled, status, updated_at DESC");
@@ -179,8 +230,15 @@ export function ensureChatProviderTables(db: DatabaseAdapter): void {
     db,
     "idx_chat_provider_message_deliveries_pending_outbound",
     `CREATE INDEX IF NOT EXISTS idx_chat_provider_message_deliveries_pending_outbound
-     ON chat_provider_message_deliveries (status, updated_at ASC)
+     ON chat_provider_message_deliveries (status, next_attempt_at, lease_expires_at, updated_at ASC)
      WHERE direction = 'outbound' AND status IN ('pending', 'sending', 'retryable_failure')`,
+  );
+  ensureIndex(db, "idx_chat_provider_ingress_replay_expiry", "chat_provider_ingress_replay_receipts", "expires_at ASC");
+  ensureIndex(db, "idx_chat_provider_sessions_connection", "chat_provider_sessions", "provider_connection_id, updated_at DESC");
+  ensureReadIndexSql(
+    db,
+    "idx_chat_provider_sessions_expiry",
+    "CREATE INDEX IF NOT EXISTS idx_chat_provider_sessions_expiry ON chat_provider_sessions (expires_at ASC) WHERE expires_at IS NOT NULL",
   );
 }
 

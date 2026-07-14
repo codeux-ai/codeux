@@ -65,6 +65,11 @@ describe("MCP Factory", () => {
       memoryPromotionService: {},
       embeddingModelManager: {},
       sprintIssueService: {},
+      chatProviderRepository: { id: "chat-provider-repository" },
+      chatProviderSecretService: { id: "chat-provider-secret-service" },
+      chatProviderVerificationService: { id: "chat-provider-verification-service" },
+      chatConnectorRegistry: { id: "chat-connector-registry" },
+      headlessAuthService: { configuration: { mode: "local", remoteCredentialManagement: false } },
     };
 
     mockSprintDeps = {
@@ -80,6 +85,7 @@ describe("MCP Factory", () => {
       projectSetupService: {},
       quicksprintService: {},
       schedulerService: {},
+      chatProviderOutboundService: { id: "chat-provider-outbound-service" },
     };
   });
 
@@ -101,6 +107,11 @@ describe("MCP Factory", () => {
     expect(managementArgs.quicksprintService).toBe(mockDashboardDeps.quicksprintService);
     expect(managementArgs.schedulerService).toBe(mockDashboardDeps.schedulerService);
     expect(managementArgs.workerClarificationContinuationService).toBeDefined();
+    expect(managementArgs.chatProviderRepository).toBe(mockCoreDeps.chatProviderRepository);
+    expect(managementArgs.chatProviderSecretService).toBe(mockCoreDeps.chatProviderSecretService);
+    expect(managementArgs.chatProviderVerificationService).toBe(mockCoreDeps.chatProviderVerificationService);
+    expect(managementArgs.chatProviderOutboundService).toBe(mockDashboardDeps.chatProviderOutboundService);
+    expect(managementArgs.chatConnectorRegistry).toBe(mockCoreDeps.chatConnectorRegistry);
 
     const continuationArgs = vi.mocked(WorkerClarificationContinuationService).mock.calls[0][0];
     expect(continuationArgs.clarificationService).toBe(managementArgs.workerClarificationService);
