@@ -78,6 +78,10 @@ async function buildRepositoryTree(sessionId: string): Promise<FileBrowserTree> 
     path: entry.name,
     type: entry.isDirectory() ? 'directory' : 'file',
   }));
+  nodes.push(
+    { id: 'assets/logo.bin', name: 'logo.bin', path: 'assets/logo.bin', type: 'file' },
+    { id: 'src/a/very/long/path/example.ts', name: 'example.ts', path: 'src/a/very/long/path/example.ts', type: 'file' },
+  );
 
   return {
     sessionId,
@@ -130,6 +134,60 @@ async function mockFileBrowserSessionRoutes(
     });
   });
 
+  await page.route(new RegExp(`/api/file-browser/sessions/${session.id}/file\\?`), async (route) => {
+    const filePath = new URL(route.request().url()).searchParams.get('path') ?? '';
+    const binary = filePath === 'assets/logo.bin';
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        path: filePath,
+        content: binary ? '' : "export const repositoryText = 'unverändert';",
+        encoding: binary ? 'binary' : 'utf8',
+        size: binary ? 4096 : 47,
+        truncated: false,
+        binary,
+        language: binary ? null : 'typescript',
+      }),
+    });
+  });
+
+  await page.route(new RegExp(`/api/file-browser/sessions/${session.id}/changes$`), async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        sessionId: session.id,
+        available: true,
+        files: [
+          { path: 'src/modified.ts', oldPath: null, status: 'modified', additions: 4, deletions: 1 },
+          { path: 'src/added.ts', oldPath: null, status: 'added', additions: 7, deletions: 0 },
+          { path: 'src/deleted.ts', oldPath: null, status: 'deleted', additions: 0, deletions: 3 },
+        ],
+        featureBranch: session.featureBranch,
+        defaultBranch: session.defaultBranch,
+        reason: null,
+      }),
+    });
+  });
+
+  await page.route(new RegExp(`/api/file-browser/sessions/${session.id}/diff\\?`), async (route) => {
+    const filePath = new URL(route.request().url()).searchParams.get('path') ?? '';
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        path: filePath,
+        oldPath: null,
+        status: 'modified',
+        original: "export const state = 'before';",
+        modified: "export const state = 'after';",
+        binary: false,
+        language: 'typescript',
+      }),
+    });
+  });
+
   return { session, startRequests: () => startRequestCount };
 }
 
@@ -167,8 +225,7 @@ test.describe('file browser page', () => {
 
     await page.goto('/files');
 
-    await expect(page.getByText('Select a project to open the sprint file browser.')).toBeVisible();
-    await expect(page.getByText('The workspace launches one containerized snapshot of the selected sprint branch.')).toBeVisible();
+    await expect(page.getByText(/Select a project to open the sprint file browser/)).toBeVisible();
   });
 
   test('renders real repository entries for the selected project without starting a container', async ({ page, request }, testInfo) => {
@@ -197,6 +254,39 @@ test.describe('file browser page', () => {
 
     await expect(page.getByRole('alert').filter({ hasText: 'Failed to load file tree.' })).toBeVisible();
     await expect(page.getByText('Use Refresh or Rebuild to try again.')).toBeVisible();
+    expect(routes.startRequests()).toBe(0);
+  });
+
+  test('localizes German file, binary, and change review chrome without changing repository data', async ({ page, request }, testInfo) => {
+    const prefix = createE2eFixturePrefix({ testInfo, fixtureKey: 'file-browser-de' });
+    const project = await createSelectedFileBrowserProject(request, `${prefix} files project`);
+    createdProjectId = project.id;
+    const routes = await mockFileBrowserSessionRoutes(page, project);
+    await page.addInitScript(() => {
+      localStorage.setItem('codeux.dashboard.locale.v1', 'de');
+    });
+
+    await page.goto('/files');
+
+    await expect(page.getByRole('heading', { name: 'Sprint-Branch durchsuchen und vergleichen' })).toBeVisible();
+    await expect(page.getByRole('tree', { name: 'Sprint-Dateibaum' })).toBeVisible();
+    const longPathFile = page.locator('[id="file-tree-node-src/a/very/long/path/example.ts"]');
+    await expect(longPathFile).toHaveAccessibleName('Datei src/a/very/long/path/example.ts');
+    await longPathFile.click();
+    await expect(page.getByText("export const repositoryText = 'unverändert';")).toBeVisible();
+
+    const binaryFile = page.locator('[id="file-tree-node-assets/logo.bin"]');
+    await expect(binaryFile).toHaveAccessibleName('Datei assets/logo.bin');
+    await binaryFile.click();
+    await expect(page.getByText('Binärdatei erkannt')).toBeVisible();
+
+    await page.getByRole('tab', { name: /Änderungen/ }).click();
+    const changedFiles = page.getByRole('listbox', { name: 'Geänderte Dateien' });
+    await expect(changedFiles.getByRole('option', { name: /Geändert: Datei src\/modified\.ts/ })).toBeVisible();
+    await expect(changedFiles.getByRole('option', { name: /Hinzugefügt: Datei src\/added\.ts/ })).toBeVisible();
+    await expect(changedFiles.getByRole('option', { name: /Gelöscht: Datei src\/deleted\.ts/ })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Vergleich für src/modified.ts' })).toBeVisible();
+    await expect(page.getByText('e2e/file-browser', { exact: true })).toBeVisible();
     expect(routes.startRequests()).toBe(0);
   });
 });

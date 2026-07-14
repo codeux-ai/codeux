@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Source } from "../../types.js";
 import { planSourcesGridLayout, SourcesGrid } from "../SourcesGrid.js";
 import { ProjectDataContext } from "../../context/project-data.js";
+import { DashboardI18nProvider } from "../../i18n/index.js";
+import type { DashboardLocale } from "../../i18n/locales.js";
 
 expect.extend(matchers);
 
@@ -53,13 +55,14 @@ const createSource = (id: number, updatedAt: string): Source => ({
   updatedAt,
 });
 
-const renderSourcesGrid = (projects: Source[]) => render(
-  <ProjectDataContext.Provider
+const renderSourcesGrid = (projects: Source[], locale: DashboardLocale = "en", loading = false) => render(
+  <DashboardI18nProvider initialLocale={locale} storage={null}>
+    <ProjectDataContext.Provider
     value={{
       projects,
       selectedProjectId: null,
       selectedProject: null,
-      loading: false,
+      loading,
       error: null,
       refreshProjects: vi.fn(),
       selectProject: vi.fn(),
@@ -68,8 +71,9 @@ const renderSourcesGrid = (projects: Source[]) => render(
       deleteProject: vi.fn(),
     }}
   >
-    <SourcesGrid />
-  </ProjectDataContext.Provider>,
+      <SourcesGrid />
+    </ProjectDataContext.Provider>
+  </DashboardI18nProvider>,
 );
 
 describe("SourcesGrid", () => {
@@ -116,5 +120,24 @@ describe("SourcesGrid", () => {
     const grid = document.querySelector("[data-source-columns]") as HTMLElement;
     expect(grid.style.justifyContent).toBe("space-between");
     expect(grid.style.gridTemplateColumns).toContain("calc((100% - 48px) / 3)");
+  });
+
+  it("localizes German source state and counts without changing project names", () => {
+    const source = { ...createSource(1234, "2026-01-06T00:00:00.000Z"), name: "Runtime Project Name", status: "running" } as Source;
+    renderSourcesGrid([source], "de");
+
+    expect(screen.getByRole("heading", { name: "Projekte & Quellen" })).toBeInTheDocument();
+    expect(screen.getByText("Runtime Project Name")).toBeInTheDocument();
+    expect(screen.getByText("Laufend")).toBeInTheDocument();
+    expect(screen.getByText(`${new Intl.NumberFormat("de").format(1234)} offen`)).toBeInTheDocument();
+  });
+
+  it("announces German loading and empty states", () => {
+    const loadingView = renderSourcesGrid([], "de", true);
+    expect(screen.getByRole("status", { name: "Projekte und Quellen werden geladen" })).toHaveAttribute("aria-busy", "true");
+    loadingView.unmount();
+
+    renderSourcesGrid([], "de");
+    expect(screen.getByRole("status")).toHaveTextContent("Keine Projekte oder Quellen");
   });
 });

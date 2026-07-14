@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "preact/hooks";
+import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { SprintPreviewSession } from "../../types.js";
 import { fetchPreviewSessions } from "../lib/browser-api.js";
 
@@ -26,27 +26,34 @@ export const usePreviewSessions = ({
   const [sessions, setSessions] = useState<SprintPreviewSession[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
-  const refresh = async (silent = false): Promise<void> => {
+  const refresh = useCallback(async (silent = false): Promise<void> => {
+    const requestId = ++requestIdRef.current;
     if (!projectId) {
       setSessions([]);
+      setError(null);
+      setLoading(false);
       return;
     }
     if (!silent) setLoading(true);
     try {
       const data = await fetchPreviewSessions(projectId);
+      if (requestId !== requestIdRef.current) return;
       setSessions(data);
       setError(null);
     } catch (fetchError) {
+      if (requestId !== requestIdRef.current) return;
+      // API and network diagnostics are intentionally returned verbatim for the presentation layer.
       setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
     } finally {
-      if (!silent) setLoading(false);
+      if (!silent && requestId === requestIdRef.current) setLoading(false);
     }
-  };
+  }, [projectId]);
 
   useEffect(() => {
     void refresh();
-  }, [projectId]);
+  }, [refresh]);
 
   useEffect(() => {
     if (!projectId || !pollInterval) return;
@@ -54,7 +61,7 @@ export const usePreviewSessions = ({
       void refresh(true);
     }, pollInterval);
     return () => window.clearInterval(timer);
-  }, [projectId, pollInterval]);
+  }, [projectId, pollInterval, refresh]);
 
   const selectedSession = useMemo(() => {
     if (activeSessionId) {

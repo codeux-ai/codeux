@@ -1,4 +1,5 @@
 import type { Source, Sprint, Task, ProjectExecutionStatsSnapshot, ExecutionUsageBucketSummary } from "../types.js";
+import type { DashboardFormatters } from "../i18n/formatters.js";
 
 export interface OverviewStats {
   totalProjects: number;
@@ -14,6 +15,41 @@ export interface OverviewStats {
   sprintsTrend: number[];
   openTasksTrend: number[];
   completedTasksTrend: number[];
+}
+
+type OverviewNumberFormatter = DashboardFormatters["formatNumber"];
+
+export function formatOverviewTokens(value: number, formatNumber: OverviewNumberFormatter): string {
+  if (value >= 1_000_000) {
+    return `${formatNumber(value / 1_000_000, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}M`;
+  }
+  if (value >= 1_000) {
+    return `${formatNumber(value / 1_000, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}k`;
+  }
+  return formatNumber(value);
+}
+
+export function formatOverviewCost(value: number, formatNumber: OverviewNumberFormatter): string {
+  return formatNumber(value, {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+export function formatOverviewDuration(value: number, formatNumber: OverviewNumberFormatter): string {
+  const seconds = Math.max(0, Math.round(value / 1000));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+  if (hours > 0) {
+    return `${formatNumber(hours)}h ${formatNumber(minutes)}m`;
+  }
+  if (minutes > 0) {
+    return `${formatNumber(minutes)}m ${formatNumber(remainingSeconds)}s`;
+  }
+  return `${formatNumber(remainingSeconds)}s`;
 }
 
 /**
