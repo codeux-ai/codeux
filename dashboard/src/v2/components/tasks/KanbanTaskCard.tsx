@@ -274,6 +274,7 @@ export const KanbanTaskCard: FunctionComponent<{
                 className="kanban-card__meta-slot kanban-card__meta-slot--pr flex min-h-7 items-center gap-1 rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-2 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:text-signal-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:text-signal-400 dark:hover:text-signal-300"
                 onClick={(e) => e.stopPropagation()}
                 aria-label={`Open pull request for task ${task.id}`}
+                title={`Open pull request for task ${task.id}`}
               >
                 <GitPullRequest className="w-3 h-3" strokeWidth={2} aria-hidden="true" />
                 <span>PR ready</span>

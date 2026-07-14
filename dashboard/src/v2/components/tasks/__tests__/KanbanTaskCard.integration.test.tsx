@@ -481,13 +481,26 @@ describe("KanbanTaskCard Integration", () => {
     await user.click(getByRole("button", { name: /Open task actions for task TASK-123/i }));
     const menu = await screen.findByRole("menu", { name: /Actions for task TASK-123/i });
     expect(within(menu).getByRole("menuitem", { name: /Open live runtime for task TASK-123: Implement new feature/i })).toHaveTextContent("Live");
+    expect(within(menu).getByRole("menuitem", { name: /Open live runtime for task TASK-123: Implement new feature/i })).toHaveAttribute(
+      "title",
+      "Open the live runtime page. Task TASK-123.",
+    );
     expect(within(menu).getByRole("menuitem", { name: /Open pull request for task TASK-123: Implement new feature/i })).toHaveAttribute("target", "_blank");
     expect(within(menu).getByRole("menuitem", { name: /Open pull request for task TASK-123: Implement new feature/i })).toHaveAttribute("rel", "noopener noreferrer");
+    expect(within(menu).getByRole("menuitem", { name: /Open pull request for task TASK-123: Implement new feature/i })).toHaveAttribute(
+      "title",
+      "Open pull request in a new tab. Task TASK-123.",
+    );
+    expect(within(menu).getByRole("menuitem", { name: /Open sprint preview for task TASK-123: Implement new feature/i })).toHaveAttribute(
+      "title",
+      "Open the sprint preview workspace. Task TASK-123.",
+    );
 
     // Test that the PR link anchor tag exists by checking for "PR ready"
     const prLink = getByText("PR ready").closest('a');
     expect(prLink).toBeInTheDocument();
     expect(prLink).toHaveAttribute("href", "https://github.com/org/repo/pull/42");
+    expect(prLink).toHaveAttribute("title", "Open pull request for task TASK-123");
   });
 
   it("provides accessible interaction targets and structure", async () => {

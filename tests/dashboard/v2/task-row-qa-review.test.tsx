@@ -179,6 +179,7 @@ describe("TaskRow QA review indicator", () => {
     const menu = await screen.findByRole("menu", { name: /Actions for task T1: Reviewed task/i });
     expect(within(menu).getByRole("menuitem", { name: "Rerun task T1: Reviewed task" })).toHaveAccessibleDescription("Open Live to rerun task T1.");
     expect(within(menu).getByRole("menuitem", { name: "Open sprint preview for task T1: Reviewed task" })).toHaveAttribute("href", "/browser?sprintId=sprint-1");
+    expect(within(menu).getByRole("menuitem", { name: "Open sprint preview for task T1: Reviewed task" })).toHaveAttribute("title", "Open the sprint preview workspace. Task T1.");
     expect(within(menu).getByRole("menuitem", { name: "Open pull request for task T1: Reviewed task" })).toHaveAccessibleDescription("No pull request is available for task T1 yet.");
     expect(within(menu).getByRole("menuitem", { name: "Open live runtime for task T1: Reviewed task" })).toHaveAccessibleDescription("Live runtime has not started for task T1.");
   });

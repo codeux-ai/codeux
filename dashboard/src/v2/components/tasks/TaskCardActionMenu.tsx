@@ -100,7 +100,7 @@ export const TaskCardActionMenu: FunctionComponent<{
                         target={action.external ? "_blank" : undefined}
                         rel={action.external ? "noopener noreferrer" : undefined}
                         className={menuItemClassName}
-                        title={action.title}
+                        title={`${action.title} Task ${task.id}.`}
                         aria-label={action.ariaLabel}
                         draggable={false}
                         onDragStart={(event) => {
