@@ -5,6 +5,7 @@ import type { TaskExecutorType } from "../../types.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { useOptionalDashboardI18n } from "../../i18n/context.js";
 import { taskMessages } from "../../i18n/messages/tasks.js";
+import { formatTaskTimeState } from "../../lib/tasks/task-presentation.js";
 
 export interface TaskExecutionMetaProps {
   time?: string;
@@ -20,7 +21,7 @@ export const TaskExecutionMeta: FunctionComponent<TaskExecutionMetaProps> = memo
   className = "",
 }) => {
   const interactionTokens = useInteractionTokens();
-  const { translate } = useOptionalDashboardI18n();
+  const { locale, translate } = useOptionalDashboardI18n();
   const getExecutorIcon = () => {
     switch (executorType) {
       case "docker_cli":
@@ -42,7 +43,7 @@ export const TaskExecutionMeta: FunctionComponent<TaskExecutionMetaProps> = memo
     }
   };
 
-  const durationLabel = time || translate(taskMessages, "notStarted");
+  const durationLabel = time ? formatTaskTimeState(time, locale) : translate(taskMessages, "notStarted");
   const executorLabel = getExecutorLabel();
   const modeLabel = executionMode || translate(taskMessages, "standard");
   const runtimeAvailabilityLabel = time

@@ -24,6 +24,7 @@ import { SprintReviewBadge } from "../sprints/SprintReviewBadge.js";
 import { CiStatusBadge } from "../ui/CiStatusBadge.js";
 import { useOptionalDashboardI18n } from "../../i18n/context.js";
 import { taskMessages } from "../../i18n/messages/tasks.js";
+import { formatTaskTimeState } from "../../lib/tasks/task-presentation.js";
 
 export const KanbanTaskCard: FunctionComponent<{
   viewModel: TaskCardViewModel;
@@ -42,6 +43,7 @@ export const KanbanTaskCard: FunctionComponent<{
   const { locale, translate, translatePlural, formatList, formatNumber } = useOptionalDashboardI18n();
   const statusLabel = getTaskStatusLabel(task.status, locale);
   const priorityLabel = getTaskPriorityLabel(task.priority, locale);
+  const taskTimeLabel = formatTaskTimeState(task.time, locale);
   const interactionTokens = useInteractionTokens();
   const blockerCount = dependencyIndicators.filter((dep) => dep.isBlocking ?? dep.status !== "completed").length;
   const dependencyActionLabel = viewModel.dependencyActionLabel ?? (blockerCount > 0 ? translatePlural(taskMessages, "dependencyBlockers", blockerCount) : translate(taskMessages, "dependenciesClear"));
@@ -279,7 +281,7 @@ export const KanbanTaskCard: FunctionComponent<{
           <div className="kanban-card__meta-slots flex min-w-0 flex-wrap items-center gap-2" aria-busy={task.isOptimistic ? "true" : "false"} aria-live="polite" aria-atomic="false">
             <div
               className="kanban-card__meta-slot kanban-card__meta-slot--duration flex min-h-7 min-w-0 items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.03] px-2 text-[10px] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-500"
-              aria-label={`${translate(taskMessages, liveRunningTime ? "liveRuntime" : "duration")}: ${liveRunningTime ?? task.time ?? translate(taskMessages, "notStarted")}`}
+              aria-label={`${translate(taskMessages, liveRunningTime ? "liveRuntime" : "duration")}: ${liveRunningTime ?? taskTimeLabel}`}
             >
               <Clock className="w-3 h-3 shrink-0" strokeWidth={2} aria-hidden="true" />
               <span className="sr-only">{translate(taskMessages, liveRunningTime ? "liveRuntime" : "duration")}: </span>
@@ -288,7 +290,7 @@ export const KanbanTaskCard: FunctionComponent<{
               </span>
               <span aria-live={liveRunningTime ? "polite" : undefined} aria-atomic="true">
                 <LiveDurationBadge
-                  durationText={liveRunningTime ?? task.time ?? translate(taskMessages, "notStarted")}
+                  durationText={liveRunningTime ?? taskTimeLabel}
                   flashTriggerCount={flashTriggerCount}
                 />
               </span>

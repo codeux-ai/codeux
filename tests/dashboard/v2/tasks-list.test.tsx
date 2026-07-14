@@ -339,7 +339,7 @@ const baseProps: any = {
             goal: "Exercise reduced-motion sprint scope status",
             status: "running",
             showcasePinned: false,
-            startDate: null,
+            startDate: "2026-07-05",
             endDate: null,
             featureBranch: null,
             baseCommitSha: null,

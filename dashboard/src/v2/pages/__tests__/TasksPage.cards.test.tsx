@@ -925,13 +925,14 @@ describe("TasksPage.cards Integration", () => {
       title: "Keep stored task title",
       status: "pending",
       priority: "high",
+      time: "Active",
     });
     (useProjectData as unknown as any).mockReturnValue({
       projects: [{ id: "proj_1", name: "Keep Project Name" }],
       selectedProject: { id: "proj_1", name: "Keep Project Name" },
     });
     (useSprints as unknown as any).mockReturnValue({
-      data: [{ id: "sprint_1", number: 1, name: "Keep Sprint Name", status: "running", date: "2026-07-14", tasksCount: 1, completion: 0, active: true }],
+      data: [{ id: "sprint_1", number: 1, name: "Keep Sprint Name", status: "running", startDate: "2026-07-14", endDate: "2026-07-20", date: "Wrong preformatted date", tasksCount: 1, completion: 0, active: true }],
       loading: false,
       selectedSprintId: "sprint_1",
       selectSprint: vi.fn(),
@@ -950,6 +951,9 @@ describe("TasksPage.cards Integration", () => {
 
     expect(screen.getAllByRole("region", { name: "Aufgabenboard" })).toHaveLength(2);
     expect(screen.getByText("Keep stored task title")).toBeInTheDocument();
+    expect(screen.getByText("Aktiv")).toBeInTheDocument();
+    expect(screen.getByText("14. Juli – 20. Juli")).toBeInTheDocument();
+    expect(screen.queryByText("Wrong preformatted date")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Aufgaben mit hoher Priorität anzeigen" }));
     expect(await screen.findByText(/Aufgabenfilter geändert.*Priorität Hoch/i)).toBeInTheDocument();
 

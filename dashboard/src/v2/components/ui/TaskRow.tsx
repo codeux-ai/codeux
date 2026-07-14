@@ -8,6 +8,7 @@ import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { useOptionalDashboardI18n } from "../../i18n/context.js";
 import { taskMessages } from "../../i18n/messages/tasks.js";
 import { getTaskStatusLabel } from "../../lib/tasks-constants.js";
+import { formatTaskTimeState } from "../../lib/tasks/task-presentation.js";
 
 interface TaskRowProps {
     task: Task;
@@ -23,6 +24,7 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
     const playStopLabel = translate(taskMessages, isRunning ? "stop" : "rerun");
     const playStopTarget = translate(taskMessages, isRunning ? "stopTarget" : "rerunTarget", { id: task.id, title: task.title });
     const statusLabel = getTaskStatusLabel(task.status, locale);
+    const taskTimeLabel = formatTaskTimeState(task.time, locale);
     const disabledReason = busy
         ? translate(taskMessages, "rerunUnavailablePending", { action: playStopLabel })
         : !onPlayStop
@@ -99,7 +101,7 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
                 <div className="flex min-h-9 items-center gap-2 rounded-full border border-black/[0.05] bg-black/[0.02] px-2 dark:border-white/[0.06] dark:bg-white/[0.03]">
                     <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" strokeWidth={2} aria-hidden="true" />
                     <span className="sr-only">{translate(taskMessages, "duration")}: </span>
-                    <span className="text-xs font-mono text-slate-500 dark:text-slate-400">{task.time}</span>
+                    <span className="text-xs font-mono text-slate-500 dark:text-slate-400">{taskTimeLabel}</span>
                 </div>
 
                 {/* Quick actions */}

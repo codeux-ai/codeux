@@ -27,16 +27,9 @@ import { useTaskBoardController } from "./hooks/use-task-board-controller.js";
 import { useOptionalDashboardI18n } from "./i18n/context.js";
 import { taskMessages } from "./i18n/messages/tasks.js";
 import { getTaskPriorityLabel, getTaskStatusLabel } from "./lib/tasks-constants.js";
+import { formatTaskSprintDateRange } from "./lib/tasks/task-presentation.js";
 
 type TaskScopePlaceholderMode = "project" | "sprint";
-
-function formatTaskSprintDate(
-  value: string,
-  formatDate: (value: Date | number, options?: Intl.DateTimeFormatOptions) => string,
-): string {
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? value : formatDate(parsed, { month: "short", day: "numeric" });
-}
 
 const TaskScopePlaceholder: FunctionComponent<{
   mode: TaskScopePlaceholderMode;
@@ -137,10 +130,10 @@ const TaskScopePlaceholder: FunctionComponent<{
 };
 
 const SprintProgressCard: FunctionComponent<{
-  sprint: { id: string; name: string; date: string };
+  sprint: { id: string; name: string; startDate: string | null; endDate: string | null };
   tasks: Task[];
 }> = memo(({ sprint, tasks }) => {
-  const { translate, formatNumber, formatDate } = useOptionalDashboardI18n();
+  const { locale, translate, formatNumber } = useOptionalDashboardI18n();
   const completed = tasks.filter((task) => task.status === "completed").length;
   const inProgress = tasks.filter((task) => task.status === "in_progress").length;
   const pending = tasks.filter((task) => task.status === "pending").length;
@@ -159,7 +152,7 @@ const SprintProgressCard: FunctionComponent<{
         </div>
         <div>
           <h3 className="text-base font-semibold font-display tracking-tight text-slate-900 dark:text-white">{sprint.name}</h3>
-          <p className="text-[10px] font-mono text-slate-400 uppercase tracking-[0.1em]">{formatTaskSprintDate(sprint.date, formatDate)}</p>
+          <p className="text-[10px] font-mono text-slate-400 uppercase tracking-[0.1em]">{formatTaskSprintDateRange(sprint.startDate, sprint.endDate, locale)}</p>
         </div>
       </div>
 

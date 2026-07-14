@@ -9,6 +9,7 @@ import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { clampSprintCompletion } from "../../lib/sprint-progress-display.js";
 import { useOptionalDashboardI18n } from "../../i18n/context.js";
 import { taskMessages } from "../../i18n/messages/tasks.js";
+import { formatTaskSprintDateRange } from "../../lib/tasks/task-presentation.js";
 
 export interface TaskBoardSprintSelectorProps {
   sprints: Sprint[];
@@ -16,16 +17,6 @@ export interface TaskBoardSprintSelectorProps {
   onSelect: (id: string | null) => void;
   sprintKeyPrefix: string;
   loading: boolean;
-}
-
-function formatSprintDate(
-  value: string,
-  formatDate: (value: Date | number, options?: Intl.DateTimeFormatOptions) => string,
-): string {
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime())
-    ? value
-    : formatDate(parsed, { month: "short", day: "numeric" });
 }
 
 export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorProps> = memo(({
@@ -41,7 +32,7 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
   const triggerRef = useRef<HTMLButtonElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const interactionTokens = useInteractionTokens();
-  const { locale, translate, formatNumber, formatDate } = useOptionalDashboardI18n();
+  const { locale, translate, formatNumber } = useOptionalDashboardI18n();
   const listboxId = "tasks-sprint-selector-listbox";
   const statusId = "tasks-sprint-selector-status";
   const selected = selectedId ? sprints.find((sprint: Sprint) => sprint.id === selectedId) : null;
@@ -70,7 +61,7 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
         id: sprint.id,
         label: formatSprintDisplay(sprint, sprintKeyPrefix),
         description: translate(taskMessages, "sprintOptionDescription", {
-          date: formatSprintDate(sprint.date, formatDate),
+          date: formatTaskSprintDateRange(sprint.startDate, sprint.endDate, locale),
           tasks: `${formatNumber(sprint.tasksCount)} ${locale === "de" ? (sprint.tasksCount === 1 ? "Aufgabe" : "Aufgaben") : (sprint.tasksCount === 1 ? "task" : "tasks")}`,
           percent: formatNumber(completion),
         }),
@@ -78,7 +69,7 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
         completion,
       };
     }),
-  ], [formatDate, formatNumber, locale, sprints, sprintKeyPrefix, translate]);
+  ], [formatNumber, locale, sprints, sprintKeyPrefix, translate]);
 
   const selectedIndex = Math.max(0, options.findIndex((option) => option.id === selectedId));
 
@@ -335,7 +326,7 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
                       {formatSprintDisplay(sprint, sprintKeyPrefix)}
                     </span>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[9px] font-mono text-slate-400 uppercase tracking-[0.1em] truncate min-w-0">{formatSprintDate(sprint.date, formatDate)}</span>
+                      <span className="text-[9px] font-mono text-slate-400 uppercase tracking-[0.1em] truncate min-w-0">{formatTaskSprintDateRange(sprint.startDate, sprint.endDate, locale)}</span>
                       <span className="sr-only">{options[index].description}</span>
                     </div>
                   </div>
