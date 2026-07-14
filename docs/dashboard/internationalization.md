@@ -51,6 +51,14 @@ The initial application bundle translates only root-owned shell copy: the skip l
 
 Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged.
 
+### Tasks route
+
+The Tasks route owns its catalog in `dashboard/src/v2/i18n/messages/tasks.ts`. The page, board columns and filters, cards, dependency indicators, composer validation, rerun and delete flows, review surfaces, controller announcements, and task-specific accessibility copy all consume this feature catalog. Pure task view-model helpers accept an explicit locale so they remain deterministic outside component rendering, while components use the active provider locale.
+
+Task counts, dates, relative times, live durations, self-reflection scores, and other numeric presentation use the active locale. Locale is presentation input only: task keys, titles, descriptions, Markdown prompts, sprint and project names, branch and pull-request data, provider and agent names, review and QA text, execution messages, API errors, dependency order, optimistic ids, and runtime projections remain byte-for-byte application data rather than translation input.
+
+Task surfaces that are rendered independently in component tests or embedded legacy call sites use `useOptionalDashboardI18n`. It has the same typed formatter and translator contract as the required hook and resolves to English only when no provider is mounted; it never replaces an active provider locale.
+
 ## Verification
 
-Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization.
+Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization. Task-focused component, view-model, controller, dependency, review, rerun, and page tests additionally verify German CRUD presentation while persisted and runtime content remains unchanged.

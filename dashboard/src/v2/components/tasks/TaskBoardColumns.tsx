@@ -4,12 +4,15 @@ import type { RefObject } from "preact";
 import type { AgentAvatarConfig, AgentPreset, Task, TaskStatus } from "../../types.js";
 import type { TaskBoardState } from "../../lib/task-board-state.js";
 import type { TaskCardViewModel } from "../../lib/tasks/task-card-view-model.js";
-import { STATUS_CFG } from "../../lib/tasks-constants.js";
+import { STATUS_CFG, getTaskStatusLabel } from "../../lib/tasks-constants.js";
 import { getTaskDropFeedback } from "../../lib/tasks/task-board-actions.js";
 import { SkeletonCard, SkeletonLoader } from "../layout/SkeletonLoader.js";
 import { KanbanTaskCard } from "./KanbanTaskCard.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { taskMessages } from "../../i18n/messages/tasks.js";
 
 const ColumnHeader: FunctionComponent<{ status: TaskStatus; count: number }> = memo(({ status, count }) => {
+  const { locale, formatNumber } = useOptionalDashboardI18n();
   const cfg = STATUS_CFG[status];
   const Icon = cfg.icon;
   const headingId = `task-lane-heading-${status}`;
@@ -18,11 +21,11 @@ const ColumnHeader: FunctionComponent<{ status: TaskStatus; count: number }> = m
     <div className="flex items-center justify-between mb-6" id={headingId}>
       <div className="flex items-center gap-2.5">
         <Icon className={`w-5 h-5 ${cfg.color}`} strokeWidth={2} />
-        <h2 className={`font-display text-lg font-bold tracking-tight ${cfg.color}`}>{cfg.label}</h2>
+        <h2 className={`font-display text-lg font-bold tracking-tight ${cfg.color}`}>{getTaskStatusLabel(status, locale)}</h2>
       </div>
       <span className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg bg-black/[0.03] dark:bg-white/[0.03] ${cfg.color}`}>
-        <span aria-hidden="true">{count}</span>
-        <span className="sr-only">{count} {count === 1 ? "task" : "tasks"}</span>
+        <span aria-hidden="true">{formatNumber(count)}</span>
+        <span className="sr-only">{formatNumber(count)} {locale === "de" ? (count === 1 ? "Aufgabe" : "Aufgaben") : (count === 1 ? "task" : "tasks")}</span>
       </span>
     </div>
   );
@@ -152,7 +155,9 @@ const TaskBoardColumnsComponent: FunctionComponent<TaskBoardColumnsProps> = ({
   onDragEnd,
   onEditTask,
   onDeleteTask,
-}) => (
+}) => {
+  const { locale, translate, formatNumber } = useOptionalDashboardI18n();
+  return (
   <div
     ref={boardRef}
     aria-busy={filterTransitionPending}
@@ -176,7 +181,10 @@ const TaskBoardColumnsComponent: FunctionComponent<TaskBoardColumnsProps> = ({
       >
         <ColumnHeader status={status} count={count} />
         <p id={`task-lane-summary-${status}`} className="sr-only" aria-live="polite" aria-atomic="true">
-          {STATUS_CFG[status].label} lane contains {count} {count === 1 ? "task" : "tasks"} after current filters.
+          {translate(taskMessages, "laneSummary", {
+            status: getTaskStatusLabel(status, locale),
+            tasks: `${formatNumber(count)} ${locale === "de" ? (count === 1 ? "Aufgabe" : "Aufgaben") : (count === 1 ? "task" : "tasks")}`,
+          })}
         </p>
         <div
           className={`flex-1 grid grid-cols-1 grid-rows-1 p-4 rounded-[1.5rem] min-h-[200px] bg-black/[0.015] dark:bg-white/[0.015] border relative transition-colors motion-reduce:transition-none ${dropTargetContext?.status === status ? "border-signal-500/50 bg-signal-500/5" : "border-black/[0.03] dark:border-white/[0.03]"} ${reducedMotion ? "border-dashed" : ""}`}
@@ -190,11 +198,12 @@ const TaskBoardColumnsComponent: FunctionComponent<TaskBoardColumnsProps> = ({
               isDragging: draggedTaskId !== null,
               targetLane: status,
               currentStatus: draggedTaskId ? allTasks.find((task) => task.recordId === draggedTaskId)?.status : undefined,
+              locale,
             })}
           </p>
           {showSkeletons && (
             <div role="status" aria-live="polite" className="sr-only">
-              Loading {STATUS_CFG[status].label.toLowerCase()} tasks.
+              {translate(taskMessages, "loadingLane", { status: getTaskStatusLabel(status, locale).toLocaleLowerCase(locale) })}
             </div>
           )}
           <SkeletonLoader
@@ -210,9 +219,10 @@ const TaskBoardColumnsComponent: FunctionComponent<TaskBoardColumnsProps> = ({
           >
             {!loading && columnTasks.length === 0 ? (
               <div role="status" aria-live="polite" aria-atomic="true" className={`col-start-1 row-start-1 flex min-h-36 items-center justify-center text-center p-6 text-xs font-medium text-slate-400 dark:text-slate-500 border-2 border-dashed rounded-[1.5rem] bg-black/[0.015] dark:bg-white/[0.015] transition-colors motion-reduce:transition-none ${dropTargetContext?.status === status ? "border-signal-500/30" : "border-black/[0.05] dark:border-white/[0.05]"}`}>
-                No {status.replace("_", " ")} tasks
-                <br />
-                {statusFilter !== "all" || priorityFilter !== "all" ? "matching current filters" : taskScopeSprintId ? "in this sprint" : "in this project"}.
+                {translate(taskMessages, "emptyLane", {
+                  status: getTaskStatusLabel(status, locale).toLocaleLowerCase(locale),
+                  scope: translate(taskMessages, statusFilter !== "all" || priorityFilter !== "all" ? "matchingFilters" : taskScopeSprintId ? "inThisSprint" : "inThisProject"),
+                })}
               </div>
             ) : !loading ? (
               <div className="col-start-1 row-start-1 flex flex-col gap-4" data-motion-contract="listReorder">
@@ -263,6 +273,7 @@ const TaskBoardColumnsComponent: FunctionComponent<TaskBoardColumnsProps> = ({
       </section>
     ))}
   </div>
-);
+  );
+};
 
 export const TaskBoardColumns = memo(TaskBoardColumnsComponent, areTaskBoardColumnsPropsEqual);

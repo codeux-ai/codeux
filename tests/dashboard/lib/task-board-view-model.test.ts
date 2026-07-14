@@ -731,3 +731,34 @@ test("buildTaskBoardSprintScopeState exposes selected, loading, and empty scope 
     loading: false,
   })).toMatchObject({ label: "No sprints", isEmpty: true });
 });
+
+test("buildTaskBoardViewModel refreshes localized presentation while preserving optimistic records", () => {
+  const optimisticTask = createMockTask("opt-unchanged", {
+    id: "OPT-...",
+    recordId: "opt-unchanged",
+    title: "Keep optimistic title",
+    isOptimistic: true,
+  });
+  const common = {
+    tasks: [],
+    optimisticTasks: [optimisticTask],
+    statusFilter: "all" as const,
+    priorityFilter: "all" as const,
+    listWindow: 50 as const,
+    taskScopeSprintId: null,
+    taskDispatches: [],
+    recentEvents: [],
+    subtasks: [],
+  };
+  const english = buildTaskBoardViewModel({ ...common, locale: "en" });
+  const german = buildTaskBoardViewModel({
+    ...common,
+    locale: "de",
+    previousTaskViewModels: english.taskViewModels,
+  });
+
+  expect(german.boardState.filteredTasks[0]).toBe(optimisticTask);
+  expect(german.taskViewModels.get("opt-unchanged")).not.toBe(english.taskViewModels.get("opt-unchanged"));
+  expect(german.taskViewModels.get("opt-unchanged")?.task.title).toBe("Keep optimistic title");
+  expect(german.taskViewModels.get("opt-unchanged")?.optimisticSavingLabel).toBe("Aufgabenänderungen werden gespeichert");
+});

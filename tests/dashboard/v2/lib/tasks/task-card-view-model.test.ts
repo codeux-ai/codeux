@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { getTaskLane } from "../../../../../dashboard/src/v2/lib/task-board-state.js";
 import {
   formatTimeAgo,
+  formatTaskDuration,
   getExecutorLabel,
   buildTaskCardViewModel,
 } from "../../../../../dashboard/src/v2/lib/tasks/task-card-view-model.js";
@@ -9,9 +10,9 @@ import type { Task } from "../../../../../dashboard/src/v2/types.js";
 import type { TaskSelfReflectionRating } from "../../../../../src/contracts/task-self-reflection-types.js";
 
 describe("task-card-view-model", () => {
-  describe("formatTimeAgo", () => {
-    const NOW = new Date("2023-10-01T12:00:00Z").getTime();
+  const NOW = new Date("2023-10-01T12:00:00Z").getTime();
 
+  describe("formatTimeAgo", () => {
     it("handles invalid dates", () => {
       expect(formatTimeAgo("invalid", NOW)).toBe("--");
     });
@@ -34,6 +35,13 @@ describe("task-card-view-model", () => {
     it("returns days ago", () => {
       const past = new Date(NOW - 3 * 24 * 60 * 60000).toISOString();
       expect(formatTimeAgo(past, NOW)).toBe("3d ago");
+    });
+  });
+
+  describe("German presentation", () => {
+    it("formats relative times and live durations for the active locale", () => {
+      expect(formatTimeAgo(new Date(NOW - 15 * 60_000).toISOString(), NOW, "de")).toBe("vor 15 Min.");
+      expect(formatTaskDuration(3725, "de")).toBe("1 Std. 2 Min. 5 Sek.");
     });
   });
 
