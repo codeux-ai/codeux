@@ -54,7 +54,7 @@ export function registerChatProviderIngressRoutes(router: Express, deps: Dashboa
       }
     }
 
-    if (profile.ingress.ignore?.(payload) && connection.bridgeMode === "official_api") {
+    if (profile.ingress.ignore?.(payload, connection.bridgeMode) && connection.bridgeMode === "official_api") {
       sendAcknowledgement(res, profile.ingress.acknowledgement);
       return;
     }

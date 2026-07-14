@@ -10,6 +10,7 @@ import type {
   ChatConnectorHttpOutboundRequest,
   ChatConnectorProfile,
 } from "../domain/chat-connectors/types.js";
+import { ChatConnectorOutboundResponseError } from "../domain/chat-connectors/types.js";
 import { redactText } from "../shared/security/redaction.js";
 
 export interface ChatProviderOutboundBridgePayload {
@@ -34,6 +35,10 @@ export interface ChatProviderOutboundAdapterContext {
 export interface ChatProviderOutboundAdapterResult {
   externalMessageId?: string | null;
   responseMetadata?: Record<string, unknown>;
+  failure?: {
+    message: string;
+    retryable: boolean;
+  };
 }
 
 export interface ChatProviderOutboundAdapter {
@@ -107,15 +112,20 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
         signal: AbortSignal.timeout(request.timeoutMs),
       });
     } catch (error) {
+      const isTelegramOfficialApi = context.connection.providerKind === "telegram"
+        && context.connection.bridgeMode === "official_api";
       throw new ChatProviderOutboundAdapterError(
-        `Failed to reach ${context.connection.bridgeMode} bridge: ${error instanceof Error ? error.message : String(error)}`,
-        true,
+        isTelegramOfficialApi
+          ? "Telegram Bot API send did not return a response; delivery status is unknown."
+          : `Failed to reach ${context.connection.bridgeMode} bridge: ${error instanceof Error ? error.message : String(error)}`,
+        !isTelegramOfficialApi,
       );
     }
 
     const responseText = await response.text().catch(() => "");
     const responseContext = {
       bridgeMode: context.connection.bridgeMode,
+      mode: context.connection.bridgeMode,
       statusCode: response.status,
       headers: Object.fromEntries(response.headers.entries()),
     } as const;
@@ -134,7 +144,20 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
       );
     }
 
-    const parsed = profile.outbound.parseResponse(responseText, responseContext);
+    let parsed: ChatProviderOutboundAdapterResult;
+    try {
+      parsed = profile.outbound.parseResponse(responseText, responseContext);
+    } catch (error) {
+      if (error instanceof ChatConnectorOutboundResponseError) {
+        throw new ChatProviderOutboundAdapterError(
+          error.message,
+          error.retryable,
+          error.statusCode ?? response.status,
+          error.retryAfterMs ?? retryAfterMs,
+        );
+      }
+      throw error;
+    }
     if (parsed.failure) {
       throw new ChatProviderOutboundAdapterError(
         parsed.failure.message,
@@ -145,8 +168,10 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
     }
     if (!response.ok) {
       throw new ChatProviderOutboundAdapterError(
-        `${context.connection.bridgeMode} bridge returned HTTP ${response.status}${responseText ? `: ${responseText.slice(0, 500)}` : ""}`,
-        profile.outbound.isRetryableStatus(response.status),
+        context.connection.providerKind === "telegram" && context.connection.bridgeMode === "official_api"
+          ? `Telegram Bot API returned HTTP ${response.status}.`
+          : `${context.connection.bridgeMode} bridge returned HTTP ${response.status}${responseText ? `: ${responseText.slice(0, 500)}` : ""}`,
+        profile.outbound.isRetryableStatus(response.status, context.connection.bridgeMode),
         response.status,
         retryAfterMs,
       );
@@ -202,7 +227,12 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
       );
     }
 
-    return profile.outbound.parseResponse(result.stdout);
+    return profile.outbound.parseResponse(result.stdout, {
+      bridgeMode: context.connection.bridgeMode,
+      mode: context.connection.bridgeMode,
+      statusCode: 200,
+      headers: {},
+    });
   }
 }
 
