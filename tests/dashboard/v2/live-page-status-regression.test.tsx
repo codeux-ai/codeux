@@ -1,11 +1,12 @@
 /** @vitest-environment happy-dom */
-import { h, Fragment } from "preact";
+import { h, Fragment, type ComponentChildren } from "preact";
 /** @jsx h */
 /** @jsxFrag Fragment */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, cleanup } from "@testing-library/preact";
+import { fireEvent, render as testingRender, screen, cleanup } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { LiveSessionPage } from "../../../dashboard/src/v2/LiveSessionPage.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
 import { useDashboardRuntimeData } from "../../../dashboard/src/hooks/use-dashboard-runtime-data.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
 import { 
@@ -15,6 +16,18 @@ import {
 } from "../fixtures/sprint-status.js";
 
 expect.extend(matchers);
+
+const render = (children: ComponentChildren) => {
+  const result = testingRender(
+    <DashboardI18nProvider initialLocale="en" storage={null}>{children}</DashboardI18nProvider>,
+  );
+  return {
+    ...result,
+    rerender: (nextChildren: ComponentChildren) => result.rerender(
+      <DashboardI18nProvider initialLocale="en" storage={null}>{nextChildren}</DashboardI18nProvider>,
+    ),
+  };
+};
 
 vi.mock("gsap", () => ({
   default: {

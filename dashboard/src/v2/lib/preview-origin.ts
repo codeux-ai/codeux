@@ -1,4 +1,10 @@
 import type { SprintPreviewPortMapping, SprintPreviewSession } from "../../types.js";
+import { browserPreviewMessages } from "../i18n/messages/browser-preview.js";
+import {
+  DEFAULT_DASHBOARD_LOCALE,
+  translateDashboardMessage,
+  type DashboardLocale,
+} from "../i18n/locales.js";
 
 /**
  * Normalizes a URL path to ensure it starts with a slash and drops the domain name if an absolute URL is provided.
@@ -51,7 +57,7 @@ export const getPreviewPortMappings = (
   session: Pick<SprintPreviewSession, "containerAppPort" | "hostPort" | "portMappings"> | null | undefined,
 ): SprintPreviewPortMapping[] => {
   if (session && Array.isArray(session.portMappings) && session.portMappings.length > 0) {
-    return session.portMappings;
+    return session.portMappings.filter((mapping) => Number.isInteger(mapping.containerPort) && mapping.containerPort > 0 && mapping.containerPort <= 65_535);
   }
   if (!session) {
     return [];
@@ -101,20 +107,28 @@ export const formatPreviewPortTabLabel = (mapping: SprintPreviewPortMapping): st
   return label ? `${label} ${portLabel}` : portLabel;
 };
 
-export const formatPreviewPortMapping = (mapping: SprintPreviewPortMapping): string => {
-  const target = mapping.hostPort ? `:${mapping.hostPort}` : "pending";
+export const formatPreviewPortMapping = (
+  mapping: SprintPreviewPortMapping,
+  locale: DashboardLocale = DEFAULT_DASHBOARD_LOCALE,
+): string => {
+  const target = mapping.hostPort && Number.isInteger(mapping.hostPort) && mapping.hostPort > 0 && mapping.hostPort <= 65_535
+    ? `:${mapping.hostPort}`
+    : translateDashboardMessage(browserPreviewMessages, locale, "pending");
   return `${formatPreviewPortTabLabel(mapping)} -> ${target}`;
 };
 
 export const formatPreviewPortMappingsSummary = (
   session: Pick<SprintPreviewSession, "containerAppPort" | "hostPort" | "portMappings">,
+  locale: DashboardLocale = DEFAULT_DASHBOARD_LOCALE,
 ): string => {
-  const mappings = getPreviewPortMappings(session);
+  const mappings = getPreviewPortMappings(session).filter((mapping) => (
+    Number.isInteger(mapping.containerPort) && mapping.containerPort > 0 && mapping.containerPort <= 65_535
+  ));
   if (mappings.length === 0) {
-    return "port pending";
+    return translateDashboardMessage(browserPreviewMessages, locale, "portPending");
   }
   if (mappings.length === 1) {
-    return formatPreviewPortMapping(mappings[0]!);
+    return formatPreviewPortMapping(mappings[0]!, locale);
   }
-  return mappings.map(formatPreviewPortMapping).join(" · ");
+  return mappings.map((mapping) => formatPreviewPortMapping(mapping, locale)).join(" · ");
 };
