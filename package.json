@@ -73,6 +73,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:backend:coverage": "vitest run tests/backend --coverage",
+    "check:dashboard-i18n": "node scripts/check-dashboard-i18n.mjs",
     "quality:guardrails": "node scripts/check-quality-guardrails.mjs",
     "sync:docs-web": "node scripts/sync-docs-web.mjs",
     "check:docs-web": "node scripts/sync-docs-web.mjs --check",
