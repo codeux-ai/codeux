@@ -21,6 +21,8 @@ Code UX updates the page's HTML `lang` value when the language changes so browse
 
 Dashboard-owned interface copy changes between English and German, including navigation, buttons, form labels, validation, status framing, accessibility text, and the chrome around the internal Docs viewer. Numbers, dates, times, relative times, lists, percentages, sizes, and plural forms use locale-aware browser formatting where those values are presented by the dashboard.
 
+This coverage includes Custom Dashboards, Nodes, task and workflow views, Settings integrations and chat connectors, and Stats cost panels. Technical and authored values inside those surfaces still follow the unchanged-content boundary below.
+
 ## What remains unchanged
 
 Internationalization affects presentation only. Backend, API, and MCP contracts are unchanged, and the selected locale is not sent to providers or stored as a Code UX runtime setting.

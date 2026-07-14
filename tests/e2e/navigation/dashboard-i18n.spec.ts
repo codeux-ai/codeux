@@ -17,7 +17,7 @@ const localizedRoutes: RouteCase[] = [
   { path: '/', landmark: (page) => page.getByRole('main', { name: 'Hauptinhalt' }) },
   { path: '/projects', landmark: (page) => page.getByRole('heading', { name: 'Projekte verwalten' }) },
   { path: '/sprints', landmark: (page) => page.getByRole('heading', { name: 'Aktive Sprints' }) },
-  { path: '/tasks', landmark: (page) => page.getByRole('heading', { name: 'Aufgabenboard', level: 1, exact: true }) },
+  { path: '/tasks', landmark: (page) => page.getByRole('heading', { name: 'Aufgaben', level: 1, exact: true }) },
   { path: '/chat', landmark: (page) => page.getByRole('main', { name: 'Hauptinhalt' }) },
   { path: '/agents', landmark: (page) => page.getByRole('main', { name: 'Hauptinhalt' }) },
   { path: '/stats', landmark: (page) => page.getByRole('main', { name: 'Hauptinhalt' }) },
@@ -133,6 +133,7 @@ test.describe('dashboard German locale fan-in', () => {
     const localizedDate = new Intl.DateTimeFormat('de', { month: 'short', day: 'numeric' }).format(new Date());
     await expect(page.getByText(localizedDate, { exact: false }).first()).toBeVisible();
     await page.goto('/tasks');
+    await expect(page.getByRole('region', { name: 'Aufgabenboard', exact: true })).toBeVisible();
     await expect(page.getByText(taskTitle, { exact: true }).first()).toBeVisible();
     await page.goto('/docs');
     await expect(page.getByRole('navigation', { name: 'Dokumentationsnavigation' })).toBeVisible();
