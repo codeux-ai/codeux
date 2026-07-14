@@ -47,6 +47,8 @@ Click the dashed **Add Project** card to open the shared modal in local-import m
 
 Click **New Project** on the Projects page to initialize a new repository through the same modal. New project initialization does not scaffold application source files in the dashboard; it sends `new-local` or `new-remote` initialization data to the backend repository creation flow.
 
+Imported and newly initialized projects always start with Tech Stack Guidance and Styleguide set to **None** at project scope. This creation default is independent of system-level or caller-provided guidance selections; choose reusable guidance after creation from the top bar or Settings -> Guidance.
+
 New project creation always writes an explicit project techstack override. New local projects additionally receive `git.githubMode: LOCAL`; new remote projects do not. To set up a web app, desktop app, online shop, portfolio, or game in an eligible initial project, use the matching create-app quickaction in Chat Threads beside the composer. Those quickactions operate in the selected project, create a chat thread when needed, and launch the matching detached quicksprint without opening the new-project modal. All five disappear once the seed repository changes.
 
 Code UX persists whether a project was imported or initialized as a new local/remote repository. Initial-app quickactions are eligible only while a persisted new project is still a clean, one-commit seed containing exactly `README.md` and the Code UX `.gitignore`. Additional files, commits, setup artifacts, dirty state, missing checkouts, or inspection failures disable eligibility; imported and legacy projects are never inferred to be new from their source type or age.
@@ -67,7 +69,7 @@ On save, Code UX:
 
 1. Imports or initializes the repository through the backend project creation flow.
 2. Initialises `<repo>/.code-ux/` with project-local subdirectories (settings, sprints, agents, memory).
-3. Applies only the settings overrides appropriate to the source: local git mode for imported local projects, explicit techstack for new apps, and both for new local apps.
+3. Pins both reusable guidance selections to **None**, then applies source-specific overrides: local git mode for imported local projects, explicit project classification techstack for new apps, and both source-specific overrides for new local apps.
 4. Reads any external settings hints (Jules / Gemini / Codex / Claude / Qwen / OpenCode CLI auth) and pre-populates provider settings.
 
 For imported projects, setup techstack detection inspects dependency manifests, especially `package.json`, plus lockfiles and framework config files. When the detection is valid, Code UX adds the stack to the system catalog if needed and writes the project selection to `techstack.selectedTechstackId`. Invalid or empty detections are ignored without blocking other selected setup artifacts, so imported projects are not classified until evidence or an operator assigns them.

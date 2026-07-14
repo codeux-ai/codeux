@@ -18,6 +18,7 @@ import { buildLiveTaskEnrichmentMap, type LiveTaskEnrichment } from "./live-task
 import { buildTaskCardViewModel, type TaskCardViewModel } from "./task-card-view-model.js";
 import { STATUS_CFG } from "../tasks-constants.js";
 import { formatDuration } from "../format-duration.js";
+import { findActiveTaskHumanIntervention } from "../workflow-status-presentation.js";
 
 export interface TaskBoardViewModelOptions {
   tasks: Task[];
@@ -116,6 +117,7 @@ function attentionMatchesTaskRecord(item: ExecutionAttentionItemSummary, task: T
 
 interface TaskCiSource {
   presentation: CiStatusPresentation | null;
+  humanIntervention: ExecutionAttentionItemSummary | null;
   signature: string;
 }
 
@@ -136,6 +138,11 @@ function buildTaskCiSource(args: {
   };
   const events = args.events.filter((event) => eventMatchesTaskRecord(event, args.task));
   const attentionItems = args.attentionItems.filter((item) => attentionMatchesTaskRecord(item, args.task));
+  const humanIntervention = findActiveTaskHumanIntervention(args.attentionItems, {
+    recordId: args.task.recordId,
+    taskKey: args.task.id,
+    sprintId: args.task.sprintId,
+  });
   const presentation = deriveTaskCiStatusPresentation({
     task: evidence,
     events,
@@ -164,8 +171,15 @@ function buildTaskCiSource(args: {
       resolvedAt: item.resolvedAt,
       payload: item.payload,
     })).sort((left, right) => left.id.localeCompare(right.id)),
+    humanIntervention: humanIntervention ? {
+      id: humanIntervention.id,
+      ownerType: humanIntervention.ownerType,
+      status: humanIntervention.status,
+      assignedWorkerEndpointId: humanIntervention.assignedWorkerEndpointId,
+      updatedAt: humanIntervention.updatedAt,
+    } : null,
   });
-  return { presentation, signature };
+  return { presentation, humanIntervention, signature };
 }
 
 function buildTaskSignature(task: Task): string {
@@ -450,6 +464,7 @@ export function buildTaskBoardViewModel(options: TaskBoardViewModelOptions): Tas
       reusableViewModel ?? buildTaskCardViewModel(task, taskLookup, liveEnrichment, {
         taskPullRequestsEnabled,
         ciStatusPresentation: ciSource.presentation,
+        humanIntervention: ciSource.humanIntervention,
         ciStatusSourceSignature: ciSource.signature,
       })
     );

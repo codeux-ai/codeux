@@ -467,7 +467,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                             </div>
                         </div>
                     ) : (
-                        taskCardItems.map(({ key, task, phase, taskTiming, events, invocations, ciPresentation, isRerunning, isForceCompleting, forceCompleteError, dispatchInfo }) => (
+                        taskCardItems.map(({ key, task, phase, taskTiming, events, invocations, ciPresentation, humanIntervention, isRerunning, isForceCompleting, forceCompleteError, dispatchInfo }) => (
                             <LiveTaskCard
                                 key={key}
                                 task={task}
@@ -477,6 +477,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                                 events={events}
                                 invocations={invocations}
                                 ciPresentation={ciPresentation}
+                                humanIntervention={humanIntervention}
                                 onRerun={handleRerun}
                                 onEdit={handleEditTask}
                                 onForceComplete={handleForceCompleteTask}

@@ -1,6 +1,30 @@
 import { describe, expect, it } from "vitest";
 import type { CiStatusPresentation } from "../../../../dashboard/src/v2/lib/ci-status-presentation.js";
 import { deriveWorkflowStatusPresentation } from "../../../../dashboard/src/v2/lib/workflow-status-presentation.js";
+import type { ExecutionAttentionItemSummary } from "../../../../dashboard/src/types.js";
+
+const attention = (
+  overrides: Partial<ExecutionAttentionItemSummary> = {},
+): ExecutionAttentionItemSummary => ({
+  id: "attention-1",
+  sprintId: "sprint-1",
+  taskId: "task-record-1",
+  sprintRunId: "run-1",
+  dispatchId: "dispatch-1",
+  attentionType: "human_escalation_required",
+  severity: "high",
+  ownerType: "human",
+  status: "open",
+  assignedWorkerEndpointId: null,
+  title: "Operator decision required",
+  summaryMarkdown: "Choose the safe recovery path.",
+  payload: null,
+  openedAt: "2026-07-14T08:00:00.000Z",
+  claimedAt: null,
+  resolvedAt: null,
+  updatedAt: "2026-07-14T08:00:00.000Z",
+  ...overrides,
+});
 
 const successfulCi: CiStatusPresentation = {
   scope: "task",
@@ -110,5 +134,69 @@ describe("deriveWorkflowStatusPresentation", () => {
     const presentation = deriveWorkflowStatusPresentation({ scope: "task", status: "QUOTA" });
     expect(presentation).toMatchObject({ state: "in_progress", label: "Quota wait" });
     expect(presentation.stages[0].statusLabel).toBe("Quota wait");
+  });
+
+  it("gives an active human-only intervention red Human needed precedence", () => {
+    const presentation = deriveWorkflowStatusPresentation({
+      scope: "task",
+      status: "running",
+      humanIntervention: attention(),
+    });
+
+    expect(presentation).toMatchObject({
+      state: "failed",
+      tone: "failed",
+      label: "Human needed",
+      requiresHuman: true,
+    });
+    expect(presentation.stages).toHaveLength(6);
+    expect(presentation.stages[0]).toMatchObject({ state: "in_progress", statusLabel: "Coding in progress" });
+    expect(presentation.accessibleLabel).toContain("Operator decision required");
+  });
+
+  it("falls back to the lifecycle after the human intervention is resolved", () => {
+    const presentation = deriveWorkflowStatusPresentation({
+      scope: "task",
+      status: "running",
+      humanIntervention: attention({ status: "resolved", resolvedAt: "2026-07-14T09:00:00.000Z" }),
+    });
+
+    expect(presentation).toMatchObject({
+      state: "in_progress",
+      tone: "active",
+      label: "Coding in progress",
+      requiresHuman: false,
+    });
+  });
+
+  it.each([
+    ["worker-owned", attention({ ownerType: "worker" })],
+    ["system-owned", attention({ ownerType: "system" })],
+    ["worker-assigned", attention({ assignedWorkerEndpointId: "worker-endpoint-1" })],
+  ])("does not classify %s attention as Human needed", (_label, humanIntervention) => {
+    const presentation = deriveWorkflowStatusPresentation({
+      scope: "task",
+      status: "running",
+      humanIntervention,
+    });
+
+    expect(presentation).toMatchObject({ label: "Coding in progress", requiresHuman: false });
+  });
+
+  it("does not treat an ambiguous sprint-run intervention summary as pure human attention", () => {
+    const presentation = deriveWorkflowStatusPresentation({
+      scope: "sprint",
+      status: "paused",
+      humanIntervention: {
+        ownerType: "human",
+        title: "Sprint paused",
+      },
+    });
+
+    expect(presentation).toMatchObject({
+      label: "Coding paused",
+      state: "in_progress",
+      requiresHuman: false,
+    });
   });
 });

@@ -21,6 +21,7 @@ import type { SprintReviewSummary } from "../../types.js";
 import type { CiStatusPresentation, CiWorkflowState } from "../../lib/ci-status-presentation.js";
 import {
   deriveWorkflowStatusPresentation,
+  type WorkflowHumanInterventionEvidence,
   type WorkflowStage,
   type WorkflowStageId,
 } from "../../lib/workflow-status-presentation.js";
@@ -32,6 +33,7 @@ export interface WorkflowStatusBadgeProps {
   status: string;
   review?: SprintReviewSummary | null;
   ciPresentation?: CiStatusPresentation | null;
+  humanIntervention?: WorkflowHumanInterventionEvidence | null;
   compact?: boolean;
   align?: "left" | "right";
   className?: string;
@@ -289,6 +291,7 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
   status,
   review = null,
   ciPresentation = null,
+  humanIntervention = null,
   compact = false,
   align = "left",
   className = "",
@@ -313,7 +316,8 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
     status,
     review,
     ciPresentation: effectiveCiPresentation,
-  }), [effectiveCiPresentation, review, scope, status]);
+    humanIntervention,
+  }), [effectiveCiPresentation, humanIntervention, review, scope, status]);
   const MainIcon = presentation.tone === "qa_changes"
     ? PencilLine
     : presentation.state === "failed"
@@ -419,8 +423,9 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
   const handleBlur = (relatedTarget: EventTarget | null): void => {
     if (!(relatedTarget instanceof Node) || (!triggerRef.current?.contains(relatedTarget) && !overlayRef.current?.contains(relatedTarget))) scheduleClose();
   };
-  const ciAccessibleLabel = effectiveCiPresentation?.accessibleLabel ?? presentation.accessibleLabel;
-
+  const triggerStatusLabel = presentation.requiresHuman
+    ? presentation.label
+    : effectiveCiPresentation?.label ?? presentation.label;
   return (
     <span
       className={`relative inline-flex max-w-full items-center ${className}`}
@@ -428,6 +433,7 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
       data-workflow-tone={presentation.tone}
       data-ci-state={effectiveCiPresentation?.state ?? presentation.state}
       data-qa-state={currentReviewState ?? undefined}
+      data-human-needed={presentation.requiresHuman ? "true" : undefined}
       onMouseEnter={() => {
         pointerInsideRef.current = true;
         openOverlay();
@@ -442,7 +448,7 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
         type="button"
         aria-expanded={open}
         aria-controls={overlayId}
-        aria-label={`CI status: ${effectiveCiPresentation?.label ?? presentation.label}. ${ciAccessibleLabel} ${open ? "Hide" : "Show"} workflow details`}
+        aria-label={`CI status: ${triggerStatusLabel}. ${presentation.accessibleLabel} ${effectiveCiPresentation ? `CI evidence: ${effectiveCiPresentation.accessibleLabel} ` : ""}${open ? "Hide" : "Show"} workflow details`}
         onClick={() => openFromTrigger(triggerRef.current)}
         onFocus={() => openFromTrigger(triggerRef.current)}
         onBlur={(event) => handleBlur(event.relatedTarget)}
@@ -493,7 +499,7 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
           aria-label="CI workflow details"
           aria-describedby={review ? reviewHeadingId : undefined}
           tabIndex={-1}
-          className={`fixed z-[99999] grid max-h-[calc(100vh-1.5rem)] w-[min(52rem,calc(100vw-1.5rem))] gap-3 overflow-y-auto rounded-[1.65rem] border border-black/[0.08] bg-[#F9F8F4] p-3 shadow-[0_24px_70px_rgba(15,23,42,0.2)] motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 dark:border-white/[0.09] dark:bg-void-900 ${review ? "md:grid-cols-[minmax(0,19rem)_2rem_minmax(0,1fr)] md:items-center" : "max-w-[20rem]"}`}
+          className={`fixed z-[99999] grid max-h-[calc(100vh-1.5rem)] w-[min(52rem,calc(100vw-1.5rem))] gap-3 overflow-y-auto motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 ${review ? "md:grid-cols-[minmax(0,19rem)_2rem_minmax(0,1fr)] md:items-center" : "max-w-[20rem]"}`}
           style={{ top: coords.top, left: coords.left }}
           onMouseEnter={() => {
             pointerInsideRef.current = true;
@@ -516,6 +522,11 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
                 <MainIcon className={`h-4 w-4 ${presentation.state === "in_progress" && presentation.tone !== "qa_changes" ? "motion-safe:animate-spin motion-reduce:animate-none" : ""}`} strokeWidth={2.3} />
               </span>
             </div>
+            {presentation.requiresHuman && humanIntervention?.title && (
+              <p className="mb-3 rounded-xl border border-status-red/20 bg-status-red/[0.06] px-3 py-2 text-[11px] font-semibold leading-snug text-status-red">
+                {humanIntervention.title}
+              </p>
+            )}
             <ol className="grid">
               {presentation.stages.map((stage, index) => <WorkflowStageRow key={stage.id} stage={stage} isLast={index === presentation.stages.length - 1} />)}
             </ol>

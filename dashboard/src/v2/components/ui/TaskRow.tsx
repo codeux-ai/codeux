@@ -5,14 +5,18 @@ import type { Task } from "../../types.js";
 import type { TaskStreamState } from "../../hooks/use-overview-stream-actions.js";
 import { WorkflowStatusBadge } from "./WorkflowStatusBadge.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import type { CiStatusPresentation } from "../../lib/ci-status-presentation.js";
+import type { ExecutionAttentionItemSummary } from "../../../types.js";
 
 interface TaskRowProps {
     task: Task;
     state?: TaskStreamState;
+    ciPresentation?: CiStatusPresentation | null;
+    humanIntervention?: ExecutionAttentionItemSummary | null;
     onPlayStop?: () => void;
 }
 
-export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onPlayStop }) => {
+export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, ciPresentation = null, humanIntervention = null, onPlayStop }) => {
     const isRunning = state?.isRunning ?? task.status === "in_progress";
     const busy = state?.busy ?? false;
     const interactionTokens = useInteractionTokens();
@@ -52,6 +56,8 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
                         scope="task"
                         status={task.status}
                         review={task.latestReview}
+                        ciPresentation={ciPresentation}
+                        humanIntervention={humanIntervention}
                         compact
                         align="right"
                     />

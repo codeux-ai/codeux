@@ -1,4 +1,4 @@
-import type { FunctionComponent, ComponentChildren } from "preact";
+import type { FunctionComponent, ComponentChildren, Ref } from "preact";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { createPortal } from "preact/compat";
 import { Check, ChevronDown } from "lucide-preact";
@@ -12,9 +12,10 @@ export interface SelectOption {
   value: string;
   label: string;
   icon?: ComponentChildren | (() => ComponentChildren);
+  disabled?: boolean;
 }
 
-interface AvantgardeSelectProps {
+export interface AvantgardeSelectProps {
   id?: string;
   value: string;
   onChange: (value: string) => void;
@@ -36,6 +37,9 @@ interface AvantgardeSelectProps {
   "aria-invalid"?: boolean | "false" | "true" | "grammar" | "spelling";
   "aria-errormessage"?: string;
   "aria-required"?: boolean | "false" | "true";
+  "aria-busy"?: boolean | "false" | "true";
+  title?: string;
+  triggerRef?: Ref<HTMLButtonElement>;
   onBlur?: (e: FocusEvent) => void;
 }
 
@@ -96,6 +100,9 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   "aria-invalid": ariaInvalid,
   "aria-errormessage": ariaErrorMessage,
   "aria-required": ariaRequired,
+  "aria-busy": ariaBusy,
+  title,
+  triggerRef: externalTriggerRef,
   onBlur,
 }) => {
   const [open, setOpen] = useState(false);
@@ -196,6 +203,11 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   useLayoutEffect(() => {
     if (!isRendered || !panelRef.current || !position) return;
 
+    if (typeof gsap.context !== "function") {
+      if (!open) setIsRendered(false);
+      return;
+    }
+
     const panel = panelRef.current;
     let ctx = gsap.context(() => {
       const isUp = position.direction === "up";
@@ -241,8 +253,9 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
 
   useEffect(() => {
     if (open) {
-      const idx = options.findIndex(o => o.value === value);
-      setActiveIndex(idx >= 0 ? idx : 0);
+      const selectedIndex = options.findIndex(o => o.value === value && !o.disabled);
+      const firstEnabledIndex = options.findIndex(o => !o.disabled);
+      setActiveIndex(selectedIndex >= 0 ? selectedIndex : firstEnabledIndex);
     } else {
       setActiveIndex(-1);
       setFilter("");
@@ -300,6 +313,15 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
     return [...matches, { value: trimmed, label: `Use "${trimmed}"` }];
   }, [options, searchable, allowCustomValue, filter, maxVisibleOptions]);
 
+  useEffect(() => {
+    if (!open) return;
+    setActiveIndex((currentIndex) => (
+      filteredOptions[currentIndex] && !filteredOptions[currentIndex].disabled
+        ? currentIndex
+        : filteredOptions.findIndex((option) => !option.disabled)
+    ));
+  }, [filteredOptions, open]);
+
   const onKeyDown = (e: KeyboardEvent) => {
     if (!open) return;
     // Don't intercept space if we are in the search input
@@ -318,22 +340,32 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
       focusWithoutScroll(triggerRef.current);
       return;
     }
-    if (!filteredOptions.length) return;
+    if (!filteredOptions.some((option) => !option.disabled)) return;
+    const moveToEnabledOption = (offset: 1 | -1): void => {
+      let nextIndex = activeIndex;
+      for (let step = 0; step < filteredOptions.length; step += 1) {
+        nextIndex = (nextIndex + offset + filteredOptions.length) % filteredOptions.length;
+        if (!filteredOptions[nextIndex]?.disabled) {
+          setActiveIndex(nextIndex);
+          return;
+        }
+      }
+    };
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIndex(prev => (prev + 1) % filteredOptions.length);
+      moveToEnabledOption(1);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActiveIndex(prev => (prev - 1 + filteredOptions.length) % filteredOptions.length);
+      moveToEnabledOption(-1);
     } else if (e.key === "Home") {
       e.preventDefault();
-      setActiveIndex(0);
+      setActiveIndex(filteredOptions.findIndex((option) => !option.disabled));
     } else if (e.key === "End") {
       e.preventDefault();
-      setActiveIndex(filteredOptions.length - 1);
+      setActiveIndex(filteredOptions.map((option) => !option.disabled).lastIndexOf(true));
     } else if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      if (activeIndex >= 0 && activeIndex < filteredOptions.length) {
+      if (activeIndex >= 0 && activeIndex < filteredOptions.length && !filteredOptions[activeIndex].disabled) {
         onChange(filteredOptions[activeIndex].value);
         setOpen(false);
         focusWithoutScroll(triggerRef.current);
@@ -344,7 +376,8 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   const selected = options.find((o) => o.value === value);
   const selectId = id || generatedId;
   const listboxId = `${selectId}-listbox`;
-  const selectedOptionId = selected ? `select-option-${selected.value.replace(/\W/g, '-')}` : undefined;
+  const optionId = (optionValue: string): string => `${listboxId}-option-${optionValue.replace(/\W/g, '-') || "empty"}`;
+  const selectedOptionId = selected ? optionId(selected.value) : undefined;
 
   const activeOptionRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -409,7 +442,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
             onKeyDown={onKeyDown}
             aria-label={ariaLabel}
             aria-labelledby={ariaLabelledby}
-            aria-activedescendant={activeIndex >= 0 && filteredOptions[activeIndex] ? `select-option-${filteredOptions[activeIndex].value.replace(/\W/g, '-')}` : undefined}
+            aria-activedescendant={activeIndex >= 0 && filteredOptions[activeIndex] ? optionId(filteredOptions[activeIndex].value) : undefined}
           >
             {searchable && (
               <div className="px-2 pt-1 pb-1.5 sticky -top-1.5 bg-white/[0.97] dark:bg-void-800/[0.97] z-20">
@@ -419,9 +452,11 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
                   value={filter}
                   onInput={(e) => {
                     setFilter(e.currentTarget.value);
-                    setActiveIndex(0);
                   }}
-                  onKeyDown={onKeyDown as any}
+                  onKeyDown={(event) => {
+                    event.stopPropagation();
+                    onKeyDown(event);
+                  }}
                   className="w-full px-3 py-1.5 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-signal-500/30 text-slate-700 dark:text-slate-200"
                   ref={searchInputRef}
                 />
@@ -433,17 +468,22 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
               return (
                 <button
                   key={option.value}
-                  id={`select-option-${option.value.replace(/\W/g, '-')}`}
+                  id={optionId(option.value)}
                   role="option"
                   aria-selected={isSelected}
+                  aria-disabled={option.disabled || undefined}
                   type="button"
                   ref={isFocused ? activeOptionRef : null}
                   onClick={() => {
+                    if (option.disabled) return;
                     onChange(option.value);
                     setOpen(false);
                     focusWithoutScroll(triggerRef.current);
                   }}
+                  disabled={option.disabled}
                   className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors motion-reduce:duration-0 motion-reduce:ease-none ${
+                    option.disabled ? "cursor-not-allowed opacity-45 " : ""
+                  }${
                     isFocused ? "bg-signal-500/10 shadow-[inset_2px_0_0_0_var(--color-signal-500)] text-signal-600 dark:text-signal-300 z-10 relative" : ""
                   }${
                     isSelected
@@ -473,9 +513,17 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
     <div className={`relative ${className}`}>
       <button
         id={id}
-        ref={triggerRef}
+        ref={(element) => {
+          triggerRef.current = element;
+          if (typeof externalTriggerRef === "function") {
+            externalTriggerRef(element);
+          } else if (externalTriggerRef) {
+            externalTriggerRef.current = element;
+          }
+        }}
         style={{ transitionProperty: "all", transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
         type="button"
+        value={value}
         onClick={() => !disabled && setOpen(!open)}
         onKeyDown={(e) => {
           if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === " ")) {
@@ -498,6 +546,8 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
         aria-describedby={ariaDescribedBy}
         aria-errormessage={ariaErrorMessage}
         aria-required={ariaRequired}
+        aria-busy={ariaBusy}
+        title={title}
       >
         {selected?.icon ? <span className="flex-shrink-0">{renderOptionIcon(selected.icon)}</span> : null}
         <span className="truncate">{selected?.label || placeholder}</span>

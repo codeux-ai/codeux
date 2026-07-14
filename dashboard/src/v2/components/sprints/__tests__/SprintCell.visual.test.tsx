@@ -137,7 +137,7 @@ describe("SprintCell visuals", () => {
     expect(onPrimaryAction).not.toHaveBeenCalled();
   });
 
-  it("renders a reduced-motion-safe failed execution indicator and full red attention border", () => {
+  it("uses the workflow widget for failed execution without a duplicate banner or outer red border", () => {
     const { container } = render(
       <SprintCell
         sprint={{ ...sprint, status: "failed" }}
@@ -154,15 +154,21 @@ describe("SprintCell visuals", () => {
       />,
     );
 
-    const cell = container.querySelector('[data-sprint-attention="failure"]');
-    const indicator = screen.getByRole("status", { name: "Sprint execution failed" });
-    const border = container.querySelector("[data-sprint-attention-border]");
+    const workflowTrigger = screen.getByRole("button", { name: /CI status: Coding failed.*Show workflow details/i });
 
-    expect(cell).toBeInTheDocument();
-    expect(indicator).toHaveAttribute("data-reduced-motion", "true");
-    expect(indicator.querySelector(".motion-reduce\\:animate-none")).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Sprint execution failed" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Execution failed")).not.toBeInTheDocument();
+    expect(container.querySelector('[data-sprint-attention="failure"]')).not.toBeInTheDocument();
+    expect(container.querySelector("[data-sprint-attention-border]")).not.toBeInTheDocument();
+    expect(container.querySelector("[data-sprint-status-ring='failed']")).not.toBeInTheDocument();
     expect(screen.queryByRole("status", { name: "Sprint waiting for human intervention" })).not.toBeInTheDocument();
-    expect(border).toHaveClass("border-2", "border-status-red/70", "motion-reduce:shadow-none");
+    expect(workflowTrigger.closest("[data-workflow-state]")).toHaveAttribute("data-workflow-state", "failed");
+    expect(workflowTrigger).toHaveTextContent("Coding failed");
+
+    fireEvent.click(workflowTrigger);
+    const workflowDetails = screen.getByRole("region", { name: "CI workflow details" });
+    expect(within(workflowDetails).getAllByText("Coding failed")).toHaveLength(2);
+    expect(within(workflowDetails).getByText("Workflow failed")).toBeVisible();
   });
 
   it("places a human-owned waiting cue 10px above the cell without a red border or duplicate badge", () => {

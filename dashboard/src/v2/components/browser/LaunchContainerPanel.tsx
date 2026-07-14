@@ -1,6 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { Play, Loader2 } from "lucide-preact";
 import type { Sprint } from "../../types.js";
+import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { buildInteractionTransition } from "../../lib/motion/tokens.js";
 
 interface LaunchContainerPanelProps {
@@ -64,27 +65,19 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
           {statusMessage}
         </div>
         <label htmlFor="launch-container-sprint" className="sr-only">Sprint to preview</label>
-        <select
+        <AvantgardeSelect
           id="launch-container-sprint"
           value={launchSprintId}
-          onChange={(event) => onLaunchSprintChange((event.currentTarget as HTMLSelectElement).value)}
+          onChange={onLaunchSprintChange}
           disabled={selectUnavailable}
-          aria-disabled={selectUnavailable}
           aria-busy={launchBusy}
           aria-describedby="launch-container-status"
           title={selectUnavailable ? statusMessage : "Choose the sprint to preview"}
-          className={`w-full rounded-2xl border border-black/[0.08] bg-white/85 px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-200 ${
-            selectUnavailable ? "cursor-not-allowed opacity-50" : ""
-          }`}
-          style={{ transition: controlTransition }}
-        >
-          {sprints.length === 0 && <option value="">No sprints available</option>}
-          {sprints.map((sprint) => (
-            <option key={sprint.id} value={sprint.id}>
-              {sprint.name}
-            </option>
-          ))}
-        </select>
+          className="w-full"
+          options={sprints.length === 0
+            ? [{ value: "", label: "No sprints available" }]
+            : sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))}
+        />
 
         <button
           type="button"

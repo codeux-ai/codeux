@@ -271,6 +271,18 @@ function ciAttention(overrides: Partial<ExecutionAttentionItemSummary> = {}): Ex
   };
 }
 
+function humanAttention(overrides: Partial<ExecutionAttentionItemSummary> = {}): ExecutionAttentionItemSummary {
+  return ciAttention({
+    id: "attention-human-fixture",
+    attentionType: "human_escalation_required",
+    ownerType: "human",
+    title: "Operator decision required",
+    summaryMarkdown: "Choose the safe recovery path.",
+    payload: { projectId: PROJECT_ID, taskKey: TASK_KEY },
+    ...overrides,
+  });
+}
+
 interface SurfaceData {
   taskBoard: TaskBoardViewModel;
   taskViewModel: TaskCardViewModel;
@@ -615,6 +627,20 @@ describe("shared QA and CI card status integration", () => {
       const surface = screen.getByRole("region", { name: surfaceLabel });
       expect(within(surface).getByRole("button", { name: /CI status: Coding in progress/i })).toBeVisible();
       expect(surface.querySelector('[data-ci-icon="failure"]')).not.toBeInTheDocument();
+    }
+  });
+
+  it("projects active human-only attention into both task and Live workflow badges", () => {
+    const data = buildSurfaceData(CI_HISTORY, [humanAttention()]);
+    expect(data.taskViewModel.humanIntervention?.id).toBe("attention-human-fixture");
+    expect(data.liveItem.humanIntervention?.id).toBe("attention-human-fixture");
+
+    render(<><TaskSurface data={data} /><LiveSurface data={data} /></>);
+    for (const [, surfaceLabel] of TASK_SURFACES) {
+      const surface = screen.getByRole("region", { name: surfaceLabel });
+      const trigger = within(surface).getByRole("button", { name: /CI status: Human needed/i });
+      expect(trigger).toHaveTextContent("Human needed");
+      expect(trigger).toHaveClass("text-status-red");
     }
   });
 

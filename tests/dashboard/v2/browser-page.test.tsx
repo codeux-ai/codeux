@@ -869,7 +869,8 @@ describe("BrowserPage", () => {
     render(<BrowserPage />);
 
     expandPanel(/Docker Access/);
-    await user.selectOptions(screen.getByLabelText("Selected container Docker access policy"), "enabled");
+    await user.click(screen.getByLabelText("Selected container Docker access policy"));
+    await user.click(screen.getByRole("option", { name: "Enable for this container" }));
 
     expect(savePreviewDockerAccessOverride).toHaveBeenCalledWith("p1", "s1", "sess-1", true);
     expect(screen.getByText("Selected container Docker access saved. Rebuild the container to apply it.")).toBeInTheDocument();

@@ -671,43 +671,26 @@ export const SprintJiraImportModal = ({
                   provider={JIRA_PROVIDER}
                   aria-label="Jira status"
                   value={getStatusSelectValue(statusSelection, jiraStatusNames, useCategoryStatusFallback)}
-                  onInput={(event) => {
+                  onChange={(value) => {
                     updateStatusSelection(parseStatusSelectValue(
-                      (event.target as HTMLSelectElement).value,
+                      value,
                       jiraStatusNames,
                       useCategoryStatusFallback,
                     ));
                   }}
-                  onChange={(event) => {
-                    updateStatusSelection(parseStatusSelectValue(
-                      (event.target as HTMLSelectElement).value,
-                      jiraStatusNames,
-                      useCategoryStatusFallback,
-                    ));
-                  }}
-                >
-                  {useCategoryStatusFallback ? (
-                    STATUS_OPTIONS.map((option) => (
-                      <option key={option.value} value={`category:${option.value}`}>
-                        {option.label}
-                      </option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="all">All statuses</option>
-                      {statusLoadState === "loading" && jiraStatusNames.length === 0 && (
-                        <option value="loading" disabled>
-                          Loading Jira statuses...
-                        </option>
-                      )}
-                      {jiraStatusNames.map((statusName) => (
-                        <option key={statusName} value={`jira-status:${encodeURIComponent(statusName)}`}>
-                          {statusName}
-                        </option>
-                      ))}
-                    </>
-                  )}
-                </IssueImportSelect>
+                  options={useCategoryStatusFallback
+                    ? STATUS_OPTIONS.map((option) => ({ value: `category:${option.value}`, label: option.label }))
+                    : [
+                        { value: "all", label: "All statuses" },
+                        ...(statusLoadState === "loading" && jiraStatusNames.length === 0
+                          ? [{ value: "loading", label: "Loading Jira statuses...", disabled: true }]
+                          : []),
+                        ...jiraStatusNames.map((statusName) => ({
+                          value: `jira-status:${encodeURIComponent(statusName)}`,
+                          label: statusName,
+                        })),
+                      ]}
+                />
               </IssueImportField>
 
               <IssueImportField label="Sort field">
@@ -715,14 +698,9 @@ export const SprintJiraImportModal = ({
                   provider={JIRA_PROVIDER}
                   aria-label="Sort field"
                   value={sortField}
-                  onChange={(event) => setSortField((event.target as HTMLSelectElement).value as JiraSortField)}
-                >
-                  {SORT_FIELD_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </IssueImportSelect>
+                  onChange={(value) => setSortField(value as JiraSortField)}
+                  options={SORT_FIELD_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                />
               </IssueImportField>
 
               <IssueImportField label="Sort direction">
@@ -730,14 +708,9 @@ export const SprintJiraImportModal = ({
                   provider={JIRA_PROVIDER}
                   aria-label="Sort direction"
                   value={sortDirection}
-                  onChange={(event) => setSortDirection((event.target as HTMLSelectElement).value as JiraSortDirection)}
-                >
-                  {SORT_DIRECTION_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </IssueImportSelect>
+                  onChange={(value) => setSortDirection(value as JiraSortDirection)}
+                  options={SORT_DIRECTION_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                />
               </IssueImportField>
 
               <IssueImportField label="Limit" hint="Bounded to the Jira search endpoint limit.">

@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 /** @jsx h */
 import { h } from "preact";
-import { cleanup, render, screen, waitFor } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -126,9 +126,10 @@ describe("NodesPage governed workspace", () => {
     api.attachNodeFlowToAgent.mockImplementation(async () => { isAttached = true; return attachment; });
     render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
 
-    const select = await screen.findByRole("combobox", { name: "Agent preset" });
+    const select = await screen.findByRole("button", { name: "Agent preset" });
     await waitFor(() => expect(select).toBeEnabled());
-    await user.selectOptions(select, "agent-1");
+    await user.click(select);
+    await user.click(screen.getByRole("option", { name: "Release Agent" }));
     const attachButton = screen.getByRole("button", { name: "Attach node flow to agent" });
     attachButton.focus();
     await user.keyboard("{Enter}");
@@ -176,6 +177,7 @@ describe("NodesPage governed workspace", () => {
 
     expect(await screen.findByText("Quality skill")).toBeInTheDocument();
     expect(screen.queryByText("Release skill")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Agent preset" }));
     expect(screen.getByRole("option", { name: "Quality Agent" })).toBeInTheDocument();
     expect(firstAgentSignal?.aborted).toBe(true);
     expect(firstAttachmentSignal?.aborted).toBe(true);
@@ -193,6 +195,9 @@ describe("NodesPage governed workspace", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Agent service unavailable");
     await user.click(screen.getByRole("button", { name: "Retry attachments" }));
 
+    const select = await screen.findByRole("button", { name: "Agent preset" });
+    await waitFor(() => expect(select).toBeEnabled());
+    await user.click(select);
     expect(await screen.findByRole("option", { name: "Release Agent" })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("Agent service unavailable")).not.toBeInTheDocument());
   });
@@ -202,9 +207,10 @@ describe("NodesPage governed workspace", () => {
     api.attachNodeFlowToAgent.mockRejectedValueOnce(new Error("Attachment denied"));
     render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
 
-    const select = await screen.findByRole("combobox", { name: "Agent preset" });
+    const select = await screen.findByRole("button", { name: "Agent preset" });
     await waitFor(() => expect(select).toBeEnabled());
-    await user.selectOptions(select, "agent-1");
+    await user.click(select);
+    await user.click(screen.getByRole("option", { name: "Release Agent" }));
     await user.click(screen.getByRole("button", { name: "Attach node flow to agent" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Attachment denied");

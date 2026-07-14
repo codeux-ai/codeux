@@ -432,6 +432,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
             status={sprint.status}
             review={sprint.latestReview}
             ciPresentation={ciStatus}
+            humanIntervention={humanIntervention}
             compact
             align="left"
           />

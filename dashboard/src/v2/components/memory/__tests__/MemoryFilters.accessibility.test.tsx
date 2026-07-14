@@ -57,8 +57,8 @@ describe("MemoryFilters Accessibility", () => {
             />
         );
 
-        expect(getByRole("combobox", { name: "Filter memory by Sprint" })).toBeInTheDocument();
-        expect(getByRole("combobox", { name: "Filter memory by Agent Preset" })).toBeInTheDocument();
+        expect(getByRole("button", { name: "Filter memory by Sprint" })).toBeInTheDocument();
+        expect(getByRole("button", { name: "Filter memory by Agent Preset" })).toBeInTheDocument();
     });
 
     test("select changes expose selected sprint and agent feedback", async () => {
@@ -81,11 +81,13 @@ describe("MemoryFilters Accessibility", () => {
             />
         );
 
-        await user.selectOptions(getByRole("combobox", { name: "Filter memory by Sprint" }), "2");
+        await user.click(getByRole("button", { name: "Filter memory by Sprint" }));
+        await user.click(getByRole("option", { name: /Sprint 2/ }));
         expect(selectedSprintIdSignal.value).toBe("2");
         expect(getByText("Sprint filter set to Sprint 2.")).toBeInTheDocument();
 
-        await user.selectOptions(getByRole("combobox", { name: "Filter memory by Agent Preset" }), "agent2");
+        await user.click(getByRole("button", { name: "Filter memory by Agent Preset" }));
+        await user.click(getByRole("option", { name: "Agent 2" }));
         expect(selectedAgentPresetIdSignal.value).toBe("agent2");
         expect(getByText("Agent filter set to Agent 2.")).toBeInTheDocument();
         expect(getByText("Short Term: showing 7 memories of 17 memories · Sprint 2 · Agent 2")).toBeInTheDocument();

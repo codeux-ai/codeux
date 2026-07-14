@@ -5,17 +5,20 @@ import { fileURLToPath } from "node:url";
 import {
   parseDashboardFeatureFlagValue,
   resolveDashboardFeatureFlags,
+  type DashboardFeatureFlagMap,
 } from "../../../dashboard/src/v2/lib/dashboard-feature-flags.js";
 import { getPrimaryNavigationItems } from "../../../dashboard/src/v2/lib/navigation-items.js";
 import { canPrefetchRoute } from "../../../dashboard/src/v2/router/route-prefetch.js";
 
-const buildFeatureFlags = (overrides: Partial<Record<"nodes" | "custom-dashboards", boolean>> = {}) => ({
+const buildFeatureFlags = (overrides: Partial<DashboardFeatureFlagMap> = {}): DashboardFeatureFlagMap => ({
   nodes: true,
   "custom-dashboards": true,
+  "chat-nodes-workflow-quick-action": false,
+  "chat-custom-dashboard-quick-action": false,
   ...overrides,
 });
 
-const navigationLabels = (featureFlags: Record<"nodes" | "custom-dashboards", boolean>): string[] => (
+const navigationLabels = (featureFlags: DashboardFeatureFlagMap): string[] => (
   getPrimaryNavigationItems("EXPERT", { featureFlags }).map((item) => item.label)
 );
 
@@ -35,7 +38,7 @@ describe("dashboard feature flags", () => {
   });
 
   it("shows unfinished features by default in development mode", () => {
-    expect(resolveDashboardFeatureFlags({ devMode: true })).toEqual({ nodes: true, "custom-dashboards": true });
+    expect(resolveDashboardFeatureFlags({ devMode: true })).toEqual(buildFeatureFlags());
   });
 
   it("builds the watched dashboard with Vite development semantics", () => {
@@ -43,7 +46,10 @@ describe("dashboard feature flags", () => {
   });
 
   it("hides unfinished features by default outside development mode", () => {
-    expect(resolveDashboardFeatureFlags({ devMode: false })).toEqual({ nodes: false, "custom-dashboards": false });
+    expect(resolveDashboardFeatureFlags({ devMode: false })).toEqual(buildFeatureFlags({
+      nodes: false,
+      "custom-dashboards": false,
+    }));
   });
 
   it("keeps every flagged surface available in development despite disabled env values", () => {
@@ -52,16 +58,37 @@ describe("dashboard feature flags", () => {
       values: { nodes: "false", "custom-dashboards": "off" },
     });
 
-    expect(flags).toEqual({ nodes: true, "custom-dashboards": true });
+    expect(flags).toEqual(buildFeatureFlags());
     expect(navigationLabels(flags)).toEqual(expect.arrayContaining(["Nodes", "Dashboards"]));
     expect(canPrefetchRoute("/nodes", flags)).toBe(true);
     expect(canPrefetchRoute("/custom-dashboards", flags)).toBe(true);
   });
 
   it("honors explicit values outside development mode", () => {
-    expect(resolveDashboardFeatureFlags({ devMode: false, values: { nodes: "true", "custom-dashboards": "enabled" }, prerequisites: { nodeFlowBackend: "enabled", automationSecurity: "enabled" } })).toEqual({ nodes: true, "custom-dashboards": true });
+    expect(resolveDashboardFeatureFlags({ devMode: false, values: { nodes: "true", "custom-dashboards": "enabled" }, prerequisites: { nodeFlowBackend: "enabled", automationSecurity: "enabled" } })).toEqual(buildFeatureFlags());
     expect(resolveDashboardFeatureFlags({ devMode: false, values: { nodes: "true" }, prerequisites: { nodeFlowBackend: "enabled", automationSecurity: "off" } }).nodes).toBe(false);
-    expect(resolveDashboardFeatureFlags({ devMode: false, values: { nodes: "false", "custom-dashboards": "off" } })).toEqual({ nodes: false, "custom-dashboards": false });
+    expect(resolveDashboardFeatureFlags({ devMode: false, values: { nodes: "false", "custom-dashboards": "off" } })).toEqual(buildFeatureFlags({
+      nodes: false,
+      "custom-dashboards": false,
+    }));
+  });
+
+  it("keeps cinematic workflow actions disabled by default and allows explicit opt-in", () => {
+    expect(resolveDashboardFeatureFlags({ devMode: true })).toMatchObject({
+      "chat-nodes-workflow-quick-action": false,
+      "chat-custom-dashboard-quick-action": false,
+    });
+
+    expect(resolveDashboardFeatureFlags({
+      devMode: true,
+      values: {
+        "chat-nodes-workflow-quick-action": "enabled",
+        "chat-custom-dashboard-quick-action": "true",
+      },
+    })).toMatchObject({
+      "chat-nodes-workflow-quick-action": true,
+      "chat-custom-dashboard-quick-action": true,
+    });
   });
 
   it("filters Nodes from shared navigation and prefetch when disabled", () => {

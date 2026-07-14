@@ -442,12 +442,13 @@ describe("CustomDashboardsPage", () => {
     expect(panel).toHaveTextContent("Optional");
     expect(panel).toHaveTextContent("need attention before the next revision is publication-ready");
 
-    const select = screen.getByRole("combobox", { name: "Compatible credential for Deployment API" });
-    expect(select).toHaveTextContent("Compatible Key");
-    expect(select).toHaveTextContent("Replacement Key");
-    expect(select).not.toHaveTextContent("Wrong Kind");
-    expect(select).not.toHaveTextContent("Read Only");
-    expect(select).not.toHaveTextContent("Inactive Key");
+    const select = screen.getByRole("button", { name: "Compatible credential for Deployment API" });
+    fireEvent.click(select);
+    expect(screen.getByRole("option", { name: /Compatible Key/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Replacement Key/ })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Wrong Kind/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Read Only/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Inactive Key/ })).not.toBeInTheDocument();
   });
 
   it("binds, replaces, and unbinds with the latest revision while restoring action focus", async () => {
@@ -465,11 +466,10 @@ describe("CustomDashboardsPage", () => {
     renderPage();
 
     await openCredentialPanel();
-    const select = await screen.findByRole("combobox", { name: "Compatible credential for Deployment API" });
+    const select = await screen.findByRole("button", { name: "Compatible credential for Deployment API" });
     select.focus();
     fireEvent.keyDown(select, { key: "ArrowDown" });
-    expect(document.activeElement).toBe(select);
-    fireEvent.input(select, { target: { value: compatibleCredential.id } });
+    fireEvent.click(screen.getByRole("option", { name: /Compatible Key/ }));
     expect(select).toHaveValue(compatibleCredential.id);
     const bindButton = screen.getByRole("button", { name: "Bind credential for Deployment API" });
     await waitFor(() => expect(bindButton).toBeEnabled());
@@ -484,7 +484,8 @@ describe("CustomDashboardsPage", () => {
     await screen.findByText("Compatible binding");
     await waitFor(() => expect(document.activeElement).toBe(select));
 
-    fireEvent.input(select, { target: { value: replacementCredential.id } });
+    fireEvent.click(select);
+    fireEvent.click(screen.getByRole("option", { name: /Replacement Key/ }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Replace binding for Deployment API" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Replace binding for Deployment API" }));
     await waitFor(() => expect(bindCustomDashboardCredential).toHaveBeenLastCalledWith(
@@ -525,7 +526,7 @@ describe("CustomDashboardsPage", () => {
     expect(await screen.findByText("Secure credential custody is unavailable.")).toBeInTheDocument();
     expect(screen.getByText("Local key custody is offline.")).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Manage credentials in Settings" })[0]).toHaveAttribute("href", "/config");
-    expect(screen.getByRole("combobox", { name: "Compatible credential for Deployment API" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Compatible credential for Deployment API" })).toBeDisabled();
   });
 
   it("cancels stale credential metadata requests when the selected dashboard changes", async () => {
@@ -567,8 +568,9 @@ describe("CustomDashboardsPage", () => {
     renderPage();
 
     await openCredentialPanel();
-    const select = await screen.findByRole("combobox", { name: "Compatible credential for Deployment API" });
-    fireEvent.input(select, { target: { value: compatibleCredential.id } });
+    const select = await screen.findByRole("button", { name: "Compatible credential for Deployment API" });
+    fireEvent.click(select);
+    fireEvent.click(screen.getByRole("option", { name: /Compatible Key/ }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Bind credential for Deployment API" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Bind credential for Deployment API" }));
 
@@ -603,8 +605,9 @@ describe("CustomDashboardsPage", () => {
     await openCredentialPanel();
     fireEvent.click(await screen.findByRole("button", { name: "Validate" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Publish" })).toBeEnabled());
-    const select = screen.getByRole("combobox", { name: "Compatible credential for Deployment API" });
-    fireEvent.input(select, { target: { value: compatibleCredential.id } });
+    const select = screen.getByRole("button", { name: "Compatible credential for Deployment API" });
+    fireEvent.click(select);
+    fireEvent.click(screen.getByRole("option", { name: /Compatible Key/ }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Bind credential for Deployment API" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Bind credential for Deployment API" }));
     expect(await screen.findByText("Credential capability policy denied this binding.")).toBeInTheDocument();

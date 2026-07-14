@@ -12,7 +12,7 @@ import { MARKDOWN_PROSE_CLASS } from "./ui/MarkdownEditorField.js";
 import { TaskStagePills } from "./SprintStatsDeck.js";
 import { RuntimeEventFeed } from "./RuntimeEventFeed.js";
 import { renderMarkdown } from "../../lib/markdown.js";
-import type { Subtask, ExecutionRuntimeEventSummary, ExecutionInvocationRecord } from "../../types.js";
+import type { Subtask, ExecutionAttentionItemSummary, ExecutionRuntimeEventSummary, ExecutionInvocationRecord } from "../../types.js";
 import {
     getTaskCfg,
 } from "../lib/live-session-config.js";
@@ -50,6 +50,7 @@ export interface LiveTaskCardProps {
     events?: ExecutionRuntimeEventSummary[];
     invocations?: ExecutionInvocationRecord[];
     ciPresentation?: CiStatusPresentation | null;
+    humanIntervention?: ExecutionAttentionItemSummary | null;
     onRerun: (id: string, options?: RerunOptions) => void;
     onEdit: (task: Subtask) => void;
     onForceComplete: (task: Subtask) => void;
@@ -73,6 +74,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     events,
     invocations = [],
     ciPresentation = null,
+    humanIntervention = null,
     onRerun,
     onEdit,
     onForceComplete,
@@ -292,6 +294,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                                     status={taskPhase}
                                     review={task.latestReview}
                                     ciPresentation={ciPresentation}
+                                    humanIntervention={humanIntervention}
                                     compact
                                     align="right"
                                 />

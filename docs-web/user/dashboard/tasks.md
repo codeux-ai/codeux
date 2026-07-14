@@ -37,7 +37,7 @@ When a worker reports a task-run self-reflection rating, the shared rating badge
 
 ## Delivery workflow and QA review details
 
-Task cards use the shared bright delivery workflow badge in place of the standalone QA and CI badges. The task lifecycle label remains visible beside it, while the badge itself always exposes Coding → Pull request → QA → CI → Merge → Completion. Lifecycle and review state keep the badge durable when CI evidence is absent or refreshing.
+Task cards use the shared bright delivery workflow badge in place of the standalone QA and CI badges. The task lifecycle label remains visible beside it, while the badge itself always exposes Coding → Pull request → QA → CI → Merge → Completion. Lifecycle and review state keep the badge durable when CI evidence is absent or refreshing. An open or claimed task-matched human/user intervention with no worker assignment takes precedence as a red **Human needed** trigger; clearing or handing the item to automation restores the ordinary workflow stage.
 
 | Presentation | Meaning |
 | --- | --- |
@@ -46,7 +46,7 @@ Task cards use the shared bright delivery workflow badge in place of the standal
 | Blue pencil, **QA edits** / **QA changes requested** | QA completed successfully and requested changes. This is an actionable review outcome, not a provider failure. |
 | Red X, **QA failed** | The QA provider run failed, errored, or was cancelled before returning a usable verdict. It does not mean QA requested code changes. |
 
-Hovering, focusing, or activating the badge opens an opaque, viewport-positioned workflow card. Six circles on the left are connected by motion-safe animated dots. When review data exists, an animated chevron reveals an adjacent opaque QA review card with the outcome, summary, findings, fix instructions, target task key, reviewer, reviewed time, and generated follow-up tasks. `Escape` closes the surface and restores focus to the exact workflow or QA-chevron trigger that opened it; outside pointer or touch input dismisses it.
+Hovering, focusing, or activating the badge opens one viewport-positioned interaction region without a visible outer card. Its opaque Delivery flow card contains six circles connected by motion-safe animated dots. When review data exists, a floating responsive arrow points to an independent opaque QA review card with the outcome, summary, findings, fix instructions, target task key, reviewer, reviewed time, and generated follow-up tasks. `Escape` closes the region and restores focus to the exact workflow or QA trigger that opened it; outside pointer or touch input dismisses it.
 
 Generated follow-up task specifications are collapsed initially, so long prompts do not dominate the review. Each **Follow-up task N** button exposes `aria-expanded` and can be toggled with the keyboard or touch. Expansion reveals the generated title, description, priority, dependency task keys (or **None**), and full Markdown prompt in a bounded scrolling area. The card uses one column on constrained screens, may split summary and findings on wider screens, clamps to the viewport, and scrolls vertically when needed. Reduced motion removes spinner, pulse, rotation, and transition movement without removing labels, borders, focus rings, expanded content, or state semantics.
 
@@ -63,7 +63,7 @@ The workflow badge summarizes six stages shared by Sprints, Tasks, Overview, and
 
 The four first-class workflow states are `pending`, `in_progress`, `successful`, and `failed`. Pending uses a neutral clock, `in_progress` is presented as running with the signal-colored progress treatment, `successful` uses a green check, and `failed` uses a red X. Failed wins over in progress, in progress wins over pending, and pending wins over successful when the overall badge is derived from the three steps.
 
-The red X is reserved for an actual provider/runtime or workflow failure. Requested QA edits use the bright blue pencil treatment, not failure red. A review blocker is not a CI failure: CI remains passed and Merge reads **Waiting for review**. A merge conflict belongs to Merge and remains distinct from **CI failed**.
+The red X identifies an actual provider/runtime or workflow failure, or explicit active **Human needed** intervention. Requested QA edits use the bright blue pencil treatment, not failure red. A review blocker is not a CI failure: CI remains passed and Merge reads **Waiting for review**. A merge conflict belongs to Merge and remains distinct from **CI failed**.
 
 These badges do not poll per card. Task feature-PR gates are persisted as `ci_gate_status` task-run events, and unresolved CI repair attention remains active while its item is `open` or `claimed`. The card projection selects the newest matching task event by creation time and then event ID, combines it with active attention, and uses persisted task merge metadata only as durable fallback evidence when no matching event is available.
 

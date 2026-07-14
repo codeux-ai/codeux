@@ -557,7 +557,7 @@ export const SettingsPage: FunctionComponent = () => {
           aria-label="Settings category panel"
           aria-busy={activeSaving || loading || resettingProject ? "true" : undefined}
           data-motion-contract="enterExit"
-          className="flex min-w-0 flex-col gap-5 lg:col-start-2 lg:row-start-2"
+          className="flex min-w-0 self-start flex-col justify-start gap-5 lg:col-start-2 lg:row-start-2"
         >
           <div className="flex flex-col gap-3">
             {loading ? (
