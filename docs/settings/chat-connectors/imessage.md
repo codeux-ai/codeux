@@ -11,7 +11,7 @@ Code UX supports iMessage only through operator-selected third-party bridge cont
 
 These are the only supported modes. `official_api` is not an iMessage mode, and provider-native endpoint verification is explicitly unavailable.
 
-Apple's public material describes [Messages framework app extensions](https://developer.apple.com/documentation/messages), [iMessage apps, stickers, and Messages for Business](https://developer.apple.com/imessage/), and [in-app message composition UI](https://developer.apple.com/documentation/messageui). Those references do not publish a general-purpose server bot API for personal iMessage accounts or a public personal-iMessage sandbox. The bridge contract is therefore a Code UX contract for third-party/local software, not an Apple API contract.
+Apple's public material describes [Messages framework app extensions](https://developer.apple.com/documentation/messages), [iMessage apps and stickers](https://developer.apple.com/imessage/), and [in-app message composition UI](https://developer.apple.com/documentation/messageui). Those references do not publish a general-purpose server bot API for personal iMessage accounts or a public personal-iMessage bot sandbox. The bridge contract is therefore a Code UX contract for third-party/local software, not an Apple API contract or Apple-certified automation.
 
 ## Bridge protocol v1
 

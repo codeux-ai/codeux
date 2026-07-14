@@ -2,7 +2,7 @@
 
 The iMessage profile is a transparent third-party bridge contract. It advertises only `managed_bridge` and `native_bridge`; it does not expose `official_api`, imply Apple endorsement, or verify an Apple provider endpoint.
 
-Apple documents the [Messages framework](https://developer.apple.com/documentation/messages) for app extensions, [iMessage apps and Messages for Business experiences](https://developer.apple.com/imessage/), and [Message UI](https://developer.apple.com/documentation/messageui) for composing messages inside apps. Those public surfaces do not define a general-purpose personal-iMessage server bot API or public personal-account sandbox. Consequently, Code UX models bridge-owned identifiers without treating third-party payloads as undocumented Apple objects.
+Apple documents the [Messages framework](https://developer.apple.com/documentation/messages) for app extensions, [iMessage apps and stickers](https://developer.apple.com/imessage/), and [Message UI](https://developer.apple.com/documentation/messageui) for composing messages inside apps. Those public surfaces do not define a general-purpose personal-iMessage server bot API or public personal-account bot sandbox. Consequently, Code UX models bridge-owned identifiers without treating third-party payloads as undocumented Apple objects or claiming Apple-certified automation.
 
 ## Profile boundary
 

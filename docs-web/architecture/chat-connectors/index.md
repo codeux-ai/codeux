@@ -4,7 +4,7 @@ Code UX registers one typed, independently editable profile for each external ch
 
 The registry is static and side-effect free. Network requests and native command execution remain in service-layer facades. Lookup fails closed when a provider or provider/mode combination is not registered.
 
-The additive `official_api` mode is available to future profiles without changing the persisted meaning of `managed_bridge`, `webhook`, or `native_bridge`. Baseline profiles advertise only implemented modes.
+The `official_api` mode is provider-native and does not change the persisted meaning of `managed_bridge`, `webhook`, or `native_bridge`. Profiles advertise only implemented modes. Registry presence is not provider certification or production readiness, and a skipped credential-gated test is not a live pass.
 
 ## Provider Profiles
 

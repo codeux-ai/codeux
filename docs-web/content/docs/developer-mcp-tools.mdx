@@ -305,13 +305,14 @@ Chat provider management uses the same safety model for sensitive operations:
 ## `manage_chat_providers`
 
 `manage_chat_providers` configures external chat provider setup definitions, provider connections,
-channel bindings, and outbound delivery inspection. It does not process inbound messages or force
-outbound sends; those are runtime services behind authenticated ingress and delivery adapters.
+channel bindings, bounded verification/health, and durable delivery inspection/control. Inbound
+processing remains behind authenticated ingress and sends remain behind leased delivery adapters.
 
 Supported provider kinds are `whatsapp`, `imessage`, `telegram`, `slack`, `microsoft-teams`, and
-`discord`. Supported bridge modes are `managed_bridge`, `webhook`, and `native_bridge`. Code UX does not
-call those providers' official APIs directly; it talks to the configured managed bridge, webhook
-gateway, or native bridge command.
+`discord`. Profiles advertise only their implemented `managed_bridge`, `webhook`, `native_bridge`, or
+`official_api` modes. Official modes use profile-pinned provider endpoints; the other modes use
+operator-selected managed/custom/local bridges. Registry presence is not provider certification or
+production readiness.
 
 Common actions:
 
@@ -320,22 +321,26 @@ Common actions:
   state, status, and write-only secret replacements.
 - `create_channel_binding` and `update_channel_binding` attach external channels to projects with
   optional routing hints, inbound/outbound flags, `agentPresetId`, and `suppressRichWidgets`.
-- `list_outbound_deliveries` reads persisted outbound delivery state by connection, binding, channel,
-  status, and limit.
+- `verify_connection` runs bounded configuration/provider checks; `get_health` reads only persisted
+  sanitized outcomes and never contacts a provider.
+- `list_deliveries` reads both directions; compatibility action `list_outbound_deliveries` remains
+  outbound-only. `retry_delivery` and `cancel_delivery` control one durable delivery.
 
 Redaction rules:
 
 - Raw `secrets` are never returned in success responses, validation errors, or approval envelopes.
 - Public connection records return `credentials` entries that show only key, label, configured state,
   and redacted placeholder.
-- Delivery payloads, bridge response metadata, and error text are redacted before MCP responses.
+- Delivery payloads and lease fields are omitted. Error text, diagnostics, URLs, identities, and
+  provider metadata are redacted/bounded before MCP responses.
 
 Approval behavior:
 
 - `delete_connection` requires approval and cascades channel bindings and delivery rows.
 - `delete_channel_binding` requires approval and stops routing for that channel/project pair.
-- `update_connection` requires a one-use approval handshake before replacing a non-empty `secrets`
-  payload. The approval fingerprint is bound to the redacted payload plus a secret hash.
+- `update_connection` requires one-use approval before replacing/clearing secrets or modifying/removing
+  executable or endpoint setup. `retry_delivery` also requires one-use approval because it may resend.
+  Approval is bound to the exact redacted payload and expires after 15 minutes.
 
 Create a webhook-backed connection:
 
@@ -388,6 +393,59 @@ Inspect retryable outbound delivery state:
   "limit": 25
 }
 ```
+
+Verify a connection and read local health:
+
+```jsonc
+{ "action": "verify_connection", "providerConnectionId": "connection-generic" }
+```
+
+```jsonc
+{ "action": "get_health" }
+```
+
+Meta send checks require explicit test-number opt-in. Telegram `getMe`, Slack `auth.test`, and Discord
+current-user checks require test credentials. Teams uses deterministic Emulator-shaped/mocked contract
+coverage, and iMessage has no public provider-native bot sandbox. A credential-gated skip is not a pass.
+
+Sanitized timeout example:
+
+```jsonc
+{
+  "providerKind": "slack",
+  "status": "failed",
+  "providerErrorCode": "verification_timeout",
+  "retryable": true,
+  "issues": ["Provider verification timed out."],
+  "diagnostics": null
+}
+```
+
+Retry requires two calls. The first returns `approvalRequired`; repeat the exact request only after
+human confirmation:
+
+```jsonc
+{ "action": "retry_delivery", "deliveryId": "delivery-generic" }
+```
+
+```jsonc
+{
+  "action": "retry_delivery",
+  "deliveryId": "delivery-generic",
+  "approval": { "confirmed": true }
+}
+```
+
+```jsonc
+{ "action": "cancel_delivery", "deliveryId": "delivery-generic" }
+```
+
+Generated ingress guidance uses
+`https://codeux.example.test/api/chat-providers/ingress/connection-generic`. Validation rejects
+unsupported provider/mode pairs and delivery limits outside 1-500. Remote credential mutation may be
+disabled. Binding/delivery access derives from the persisted project; foreign records are filtered or
+return a generic authorization error. Provider throttling/temporary failures schedule sanitized retry,
+while invalid authentication/permissions are terminal until corrected.
 
 Delivery statuses include `pending`, `sending`, `delivered`, `retryable_failure`, `processed`,
 `failed`, `duplicate`, and `cancelled`.

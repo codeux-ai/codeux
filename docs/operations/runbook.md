@@ -324,6 +324,72 @@ Transient provider failures are classified and managed in `src/shared/providers/
 - **OpenCode missing sessions**: Attempts to resume a removed native session resulting in "Session not found"; Code UX retries once as a fresh OpenCode session in the same workspace.
 - **Silent quota signals**: Provider tools (like Antigravity) failing due to capacity limits without explicit failure output.
 
+### External chat connector incidents
+
+Use only redacted connection, binding, delivery, and session IDs in incident notes. Start with `GET /api/chat-providers/health`, the connection record, persisted binding, and `GET /api/chat-providers/deliveries?...`. Connector health is a local persisted-state summary; it does not prove provider reachability.
+
+#### Bad or rotated credentials
+
+1. Disable the affected connection or its inbound/outbound binding.
+2. Rotate the provider credential, then replace the write-only secret through a local operator or authorized TLS `credential_admin` path with remote credential management enabled.
+3. Treat the update as verification-invalidating. Run `POST /api/chat-providers/connections/:connectionId/verify` or MCP `verify_connection`; do not reactivate until it returns `verified`.
+4. If a credential-gated lane skips, record **not run**, not passed. Telegram `getMe`, Slack `auth.test`, and Discord current-user checks need test credentials. Meta sends need explicit test-number opt-in.
+5. Re-enable one test binding and observe one inbound/outbound cycle before restoring broader routing.
+
+Rollback: disable the changed connection and re-enable the previously verified managed/custom bridge. Do not paste the previous secret into logs or approval payloads.
+
+#### Provider outage or throttling
+
+1. Confirm provider status outside Code UX and inspect the sanitized provider error code/retry time.
+2. Leave scheduled retries alone when `nextAttemptAt` follows provider `Retry-After`; repeated manual retry can duplicate messages and worsen throttling.
+3. Disable outbound routing if the queue grows faster than recovery. Inbound may remain enabled only if callback acknowledgement is healthy.
+4. Cancel deliveries that are no longer safe. After recovery, manually retry one known delivery through the approval handshake, then let the durable worker drain.
+
+Rollback: route new traffic through an existing managed/custom bridge only after verifying its credentials and binding. Preserve failed delivery rows for audit.
+
+#### Stale or reconnecting sessions
+
+Discord symptoms include repeated Gateway reconnects, missed heartbeat acknowledgements, invalid-session loops, or exhausted attempts. iMessage bridge symptoms mean the operator bridge is unavailable; Code UX does not own an Apple session.
+
+1. Disable the connection to stop reconnect timers and outbound work.
+2. Confirm Discord bot token, intents, and privileged `MESSAGE_CONTENT` access. Reject a persisted resume URL that is not a secure Discord-owned host.
+3. Restart Code UX once. Eligible sessions resume durable state; Discord falls back to Identify after invalid/expired resume state.
+4. If attempts exhaust, keep the connection disabled, correct provider configuration, reverify, and restart/re-enable. Do not create an unbounded restart loop.
+5. For iMessage, repair the selected bridge and run its protocol health check; do not substitute unsupported AppleScript or Messages-database automation.
+
+Rollback: restore the known-good custom Discord gateway or managed/native iMessage bridge connection. Registry presence is not bridge certification.
+
+#### Failed legacy-secret migration
+
+1. Stop credential edits and take a protected database backup plus the referenced key-provider version. Never copy `secret_json` into incident notes.
+2. Restore the original secure key provider (KMS/Vault version, Electron safe storage, or owner-only mounted key) and verify health.
+3. Restart Code UX or rerun migration. It seals first and compare-and-set commits before clearing the legacy row, so completed rows need not repeat.
+4. Resolve each sanitized failure and repeat until `pending: 0`.
+5. Reverify affected connections if credentials/setup changed during recovery.
+
+Rollback: restore the database **and matching key material** from one backup point. Never downgrade an encrypted row to plaintext or delete the legacy source before a successful envelope commit.
+
+#### Disabled or ambiguous routing
+
+1. Confirm the connection is enabled/active and the persisted binding has the intended project, external channel, inbound/outbound flags, and selector.
+2. For a shared channel, add a unique selector/alias. Code UX intentionally refuses to guess between projects.
+3. Confirm the principal is authorized for the binding's stored project; a query `projectId` cannot grant access.
+4. Create a new inbound message after correction. Do not mutate a historical delivery into a different project.
+
+Rollback: disable the new binding and re-enable the prior binding/bridge pair. Preserve the ambiguous delivery as evidence.
+
+#### Repeated retries or possible duplicate send
+
+1. Inspect attempt count, sanitized `lastError`, `nextAttemptAt`, and ambiguity classification.
+2. Do not manually retry `sending` work with an unexpired lease. After a crash, let lease expiry/startup recovery reclaim it.
+3. Cancel unsafe/stale work. Manual retry is one-use approval-gated because the provider could receive it twice.
+4. Reconcile provider-declared ambiguous terminal outcomes with provider history before retrying.
+5. If retries loop after restart, disable outbound routing, capture redacted diagnostics, fix configuration, and test one delivery.
+
+#### Cleanup after rollback
+
+Keep failed connections disabled until retention is satisfied. Cancel unwanted pending deliveries, let in-flight leases settle, and verify resumable timers stopped. Delete a connection only after approval and a backup decision because deletion cascades bindings and delivery rows. Expired replay receipts and sessions are cleaned automatically; connector cleanup does not require deleting global runtime state.
+
 ## Recovery Techniques
 
 - Temporarily disable selected loop steps for diagnosis.

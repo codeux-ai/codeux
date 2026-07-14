@@ -39,7 +39,7 @@ Timeouts and transport failures after dispatch have an ambiguous delivery outcom
 
 ## Verification and diagnostics
 
-Official verification calls `getMe` to validate the bot token and bot identity, then calls the read-only `getWebhookInfo` method. Diagnostics include the bot identity, whether a webhook is configured, pending update count, allowed updates, connection limits, and the latest webhook delivery error when Telegram supplies one. Verification does not alter the existing webhook.
+Official verification calls `getMe` to validate the bot token and bot identity, then calls the read-only `getWebhookInfo` method. Diagnostics include the bot identity, whether a webhook is configured, pending update count, allowed updates, connection limits, and the latest webhook delivery error when Telegram supplies one. Verification does not alter the existing webhook. It requires an explicitly configured test bot token; a credential-gated skip is reported as not run, not passed.
 
 ## Legacy bridges
 
