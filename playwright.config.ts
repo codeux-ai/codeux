@@ -4,6 +4,8 @@ import os from 'os';
 import path from 'path';
 
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'codeux-e2e-home-'));
+const credentialKeyPath = path.join(tempHome, 'credential-root-key');
+fs.writeFileSync(credentialKeyPath, Buffer.alloc(32, 23).toString('hex'), { mode: 0o600 });
 const mockProviderCliPath = path.resolve(process.cwd(), 'scripts/e2e/mock-provider-cli.mjs');
 const dashboardPort = Number.parseInt(
   process.env.CODEUX_E2E_DASHBOARD_PORT || process.env.DASHBOARD_PORT || '4464',
@@ -133,6 +135,8 @@ export default defineConfig({
       // let Playwright's inherited stdin pipe activate the MCP stdio lifecycle.
       CODE_UX_DISABLE_MCP_STDIO: '1',
       MCP_HTTP_ENABLED: 'false',
+      CODE_UX_CREDENTIAL_KEY_PROVIDER: 'mounted-key-file',
+      CODE_UX_CREDENTIAL_KEY_FILE: credentialKeyPath,
       CODE_UX_CONTAINERIZED_GIT: '0',
       CODE_UX_GIT_CONTAINER_MODE: 'host',
     },
