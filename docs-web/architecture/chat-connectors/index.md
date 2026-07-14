@@ -4,7 +4,7 @@ Code UX registers one typed, independently editable profile for each external ch
 
 The registry is static and side-effect free. Network requests and native command execution remain in service-layer facades. Lookup fails closed when a provider or provider/mode combination is not registered.
 
-Discord implements the additive `official_api` mode without changing the persisted meaning of `managed_bridge`, `webhook`, or `native_bridge`. Other profiles advertise only the modes they implement.
+The additive `official_api` mode is available to future profiles without changing the persisted meaning of `managed_bridge`, `webhook`, or `native_bridge`. Baseline profiles advertise only implemented modes.
 
 ## Provider Profiles
 

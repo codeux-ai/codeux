@@ -44,6 +44,12 @@ describe("chat connector registry", () => {
         modes: [
           { mode: "managed_bridge", integration: "managed_plugin", setup: ["pluginName", "workspaceId"], secrets: ["bridgeApiKey"] },
           { mode: "webhook", integration: "webhook", setup: ["webhookUrl", "verifyTokenName"], secrets: ["webhookSecret", "verifyToken"] },
+          {
+            mode: "official_api",
+            integration: "official_api",
+            setup: ["graphApiVersion", "phoneNumberId", "appId", "businessAccountId"],
+            secrets: ["accessToken", "appSecret", "webhookVerifyToken"],
+          },
         ],
       },
       imessage: {
@@ -79,7 +85,6 @@ describe("chat connector registry", () => {
         defaultMode: "webhook",
         modes: [
           { mode: "webhook", integration: "bot_gateway", setup: ["gatewayUrl", "applicationId"], secrets: ["botToken", "webhookSecret"] },
-          { mode: "official_api", integration: "official_api", setup: ["applicationId", "publicKey", "intents"], secrets: ["botToken"] },
         ],
       },
     });
@@ -94,13 +99,13 @@ describe("chat connector registry", () => {
     expect(() => getChatConnectorProfileForMode("discord", "managed_bridge")).toThrow(
       "Unsupported bridge mode for discord: managed_bridge",
     );
-    for (const kind of CHAT_CONNECTOR_KINDS.filter((candidate) => candidate !== "discord" && candidate !== "slack")) {
+    expect(getChatConnectorProfileForMode("whatsapp", "official_api").kind).toBe("whatsapp");
+    expect(getChatConnectorProfileForMode("slack", "official_api").kind).toBe("slack");
+    for (const kind of CHAT_CONNECTOR_KINDS.filter((candidate) => candidate !== "whatsapp" && candidate !== "slack")) {
       expect(() => getChatConnectorProfileForMode(kind, "official_api" as ChatProviderBridgeMode)).toThrow(
         `Unsupported bridge mode for ${kind}: official_api`,
       );
     }
-    expect(getChatConnectorProfileForMode("discord", "official_api").kind).toBe("discord");
-    expect(getChatConnectorProfileForMode("slack", "official_api").kind).toBe("slack");
   });
 
   it("constructs the registry without network or process side effects", async () => {

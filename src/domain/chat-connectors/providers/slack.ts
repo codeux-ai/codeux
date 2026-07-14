@@ -140,8 +140,8 @@ export const slackChatConnectorProfile: ChatConnectorProfile = {
       }
       throw new Error(`Unsupported bridge mode for slack: ${mode}`);
     },
-    parseResponse: (responseBody, response, mode) => mode === "official_api"
-      ? parseSlackPostMessageResponse(responseBody, response)
+    parseResponse: (responseBody, context) => context?.bridgeMode === "official_api"
+      ? parseSlackPostMessageResponse(responseBody, context)
       : parseLegacyOutboundResponse(responseBody),
     isRetryableStatus: isLegacyRetryableHttpStatus,
   },

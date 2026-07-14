@@ -5,18 +5,13 @@ import type { ChatConnectorHmacAuthentication } from "../domain/chat-connectors/
 
 export interface ChatProviderIngressSecurityRequest {
   headers: Record<string, string | string[] | undefined>;
-  rawBody: string | Uint8Array;
+  rawBody: string;
   now?: Date;
 }
 
 export interface ChatProviderIngressSecurityResult {
   authenticated: true;
-  method: string;
-  immediateResponse?: {
-    statusCode: number;
-    headers: Readonly<Record<string, string>>;
-    body: unknown;
-  };
+  method: "bearer" | "hmac";
 }
 
 export class ChatProviderIngressSecurityError extends Error {
@@ -46,33 +41,14 @@ export class ChatProviderIngressSecurity {
     }
 
     const profile = getChatConnectorProfileForMode(connection.providerKind, connection.bridgeMode);
-    const now = request.now ?? new Date();
-    const providerResult = profile.ingress.authenticateProviderRequest?.({
-      connection,
-      headers: request.headers,
-      rawBody: request.rawBody,
-      now,
-    }) ?? null;
-    if (providerResult) {
-      if (!providerResult.authenticated) {
-        throw new ChatProviderIngressSecurityError(
-          providerResult.code,
-          providerResult.message,
-          providerResult.statusCode,
-        );
-      }
-      return {
-        authenticated: true,
-        method: providerResult.method,
-        ...(providerResult.immediateResponse ? { immediateResponse: providerResult.immediateResponse } : {}),
-      };
-    }
     const authentication = profile.ingress.authentication[connection.bridgeMode];
     if (!authentication) {
       throw new ChatProviderIngressSecurityError("unsupported_authentication", "Unsupported chat provider authentication mode.", 403);
     }
-    const nowMs = now.getTime();
-    const timestamp = this.requireFreshTimestamp(request.headers, authentication.timestampHeaders, nowMs);
+    const nowMs = (request.now ?? new Date()).getTime();
+    const timestamp = authentication.timestampRequirement === "none"
+      ? null
+      : this.requireFreshTimestamp(request.headers, authentication.timestampHeaders, nowMs);
 
     if (authentication.type === "hmac_sha256") {
       const hmacSecret = firstConfiguredSecret(connection.secrets, authentication.secretKeys);
@@ -87,7 +63,7 @@ export class ChatProviderIngressSecurity {
         connectionId: connection.id,
         signature,
         timestamp,
-        rawBody: rawBodyToString(request.rawBody),
+        rawBody: request.rawBody,
         secret: hmacSecret,
         nowMs,
         authentication,
@@ -144,7 +120,7 @@ export class ChatProviderIngressSecurity {
   private verifyHmacSignature(input: {
     connectionId: string;
     signature: string;
-    timestamp: { raw: string; value: number };
+    timestamp: { raw: string; value: number } | null;
     rawBody: string;
     secret: string;
     nowMs: number;
@@ -156,18 +132,20 @@ export class ChatProviderIngressSecurity {
     }
 
     const candidates = input.authentication
-      .signatureBases({ timestamp: input.timestamp.raw, rawBody: input.rawBody })
+      .signatureBases({ timestamp: input.timestamp?.raw ?? "", rawBody: input.rawBody })
       .map((base) => createHmac("sha256", input.secret).update(base).digest("hex"));
     const valid = candidates.some((candidate) => constantTimeEquals(candidate, normalizedSignature));
     if (!valid) {
       throw new ChatProviderIngressSecurityError("signature_mismatch", "Invalid chat provider ingress signature.", 401);
     }
 
-    this.preventReplay({
-      connectionId: input.connectionId,
-      key: `hmac:${input.timestamp.value}:${normalizedSignature}`,
-      nowMs: input.nowMs,
-    });
+    if (input.timestamp) {
+      this.preventReplay({
+        connectionId: input.connectionId,
+        key: `hmac:${input.timestamp.value}:${normalizedSignature}`,
+        nowMs: input.nowMs,
+      });
+    }
   }
 
   private preventReplay(input: { connectionId: string; key: string; nowMs: number }): void {
@@ -245,8 +223,4 @@ function constantTimeEquals(left: string, right: string): boolean {
     return false;
   }
   return timingSafeEqual(leftBuffer, rightBuffer);
-}
-
-function rawBodyToString(rawBody: string | Uint8Array): string {
-  return typeof rawBody === "string" ? rawBody : Buffer.from(rawBody).toString("utf8");
 }

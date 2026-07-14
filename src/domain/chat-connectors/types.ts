@@ -18,7 +18,6 @@ export interface PartialNormalizedChatConnectorInbound {
   externalMessageId?: string;
   conversationThreadId?: string;
   timestamp?: unknown;
-  externalThreadId?: string;
 }
 
 export interface ChatConnectorAuthenticationInput {
@@ -26,37 +25,12 @@ export interface ChatConnectorAuthenticationInput {
   rawBody: string;
 }
 
-export interface ChatConnectorProviderIngressRequest {
-  connection: ChatProviderConnectionInternalRecord;
-  headers: Readonly<Record<string, string | string[] | undefined>>;
-  rawBody: string | Uint8Array;
-  now: Date;
-}
-
-export interface ChatConnectorImmediateResponse {
-  statusCode: number;
-  headers: Readonly<Record<string, string>>;
-  body: unknown;
-}
-
-export type ChatConnectorProviderIngressResult =
-  | {
-    authenticated: true;
-    method: string;
-    immediateResponse?: ChatConnectorImmediateResponse;
-  }
-  | {
-    authenticated: false;
-    code: string;
-    message: string;
-    statusCode: number;
-  };
-
 export interface ChatConnectorBearerAuthentication {
   type: "bearer";
   secretKeys: readonly string[];
   tokenHeaders: readonly string[];
   timestampHeaders: readonly string[];
+  timestampRequirement?: "required" | "none";
 }
 
 export interface ChatConnectorHmacAuthentication {
@@ -64,6 +38,7 @@ export interface ChatConnectorHmacAuthentication {
   secretKeys: readonly string[];
   signatureHeaders: readonly string[];
   timestampHeaders: readonly string[];
+  timestampRequirement?: "required" | "none";
   signaturePrefix?: string;
   signatureBases(input: ChatConnectorAuthenticationInput): readonly string[];
 }
@@ -72,12 +47,25 @@ export type ChatConnectorIngressAuthentication =
   | ChatConnectorBearerAuthentication
   | ChatConnectorHmacAuthentication;
 
-export interface ChatConnectorHandshake {
-  type: "none" | "challenge";
-  challengeField?: string;
-  responseField?: string;
-  modes?: readonly ChatProviderBridgeMode[];
+export interface ChatConnectorHandshakeResult {
+  statusCode: number;
+  headers: Readonly<Record<string, string>>;
+  body: string | null;
 }
+
+export type ChatConnectorHandshake =
+  | { type: "none" }
+  | {
+    type: "challenge";
+    modes: readonly ChatProviderBridgeMode[];
+    challengeField?: string;
+    responseField?: string;
+    handle?(input: {
+      query: Readonly<Record<string, unknown>>;
+      setup: Readonly<Record<string, unknown>>;
+      secrets: Readonly<Record<string, unknown>> | null;
+    }): ChatConnectorHandshakeResult;
+  };
 
 export interface ChatConnectorAcknowledgement {
   statusCode: number;
@@ -174,25 +162,15 @@ export interface ChatConnectorLiveVerification {
   ): ChatConnectorLiveVerificationResult;
 }
 
-export interface ChatConnectorOutboundExecutor {
-  send(context: ChatConnectorOutboundContext): Promise<ChatConnectorOutboundResult>;
+export interface ChatConnectorOutboundErrorClassification {
+  message: string;
+  retryable: boolean;
 }
 
-export interface ChatConnectorOutboundRuntime {
-  fetch: typeof fetch;
-  now?: () => number;
-  wait?: (delayMs: number, signal?: AbortSignal) => Promise<void>;
-}
-
-export class ChatConnectorOutboundExecutionError extends Error {
-  constructor(
-    message: string,
-    readonly retryable: boolean,
-    readonly statusCode?: number,
-  ) {
-    super(message);
-    this.name = "ChatConnectorOutboundExecutionError";
-  }
+export interface ChatConnectorOutboundResponseContext {
+  bridgeMode: ChatProviderBridgeMode;
+  statusCode: number;
+  headers: Readonly<Record<string, string>>;
 }
 
 export interface ChatConnectorVerificationResult {
@@ -206,11 +184,9 @@ export interface ChatConnectorProfile {
   supportedTransportModes: readonly ChatProviderBridgeMode[];
   ingress: {
     authentication: Readonly<Partial<Record<ChatProviderBridgeMode, ChatConnectorIngressAuthentication>>>;
-    authenticateProviderRequest?(
-      request: ChatConnectorProviderIngressRequest,
-    ): ChatConnectorProviderIngressResult | null;
     handshake: ChatConnectorHandshake;
     acknowledgement: ChatConnectorAcknowledgement;
+    classify?(payload: Record<string, unknown>): "message" | "ignored";
     ignore?(payload: Record<string, unknown>): string | null;
     normalize(payload: Record<string, unknown>): PartialNormalizedChatConnectorInbound;
   };
@@ -221,17 +197,17 @@ export interface ChatConnectorProfile {
     ): ChatConnectorExternalIdentity;
   };
   outbound: {
-    createExecutor?(
-      mode: ChatProviderBridgeMode,
-      runtime: ChatConnectorOutboundRuntime,
-    ): ChatConnectorOutboundExecutor | null;
     buildRequest(context: ChatConnectorOutboundContext): ChatConnectorOutboundRequest;
     parseResponse(
       responseBody: string,
-      response?: ChatConnectorHttpResponse,
-      mode?: ChatProviderBridgeMode,
+      context?: ChatConnectorOutboundResponseContext,
     ): ChatConnectorOutboundResult;
     isRetryableStatus(statusCode: number): boolean;
+    classifyError?(
+      statusCode: number,
+      responseBody: string,
+      context?: ChatConnectorOutboundResponseContext,
+    ): ChatConnectorOutboundErrorClassification | null;
   };
   verification: {
     strategy: "configuration" | "configuration_and_live";
