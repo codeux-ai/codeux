@@ -8,6 +8,7 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import { LiveSessionPage } from "../../../dashboard/src/v2/LiveSessionPage.js";
 import { useDashboardRuntimeData } from "../../../dashboard/src/hooks/use-dashboard-runtime-data.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
 import { 
   createSprintRunFixture, 
   createManualPauseIntervention, 
@@ -237,6 +238,38 @@ describe("LiveSessionPage Status Regression", () => {
 
     expect(screen.getByLabelText("Live Session")).not.toHaveAttribute("aria-busy");
     expect(screen.getByRole("status", { name: /Waiting for Sprint Start/i })).toHaveTextContent("Launch a sprint to activate live task telemetry");
+  });
+
+  it("renders German idle and active Live presentation while preserving task content", () => {
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData());
+
+    const view = render(
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <LiveSessionPage />
+      </DashboardI18nProvider>,
+    );
+
+    expect(screen.getByLabelText("Live-Sitzung")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: /Warten auf den Sprint-Start/i })).toBeInTheDocument();
+
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      tasksWithLiveActivities: [liveTask({
+        title: "KEEP task title verbatim",
+        prompt: "KEEP provider-authored prompt verbatim",
+      })],
+      execution: liveExecution(),
+    }));
+    view.rerender(
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <LiveSessionPage />
+      </DashboardI18nProvider>,
+    );
+
+    expect(screen.getByText("Sprint-Pipeline")).toBeInTheDocument();
+    expect(screen.getByText("KEEP task title verbatim")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Aufgabe T-100 bearbeiten" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Aufgabe T-100 zwangsweise abschließen" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Aufgabe T-100 erneut ausführen" })).toBeInTheDocument();
   });
 
   it("keeps recovered live task data in the task pipeline", () => {

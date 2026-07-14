@@ -214,6 +214,12 @@ export const LiveSessionPage: FunctionComponent = () => {
         humanInterventionOwnerType: pausedIntervention?.ownerType ?? null,
     }), [hasLiveSprint, pausedIntervention?.instructions, pausedIntervention?.ownerType, pausedIntervention?.reason, pausedIntervention?.title, pausedInterventionRun?.status]);
     const showStatusPanel = !hasLiveSprint && (sprintStatusPresentation.isManualPause || sprintStatusPresentation.isSystemStop);
+    const localizedStatusTitle = sprintStatusPresentation.isManualPause
+        ? pausedIntervention?.title || t("manualPauseTitle")
+        : t("systemStoppedTitle");
+    const localizedStatusDetail = sprintStatusPresentation.isManualPause
+        ? pausedIntervention?.instructions || t("manualPauseDetail")
+        : t("systemStoppedDetail");
 
     const rawHasSprintContext = runtimeState.hasSprintContext;
     const scopedRuntime = useMemo(
@@ -354,7 +360,7 @@ export const LiveSessionPage: FunctionComponent = () => {
             });
             setForceCompleteErrorByTaskId((prev) => {
                 const next = new Map(prev);
-                next.set(taskRuntimeId, error instanceof Error ? error.message : "Failed to force complete task.");
+                next.set(taskRuntimeId, error instanceof Error ? error.message : t("forceCompleteFailed", { task: task.title || task.id }));
                 return next;
             });
             setError(t("forceCompleteFailed", { task: task.title || task.id }));
@@ -452,9 +458,9 @@ export const LiveSessionPage: FunctionComponent = () => {
                         </div>
                     ) : !hasSprintContext ? (
                         <IdleRuntimeState
-                            title={showStatusPanel ? sprintStatusPresentation.title : t("waitingForSprintStart")}
+                            title={showStatusPanel ? localizedStatusTitle : t("waitingForSprintStart")}
                             subtitle={showStatusPanel
-                                ? sprintStatusPresentation.detail
+                                ? localizedStatusDetail
                                 : t("waitingForSprintDescription")}
                         />
                     ) : taskCardItems.length === 0 ? (
@@ -464,7 +470,14 @@ export const LiveSessionPage: FunctionComponent = () => {
                                 <p className="text-sm text-slate-400 dark:text-slate-600 font-medium">
                                     {activeFilter === "All"
                                         ? t("awaitingSprintDecomposition")
-                                        : t("noFilteredTasks", { filter: activeFilter.toLocaleLowerCase(locale) })
+                                        : t("noFilteredTasks", {
+                                            filter: t(({
+                                                Running: "filterRunning",
+                                                Completed: "filterCompleted",
+                                                Failed: "filterFailed",
+                                                Pending: "filterPendingLabel",
+                                            } as const)[activeFilter]),
+                                        })
                                     }
                                 </p>
                             </div>

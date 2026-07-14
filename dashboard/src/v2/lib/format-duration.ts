@@ -8,7 +8,7 @@ const formatDurationPart = (value: number, unit: "hour" | "minute" | "second", l
 };
 
 export function formatDuration(totalSeconds: number, locale: DashboardLocale = "en"): string {
-    if (totalSeconds <= 0) return "0s";
+    if (totalSeconds <= 0) return formatDurationPart(0, "second", locale);
     const h = Math.floor(totalSeconds / 3600);
     const m = Math.floor((totalSeconds % 3600) / 60);
     const s = totalSeconds % 60;
@@ -18,7 +18,7 @@ export function formatDuration(totalSeconds: number, locale: DashboardLocale = "
 }
 
 export function formatDurationTight(totalSeconds: number, locale: DashboardLocale = "en"): string {
-    if (totalSeconds <= 0) return "0s";
+    if (totalSeconds <= 0) return formatDurationPart(0, "second", locale);
     const h = Math.floor(totalSeconds / 3600);
     const m = Math.floor((totalSeconds % 3600) / 60);
     const s = totalSeconds % 60;

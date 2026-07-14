@@ -6,7 +6,8 @@ import { getInvocationContainerBuildProgress } from "../../../lib/activity.js";
 import type { ExecutionInvocationRecord } from "../../../types.js";
 import { formatInvocationDuration, formatInvocationPurpose } from "../chat/invocation-display.js";
 import { ContainerBuildStatusInfobox } from "./ContainerBuildStatusInfobox.js";
-import { useLiveI18n } from "../../i18n/messages/live.js";
+import { formatDuration } from "../../lib/format-duration.js";
+import { useLiveI18n, type LiveMessageKey } from "../../i18n/messages/live.js";
 
 const INVOCATION_STATUS_DOT: Record<string, string> = {
   running: "bg-signal-500 shadow-[0_0_8px_rgba(0,224,160,0.55)] motion-reduce:ring-2 motion-reduce:ring-signal-500/25 motion-reduce:shadow-none",
@@ -24,6 +25,26 @@ const INVOCATION_STATUS_TEXT: Record<string, string> = {
   paused: "text-status-amber",
 };
 
+const INVOCATION_PURPOSE_KEYS: Partial<Record<string, LiveMessageKey>> = {
+  planning: "planning",
+  cli_task_coding: "taskCoding",
+  cli_task_review: "taskReview",
+  cli_qa: "qaReview",
+  qa_review: "qaReview",
+  dashboard_reply: "chatReply",
+  worker_dispatch: "workerDispatch",
+};
+
+const INVOCATION_STATUS_KEYS: Partial<Record<string, LiveMessageKey>> = {
+  running: "running",
+  completed: "completed",
+  failed: "failed",
+  cancelled: "cancelled",
+  paused: "paused",
+  pending: "pending",
+  queued: "queued",
+};
+
 export const buildInvocationHref = (invocationId: string): string => (
   `/chat?mode=invocations&invocation=${encodeURIComponent(invocationId)}`
 );
@@ -33,13 +54,21 @@ const shortenInvocationId = (value: string): string => value.slice(0, 8);
 export const LiveTaskInvocationRow: FunctionComponent<{
   invocation: ExecutionInvocationRecord;
 }> = memo(({ invocation }) => {
-  const { t, formatNumber, formatTime } = useLiveI18n();
-  const purposeLabel = formatInvocationPurpose(invocation.type);
+  const { locale, t, tp, formatNumber, formatTime } = useLiveI18n();
+  const purposeKey = INVOCATION_PURPOSE_KEYS[invocation.type ?? ""];
+  const purposeLabel = purposeKey ? t(purposeKey) : formatInvocationPurpose(invocation.type);
   const activityAt = invocation.lastMessageAt || invocation.updatedAt || invocation.startedAt || invocation.createdAt;
-  const duration = formatInvocationDuration(invocation.startedAt || invocation.createdAt, invocation.finishedAt);
+  const rawDuration = formatInvocationDuration(invocation.startedAt || invocation.createdAt, invocation.finishedAt);
+  const durationStart = Date.parse(invocation.startedAt || invocation.createdAt);
+  const durationEnd = invocation.finishedAt ? Date.parse(invocation.finishedAt) : Date.now();
+  const duration = Number.isFinite(durationStart) && Number.isFinite(durationEnd) && durationEnd >= durationStart
+    ? formatDuration(Math.round((durationEnd - durationStart) / 1000), locale)
+    : rawDuration;
   const tokenTotal = invocation.totalTokens ?? ((invocation.inputTokens ?? 0) + (invocation.outputTokens ?? 0));
   const statusDot = INVOCATION_STATUS_DOT[invocation.status] || "bg-slate-400";
   const statusText = INVOCATION_STATUS_TEXT[invocation.status] || "text-slate-500";
+  const statusKey = INVOCATION_STATUS_KEYS[invocation.status];
+  const statusLabel = locale === "en" ? invocation.status : statusKey ? t(statusKey) : invocation.status;
   const containerBuildProgress = getInvocationContainerBuildProgress(invocation);
 
   return (
@@ -48,7 +77,7 @@ export const LiveTaskInvocationRow: FunctionComponent<{
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
             <span className={`h-2 w-2 shrink-0 rounded-full ${statusDot} ${invocation.status === "running" ? "motion-safe:animate-pulse" : ""}`} aria-hidden="true" />
-            <span className="sr-only">{t("invocationStatus", { status: invocation.status })}</span>
+            <span className="sr-only">{t("invocationStatus", { status: statusLabel })}</span>
             <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
               {purposeLabel}
             </span>
@@ -63,7 +92,7 @@ export const LiveTaskInvocationRow: FunctionComponent<{
         </div>
         <div className="shrink-0 text-right">
           <div className={`text-[10px] font-bold uppercase tracking-[0.14em] ${statusText}`}>
-            {invocation.status}
+            {statusLabel}
           </div>
           <div className="mt-1 text-[10px] font-mono text-slate-400">
             {formatTime(new Date(activityAt))}
@@ -76,7 +105,7 @@ export const LiveTaskInvocationRow: FunctionComponent<{
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className="inline-flex items-center gap-1 rounded-md border border-black/[0.05] px-2 py-0.5 text-[10px] font-mono text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
           <MessageSquareText className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
-          {formatNumber(invocation.messageCount)}
+          {tp("messages", invocation.messageCount, { count: formatNumber(invocation.messageCount) })}
         </span>
         {duration && (
           <span className="inline-flex items-center gap-1 rounded-md border border-black/[0.05] px-2 py-0.5 text-[10px] font-mono text-slate-500 dark:border-white/[0.06] dark:text-slate-400">

@@ -29,6 +29,7 @@ import {
   type CiStatusPresentation,
 } from "./ci-status-presentation.js";
 import { DEFAULT_DASHBOARD_LOCALE, type DashboardLocale } from "../i18n/locales.js";
+import { createDashboardFormatters } from "../i18n/formatters.js";
 import { translateLiveMessage, translateLivePlural } from "../i18n/messages/live.js";
 
 export type LiveSessionTaskFilter = "All" | "Running" | "Completed" | "Failed" | "Pending";
@@ -590,8 +591,9 @@ export function deriveLiveSessionTaskFilterAnnouncement(
   locale: DashboardLocale = DEFAULT_DASHBOARD_LOCALE,
 ): string {
   const filterKey = ({ All: "filterAll", Running: "filterRunning", Completed: "filterCompleted", Failed: "filterFailed", Pending: "filterPendingLabel" } as const)[activeFilter];
+  const formattedCount = createDashboardFormatters(locale).formatNumber(filteredTaskCount);
   return translateLivePlural(locale, "filterResults", filteredTaskCount, {
-    count: filteredTaskCount,
+    count: formattedCount,
     filter: translateLiveMessage(locale, filterKey).toLocaleLowerCase(locale),
   });
 }

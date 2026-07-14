@@ -31,7 +31,7 @@ const messages = defineDashboardMessages({
 const { translate, translatePlural, formatNumber } = useDashboardI18n();
 ```
 
-English and German must declare exactly the same top-level keys. Interpolation treats replacement values as literal text, plural messages require an `other` form, and locale-aware formatting delegates to the browser's native `Intl` implementation.
+English and German must declare exactly the same top-level keys. Interpolation treats replacement values as literal text, plural messages require an `other` form, and locale-aware formatting delegates to the browser's native `Intl` implementation. Plural selection keeps using the numeric count while callers may provide a separately formatted `{count}` display value.
 
 Keep each catalog with its owning feature and import it only where the feature is loaded. Translate dashboard-authored interface copy only. Never translate provider output, API responses, stored instructions, project data, runtime diagnostics, or user-authored content.
 

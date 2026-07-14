@@ -252,7 +252,7 @@ const areDagNodePropsEqual = (
 };
 
 const DagNode = memo(({ node, dispatch, onNodeClick }: { node: SprintDagNodeModel & { x: number; y: number; }, dispatch?: ExecutionTaskDispatchSummary, onNodeClick?: (node: SprintDagNodeModel & { x: number; y: number; }) => void }) => {
-  const { t, formatNumber } = useLiveI18n();
+  const { t, tp, formatNumber } = useLiveI18n();
   const tone = getNodeTone(node);
   const executorLabel = formatExecutor(dispatch, t);
   const mergeLabel = getMergeLabel(node.task, t);
@@ -337,12 +337,12 @@ const DagNode = memo(({ node, dispatch, onNodeClick }: { node: SprintDagNodeMode
                   </span>
                   {node.incoming.length === 0 && (
                     <span className="shrink-0 rounded-full border border-ember-500/20 bg-ember-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.08em] text-ember-600 dark:text-ember-400">
-                      Root
+                      {t("root")}
                     </span>
                   )}
                   {node.isReady && (
                     <span className="shrink-0 rounded-full border border-signal-500/20 bg-signal-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.08em] text-signal-600 dark:text-signal-300">
-                      Ready
+                      {t("ready")}
                     </span>
                   )}
                 </div>
@@ -376,8 +376,8 @@ const DagNode = memo(({ node, dispatch, onNodeClick }: { node: SprintDagNodeMode
 
             <div className="mt-auto grid grid-cols-[1fr_auto] items-end gap-3 pt-3">
               <div className="min-w-0 rounded-2xl border border-black/[0.045] bg-white/38 px-3 py-2 font-mono text-[10px] leading-tight text-slate-500 dark:border-white/[0.055] dark:bg-white/[0.035] dark:text-slate-400">
-                <div className="truncate">{node.incoming.length} deps in</div>
-                <div className="truncate">{node.outgoing.length} deps out</div>
+                <div className="truncate">{tp("dependenciesIn", node.incoming.length, { count: formatNumber(node.incoming.length) })}</div>
+                <div className="truncate">{tp("dependenciesOut", node.outgoing.length, { count: formatNumber(node.outgoing.length) })}</div>
               </div>
               <div className="flex min-w-0 max-w-[7.5rem] flex-col items-end rounded-2xl border border-black/[0.045] bg-white/38 px-3 py-2 text-right font-mono text-[10px] leading-tight text-slate-500 dark:border-white/[0.055] dark:bg-white/[0.035] dark:text-slate-400">
                 {executorLabel && <span className="max-w-full truncate">{executorLabel}</span>}

@@ -39,7 +39,7 @@ translate(messages, "greeting", { name: "Sam" });
 translatePlural(messages, "itemCount", 2);
 ```
 
-Interpolation replaces only named `{variable}` tokens through literal string substitution. Missing variables remain visible, and values are never evaluated or inserted as HTML. Plural selection uses `Intl.PluralRules` for the active locale and falls back to the required `other` form.
+Interpolation replaces only named `{variable}` tokens through literal string substitution. Missing variables remain visible, and values are never evaluated or inserted as HTML. Plural selection uses the numeric count with `Intl.PluralRules` for the active locale and falls back to the required `other` form; callers may separately provide a locale-formatted `{count}` display value.
 
 ## Locale-aware formatting
 

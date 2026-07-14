@@ -25,7 +25,7 @@ import {
 } from "../../lib/live-session-runtime.js";
 import { deriveExecutionRuntimeViewModel } from "../../lib/live-session/execution-runtime-view-model.js";
 import { ContainerBuildStatusInfobox } from "./ContainerBuildStatusInfobox.js";
-import { useLiveI18n } from "../../i18n/messages/live.js";
+import { useLiveI18n, type LiveMessageKey } from "../../i18n/messages/live.js";
 
 export const statusTone = (value: string | null): string => {
     if (!value) return "text-slate-400";
@@ -52,13 +52,19 @@ export const statusRailTone = (value: string | null): string => {
 const EXECUTOR_LABELS: Record<string, string> = {
     docker_cli: "CLI",
     jules: "Jules",
-    mixed: "Mixed",
 };
 
-function getInterventionHeading(intervention: { attentionType: string | null; ownerType: string | null }): string {
-    if (intervention.attentionType === "merge_conflict") return "Merge conflict";
-    if (intervention.ownerType === "system" || intervention.ownerType === "worker") return "Stopped automatically";
-    return "Human intervention needed";
+function getExecutorLabel(value: string, t: (key: LiveMessageKey) => string): string {
+    return value === "mixed" ? t("mixed") : EXECUTOR_LABELS[value] || value;
+}
+
+function getInterventionHeading(
+    intervention: { attentionType: string | null; ownerType: string | null },
+    t: (key: LiveMessageKey) => string,
+): string {
+    if (intervention.attentionType === "merge_conflict") return t("mergeConflict");
+    if (intervention.ownerType === "system" || intervention.ownerType === "worker") return t("stoppedAutomatically");
+    return t("humanInterventionNeeded");
 }
 
 export const ATTENTION_SEVERITY_TONE: Record<string, string> = {
@@ -551,16 +557,16 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                         <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("executionRuntime")}</span>
                         <div className="flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em]">
                             <span className="rounded-md bg-signal-500/10 px-2 py-0.5 font-mono text-signal-500">
-                                active {activeSprintRuns.length}
+                                {t("activeCount", { count: formatNumber(activeSprintRuns.length) })}
                             </span>
                             <span className="rounded-md bg-black/[0.03] px-2 py-0.5 font-mono text-slate-500 dark:bg-white/[0.04] dark:text-slate-400">
-                                dispatch {activeDispatches.length}
+                                {t("dispatchCount", { count: formatNumber(activeDispatches.length) })}
                             </span>
                             <span className="rounded-md bg-status-amber/10 px-2 py-0.5 font-mono text-status-amber">
-                                attention {blockedAttentionCount}
+                                {t("attentionCount", { count: formatNumber(blockedAttentionCount) })}
                             </span>
                             <span className="rounded-md bg-status-red/10 px-2 py-0.5 font-mono text-status-red">
-                                failed {failedTaskCount}
+                                {t("failedCount", { count: formatNumber(failedTaskCount) })}
                             </span>
                         </div>
                         <RuntimeSnapshotSurfaceBadge surface={snapshotSurface} />
@@ -612,7 +618,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                         <section aria-label={t("sprintRunsAria")}>
                             <div className="mb-3 flex items-center justify-between gap-3 border-b border-black/[0.04] pb-2 dark:border-white/[0.05]">
                                 <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("sprintRuns")}</span>
-                                <span className="rounded-md border border-black/[0.05] bg-black/[0.02] px-2 py-0.5 text-[9px] font-mono text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.025]">{snapshot.sprintRuns.length} total</span>
+                                <span className="rounded-md border border-black/[0.05] bg-black/[0.02] px-2 py-0.5 text-[9px] font-mono text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.025]">{t("totalCount", { count: formatNumber(snapshot.sprintRuns.length) })}</span>
                             </div>
                             {snapshot.sprintRuns.length === 0 ? (
                                 <div role="status" aria-live="polite" className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 text-[11px] font-mono text-slate-400 dark:border-white/[0.04] dark:bg-white/[0.015] dark:text-slate-500">{t("noSprintRuns")}</div>
@@ -629,10 +635,10 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                             <div className="flex items-center justify-between gap-3 min-w-0">
                                                 <div className="min-w-0">
                                                     <div className="break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
-                                                        {run.sprintName}{run.sprintNumber != null ? ` · Sprint ${run.sprintNumber}` : ""}
+                                                        {run.sprintName}{run.sprintNumber != null ? ` · ${t("sprintNumber", { number: formatNumber(run.sprintNumber) })}` : ""}
                                                     </div>
                                                     <div className="mt-1 break-words text-[10px] font-mono text-slate-400">
-                                                        {EXECUTOR_LABELS[run.executorMode] || run.executorMode} · {run.triggerType}
+                                                        {getExecutorLabel(run.executorMode, t)} · {run.triggerType}
                                                         {run.triggeredBy ? ` · ${run.triggeredBy}` : ""}
                                                     </div>
                                                 </div>
@@ -642,7 +648,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                     </div>
                                                     {run.activeLeaseOwnerKey && (
                                                         <div className="mt-1 text-[10px] font-mono text-slate-400">
-                                                            lease <span className="break-all">{run.activeLeaseOwnerKey}</span>
+                                                            {t("lease")} <span className="break-all">{run.activeLeaseOwnerKey}</span>
                                                         </div>
                                                     )}
                                                 </div>
@@ -682,7 +688,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                     <>
                                                         <div className="inline-flex items-center gap-1.5 rounded-md border border-status-amber/20 bg-status-amber/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-amber">
                                                             <Clock className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
-                                                            Stop Pending
+                                                            {t("stopPending")}
                                                         </div>
                                                         <RuntimeActionButton
                                                             actionState={forceCancelActionState}
@@ -708,7 +714,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                                     ? "text-slate-500 dark:text-slate-400"
                                                                     : "text-status-amber"
                                                             }`}>
-                                                                {getInterventionHeading(run.humanIntervention)}
+                                                                {getInterventionHeading(run.humanIntervention, t)}
                                                             </div>
                                                             <div className="mt-1 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
                                                                 {run.humanIntervention.title}
@@ -731,7 +737,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                                 aria-controls={`${contentId}-intervention-${run.id}`}
                                                                 className="inline-flex items-center gap-1 rounded-md border border-black/[0.06] bg-white/60 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:border-signal-500/25 hover:text-slate-700 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:text-slate-200"
                                                             >
-                                                                Instructions
+                                                                {t("instructions")}
                                                                 <ChevronDown
                                                                     className={`h-3 w-3 transition-transform ${expandedInterventionIds.has(run.id) ? "rotate-180" : ""}`}
                                                                     strokeWidth={2}
@@ -762,7 +768,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                         <section aria-label={t("dispatchQueueAria")}>
                             <div className="mb-3 flex items-center justify-between gap-3 border-b border-black/[0.04] pb-2 dark:border-white/[0.05]">
                                 <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("dispatchQueue")}</span>
-                                <span className="rounded-md border border-black/[0.05] bg-black/[0.02] px-2 py-0.5 text-[9px] font-mono text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.025]">{snapshot.taskDispatches.length} total</span>
+                                <span className="rounded-md border border-black/[0.05] bg-black/[0.02] px-2 py-0.5 text-[9px] font-mono text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.025]">{t("totalCount", { count: formatNumber(snapshot.taskDispatches.length) })}</span>
                             </div>
                             {snapshot.taskDispatches.length === 0 ? (
                                 <div role="status" aria-live="polite" className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 text-[11px] font-mono text-slate-400 dark:border-white/[0.04] dark:bg-white/[0.015] dark:text-slate-500">{t("noDispatches")}</div>
@@ -784,7 +790,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                         <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
                                                             <span className="break-words">{dispatch.sprintName}</span>
                                                             <span>·</span>
-                                                            <span>{EXECUTOR_LABELS[dispatch.executorType] || dispatch.executorType}</span>
+                                                            <span>{getExecutorLabel(dispatch.executorType, t)}</span>
                                                             {dispatch.connectionDisplayName && (
                                                                 <>
                                                                     <span>·</span>
@@ -816,9 +822,9 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                 </div>
                                                 {(dispatch.sessionId || dispatch.workerBranch || dispatch.errorMessage || dispatch.activeLeaseOwnerKey) && (
                                                     <div className="mt-2 space-y-1 border-t border-black/[0.04] pt-2 text-[10px] font-mono text-slate-400 dark:border-white/[0.04]">
-                                                        {dispatch.sessionId && <div className="break-all">session {dispatch.sessionId}</div>}
-                                                        {dispatch.workerBranch && <div className="break-all">branch {dispatch.workerBranch}</div>}
-                                                        {dispatch.activeLeaseOwnerKey && <div className="break-all">lease {dispatch.activeLeaseOwnerKey}</div>}
+                                                        {dispatch.sessionId && <div className="break-all">{t("session")} {dispatch.sessionId}</div>}
+                                                        {dispatch.workerBranch && <div className="break-all">{t("branch")} {dispatch.workerBranch}</div>}
+                                                        {dispatch.activeLeaseOwnerKey && <div className="break-all">{t("lease")} {dispatch.activeLeaseOwnerKey}</div>}
                                                         {dispatch.errorMessage && <QuotaCountdown errorMessage={dispatch.errorMessage} />}
                                                     </div>
                                                 )}
@@ -837,7 +843,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                     <>
                                                         <div className="inline-flex items-center gap-1.5 rounded-md border border-status-amber/20 bg-status-amber/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-amber">
                                                             <Clock className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
-                                                            Stop Pending
+                                                            {t("stopPending")}
                                                         </div>
                                                         <RuntimeActionButton
                                                             actionState={forceCancelActionState}

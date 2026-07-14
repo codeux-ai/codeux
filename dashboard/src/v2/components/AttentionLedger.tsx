@@ -10,9 +10,39 @@ import { AlertTriangle, Bot, CheckCircle2, ChevronDown, XCircle } from "lucide-p
 import { renderMarkdown } from "../../lib/markdown.js";
 import { MARKDOWN_PROSE_CLASS } from "./ui/MarkdownEditorField.js";
 import { useExecutionTimeline } from "../../hooks/ExecutionTimelineContext.js";
-import { ATTENTION_OWNER_LABELS, ATTENTION_SEVERITY_TONE, ATTENTION_TYPE_LABELS, ATTENTION_STATUS_TONE, shortenRuntimeId } from "./live-session/ExecutionRuntimePanel.js";
-import { useLiveI18n } from "../i18n/messages/live.js";
+import { ATTENTION_SEVERITY_TONE, ATTENTION_STATUS_TONE, shortenRuntimeId } from "./live-session/ExecutionRuntimePanel.js";
+import { useLiveI18n, type LiveMessageKey } from "../i18n/messages/live.js";
 
+const ATTENTION_OWNER_MESSAGE_KEYS: Partial<Record<string, LiveMessageKey>> = {
+    worker: "worker",
+    human: "human",
+    system: "system",
+};
+
+const ATTENTION_TYPE_MESSAGE_KEYS: Partial<Record<string, LiveMessageKey>> = {
+    worker_lease_expired: "workerLeaseExpired",
+    worker_dispatch_blocked: "workerDispatchBlocked",
+    dispatch_cancel_stalled: "dispatchCancelStalled",
+    merge_required: "mergeRequired",
+    merge_conflict: "mergeConflict",
+    action_required: "actionRequired",
+    manual_attention: "manualAttention",
+};
+
+const ATTENTION_STATUS_MESSAGE_KEYS: Partial<Record<string, LiveMessageKey>> = {
+    open: "open",
+    claimed: "claimed",
+    resolved: "resolved",
+    dismissed: "dismissed",
+    expired: "expired",
+};
+
+const ATTENTION_SEVERITY_MESSAGE_KEYS: Partial<Record<string, LiveMessageKey>> = {
+    critical: "critical",
+    high: "high",
+    medium: "medium",
+    low: "low",
+};
 
 
 type AttentionLedgerProps = {
@@ -53,6 +83,10 @@ export const AttentionQueueItemsList: FunctionComponent<{
     listClassName = "max-h-[50dvh] sm:max-h-96 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar",
 }) => {
     const { t, formatTime } = useLiveI18n();
+    const localizedValue = (value: string, keys: Partial<Record<string, LiveMessageKey>>): string => {
+        const key = keys[value];
+        return key ? t(key) : value.replace(/_/g, " ");
+    };
     const resolvedEmptyTitle = emptyTitle ?? t("queueClear");
     const resolvedEmptyDescription = emptyDescription ?? t("noActiveBlockers");
     const resolvedListLabel = listLabel ?? t("activeAttentionItems");
@@ -122,7 +156,7 @@ export const AttentionQueueItemsList: FunctionComponent<{
                     ? workersByEndpointId.get(item.assignedWorkerEndpointId) || item.assignedWorkerEndpointId
                     : item.ownerType === "worker"
                         ? t("unassigned")
-                        : ATTENTION_OWNER_LABELS[item.ownerType] || item.ownerType;
+                        : localizedValue(item.ownerType, ATTENTION_OWNER_MESSAGE_KEYS);
                 const canClaim = (
                     showActions
                     && Boolean(snapshot?.projectId)
@@ -162,18 +196,18 @@ export const AttentionQueueItemsList: FunctionComponent<{
                                     <span className={`rounded-md border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${
                                         ATTENTION_SEVERITY_TONE[item.severity] || ATTENTION_SEVERITY_TONE.medium
                                     }`}>
-                                        {item.severity}
+                                        {localizedValue(item.severity, ATTENTION_SEVERITY_MESSAGE_KEYS)}
                                     </span>
                                     <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
-                                        {ATTENTION_TYPE_LABELS[item.attentionType] || item.attentionType.replace(/_/g, " ")}
+                                        {localizedValue(item.attentionType, ATTENTION_TYPE_MESSAGE_KEYS)}
                                     </span>
                                 </div>
                                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono text-slate-400">
                                     <span className={ATTENTION_STATUS_TONE[item.status] || "text-slate-400"}>
-                                        {item.status}
+                                        {localizedValue(item.status, ATTENTION_STATUS_MESSAGE_KEYS)}
                                     </span>
                                     <span className="text-slate-300 dark:text-slate-700">/</span>
-                                    <span>{ATTENTION_OWNER_LABELS[item.ownerType] || item.ownerType}</span>
+                                    <span>{localizedValue(item.ownerType, ATTENTION_OWNER_MESSAGE_KEYS)}</span>
                                     <span className="text-slate-300 dark:text-slate-700">/</span>
                                     <span className="break-all">{assignedWorkerLabel}</span>
                                     {shortenRuntimeId(item.taskId) && (

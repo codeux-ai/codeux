@@ -92,7 +92,7 @@ function statusLabel(value: string | null | undefined): string {
 }
 
 const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ status, error }) => {
-  const { t, formatNumber, formatTime } = useLiveI18n();
+  const { t, tp, formatNumber, formatTime } = useLiveI18n();
   if (error) {
     return (
       // Using aria-live="assertive" here because a Git tracking error prevents the user from understanding their source control state and requires immediate attention.
@@ -131,13 +131,13 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
               <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("gitCiPr")}</span>
             </div>
             <div className="flex min-w-0 items-center gap-2">
-              <span className="min-w-0 break-all font-mono text-xs text-slate-700 dark:text-slate-300">{status.branch ?? "no-branch"}</span>
+              <span className="min-w-0 break-all font-mono text-xs text-slate-700 dark:text-slate-300">{status.branch ?? t("noBranch")}</span>
               <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${
                 status.dirty
                   ? "bg-status-amber/15 text-status-amber"
                   : "bg-status-green/15 text-status-green"
               }`}>
-                {status.dirty ? "Dirty" : "Clean"}
+                {t(status.dirty ? "dirty" : "clean")}
               </span>
             </div>
           </div>
@@ -177,7 +177,7 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
         <div>
           <span className="mb-3 block text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400">
             <GitPullRequest className="mr-1.5 inline h-3 w-3 -mt-px" strokeWidth={2} aria-hidden="true" />
-            Open PRs
+            {t("openPrs")}
           </span>
           {status.openPullRequests.length === 0 ? (
             <p role="status" className="font-mono text-[11px] text-slate-400 dark:text-slate-600">{t("noOpenPrs")}</p>
@@ -204,10 +204,10 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
                     </div>
                     <p className={`mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-mono ${statusTone(pr.mergeStateStatus)}`}>
                       <PrIcon className="h-3 w-3 shrink-0" strokeWidth={1.8} aria-hidden="true" />
-                      <span>Merge status: {statusLabel(pr.mergeStateStatus)}</span>
+                      <span>{t("mergeStatus", { status: statusLabel(pr.mergeStateStatus) })}</span>
                       <span className="text-slate-400">·</span>
                       <MessageCircle className="h-3 w-3 shrink-0 text-slate-400" strokeWidth={1.8} aria-hidden="true" />
-                      <span className="text-slate-400">{pr.comments} comments</span>
+                      <span className="text-slate-400">{tp("commentsCount", pr.comments, { count: formatNumber(pr.comments) })}</span>
                     </p>
                   </a>
                 );
@@ -219,7 +219,7 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
         <div>
           <span className="mb-3 block text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400">
             <CircleDot className="mr-1.5 inline h-3 w-3 -mt-px" strokeWidth={2} aria-hidden="true" />
-            CI Runs
+            {t("ciRuns")}
           </span>
           {status.ciRuns.length === 0 ? (
             <p role="status" className="font-mono text-[11px] text-slate-400 dark:text-slate-600">{t("noCiRuns")}</p>
@@ -247,7 +247,11 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
                         aria-hidden="true"
                       />
                       <span className="sr-only">{run.status}</span>
-                      <span>CI status: {statusLabel(run.status)}{run.conclusion ? ` / conclusion ${statusLabel(run.conclusion)}` : ""}</span>
+                      <span>{t("ciStatus", {
+                        status: run.conclusion
+                          ? t("ciConclusion", { status: statusLabel(run.status), conclusion: statusLabel(run.conclusion) })
+                          : statusLabel(run.status),
+                      })}</span>
                     </p>
                   </a>
                 );
@@ -259,7 +263,7 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
         <div>
           <span className="mb-3 block text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400">
             <GitMerge className="mr-1.5 inline h-3 w-3 -mt-px" strokeWidth={2} aria-hidden="true" />
-            Recent Merges
+            {t("recentMerges")}
           </span>
           {status.mergedPullRequests.length === 0 ? (
             <p role="status" className="font-mono text-[11px] text-slate-400 dark:text-slate-600">{t("noRecentMerges")}</p>
@@ -279,7 +283,7 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
                   <p className="mt-0.5 break-all text-[10px] font-mono text-slate-400">{merged.headRefName ?? "?"} → {merged.baseRefName ?? "?"}</p>
                   <p className="mt-0.5 flex items-center gap-1.5 text-[10px] font-mono text-status-green">
                     <CheckCircle2 className="h-3 w-3" strokeWidth={1.8} aria-hidden="true" />
-                    merged {merged.mergedAt ? formatTime(new Date(merged.mergedAt)) : ""}
+                    {t("mergedAt", { time: merged.mergedAt ? formatTime(new Date(merged.mergedAt)) : "" })}
                   </p>
                 </a>
               ))}

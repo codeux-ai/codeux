@@ -57,6 +57,18 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
       humanInterventionOwnerType: pausedIntervention?.ownerType ?? null,
     });
     const showStatusPanel = !hasLiveSprint && (sprintStatusPresentation.isManualPause || sprintStatusPresentation.isSystemStop);
+    const localizedStatus = {
+      statusLabel: t(sprintStatusPresentation.isManualPause ? "paused" : "stopped"),
+      title: sprintStatusPresentation.isManualPause
+        ? pausedIntervention?.title || t("manualPauseTitle")
+        : t("systemStoppedTitle"),
+      reason: sprintStatusPresentation.isManualPause
+        ? pausedIntervention?.reason || t("manualPauseReason")
+        : t("systemStoppedReason"),
+      detail: sprintStatusPresentation.isManualPause
+        ? pausedIntervention?.instructions || t("manualPauseDetail")
+        : t("systemStoppedDetail"),
+    };
 
     useLayoutEffect(() => {
         if (headerRef.current) {
@@ -100,7 +112,7 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                             ? t("monitoringBranch", { branch: scopedFeatureBranch })
                             : t("monitoringSprint", { sprint: liveSprintRun?.sprintName || t("activeSprint") })
                         : showStatusPanel
-                            ? sprintStatusPresentation.detail
+                            ? localizedStatus.detail
                             : hasSprintContext
                                 ? t("latestSnapshot")
                                 : !initialLoadComplete
@@ -168,7 +180,7 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                             <span className={`w-2 h-2 rounded-full relative ${hasLiveSprint ? "bg-signal-500" : showStatusPanel ? "bg-status-amber" : "bg-slate-400"}`}>
                                 {hasLiveSprint && <span className="absolute inset-0 rounded-full motion-safe:animate-ping bg-signal-400 opacity-60" />}
                             </span>
-                            {hasLiveSprint ? `${formatNumber(visibleStats.running)} ${t("running")}` : showStatusPanel ? sprintStatusPresentation.statusLabel : hasSprintContext ? t("snapshotLoaded") : !initialLoadComplete ? t("connecting") : t("waiting")}
+                            {hasLiveSprint ? `${formatNumber(visibleStats.running)} ${t("running")}` : showStatusPanel ? localizedStatus.statusLabel : hasSprintContext ? t("snapshotLoaded") : !initialLoadComplete ? t("connecting") : t("waiting")}
                         </div>
                         {pausedIntervention && !hasLiveSprint && sprintStatusPresentation.showHumanInterventionBadge && (
                             <HumanInterventionBadge summary={pausedIntervention} label={t("needsYou")} align="right" />
@@ -197,13 +209,13 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                         <div className="min-w-0">
                             <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-status-amber">
                                 <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.2} />
-                                {sprintStatusPresentation.title}
+                                {localizedStatus.title}
                             </div>
                             <h3 className="mt-2 text-xl font-semibold tracking-tight text-slate-900 dark:text-white font-display">
-                                {sprintStatusPresentation.reason}
+                                {localizedStatus.reason}
                             </h3>
                             <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-                                {sprintStatusPresentation.detail}
+                                {localizedStatus.detail}
                             </p>
                         </div>
                     </div>

@@ -54,7 +54,7 @@ const InvocationFeedRow: FunctionComponent<{
   invocation: ExecutionInvocationRecord;
   sprintKeyPrefix?: string;
 }> = memo(({ invocation, sprintKeyPrefix = "SPR" }) => {
-  const { locale, t, formatNumber, formatTime } = useLiveI18n();
+  const { locale, t, tp, formatNumber, formatTime } = useLiveI18n();
   const rowRef = useRef<HTMLDivElement>(null);
   const isReducedMotion = useReducedMotion();
   const motionTokens = useGsapInteractionTokens();
@@ -91,8 +91,8 @@ const InvocationFeedRow: FunctionComponent<{
     : rawDuration;
   const tokenTotal = invocation.totalTokens ?? ((invocation.inputTokens ?? 0) + (invocation.outputTokens ?? 0));
   const dotClass = INVOCATION_STATUS_DOT[invocation.status] || "bg-slate-400";
-  const providerLabel = invocation.provider || "provider pending";
-  const modelLabel = invocation.model || "model pending";
+  const providerLabel = invocation.provider || t("providerPending");
+  const modelLabel = invocation.model || t("modelPending");
 
   const purposeKey = INVOCATION_PURPOSE_KEYS[invocation.type ?? ""];
   const purposeLabel = purposeKey ? t(purposeKey) : formatInvocationPurpose(invocation.type);
@@ -148,7 +148,7 @@ const InvocationFeedRow: FunctionComponent<{
         <InvocationContextChips invocation={invocation} sprintKeyPrefix={sprintKeyPrefix} />
         <span className="inline-flex items-center gap-1 rounded-md border border-black/[0.05] px-2 py-0.5 text-[10px] font-mono text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
           <MessageSquareText className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
-          {t("messagesCount", { count: formatNumber(invocation.messageCount) })}
+          {tp("messages", invocation.messageCount, { count: formatNumber(invocation.messageCount) })}
         </span>
         {duration && (
           <span className="inline-flex items-center gap-1 rounded-md border border-black/[0.05] px-2 py-0.5 text-[10px] font-mono text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
