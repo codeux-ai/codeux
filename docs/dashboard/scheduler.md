@@ -136,7 +136,7 @@ Agent-created `agent_wakeup` and `task` entries are display-only in the dashboar
 ### Due Entry Execution
 
 Due entries execute through existing production paths:
-- sprint entries with no tasks call the planning path with auto-start enabled, so successful planning creates the tasks and starts execution automatically; sprint entries that already have tasks call `ExecutionControlService.orchestrateSprint` directly
+- every sprint entry calls `ExecutionControlService.orchestrateSprint`, regardless of whether tasks already exist. Planned sprints continue directly into orchestration. Unplanned sprints use the normal start pipeline: branch preflight runs first, planning starts automatically, and successful planning requests orchestration again after the generated tasks are saved
 - quicksprint entries call `QuicksprintService.executeQuicksprint`
 - chat entries call `ChatThreadRuntimeService.postMessage`
 - memory remediation entries call `MemoryRemediationService.remediateLongTermMemories`
@@ -158,7 +158,7 @@ AI memory remediation entries create a `remediation` invocation record even when
 
 After a successful run, the service advances `nextRunAt` from the scheduled occurrence time. One-time entries move to `completed`; recurring entries stay `scheduled` until their count or end date/time is exhausted. Failed entries move to `failed` with `lastError` for operator visibility. Node-flow entries are durably claimed before `runFlow` is awaited so the same due occurrence is not dispatched again after a restart, then the scheduler entry is finalized from the returned node-flow run status.
 
-For sprint targets, failures from either automatic planning or direct orchestration are recorded on the scheduler entry: the entry moves to `failed`, and `lastError` exposes the failure in the scheduled-entry list.
+For sprint targets, a failure returned while the scheduler submits the normal start request moves the entry to `failed`, and `lastError` exposes that failure in the scheduled-entry list. Planning and orchestration continue asynchronously after an accepted start; later provider failures remain visible through their planning invocation or sprint run rather than rewriting the already accepted scheduler occurrence.
 
 ### Node-Flow Schedules
 
@@ -179,6 +179,7 @@ Behavior:
 
 Anchored entries are evaluated separately from absolute `nextRunAt` polling:
 - An `after_sprint_end` entry is due only after the source sprint's effective status reaches successful `completed`; failed, cancelled, and otherwise non-completed sources remain unresolved.
+- A follow-up sprint stored without planned tasks therefore remains only a draft while its source sprint is running. Its planning provider is not invoked until the completion anchor becomes due and the scheduler submits the follow-up through the normal start path.
 - The anchor timestamp is the latest successful sprint run `finishedAt` when a valid one exists; otherwise the scheduler falls back to the completed sprint's `endDate`.
 - An `after_task_end` entry is due only after the source task reaches `completed` or `QA_REVIEW_FAILED`.
 - The task anchor timestamp is the latest terminal task run `finishedAt` when one exists, then the latest terminal task dispatch `finishedAt`, and finally the task `updatedAt` fallback.

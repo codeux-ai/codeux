@@ -1,4 +1,5 @@
 import type {
+  ExecutionAttentionItemSummary,
   ExecutionRuntimeEventSummary,
   ExecutionTaskDispatchSummary,
   ProviderId,
@@ -36,6 +37,18 @@ function normalizeString(value: string | null | undefined): string | null {
 
 /** Runtime event the backend emits while it sleeps in-process waiting for a provider quota reset. */
 export const QUOTA_WAIT_EVENT_TYPE = "cli_provider_quota_wait";
+
+const CI_GATE_EVENT_TYPES = new Set(["ci_gate_status", "main_merge_gate_status"]);
+const ACTIVE_CI_ATTENTION_STATUSES = new Set(["open", "claimed"]);
+
+export function isCiGateRuntimeEvent(event: ExecutionRuntimeEventSummary): boolean {
+  return CI_GATE_EVENT_TYPES.has(event.eventType);
+}
+
+export function isActiveCiAttentionItem(item: ExecutionAttentionItemSummary): boolean {
+  return item.attentionType.toLowerCase() === "ci_fix_required"
+    && ACTIVE_CI_ATTENTION_STATUSES.has(item.status.toLowerCase());
+}
 
 export interface ActiveQuotaWait {
   retryAfterIso: string;

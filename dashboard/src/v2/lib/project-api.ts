@@ -22,6 +22,7 @@ import type {
   SprintLinkedIssueInput,
   SprintLinkedIssueRecord,
   SprintRecord,
+  SprintBranchUpdateResult,
   SprintRollbackAssessment,
   TaskRecord,
   UpdateProjectInput,
@@ -427,6 +428,16 @@ export const updateSprint = async (sprintId: string, input: UpdateSprintInput): 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
+};
+
+export const updateSprintBranch = async (
+  projectId: string,
+  sprintId: string,
+): Promise<SprintBranchUpdateResult> => {
+  return fetchJson<SprintBranchUpdateResult>(
+    `/api/projects/${encodeURIComponent(projectId)}/sprints/${encodeURIComponent(sprintId)}/update-branch`,
+    { method: "POST" },
+  );
 };
 
 export const markSprintCompleted = async (sprintId: string): Promise<SprintRecord> => {

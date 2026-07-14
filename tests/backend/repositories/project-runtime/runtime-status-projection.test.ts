@@ -133,15 +133,25 @@ describe("RuntimeStatusProjection", () => {
     db.prepare(`
       INSERT INTO qa_review_runs (
         id, project_id, sprint_id, task_id, trigger_type, status, outcome, run_index,
-        summary_markdown, payload_json, agent_name, started_at, finished_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, 'task_completion', 'running', NULL, 1, ?, ?, 'QA Bot', ?, NULL, ?, ?)
+        target_task_key, summary_markdown, fix_instructions, payload_json, agent_name,
+        started_at, finished_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 'task_completion', 'running', NULL, 1, ?, ?, ?, ?, 'QA Bot', ?, NULL, ?, ?)
     `).run(
       "run-qa-1",
       project.id,
       sprint.id,
       task.id,
+      "T1",
       "Review in progress",
-      JSON.stringify({ findings: [] }),
+      "Verify the error path before completion.",
+      JSON.stringify({
+        findings: ["Error path is not verified"],
+        followUpTasks: [{
+          title: "Verify error path",
+          promptMarkdown: "Add a deterministic error-path test.",
+          priority: "medium",
+        }],
+      }),
       "2026-05-30T09:00:00.000Z",
       "2026-05-30T09:00:00.000Z",
       "2026-05-30T09:00:00.000Z",
@@ -150,13 +160,23 @@ describe("RuntimeStatusProjection", () => {
     const status = projection.buildProjectStatus(project.id, sprint.id, null);
 
     expect(status.subtasks).toHaveLength(1);
+    expect(status.subtasks[0]?.latestReview).toEqual(projectRepository.listTasks(project.id, sprint.id)[0]?.latestReview);
     expect(status.subtasks[0]?.latestReview).toEqual({
       status: "running",
       outcome: null,
       summary: "Review in progress",
-      findings: [],
+      findings: ["Error path is not verified"],
       reviewer: "QA Bot",
       finishedAt: null,
+      fixInstructions: "Verify the error path before completion.",
+      targetTaskKey: "T1",
+      followUpTasks: [{
+        title: "Verify error path",
+        promptMarkdown: "Add a deterministic error-path test.",
+        description: null,
+        dependsOnTaskKeys: [],
+        priority: "medium",
+      }],
     });
   });
 
@@ -297,5 +317,68 @@ describe("RuntimeStatusProjection", () => {
         { label: "Quality", normalizedLabel: "quality", rating: 5, note: "Latest" },
       ],
     });
+  });
+
+  it("projects the same persisted CI state as task cards and clears it after settlement", async () => {
+    const { storage, projection, projectRepository, executionRepository } = await createProjection();
+    const project = projectRepository.createProject({
+      name: "Runtime CI Projection",
+      sourceType: "local",
+      sourceRef: "/workspace/runtime-ci-projection",
+    });
+    const sprint = projectRepository.createSprint(project.id, { name: "Sprint 1", number: 1 });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "CI task",
+      status: "in_progress",
+      mergeIndicator: "CI",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      state: "RUNNING",
+    });
+
+    expect(projection.buildProjectStatus(project.id, sprint.id, null).subtasks[0]?.ciStatus).toBe("pending");
+
+    executionRepository.appendTaskRunEvent(taskRun.id, "ci_gate_status", "system", {
+      state: "waiting_checks",
+      hasPendingChecks: true,
+    }, { createdAt: "2026-07-13T11:00:00.000Z" });
+    expect(projection.buildProjectStatus(project.id, sprint.id, null).subtasks[0]?.ciStatus).toBe("running");
+
+    const now = "2026-07-13T11:01:00.000Z";
+    storage.getDatabase().prepare(`
+      INSERT INTO project_attention_items (
+        id, project_id, sprint_id, task_id, sprint_run_id, dispatch_id,
+        attention_type, severity, owner_type, status, assigned_worker_endpoint_id,
+        title, summary_markdown, payload_json, opened_at, claimed_at, resolved_at, updated_at
+      ) VALUES (?, ?, ?, ?, NULL, NULL, 'human_escalation_required', 'high', 'human', 'claimed', NULL, ?, ?, ?, ?, ?, NULL, ?)
+    `).run(
+      "runtime-ci-handoff",
+      project.id,
+      sprint.id,
+      task.id,
+      "CI handoff",
+      "CI requires human repair.",
+      JSON.stringify({ sourceAttentionType: "ci_fix" }),
+      now,
+      now,
+      now,
+    );
+    expect(projection.buildProjectStatus(project.id, sprint.id, null).subtasks[0]?.ciStatus).toBe("failed");
+
+    storage.getDatabase().prepare(`
+      UPDATE project_attention_items
+      SET status = 'resolved', resolved_at = ?, updated_at = ?
+      WHERE id = 'runtime-ci-handoff'
+    `).run("2026-07-13T11:02:00.000Z", "2026-07-13T11:02:00.000Z");
+    executionRepository.appendTaskRunEvent(taskRun.id, "ci_gate_status", "system", {
+      state: "ready_for_merge",
+    }, { createdAt: "2026-07-13T11:03:00.000Z" });
+
+    expect(projection.buildProjectStatus(project.id, sprint.id, null).subtasks[0]?.ciStatus).toBeNull();
   });
 });

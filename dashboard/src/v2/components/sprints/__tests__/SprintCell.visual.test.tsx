@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 /// <reference types="@testing-library/jest-dom" />
-import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Sprint } from "../../../types.js";
 import { ORGANIC_CELL_SHADOW_CLASS } from "../../ui/organic-cell-styles.js";
 import { SprintCell } from "../SprintCell.js";
+import type { CiStatusPresentation } from "../../../lib/ci-status-presentation.js";
 
 expect.extend(matchers);
 
@@ -57,6 +58,19 @@ const sprint: Sprint = {
   updatedAt: "2026-01-01T00:00:00.000Z",
   showcasePinned: false,
   linkedIssues: [],
+};
+
+const failedCiStatus: CiStatusPresentation = {
+  scope: "sprint",
+  state: "failed",
+  label: "CI failed",
+  accessibleLabel: "CI failed. Pull request: Pull request ready. Checks: Checks failed. Merge: Blocked by checks.",
+  failureKind: "ci_checks",
+  steps: [
+    { id: "pull_request", label: "Pull request", state: "successful", statusLabel: "Pull request ready" },
+    { id: "checks", label: "Checks", state: "failed", statusLabel: "Checks failed", failureKind: "ci_checks" },
+    { id: "merge", label: "Merge", state: "pending", statusLabel: "Blocked by checks" },
+  ],
 };
 
 describe("SprintCell visuals", () => {
@@ -182,5 +196,56 @@ describe("SprintCell visuals", () => {
     expect(container.querySelector('[data-sprint-kind="rollback"]')).toBeInTheDocument();
     expect(screen.getByText("Rollback")).toHaveClass("text-orange-700");
     expect(container.querySelector(".border-orange-400\\/35")).toBeInTheDocument();
+  });
+
+  it("shows CI failure steps and requested-change QA details without replacing lifecycle status", () => {
+    const { container } = render(
+      <SprintCell
+        sprint={{
+          ...sprint,
+          status: "running",
+          latestReview: {
+            status: "completed",
+            outcome: "changes_requested",
+            summary: "The retry path still needs coverage.",
+            findings: ["Exercise the retry timeout"],
+            fixInstructions: "Add a deterministic timeout regression test.",
+            targetTaskKey: "T02",
+            reviewer: "QA Worker",
+            finishedAt: "2026-07-13T10:00:00.000Z",
+          },
+        }}
+        isEven={false}
+        accentColor="text-signal-600 dark:text-signal-300"
+        ciStatus={failedCiStatus}
+        humanIntervention={{
+          title: "CI repair in progress",
+          reason: "Checks failed",
+          instructions: "Repair the checks",
+          attentionType: "ci_fix_required",
+          severity: "high",
+          ownerType: "worker",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Running")).toBeInTheDocument();
+    expect(screen.queryByText("CI")).not.toBeInTheDocument();
+    const ciTrigger = screen.getByRole("button", { name: /CI status: CI failed.*Show workflow details/i });
+    expect(ciTrigger).toHaveClass("text-status-red");
+    expect(container.querySelector('[data-ci-icon="failure"]')).toHaveClass("text-status-red");
+
+    fireEvent.click(ciTrigger);
+    const workflow = screen.getByRole("region", { name: "CI workflow details" });
+    expect(within(workflow).getByText("Pull request")).toBeVisible();
+    expect(within(workflow).getByText("Checks")).toBeVisible();
+    expect(within(workflow).getByText("Merge")).toBeVisible();
+
+    const qaTrigger = screen.getByRole("button", { name: "QA review details" });
+    expect(qaTrigger).toHaveAccessibleDescription(/QA changes requested/i);
+    fireEvent.click(qaTrigger);
+    const review = screen.getByRole("region", { name: "QA Changes Requested" });
+    expect(within(review).getByText("Add a deterministic timeout regression test.")).toBeVisible();
+    expect(within(review).getByText("T02")).toBeVisible();
   });
 });

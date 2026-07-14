@@ -198,6 +198,7 @@ export function useTaskBoardController(): TaskBoardController {
     { selectedSprintId: taskScopeSprintId },
   );
   const taskDispatches = useStableArrayValue(execution.taskDispatches);
+  const attentionItems = useStableArrayValue(execution.attentionItems ?? []);
   const recentEvents = useStableArrayValue(execution.recentEvents);
   const subtasks = useStableArrayValue(status.subtasks ?? []);
   const settings = useProjectEffectiveSettings(projectId);
@@ -281,7 +282,9 @@ export function useTaskBoardController(): TaskBoardController {
       priorityFilter,
       listWindow,
       taskScopeSprintId,
+      projectId,
       taskDispatches,
+      attentionItems,
       recentEvents,
       subtasks,
       taskPullRequestsEnabled,
@@ -294,7 +297,9 @@ export function useTaskBoardController(): TaskBoardController {
     priorityFilter,
     listWindow,
     taskScopeSprintId,
+    projectId,
     taskDispatches,
+    attentionItems,
     recentEvents,
     subtasks,
     taskPullRequestsEnabled,

@@ -47,6 +47,8 @@ import {
 import {
   buildActualActiveRunsMap,
   buildActiveRunsMap,
+  areCiStatusPresentationsEqual,
+  buildCiStatusBySprintId,
   buildDisplaySprints,
   getDefaultPlanningProviderMetadata,
   buildPauseResumeRunsMap,
@@ -158,7 +160,7 @@ export function useSprintsPageData() {
 
   const inFlightStartIds = useRef<Set<string>>(new Set());
 
-  const { feedback, setError, clearFeedback, clearError } = useActionFeedback();
+  const { feedback, setSuccess, setError, clearFeedback, clearError } = useActionFeedback();
 
   const { projects, selectedProject, selectProject, createProject } = useProjectData();
   const {
@@ -358,6 +360,19 @@ export function useSprintsPageData() {
       && a.attentionType === b.attentionType,
   );
 
+  const ciStatusBySprintId = useStableMapByContent(
+    useMemo(
+      () => buildCiStatusBySprintId(
+        sprints,
+        execution.taskDispatches ?? [],
+        execution.recentEvents ?? [],
+        execution.attentionItems ?? [],
+      ),
+      [execution.attentionItems, execution.recentEvents, execution.taskDispatches, sprints],
+    ),
+    areCiStatusPresentationsEqual,
+  );
+
   const displaySprints = useMemo(
     () =>
       buildDisplaySprints(
@@ -432,6 +447,7 @@ export function useSprintsPageData() {
     reserveNextSprintNumber,
     releaseSprintNumberReservation,
     setError,
+    setSuccess,
     setExportState,
     addTaskForSprint,
     setAddTaskSprintTasks,
@@ -478,6 +494,7 @@ export function useSprintsPageData() {
     activeRunsBySprintId,
     pauseResumeRunsBySprintId,
     interventionBySprintId,
+    ciStatusBySprintId,
     showCreateComposer,
     setShowCreateComposer,
     editingSprint,

@@ -1,12 +1,15 @@
 import { DatabaseAdapter } from "../db/database-adapter.js";
 import { AppDbStorage } from "../app-db-storage.js";
 import type { DashboardStatus, JulesActivity, Subtask, SubtaskStatus } from "../../contracts/app-types.js";
-import type { SprintReviewSummary } from "../../contracts/project-management-types.js";
+import type { SprintReviewSummary } from "../../contracts/qa-review-summary.js";
 import type { TaskSelfReflectionRating } from "../../contracts/task-self-reflection-types.js";
 import { mapPlanningStatusToRuntimeStatus, toMergeIndicator } from "../../services/subtask-state-mapper.js";
 import { RuntimeContextPayload } from "./runtime-context-store.js";
 import { toNumber, toBoolean, parsePayloadJson } from "../repository-utils.js";
 import { TaskSelfReflectionRatingRepository } from "../task-self-reflection-rating-repository.js";
+import { resolveTaskCardCiStatus } from "../../domain/sprint/card-ci-status.js";
+import { loadCardCiStatusEvidence } from "../project-management/card-ci-status-query.js";
+import { loadLatestTaskReviewSummaryMap } from "../project-management/qa-review-summary-query.js";
 
 export type PlanningTaskStatus = "pending" | "in_progress" | "coding_completed" | "completed" | "QA_REVIEW_FAILED";
 export type ProjectStatus = "running" | "failed" | "intervention" | "idle";
@@ -43,11 +46,6 @@ export interface TaskRow {
 export interface DependencyRow {
   task_id: string;
   depends_on_task_id: string;
-}
-
-export interface TaskReviewSummaryRow {
-  task_id: string;
-  latest_task_review_json: string | null;
 }
 
 export interface TaskRunRow {
@@ -147,6 +145,10 @@ export class RuntimeStatusProjection {
     const latestRuns = this.getLatestRuns(tasks.map((task) => task.row.id));
     const recentActivitiesByTaskId = this.getRecentActivitiesByTask(projectId, sprintIdToLoad, tasks.map((task) => task.row.id));
     const taskKeyByRecordId = new Map(tasks.map((task) => [task.row.id, task.row.task_key]));
+    const ciEvidence = loadCardCiStatusEvidence(this.storage, {
+      taskIds: tasks.map((task) => task.row.id),
+      sprintIds: tasks.map((task) => task.row.sprint_id),
+    });
 
     const subtasks: Subtask[] = tasks.map((task) => {
       const run = latestRuns.get(task.row.id);
@@ -172,6 +174,13 @@ export class RuntimeStatusProjection {
         selfReflectionRating: task.selfReflectionRating,
         is_merged: merged,
         merge_indicator: toMergeIndicator(task.row.merge_indicator),
+        ciStatus: resolveTaskCardCiStatus({
+          status: task.row.status,
+          isMerged: merged,
+          mergeIndicator: task.row.merge_indicator,
+          latestGateEvent: ciEvidence.latestTaskGateByTaskId.get(task.row.id),
+          hasActiveFailure: ciEvidence.failedTaskIds.has(task.row.id),
+        }),
       };
     });
 
@@ -224,7 +233,7 @@ export class RuntimeStatusProjection {
     }
 
     const taskIds = taskRows.map((row) => row.id);
-    const reviewMap = this.getLatestTaskReviewSummaryMap(taskIds);
+    const reviewMap = loadLatestTaskReviewSummaryMap(this.storage, taskIds);
     const selfReflectionRatingMap = this.taskSelfReflectionRatingRepository.getLatestByTaskIds(taskIds);
 
     return taskRows.map((row) => ({
@@ -233,55 +242,6 @@ export class RuntimeStatusProjection {
       latestReview: reviewMap.get(row.id),
       selfReflectionRating: selfReflectionRatingMap.get(row.id),
     }));
-  }
-
-  getLatestTaskReviewSummaryMap(taskIds: string[]): Map<string, SprintReviewSummary> {
-    if (taskIds.length === 0) {
-      return new Map();
-    }
-
-    const rows = this.storage.executeChunkedInQuery<TaskReviewSummaryRow>({
-      sqlPrefix: `
-        SELECT
-          q.task_id,
-          json_object(
-            'status', q.status,
-            'outcome', q.outcome,
-            'summary', q.summary_markdown,
-            'findings', COALESCE(json_extract(q.payload_json, '$.findings'), json_array()),
-            'reviewer', q.agent_name,
-            'finishedAt', q.finished_at
-          ) AS latest_task_review_json
-        FROM qa_review_runs q
-        WHERE q.task_id`,
-      sqlSuffix: `
-          AND q.trigger_type IN ('task_completion', 'completed_task_without_pr')
-          AND q.rowid = (
-            SELECT q2.rowid
-            FROM qa_review_runs q2
-            WHERE q2.task_id = q.task_id
-              AND q2.trigger_type IN ('task_completion', 'completed_task_without_pr')
-            ORDER BY q2.started_at DESC, q2.rowid DESC
-            LIMIT 1
-          )
-      `,
-      items: taskIds,
-    });
-
-    const map = new Map<string, SprintReviewSummary>();
-    for (const row of rows) {
-      if (!row.latest_task_review_json) {
-        continue;
-      }
-      try {
-        const parsed = JSON.parse(row.latest_task_review_json) as SprintReviewSummary;
-        parsed.findings = Array.isArray(parsed.findings) ? parsed.findings : [];
-        map.set(row.task_id, parsed);
-      } catch {
-        // Ignore malformed persisted QA payloads.
-      }
-    }
-    return map;
   }
 
   getLatestRuns(taskIds: string[]): Map<string, TaskRunRow> {

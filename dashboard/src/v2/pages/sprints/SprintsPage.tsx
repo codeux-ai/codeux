@@ -55,6 +55,7 @@ import type { SprintImportedTaskInput } from "../../types.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
 const SPRINT_GALLERY_VISIBILITY_STORAGE_KEY = "code_ux_sprints_show_gallery";
+const EMPTY_CI_STATUS_BY_SPRINT_ID = new Map<string, never>();
 type RepositoryIssueImportProvider = "github" | "gitlab";
 
 const getImportedTaskKey = (task: SprintImportedTaskInput): string => (
@@ -222,6 +223,7 @@ export const SprintsPage: FunctionComponent = () => {
     activeRunsBySprintId,
     pauseResumeRunsBySprintId,
     interventionBySprintId,
+    ciStatusBySprintId = EMPTY_CI_STATUS_BY_SPRINT_ID,
     showCreateComposer, setShowCreateComposer,
     editingSprint, setEditingSprint,
     showImportModal, setShowImportModal,
@@ -265,6 +267,7 @@ export const SprintsPage: FunctionComponent = () => {
     handleAppendTask,
     handleDeleteSprint,
     handleToggleShowcase,
+    handleUpdateBranch,
     handleBulkToggleShowcase,
     handleOpenExport,
     handleImportSprint,
@@ -592,6 +595,10 @@ export const SprintsPage: FunctionComponent = () => {
     setOverrideSprint(sprint);
   }, [setOverrideSprint]);
 
+  const handleUpdateBranchFromLedger = useCallback((sprint: typeof sortedSprints[number]) => {
+    void handleUpdateBranch(sprint);
+  }, [handleUpdateBranch]);
+
   const handleMarkCompletedFromLedger = useCallback((sprintId: string) => {
     void handleMarkCompleted(sprintId);
   }, [handleMarkCompleted]);
@@ -799,9 +806,11 @@ export const SprintsPage: FunctionComponent = () => {
                         showcaseBusy={pendingActionIds.has(pinActionId)}
                         markCompletedBusy={pendingActionIds.has(markCompletedActionId)}
                         markQaPassedBusy={pendingActionIds.has(markQaPassedActionId)}
+                        updateBranchBusy={pendingActionIds.has(`sprint-update-branch:${sprint.id}`)}
                         isPaused={isPaused}
                         pauseResumeBusy={pauseResumeBusy}
                         humanIntervention={interventionBySprintId.get(sprint.id) || null}
+                        ciStatus={ciStatusBySprintId.get(sprint.id) || null}
                         onPrimaryAction={() => { handleSprintToggle(sprint.id); }}
                         onPauseResume={pauseResumeRun ? () => { handleSprintPauseResume(sprint.id); } : undefined}
                         onAddTasks={() => { void handleOpenAppendTasks(sprint); }}
@@ -829,6 +838,7 @@ export const SprintsPage: FunctionComponent = () => {
                         }}
                         onExport={() => { void handleOpenExport(sprint.id, sprint.name); }}
                         onOverrides={() => { setOverrideSprint(sprint); }}
+                        onUpdateBranch={sprint.status === "idle" ? () => { void handleUpdateBranch(sprint); } : undefined}
                         onToggleShowcase={() => { void handleToggleShowcase(sprint); }}
                       />
                     );
@@ -971,6 +981,7 @@ export const SprintsPage: FunctionComponent = () => {
                 activeRunsBySprintId={activeRunsBySprintId}
                 pauseResumeRunsBySprintId={pauseResumeRunsBySprintId}
                 interventionBySprintId={interventionBySprintId}
+                ciStatusBySprintId={ciStatusBySprintId}
                 pendingActionIds={pendingActionIds}
                 onToggleShowcase={handleToggleShowcaseWithSprint}
                 onSprintToggle={handleSprintToggle}
@@ -979,6 +990,7 @@ export const SprintsPage: FunctionComponent = () => {
                 onEditSprint={handleEditSprintFromLedger}
                 onExportSprint={handleExportSprintFromLedger}
                 onOverridesSprint={handleOverridesSprintFromLedger}
+                onUpdateBranchSprint={handleUpdateBranchFromLedger}
                 onMarkCompletedSprint={handleMarkCompletedFromLedger}
                 onMarkQaPassedSprint={handleMarkQaPassedFromLedger}
                 onRollbackSprint={setRollbackSprint}
@@ -1156,6 +1168,10 @@ export const SprintsPage: FunctionComponent = () => {
               onOverrides={() => {
                 setOverrideSprint(activeRowMenuSprint);
               }}
+              onUpdateBranch={activeRowMenuSprint.status === "idle" ? () => {
+                void handleUpdateBranch(activeRowMenuSprint);
+              } : undefined}
+              updateBranchBusy={pendingActionIds.has(`sprint-update-branch:${activeRowMenuSprint.id}`)}
               onMarkCompleted={() => {
                 void handleMarkCompleted(activeRowMenuSprint.id);
               }}

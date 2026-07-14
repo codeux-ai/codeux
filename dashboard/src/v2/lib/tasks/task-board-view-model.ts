@@ -1,7 +1,18 @@
 import type { Task, TaskPriority, TaskStatus } from "../../types.js";
 import type { Sprint } from "../../types.js";
-import type { ExecutionTaskDispatchSummary, ExecutionRuntimeEventSummary, Subtask } from "../../../types.js";
+import type {
+  ExecutionAttentionItemSummary,
+  ExecutionTaskDispatchSummary,
+  ExecutionRuntimeEventSummary,
+  Subtask,
+  SubtaskMergeIndicator,
+} from "../../../types.js";
 import { type ListWindowOption } from "../list-window.js";
+import {
+  deriveTaskCiStatusPresentation,
+  type CiTaskMergeEvidence,
+  type CiStatusPresentation,
+} from "../ci-status-presentation.js";
 import { deriveTaskBoardState, type TaskBoardState } from "../task-board-state.js";
 import { buildLiveTaskEnrichmentMap, type LiveTaskEnrichment } from "./live-task-enrichment.js";
 import { buildTaskCardViewModel, type TaskCardViewModel } from "./task-card-view-model.js";
@@ -15,7 +26,9 @@ export interface TaskBoardViewModelOptions {
   priorityFilter: "all" | TaskPriority;
   listWindow: ListWindowOption;
   taskScopeSprintId: string | null;
+  projectId?: string | null;
   taskDispatches: ExecutionTaskDispatchSummary[];
+  attentionItems?: ExecutionAttentionItemSummary[];
   recentEvents: ExecutionRuntimeEventSummary[];
   subtasks: Subtask[];
   taskPullRequestsEnabled?: boolean;
@@ -49,6 +62,112 @@ function appendField(parts: string[], value: unknown): void {
   parts.push(`${text.length}:${text}`);
 }
 
+function stableJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(stableJsonValue);
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.keys(record).sort().map((key) => [key, stableJsonValue(record[key])]),
+    );
+  }
+  return value;
+}
+
+function stableStringify(value: unknown): string {
+  return JSON.stringify(stableJsonValue(value)) ?? "";
+}
+
+const ACTIVE_ATTENTION_STATUSES = new Set(["open", "claimed"]);
+const SUBTASK_MERGE_INDICATORS = new Set<SubtaskMergeIndicator>([
+  "CI",
+  "AUTOMERGE",
+  "MERGED",
+  "MERGE_BLOCKED",
+  "MERGE_CONFLICT",
+  "PR_ONLY",
+  "QA_PENDING",
+]);
+
+function normalizeMergeIndicator(value: string | null): SubtaskMergeIndicator | undefined {
+  return value && SUBTASK_MERGE_INDICATORS.has(value as SubtaskMergeIndicator)
+    ? value as SubtaskMergeIndicator
+    : undefined;
+}
+
+function payloadTaskRecordId(payload: Record<string, unknown> | null): string | null {
+  const taskId = payload?.taskId;
+  return typeof taskId === "string" && taskId.trim() ? taskId.trim() : null;
+}
+
+function eventMatchesTaskRecord(event: ExecutionRuntimeEventSummary, task: Task): boolean {
+  return event.eventType === "ci_gate_status"
+    && event.sprintId === task.sprintId
+    && (event.taskId === task.recordId || payloadTaskRecordId(event.payload) === task.recordId);
+}
+
+function attentionMatchesTaskRecord(item: ExecutionAttentionItemSummary, task: Task): boolean {
+  return item.attentionType.toLowerCase() === "ci_fix_required"
+    && ACTIVE_ATTENTION_STATUSES.has(item.status.toLowerCase())
+    && item.sprintId === task.sprintId
+    && (item.taskId === task.recordId || payloadTaskRecordId(item.payload) === task.recordId);
+}
+
+interface TaskCiSource {
+  presentation: CiStatusPresentation | null;
+  signature: string;
+}
+
+function buildTaskCiSource(args: {
+  task: Task;
+  subtask?: Subtask;
+  liveEnrichment?: LiveTaskEnrichment;
+  events: ExecutionRuntimeEventSummary[];
+  attentionItems: ExecutionAttentionItemSummary[];
+}): TaskCiSource {
+  const evidence: CiTaskMergeEvidence = {
+    record_id: args.task.recordId,
+    id: args.task.id,
+    sprint_id: args.task.sprintId,
+    merge_indicator: args.subtask?.merge_indicator ?? normalizeMergeIndicator(args.task.mergeIndicator),
+    is_merged: args.subtask?.is_merged ?? args.task.isMerged,
+    pr_url: args.subtask?.pr_url ?? args.liveEnrichment?.prUrl,
+  };
+  const events = args.events.filter((event) => eventMatchesTaskRecord(event, args.task));
+  const attentionItems = args.attentionItems.filter((item) => attentionMatchesTaskRecord(item, args.task));
+  const presentation = deriveTaskCiStatusPresentation({
+    task: evidence,
+    events,
+    attentionItems,
+  });
+  const signature = stableStringify({
+    evidence,
+    events: events.map((event) => ({
+      id: event.id,
+      projectId: event.projectId,
+      sprintId: event.sprintId,
+      sprintRunId: event.sprintRunId,
+      taskId: event.taskId,
+      taskKey: event.taskKey,
+      createdAt: event.createdAt,
+      payload: event.payload,
+    })).sort((left, right) => left.id.localeCompare(right.id)),
+    attentionItems: attentionItems.map((item) => ({
+      id: item.id,
+      sprintId: item.sprintId,
+      sprintRunId: item.sprintRunId,
+      taskId: item.taskId,
+      status: item.status,
+      openedAt: item.openedAt,
+      updatedAt: item.updatedAt,
+      resolvedAt: item.resolvedAt,
+      payload: item.payload,
+    })).sort((left, right) => left.id.localeCompare(right.id)),
+  });
+  return { presentation, signature };
+}
+
 function buildTaskSignature(task: Task): string {
   const parts: string[] = [];
   appendField(parts, task.recordId);
@@ -71,15 +190,7 @@ function buildTaskSignature(task: Task): string {
   appendField(parts, task.isMerged === true ? "1" : "0");
   appendField(parts, task.mergeIndicator);
   appendField(parts, task.isOptimistic === true ? "1" : "0");
-  appendField(parts, task.latestReview?.status);
-  appendField(parts, task.latestReview?.outcome);
-  appendField(parts, task.latestReview?.summary);
-  appendField(parts, task.latestReview?.reviewer);
-  appendField(parts, task.latestReview?.finishedAt);
-  appendField(parts, task.latestReview?.findings?.length ?? 0);
-  for (const finding of task.latestReview?.findings ?? []) {
-    appendField(parts, finding);
-  }
+  appendField(parts, stableStringify(task.latestReview));
   appendField(parts, task.selfReflectionRating?.id);
   appendField(parts, task.selfReflectionRating?.projectId);
   appendField(parts, task.selfReflectionRating?.sprintId);
@@ -164,11 +275,13 @@ function buildTaskCardReuseSignature(args: {
   taskLookup: ReadonlyMap<string, Task>;
   liveEnrichment?: LiveTaskEnrichment;
   taskPullRequestsEnabled: boolean;
+  ciStatusSourceSignature: string;
 }): string {
   return [
     buildTaskSignature(args.task),
     buildDependencySignature(args.task, args.taskLookup),
     buildLiveEnrichmentSignature(args.liveEnrichment),
+    args.ciStatusSourceSignature,
     args.liveEnrichment?.prUrl || args.taskPullRequestsEnabled ? "pr:1" : "pr:0",
   ].join("||");
 }
@@ -179,6 +292,7 @@ function findReusableTaskCardViewModel(args: {
   liveEnrichment?: LiveTaskEnrichment;
   previousTaskViewModels?: ReadonlyMap<string, TaskCardViewModel>;
   taskPullRequestsEnabled: boolean;
+  ciStatusSourceSignature: string;
 }): TaskCardViewModel | null {
   const previous = args.previousTaskViewModels?.get(args.task.recordId);
   if (!previous) {
@@ -194,6 +308,7 @@ function findReusableTaskCardViewModel(args: {
     buildTaskSignature(previous.task),
     buildDependencyIndicatorSignature(previous.task, previous.dependencyIndicators),
     buildTaskCardLiveSignature(previous),
+    previous.ciStatusSourceSignature ?? "",
     previous.hasPullRequestMetadata ?? true ? "pr:1" : "pr:0",
   ].join("||");
 
@@ -267,7 +382,9 @@ export function buildTaskBoardViewModel(options: TaskBoardViewModelOptions): Tas
     priorityFilter,
     listWindow,
     taskScopeSprintId,
+    projectId = null,
     taskDispatches,
+    attentionItems = [],
     recentEvents,
     subtasks,
     taskPullRequestsEnabled = true,
@@ -286,30 +403,54 @@ export function buildTaskBoardViewModel(options: TaskBoardViewModelOptions): Tas
 
   const boardState = deriveTaskBoardState(allTasks, statusFilter, priorityFilter, listWindow);
 
-  let scopedDispatches = taskDispatches;
-  let scopedEvents = recentEvents;
+  let scopedDispatches = projectId
+    ? taskDispatches.filter((dispatch) => dispatch.projectId === projectId)
+    : taskDispatches;
+  let scopedEvents = projectId
+    ? recentEvents.filter((event) => event.projectId === projectId)
+    : recentEvents;
+  let scopedAttentionItems = projectId
+    ? attentionItems.filter((item) => {
+      const payloadProjectId = item.payload?.projectId;
+      return typeof payloadProjectId !== "string" || payloadProjectId === projectId;
+    })
+    : attentionItems;
 
   if (taskScopeSprintId) {
-    scopedDispatches = taskDispatches.filter((d) => d.sprintId === taskScopeSprintId);
-    scopedEvents = recentEvents.filter((e) => e.sprintId === taskScopeSprintId);
+    scopedDispatches = scopedDispatches.filter((dispatch) => dispatch.sprintId === taskScopeSprintId);
+    scopedEvents = scopedEvents.filter((event) => event.sprintId === taskScopeSprintId);
+    scopedAttentionItems = scopedAttentionItems.filter((item) => item.sprintId === taskScopeSprintId);
   }
 
   const liveEnrichmentMap = buildLiveTaskEnrichmentMap(subtasks, scopedDispatches, scopedEvents);
+  const subtasksByRecordId = new Map(
+    subtasks.flatMap((subtask) => subtask.record_id ? [[subtask.record_id, subtask] as const] : []),
+  );
 
   const taskViewModels = new Map<string, TaskCardViewModel>();
   for (const task of allTasks) {
     const liveEnrichment = liveEnrichmentMap.get(task.recordId);
+    const ciSource = buildTaskCiSource({
+      task,
+      subtask: subtasksByRecordId.get(task.recordId),
+      liveEnrichment,
+      events: scopedEvents,
+      attentionItems: scopedAttentionItems,
+    });
     const reusableViewModel = findReusableTaskCardViewModel({
       task,
       taskLookup,
       liveEnrichment,
       previousTaskViewModels,
       taskPullRequestsEnabled,
+      ciStatusSourceSignature: ciSource.signature,
     });
     taskViewModels.set(
       task.recordId,
       reusableViewModel ?? buildTaskCardViewModel(task, taskLookup, liveEnrichment, {
         taskPullRequestsEnabled,
+        ciStatusPresentation: ciSource.presentation,
+        ciStatusSourceSignature: ciSource.signature,
       })
     );
   }

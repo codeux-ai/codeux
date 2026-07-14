@@ -306,6 +306,19 @@ export class WorkspaceArtifactService {
     gitAuth?: GitHttpAuthOptions;
   }): Promise<string> {
     if (args.githubMode === "LOCAL") {
+      const localRef = `refs/heads/${args.workerBranch}`;
+      try {
+        const currentTip = (await runCommandStrict(
+          "git",
+          ["rev-parse", "--verify", localRef],
+          args.repoPath,
+        )).stdout.trim();
+        if (currentTip && await this.isAncestor(args.repoPath, args.baseRef, currentTip)) {
+          return currentTip;
+        }
+      } catch {
+        // A fresh worker branch may not exist in the host repository yet.
+      }
       return args.baseRef;
     }
 

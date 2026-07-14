@@ -22,6 +22,8 @@ import type { ExecutionHumanInterventionSummary, Sprint, SprintStatus } from "..
 import { WaveFluid } from "../ui/WaveFluid.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
 import { HumanInterventionBadge } from "../ui/HumanInterventionBadge.js";
+import { CiStatusBadge } from "../ui/CiStatusBadge.js";
+import type { CiStatusPresentation } from "../../lib/ci-status-presentation.js";
 import { SprintReviewBadge } from "./SprintReviewBadge.js";
 import { SprintActionMenu } from "./SprintActionMenu.js";
 import {
@@ -72,9 +74,11 @@ interface SprintCellProps {
   showcaseBusy?: boolean;
   markCompletedBusy?: boolean;
   markQaPassedBusy?: boolean;
+  updateBranchBusy?: boolean;
   isPaused?: boolean;
   pauseResumeBusy?: boolean;
   humanIntervention?: ExecutionHumanInterventionSummary | null;
+  ciStatus?: CiStatusPresentation | null;
   onPrimaryAction?: () => void;
   onPauseResume?: () => void;
   onAddTasks?: () => void;
@@ -82,6 +86,7 @@ interface SprintCellProps {
   onDelete?: () => void;
   onExport?: () => void;
   onOverrides?: () => void;
+  onUpdateBranch?: () => void;
   onToggleShowcase?: () => void;
   onMarkCompleted?: () => void;
   onMarkQaPassed?: () => void;
@@ -109,9 +114,11 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   showcaseBusy = false,
   markCompletedBusy = false,
   markQaPassedBusy = false,
+  updateBranchBusy = false,
   isPaused = false,
   pauseResumeBusy = false,
   humanIntervention = null,
+  ciStatus = null,
   onPrimaryAction,
   onPauseResume,
   onAddTasks,
@@ -119,6 +126,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   onDelete,
   onExport,
   onOverrides,
+  onUpdateBranch,
   onToggleShowcase,
   onMarkCompleted,
   onMarkQaPassed,
@@ -143,7 +151,9 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
     latestReviewStatus: sprint.latestReview?.status ?? null,
   });
 
-  const attentionOverride = (sprint.status === "running" || sprint.status === "paused") && humanIntervention?.attentionType
+  const attentionOverride = (sprint.status === "running" || sprint.status === "paused")
+    && humanIntervention?.attentionType
+    && !(ciStatus && humanIntervention.attentionType === "ci_fix_required")
     ? ATTENTION_OVERRIDE_MAP[humanIntervention.attentionType]
     : undefined;
 
@@ -340,11 +350,12 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
             {formatBubbleTime(sprint.createdAt)}
           </div>
         </div>
-{(showInterventionBadge || sprint.latestReview) && (
-          <div className="absolute right-4 top-4 z-[60] flex items-center gap-2 lg:right-5 lg:top-5">
+        {(showInterventionBadge || sprint.latestReview || ciStatus) && (
+          <div className="absolute right-4 top-4 z-[60] flex max-w-[11rem] flex-wrap items-center justify-end gap-2 lg:right-5 lg:top-5 lg:max-w-[13rem]">
             {sprint.latestReview && (
               <SprintReviewBadge summary={sprint.latestReview} compact align="right" />
             )}
+            <CiStatusBadge presentation={ciStatus} compact />
             {showInterventionBadge && humanIntervention && (
               <div className={reducedMotion ? "" : "animate-pulse"} style={interventionPulseStyle}>
                 <HumanInterventionBadge summary={humanIntervention} label="Needs you" compact align="right" />
@@ -459,6 +470,8 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
                 onExport={onExport}
                 onToggleShowcase={onToggleShowcase}
                 onOverrides={onOverrides}
+                onUpdateBranch={onUpdateBranch}
+                updateBranchBusy={updateBranchBusy}
                 onMarkCompleted={onMarkCompleted}
                 onMarkQaPassed={onMarkQaPassed}
                 onRollback={onRollback}

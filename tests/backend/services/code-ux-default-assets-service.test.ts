@@ -88,6 +88,9 @@ describe("Code UX default assets service", () => {
       "present missing tasks as an error",
       "list and cancel every obsolete pending planning-status wakeup created by you",
       "Never use a recurring schedule for planning status",
+      "`action: \"followup\"` to save an unplanned idle draft",
+      "`manage_scheduler` using `after_sprint_end`",
+      "Never call `plan` for that follow-up before its scheduled start",
     ]) {
       expect(instructions).toContain(requiredPlanningGuidance);
     }

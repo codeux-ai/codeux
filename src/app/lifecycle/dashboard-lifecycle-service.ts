@@ -93,7 +93,10 @@ import {
   getOnboardingRuntimeReadiness,
   invalidateOnboardingRuntimeReadinessCache,
 } from "../../services/onboarding-readiness-service.js";
-import type { SprintImportedTaskInput } from "../../contracts/project-management-types.js";
+import type {
+  SprintBranchUpdateResult,
+  SprintImportedTaskInput,
+} from "../../contracts/project-management-types.js";
 import { SprintManualActionService } from "../../services/sprint-manual-action-service.js";
 import type { McpConnectionInfo } from "../../contracts/mcp-connection-types.js";
 import type {
@@ -199,6 +202,7 @@ export interface BootDashboardDeps {
     selectedPort?: string | number | null;
   }) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>;
   listFileBrowserSessions: (projectId: string) => Promise<FileBrowserSession[]>;
+  updateSprintBranch: (projectId: string, sprintId: string) => Promise<SprintBranchUpdateResult>;
   startFileBrowserSession: (projectId: string, sprintId: string) => Promise<FileBrowserSession>;
   rebuildFileBrowserSession: (sessionId: string) => Promise<FileBrowserSession>;
   stopFileBrowserSession: (sessionId: string) => Promise<FileBrowserSession>;
@@ -740,6 +744,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     getSprint: (sprintId) => deps.projectManagementRepository.getSprint(sprintId),
     createSprint: (projectId, input) => deps.projectManagementRepository.createSprint(projectId, input),
     updateSprint: (sprintId, input) => deps.projectManagementRepository.updateSprint(sprintId, input),
+    updateSprintBranch: (projectId, sprintId) => deps.updateSprintBranch(projectId, sprintId),
     markSprintCompleted: (sprintId) => sprintManualActionService.markCompleted(sprintId),
     markSprintQaPassed: (sprintId) => sprintManualActionService.markQaPassed(sprintId),
     deleteSprint: (sprintId) => deps.projectManagementRepository.deleteSprint(sprintId),

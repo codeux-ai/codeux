@@ -167,7 +167,9 @@ describe("Dashboard Factory", () => {
       sprintTaskDispatchService: {
         startTask: vi.fn(),
       },
-      sprintOrchestrator: {},
+      sprintOrchestrator: {
+        setUnplannedSprintPlanner: vi.fn(),
+      },
       taskService: {},
     };
   });
@@ -184,6 +186,7 @@ describe("Dashboard Factory", () => {
 
     expect(ActivityCacheService).toHaveBeenCalledTimes(1);
     expect(TaskRerunService).toHaveBeenCalledTimes(1);
+    expect(mockSprintDeps.sprintOrchestrator.setUnplannedSprintPlanner).toHaveBeenCalledOnce();
 
     // Get the arguments passed to ActivityCacheService constructor
     const activityCacheArgs = vi.mocked(ActivityCacheService).mock.calls[0][0];
