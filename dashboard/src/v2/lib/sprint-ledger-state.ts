@@ -1,4 +1,11 @@
 import type { Sprint, SprintStatus } from "../types.js";
+import { createDashboardFormatters } from "../i18n/formatters.js";
+import {
+  translateDashboardMessage,
+  translateDashboardPlural,
+  type DashboardLocale,
+} from "../i18n/locales.js";
+import { sprintsMessages } from "../i18n/messages/sprints.js";
 
 export type SprintTableSortKey = "showcasePinned" | "sprintKey" | "name" | "status" | "tasksCount" | "completion" | "createdAt";
 export type SprintTableSortDirection = "asc" | "desc";
@@ -17,6 +24,20 @@ export const SPRINT_TABLE_SORT_LABELS: Record<SprintTableSortKey, string> = {
   completion: "Completion",
   createdAt: "Created",
 };
+
+const SPRINT_TABLE_SORT_MESSAGE_KEYS: Record<SprintTableSortKey, "showcase" | "sprintId" | "sprint" | "status" | "tasks" | "completion" | "created"> = {
+  showcasePinned: "showcase",
+  sprintKey: "sprintId",
+  name: "sprint",
+  status: "status",
+  tasksCount: "tasks",
+  completion: "completion",
+  createdAt: "created",
+};
+
+export const getSprintTableSortLabel = (key: SprintTableSortKey, locale: DashboardLocale = "en"): string => (
+  translateDashboardMessage(sprintsMessages, locale, SPRINT_TABLE_SORT_MESSAGE_KEYS[key])
+);
 
 export type SprintShowcaseFilter = "all" | "pinned" | "unpinned";
 export type SprintQaFilter = "all" | "missing" | "running" | "reviewed";
@@ -55,6 +76,19 @@ const STATUS_ORDER: Record<SprintStatus, number> = {
 
 export { STATUS_LABELS, STATUS_ORDER };
 
+const STATUS_MESSAGE_KEYS: Record<SprintStatus, "statusRunning" | "statusPaused" | "statusCompleted" | "statusFailed" | "statusCancelled" | "statusDraft"> = {
+  running: "statusRunning",
+  paused: "statusPaused",
+  completed: "statusCompleted",
+  failed: "statusFailed",
+  cancelled: "statusCancelled",
+  idle: "statusDraft",
+};
+
+export const getSprintStatusLabel = (status: SprintStatus, locale: DashboardLocale = "en"): string => (
+  translateDashboardMessage(sprintsMessages, locale, STATUS_MESSAGE_KEYS[status])
+);
+
 export const formatSprintKey = (sprint: Sprint, prefix: string = "SPR"): string => (
   sprint.number ? `${prefix}-${sprint.number}` : sprint.slug.toUpperCase()
 );
@@ -67,7 +101,7 @@ const compareString = (left: string, right: string): number => (
  * Filter sprints by a search query. Matches against sprint key,
  * name, status label, and goal text (case-insensitive).
  */
-export function filterSprints(sprints: Sprint[], filters: LedgerFilters, sprintKeyPrefix: string = "SPR"): Sprint[] {
+export function filterSprints(sprints: Sprint[], filters: LedgerFilters, sprintKeyPrefix: string = "SPR", locale: DashboardLocale = "en"): Sprint[] {
   let filtered = sprints;
 
   if (filters.status !== "all" && filters.status.size > 0) {
@@ -96,7 +130,7 @@ export function filterSprints(sprints: Sprint[], filters: LedgerFilters, sprintK
   return filtered.filter((sprint) => {
     const key = formatSprintKey(sprint, sprintKeyPrefix).toLowerCase();
     const name = sprint.name.toLowerCase();
-    const statusLabel = STATUS_LABELS[sprint.status].toLowerCase();
+    const statusLabel = getSprintStatusLabel(sprint.status, locale).toLocaleLowerCase(locale);
     const goal = (sprint.goal || "").toLowerCase();
     return (
       key.includes(lower)
@@ -144,8 +178,8 @@ export function sortSprints(sprints: Sprint[], sort: LedgerSort, sprintKeyPrefix
 /**
  * Filter then sort sprints for ledger display.
  */
-export function getLedgerSprints(sprints: Sprint[], filters: LedgerFilters, sort: LedgerSort, sprintKeyPrefix: string = "SPR"): Sprint[] {
-  return sortSprints(filterSprints(sprints, filters, sprintKeyPrefix), sort, sprintKeyPrefix);
+export function getLedgerSprints(sprints: Sprint[], filters: LedgerFilters, sort: LedgerSort, sprintKeyPrefix: string = "SPR", locale: DashboardLocale = "en"): Sprint[] {
+  return sortSprints(filterSprints(sprints, filters, sprintKeyPrefix, locale), sort, sprintKeyPrefix);
 }
 
 /**
@@ -237,8 +271,10 @@ export function getLedgerViewStateKey(filters: LedgerFilters, sort: LedgerSort, 
 
 export type BulkLedgerAction = "start" | "pin" | "unpin" | "delete" | null;
 
-export function formatSprintCount(count: number): string {
-  return `${count} sprint${count === 1 ? "" : "s"}`;
+export function formatSprintCount(count: number, locale: DashboardLocale = "en"): string {
+  return translateDashboardPlural(sprintsMessages, locale, "sprintCount", count, {
+    count: createDashboardFormatters(locale).formatNumber(count),
+  });
 }
 
 export interface LedgerOutcomeMessageOptions {
@@ -252,83 +288,86 @@ export function getLedgerOutcomeMessage(
   outcome: string,
   visibleCount: number,
   options: LedgerOutcomeMessageOptions = {},
+  locale: DashboardLocale = "en",
 ): string {
+  const { formatNumber } = createDashboardFormatters(locale);
   const visibleCopy = typeof options.filteredCount === "number" && options.filteredCount !== visibleCount
-    ? `Showing ${visibleCount} of ${formatSprintCount(options.filteredCount)} in the current result.`
+    ? translateDashboardPlural(sprintsMessages, locale, "showingFilteredPlural", options.filteredCount, { visible: formatNumber(visibleCount), total: formatNumber(options.filteredCount) })
     : typeof options.totalCount === "number"
-      ? `Showing ${visibleCount} of ${formatSprintCount(options.totalCount)}.`
-      : `${formatSprintCount(visibleCount)} visible.`;
+      ? translateDashboardPlural(sprintsMessages, locale, "showingTotalPlural", options.totalCount, { visible: formatNumber(visibleCount), total: formatNumber(options.totalCount) })
+      : translateDashboardPlural(sprintsMessages, locale, "visibleSprintsPlural", visibleCount, { count: formatNumber(visibleCount) });
   const selectedCopy = typeof options.selectedCount === "number"
     ? options.selectedCount === 0
-      ? "No sprints selected."
-      : `${options.selectedCount} selected.`
+      ? translateDashboardMessage(sprintsMessages, locale, "noSprintsSelected")
+      : translateDashboardMessage(sprintsMessages, locale, "selectedShort", { count: formatNumber(options.selectedCount) })
     : "";
   const removedCopy = options.removedSelectedCount
-    ? `${options.removedSelectedCount} hidden selection${options.removedSelectedCount === 1 ? "" : "s"} removed.`
+    ? translateDashboardPlural(sprintsMessages, locale, "hiddenSelectionsRemoved", options.removedSelectedCount, { count: formatNumber(options.removedSelectedCount) })
     : "";
 
   return [outcome, visibleCopy, selectedCopy, removedCopy].filter(Boolean).join(" ");
 }
 
-export function formatSelectedSprintNamesForConfirmation(sprints: Sprint[], maxNames: number = 3): string {
+export function formatSelectedSprintNamesForConfirmation(sprints: Sprint[], maxNames: number = 3, locale: DashboardLocale = "en"): string {
   if (sprints.length === 0) {
-    return "No selected sprints.";
+    return translateDashboardMessage(sprintsMessages, locale, "noSelectedSprints");
   }
   const visibleNames = sprints.slice(0, maxNames).map((sprint) => `"${sprint.name}"`);
+  const names = createDashboardFormatters(locale).formatList(visibleNames, { type: "conjunction" });
   const remainingCount = sprints.length - visibleNames.length;
   if (remainingCount <= 0) {
-    return `Affected sprints: ${visibleNames.join(", ")}.`;
+    return translateDashboardMessage(sprintsMessages, locale, "affectedSprints", { names });
   }
-  return `Affected sprints: ${visibleNames.join(", ")}, and ${remainingCount} more sprint${remainingCount === 1 ? "" : "s"}.`;
+  return translateDashboardPlural(sprintsMessages, locale, "affectedSprintsMore", remainingCount, {
+    names,
+    count: createDashboardFormatters(locale).formatNumber(remainingCount),
+  });
 }
 
-export function getBulkActionMessage(action: BulkLedgerAction, selectedCount: number, pending: boolean): string {
+export function getBulkActionMessage(action: BulkLedgerAction, selectedCount: number, pending: boolean, locale: DashboardLocale = "en"): string {
   if (selectedCount === 0) {
-    return "No sprints selected.";
+    return translateDashboardMessage(sprintsMessages, locale, "noSprintsSelected");
   }
-  const suffix = `${selectedCount} selected sprint${selectedCount === 1 ? "" : "s"}`;
+  const selection = translateDashboardPlural(sprintsMessages, locale, "selectedSprintsNoun", selectedCount, {
+    count: createDashboardFormatters(locale).formatNumber(selectedCount),
+  });
   if (!action) {
-    return `Bulk controls apply to ${suffix}.`;
+    return translateDashboardMessage(sprintsMessages, locale, "bulkControlsApplyLocalized", { selection });
   }
+  const actionLabel = getBulkActionButtonLabel(action, pending, locale);
   if (pending) {
-    const verb = action === "delete" ? "Deleting" : action === "start" ? "Starting" : action === "pin" ? "Pinning" : "Unpinning";
-    return `${verb} ${suffix}.`;
+    return translateDashboardMessage(sprintsMessages, locale, "bulkActionRunningLocalized", { action: actionLabel, selection });
   }
-  const verb = action === "delete" ? "Delete" : action === "start" ? "Start" : action === "pin" ? "Pin" : "Unpin";
-  return `${verb} will apply to ${suffix}.`;
+  return translateDashboardMessage(sprintsMessages, locale, "bulkActionWillApplyLocalized", { action: actionLabel, selection });
 }
 
-export function getBulkActionButtonLabel(action: Exclude<BulkLedgerAction, null>, pending: boolean): string {
+export function getBulkActionButtonLabel(action: Exclude<BulkLedgerAction, null>, pending: boolean, locale: DashboardLocale = "en"): string {
   if (!pending) {
-    if (action === "start") return "Start";
-    if (action === "pin") return "Pin";
-    if (action === "unpin") return "Unpin";
-    return "Delete";
+    if (action === "start") return translateDashboardMessage(sprintsMessages, locale, "start");
+    if (action === "pin") return translateDashboardMessage(sprintsMessages, locale, "pin");
+    if (action === "unpin") return translateDashboardMessage(sprintsMessages, locale, "unpin");
+    return translateDashboardMessage(sprintsMessages, locale, "delete");
   }
-  if (action === "start") return "Starting";
-  if (action === "pin") return "Pinning";
-  if (action === "unpin") return "Unpinning";
-  return "Deleting";
+  if (action === "start") return translateDashboardMessage(sprintsMessages, locale, "starting");
+  if (action === "pin") return translateDashboardMessage(sprintsMessages, locale, "pinning");
+  if (action === "unpin") return translateDashboardMessage(sprintsMessages, locale, "unpinning");
+  return translateDashboardMessage(sprintsMessages, locale, "deleting");
 }
 
-export function getBulkPendingReason(action: BulkLedgerAction, selectedCount: number): string {
-  const suffix = `${selectedCount} selected sprint${selectedCount === 1 ? "" : "s"}`;
+export function getBulkPendingReason(action: BulkLedgerAction, selectedCount: number, locale: DashboardLocale = "en"): string {
   if (selectedCount === 0) {
-    return "Bulk controls are disabled because no sprints are selected.";
+    return translateDashboardMessage(sprintsMessages, locale, "bulkDisabledNone");
   }
-  if (action === "start") {
-    return `Bulk controls are disabled while starting ${suffix}.`;
+  const selection = translateDashboardPlural(sprintsMessages, locale, "selectedSprintsNoun", selectedCount, {
+    count: createDashboardFormatters(locale).formatNumber(selectedCount),
+  });
+  if (action) {
+    return translateDashboardMessage(sprintsMessages, locale, "bulkDisabledRunningLocalized", {
+      action: getBulkActionButtonLabel(action, true, locale).toLocaleLowerCase(locale),
+      selection,
+    });
   }
-  if (action === "pin") {
-    return `Bulk controls are disabled while pinning ${suffix}.`;
-  }
-  if (action === "unpin") {
-    return `Bulk controls are disabled while unpinning ${suffix}.`;
-  }
-  if (action === "delete") {
-    return `Bulk controls are disabled while deleting ${suffix}.`;
-  }
-  return `Bulk controls are disabled while an action runs for ${suffix}.`;
+  return translateDashboardMessage(sprintsMessages, locale, "bulkDisabledGenericLocalized", { selection });
 }
 
 export function getSortAriaSort(sort: LedgerSort, key: SprintTableSortKey): "none" | "ascending" | "descending" {
@@ -336,16 +375,21 @@ export function getSortAriaSort(sort: LedgerSort, key: SprintTableSortKey): "non
   return sort.direction === "asc" ? "ascending" : "descending";
 }
 
-export function getSortButtonLabel(sort: LedgerSort, key: SprintTableSortKey): string {
-  return `Sort by ${SPRINT_TABLE_SORT_LABELS[key]}`;
+export function getSortButtonLabel(sort: LedgerSort, key: SprintTableSortKey, locale: DashboardLocale = "en"): string {
+  return translateDashboardMessage(sprintsMessages, locale, "sortBy", { column: getSprintTableSortLabel(key, locale) });
 }
 
-export function getSortButtonDescription(sort: LedgerSort, key: SprintTableSortKey): string {
+export function getSortButtonDescription(sort: LedgerSort, key: SprintTableSortKey, locale: DashboardLocale = "en"): string {
+  const direction = (value: SprintTableSortDirection): string => translateDashboardMessage(sprintsMessages, locale, value === "asc" ? "ascending" : "descending");
   const currentState = sort.key === key
-    ? `Currently sorted ${sort.direction === "asc" ? "ascending" : "descending"}`
-    : "Not currently sorted";
+    ? translateDashboardMessage(sprintsMessages, locale, "currentlySorted", { direction: direction(sort.direction) })
+    : translateDashboardMessage(sprintsMessages, locale, "notCurrentlySorted");
   const next = nextSort(sort, key);
-  return `${currentState}. Activate to sort ${SPRINT_TABLE_SORT_LABELS[key]} ${next.direction === "asc" ? "ascending" : "descending"}.`;
+  return translateDashboardMessage(sprintsMessages, locale, "activateSort", {
+    current: currentState,
+    column: getSprintTableSortLabel(key, locale),
+    direction: direction(next.direction),
+  });
 }
 
 /**

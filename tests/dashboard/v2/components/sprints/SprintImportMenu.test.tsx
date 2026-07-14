@@ -5,11 +5,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, fireEvent, screen, cleanup } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { SprintImportMenu } from "../../../../../dashboard/src/v2/components/sprints/SprintImportMenu";
+import { renderWithI18n } from "../../../render-with-i18n.js";
 
 expect.extend(matchers);
 
 describe("SprintImportMenu", () => {
-  const renderMenu = (overrides: Partial<Parameters<typeof SprintImportMenu>[0]> = {}) => render(
+  const renderMenu = (overrides: Partial<Parameters<typeof SprintImportMenu>[0]> = {}) => renderWithI18n(
     <SprintImportMenu
       disabled={false}
       onImportMarkdown={vi.fn()}
@@ -121,7 +122,7 @@ describe("SprintImportMenu", () => {
 
   it("clicks Jira issue import", () => {
     const onImportJira = vi.fn();
-    render(
+    renderWithI18n(
       <SprintImportMenu
         disabled={false}
         onImportMarkdown={vi.fn()}
@@ -157,7 +158,7 @@ describe("SprintImportMenu", () => {
       onImportFigma: vi.fn(),
       onImportMural: vi.fn(),
     };
-    render(<SprintImportMenu disabled={false} {...handlers} />);
+    renderWithI18n(<SprintImportMenu disabled={false} {...handlers} />);
 
     const trigger = screen.getAllByRole("button").find(btn => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown"));
     fireEvent.click(trigger);
@@ -185,7 +186,7 @@ describe("SprintImportMenu", () => {
       onImportFigma: vi.fn(),
       onImportMural: vi.fn(),
     };
-    render(<SprintImportMenu disabled={false} {...handlers} />);
+    renderWithI18n(<SprintImportMenu disabled={false} {...handlers} />);
 
     const trigger = screen.getAllByRole("button").find(btn => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown"));
     fireEvent.click(trigger);

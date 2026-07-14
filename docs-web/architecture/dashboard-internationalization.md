@@ -12,6 +12,8 @@ The runtime is isolated under `dashboard/src/v2/i18n/`:
 - `context.tsx` provides locale state, synchronous switching, translated messages, cross-tab synchronization, and `<html lang>` updates.
 - `messages/` contains feature-owned catalogs so lazy route bundles do not become part of an eager monolithic catalog.
 
+Onboarding owns `messages/onboarding.ts`. Its catalog covers the full first-run flow, readiness and installation framing, provider setup, validation and save announcements, plus the responsive guided tour. Locale-explicit helpers localize reducer defaults and other pure presentation data without coupling settings drafts or persistence helpers to Preact context.
+
 The provider restores storage and updates `document.documentElement.lang` before the application root renders. Missing, invalid, unavailable, or throwing storage safely resolves to English. Storage events from another tab update locale state immediately; clearing the key resets the dashboard to English.
 
 ## Adding a feature catalog
@@ -40,3 +42,5 @@ Keep each catalog with its owning feature and import it only where the feature i
 The lazy `/agents` route imports its own `messages/agents.ts` catalog. English and German cover the roster, preset detail/editor, validation, avatar customization, instruction files, memory and MCP configuration, repository push feedback, compatibility updates, loading and empty states, and accessibility labels. Dates, counts, token estimates, byte sizes, and plural messages use the active locale.
 
 Agent-authored and runtime data stays byte-for-byte outside translation: preset names and labels, system instructions, memory templates, Markdown files, MCP server/tool names, storage names, provider/model names, repository and invocation output, and API errors. Persisted identifiers and configuration values are likewise unchanged; the route translates only their presentation.
+
+For onboarding specifically, provider and dependency names, detected paths, model IDs, command snippets and installation output, and API-returned readiness diagnostics stay verbatim. The locale changes only dashboard-owned framing and accessible names; submitted provider IDs, enums, credentials, and settings drafts are unchanged.

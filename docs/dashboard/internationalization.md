@@ -45,6 +45,8 @@ Interpolation replaces only named `{variable}` tokens through literal string sub
 
 `useDashboardI18n` exposes `formatNumber`, `formatDate`, `formatTime`, `formatRelativeTime`, and `formatList`. Each function is rebound when the active locale changes and accepts the corresponding native `Intl` options. New localized UI should use these functions instead of adding fixed `en-US` formatters.
 
+The Sprints route owns its catalog in `dashboard/src/v2/i18n/messages/sprints.ts`. The page header, gallery, ledger, menus, bulk actions, importers, rollback flow, status summaries, empty/error states, and ARIA announcements follow the active locale. Sprint and task records, linked issue keys/titles/content, provider names, Git/PR details, review output, runtime events, importer warnings, and API error messages are data rather than interface copy and remain verbatim. Dates, times, counts, percentages, and list summaries use the active locale without changing stored UTC timestamps or sort keys.
+
 ## Translation scope
 
 The initial application bundle translates only root-owned shell copy: the skip link, main landmark label, route loading announcement, and hidden footer. Route catalogs should be imported with their route when those features are localized.
@@ -56,6 +58,8 @@ Localization applies only to dashboard-authored interface copy. API responses, p
 The `/agents` route owns `messages/agents.ts`. Its English and German catalog covers roster controls, preset details and editing, validation, avatar controls, instruction files, memory filters, MCP access, repository push feedback, compatibility-update notices, empty/loading/error states, and accessible labels. Dates, counts, token estimates, file sizes, and plurals use the active locale's native formatters.
 
 The localization boundary is intentionally strict. Preset names and labels, system instructions, memory templates, Markdown file contents, MCP server and tool names, storage names, provider/model names, invocation and repository output, and API error messages pass through verbatim. Stable configuration identifiers—such as avatar part values, memory tiers, MCP tool IDs, and sync states—also remain unchanged; only their dashboard presentation is localized.
+
+The feature-gated custom-dashboard workspace owns its catalog in `messages/custom-dashboards.ts`. It localizes management, editor, viewer, validation, publication, and accessibility chrome. Persisted dashboard bundles and user-authored fields remain locale-neutral; known validation issue codes may select a localized explanation, while API, build, log, preview, and iframe diagnostics remain verbatim.
 
 ## Verification
 
