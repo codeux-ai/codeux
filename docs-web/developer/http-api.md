@@ -134,6 +134,78 @@ This page lists every endpoint, grouped by domain. Path parameters use `:name` n
 
 ---
 
+## External chat connectors
+
+Connection reads and delivery responses are redacted. Remote connection create/update/verify requires TLS, `credential_admin`, and `CODE_UX_REMOTE_CREDENTIAL_MANAGEMENT=true`. Binding/delivery authorization derives from each persisted binding's project. Provider callback ingress authenticates with connector credentials/provider signatures rather than dashboard bearer identity.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/api/chat-providers/setup-definitions` | Provider schemas, required fields, official references, limitations, and ingress template. |
+| `GET` | `/api/chat-providers/connections` | Redacted connections; filters: `providerKind`, `enabledOnly`. |
+| `GET` | `/api/chat-providers/connections/:connectionId` | Redacted connection plus canonical ingress URL/setup hints. |
+| `POST` | `/api/chat-providers/connections` | Validated draft/connection creation with write-only secrets. |
+| `PATCH` | `/api/chat-providers/connections/:connectionId` | Metadata/setup/secret update; transport changes invalidate verification. |
+| `DELETE` | `/api/chat-providers/connections/:connectionId` | Delete after project authorization; cascades bindings/deliveries. |
+| `POST` | `/api/chat-providers/connections/:connectionId/verify` | Bounded configuration/provider verification with sanitized result. |
+| `GET` | `/api/chat-providers/health` | Persisted connector counts/outcomes; no provider call. |
+| `GET` | `/api/chat-providers/diagnostics` | Alias for connector health. |
+| `GET` | `/api/chat-providers/channel-bindings` | Authorized binding list; connection/project/channel/enabled filters. |
+| `POST` | `/api/chat-providers/channel-bindings` | Create an authorized project/channel binding. |
+| `PATCH` | `/api/chat-providers/channel-bindings/:bindingId` | Update routing/selectors/flags after old/new project authorization. |
+| `DELETE` | `/api/chat-providers/channel-bindings/:bindingId` | Delete an authorized binding. |
+| `GET` | `/api/chat-providers/deliveries` | Sanitized inbound/outbound records; omits payload and lease fields. |
+| `GET` | `/api/chat-providers/deliveries/:deliveryId` | One sanitized, project-authorized delivery. |
+| `POST` | `/api/chat-providers/deliveries/:deliveryId/retry` | Manual resend; requires explicit approval body. |
+| `POST` | `/api/chat-providers/deliveries/:deliveryId/cancel` | Terminal cancellation and in-flight abort. |
+| `GET` | `/api/chat-providers/ingress/:providerConnectionId` | Provider challenge/handshake where configured. |
+| `POST` | `/api/chat-providers/ingress/:providerConnectionId` | Authenticated provider/bridge callback ingress. |
+
+Canonical provider configuration URL:
+
+```text
+https://codeux.example.test/api/chat-providers/ingress/connection-example
+```
+
+The compatibility alias `/api/chat-providers/connections/:connectionId/ingress` remains implemented but should not be used in new setup.
+
+Verification:
+
+```http
+POST /api/chat-providers/connections/connection-example/verify
+```
+
+```json
+{
+  "providerConnectionId": "connection-example",
+  "providerKind": "slack",
+  "status": "failed",
+  "providerErrorCode": "verification_timeout",
+  "retryable": true,
+  "issues": ["Provider verification timed out."],
+  "diagnostics": null
+}
+```
+
+Approved retry and cancellation:
+
+```http
+POST /api/chat-providers/deliveries/delivery-example/retry
+Content-Type: application/json
+
+{ "approval": { "confirmed": true } }
+```
+
+```http
+POST /api/chat-providers/deliveries/delivery-example/cancel
+Content-Type: application/json
+
+{}
+```
+
+Failure contract: malformed input returns validation errors (including limits outside 1-500); missing records return 404; persisted-project authorization failures return 403; unavailable verification/delivery control returns 503. Verification uses a bounded timeout and sanitizes provider data. Retryable provider outages/429 persist `retryable_failure` plus `nextAttemptAt`; invalid credentials/permissions are terminal until corrected. Public errors never contain secrets, authorization headers, signed URLs, payload text, provider response bodies, or lease ownership.
+
+---
+
 ## Execution invocations
 
 | Method | Path | Description |

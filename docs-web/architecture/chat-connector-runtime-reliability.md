@@ -24,6 +24,12 @@ The verification service resolves credentials ephemerally, runs profile validati
 
 Connector health aggregates persisted counts and last outcomes without network calls. It remains separate from `/health` and `/ready`, so optional connector failures do not make the runtime unready.
 
+Secret replacement/clearing, bridge-mode changes, and setup replacement invalidate the previous verification outcome. Display-name, enabled, and lifecycle-status-only edits preserve it. Meta send testing remains explicit test-number opt-in; Telegram `getMe`, Slack `auth.test`, and Discord current-user checks require test credentials; Teams uses deterministic Emulator-shaped/mocked contract coverage; iMessage has no provider-native bot sandbox. A credential-gated skip is not a pass.
+
+## Encrypted legacy migration
+
+New and rotated connector secrets are sealed envelopes. Startup migration waits for secure key readiness, seals each legacy row, and compare-and-set commits before clearing the plaintext source. A partial/blocked run keeps the source intact and can resume. Recovery restores the matching key provider and repeats until no pending rows remain; rollback restores a matched database/key backup and never recreates plaintext.
+
 ## Resumable sessions and lifecycle
 
 The session runtime consumes each profile's required/session-scope declarations. Managed drivers are optional, so unavailable or disabled connectors never block dashboard readiness. Durable sessions resume after restart with bounded reconnect attempts and one timer/controller per session. The production factory shares the same registry-backed secret, verification, ingress, outbound, and session service instances across REST routes, dashboard chat management, standalone MCP management, and lifecycle hooks.

@@ -22,13 +22,14 @@ Gemini CLI remains supported for existing and new configurations but is deprecat
 
 Settings -> Integrations -> Chat Connectors includes external chat connector connections for WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, and Discord channels. These are not AI model providers and they do not affect invocation routing. They bind authenticated external chat bridges to Code UX projects so inbound messages can enter project chat threads and assistant replies can be delivered back through the same bridge.
 
-Supported bridge modes are:
+Connection modes are explicit per connector:
 
 - `managed_bridge` — HTTP delivery to a configured managed bridge URL.
 - `webhook` — HTTP delivery to a configured generic bridge or bot gateway URL.
 - `native_bridge` — shell-free local command execution for native bridge scripts, with JSON on stdin and optional bridge token environment variables.
+- `official_api` — provider-native authentication and fixed provider endpoints implemented by the WhatsApp, Telegram, Slack, Microsoft Teams, and Discord profiles.
 
-Code UX does not call the official WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, or Discord APIs directly. Provider-specific API interaction belongs to the managed bridge, webhook gateway, or native bridge you connect.
+iMessage supports managed and native third-party bridges only; Apple does not expose an official public personal-iMessage bot endpoint. Managed, webhook, and native endpoints remain operator-selected integrations and are not provider-certified merely because a connector profile is registered. Use only the modes advertised by the selected profile.
 
 Chat provider setup stores connection records, write-only secrets, channel bindings, routing hints, and outbound delivery state separately from AI provider credentials. Webhook ingress requires HMAC signatures when a signing secret is configured; Managed and native bridge ingress use bearer-style bridge tokens. Shared external channels can route to multiple projects only when a selector or routing hint chooses exactly one binding.
 

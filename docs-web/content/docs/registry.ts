@@ -820,8 +820,8 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     id: 'architecture-external-chat-providers',
     path: '/docs/architecture-external-chat-providers',
     section: 'Architecture',
-    title: "External chat connectors",
-    description: "Code UX persists external chat provider configuration separately from MCP listener connections and dashboard conversation messages. The runtime stays adapter-neutral: it records provider setup, bridge mode, channel ro...",
+    title: "External Chat Providers",
+    description: "Code UX connector profiles declare setup, provider-native or bridge transport, ingress authentication, identity, verification, and session requirements. Shared services own encrypted secrets, authorized project routin...",
   },
   'architecture-configuration-resolution': {
     id: 'architecture-configuration-resolution',
@@ -891,7 +891,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/architecture-chat-connectors-discord',
     section: 'Architecture',
     title: "Discord Connector Profile",
-    description: "Discord is registered only with the existing webhook bot/gateway transport. Its module owns the unchanged setup schema, message normalizer, authentication headers and signature bases, outbound gateway mapping, respons...",
+    description: "Discord has two independently selected transports. Existing webhook mode preserves custom bot/gateway URLs. Provider-native official_api owns Discord HTTP interaction authentication, Gateway v10 delivery, REST replies...",
   },
   'architecture-chat-connectors-imessage': {
     id: 'architecture-chat-connectors-imessage',
@@ -912,7 +912,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/architecture-chat-connectors-microsoft-teams',
     section: 'Architecture',
     title: "Microsoft Teams Connector Profile",
-    description: "Microsoft Teams is registered with managed_bridge and webhook transports. Its module owns the unchanged setup schemas, Bot Framework activity normalizer, ingress authentication metadata, outbound request mapping, resp...",
+    description: "Microsoft Teams retains managed_bridge and custom webhook transports and provides a direct official_api profile based on Bot Connector Activities. Managed/custom endpoints remain operator-selected and are not represen...",
   },
   'architecture-chat-connectors-slack': {
     id: 'architecture-chat-connectors-slack',

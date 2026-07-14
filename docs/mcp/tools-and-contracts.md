@@ -1175,7 +1175,7 @@ For preview calls:
 
 For external chat provider calls:
 - `manage_chat_providers` supports `list_provider_definitions`, `list_connections`, `get_connection`, `create_connection`, `update_connection`, `delete_connection`, `list_channel_bindings`, `create_channel_binding`, `update_channel_binding`, `delete_channel_binding`, `verify_connection`, `get_health`, `list_deliveries`, `retry_delivery`, `cancel_delivery`, and compatibility action `list_outbound_deliveries`.
-- Supported provider kinds are `whatsapp`, `imessage`, `telegram`, `slack`, `microsoft-teams`, and `discord`. Each typed profile advertises only the `managed_bridge`, `webhook`, `native_bridge`, or `official_api` modes it implements.
+- Supported provider kinds are `whatsapp`, `imessage`, `telegram`, `slack`, `microsoft-teams`, and `discord`. Each typed profile advertises only the `managed_bridge`, `webhook`, `native_bridge`, or `official_api` modes it implements. Official modes call profile-pinned provider endpoints; the other modes use operator-selected managed/custom/local bridges. Registry presence is not provider certification or production readiness.
 - Connection responses return redacted credential metadata and generated ingress URL guidance; raw `secrets` are not exposed in success responses, validation errors, or approval envelopes.
 - `delete_connection` and `delete_channel_binding` require approval confirmation.
 - `update_connection` requires a one-use approval handshake before replacing secrets or changing executable/endpoint setup. `retry_delivery` also requires one-use approval. Preflight state is bound to the exact redacted payload and expires after 15 minutes.
@@ -1235,6 +1235,68 @@ Inspect retryable outbound delivery state:
   "limit": 25
 }
 ```
+
+Run the connection's bounded verification contract:
+
+```json
+{
+  "action": "verify_connection",
+  "providerConnectionId": "connection-generic"
+}
+```
+
+Official Telegram `getMe`, Slack `auth.test`, and Discord current-user checks require explicitly configured test credentials. Meta send testing is a separate test-number opt-in. Teams verification coverage is deterministic Emulator/contract testing rather than a public sandbox, and iMessage has no provider-native bot sandbox. A credential-gated skip is not a successful live result.
+
+A redacted timeout/failure result retains classification but not upstream URL, request/response body, signed data, identity values, or credentials:
+
+```json
+{
+  "result": {
+    "status": "success",
+    "domain": "chat_providers",
+    "action": "verify_connection",
+    "verification": {
+      "providerConnectionId": "connection-generic",
+      "providerKind": "slack",
+      "status": "failed",
+      "verifiedAt": "2030-01-01T00:00:00.000Z",
+      "capabilities": ["setup", "authentication", "handshake", "outbound"],
+      "providerErrorCode": "verification_timeout",
+      "retryable": true,
+      "issues": ["Provider verification timed out."],
+      "diagnostics": null
+    }
+  }
+}
+```
+
+Manual retry is a two-call approval flow. The first call returns `approvalRequired`; repeat the exact action/payload only after human confirmation:
+
+```json
+{
+  "action": "retry_delivery",
+  "deliveryId": "delivery-generic"
+}
+```
+
+```json
+{
+  "action": "retry_delivery",
+  "deliveryId": "delivery-generic",
+  "approval": { "confirmed": true }
+}
+```
+
+Cancellation does not send again and therefore does not require the retry approval:
+
+```json
+{
+  "action": "cancel_delivery",
+  "deliveryId": "delivery-generic"
+}
+```
+
+Validation rejects unsupported provider/mode combinations, missing required IDs, non-object setup/secrets, and `limit` outside 1-500. Credential mutation/verification can be disabled for remote MCP clients. Binding and delivery operations authorize the project stored on the binding; an unauthorized principal receives a generic project-authorization failure rather than foreign delivery data. Provider 429/temporary failures return `retryable: true` with a sanitized retry schedule, while invalid authentication/permissions are terminal until configuration changes.
 
 For settings patch calls, `value` may be any JSON value, including strings, booleans, numbers, `null`, arrays, or objects.
 Settings patch and replacement calls still require the stateful human-confirmation gate described above.

@@ -37,6 +37,6 @@ The runtime checks Slack's `ok`/`error` envelope even when HTTP itself succeeded
 
 ## Verification diagnostics
 
-The live official-mode check calls the fixed `https://slack.com/api/auth.test` endpoint. It verifies that Slack accepts the token, the token resolves to a bot, and the returned workspace matches the configured workspace. When Slack reports granted scopes, the check diagnoses a missing `chat:write` scope. Channel membership is confirmed by `chat.postMessage`; `not_in_channel` is returned as a channel-membership capability failure. Diagnostics describe the capability state without echoing Slack workspace, user, bot, or token identifiers. See [`auth.test`](https://api.slack.com/methods/auth.test).
+The live official-mode check calls the fixed `https://slack.com/api/auth.test` endpoint. It verifies that Slack accepts the token, the token resolves to a bot, and the returned workspace matches the configured workspace. It requires an explicitly configured test bot token; a credential-gated skip is not a pass. When Slack reports granted scopes, the check diagnoses a missing `chat:write` scope. Channel membership is confirmed by `chat.postMessage`; `not_in_channel` is returned as a channel-membership capability failure. Diagnostics describe the capability state without echoing Slack workspace, user, bot, or token identifiers. See [`auth.test`](https://api.slack.com/methods/auth.test).
 
 Slack token-shaped values are redacted from errors, persisted delivery metadata, audit/log output, and snapshots.

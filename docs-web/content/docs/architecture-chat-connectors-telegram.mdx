@@ -25,7 +25,7 @@ The token-bearing request URL is transient. Error text, logs, response metadata,
 
 ## Verification
 
-The profile advertises live verification for `official_api`. Verification calls `getMe`, optionally checks the configured username, and returns sanitized `getWebhookInfo` diagnostics. It never invokes webhook mutation methods, so checking a connection cannot replace or delete an operator-managed webhook.
+The profile advertises live verification for `official_api`. Verification calls `getMe`, optionally checks the configured username, and returns sanitized `getWebhookInfo` diagnostics. It requires explicitly configured test bot credentials; a skipped credential-gated check is not a pass. It never invokes webhook mutation methods, so checking a connection cannot replace or delete an operator-managed webhook.
 
 Registry construction remains static and performs no network requests. Provider calls occur only through explicit outbound delivery or live verification actions.
 
