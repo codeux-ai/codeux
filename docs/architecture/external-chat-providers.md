@@ -15,14 +15,14 @@ Supported providers:
 - `microsoft-teams`
 - `discord`
 
-The bridge-mode type includes `managed_bridge`, `webhook`, `native_bridge`, and the additive `official_api` value. A profile advertises only modes it implements; Discord implements `official_api` while preserving its existing webhook schema, and the other profiles retain their existing modes:
+The bridge-mode type includes `managed_bridge`, `webhook`, `native_bridge`, and the additive `official_api` value. A profile advertises only modes it implements; the baseline profiles preserve the existing schemas below and do not yet advertise `official_api`:
 
 - WhatsApp: managed bridge or webhook.
 - iMessage: managed bridge or macOS native bridge command.
 - Telegram: managed bridge or bot webhook.
 - Slack: managed bridge or Events webhook.
 - Microsoft Teams: managed bridge or bot webhook.
-- Discord: bot/webhook gateway or provider-native official API.
+- Discord: bot/webhook gateway.
 
 Public records expose redacted credential metadata only. Runtime code that needs secrets resolves an ephemeral connection profile through `ChatProviderSecretService`; repository reads never decrypt connector credentials.
 

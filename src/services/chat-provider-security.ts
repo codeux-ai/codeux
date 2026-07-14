@@ -1,22 +1,17 @@
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHash, createHmac, timingSafeEqual } from "crypto";
 import type { ChatProviderConnectionInternalRecord, ChatProviderSecretConfig } from "../contracts/chat-provider-types.js";
 import { getChatConnectorProfileForMode } from "../domain/chat-connectors/registry.js";
 import type { ChatConnectorHmacAuthentication } from "../domain/chat-connectors/types.js";
 
 export interface ChatProviderIngressSecurityRequest {
   headers: Record<string, string | string[] | undefined>;
-  rawBody: string | Uint8Array;
+  rawBody: string;
   now?: Date;
 }
 
 export interface ChatProviderIngressSecurityResult {
   authenticated: true;
-  method: string;
-  immediateResponse?: {
-    statusCode: number;
-    headers: Readonly<Record<string, string>>;
-    body: unknown;
-  };
+  method: "bearer" | "header_secret" | "hmac";
 }
 
 export class ChatProviderIngressSecurityError extends Error {
@@ -53,33 +48,26 @@ export class ChatProviderIngressSecurity {
     }
 
     const profile = getChatConnectorProfileForMode(connection.providerKind, connection.bridgeMode);
-    const now = request.now ?? new Date();
-    const providerResult = profile.ingress.authenticateProviderRequest?.({
-      connection,
-      headers: request.headers,
-      rawBody: request.rawBody,
-      now,
-    }) ?? null;
-    if (providerResult) {
-      if (!providerResult.authenticated) {
-        throw new ChatProviderIngressSecurityError(
-          providerResult.code,
-          providerResult.message,
-          providerResult.statusCode,
-        );
-      }
-      return {
-        authenticated: true,
-        method: providerResult.method,
-        ...(providerResult.immediateResponse ? { immediateResponse: providerResult.immediateResponse } : {}),
-      };
-    }
     const authentication = profile.ingress.authentication[connection.bridgeMode];
     if (!authentication) {
       throw new ChatProviderIngressSecurityError("unsupported_authentication", "Unsupported chat provider authentication mode.", 403);
     }
-    const nowMs = now.getTime();
-    const timestamp = this.requireFreshTimestamp(request.headers, authentication.timestampHeaders, nowMs);
+    if (authentication.type === "header_secret") {
+      const expectedToken = firstConfiguredSecretExact(connection.secrets, authentication.secretKeys);
+      if (!expectedToken) {
+        throw new ChatProviderIngressSecurityError("missing_header_secret", "Webhook secret token is not configured.", 403);
+      }
+      const actualToken = firstHeaderExact(request.headers, authentication.tokenHeaders);
+      if (actualToken === undefined || !constantTimeEqualsExact(actualToken, expectedToken)) {
+        throw new ChatProviderIngressSecurityError("invalid_header_secret", "Invalid webhook secret token.", 401);
+      }
+      return { authenticated: true, method: "header_secret" };
+    }
+
+    const nowMs = (request.now ?? new Date()).getTime();
+    const timestamp = authentication.timestampRequirement === "none"
+      ? null
+      : this.requireFreshTimestamp(request.headers, authentication.timestampHeaders, nowMs);
 
     if (authentication.type === "hmac_sha256") {
       const hmacSecret = firstConfiguredSecret(connection.secrets, authentication.secretKeys);
@@ -94,7 +82,7 @@ export class ChatProviderIngressSecurity {
         connectionId: connection.id,
         signature,
         timestamp,
-        rawBody: rawBodyToString(request.rawBody),
+        rawBody: request.rawBody,
         secret: hmacSecret,
         nowMs,
         authentication,
@@ -151,7 +139,7 @@ export class ChatProviderIngressSecurity {
   private verifyHmacSignature(input: {
     connectionId: string;
     signature: string;
-    timestamp: { raw: string; value: number };
+    timestamp: { raw: string; value: number } | null;
     rawBody: string;
     secret: string;
     nowMs: number;
@@ -163,18 +151,20 @@ export class ChatProviderIngressSecurity {
     }
 
     const candidates = input.authentication
-      .signatureBases({ timestamp: input.timestamp.raw, rawBody: input.rawBody })
+      .signatureBases({ timestamp: input.timestamp?.raw ?? "", rawBody: input.rawBody })
       .map((base) => createHmac("sha256", input.secret).update(base).digest("hex"));
     const valid = candidates.some((candidate) => constantTimeEquals(candidate, normalizedSignature));
     if (!valid) {
       throw new ChatProviderIngressSecurityError("signature_mismatch", "Invalid chat provider ingress signature.", 401);
     }
 
-    this.preventReplay({
-      connectionId: input.connectionId,
-      key: `hmac:${input.timestamp.value}:${normalizedSignature}`,
-      nowMs: input.nowMs,
-    });
+    if (input.timestamp) {
+      this.preventReplay({
+        connectionId: input.connectionId,
+        key: `hmac:${input.timestamp.value}:${normalizedSignature}`,
+        nowMs: input.nowMs,
+      });
+    }
   }
 
   private preventReplay(input: { connectionId: string; key: string; nowMs: number }): void {
@@ -236,6 +226,16 @@ function firstConfiguredSecret(secrets: ChatProviderSecretConfig | null, keys: r
   return null;
 }
 
+function firstConfiguredSecretExact(secrets: ChatProviderSecretConfig | null, keys: readonly string[]): string | null {
+  for (const key of keys) {
+    const value = secrets?.[key];
+    if (typeof value === "string" && value.length > 0) {
+      return value;
+    }
+  }
+  return null;
+}
+
 function firstHeader(headers: Record<string, string | string[] | undefined>, names: readonly string[]): string | undefined {
   const normalized = new Map(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]));
   for (const name of names) {
@@ -243,6 +243,21 @@ function firstHeader(headers: Record<string, string | string[] | undefined>, nam
     const candidate = Array.isArray(value) ? value[0] : value;
     if (typeof candidate === "string" && candidate.trim()) {
       return candidate.trim();
+    }
+  }
+  return undefined;
+}
+
+function firstHeaderExact(
+  headers: Record<string, string | string[] | undefined>,
+  names: readonly string[],
+): string | undefined {
+  const normalized = new Map(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]));
+  for (const name of names) {
+    const value = normalized.get(name.toLowerCase());
+    const candidate = Array.isArray(value) ? value[0] : value;
+    if (typeof candidate === "string") {
+      return candidate;
     }
   }
   return undefined;
@@ -266,6 +281,10 @@ function constantTimeEquals(left: string, right: string): boolean {
   return timingSafeEqual(leftBuffer, rightBuffer);
 }
 
-function rawBodyToString(rawBody: string | Uint8Array): string {
-  return typeof rawBody === "string" ? rawBody : Buffer.from(rawBody).toString("utf8");
+function constantTimeEqualsExact(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  const leftDigest = createHash("sha256").update(leftBuffer).digest();
+  const rightDigest = createHash("sha256").update(rightBuffer).digest();
+  return timingSafeEqual(leftDigest, rightDigest) && leftBuffer.length === rightBuffer.length;
 }

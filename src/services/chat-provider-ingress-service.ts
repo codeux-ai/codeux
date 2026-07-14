@@ -35,6 +35,7 @@ export interface NormalizedChatProviderInboundMessage {
 export type ChatProviderIngressStatus =
   | "accepted"
   | "duplicate"
+  | "ignored"
   | "ambiguous"
   | "unbound"
   | "rejected";
@@ -94,7 +95,31 @@ export class ChatProviderIngressService {
       };
     }
 
-    const normalized = normalizeInboundPayload(connection, input.payload);
+    const body = requireRecord(input.payload, "payload");
+    const profile = getChatConnectorProfileForMode(connection.providerKind, connection.bridgeMode);
+    const ignoreResult = connection.bridgeMode === "official_api"
+      ? profile.ingress.ignore?.(body, connection.bridgeMode)
+      : null;
+    const ignored = typeof ignoreResult === "string"
+      ? ignoreResult
+      : ignoreResult && typeof ignoreResult === "object" && ignoreResult.ignored
+        ? ignoreResult.reason ?? "provider_profile"
+        : null;
+    if (ignored || (connection.bridgeMode === "official_api" && profile.ingress.classify?.(body) === "ignored")) {
+      this.log("info", "Ignored chat provider ingress update", {
+        providerConnectionId: connection.id,
+        providerKind: connection.providerKind,
+        reason: ignored ?? "provider_profile",
+      });
+      return {
+        status: "ignored",
+        message: "Inbound chat provider update ignored.",
+        providerConnectionId: connection.id,
+        providerKind: connection.providerKind,
+      };
+    }
+
+    const normalized = normalizeInboundPayload(connection, body);
     const existing = this.deps.chatProviderRepository.findInboundDelivery(connection.id, normalized.externalMessageId);
     if (existing) {
       this.log("info", "Duplicate chat provider ingress ignored", {
@@ -275,7 +300,7 @@ export function normalizeInboundPayload(
   const providerKind = connection.providerKind;
   const profile = getChatConnectorProfileForMode(providerKind, connection.bridgeMode);
   const normalized = {
-    ...profile.ingress.normalize(body),
+    ...profile.ingress.normalize(body, connection.bridgeMode),
     ...definedInboundFields(normalizeGeneric(body)),
   };
   const timestamp = parseTimestamp(normalized.timestamp) ?? new Date().toISOString();
