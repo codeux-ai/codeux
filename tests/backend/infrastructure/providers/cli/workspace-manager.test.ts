@@ -651,6 +651,7 @@ describe("WorkspaceManager", () => {
     const releaseFirstSeedPromise = new Promise<void>((resolve) => { releaseFirstSeed = resolve; });
     let secondSeedStarted!: () => void;
     const secondSeedStartedPromise = new Promise<void>((resolve) => { secondSeedStarted = resolve; });
+    let secondSeedDidStart = false;
 
     vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
       if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
@@ -683,6 +684,7 @@ describe("WorkspaceManager", () => {
           await releaseFirstSeedPromise;
         }
         if (String(mount).includes("session-2")) {
+          secondSeedDidStart = true;
           secondSeedStarted();
         }
       }
@@ -704,13 +706,13 @@ describe("WorkspaceManager", () => {
       "feature/sprint-1",
     );
 
-    await expect(Promise.race([
-      secondSeedStartedPromise.then(() => "started"),
-      new Promise((resolve) => setTimeout(() => resolve("blocked"), 1000)),
-    ])).resolves.toBe("started");
-
-    releaseFirstSeed();
-    await Promise.all([firstPrepare, secondPrepare]);
+    try {
+      await vi.waitFor(() => expect(secondSeedDidStart).toBe(true), { timeout: 5_000 });
+      await secondSeedStartedPromise;
+    } finally {
+      releaseFirstSeed();
+      await Promise.allSettled([firstPrepare, secondPrepare]);
+    }
   });
 
   it("dedupes concurrent Docker seed bundles for identical feature-branch snapshots", async () => {
@@ -719,6 +721,7 @@ describe("WorkspaceManager", () => {
     let releaseBundle!: () => void;
     const releaseBundlePromise = new Promise<void>((resolve) => { releaseBundle = resolve; });
     let bundleCreates = 0;
+    let bundleKeyResolutions = 0;
 
     vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
       if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
@@ -735,6 +738,10 @@ describe("WorkspaceManager", () => {
           return { ok: true, stdout: "", stderr: "" } as any;
         }
         throw new Error("missing ref");
+      }
+      if (command === "git" && args[0] === "rev-parse" && args[1] === "--verify") {
+        bundleKeyResolutions += 1;
+        return { ok: true, stdout: `${"a".repeat(40)}\n`, stderr: "" } as any;
       }
       if (command === "git" && args[0] === "bundle" && args[1] === "create") {
         bundleCreates += 1;
@@ -763,11 +770,13 @@ describe("WorkspaceManager", () => {
       "feature/sprint-1",
     );
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(bundleCreates).toBe(1);
-
-    releaseBundle();
-    await Promise.all([firstPrepare, secondPrepare]);
+    try {
+      await vi.waitFor(() => expect(bundleKeyResolutions).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+      expect(bundleCreates).toBe(1);
+    } finally {
+      releaseBundle();
+      await Promise.allSettled([firstPrepare, secondPrepare]);
+    }
 
     const bundleCreateCalls = vi.mocked(runCommandStrict).mock.calls.filter((call) =>
       call[0] === "git" && call[1][0] === "bundle" && call[1][1] === "create"

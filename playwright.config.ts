@@ -127,6 +127,8 @@ export default defineConfig({
       XDG_DATA_HOME: path.join(tempHome, '.local', 'share'),
       CODE_UX_DIRECTORY_BROWSER_ROOTS: os.tmpdir(),
       CODEUX_E2E_PROVIDER_CLI_SHIM: mockProviderCliPath,
+      CODEUX_E2E_MODE: '1',
+      CODEUX_E2E_DASHBOARD_API_RATE_LIMIT_MAX: '10000',
       DASHBOARD_PORT: String(resolvedDashboardPort),
       MCP_HTTP_PORT: String(resolvedDashboardPort + 1),
       // Browser E2E only needs the dashboard HTTP server. In particular, do not

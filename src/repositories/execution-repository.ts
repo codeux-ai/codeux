@@ -269,6 +269,8 @@ function stripMarkdown(value: string): string {
 }
 
 const DASHBOARD_NOTIFICATION_TASK_EVENT_TYPES = new Set([
+  "provider_admission_waiting",
+  "provider_admission_wait_ended",
   "dispatch_error",
   "dispatch_failed",
   "cli_error",

@@ -18,6 +18,9 @@ One interactive reply may use the reserved slot. Extreme load alone does not con
 reservation because Linux load also counts I/O wait; critically low memory does. Existing work is
 not killed; admission resumes when pressure falls.
 
+Unchanged provider-cap deferrals are coalesced to one structured diagnostic per provider every ten
+seconds. A wide ready queue therefore does not create a log write on every orchestration cycle.
+
 ## Docker control plane
 
 Availability and container discovery share one process-wide `docker ps` inventory, in-flight

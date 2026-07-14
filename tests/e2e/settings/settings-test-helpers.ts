@@ -30,9 +30,22 @@ export async function openSettingsSection(
   configureName = `Configure ${title}`,
 ): Promise<void> {
   const panel = page.getByRole('region', { name: 'Settings category panel' });
-  await panel.getByRole('button', { name: configureName, exact: true }).click();
-  await expect(panel.getByRole('heading', { name: title, exact: true })).toBeVisible();
-  await expect(panel.getByRole('button', { name: 'Back to category overview', exact: true })).toBeVisible();
+  const heading = panel.getByRole('heading', { name: title, exact: true });
+  const backButton = panel.getByRole('button', { name: 'Back to category overview', exact: true });
+
+  if (await heading.isVisible() && await backButton.isVisible()) {
+    return;
+  }
+
+  if (await backButton.isVisible()) {
+    await backButton.click();
+  }
+
+  const configureButton = panel.getByRole('button', { name: configureName, exact: true });
+  await expect(configureButton).toBeVisible();
+  await configureButton.click();
+  await expect(heading).toBeVisible();
+  await expect(backButton).toBeVisible();
 }
 
 export async function selectSettingsScope(page: Page, scope: 'System' | 'Project'): Promise<void> {

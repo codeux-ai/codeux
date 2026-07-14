@@ -59,11 +59,13 @@ describe("ProviderToolManager", () => {
       resolveImage: vi.fn(async () => "example/runtime@sha256:base"),
       getCompatibilityKey: vi.fn(() => "runtime-abi-1"),
     } as any;
+    const statePath = path.join(root, "state.json");
     return {
-      manager: new ProviderToolManager(runtime, { run, stream }, fetchImpl, { statePath: path.join(root, "state.json") }),
+      manager: new ProviderToolManager(runtime, { run, stream }, fetchImpl, { statePath }),
       run,
       stream,
       fetchImpl,
+      statePath,
     };
   };
 
@@ -226,6 +228,28 @@ describe("ProviderToolManager", () => {
       undefined,
       { minimumUpdateIntervalMs: 6 * 60 * 60 * 1_000 },
     );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats a slightly future persisted-state mtime as fresh during automatic startup checks", async () => {
+    const { manager, fetchImpl, statePath } = await createHarness();
+    await manager.prepare("codex", DEFAULT_DASHBOARD_SETTINGS.cliWorkflow);
+
+    const now = Date.now();
+    const futureMtime = new Date(now + 1_000);
+    await fs.utimes(statePath, futureMtime, futureMtime);
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(now);
+    try {
+      await manager.checkActiveProviders(
+        ["codex"],
+        DEFAULT_DASHBOARD_SETTINGS.cliWorkflow,
+        undefined,
+        { minimumUpdateIntervalMs: 6 * 60 * 60 * 1_000 },
+      );
+    } finally {
+      nowSpy.mockRestore();
+    }
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });

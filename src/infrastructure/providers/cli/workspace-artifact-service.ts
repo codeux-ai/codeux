@@ -64,6 +64,19 @@ const buildCommitIdentityEnv = (
 
 const GIT_PUSH_RETRY_ATTEMPTS = 3;
 
+const resolveGitAdministrativeDirectory = async (repoPath: string): Promise<string | null> => {
+  const dotGitPath = path.join(repoPath, ".git");
+  try {
+    const stat = await fs.stat(dotGitPath);
+    if (stat.isDirectory()) return dotGitPath;
+    if (!stat.isFile()) return null;
+    const match = /^gitdir:\s*(.+)$/i.exec((await fs.readFile(dotGitPath, "utf8")).trim());
+    return match ? path.resolve(repoPath, match[1]) : null;
+  } catch {
+    return null;
+  }
+};
+
 function isRetryableGitPushError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /exit code 137|SIGKILL|no output captured|RPC failed|remote end hung up unexpectedly|early EOF/i.test(message);
@@ -87,15 +100,23 @@ export class WorkspaceArtifactService {
       ":(exclude,glob)**/logs/openai/**",
       ":(exclude,glob)logs/openai/**",
     ];
+    const pathspecs = [".", ...excludePathspecs];
     const tempIndexFilename = `.code-ux-export-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.index`;
-    const tempIndexPath = workspaceRef.startsWith("docker-volume://") || !path.isAbsolute(workspaceRef)
+    if (workspaceRef.startsWith("docker-volume://")) {
+      return await this.exportDockerVolumeBinaryPatch(
+        workspaceRef,
+        baseRef,
+        pathspecs,
+        tempIndexFilename,
+      );
+    }
+    const tempIndexPath = !path.isAbsolute(workspaceRef)
       ? tempIndexFilename
       : path.join(workspaceRef, tempIndexFilename);
     const tempIndexEnv = {
       ...process.env,
       GIT_INDEX_FILE: tempIndexPath,
     };
-    const pathspecs = [".", ...excludePathspecs];
     const tempPathListPath = path.join(os.tmpdir(), `code-ux-export-paths-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.paths`);
 
     try {
@@ -129,15 +150,49 @@ export class WorkspaceArtifactService {
       return result.stdout;
     } finally {
       await fs.rm(tempPathListPath, { force: true }).catch(() => undefined);
-      if (workspaceRef.startsWith("docker-volume://")) {
-        await this.workspaceManager.runWorkspaceCommand(workspaceRef, "rm", ["-f", tempIndexFilename]).catch(() => undefined);
-      } else {
-        const hostTempIndexPath = path.isAbsolute(tempIndexPath)
-          ? tempIndexPath
-          : path.join(workspaceRef, tempIndexPath);
-        await fs.rm(hostTempIndexPath, { force: true }).catch(() => undefined);
-      }
+      const hostTempIndexPath = path.isAbsolute(tempIndexPath)
+        ? tempIndexPath
+        : path.join(workspaceRef, tempIndexPath);
+      await fs.rm(hostTempIndexPath, { force: true }).catch(() => undefined);
     }
+  }
+
+  private async exportDockerVolumeBinaryPatch(
+    workspaceRef: string,
+    baseRef: string,
+    pathspecs: string[],
+    tempIndexFilename: string,
+  ): Promise<string> {
+    const tempPathListFilename = tempIndexFilename.replace(/\.index$/, ".paths");
+    const script = [
+      "index_file=$1",
+      "path_file=$2",
+      "base_ref=$3",
+      "shift 3",
+      "trap 'rm -f \"$index_file\" \"$path_file\"' EXIT",
+      "export GIT_INDEX_FILE=$index_file",
+      "git read-tree HEAD",
+      "git ls-files --modified --deleted --others --exclude-standard -z -- \"$@\" > \"$path_file\"",
+      "if [ -s \"$path_file\" ]; then",
+      "  git add -A --pathspec-from-file=- --pathspec-file-nul < \"$path_file\"",
+      "fi",
+      "git diff --binary --cached \"$base_ref\" -- \"$@\"",
+    ].join("\n");
+    const result = await this.workspaceManager.runWorkspaceCommand(
+      workspaceRef,
+      "sh",
+      [
+        "-ceu",
+        script,
+        "code-ux-export",
+        tempIndexFilename,
+        tempPathListFilename,
+        baseRef,
+        ...pathspecs,
+      ],
+      { trimOutput: false },
+    );
+    return result.stdout;
   }
 
   async applyPatchToBranch(args: {
@@ -179,7 +234,11 @@ export class WorkspaceArtifactService {
       return { hasChanges: false };
     }
 
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-patch-"));
+    // Keep patch transaction files under Git's administrative directory whenever possible.
+    // Containerized Git can then reuse the warm project helper container; putting the index in
+    // the host temp directory forces every Git command onto a new helper because of the extra bind.
+    const gitAdministrativeDirectory = await resolveGitAdministrativeDirectory(args.repoPath);
+    const tempDir = await fs.mkdtemp(path.join(gitAdministrativeDirectory ?? os.tmpdir(), "code-ux-patch-"));
     const patchPath = path.join(tempDir, "workspace.patch");
     const indexPath = path.join(tempDir, "workspace.index");
 
@@ -193,7 +252,8 @@ export class WorkspaceArtifactService {
 
       const materialized = await this.materializePatchCommit({
         repoPath: args.repoPath,
-        baseRef: materializationBaseRef,
+        patchBaseRef: args.baseRef,
+        commitBaseRef: materializationBaseRef,
         workerBranch: args.workerBranch,
         patchPath,
         commitMessage: args.commitMessage,
@@ -225,7 +285,10 @@ export class WorkspaceArtifactService {
 
   private async materializePatchCommit(args: {
     repoPath: string;
-    baseRef: string;
+    /** Ref the exported patch was diffed against. */
+    patchBaseRef: string;
+    /** Latest worker-branch tip that the final commit must descend from. */
+    commitBaseRef: string;
     workerBranch: string;
     patchPath: string;
     commitMessage: string;
@@ -255,14 +318,38 @@ export class WorkspaceArtifactService {
     };
 
     try {
-      await git(["read-tree", args.baseRef]);
+      // Always apply against the ref used to export the patch. A resumed Docker clone can lag the
+      // host worker ref in LOCAL mode; applying that old-base patch directly to the advanced tip
+      // makes an already-landed file fail with "already exists in index".
+      await git(["read-tree", args.patchBaseRef]);
       if (args.hasPatch) {
         await git(["apply", "--cached", "--binary", args.patchPath]);
       }
 
-      const tree = (await git(["write-tree"])).trim();
-      const baseTree = (await git(["rev-parse", `${args.baseRef}^{tree}`])).trim();
-      if (!tree || (tree === baseTree && !args.forceCommitForMergeParent)) {
+      const patchTree = (await git(["write-tree"])).trim();
+      const patchBaseTree = (await git(["rev-parse", `${args.patchBaseRef}^{tree}`])).trim();
+      if (!patchTree || (patchTree === patchBaseTree && !args.forceCommitForMergeParent)) {
+        return {};
+      }
+
+      let tree = patchTree;
+      if (args.patchBaseRef !== args.commitBaseRef && patchTree !== patchBaseTree) {
+        // Materialize an internal commit solely as the second head for Git's three-way tree merge.
+        // This preserves changes added by either side, de-duplicates identical additions, and
+        // rejects genuine content conflicts instead of silently overwriting newer branch work.
+        const patchCommit = (await git([
+          "commit-tree",
+          patchTree,
+          "-p",
+          args.patchBaseRef,
+          "-m",
+          `${args.commitMessage} (workspace patch base)`,
+        ])).trim();
+        tree = (await git(["merge-tree", "--write-tree", args.commitBaseRef, patchCommit])).trim();
+      }
+
+      const commitBaseTree = (await git(["rev-parse", `${args.commitBaseRef}^{tree}`])).trim();
+      if (!tree || (tree === commitBaseTree && !args.forceCommitForMergeParent)) {
         return {};
       }
 
@@ -270,7 +357,7 @@ export class WorkspaceArtifactService {
         "commit-tree",
         tree,
         "-p",
-        args.baseRef,
+        args.commitBaseRef,
         ...args.parentRefs.flatMap((parentRef) => ["-p", parentRef]),
         "-m",
         args.commitMessage,
@@ -287,7 +374,7 @@ export class WorkspaceArtifactService {
       if (syncCheckedOut) {
         await git(["reset", "--hard", commit], normalEnv);
       }
-      const numstatOutput = await git(["diff", "--numstat", args.baseRef, commit], normalEnv, { trimOutput: false });
+      const numstatOutput = await git(["diff", "--numstat", args.commitBaseRef, commit], normalEnv, { trimOutput: false });
 
       return {
         commitSha: commit,

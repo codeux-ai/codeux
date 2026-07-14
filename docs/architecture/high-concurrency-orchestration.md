@@ -21,7 +21,7 @@ The automatic local ceiling is the smaller of:
   planning estimate for one active provider/CI container.
 
 One slot is held back from ordinary background work for `worker_reply`, `dashboard_reply`, or
-`clarification_reply`. A configured positive provider ceiling still wins over this automatic value.
+`clarification_reply`. A configured positive provider ceiling remains an upper bound; adaptive CPU and memory admission can temporarily grant fewer new starts while the host is saturated.
 
 Admission samples one-minute load and free memory through a one-second in-process cache. When load
 per CPU reaches 0.9 or free memory falls to 15%, background expansion freezes at the current running
@@ -32,6 +32,8 @@ admission resumes as pressure falls.
 
 The policy does not call Docker. A rejected bounded claim may invoke stale-runtime reconciliation,
 but a claim with available capacity reaches the atomic SQLite boundary first.
+Unchanged provider-cap deferrals are coalesced to one structured diagnostic per provider every ten
+seconds, so a wide ready queue does not turn a one-second orchestration loop into a log-write loop.
 
 ## Docker Inventory
 

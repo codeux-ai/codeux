@@ -238,6 +238,88 @@ describe("ProviderConcurrencyService", () => {
       expect(executionRepository.tryCreateProviderInvocationUsage).not.toHaveBeenCalled();
     });
 
+    it("heartbeats and records a recoverable task wait while adaptive admission is pressure-paused", async () => {
+      vi.useFakeTimers();
+      try {
+        const admissionPolicy = {
+          getEffectiveLimit: vi.fn()
+            .mockReturnValueOnce(-1)
+            .mockReturnValueOnce(1),
+        };
+        executionRepository.getTaskDispatch.mockReturnValue({ id: "dispatch-pressure", status: "running" });
+        executionRepository.tryCreateProviderInvocationUsage.mockReturnValue({ id: "inv-after-pressure" });
+        service = new ProviderConcurrencyService({ executionRepository, logger, admissionPolicy });
+
+        const wait = service.waitForSlotAndClaim("codex", 0, {
+          provider: "codex",
+          purpose: "task_coding",
+          sessionId: "session-pressure",
+          taskRunId: "task-run-pressure",
+          dispatchId: "dispatch-pressure",
+        } as any, undefined, undefined, "exec-pressure");
+        await vi.advanceTimersByTimeAsync(2000);
+
+        await expect(wait).resolves.toMatchObject({ id: "inv-after-pressure" });
+        expect(executionRepository.updateTaskDispatch).toHaveBeenCalledWith("dispatch-pressure", {
+          lastHeartbeatAt: expect.any(String),
+        });
+        expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
+          "task-run-pressure",
+          "provider_admission_waiting",
+          "system",
+          expect.objectContaining({
+            provider: "codex",
+            reason: "resource_pressure",
+            effectiveLimit: null,
+          }),
+          expect.objectContaining({ sourceEventKey: expect.stringContaining("provider:admission:waiting:exec-pressure") }),
+        );
+        expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
+          "task-run-pressure",
+          "provider_admission_wait_ended",
+          "system",
+          expect.objectContaining({ outcome: "admitted", reason: "resource_pressure" }),
+          expect.objectContaining({ sourceEventKey: expect.stringContaining("provider:admission:ended:exec-pressure") }),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("keeps pressure wait heartbeats low-frequency and closes the wait on timeout", async () => {
+      vi.useFakeTimers();
+      try {
+        executionRepository.getTaskDispatch.mockReturnValue({ id: "dispatch-pressure", status: "running" });
+        service = new ProviderConcurrencyService({
+          executionRepository,
+          logger,
+          admissionPolicy: { getEffectiveLimit: vi.fn().mockReturnValue(-1) },
+        });
+        const wait = service.waitForSlotAndClaim("codex", 0, {
+          provider: "codex",
+          purpose: "task_coding",
+          sessionId: "session-pressure",
+          taskRunId: "task-run-pressure",
+          dispatchId: "dispatch-pressure",
+        } as any, undefined, 25_000, "exec-pressure");
+        const assertion = expect(wait).rejects.toThrow("timed out after 25000ms");
+
+        await vi.advanceTimersByTimeAsync(25_000);
+        await assertion;
+
+        expect(executionRepository.updateTaskDispatch).toHaveBeenCalledTimes(3);
+        expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
+          "task-run-pressure",
+          "provider_admission_wait_ended",
+          "system",
+          expect.objectContaining({ outcome: "timed_out" }),
+          expect.any(Object),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("links a claimed provider usage to the active execution invocation", async () => {
       const input = { provider: "jules", startedAt: "2026-07-13T12:00:00.000Z" } as any;
       executionRepository.tryCreateProviderInvocationUsage.mockReturnValue({ id: "inv-linked" });

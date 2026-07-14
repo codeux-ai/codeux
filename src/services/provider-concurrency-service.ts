@@ -25,6 +25,10 @@ const TERMINAL_FAILURE_TASK_RUN_STATES = new Set(["FAILED", "BLOCKED", "QUOTA"])
 const RECONCILIATION_THROTTLE_MS = 10_000;
 const RECONCILIATION_DOCKER_INVENTORY_TTL_MS = 10_000;
 const MAX_DESTRUCTIVE_DOCKER_INVENTORY_AGE_MS = 2_000;
+const ADMISSION_WAIT_HEARTBEAT_MS = 10_000;
+
+type ProviderAdmissionWaitReason = "resource_pressure" | "provider_capacity";
+type ProviderAdmissionWaitOutcome = "admitted" | "timed_out" | "cancelled" | "failed";
 
 export interface ProviderClaimAdmissionPolicy {
   getEffectiveLimit(input: {
@@ -123,58 +127,173 @@ export class ProviderConcurrencyService {
   ): Promise<ProviderInvocationUsageRecord> {
     const startMs = Date.now();
     let lastLogMs = 0;
+    let lastAdmissionHeartbeatMs = 0;
+    let waitReason: ProviderAdmissionWaitReason | null = null;
+    const waitCycleKey = `${executionInvocationId || input.sessionId || input.taskRunId || provider}:${startMs}`;
 
-    while (true) {
-      this.throwIfAborted(signal);
-
-      // Keep the status check and synchronous repository claim in the same event-loop turn.
-      // Dashboard cancellation can therefore stop a waiting execution before it manufactures
-      // provider usage or consumes capacity.
-      this.assertExecutionInvocationCanClaim(executionInvocationId);
-      const effectiveLimit = await this.resolveEffectiveLimit(provider, limit, input.purpose);
-      if (effectiveLimit === 0) {
-        const invocation = this.deps.executionRepository.createProviderInvocationUsage(input);
-        this.linkExecutionInvocation(executionInvocationId, invocation.id);
-        return invocation;
-      }
-      if (maxWaitMs !== undefined && Date.now() - startMs >= maxWaitMs) {
-        throw new Error(`Provider concurrency wait timed out after ${maxWaitMs}ms`);
-      }
-
-      let invocation = effectiveLimit > 0
-        ? this.deps.executionRepository.tryCreateProviderInvocationUsage(input, effectiveLimit)
-        : null;
-      if (invocation) {
-        this.linkExecutionInvocation(executionInvocationId, invocation.id);
-        return invocation;
-      }
-
-      // Stale recovery is only paid when the atomic claim says capacity is full.
-      // A successful reconciliation gets one immediate atomic retry before sleeping.
-      const reconciled = effectiveLimit > 0
-        ? await this.reconcileStaleProviderInvocations(provider)
-        : false;
-      if (reconciled) {
+    try {
+      while (true) {
         this.throwIfAborted(signal);
+
+        // Keep the status check and synchronous repository claim in the same event-loop turn.
+        // Dashboard cancellation can therefore stop a waiting execution before it manufactures
+        // provider usage or consumes capacity.
         this.assertExecutionInvocationCanClaim(executionInvocationId);
-        invocation = this.deps.executionRepository.tryCreateProviderInvocationUsage(input, effectiveLimit);
-        if (invocation) {
+        const effectiveLimit = await this.resolveEffectiveLimit(provider, limit, input.purpose);
+        if (effectiveLimit === 0) {
+          const invocation = this.deps.executionRepository.createProviderInvocationUsage(input);
+          this.finishAdmissionWait(input, provider, waitReason, startMs, "admitted", waitCycleKey);
           this.linkExecutionInvocation(executionInvocationId, invocation.id);
           return invocation;
         }
+        if (maxWaitMs !== undefined && Date.now() - startMs >= maxWaitMs) {
+          throw new Error(`Provider concurrency wait timed out after ${maxWaitMs}ms`);
+        }
+
+        let invocation = effectiveLimit > 0
+          ? this.deps.executionRepository.tryCreateProviderInvocationUsage(input, effectiveLimit)
+          : null;
+        if (invocation) {
+          this.finishAdmissionWait(input, provider, waitReason, startMs, "admitted", waitCycleKey);
+          this.linkExecutionInvocation(executionInvocationId, invocation.id);
+          return invocation;
+        }
+
+        // Stale recovery is only paid when the atomic claim says capacity is full.
+        // A successful reconciliation gets one immediate atomic retry before sleeping.
+        const reconciled = effectiveLimit > 0
+          ? await this.reconcileStaleProviderInvocations(provider)
+          : false;
+        if (reconciled) {
+          this.throwIfAborted(signal);
+          this.assertExecutionInvocationCanClaim(executionInvocationId);
+          invocation = this.deps.executionRepository.tryCreateProviderInvocationUsage(input, effectiveLimit);
+          if (invocation) {
+            this.finishAdmissionWait(input, provider, waitReason, startMs, "admitted", waitCycleKey);
+            this.linkExecutionInvocation(executionInvocationId, invocation.id);
+            return invocation;
+          }
+        }
+
+        // Count for logging/tracking purposes. A dispatch that has already been claimed must remain
+        // observably alive while adaptive admission intentionally pauses it, otherwise runtime
+        // recovery and E2E stall detection cannot distinguish backpressure from a dead worker.
+        const runningCount = this.deps.executionRepository.listRunningProviderInvocationUsages([provider]).length;
+        const nextWaitReason: ProviderAdmissionWaitReason = effectiveLimit < 0
+          ? "resource_pressure"
+          : "provider_capacity";
+        const nowMs = Date.now();
+        if (waitReason !== nextWaitReason || nowMs - lastAdmissionHeartbeatMs >= ADMISSION_WAIT_HEARTBEAT_MS) {
+          this.recordAdmissionWait(
+            input,
+            provider,
+            nextWaitReason,
+            runningCount,
+            effectiveLimit,
+            nowMs - startMs,
+            waitReason !== nextWaitReason,
+            waitCycleKey,
+          );
+          lastAdmissionHeartbeatMs = nowMs;
+          waitReason = nextWaitReason;
+        }
+        lastLogMs = this.logProviderCapWait(provider, effectiveLimit, runningCount, lastLogMs);
+
+        let delayMs = 2000;
+        if (maxWaitMs !== undefined) {
+          const remainingMs = maxWaitMs - (Date.now() - startMs);
+          delayMs = Math.min(delayMs, Math.max(0, remainingMs));
+        }
+
+        await sleepWithSignal(delayMs, signal);
       }
+    } catch (error) {
+      const outcome: ProviderAdmissionWaitOutcome = signal?.aborted
+        ? "cancelled"
+        : error instanceof Error && error.message.includes("concurrency wait timed out")
+          ? "timed_out"
+          : "failed";
+      this.finishAdmissionWait(input, provider, waitReason, startMs, outcome, waitCycleKey);
+      throw error;
+    }
+  }
 
-      // Count for logging/tracking purposes.
-      const runningCount = this.deps.executionRepository.listRunningProviderInvocationUsages([provider]).length;
-      lastLogMs = this.logProviderCapWait(provider, effectiveLimit, runningCount, lastLogMs);
-
-      let delayMs = 2000;
-      if (maxWaitMs !== undefined) {
-        const remainingMs = maxWaitMs - (Date.now() - startMs);
-        delayMs = Math.min(delayMs, Math.max(0, remainingMs));
+  private recordAdmissionWait(
+    input: CreateProviderInvocationUsageInput,
+    provider: ProviderId,
+    reason: ProviderAdmissionWaitReason,
+    runningCount: number,
+    effectiveLimit: number,
+    elapsedMs: number,
+    reasonChanged: boolean,
+    waitCycleKey: string,
+  ): void {
+    try {
+      if (input.dispatchId) {
+        const dispatch = this.deps.executionRepository.getTaskDispatch(input.dispatchId);
+        if (dispatch && ACTIVE_DISPATCH_STATUSES.has(dispatch.status)) {
+          this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+            lastHeartbeatAt: new Date().toISOString(),
+          });
+        }
       }
+      if (reasonChanged && input.taskRunId) {
+        this.deps.executionRepository.appendTaskRunEvent(
+          input.taskRunId,
+          "provider_admission_waiting",
+          "system",
+          {
+            provider,
+            reason,
+            runningCount,
+            effectiveLimit: effectiveLimit < 0 ? null : effectiveLimit,
+            elapsedMs,
+          },
+          { sourceEventKey: `provider:admission:waiting:${waitCycleKey}:${reason}` },
+        );
+      }
+    } catch (error) {
+      // Admission telemetry must never turn recoverable host pressure into a task failure.
+      this.deps.logger.warn("Failed to persist provider admission wait heartbeat", {
+        provider,
+        dispatchId: input.dispatchId ?? null,
+        taskRunId: input.taskRunId ?? null,
+        error,
+      });
+    }
+  }
 
-      await sleepWithSignal(delayMs, signal);
+  private finishAdmissionWait(
+    input: CreateProviderInvocationUsageInput,
+    provider: ProviderId,
+    reason: ProviderAdmissionWaitReason | null,
+    startMs: number,
+    outcome: ProviderAdmissionWaitOutcome,
+    waitCycleKey: string,
+  ): void {
+    if (!reason || !input.taskRunId) {
+      return;
+    }
+    try {
+      this.deps.executionRepository.appendTaskRunEvent(
+        input.taskRunId,
+        "provider_admission_wait_ended",
+        "system",
+        {
+          provider,
+          reason,
+          outcome,
+          elapsedMs: Math.max(0, Date.now() - startMs),
+        },
+        { sourceEventKey: `provider:admission:ended:${waitCycleKey}` },
+      );
+    } catch (error) {
+      this.deps.logger.warn("Failed to persist provider admission wait completion", {
+        provider,
+        taskRunId: input.taskRunId,
+        outcome,
+        error,
+      });
     }
   }
 

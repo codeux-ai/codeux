@@ -14,6 +14,8 @@ the dashboard, and interactive replies.
 - Passive idle-time WAL checkpoints and a 256-page incremental-vacuum cap avoid full-file barriers.
 - Runtime and startup asset cleanup are single-flight; stale-path filesystem work is asynchronous,
   while Docker inspection/removal uses bounded parallel batches.
+- Unchanged provider-cap diagnostics are coalesced per provider, avoiding per-cycle log writes while
+  a wide ready queue waits for one of the running slots.
 
 The published architecture page is available at
 [`/docs/architecture-high-concurrency-orchestration`](/docs/architecture-high-concurrency-orchestration).

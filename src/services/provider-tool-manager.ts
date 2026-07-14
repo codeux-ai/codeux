@@ -221,8 +221,11 @@ export class ProviderToolManager {
   private async isPersistedStateFresh(maxAgeMs: number): Promise<boolean> {
     const stat = await fs.stat(this.statePath).catch(() => null);
     if (!stat) return false;
-    const ageMs = Date.now() - stat.mtimeMs;
-    return ageMs >= 0 && ageMs < maxAgeMs;
+    // Filesystem mtimes can land a few milliseconds ahead of the process clock after an
+    // atomic rename (notably on virtualized CI filesystems). A future mtime is necessarily
+    // fresh; clamping it avoids a redundant registry request immediately after persistence.
+    const ageMs = Math.max(0, Date.now() - stat.mtimeMs);
+    return ageMs < maxAgeMs;
   }
 
   private async prepareInternal(
