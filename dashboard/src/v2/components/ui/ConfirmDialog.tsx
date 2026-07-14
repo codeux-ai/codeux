@@ -341,7 +341,6 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFoc
   if (!shouldRender || !options) return null;
 
   const { title, body, confirmLabel = "Confirm", cancelLabel = "Cancel", destructive = false } = options;
-  const copy = options.copy;
   const requiredConfirmationText = options.requiredConfirmationText;
   const confirmationMatches = !requiredConfirmationText || confirmationText === requiredConfirmationText;
   const tone = destructive ? "danger" : options.tone || "default";
@@ -407,7 +406,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFoc
               <ToneIcon className="h-5 w-5" strokeWidth={1.8} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">{copy?.eyebrow ?? "Confirm Runtime Action"}</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">Confirm Runtime Action</p>
               <h2 id="confirm-dialog-title" className="mt-1 text-base font-semibold leading-tight tracking-tight text-void-900 dark:text-slate-50">
                 {title}
               </h2>
@@ -423,14 +422,14 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFoc
           {destructive && (
             <div className="mt-4 rounded-xl border border-status-red/20 bg-status-red/10 p-3">
               <p className="text-xs font-medium text-status-red">
-                <span className="inline-flex items-start gap-1.5"><AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />{copy?.destructiveWarning ?? "This action is permanent and cannot be undone."}</span>
+                <span className="inline-flex items-start gap-1.5"><AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />This action is permanent and cannot be undone.</span>
               </p>
             </div>
           )}
           {requiredConfirmationText ? (
             <label className="mt-4 block">
               <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
-                {copy?.requiredConfirmationPrompt ?? <>Type <span className="font-mono font-bold">{requiredConfirmationText}</span> to continue</>}
+                Type <span className="font-mono font-bold">{requiredConfirmationText}</span> to continue
               </span>
               <input
                 type="text"
@@ -439,7 +438,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFoc
                 disabled={isProcessing}
                 autoComplete="off"
                 spellcheck={false}
-                aria-label={copy?.requiredConfirmationInputLabel ?? `Type ${requiredConfirmationText} to confirm`}
+                aria-label={`Type ${requiredConfirmationText} to confirm`}
                 className="mt-2 w-full rounded-xl border border-black/[0.1] bg-white px-3 py-2.5 text-sm text-void-900 outline-none focus:border-status-red/45 focus:ring-2 focus:ring-status-red/20 disabled:opacity-50 dark:border-white/[0.12] dark:bg-void-900 dark:text-slate-50"
               />
             </label>
@@ -470,12 +469,12 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFoc
               onClick={() => handleClose(onConfirm)}
               disabled={isProcessing || !confirmationMatches}
               aria-busy={isProcessing}
-              aria-label={!confirmationMatches && requiredConfirmationText ? copy?.requiredConfirmationDisabledLabel ?? `Type ${requiredConfirmationText} to enable ${confirmLabel}` : undefined}
+              aria-label={!confirmationMatches && requiredConfirmationText ? `Type ${requiredConfirmationText} to enable ${confirmLabel}` : undefined}
               style={controlTransitionStyle}
               className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-safe:active:scale-[0.98] motion-reduce:duration-0 motion-reduce:ease-none disabled:cursor-not-allowed disabled:opacity-50 ${toneStyles.confirm} ${confirmFlash ? '!bg-status-green !text-white !border-transparent' : ''}`}
             >
-              {isProcessing && <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" /><span className="sr-only">{copy?.processingWait ?? "Processing, please wait"}</span></>}
-              {isProcessing ? copy?.processing ?? "Processing..." : confirmLabel}
+              {isProcessing && <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" /><span className="sr-only">Processing, please wait</span></>}
+              {isProcessing ? "Processing..." : confirmLabel}
             </button>
           )}
         </div>

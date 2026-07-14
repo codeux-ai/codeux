@@ -15,8 +15,6 @@ Use it when you are configuring a new project, auditing inherited settings, or d
 
 Each section has a selector with None support, custom entry add/edit/delete controls, and styleguide visibility controls for hiding built-in defaults from the UI.
 
-Editor labels, validation, selection summaries, and accessible names follow the active dashboard locale. Custom ids, names, summaries, and instruction markdown remain verbatim because selected instruction markdown is submitted to agents.
-
 | Control Surface | Runtime Effect | Review Before Saving |
 | --- | --- | --- |
 | Settings card fields | Updates the active Settings scope after you save the page. | Confirm whether you are editing System or Project scope. |

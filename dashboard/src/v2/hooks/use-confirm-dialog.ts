@@ -8,15 +8,6 @@ export interface ConfirmDialogOptions {
   destructive?: boolean;
   tone?: "default" | "success" | "warning" | "danger" | "neutral";
   requiredConfirmationText?: string;
-  copy?: {
-    eyebrow: string;
-    destructiveWarning: string;
-    requiredConfirmationPrompt: string;
-    requiredConfirmationInputLabel: string;
-    requiredConfirmationDisabledLabel: string;
-    processing: string;
-    processingWait: string;
-  };
 }
 
 export function useConfirmDialog() {

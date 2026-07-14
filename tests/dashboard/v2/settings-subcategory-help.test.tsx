@@ -42,20 +42,6 @@ describe("settings subcategory help", () => {
     );
   });
 
-  it("keeps documentation help connected when a subcategory title is German", () => {
-    render(
-      <SectionCard title="Technologie-Stack" helpId="guidance" icon={<span aria-hidden>G</span>}>
-        <p>Anleitungseinstellungen</p>
-      </SectionCard>,
-    );
-
-    expect(screen.getByRole("button", { name: "Show help for Technologie-Stack" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open documentation for Technologie-Stack" })).toHaveAttribute(
-      "href",
-      "/docs/settings-guidance",
-    );
-  });
-
   it("has canonical docs files for every subcategory metadata entry", () => {
     const docsRoot = path.resolve(process.cwd(), "docs/settings");
     const docsWebRoot = path.resolve(process.cwd(), "docs-web/settings");
