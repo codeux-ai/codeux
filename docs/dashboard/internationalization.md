@@ -51,6 +51,8 @@ The initial application bundle translates only root-owned shell copy: the skip l
 
 Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged.
 
+Operational Settings categories use a feature-owned catalog for General, Sprint, QA, Automation, Worker, Browser, and Danger controls plus their branch, PR-template, file-picker, and open-source dialogs. Translated captions map back to the existing serialized enum values; branch tokens, paths, command examples, default instruction templates, dependency metadata, API errors, and runtime diagnostics remain verbatim.
+
 ## Verification
 
 Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization.

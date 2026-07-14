@@ -34,3 +34,5 @@ const { translate, translatePlural, formatNumber } = useDashboardI18n();
 English and German must declare exactly the same top-level keys. Interpolation treats replacement values as literal text, plural messages require an `other` form, and locale-aware formatting delegates to the browser's native `Intl` implementation.
 
 Keep each catalog with its owning feature and import it only where the feature is loaded. Translate dashboard-authored interface copy only. Never translate provider output, API responses, stored instructions, project data, runtime diagnostics, or user-authored content.
+
+The operational Settings catalog covers General, Sprint, QA, Automation, Worker, Browser, and Danger controls and their related dialogs. Localized option captions continue to save the existing enum values, while branch tokens, paths, command examples, default instruction templates, dependency metadata, API errors, and runtime diagnostics are displayed unchanged.
