@@ -53,6 +53,8 @@ import { createSchedulerEntry } from "../../lib/scheduler-api.js";
 import { SprintPageActionRunner } from "../../lib/sprint-page-action-runner.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../lib/settings.js";
 import { buildProjectCreationSettingsOverride } from "../../../lib/settings-updaters.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import { sprintsMessages } from "../../i18n/messages/sprints.js";
 
 export interface SprintsPageActionsDeps {
   selectedProject: any;
@@ -119,6 +121,7 @@ export function useSprintsPageActions({
   reloadQuicksprintTemplates,
   createProject,
 }: SprintsPageActionsDeps) {
+  const { translate } = useDashboardI18n();
   const checkActiveRun = useCallback(
     async (sprintId: string) => {
       if (!selectedProject) return false;
@@ -393,7 +396,7 @@ export function useSprintsPageActions({
 
         if (payload.submitMode === "schedule") {
           if (!payload.schedule) {
-            throw new Error("Choose when this sprint should be scheduled.");
+            throw new Error(translate(sprintsMessages, "chooseSchedule"));
           }
           await createSchedulerEntry(selectedProject.id, {
             title: `Start ${updated.name}`,
@@ -475,7 +478,7 @@ export function useSprintsPageActions({
 
         if (payload.submitMode === "schedule") {
           if (!payload.schedule) {
-            throw new Error("Choose when this sprint should be scheduled.");
+            throw new Error(translate(sprintsMessages, "chooseSchedule"));
           }
           await createSchedulerEntry(selectedProject.id, {
             title: `Start ${created.name}`,
@@ -542,7 +545,7 @@ export function useSprintsPageActions({
       signal?: AbortSignal,
     ): Promise<string> => {
       if (!selectedProject) {
-        throw new Error("Select a project before using Plan ahead with AI.");
+        throw new Error(translate(sprintsMessages, "selectProjectForAi"));
       }
       const response = await improveSprintPrompt(
         selectedProject.id,
@@ -552,7 +555,7 @@ export function useSprintsPageActions({
       await refreshPlanningEta(selectedProject.id);
       return response.goal;
     },
-    [refreshPlanningEta, selectedProject],
+    [refreshPlanningEta, selectedProject, translate],
   );
 
   const handleCancelPlanningRequest = useCallback(
