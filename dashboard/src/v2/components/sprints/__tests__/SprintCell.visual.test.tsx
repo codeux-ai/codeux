@@ -94,7 +94,7 @@ describe("SprintCell visuals", () => {
     expect(shadowUnderlay?.className).not.toContain("drop-shadow");
   });
 
-  it("keeps hover-revealed card actions keyboard reachable and reduced-motion visible", () => {
+  it("keeps hover-revealed card actions keyboard reachable without a duplicate lifecycle label", () => {
     const { container } = render(
       <SprintCell
         sprint={sprint}
@@ -106,7 +106,8 @@ describe("SprintCell visuals", () => {
 
     expect(screen.getByRole("button", { name: "Start sprint Dashboard polish" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open actions menu for sprint Dashboard polish" })).toBeInTheDocument();
-    expect(screen.getByText("Draft").parentElement).toHaveClass("motion-reduce:opacity-100");
+    expect(screen.queryByText("Draft")).not.toBeInTheDocument();
+    expect(container.querySelector("[data-workflow-state]")).toBeInTheDocument();
 
     const actionCluster = container.querySelector(".group-focus-within\\:opacity-100");
     expect(actionCluster).toBeInTheDocument();
@@ -162,6 +163,108 @@ describe("SprintCell visuals", () => {
     expect(indicator.querySelector(".motion-reduce\\:animate-none")).toBeInTheDocument();
     expect(screen.queryByRole("status", { name: "Sprint waiting for human intervention" })).not.toBeInTheDocument();
     expect(border).toHaveClass("border-2", "border-status-red/70", "motion-reduce:shadow-none");
+  });
+
+  it("places a human-owned waiting cue 10px above the cell without a red border or duplicate badge", () => {
+    const { container } = render(
+      <SprintCell
+        sprint={{ ...sprint, status: "paused" }}
+        isEven={false}
+        accentColor="text-signal-600 dark:text-signal-300"
+        humanIntervention={{
+          title: "Approval required",
+          reason: "A reviewer is needed",
+          instructions: "Review the execution",
+          attentionType: "human_escalation_required",
+          severity: "high",
+          ownerType: "human",
+        }}
+      />,
+    );
+
+    const indicator = screen.getByRole("status", { name: "Sprint waiting for human intervention" });
+
+    expect(indicator).toHaveClass("bottom-full", "mb-[10px]");
+    expect(indicator).toHaveClass("border-status-amber/30");
+    expect(container.querySelector('[data-sprint-attention="human"]')).toBeInTheDocument();
+    expect(container.querySelector("[data-sprint-attention-border]")).not.toBeInTheDocument();
+    expect(screen.queryByText("Needs you")).not.toBeInTheDocument();
+  });
+
+  it("does not surface worker-owned merge conflicts as a cell badge or human wait", () => {
+    const { container } = render(
+      <SprintCell
+        sprint={{ ...sprint, status: "paused" }}
+        isEven={false}
+        accentColor="text-signal-600 dark:text-signal-300"
+        humanIntervention={{
+          title: "Merge conflict",
+          reason: "Branches conflict",
+          instructions: "Worker will resolve the conflict",
+          attentionType: "merge_conflict",
+          severity: "high",
+          ownerType: "worker",
+        }}
+      />,
+    );
+
+    expect(screen.queryByRole("status", { name: "Sprint waiting for human intervention" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Merge conflict")).not.toBeInTheDocument();
+    expect(screen.queryByText("Needs you")).not.toBeInTheDocument();
+    expect(container.querySelector("[data-sprint-attention-border]")).not.toBeInTheDocument();
+  });
+
+  it("renders an unboxed blue sprint ID lockup with an ID icon", () => {
+    const { container } = render(
+      <SprintCell
+        sprint={sprint}
+        isEven={false}
+        accentColor="text-ember-500"
+        sprintKeyPrefix="CODUX"
+      />,
+    );
+
+    const key = container.querySelector("[data-sprint-key]");
+
+    expect(key).toHaveTextContent("CODUX-1");
+    expect(key).toHaveClass("text-blue-600", "dark:text-blue-300");
+    expect(key?.className).not.toContain("rounded");
+    expect(key?.className).not.toContain("bg-");
+    expect(key?.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("keeps metrics open on the cell surface without a nested transparent card", () => {
+    const { container } = render(
+      <SprintCell
+        sprint={{ ...sprint, tasksCount: 7, completion: 100 }}
+        isEven={false}
+        accentColor="text-signal-500"
+      />,
+    );
+
+    const metrics = container.querySelector("[data-sprint-metrics]");
+
+    expect(metrics).toHaveTextContent("7Tasks100%Done");
+    expect(metrics?.className).not.toContain("rounded");
+    expect(metrics?.className).not.toContain("bg-");
+    expect(metrics?.className).not.toContain("backdrop-blur");
+  });
+
+  it("fills an active cell with a reduced-motion-safe ambient wave surface", () => {
+    const { container } = render(
+      <SprintCell
+        sprint={{ ...sprint, status: "running" }}
+        isEven={false}
+        accentColor="text-status-green"
+      />,
+    );
+
+    const fluid = container.querySelector("[data-sprint-ambient-waves]");
+
+    expect(fluid).toHaveClass("absolute", "inset-0");
+    expect(fluid).toHaveAttribute("data-motion", "static");
+    expect(fluid?.querySelector("svg")).toBeInTheDocument();
+    expect(fluid?.querySelectorAll("path")).toHaveLength(3);
   });
 
   it("does not render attention for a healthy completed sprint", () => {
@@ -229,7 +332,7 @@ describe("SprintCell visuals", () => {
       />,
     );
 
-    expect(screen.getByText("Running")).toBeInTheDocument();
+    expect(screen.queryByText("Running")).not.toBeInTheDocument();
     expect(screen.queryByText("CI")).not.toBeInTheDocument();
     const ciTrigger = screen.getByRole("button", { name: /CI status: Coding in progress.*Show workflow details/i });
     expect(ciTrigger).toHaveClass("text-signal-700");

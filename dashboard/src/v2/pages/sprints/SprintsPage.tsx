@@ -781,7 +781,7 @@ export const SprintsPage: FunctionComponent = () => {
                     : "max-h-[460rem] overflow-visible translate-y-0 scale-100 opacity-100 blur-0"
                 }`}
               >
-                <div ref={bubblesRef} className="flex flex-wrap justify-center gap-10 py-6 xl:gap-12">
+                <div ref={bubblesRef} className="flex flex-wrap justify-center gap-x-10 gap-y-[4.5rem] pb-6 pt-[4.5rem] xl:gap-x-12 xl:gap-y-20">
                   {showcaseSprints.map((sprint, index) => {
                     const activeRun = activeRunsBySprintId.get(sprint.id);
                     const pendingActionId = activeRun ? `sprint-stop:${activeRun.id}` : `sprint-start:${sprint.id}`;
