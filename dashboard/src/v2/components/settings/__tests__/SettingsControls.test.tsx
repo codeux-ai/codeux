@@ -32,6 +32,7 @@ import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../lib/settings";
 import { dashboardSettingsToProjectSettings } from "../../../lib/settings-view-models";
 import type { ProjectSettings, SystemSettings, TechstackCatalogEntrySettings } from "../../../../types";
 import { SettingsSmartFindSearch } from "../../../SettingsPage";
+import { DashboardI18nProvider } from "../../../i18n/context";
 
 const defaultInnerHeight = window.innerHeight;
 const interactionStyle = { transitionDuration: "200ms", transitionTimingFunction: "ease" };
@@ -1551,7 +1552,7 @@ describe("SettingsControls Accessibility", () => {
     const onRemove = vi.fn(() => new Promise<void>((resolve) => window.setTimeout(resolve, 10)));
 
     render(
-      <ProviderInstanceCard
+      <DashboardI18nProvider initialLocale="en" storage={null}><ProviderInstanceCard
         providerConfigId="codex"
         provider={{
           provider: "codex",
@@ -1565,7 +1566,7 @@ describe("SettingsControls Accessibility", () => {
         dockerExecutionEnabled
         onUpdate={() => {}}
         onRemove={onRemove}
-      />
+      /></DashboardI18nProvider>
     );
 
     await user.click(screen.getByRole("button", { name: "Remove Codex Primary" }));

@@ -39,6 +39,8 @@ English and German must declare exactly the same top-level keys. Interpolation t
 
 The Knowledge route is a concrete feature catalog: its headers, document controls and states, ingestion dialogs, search feedback, confirmations, and accessible announcements support English and German. Counts, sizes, dates, and similarity percentages follow the active locale, while document data, paths, names, identifiers, search excerpts, partial-failure diagnostics, and API errors remain verbatim.
 
+The Integrations and MCP catalog localizes provider and chat-bridge setup, authentication and connection states, terminal-login controls, automation credentials, MCP categories, local CLI installation, clipboard feedback, and custom-server validation. Provider and product names, credential values, redacted placeholders, paths, endpoints, repository identifiers, tool and server names, scopes, transport literals, terminal streams, and server diagnostics remain verbatim and are never passed through translation interpolation.
+
 The operational Settings catalog covers General, Sprint, QA, Automation, Worker, Browser, and Danger controls and their related dialogs. Localized option captions continue to save the existing enum values, while branch tokens, paths, command examples, default instruction templates, dependency metadata, API errors, and runtime diagnostics are displayed unchanged.
 
 The Settings feature localizes each `SectionCard` title and its purpose summary, controlled-functions guidance, recommendation, and risk notes. Stable subcategory ids, English lookup aliases, documentation routes, provider names, technical values, and backend-facing data remain locale-neutral, and the linked long-form documentation remains English.

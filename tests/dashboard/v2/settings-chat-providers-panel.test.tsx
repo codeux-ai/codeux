@@ -2,7 +2,8 @@
 /** @jsx h */
 /** @jsxFrag Fragment */
 import { h, Fragment } from "preact";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { cleanup, fireEvent, render as testingLibraryRender, screen, waitFor, within } from "@testing-library/preact";
+import type { ComponentChildren } from "preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsIntegrationsPanel } from "../../../dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.js";
 import type {
@@ -14,6 +15,12 @@ import type {
   DashboardChatProviderConnectionRecord,
   DashboardChatProviderSetupDefinition,
 } from "../../../dashboard/src/v2/lib/chat-provider-api.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+import type { DashboardLocale } from "../../../dashboard/src/v2/i18n/locales.js";
+
+const render = (children: ComponentChildren, locale: DashboardLocale = "en") => testingLibraryRender(
+  <DashboardI18nProvider initialLocale={locale} storage={null}>{children}</DashboardI18nProvider>,
+);
 
 vi.mock("gsap", () => {
   const applyStyles = (target: unknown, props: Record<string, unknown>) => {
@@ -234,14 +241,14 @@ describe("SettingsIntegrationsPanel chat connectors", () => {
     await waitFor(() => expect(screen.getByText("Slack Connector")).not.toBeNull());
     expect(screen.getByText("Slack setup guidance")).not.toBeNull();
     expect((screen.getByLabelText("Slack Bridge display name") as HTMLInputElement).value).toBe("Slack Bridge");
-    expect(screen.getByRole("radiogroup", { name: "Slack Bridge bridge mode" })).not.toBeNull();
-    expect((screen.getByLabelText("Slack Bridge ingress URL") as HTMLInputElement).value).toBe("http://localhost/api/chat-providers/ingress/conn-slack");
+    expect(screen.getByRole("radiogroup", { name: "Slack Bridge Bridge mode" })).not.toBeNull();
+    expect((screen.getByLabelText("Slack Bridge Ingress URL") as HTMLInputElement).value).toBe("http://localhost/api/chat-providers/ingress/conn-slack");
     expect((screen.getByLabelText("Slack Bridge Bridge API key") as HTMLInputElement).value).toBe("");
     expect(screen.getByText(/configured\. Enter a replacement only when rotating it\./i)).not.toBeNull();
 
     expect(screen.getByText("Shared-channel routing")).not.toBeNull();
-    expect((screen.getByLabelText("C123 project selector prefix") as HTMLInputElement).value).toBe("/project");
-    expect((screen.getByLabelText("C123 routing hint") as HTMLInputElement).value).toBe("engineering");
+    expect((screen.getByLabelText("C123 Project selector prefix") as HTMLInputElement).value).toBe("/project");
+    expect((screen.getByLabelText("C123 Routing hint or project selector") as HTMLInputElement).value).toBe("engineering");
     expect(screen.getByLabelText("C123 Suppress rich widgets").getAttribute("aria-checked")).toBe("true");
 
     expect(screen.getByText("Retryable")).not.toBeNull();
@@ -255,5 +262,19 @@ describe("SettingsIntegrationsPanel chat connectors", () => {
       routingHints: { projectSelectorPrefix: "/project", projectSelector: "engineering" },
       suppressRichWidgets: true,
     }));
+  });
+
+  it("renders German connector success and keeps provider failures verbatim", async () => {
+    const state = createState("slack");
+    (state.chatProviders as typeof state.chatProviders & { error: string | null }).error = "Provider gateway unavailable: ECONNREFUSED";
+    render(<SettingsIntegrationsPanel state={state as any} />, "de");
+
+    await waitFor(() => expect(screen.getByText("Slack Konnektor")).not.toBeNull());
+    expect(screen.getByText("Chat-Konnektor-Einstellungen nicht verfügbar")).not.toBeNull();
+    expect(screen.getByText("Provider gateway unavailable: ECONNREFUSED")).not.toBeNull();
+    expect(screen.getByText("Antwortzustellung")).not.toBeNull();
+    expect(screen.getByRole("radiogroup", { name: "Slack Bridge Bridge-Modus" })).not.toBeNull();
+    expect((screen.getByLabelText("Slack Bridge Bridge-API-Schlüssel") as HTMLInputElement).value).toBe("");
+    expect(screen.getByText("Bearer [redacted] failed")).not.toBeNull();
   });
 });

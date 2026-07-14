@@ -4,6 +4,19 @@ import { AlertTriangle, CheckCircle2, Layers, RefreshCw } from "lucide-preact";
 import type { ContainerBuildProgress } from "../../../lib/activity.js";
 import { useLiveI18n, type LiveMessageKey } from "../../i18n/messages/live.js";
 
+export interface ContainerBuildStatusCopy {
+  cached: string;
+  fallback: string;
+  waiting: string;
+  building: string;
+  setupCacheImage: string;
+  loginBaseImage: string;
+  description: string;
+  progressSuffix: string;
+  percentCompleteSuffix: string;
+  progressUnavailable: string;
+}
+
 const BUILDING_KINDS = new Set<ContainerBuildProgress["kind"]>([
   "cache_miss",
   "lock_wait",
@@ -54,7 +67,8 @@ export const isActiveContainerBuildProgress = (progress: ContainerBuildProgress 
 export const ContainerBuildStatusInfobox: FunctionComponent<{
   progress: ContainerBuildProgress | null;
   className?: string;
-}> = ({ progress, className = "" }) => {
+  copy?: ContainerBuildStatusCopy;
+}> = ({ progress, className = "", copy }) => {
   const { t, formatNumber } = useLiveI18n();
   if (!progress) return null;
 
@@ -62,10 +76,23 @@ export const ContainerBuildStatusInfobox: FunctionComponent<{
   const progressId = `container-build-progress-${progress.imageTag.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   const percent = progress.progressPercent;
   const hasKnownProgress = typeof percent === "number" && Number.isFinite(percent);
-  const imageLabel = getImageLabel(progress, t("setupCacheImage"), t("loginBaseImage"));
+  const imageLabel = getImageLabel(
+    progress,
+    copy?.setupCacheImage ?? t("setupCacheImage"),
+    copy?.loginBaseImage ?? t("loginBaseImage"),
+  );
   const localizedPercent = hasKnownProgress
     ? formatNumber(percent / 100, { style: "percent", maximumFractionDigits: 1 })
     : null;
+  const statusTitle = copy
+    ? progress.kind === "build_success"
+      ? copy.cached
+      : progress.kind === "build_failure_fallback"
+        ? copy.fallback
+        : progress.kind === "lock_wait"
+          ? copy.waiting
+          : copy.building
+    : t(status.titleKey);
 
   return (
     <div
@@ -85,14 +112,14 @@ export const ContainerBuildStatusInfobox: FunctionComponent<{
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-[0.14em]">{t(status.titleKey)}</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.14em]">{statusTitle}</span>
             <span className="inline-flex min-w-0 items-center gap-1 rounded-md border border-current/20 px-2 py-0.5 text-[9px] font-mono uppercase tracking-[0.12em]">
               <Layers className="h-3 w-3 shrink-0" strokeWidth={2} aria-hidden="true" />
               <span className="min-w-0 break-words">{imageLabel}</span>
             </span>
           </div>
           <p className="mt-1 text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
-            {t("containerBuildDescription")}
+            {copy?.description ?? t("containerBuildDescription")}
           </p>
           <p className="mt-2 break-words text-[11px] font-mono text-slate-500 dark:text-slate-400">
             {progress.stepText || progress.message}
@@ -101,7 +128,7 @@ export const ContainerBuildStatusInfobox: FunctionComponent<{
             <div
               id={progressId}
               role="progressbar"
-              aria-label={t("buildProgress", { image: imageLabel })}
+              aria-label={copy ? imageLabel + copy.progressSuffix : t("buildProgress", { image: imageLabel })}
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={hasKnownProgress ? percent : undefined}
@@ -113,7 +140,13 @@ export const ContainerBuildStatusInfobox: FunctionComponent<{
               />
             </div>
             <div className="mt-1 text-[10px] font-mono text-slate-500 dark:text-slate-400">
-              {localizedPercent ? t("percentComplete", { percent: localizedPercent }) : t("progressUnavailable")}
+              {copy
+                ? hasKnownProgress
+                  ? `${percent}${copy.percentCompleteSuffix}`
+                  : copy.progressUnavailable
+                : localizedPercent
+                  ? t("percentComplete", { percent: localizedPercent })
+                  : t("progressUnavailable")}
             </div>
           </div>
         </div>

@@ -446,7 +446,9 @@ export const SecretInput: FunctionComponent<{
   "aria-description"?: string;
   "aria-describedby"?: string;
   "aria-busy"?: boolean | "true" | "false";
-}> = ({ value, onChange, placeholder, mono, disabled, invalid, valid, helperText, errorText, forceValidation, "aria-label": ariaLabel, "aria-description": ariaDescription, "aria-describedby": ariaDescribedby, "aria-busy": ariaBusy }) => {
+  showLabel?: string;
+  hideLabel?: string;
+}> = ({ value, onChange, placeholder, mono, disabled, invalid, valid, helperText, errorText, forceValidation, "aria-label": ariaLabel, "aria-description": ariaDescription, "aria-describedby": ariaDescribedby, "aria-busy": ariaBusy, showLabel, hideLabel }) => {
   const generatedId = useId();
   const [revealed, setRevealed] = useState(false);
   const RevealIcon = revealed ? EyeOff : Eye;
@@ -456,7 +458,9 @@ export const SecretInput: FunctionComponent<{
   const validId = valid && !showError ? `${generatedId}-valid` : undefined;
   const describedBy = [showError ? errorId : helperId, validId, ariaDescribedby].filter(Boolean).join(" ") || undefined;
   const secretLabel = ariaLabel || settingsShellText("secret");
-  const revealLabel = settingsShellText(revealed ? "hideSecret" : "showSecret", { label: secretLabel });
+  const revealLabel = revealed
+    ? (hideLabel ?? settingsShellText("hideSecret", { label: secretLabel }))
+    : (showLabel ?? settingsShellText("showSecret", { label: secretLabel }));
 
   return (
     <div className="relative flex min-w-0 flex-col gap-1.5">

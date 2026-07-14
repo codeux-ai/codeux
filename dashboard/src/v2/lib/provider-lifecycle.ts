@@ -1,4 +1,6 @@
 import type { ProviderId } from "../../types.js";
+import { settingsIntegrationsMessages } from "../i18n/messages/settings-integrations.js";
+import { translateDashboardMessage, type DashboardLocale } from "../i18n/locales.js";
 
 export interface ProviderLifecycleMetadata {
   lifecycle: "active" | "deprecated";
@@ -25,3 +27,12 @@ export const isDeprecatedProvider = (provider: ProviderId): boolean => (
   providerLifecycle[provider].lifecycle === "deprecated"
 );
 
+export const getProviderLifecycleMessage = (
+  provider: ProviderId,
+  locale: DashboardLocale = "en",
+): string | undefined => {
+  if (provider !== "gemini") {
+    return providerLifecycle[provider].message;
+  }
+  return translateDashboardMessage(settingsIntegrationsMessages, locale, "providerLifecycleGemini");
+};
