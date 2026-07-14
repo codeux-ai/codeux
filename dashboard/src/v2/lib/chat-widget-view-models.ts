@@ -623,13 +623,35 @@ const canonicalAppCreationStageId = (value: string): string => {
   return normalized || "stage";
 };
 
-const DEFAULT_APP_CREATION_STAGE_DEFS = [
-  { id: "planning", labelKey: "purposePlanning" },
-  { id: "plan", labelKey: "plan" },
-  { id: "showing_tasks", labelKey: "showingEachTask" },
-  { id: "start", labelKey: "start" },
-  { id: "finish", labelKey: "finish" },
-] as const;
+const APP_CREATION_STAGE_LABEL_KEYS = {
+  planning: "purposePlanning",
+  plan: "plan",
+  showing_tasks: "showingEachTask",
+  start: "start",
+  finish: "finish",
+} as const;
+
+type CanonicalAppCreationStageId = keyof typeof APP_CREATION_STAGE_LABEL_KEYS;
+
+const DEFAULT_APP_CREATION_STAGE_DEFS = Object.entries(APP_CREATION_STAGE_LABEL_KEYS).map(([id, labelKey]) => ({
+  id: id as CanonicalAppCreationStageId,
+  labelKey,
+}));
+
+const formatAppCreationStageLabel = (
+  id: string,
+  rawId: string,
+  explicitLabel: string | null,
+  locale: DashboardLocale,
+): string => {
+  if (explicitLabel) {
+    return explicitLabel;
+  }
+  if (Object.prototype.hasOwnProperty.call(APP_CREATION_STAGE_LABEL_KEYS, id)) {
+    return translateChatMessage(locale, APP_CREATION_STAGE_LABEL_KEYS[id as CanonicalAppCreationStageId]);
+  }
+  return rawId;
+};
 
 const defaultAppCreationStageStatus = (
   stageId: string,
@@ -671,9 +693,10 @@ const normalizeAppCreationStages = (
     .map(readRecord)
     .filter((stage): stage is Record<string, unknown> => Boolean(stage))
     .map((stage) => {
-      const rawId = readString(stage.id) || readString(stage.key) || readString(stage.label) || "stage";
+      const explicitLabel = readString(stage.label);
+      const rawId = readString(stage.id) || readString(stage.key) || explicitLabel || "stage";
       const id = canonicalAppCreationStageId(rawId);
-      const label = readString(stage.label) || formatStatusLabel(id);
+      const label = formatAppCreationStageLabel(id, rawId, explicitLabel, locale);
       const status = normalizeAppCreationStageStatus(stage.status ?? stage.state, defaultAppCreationStageStatus(id, widgetStatus));
       return buildAppCreationStageState(id, label, status, locale);
     });

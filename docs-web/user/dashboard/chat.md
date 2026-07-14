@@ -93,7 +93,7 @@ Each action has a fixed template and request-scoped guidance mapping:
 
 The quickaction also carries the active project's effective techstack into planning: the selected catalog entry when assigned, or the catalog default when the project is unassigned. Stack item labels become suggestion tags, so the progress widget and planner begin from the same stack context visible in the dashboard. Catalog guidance is applied only to this planning request, reconciled with stronger repository instructions, and never saved as a project setting.
 
-The transcript then shows an app progress widget instead of raw status data. The widget reports:
+The transcript then shows an app progress widget instead of raw status data. Known unlabeled planning-stage IDs use the dashboard language, while provider-supplied labels and unknown custom stage values remain unchanged. The widget reports:
 
 - whether the sprint is for a web app, desktop app, online shop, portfolio, or game
 - the app sprint name

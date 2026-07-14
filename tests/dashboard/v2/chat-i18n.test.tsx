@@ -4,6 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import type { ComponentChildren } from "preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatMessageBubble } from "../../../dashboard/src/v2/components/chat/ChatMessageBubble.js";
+import { ChatCreateAppQuickActions } from "../../../dashboard/src/v2/components/chat/ChatCreateAppQuickActions.js";
 import { InvocationListCard } from "../../../dashboard/src/v2/components/chat/InvocationListCard.js";
 import { InvocationMessageBubble } from "../../../dashboard/src/v2/components/chat/InvocationMessageBubble.js";
 import { SpeechInputButton } from "../../../dashboard/src/v2/components/speech/SpeechInputButton.js";
@@ -132,6 +133,27 @@ describe("German Chat localization boundary", () => {
     expect(germanPrompts[0]?.label).toBe("Mein erstes Projekt hinzufügen");
   });
 
+  it("localizes create-app quick-action accessible descriptions", () => {
+    renderGerman(
+      <ChatCreateAppQuickActions
+        hasProject
+        showInitialCreateActions
+        onSelect={vi.fn()}
+      />,
+    );
+
+    const expectedDescriptions = [
+      ["Web-App erstellen", "Sprint für Web-App starten"],
+      ["Desktop-App erstellen", "Sprint für Desktop-App starten"],
+      ["Onlineshop erstellen", "Sprint für Onlineshop starten"],
+      ["Portfolio erstellen", "Sprint für Portfolio starten"],
+      ["Spiel erstellen", "Sprint für Spiel starten"],
+    ] as const;
+    for (const [name, description] of expectedDescriptions) {
+      expect(screen.getByRole("button", { name, description: new RegExp(description) })).toBeInTheDocument();
+    }
+  });
+
   it("localizes pure widget defaults without changing provider metadata", () => {
     const localized = getChatWidgetData({
       ...message,
@@ -160,6 +182,34 @@ describe("German Chat localization boundary", () => {
       routeKind: "worker",
       providerLabel: "Provider Brand",
     }, "de").planName).toBe("Task über Provider Brand");
+  });
+
+  it("localizes canonical unlabeled app-progress stages while preserving explicit and custom labels", () => {
+    const localized = getChatWidgetData({
+      ...message,
+      metadata: {
+        widget_metadata: {
+          type: "app_progress",
+          status: "running",
+          appKind: "web_app",
+          planningStages: [
+            { id: "planning", status: "completed" },
+            { id: "showing_each_task", status: "running" },
+            { id: "start", label: "Provider Explicit Start", status: "pending" },
+            { id: "custom_RUNTIME_Value", status: "pending" },
+          ],
+        },
+      },
+    }, undefined, "de");
+
+    expect(localized.appCreationProgress?.stages.map(({ id, label }) => [id, label])).toEqual([
+      ["planning", "Planung"],
+      ["plan", "Plan"],
+      ["showing_tasks", "Jeden Task anzeigen"],
+      ["start", "Provider Explicit Start"],
+      ["custom_runtime_value", "custom_RUNTIME_Value"],
+      ["finish", "Abschluss"],
+    ]);
   });
 
   it("preserves tool status, arguments, and output while translating the tool frame", () => {

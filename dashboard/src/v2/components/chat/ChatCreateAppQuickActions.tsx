@@ -31,6 +31,9 @@ export const ChatCreateAppQuickActions: FunctionComponent<{
   const labelKeys: Record<DashboardCreateAppQuickactionKind, ChatTextMessageKey> = {
     web_app: "createWebApp", desktop_app: "createDesktopApp", online_shop: "createOnlineShop", portfolio: "createPortfolio", game: "createGame",
   };
+  const appKindLabelKeys: Record<DashboardCreateAppQuickactionKind, ChatTextMessageKey> = {
+    web_app: "webApp", desktop_app: "desktopApp", online_shop: "onlineShop", portfolio: "portfolio", game: "game",
+  };
 
   return (
     <div className="min-w-0" aria-label={translate(chatMessages, "createAppQuickActions")}>
@@ -40,7 +43,10 @@ export const ChatCreateAppQuickActions: FunctionComponent<{
         )).map(({ kind, displayLabel, appKindLabel }) => {
           const Icon = CREATE_APP_ACTION_ICONS[kind];
           const label = locale === "en" ? displayLabel : translate(chatMessages, labelKeys[kind]);
-          const description = translate(chatMessages, kind === "online_shop" ? "launchOnlineShopSprint" : "launchAppSprint", { appKind: appKindLabel.toLowerCase() });
+          const localizedAppKindLabel = locale === "en"
+            ? appKindLabel.toLowerCase()
+            : translate(chatMessages, appKindLabelKeys[kind]);
+          const description = translate(chatMessages, kind === "online_shop" ? "launchOnlineShopSprint" : "launchAppSprint", { appKind: localizedAppKindLabel });
           return (
             <button
               key={kind}
