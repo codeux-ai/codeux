@@ -12,6 +12,8 @@ import {
   DashboardI18nProvider,
   DASHBOARD_LOCALE_STORAGE_KEY,
 } from "../../../dashboard/src/v2/i18n/index.js";
+import { SettingsDetailWorkspaceProvider } from "../../../dashboard/src/v2/components/settings/panels/SharedPanelComponents.js";
+import type { DashboardAccentColor } from "../../../dashboard/src/types.js";
 
 expect.extend(matchers);
 
@@ -19,8 +21,22 @@ vi.mock("../../../dashboard/src/v2/hooks/useThemeSetting.js", () => ({
   useThemeSetting: () => ({ theme: "SYSTEM", setTheme: vi.fn() }),
 }));
 
-const Harness = ({ activeScope = "system", onDraftUpdate = vi.fn() }: { activeScope?: "system" | "project"; onDraftUpdate?: ReturnType<typeof vi.fn> }) => {
-  const [settings, setSettings] = useState(cloneProjectSettings(DEFAULT_DASHBOARD_SETTINGS));
+const Harness = ({
+  activeScope = "system",
+  initialAccent,
+  onDraftUpdate = vi.fn(),
+}: {
+  activeScope?: "system" | "project";
+  initialAccent?: DashboardAccentColor;
+  onDraftUpdate?: ReturnType<typeof vi.fn>;
+}) => {
+  const [settings, setSettings] = useState(() => {
+    const initialSettings = cloneProjectSettings(DEFAULT_DASHBOARD_SETTINGS);
+    if (initialAccent) {
+      initialSettings.appearance.accentColor = initialAccent;
+    }
+    return initialSettings;
+  });
   return (
     <SettingsAppearancePanel state={{
       activeScope,
@@ -65,6 +81,37 @@ describe("SettingsAppearancePanel accent colors", () => {
     expect(violet).toHaveAttribute("aria-checked", "true");
     expect(codeUx).toHaveAttribute("aria-checked", "false");
     expect(document.documentElement.dataset.accent).toBe("violet");
+  });
+
+  it("localizes German accent highlights, option labels, descriptions, and animation names", () => {
+    const overview = render(
+      <DashboardI18nProvider initialLocale="de">
+        <SettingsDetailWorkspaceProvider>
+          <Harness initialAccent="VIOLET" />
+        </SettingsDetailWorkspaceProvider>
+      </DashboardI18nProvider>,
+    );
+    expect(screen.getByText("Violett")).toBeInTheDocument();
+    expect(screen.queryByText("Violet")).not.toBeInTheDocument();
+    overview.unmount();
+
+    render(<DashboardI18nProvider initialLocale="de"><Harness initialAccent="VIOLET" /></DashboardI18nProvider>);
+
+    const palette = screen.getByRole("radiogroup", { name: "Akzentfarbe" });
+    const violet = within(palette).getByRole("radio", {
+      name: "Violett. Ein elegantes Violett für einen ausdrucksstärkeren Arbeitsbereich.",
+    });
+    expect(within(violet).getByText("Violett")).toBeInTheDocument();
+    expect(within(palette).getByRole("radio", {
+      name: "Ozean. Klares, selbstbewusstes Blau in beiden Designs.",
+    })).toBeInTheDocument();
+
+    expect(screen.getByRole("radio", { name: "Tiefer Ozean" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Neonträume" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Polarlicht" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Kosmischer Staub" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Ätherischer Nebel" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Quantenfeld" })).toBeInTheDocument();
   });
 
   it("switches language immediately, persists it, updates html lang, and announces the change", () => {

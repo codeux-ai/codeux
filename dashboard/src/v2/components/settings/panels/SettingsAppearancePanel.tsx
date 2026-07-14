@@ -5,11 +5,40 @@ import { PillChoiceGroup, SelectInput } from "../SettingsFormFields.js";
 import { SectionCard, Row, getFieldBadge } from "./SharedPanelComponents.js";
 import { Check, Image, Monitor } from "lucide-preact";
 import { applyAppearanceSettings } from "../../../lib/apply-appearance.js";
-import type { BackgroundPattern } from "../../../../types.js";
+import type { BackgroundPattern, DashboardAccentColor } from "../../../../types.js";
 import { useThemeSetting } from "../../../hooks/useThemeSetting.js";
 import { ACCENT_COLOR_PRESETS, getAccentColorPreset } from "../../../lib/accent-colors.js";
 import { useDashboardI18n } from "../../../i18n/context.js";
-import { settingsShellMessages } from "../../../i18n/messages/settings-shell.js";
+import {
+  settingsShellMessages,
+  type SettingsShellMessageKey,
+} from "../../../i18n/messages/settings-shell.js";
+
+interface AccentPresetMessageKeys {
+  label: SettingsShellMessageKey;
+  description: SettingsShellMessageKey;
+}
+
+const ACCENT_PRESET_MESSAGE_KEYS = {
+  CODEUX: { label: "accentCodeUx", description: "accentCodeUxDescription" },
+  OCEAN: { label: "accentOcean", description: "accentOceanDescription" },
+  VIOLET: { label: "accentViolet", description: "accentVioletDescription" },
+  CYAN: { label: "accentCyan", description: "accentCyanDescription" },
+  MAGENTA: { label: "accentMagenta", description: "accentMagentaDescription" },
+  GRAPHITE: { label: "accentGraphite", description: "accentGraphiteDescription" },
+} as const satisfies Readonly<Record<DashboardAccentColor, AccentPresetMessageKeys>>;
+
+const ANIMATED_BACKGROUND_OPTIONS = [
+  { value: "deep-ocean", label: "animatedBackgroundDeepOcean" },
+  { value: "neon-dreams", label: "animatedBackgroundNeonDreams" },
+  { value: "aurora-borealis", label: "animatedBackgroundAuroraBorealis" },
+  { value: "cosmic-dust", label: "animatedBackgroundCosmicDust" },
+  { value: "ethereal-mist", label: "animatedBackgroundEtherealMist" },
+  { value: "quantum-field", label: "animatedBackgroundQuantumField" },
+] as const satisfies ReadonlyArray<{
+  value: string;
+  label: SettingsShellMessageKey;
+}>;
 
 export const SettingsAppearancePanel: FunctionComponent<{
   state: SettingsPageState;
@@ -27,6 +56,10 @@ export const SettingsAppearancePanel: FunctionComponent<{
   const [showSizeWarning, setShowSizeWarning] = useState(false);
   const supportsNativeZoom = typeof window !== "undefined" && Boolean(window.codeUxDesktop?.setZoom);
   const activeAccent = getAccentColorPreset(appearance.accentColor);
+  const activeAccentLabel = translate(
+    settingsShellMessages,
+    ACCENT_PRESET_MESSAGE_KEYS[activeAccent.id].label,
+  );
 
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
@@ -38,7 +71,7 @@ export const SettingsAppearancePanel: FunctionComponent<{
         highlights={[
           { label: translate(settingsShellMessages, "theme"), value: (activeScope === "system" ? persistedTheme : appearance.theme).toLowerCase(), tone: "active" },
           { label: translate(settingsShellMessages, "navigation"), value: appearance.navigationMode === "DOCK" ? translate(settingsShellMessages, "floatingDock") : translate(settingsShellMessages, "sidebar") },
-          { label: translate(settingsShellMessages, "accent"), value: activeAccent.label },
+          { label: translate(settingsShellMessages, "accent"), value: activeAccentLabel },
         ]}
       >
         <Row
@@ -131,13 +164,16 @@ export const SettingsAppearancePanel: FunctionComponent<{
           <div role="radiogroup" aria-label={translate(settingsShellMessages, "accentColorLabel")} className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {ACCENT_COLOR_PRESETS.map((preset) => {
               const selected = preset.id === (appearance.accentColor || "CODEUX");
+              const messageKeys = ACCENT_PRESET_MESSAGE_KEYS[preset.id];
+              const presetLabel = translate(settingsShellMessages, messageKeys.label);
+              const presetDescription = translate(settingsShellMessages, messageKeys.description);
               return (
                 <button
                   key={preset.id}
                   type="button"
                   role="radio"
                   aria-checked={selected}
-                  aria-label={`${preset.label}. ${preset.description}`}
+                  aria-label={`${presetLabel}. ${presetDescription}`}
                   onClick={() => {
                     state.updateEditableSettings((current) => ({
                       ...current,
@@ -163,7 +199,7 @@ export const SettingsAppearancePanel: FunctionComponent<{
                       <Check aria-hidden="true" className="h-3 w-3" strokeWidth={3} />
                     </span>
                   </span>
-                  <span className="mt-2 block text-xs font-bold text-slate-800 dark:text-slate-100">{preset.label}</span>
+                  <span className="mt-2 block text-xs font-bold text-slate-800 dark:text-slate-100">{presetLabel}</span>
                 </button>
               );
             })}
@@ -358,14 +394,10 @@ export const SettingsAppearancePanel: FunctionComponent<{
                   },
                 }));
               }}
-              options={[
-                { value: "deep-ocean", label: "Deep Ocean" },
-                { value: "neon-dreams", label: "Neon Dreams" },
-                { value: "aurora-borealis", label: "Aurora Borealis" },
-                { value: "cosmic-dust", label: "Cosmic Dust" },
-                { value: "ethereal-mist", label: "Ethereal Mist" },
-                { value: "quantum-field", label: "Quantum Field" },
-              ]}
+              options={ANIMATED_BACKGROUND_OPTIONS.map((option) => ({
+                value: option.value,
+                label: translate(settingsShellMessages, option.label),
+              }))}
             />
           </Row>
         ) : (
