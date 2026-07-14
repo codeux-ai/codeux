@@ -1,11 +1,9 @@
 /** @vitest-environment happy-dom */
 import { h } from "preact";
-import type { ComponentChildren } from "preact";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import { afterEach, expect, test, describe, vi } from "vitest";
 import { AddProjectModal } from "../AddProjectModal.js";
 import * as matchers from '@testing-library/jest-dom/matchers';
-import { DashboardI18nProvider } from "../../../i18n/context.js";
 expect.extend(matchers);
 
 describe("AddProjectModal Accessibility", () => {
@@ -13,12 +11,8 @@ describe("AddProjectModal Accessibility", () => {
     cleanup();
   });
 
-  const renderWithI18n = (children: ComponentChildren) => render(
-    <DashboardI18nProvider initialLocale="en" storage={null}>{children}</DashboardI18nProvider>,
-  );
-
   const revealImportedSetupOptions = async () => {
-    renderWithI18n(<AddProjectModal onClose={() => {}} onAdd={() => {}} initialSourceType="local" />);
+    render(<AddProjectModal onClose={() => {}} onAdd={() => {}} initialSourceType="local" />);
 
     const nameInput = screen.getByLabelText(/Project Name/i);
     fireEvent.input(nameInput, { target: { value: "Imported App" } });
@@ -30,7 +24,7 @@ describe("AddProjectModal Accessibility", () => {
   };
 
   test("renders with accessible name and structure", () => {
-    const { container } = renderWithI18n(<AddProjectModal onClose={() => {}} onAdd={() => {}} initialSourceType="local" />);
+    const { container } = render(<AddProjectModal onClose={() => {}} onAdd={() => {}} initialSourceType="local" />);
     const dialogs = screen.getAllByRole("dialog");
     expect(dialogs[0]).toHaveAttribute("aria-labelledby", "add-project-modal-title");
 
@@ -40,7 +34,7 @@ describe("AddProjectModal Accessibility", () => {
   });
 
   test("form inputs have associated labels and handle validation errors", async () => {
-    const { container } = renderWithI18n(<AddProjectModal onClose={() => {}} onAdd={() => {}} initialSourceType="local" />);
+    const { container } = render(<AddProjectModal onClose={() => {}} onAdd={() => {}} initialSourceType="local" />);
 
     // Check for Local Path input
     const pathInput = document.getElementById("add-project-path");
@@ -52,7 +46,7 @@ describe("AddProjectModal Accessibility", () => {
   });
 
   test("invalid git submit marks errors, focuses first invalid field, and scrolls form body", async () => {
-    renderWithI18n(<AddProjectModal onClose={() => {}} onAdd={() => {}} initialSourceType="local" />);
+    render(<AddProjectModal onClose={() => {}} onAdd={() => {}} initialSourceType="local" />);
 
     fireEvent.click(screen.getByRole("button", { name: /git url/i }));
 
@@ -91,7 +85,7 @@ describe("AddProjectModal Accessibility", () => {
   });
 
   test("new project setup omits the techstack detection option", () => {
-    renderWithI18n(<AddProjectModal onClose={() => {}} onAdd={() => {}} initialSourceType="new_project" />);
+    render(<AddProjectModal onClose={() => {}} onAdd={() => {}} initialSourceType="new_project" />);
 
     expect(screen.queryByRole("button", { name: /Techstack/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/Initialize with Project Setup Agent/i)).not.toBeInTheDocument();
