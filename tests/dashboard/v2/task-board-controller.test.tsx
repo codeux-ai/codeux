@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 /** @jsx h */
 import { h } from "preact";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/preact";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { useTaskBoardController } from "../../../dashboard/src/v2/hooks/use-task-board-controller.js";
@@ -11,6 +11,7 @@ import { useDashboardRuntimeData } from "../../../dashboard/src/hooks/use-dashbo
 import { useProjectEffectiveSettings } from "../../../dashboard/src/v2/hooks/use-project-effective-settings.js";
 import { useProjectTasks } from "../../../dashboard/src/v2/hooks/use-project-tasks.js";
 import type { Source, Sprint } from "../../../dashboard/src/v2/types.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
 
 expect.extend(matchers);
 
@@ -152,6 +153,7 @@ describe("useTaskBoardController project and sprint scope", () => {
         <div data-testid="task-scope">{controller.taskScopeSprintId ?? "all"}</div>
         <div data-testid="selected-sprint">{controller.selectedSprintId ?? "none"}</div>
         <div data-testid="sprint-count">{controller.sprints.length}</div>
+        <div data-testid="board-announcement">{controller.boardCountAnnouncement}</div>
         <button type="button" onClick={() => controller.handleSprintScopeSelect(sprintB.id)}>
           Select Sprint B
         </button>
@@ -251,5 +253,19 @@ describe("useTaskBoardController project and sprint scope", () => {
 
     expect(window.location.search).toBe("?sprintId=sprint-b");
     expect(selectSprint).toHaveBeenCalledWith(sprintB.id);
+  });
+
+  it("builds German controller announcements without changing route scope", async () => {
+    render(
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <Harness />
+      </DashboardI18nProvider>,
+    );
+
+    expect(screen.getByTestId("task-scope")).toHaveTextContent("sprint-a");
+    await waitFor(() => {
+      expect(screen.getByTestId("board-announcement")).toHaveTextContent(/Das Aufgabenboard zeigt jetzt 0 Aufgaben/);
+      expect(screen.getByTestId("board-announcement")).toHaveTextContent(/Eingereiht: 0/);
+    }, { timeout: 2000 });
   });
 });

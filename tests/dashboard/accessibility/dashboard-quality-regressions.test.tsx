@@ -6,13 +6,20 @@ import { fileURLToPath } from "node:url";
 import { h } from "preact";
 import { useRef, useState } from "preact/hooks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/preact";
+import { act, cleanup, fireEvent, render as testingRender, screen, waitFor, within } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import { renderWithI18n } from "../render-with-i18n.js";
 import type { ExecutionInvocationRecord, SprintPreviewSession } from "../../../dashboard/src/types.js";
 import type { SystemSort } from "../../../dashboard/src/v2/pages/stats/hooks/use-system-view-data.js";
 import type { TaskCardViewModel } from "../../../dashboard/src/v2/lib/tasks/task-card-view-model.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+
+const render = (ui: Parameters<typeof testingRender>[0], options?: Parameters<typeof testingRender>[1]) => testingRender(ui, {
+  ...options,
+  wrapper: ({ children }) => <DashboardI18nProvider initialLocale="en" storage={null}>{children}</DashboardI18nProvider>,
+});
+
 import {
   collectHorizontalOverflowWithoutBoundary,
   collectIconOnlyButtonsWithoutNames,
@@ -742,8 +749,8 @@ describe("dashboard accessibility quality regressions", () => {
     expect(settingsRail).toMatch(/Disabled/);
 
     const taskCard = readSource("dashboard/src/v2/components/tasks/KanbanTaskCard.tsx");
-    expect(taskCard).toMatch(/Edit task \$\{task\.id\}/);
-    expect(taskCard).toMatch(/Delete task \$\{task\.id\}/);
+    expect(taskCard).toMatch(/translate\(taskMessages, "editTaskTarget"/);
+    expect(taskCard).toMatch(/translate\(taskMessages, "deleteTaskTarget"/);
     expect(taskCard).not.toMatch(/group-hover:opacity-100/);
   });
 });

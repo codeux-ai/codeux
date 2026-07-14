@@ -1,6 +1,9 @@
+import type { DashboardLocale } from "../i18n/locales.js";
+
 export function formatInvocationRetryAt(
   isoString: string | null | undefined,
   timeZone?: string,
+  locale: DashboardLocale = "en",
 ): string | null {
   if (!isoString) {
     return null;
@@ -11,7 +14,7 @@ export function formatInvocationRetryAt(
   }
 
   const resolvedTimeZone = timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(locale, {
     month: "short",
     day: "numeric",
     hour: "2-digit",

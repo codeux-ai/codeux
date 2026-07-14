@@ -1,5 +1,8 @@
 import { type FunctionComponent } from "preact";
 import { selectAgentHumorMessage } from "../../../lib/agent-humor-messages.js";
+import type { DashboardLocale } from "../../../i18n/locales.js";
+import { useDashboardI18n } from "../../../i18n/context.js";
+import { chatMessages } from "../../../i18n/messages/chat.js";
 
 const EXPLICIT_MOOD_METADATA_KEYS = ["moodComment", "thinkingLine", "pmAside"] as const;
 const MAX_MOOD_ASIDE_LENGTH = 180;
@@ -8,6 +11,7 @@ const UNSAFE_MOOD_ASIDE_PATTERN = /\b(?:asshole|bastard|crap|damn|dumb|garbage|h
 export interface ResolveAgentMoodAsideOptions {
   metadata?: Record<string, unknown> | null;
   seed: string;
+  locale?: DashboardLocale;
 }
 
 export interface AgentMoodAsideProps {
@@ -47,6 +51,7 @@ export const buildAgentMoodAsideSeed = (parts: readonly unknown[]): string => (
 export const resolveAgentMoodAsideText = ({
   metadata,
   seed,
+  locale = "en",
 }: ResolveAgentMoodAsideOptions): string => {
   for (const key of EXPLICIT_MOOD_METADATA_KEYS) {
     const explicitText = normalizeMoodAsideText(metadata?.[key]);
@@ -59,14 +64,16 @@ export const resolveAgentMoodAsideText = ({
     category: "mood",
     seed,
     nowMs: 0,
+    locale,
   });
 };
 
 export const AgentMoodAside: FunctionComponent<AgentMoodAsideProps> = ({
   text,
-  ariaLabel = "Project manager thought",
+  ariaLabel,
   className = "",
 }) => {
+  const { translate } = useDashboardI18n();
   const displayText = normalizeMoodAsideText(text);
   if (!displayText) {
     return null;
@@ -75,7 +82,7 @@ export const AgentMoodAside: FunctionComponent<AgentMoodAsideProps> = ({
   return (
     <aside
       role="note"
-      aria-label={ariaLabel}
+      aria-label={ariaLabel ?? translate(chatMessages, "projectManagerThought")}
       className={`mt-2 max-w-full overflow-hidden border-l border-slate-300/70 pl-3 text-[13px] italic leading-5 text-slate-500 break-words overflow-wrap-anywhere dark:border-white/15 dark:text-slate-400 ${className}`}
     >
       <span className="font-serif">{displayText}</span>

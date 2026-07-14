@@ -2,6 +2,8 @@ import { type FunctionComponent } from "preact";
 import { AlertTriangle, CheckCircle2, CircleAlert, Sparkles } from "lucide-preact";
 import { ChatWidgetFrame, type ExecutionStatus } from "./ChatWidgetFrame.js";
 import type { SelfReflectionCriterionState, SelfReflectionWidgetState } from "../../../lib/chat-widget-view-models.js";
+import { useDashboardI18n } from "../../../i18n/context.js";
+import { chatMessages } from "../../../i18n/messages/chat.js";
 
 export interface SelfReflectionWidgetProps {
   reflection: SelfReflectionWidgetState;
@@ -58,7 +60,9 @@ const StarRating: FunctionComponent<{ criterion: SelfReflectionCriterionState }>
   );
 };
 
-const ReflectionCriterionCard: FunctionComponent<{ criterion: SelfReflectionCriterionState }> = ({ criterion }) => (
+const ReflectionCriterionCard: FunctionComponent<{ criterion: SelfReflectionCriterionState }> = ({ criterion }) => {
+  const { translate } = useDashboardI18n();
+  return (
   <li className="min-w-0 rounded-lg border border-black/[0.05] bg-white/65 p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
     <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0">
@@ -83,19 +87,22 @@ const ReflectionCriterionCard: FunctionComponent<{ criterion: SelfReflectionCrit
 
     {criterion.improvementInstructions ? (
       <div className="mt-2 rounded-md border border-status-amber/25 bg-status-amber/10 px-2.5 py-2 text-[12px] leading-5 text-slate-700 dark:text-slate-200">
-        <span className="font-semibold text-status-amber">Improvement: </span>
+        <span className="font-semibold text-status-amber">{translate(chatMessages, "improvement")} </span>
         <span className="whitespace-pre-wrap break-words">{criterion.improvementInstructions}</span>
       </div>
     ) : null}
   </li>
-);
+  );
+};
 
-export const SelfReflectionWidget: FunctionComponent<SelfReflectionWidgetProps> = ({ reflection }) => (
+export const SelfReflectionWidget: FunctionComponent<SelfReflectionWidgetProps> = ({ reflection }) => {
+  const { translate } = useDashboardI18n();
+  return (
   <ChatWidgetFrame
     status={frameStatus(reflection)}
     header={
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Reflection</span>
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{translate(chatMessages, "reflection")}</span>
         <span className="min-w-0 break-words font-semibold text-slate-800 dark:text-slate-100">{reflection.purposeLabel}</span>
       </div>
     }
@@ -116,7 +123,7 @@ export const SelfReflectionWidget: FunctionComponent<SelfReflectionWidgetProps> 
           </div>
           {reflection.finalDecisionLabel ? (
             <div className="break-words text-[12.5px] text-slate-600 dark:text-slate-300">
-              Final decision: <span className="font-semibold text-slate-800 dark:text-slate-100">{reflection.finalDecisionLabel}</span>
+              {translate(chatMessages, "finalDecision")} <span className="font-semibold text-slate-800 dark:text-slate-100">{reflection.finalDecisionLabel}</span>
             </div>
           ) : null}
         </div>
@@ -124,7 +131,7 @@ export const SelfReflectionWidget: FunctionComponent<SelfReflectionWidgetProps> 
 
       {reflection.errorMessage ? (
         <div role="alert" className="rounded-lg border border-status-red/25 bg-status-red/10 px-3 py-2 text-[12.5px] leading-6 text-slate-700 dark:text-slate-200">
-          <span className="font-semibold text-status-red">Reflection error: </span>
+          <span className="font-semibold text-status-red">{translate(chatMessages, "reflectionError")}: </span>
           <span className="whitespace-pre-wrap break-words">{reflection.errorMessage}</span>
         </div>
       ) : null}
@@ -137,9 +144,10 @@ export const SelfReflectionWidget: FunctionComponent<SelfReflectionWidgetProps> 
         </ul>
       ) : (
         <div className="rounded-lg border border-dashed border-black/[0.08] px-3 py-2 text-[12.5px] text-slate-500 dark:border-white/[0.08] dark:text-slate-400">
-          No criterion scores were recorded for this reflection.
+          {translate(chatMessages, "noCriterionScores")}
         </div>
       )}
     </section>
   </ChatWidgetFrame>
-);
+  );
+};

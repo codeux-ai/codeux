@@ -49,8 +49,6 @@ export interface DashboardI18nProviderProps {
   storage?: DashboardLocaleStorage | null;
 }
 
-const DashboardI18nContext = createContext<DashboardI18nContextValue | null>(null);
-
 const createFallbackDashboardI18n = (): DashboardI18nContextValue => ({
   locale: "en",
   setLocale: () => undefined,
@@ -62,6 +60,16 @@ const createFallbackDashboardI18n = (): DashboardI18nContextValue => ({
 });
 
 const FALLBACK_DASHBOARD_I18N = createFallbackDashboardI18n();
+
+const DashboardI18nContext = createContext<DashboardI18nContextValue>(FALLBACK_DASHBOARD_I18N);
+
+export const DASHBOARD_LOCALE_CHANGE_EVENT = "codeux:dashboard-locale-change";
+
+const announceDashboardLocaleChange = (locale: DashboardLocale): void => {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent<DashboardLocale>(DASHBOARD_LOCALE_CHANGE_EVENT, { detail: locale }));
+  }
+};
 
 export const syncDashboardDocumentLocale = (locale: DashboardLocale): void => {
   if (typeof document !== "undefined") {
@@ -93,6 +101,7 @@ export const DashboardI18nProvider: FunctionComponent<DashboardI18nProviderProps
     syncDashboardDocumentLocale(resolvedLocale);
     setLocaleState(resolvedLocale);
     writeDashboardLocale(resolvedLocale, storage);
+    announceDashboardLocaleChange(resolvedLocale);
   }, [storage]);
 
   useLayoutEffect(() => {
@@ -110,6 +119,7 @@ export const DashboardI18nProvider: FunctionComponent<DashboardI18nProviderProps
       const nextLocale = resolveDashboardLocale(event.newValue);
       syncDashboardDocumentLocale(nextLocale);
       setLocaleState(nextLocale);
+      announceDashboardLocaleChange(nextLocale);
     };
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
@@ -138,11 +148,7 @@ export const DashboardI18nProvider: FunctionComponent<DashboardI18nProviderProps
 };
 
 export const useDashboardI18n = (): DashboardI18nContextValue => {
-  const context = useContext(DashboardI18nContext);
-  if (!context) {
-    throw new Error("useDashboardI18n must be used within DashboardI18nProvider");
-  }
-  return context;
+  return useContext(DashboardI18nContext);
 };
 
 /**
@@ -150,6 +156,6 @@ export const useDashboardI18n = (): DashboardI18nContextValue => {
  * embedders. They use the English compatibility locale when no root provider
  * is present, while the mounted dashboard still reacts to provider updates.
  */
-export const useOptionalDashboardI18n = (): DashboardI18nContextValue => (
-  useContext(DashboardI18nContext) ?? FALLBACK_DASHBOARD_I18N
+ export const useOptionalDashboardI18n = (): DashboardI18nContextValue => (
+   useContext(DashboardI18nContext) ?? FALLBACK_DASHBOARD_I18N
 );

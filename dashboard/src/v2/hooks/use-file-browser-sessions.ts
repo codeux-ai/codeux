@@ -38,7 +38,6 @@ export const useFileBrowserSessions = ({
       setSessions(data);
       setError(null);
     } catch (fetchError) {
-      // Keep server/API error text verbatim; only dashboard-authored surrounding chrome is localized.
       setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
     } finally {
       if (!silent) setLoading(false);

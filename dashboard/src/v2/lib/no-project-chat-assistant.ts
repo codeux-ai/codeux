@@ -113,10 +113,56 @@ export const NO_PROJECT_ASSISTANT_PROMPTS: readonly NoProjectAssistantPrompt[] =
   },
 ] as const;
 
+const localizeAction = (
+  action: NoProjectAssistantAction,
+  locale: DashboardLocale,
+): NoProjectAssistantAction => {
+  const keys: Record<string, readonly [Parameters<typeof translateChatMessage>[1], Parameters<typeof translateChatMessage>[1]]> = {
+    "open-add-project": ["openAddProject", "launchAddProject"],
+    "view-projects": ["viewProjects", "openProjectList"],
+    "open-settings": ["openSettings", "reviewSettings"],
+    "open-onboarding": ["startOnboarding", "reopenOnboarding"],
+    "read-docs": ["readDocs", "openChatDocs"],
+    "read-quickstart": ["quickstart", "openQuickstart"],
+  };
+  const pair = keys[action.id];
+  return !pair ? action : {
+    ...action,
+    label: translateChatMessage(locale, pair[0]),
+    description: translateChatMessage(locale, pair[1]),
+  };
+};
+
+const PROMPT_LABEL_KEYS: Record<NoProjectAssistantPromptId, Parameters<typeof translateChatMessage>[1]> = {
+  "add-first-project": "addFirstProject",
+  "add-desktop-app-project": "buildDesktopApp",
+  "add-web-app-project": "buildWebApp",
+  "explain-code-ux": "explainCodeUx",
+  "change-settings": "changeSettings",
+};
+
+const PROMPT_REPLY_KEYS: Record<NoProjectAssistantPromptId, Parameters<typeof translateChatMessage>[1]> = {
+  "add-first-project": "noProjectReplyAdd",
+  "add-desktop-app-project": "noProjectReplyDesktop",
+  "add-web-app-project": "noProjectReplyWeb",
+  "explain-code-ux": "noProjectReplyExplain",
+  "change-settings": "noProjectReplySettings",
+};
+
+export const getNoProjectAssistantPrompts = (
+  locale: DashboardLocale = "en",
+): readonly NoProjectAssistantPrompt[] => NO_PROJECT_ASSISTANT_PROMPTS.map((prompt) => ({
+  ...prompt,
+  label: translateChatMessage(locale, PROMPT_LABEL_KEYS[prompt.id]),
+  reply: translateChatMessage(locale, PROMPT_REPLY_KEYS[prompt.id]),
+  actions: prompt.actions.map((action) => localizeAction(action, locale)),
+}));
+
 export const getNoProjectAssistantPrompt = (
   promptId: NoProjectAssistantPromptId,
+  locale: DashboardLocale = "en",
 ): NoProjectAssistantPrompt => {
-  const prompt = NO_PROJECT_ASSISTANT_PROMPTS.find((item) => item.id === promptId);
+  const prompt = getNoProjectAssistantPrompts(locale).find((item) => item.id === promptId);
   if (!prompt) {
     throw new Error(`Unknown no-project assistant prompt: ${promptId}`);
   }
@@ -129,9 +175,13 @@ export interface NoProjectAssistantReply {
   matchedPromptId: NoProjectAssistantPromptId | null;
 }
 
-export const createNoProjectAssistantReply = (input: string): NoProjectAssistantReply => {
+export const createNoProjectAssistantReply = (
+  input: string,
+  locale: DashboardLocale = "en",
+): NoProjectAssistantReply => {
   const normalized = input.trim().toLowerCase();
-  const matchedPrompt = NO_PROJECT_ASSISTANT_PROMPTS.find((prompt) => (
+  const localizedPrompts = getNoProjectAssistantPrompts(locale);
+  const matchedPrompt = localizedPrompts.find((prompt) => (
     prompt.prompt.toLowerCase() === normalized
     || prompt.label.toLowerCase() === normalized
   ));
@@ -144,8 +194,8 @@ export const createNoProjectAssistantReply = (input: string): NoProjectAssistant
   }
 
   return {
-    body: "I can help once a project exists, and I can still point you to the right setup surface now. Add a project for project-scoped chat, open Settings for provider and routing choices, or use the docs for a short orientation.",
-    actions: [addProjectAction, settingsAction, docsAction],
+    body: translateChatMessage(locale, "noProjectReplyFallback"),
+    actions: [addProjectAction, settingsAction, docsAction].map((action) => localizeAction(action, locale)),
     matchedPromptId: null,
   };
 };
@@ -164,3 +214,5 @@ export const clearChatDraftFromUrl = (windowRef: Window): void => {
   url.searchParams.delete(CHAT_DRAFT_QUERY_PARAM);
   windowRef.history.replaceState(windowRef.history.state, "", `${url.pathname}${url.search}${url.hash}`);
 };
+import type { DashboardLocale } from "../i18n/locales.js";
+import { translateChatMessage } from "../i18n/messages/chat.js";

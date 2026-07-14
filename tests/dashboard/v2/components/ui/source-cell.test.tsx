@@ -2,7 +2,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, cleanup } from "@testing-library/preact";
 import type { Source } from "../../../../../dashboard/src/v2/types.js";
-import { DashboardI18nProvider } from "../../../../../dashboard/src/v2/i18n/index.js";
 
 const { selectProjectMock } = vi.hoisted(() => ({
   selectProjectMock: vi.fn(),
@@ -60,7 +59,7 @@ describe("SourceCell", () => {
       updatedAt: "2024-01-01T00:00:00.000Z",
     };
 
-    render(<DashboardI18nProvider initialLocale="en" storage={null}><SourceCell source={source} isEven={true} /></DashboardI18nProvider>);
+    render(<SourceCell source={source} isEven={true} />);
 
     expect(capturedCellActionsProps).not.toBeNull();
     expect(capturedCellActionsProps).toMatchObject({

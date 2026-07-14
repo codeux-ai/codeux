@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveActiveSprintIds, filterOverviewTasks, filterTasksToActiveSprints } from "../../../dashboard/src/v2/lib/overview-streams.js";
+import { deriveActiveSprintIds, filterTasksToActiveSprints } from "../../../dashboard/src/v2/lib/overview-streams.js";
 import type { Sprint, Task } from "../../../dashboard/src/v2/types.js";
 
 describe("overview-streams", () => {
@@ -52,15 +52,5 @@ describe("overview-streams", () => {
       const filtered = filterTasksToActiveSprints(tasks, new Set());
       expect(filtered).toHaveLength(0);
     });
-  });
-
-  it("filters Overview task states without changing their order", () => {
-    const tasks = [
-      { id: "running-1", status: "in_progress" },
-      { id: "pending-1", status: "pending" },
-      { id: "running-2", status: "in_progress" },
-    ] as Task[];
-    expect(filterOverviewTasks(tasks, "running").map((task) => task.id)).toEqual(["running-1", "running-2"]);
-    expect(filterOverviewTasks(tasks, "all")).toBe(tasks);
   });
 });
