@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import type { SystemSettings } from "../../../types.js";
 import { PillChoiceGroup } from "../settings/SettingsFormFields.js";
 import { Toggle as UiToggle } from "../ui/Toggle.js";
+import { useOnboardingMessages } from "../../i18n/messages/onboarding.js";
 
 type AutomationLevel = SystemSettings["defaults"]["automationLevel"];
 type AutoMergeMode = SystemSettings["defaults"]["ciIntelligence"]["featurePrAutoMergeMode"];
@@ -41,30 +42,31 @@ export const OnboardingAutomationStep: FunctionComponent<OnboardingAutomationSte
   settings,
   updateSettings,
 }) => {
+  const { t } = useOnboardingMessages();
   if (!settings) return null;
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <Choice<AutomationLevel> title="Automation level" value={settings.defaults.automationLevel} options={[["ALWAYS_ASK", "Manual"], ["SEMI_AUTO", "Semi-auto"], ["FULL", "Full auto"]]} onChange={(v) => updateSettings((s) => ({ ...s, defaults: { ...s.defaults, automationLevel: v } }))} />
+      <Choice<AutomationLevel> title={t("automationLevel")} value={settings.defaults.automationLevel} options={[["ALWAYS_ASK", t("manual")], ["SEMI_AUTO", t("semiAuto")], ["FULL", t("fullAuto")]]} onChange={(v) => updateSettings((s) => ({ ...s, defaults: { ...s.defaults, automationLevel: v } }))} />
 
-      <Choice<AutoMergeMode> title="Feature PR automerge" value={settings.defaults.ciIntelligence.featurePrAutoMergeMode} options={[
-        ["OFF", "Off"],
-        ["CREATE_PR", "Create PR"],
-        ["WHEN_GREEN", "When green"],
-        ["ALWAYS", "Always"],
+      <Choice<AutoMergeMode> title={t("featurePrAutomerge")} value={settings.defaults.ciIntelligence.featurePrAutoMergeMode} options={[
+        ["OFF", t("off")],
+        ["CREATE_PR", t("createPr")],
+        ["WHEN_GREEN", t("whenGreen")],
+        ["ALWAYS", t("always")],
       ]} onChange={(value) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, featurePrAutoMergeMode: value } } }))} />
-      <Choice<AutoMergeMode> title="Main PR automerge" value={settings.defaults.ciIntelligence.mainBranchAutoMergeMode} options={[
-        ["OFF", "Off"],
-        ["CREATE_PR", "Create PR"],
-        ["WHEN_GREEN", "When green"],
-        ["ALWAYS", "Always"],
+      <Choice<AutoMergeMode> title={t("mainPrAutomerge")} value={settings.defaults.ciIntelligence.mainBranchAutoMergeMode} options={[
+        ["OFF", t("off")],
+        ["CREATE_PR", t("createPr")],
+        ["WHEN_GREEN", t("whenGreen")],
+        ["ALWAYS", t("always")],
       ]} onChange={(value) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, mainBranchAutoMergeMode: value } } }))} />
-      <ToggleRow title="Auto-approve plans" description="Let planning continue without manual approval when the generated plan is available." checked={settings.defaults.automationInterventions.autoApprovePlan} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, automationInterventions: { ...current.defaults.automationInterventions, autoApprovePlan: checked } } }))} />
-      <ToggleRow title="Memory system" description="Capture sprint and agent learnings for later retrieval." checked={settings.defaults.memory.enabled} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, memory: { ...current.defaults.memory, enabled: checked } } }))} />
-      <ToggleRow title="Resolve main merge conflicts" description="Let a virtual worker attempt conflicts on the main branch merge gate before escalating." checked={settings.defaults.ciIntelligence.resolveMainMergeConflicts} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, resolveMainMergeConflicts: checked } } }))} />
-      <ToggleRow title="Fix main merge CI failures" description="Let a virtual worker fix failing CI on the main branch merge gate before escalating." checked={settings.defaults.ciIntelligence.resolveMainMergeFailedChecks} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, resolveMainMergeFailedChecks: checked } } }))} />
-      <ToggleRow title="Resolve feature merge conflicts" description="Let a virtual worker resolve feature PR conflicts against the sprint branch when safe." checked={settings.defaults.ciIntelligence.resolveMergeConflicts} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, resolveMergeConflicts: checked } } }))} />
-      <ToggleRow title="Enable QA agent" description="Run quality-assurance reviews after task and sprint completion events." checked={settings.defaults.agents.qualityAssurance.enabled} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, agents: { ...current.defaults.agents, qualityAssurance: { ...current.defaults.agents.qualityAssurance, enabled: checked } } } }))} />
+      <ToggleRow title={t("autoApprovePlans")} description={t("autoApprovePlansBody")} checked={settings.defaults.automationInterventions.autoApprovePlan} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, automationInterventions: { ...current.defaults.automationInterventions, autoApprovePlan: checked } } }))} />
+      <ToggleRow title={t("memorySystem")} description={t("memorySystemBody")} checked={settings.defaults.memory.enabled} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, memory: { ...current.defaults.memory, enabled: checked } } }))} />
+      <ToggleRow title={t("resolveMainConflicts")} description={t("resolveMainConflictsBody")} checked={settings.defaults.ciIntelligence.resolveMainMergeConflicts} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, resolveMainMergeConflicts: checked } } }))} />
+      <ToggleRow title={t("fixMainCi")} description={t("fixMainCiBody")} checked={settings.defaults.ciIntelligence.resolveMainMergeFailedChecks} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, resolveMainMergeFailedChecks: checked } } }))} />
+      <ToggleRow title={t("resolveFeatureConflicts")} description={t("resolveFeatureConflictsBody")} checked={settings.defaults.ciIntelligence.resolveMergeConflicts} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, resolveMergeConflicts: checked } } }))} />
+      <ToggleRow title={t("enableQaAgent")} description={t("enableQaAgentBody")} checked={settings.defaults.agents.qualityAssurance.enabled} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, agents: { ...current.defaults.agents, qualityAssurance: { ...current.defaults.agents.qualityAssurance, enabled: checked } } } }))} />
 
 
 

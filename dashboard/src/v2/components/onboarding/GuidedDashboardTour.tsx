@@ -7,6 +7,7 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import type { DashboardFeatureId } from "../../lib/dashboard-feature-flags.js";
 import { isDashboardFeatureEnabled } from "../../lib/dashboard-feature-flags.js";
+import { useOnboardingMessages, type OnboardingMessageKey } from "../../i18n/messages/onboarding.js";
 
 type TourStep = {
   id: string;
@@ -25,159 +26,123 @@ type RectState = {
   height: number;
 };
 
-const TOUR_STEPS: TourStep[] = [
+type TourTranslate = (key: OnboardingMessageKey, variables?: Readonly<Record<string, string | number | bigint | boolean | undefined>>) => string;
+
+const getTourSteps = (t: TourTranslate): TourStep[] => [
   {
     id: "projects",
     targetId: "project-selector",
-    eyebrow: "Workspace setup",
-    title: "Projects",
-    body: "Manage your Projects here. Add your first Project to start working.",
+    eyebrow: t("tourWorkspaceEyebrow"), title: t("tourProjectsTitle"), body: t("tourProjectsBody"),
     accent: "signal",
   },
   {
     id: "docker",
     targetId: "docker-containers",
-    eyebrow: "Runtime health",
-    title: "Docker Containers",
-    body: "This shows the container runtime Code UX depends on. Provider CLIs, task execution, and isolated workspaces run through Docker so every session stays reproducible.",
+    eyebrow: t("tourRuntimeEyebrow"), title: t("tourDockerTitle"), body: t("tourDockerBody"),
     accent: "ember",
   },
   {
     id: "sessions",
     targetId: "active-sessions",
-    eyebrow: "Preview runtime",
-    title: "Active Sessions",
-    body: "Preview containers appear here while a sprint or browser session is running. Open them to inspect live app previews without leaving the dashboard.",
+    eyebrow: t("tourPreviewEyebrow"), title: t("tourSessionsTitle"), body: t("tourSessionsBody"),
     accent: "sky",
   },
   {
     id: "chat",
     targetId: "nav-chat",
-    eyebrow: "Command surface",
-    title: "Chat",
-    body: "Use Chat for focused collaboration with Code UX. Messages stay tied to the selected project and can route work toward connected MCP sessions.",
+    eyebrow: t("tourCommandEyebrow"), title: t("tourChatTitle"), body: t("tourChatBody"),
     accent: "signal",
   },
   {
     id: "overview",
     targetId: "nav-overview",
-    eyebrow: "Mission control",
-    title: "Overview",
-    body: "Overview is the live dashboard for project health, runtime signals, active work, and the fastest path back to what needs attention.",
+    eyebrow: t("tourOverviewEyebrow"), title: t("tourOverviewTitle"), body: t("tourOverviewBody"),
     accent: "signal",
   },
   {
     id: "sprints",
     targetId: "nav-sprints",
-    eyebrow: "Planning flow",
-    title: "Sprints",
-    body: "Plan, import, inspect, and execute sprint work here. This is where larger initiatives become tracked, reviewable delivery streams.",
+    eyebrow: t("tourPlanningEyebrow"), title: t("tourSprintsTitle"), body: t("tourSprintsBody"),
     accent: "ember",
   },
   {
     id: "tasks",
     targetId: "nav-tasks",
-    eyebrow: "Execution queue",
-    title: "Tasks",
-    body: "Tasks break sprint intent into concrete work. Track dependencies, status, execution metadata, and what each agent should pick up next.",
+    eyebrow: t("tourExecutionEyebrow"), title: t("tourTasksTitle"), body: t("tourTasksBody"),
     accent: "signal",
   },
   {
     id: "agents",
     targetId: "nav-agents",
-    eyebrow: "Worker routing",
-    title: "Agents",
-    body: "Agents shows available workers, presets, live routing, and the provider options that power automated or assisted implementation.",
+    eyebrow: t("tourWorkersEyebrow"), title: t("tourAgentsTitle"), body: t("tourAgentsBody"),
     accent: "signal",
   },
   {
     id: "nodes",
     targetId: "nav-nodes",
-    eyebrow: "Workflow graph",
-    title: "Nodes",
-    body: "Nodes lets you compose project workflow graphs, configure node widgets, attach flows to agents, and inspect persisted runs.",
+    eyebrow: t("tourWorkflowEyebrow"), title: t("tourNodesTitle"), body: t("tourNodesBody"),
     accent: "signal",
     feature: "nodes",
   },
   {
     id: "custom-dashboards",
     targetId: "nav-custom-dashboards",
-    eyebrow: "Dashboard lab",
-    title: "Dashboards",
-    body: "Dashboards lets you manage generated dashboard manifests, file bundles, validation previews, and validated publication state for the active project.",
+    eyebrow: t("tourDashboardEyebrow"), title: t("tourDashboardsTitle"), body: t("tourDashboardsBody"),
     accent: "signal",
     feature: "custom-dashboards",
   },
   {
     id: "stats",
     targetId: "nav-stats",
-    eyebrow: "Telemetry",
-    title: "Stats",
-    body: "Stats turns execution history into signal: usage, throughput, code movement, and trends that help you understand delivery quality.",
+    eyebrow: t("tourTelemetryEyebrow"), title: t("tourStatsTitle"), body: t("tourStatsBody"),
     accent: "ember",
   },
   {
     id: "schedule",
     targetId: "nav-schedule",
-    eyebrow: "Orchestration",
-    title: "Schedule",
-    body: "Schedule lets you manage recurring cron triggers, automated pipeline schedules, or one-shot timers to orchestrate workflows asynchronously.",
+    eyebrow: t("tourOrchestrationEyebrow"), title: t("tourScheduleTitle"), body: t("tourScheduleBody"),
     accent: "signal",
   },
   {
     id: "memory",
     targetId: "nav-memory",
-    eyebrow: "Continuity",
-    title: "Memory",
-    body: "Memory keeps durable context from projects, agents, and sprints so future work can reuse decisions instead of rediscovering them.",
+    eyebrow: t("tourContinuityEyebrow"), title: t("tourMemoryTitle"), body: t("tourMemoryBody"),
     accent: "ember",
   },
   {
     id: "knowledge",
     targetId: "nav-knowledge",
-    eyebrow: "Reference layer",
-    title: "Knowledge",
-    body: "Knowledge is the project reference base for durable facts, source material, and curated context that agents can reuse during planning and execution.",
+    eyebrow: t("tourReferenceEyebrow"), title: t("tourKnowledgeTitle"), body: t("tourKnowledgeBody"),
     accent: "signal",
   },
   {
     id: "browser",
     targetId: "nav-browser",
-    eyebrow: "Preview lab",
-    title: "Browser Preview",
-    body: "Browser Preview is the in-app surface for preview containers. Use it to inspect running apps, navigate sessions, and validate work quickly.",
+    eyebrow: t("tourPreviewLabEyebrow"), title: t("tourBrowserTitle"), body: t("tourBrowserBody"),
     accent: "sky",
   },
   {
     id: "files",
     targetId: "nav-files",
-    eyebrow: "Source inspector",
-    title: "Files",
-    body: "Files spins up a containerized snapshot of the active sprint's feature branch. Browse every file with a full code editor and review exactly what changed versus the default branch — diffs highlighted inline.",
+    eyebrow: t("tourSourceEyebrow"), title: t("tourFilesTitle"), body: t("tourFilesBody"),
     accent: "signal",
   },
   {
     id: "live",
     targetId: "nav-live",
-    eyebrow: "Realtime channel",
-    title: "Live",
-    body: "Live exposes active connections and runtime activity so you can see what is listening, connected, or waiting for work.",
+    eyebrow: t("tourRealtimeEyebrow"), title: t("tourLiveTitle"), body: t("tourLiveBody"),
     accent: "ember",
   },
   {
     id: "docs",
     targetId: "nav-docs",
-    eyebrow: "Reference guide",
-    title: "Docs",
-    body: "Docs opens the built-in operator guide for dashboard concepts, runtime behavior, MCP tools, and operational workflows.",
+    eyebrow: t("tourGuideEyebrow"), title: t("tourDocsTitle"), body: t("tourDocsBody"),
     accent: "sky",
   },
   {
     id: "config",
     targetId: "nav-config",
-    eyebrow: "Control room",
-    title: "Settings",
-    body: "Settings keeps every onboarding choice editable: providers, Docker behavior, AI behaviour, appearance, notifications, and defaults.",
+    eyebrow: t("tourControlEyebrow"), title: t("tourSettingsTitle"), body: t("tourSettingsBody"),
     accent: "signal",
   },
 ];
@@ -242,6 +207,8 @@ const readRect = (element: HTMLElement): RectState => {
 };
 
 export const GuidedDashboardTour: FunctionComponent = () => {
+  const { t } = useOnboardingMessages();
+  const tourSteps = useMemo(() => getTourSteps(t), [t]);
   const cardRef = useRef<HTMLDivElement>(null);
   const lineLayerRef = useRef<SVGSVGElement>(null);
   const linePathRef = useRef<SVGPathElement>(null);
@@ -259,7 +226,7 @@ export const GuidedDashboardTour: FunctionComponent = () => {
   const interactionTokens = useInteractionTokens();
 
   const refreshSteps = useCallback(() => {
-    const steps = TOUR_STEPS.filter((step) => {
+    const steps = tourSteps.filter((step) => {
       if (step.feature && !isDashboardFeatureEnabled(step.feature)) {
         return false;
       }
@@ -269,10 +236,16 @@ export const GuidedDashboardTour: FunctionComponent = () => {
     setAvailableSteps(steps);
     setActiveIndex((current) => clamp(current, 0, Math.max(steps.length - 1, 0)));
     return steps;
-  }, []);
+  }, [tourSteps]);
 
   const activeStep = availableSteps[activeIndex] || null;
   const targetReady = Boolean(targetRect);
+
+  useEffect(() => {
+    if (open) {
+      refreshSteps();
+    }
+  }, [open, refreshSteps]);
 
   const updateTargetRect = useCallback(() => {
     if (!activeStep) {
@@ -464,10 +437,10 @@ export const GuidedDashboardTour: FunctionComponent = () => {
     ? Math.round(((activeIndex + 1) / availableSteps.length) * 100)
     : Math.round(progress);
   const tourStatusText = reducedMotion
-    ? `Manual tour step ${activeIndex + 1} of ${availableSteps.length}. ${activeStep.title} is highlighted with a static outline.`
+    ? t("manualTourStatus", { current: activeIndex + 1, total: availableSteps.length, title: activeStep.title })
     : paused
-      ? `Tour paused on step ${activeIndex + 1} of ${availableSteps.length}: ${activeStep.title}.`
-      : `Tour step ${activeIndex + 1} of ${availableSteps.length}: ${activeStep.title}.`;
+      ? t("pausedTourStatus", { current: activeIndex + 1, total: availableSteps.length, title: activeStep.title })
+      : t("tourStatus", { current: activeIndex + 1, total: availableSteps.length, title: activeStep.title });
   const path = `M ${geometry.targetCenterX} ${geometry.targetCenterY} C ${geometry.targetCenterX} ${geometry.cardCenterY}, ${geometry.cardCenterX} ${geometry.targetCenterY}, ${geometry.cardCenterX} ${geometry.cardCenterY}`;
 
   return (
@@ -530,7 +503,7 @@ export const GuidedDashboardTour: FunctionComponent = () => {
               <span className={`text-[10px] font-black uppercase tracking-[0.18em] ${accent.text}`}>{activeStep.eyebrow}</span>
             </div>
             <div id="dashboard-tour-count" role="status" aria-live="polite" className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-white/45">
-              Step {activeIndex + 1} of {availableSteps.length}
+              {t("stepCount", { current: activeIndex + 1, total: availableSteps.length })}
             </div>
           </div>
 
@@ -548,7 +521,7 @@ export const GuidedDashboardTour: FunctionComponent = () => {
             {tourStatusText}
           </p>
 
-          <div className="mt-4 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label={reducedMotion ? "Tour step progress" : "Tour auto-advance progress"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={tourProgressValue}>
+          <div className="mt-4 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label={reducedMotion ? t("tourStepProgress") : t("tourAutoProgress")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={tourProgressValue}>
             <div
               className={`h-1.5 rounded-full ${accent.bg} shadow-[0_0_18px_rgba(0,224,160,0.45)] transition-[width] duration-100 motion-reduce:transition-none`}
               style={{ width: `${tourProgressValue}%`, transitionDuration: interactionTokens.selectionMovement.duration, transitionTimingFunction: interactionTokens.selectionMovement.ease }}
@@ -559,11 +532,11 @@ export const GuidedDashboardTour: FunctionComponent = () => {
             <button
               type="button"
               onClick={hideTour}
-              aria-label={`Skip guided tour from ${activeStep.title}`}
+              aria-label={t("skipTourFrom", { title: activeStep.title })}
               className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-400 transition-colors hover:bg-white/8 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
             >
               <EyeOff className="h-3.5 w-3.5" />
-              Skip
+              {t("skip")}
             </button>
             <div className="flex items-center gap-2">
               <button
@@ -571,7 +544,7 @@ export const GuidedDashboardTour: FunctionComponent = () => {
                 disabled={activeIndex === 0}
                 onClick={goPrevious}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] text-slate-300 transition-colors hover:bg-white/[0.1] hover:text-white disabled:cursor-not-allowed disabled:opacity-35 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 motion-reduce:transition-none"
-                aria-label={previousStep && activeIndex > 0 ? `Previous tour step: ${previousStep.title}` : "Previous tour step unavailable"}
+                aria-label={previousStep && activeIndex > 0 ? t("previousTourStep", { title: previousStep.title }) : t("previousTourUnavailable")}
               >
                 <ArrowLeft className="h-4 w-4" />
               </button>
@@ -579,18 +552,18 @@ export const GuidedDashboardTour: FunctionComponent = () => {
                 type="button"
                 ref={primaryActionRef}
                 onClick={isLast ? hideTour : goNext}
-                aria-label={isLast ? "Finish guided tour" : nextStep ? `Next tour step: ${nextStep.title}` : "Next tour step"}
+                aria-label={isLast ? t("finishTour") : nextStep ? t("nextTourStep", { title: nextStep.title }) : t("nextTour")}
                 className="inline-flex h-10 items-center gap-2 rounded-xl bg-white px-4 text-xs font-black uppercase tracking-[0.12em] text-void-950 transition-transform hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
                 style={{ transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }}
               >
                 {isLast ? (
                   <>
                     <Check className="h-4 w-4" />
-                    Done
+                    {t("done")}
                   </>
                 ) : (
                   <>
-                    Next
+                    {t("next")}
                     <ArrowRight className="h-4 w-4" />
                   </>
                 )}

@@ -2,12 +2,21 @@
 /** @jsx h */
 import { h } from "preact";
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, act, cleanup } from "@testing-library/preact";
+import { render as testingRender, screen, fireEvent, act, cleanup } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { PreviewSessionSlider } from "../../../dashboard/src/v2/components/browser/PreviewSessionSlider.js";
 import { PreviewWindowChrome } from "../../../dashboard/src/v2/components/browser/PreviewWindowChrome.js";
 import { LaunchContainerPanel } from "../../../dashboard/src/v2/components/browser/LaunchContainerPanel.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+
+const render = (ui: Parameters<typeof testingRender>[0], options?: Parameters<typeof testingRender>[1]) => testingRender(ui, {
+  ...options,
+  wrapper: ({ children }) => <DashboardI18nProvider initialLocale="en" storage={null}>{children}</DashboardI18nProvider>,
+});
+const renderGerman = (ui: Parameters<typeof testingRender>[0]) => testingRender(ui, {
+  wrapper: ({ children }) => <DashboardI18nProvider initialLocale="de" storage={null}>{children}</DashboardI18nProvider>,
+});
 
 expect.extend(matchers);
 
@@ -17,6 +26,33 @@ afterEach(() => {
 });
 
 describe("PreviewSessionSlider", () => {
+  it("localizes invalid port and narrow-session states without changing the sprint name", () => {
+    const { container } = renderGerman(
+      <PreviewSessionSlider
+        sessions={[{
+          id: "invalid-port",
+          projectId: "p1",
+          sprintId: "s1",
+          sprintName: "Sprint Überprüfung",
+          status: "starting",
+          healthStatus: "unknown",
+          containerAppPort: 70_000,
+          hostPort: -1,
+          portMappings: [{ containerPort: 70_000, hostPort: -1, isPrimary: true }],
+        } as any]}
+        selectedSessionId="invalid-port"
+        onSelectSession={vi.fn()}
+        onRemoveSession={vi.fn()}
+        onManageEnvironment={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Sprint Überprüfung")).toBeInTheDocument();
+    expect(screen.getByText("Port ausstehend")).toBeInTheDocument();
+    expect(screen.getByText("Link nicht verfügbar")).toBeInTheDocument();
+    expect(container.querySelector(".w-\\[280px\\]")).toBeInTheDocument();
+  });
+
   it("renders multiple session cards", () => {
     const onSelect = vi.fn();
     render(
@@ -307,6 +343,21 @@ describe("PreviewWindowChrome", () => {
     expect(screen.getByLabelText("Preview address for Chrome Sprint")).toBeInTheDocument();
   });
 
+  it("supports German keyboard chrome controls and preserves address paths", async () => {
+    const user = userEvent.setup();
+    renderGerman(
+      <PreviewWindowChrome {...defaultProps} addressValue="/prüfung?q=raw">
+        <div />
+      </PreviewWindowChrome>,
+    );
+
+    const minimize = screen.getByRole("button", { name: "Vorschaufenster minimieren" });
+    minimize.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("button", { name: "Vorschaufenster wiederherstellen" })).toHaveFocus();
+    expect(screen.getByText("Chrome Sprint")).toBeInTheDocument();
+  });
+
   it("renders the no-session state without a framed empty viewport", () => {
     const { container } = render(
       <PreviewWindowChrome {...defaultProps} session={null}>
@@ -525,6 +576,22 @@ describe("PreviewWindowChrome", () => {
 });
 
 describe("LaunchContainerPanel", () => {
+  it("renders German launch controls while preserving the selected sprint name", () => {
+    renderGerman(
+      <LaunchContainerPanel
+        sprints={[{ id: "s1", name: "Sprint Überprüfung" } as any]}
+        launchSprintId="s1"
+        onLaunchSprintChange={vi.fn()}
+        onLaunchContainer={vi.fn()}
+        launchEnabled
+        launchBusy={false}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Vorschau-Container starten" })).toHaveTextContent("Container starten");
+    expect(screen.getByRole("option", { name: "Sprint Überprüfung" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Bereit, einen Vorschau-Container für den ausgewählten Sprint zu starten.");
+  });
   const sprints = [
     { id: "s1", name: "Sprint 1" },
     { id: "s2", name: "Sprint 2" },

@@ -13,6 +13,8 @@ import { MemoryCard } from "./MemoryCard.js";
 import { clearSelectedMemoryIds, searchQuerySignal, selectVisibleMemoryIds, selectedMemoryIdsSignal, activeTierSignal, memoryMutationsSignal, selectedAgentPresetIdSignal, selectedSprintIdSignal } from "./memoryState.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import type { MemNode } from "../../lib/memory-graph.js";
+import { MEMORY_CATEGORY_MESSAGE_KEYS, useMemoryI18n } from "../../i18n/messages/memory.js";
+import type { MemoryCategory } from "../../memory-types.js";
 
 export const MemoryList: FunctionComponent<{
     nodes: MemNode[];
@@ -24,6 +26,7 @@ export const MemoryList: FunctionComponent<{
     readOnly?: boolean;
     entityLabel?: "memory" | "skill";
 }> = ({ nodes, onSelectNode, refreshing = false, loadError = null, onRetry, onAddMemory, readOnly = false, entityLabel = "memory" }) => {
+    const { formatNumber, t, tp } = useMemoryI18n();
     const committedQuery = searchQuerySignal.value;
     const filteredNodes = useMemo(() => {
         const query = committedQuery;
@@ -39,9 +42,10 @@ export const MemoryList: FunctionComponent<{
                     return false;
                 }
 
-                return node.content.toLowerCase().includes(lower) || node.category.toLowerCase().includes(lower);
+                const localizedCategory = t(MEMORY_CATEGORY_MESSAGE_KEYS[node.category as MemoryCategory] ?? "categoryContext").toLowerCase();
+                return node.content.toLowerCase().includes(lower) || node.category.toLowerCase().includes(lower) || localizedCategory.includes(lower);
             });
-    }, [committedQuery, nodes]);
+    }, [committedQuery, nodes, t]);
     const currentContextKey = JSON.stringify({
         tier: activeTierSignal.value,
         sprintId: selectedSprintIdSignal.value ?? null,
@@ -188,9 +192,11 @@ export const MemoryList: FunctionComponent<{
     const selectedSprintId = selectedSprintIdSignal.value;
     const selectedAgentPresetId = selectedAgentPresetIdSignal.value;
     const mutationFeedback = memoryMutationsSignal.value.feedback;
-    const isDeleting = batchDeletePending || (mutationFeedback?.status === "pending" && Boolean(mutationFeedback.message?.toLowerCase().includes("deleting")));
-    const entityPlural = entityLabel === "skill" ? "skills" : "memories";
-    const countLabel = `${resultCount} ${resultCount === 1 ? entityLabel : entityPlural} shown`;
+    const isDeleting = batchDeletePending || mutationFeedback?.status === "pending";
+    const entitySingular = t(entityLabel === "skill" ? "skillNoun" : "memoryNoun");
+    const entityTitle = t(entityLabel === "skill" ? "skillTitle" : "memoryTitle");
+    const entityPlural = t(entityLabel === "skill" ? "skillsNoun" : "memoriesNoun");
+    const countLabel = tp(entityLabel === "skill" ? "shownSkill" : "shownMemory", resultCount, { formattedCount: formatNumber(resultCount) });
     const isShowingStaleResults = (refreshing || Boolean(loadError))
         && filteredNodes.length === 0
         && renderedNodes.length > 0
@@ -203,18 +209,22 @@ export const MemoryList: FunctionComponent<{
     const visibleIds = (isShowingStaleResults ? renderedNodes : filteredNodes).map(({ node }) => node.id);
     const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
     const staleStatusText = loadError
-        ? `Could not refresh memories. Showing the last useful result list. ${loadError}`
-        : "Refreshing memories. Keeping the last useful result list visible.";
+        ? t("couldNotRefreshMemories", { error: loadError })
+        : t("refreshingMemories");
     const selectionLabel = selectedCount > 0
-        ? `${selectedCount} ${selectedCount === 1 ? "memory" : "memories"} selected from ${visibleIds.length} visible ${visibleIds.length === 1 ? "memory" : "memories"}`
-        : "No memories selected";
+        ? t("selectionAria", {
+            selectedCount: tp("selectedMemory", selectedCount, { formattedCount: formatNumber(selectedCount) }),
+            visibleNumber: formatNumber(visibleIds.length),
+            visibleEntities: visibleIds.length === 1 ? t("memoryNoun") : t("memoriesNoun"),
+        })
+        : t("noMemoriesSelected");
     const visibleScopeParts = [
-        activeTier.value === "short_term" ? "Short Term" : "Long Term",
+        t(activeTier.value === "short_term" ? "visibleScopeShort" : "visibleScopeLong"),
         activeTier.value === "short_term"
-            ? (selectedSprintId ? `sprint ${selectedSprintId}` : "all sprints")
-            : "project memories",
-        selectedAgentPresetId ? `agent ${selectedAgentPresetId}` : "all agents",
-        query ? `search "${query}"` : "no search",
+            ? (selectedSprintId ? t("visibleScopeSprint", { id: selectedSprintId }) : t("visibleScopeAllSprints"))
+            : t("visibleScopeProject"),
+        selectedAgentPresetId ? t("visibleScopeAgent", { id: selectedAgentPresetId }) : t("visibleScopeAllAgents"),
+        query ? t("visibleScopeSearch", { query }) : t("visibleScopeNoSearch"),
     ];
     const visibleScopeLabel = visibleScopeParts.join(", ");
 
@@ -242,10 +252,10 @@ export const MemoryList: FunctionComponent<{
         if (selectedCount === 0 || isDeleting) return;
 
         const confirmed = await requestConfirm({
-            title: "Delete Selected Memories",
-            body: `Delete ${selectedCount} selected ${selectedCount === 1 ? "memory" : "memories"} from the visible scope: ${visibleScopeLabel}. This action cannot be undone.`,
-            confirmLabel: selectedCount === 1 ? "Delete Memory" : "Delete Memories",
-            cancelLabel: "Cancel",
+            title: t("deleteSelectedTitle"),
+            body: t("deleteSelectedBody", { selectedCount: tp("selectedMemoryObject", selectedCount, { formattedCount: formatNumber(selectedCount) }), scope: visibleScopeLabel }),
+            confirmLabel: t(selectedCount === 1 ? "deleteMemory" : "deleteMemories"),
+            cancelLabel: t("cancel"),
             destructive: true,
         });
 
@@ -272,19 +282,19 @@ export const MemoryList: FunctionComponent<{
 
     if (renderedNodes.length === 0) {
         const isEmpty = totalAliveCount === 0;
-        const message = loadError ? `${entityLabel === "skill" ? "Skill" : "Memory"} list could not refresh` : isEmpty ? `No ${entityPlural} exist` : `No ${entityPlural} match your search or filters`;
+        const message = loadError ? t("couldNotRefreshList", { entity: entityTitle }) : isEmpty ? t("noEntitiesExist", { entities: entityPlural }) : t("noEntitiesMatch", { entities: entityPlural });
         return (
             <div
                 id="memory-panel"
                 aria-labelledby={`tab-${activeTier.value}`}
                 className="flex min-h-0 min-w-0 flex-col items-center justify-center p-8 text-center text-slate-400"
                 role="listbox"
-                aria-label="Memory List"
+                aria-label={t(entityLabel === "skill" ? "skillList" : "memoryList")}
                 aria-busy={refreshing || isDeleting}
             >
                 <div className="sr-only" aria-live={loadError ? "assertive" : "polite"} aria-atomic="true">
                     <span>{message}</span>
-                    <span>. Showing 0 of {totalAliveCount} {entityPlural}.</span>
+                    <span>. {t("showingZeroOf", { total: formatNumber(totalAliveCount), entities: entityPlural })}</span>
                 </div>
                 {loadError ? (
                     <RefreshCw className="mb-2 h-7 w-7 text-status-red/70" aria-hidden="true" />
@@ -296,8 +306,8 @@ export const MemoryList: FunctionComponent<{
                     {loadError
                         ? loadError
                         : isEmpty
-                            ? entityLabel === "skill" ? "Create or attach a persistent skill storage to visualize its catalog here." : "Add a memory manually or run a sprint that captures project context."
-                            : `Clear the search or adjust filters to return to the previous result set${query ? ` for "${query}"` : ""}.`}
+                            ? entityLabel === "skill" ? t("emptySkillList") : t("emptyMemoryList")
+                            : t("clearOrAdjustFilters", { querySuffix: query ? t("querySuffix", { query }) : "" })}
                 </p>
                 <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
                     {loadError && onRetry && (
@@ -310,7 +320,7 @@ export const MemoryList: FunctionComponent<{
                             className="inline-flex items-center gap-1.5 rounded-lg border border-status-red/20 bg-status-red/[0.08] px-3 py-1.5 text-[11px] font-bold text-status-red transition-colors hover:bg-status-red/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 dark:focus-visible:ring-offset-void-900"
                         >
                             <RefreshCw size={13} className={retryPending ? "motion-safe:animate-spin" : ""} aria-hidden="true" />
-                            {retryPending ? "Retrying..." : "Retry"}
+                            {retryPending ? t("retrying") : t("retry")}
                         </button>
                     )}
                     {!loadError && !isEmpty && query && (
@@ -320,7 +330,7 @@ export const MemoryList: FunctionComponent<{
                             style={controlTransitionStyle}
                             className="rounded-lg border border-black/[0.06] bg-black/[0.04] px-3 py-1.5 text-[11px] font-bold text-slate-500 transition-colors hover:bg-black/[0.08] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white dark:focus-visible:ring-offset-void-900"
                         >
-                            Clear search
+                            {t("clearSearch")}
                         </button>
                     )}
                     {!loadError && isEmpty && onAddMemory && (
@@ -331,13 +341,13 @@ export const MemoryList: FunctionComponent<{
                             className="inline-flex items-center gap-1.5 rounded-lg border border-signal-500/20 bg-signal-500/[0.1] px-3 py-1.5 text-[11px] font-bold text-signal-600 transition-colors hover:bg-signal-500/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:text-signal-300 dark:focus-visible:ring-offset-void-900"
                         >
                             <Plus size={13} aria-hidden="true" />
-                            Add memory
+                            {t("addMemoryLower")}
                         </button>
                     )}
                 </div>
                 {!isEmpty && !loadError && (
                     <p className="mt-2 max-w-full break-words text-xs font-medium text-slate-400 dark:text-slate-500">
-                        Showing 0 of {totalAliveCount} {entityPlural}{query ? ` for "${query}"` : ""}
+                        {t("showingResults", { shown: formatNumber(0), total: formatNumber(totalAliveCount), entities: entityPlural, querySuffix: query ? t("querySuffix", { query }) : "", staleSuffix: "" })}
                     </p>
                 )}
             </div>
@@ -350,15 +360,15 @@ export const MemoryList: FunctionComponent<{
             aria-labelledby={`tab-${activeTier.value}`}
             className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden p-2 dashboard-scrollbar"
             role="listbox"
-            aria-label="Memory List"
+            aria-label={t(entityLabel === "skill" ? "skillList" : "memoryList")}
             aria-describedby="memory-list-status memory-list-selection-status"
             aria-busy={refreshing || isDeleting}
         >
             <div id="memory-list-status" className="sr-only" aria-live="polite" aria-atomic="true">
                 {countLabel}
-                {searchQuerySignal.value.trim() ? ` for ${searchQuerySignal.value.trim()}` : ""}
-                {refreshing ? ". Refreshing results." : ""}
-                {loadError ? `. Could not refresh results. Showing the last useful result list.` : ""}
+                {searchQuerySignal.value.trim() ? t("querySuffix", { query: searchQuerySignal.value.trim() }) : ""}
+                {refreshing ? `. ${t("refreshingResults")}` : ""}
+                {loadError ? `. ${t("refreshFailedLastUseful")}` : ""}
             </div>
             <div id="memory-list-selection-status" className="sr-only" aria-live="polite" aria-atomic="true">
                 {selectionLabel}
@@ -366,9 +376,7 @@ export const MemoryList: FunctionComponent<{
             <div className="sticky top-0 z-10 flex min-w-0 flex-col gap-2">
                 <div className="inline-flex max-w-full items-center gap-1.5 self-start rounded-lg border border-black/[0.04] bg-black/[0.02] px-2 py-1 text-xs font-medium text-slate-500 dark:border-white/[0.04] dark:bg-white/[0.02] dark:text-slate-400">
                     <span className="truncate">
-                        Showing {resultCount} of {totalAliveCount} {entityPlural}
-                        {searchQuerySignal.value.trim() ? ` for "${searchQuerySignal.value.trim()}"` : ""}
-                        {isShowingStaleResults ? " (last useful list)" : ""}
+                        {t("showingResults", { shown: formatNumber(resultCount), total: formatNumber(totalAliveCount), entities: entityPlural, querySuffix: searchQuerySignal.value.trim() ? t("querySuffix", { query: searchQuerySignal.value.trim() }) : "", staleSuffix: isShowingStaleResults ? t("lastUsefulList") : "" })}
                     </span>
                 </div>
                 {(refreshing || loadError || isShowingStaleResults) && (
@@ -394,7 +402,7 @@ export const MemoryList: FunctionComponent<{
                                 style={controlTransitionStyle}
                                 className="ml-auto shrink-0 rounded-md border border-status-red/25 px-2 py-0.5 text-[10px] font-bold transition-colors hover:bg-status-red/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 dark:focus-visible:ring-offset-void-900"
                             >
-                                {retryPending ? "Retrying..." : "Retry"}
+                                {retryPending ? t("retrying") : t("retry")}
                             </button>
                         )}
                     </div>
@@ -405,11 +413,11 @@ export const MemoryList: FunctionComponent<{
                         type="button"
                         onClick={handleVisibleSelect}
                         disabled={visibleIds.length === 0 || allVisibleSelected || isDeleting}
-                        title={isDeleting ? "Selection is locked while selected memories are deleting." : allVisibleSelected ? "All currently visible memories are already selected." : undefined}
+                        title={isDeleting ? t("selectionDeleteLocked") : allVisibleSelected ? t("selectAllAlready") : undefined}
                         style={controlTransitionStyle}
                         className="rounded-lg border border-black/[0.06] bg-black/[0.04] px-2.5 py-1 text-[11px] font-semibold text-slate-500 transition-colors hover:bg-black/[0.08] hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white"
                     >
-                        {allVisibleSelected ? `All ${visibleIds.length} visible selected` : `Select all ${visibleIds.length} visible`}
+                        {t(allVisibleSelected ? "allVisibleSelected" : "selectAllVisible", { count: formatNumber(visibleIds.length) })}
                     </button>
                     {selectedCount > 0 && (
                         <div className={`inline-flex min-h-9 max-w-full items-center gap-2 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-[background-color,border-color,color,box-shadow] ${
@@ -417,16 +425,16 @@ export const MemoryList: FunctionComponent<{
                                 ? "border-status-red/20 bg-status-red/[0.08] text-status-red"
                                 : "border-signal-500/20 bg-signal-500/[0.08] text-signal-500"
                         }`} style={asyncTransitionStyle} aria-busy={isDeleting}>
-                            <span>{selectedCount} selected from {visibleIds.length} visible</span>
+                            <span>{t("selectionSummary", { selected: formatNumber(selectedCount), visible: formatNumber(visibleIds.length) })}</span>
                             <button
                                 type="button"
                                 onClick={clearSelectedMemoryIds}
                                 disabled={isDeleting}
-                                title={isDeleting ? "Selection cannot be cleared while deletion is pending." : undefined}
+                                title={isDeleting ? t("selectionCannotClear") : undefined}
                                 style={controlTransitionStyle}
                                 className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-slate-500 transition-colors hover:bg-black/[0.04] hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
                             >
-                                Clear
+                                {t("clear")}
                             </button>
                             <button
                                 type="button"
@@ -434,12 +442,12 @@ export const MemoryList: FunctionComponent<{
                                 disabled={isDeleting}
                                 aria-busy={isDeleting}
                                 aria-describedby="memory-list-selection-status"
-                                title={isDeleting ? "Deleting selected memories. Wait for the result or retry if it fails." : "Deletes require confirmation before continuing."}
+                                title={isDeleting ? t("deletingSelectedWait") : t("deletesRequireConfirmation")}
                                 style={controlTransitionStyle}
                                 className="inline-flex min-w-[8.5rem] items-center justify-center gap-1.5 rounded-md bg-status-red px-2 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-status-red/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 dark:focus-visible:ring-offset-void-900"
                             >
                                 {isDeleting && <Loader2 size={12} className="motion-safe:animate-spin" aria-hidden="true" />}
-                                {isDeleting ? `Deleting ${selectedCount}...` : selectedCount > 1 ? `Delete ${selectedCount} selected` : "Delete selected"}
+                                {isDeleting ? t("deletingCount", { count: formatNumber(selectedCount) }) : selectedCount > 1 ? t("deleteCountSelected", { count: formatNumber(selectedCount) }) : t("deleteSelected")}
                             </button>
                         </div>
                     )}

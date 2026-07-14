@@ -4,6 +4,12 @@ import { ChevronDown, ExternalLink, Play } from "lucide-preact";
 import type { SprintPreviewPortMapping, SprintPreviewSession } from "../../../types.js";
 import { buildPreviewUrl } from "../../lib/preview-origin.js";
 import { getSafeUrl } from "../../lib/safe-url.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import {
+    browserPreviewMessages,
+    type BrowserPreviewMessageKey,
+    type BrowserPreviewMessageVariables,
+} from "../../i18n/messages/browser-preview.js";
 
 interface LivePreviewLinkProps {
     session: SprintPreviewSession | null;
@@ -29,14 +35,6 @@ const getPrimaryMapping = (session: SprintPreviewSession): SprintPreviewPortMapp
     };
 };
 
-const getMappingLabel = (mapping: SprintPreviewPortMapping): string => {
-    return mapping.label?.trim() || `Port ${mapping.containerPort}`;
-};
-
-const getUnavailableReason = (mapping: SprintPreviewPortMapping): string => {
-    return `${getMappingLabel(mapping)} is waiting for a routed host port.`;
-};
-
 const buildMappingPreviewUrl = (session: SprintPreviewSession, mapping: SprintPreviewPortMapping): string => {
     const url = new URL(buildPreviewUrl(session.id, session.lastKnownPath));
     url.searchParams.set("previewPort", String(mapping.containerPort));
@@ -44,6 +42,13 @@ const buildMappingPreviewUrl = (session: SprintPreviewSession, mapping: SprintPr
 };
 
 export const LivePreviewLink: FunctionComponent<LivePreviewLinkProps> = ({ session }) => {
+    const { translate } = useDashboardI18n();
+    const t = (key: BrowserPreviewMessageKey, variables?: BrowserPreviewMessageVariables) => (
+        translate(browserPreviewMessages, key, variables)
+    );
+    const getMappingLabel = (mapping: SprintPreviewPortMapping): string => (
+        mapping.label?.trim() || t("portLabel", { port: mapping.containerPort })
+    );
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
@@ -175,11 +180,11 @@ export const LivePreviewLink: FunctionComponent<LivePreviewLinkProps> = ({ sessi
                 href={getSafeUrl(previewUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label={`Open Live Preview on ${getMappingLabel(primaryMapping)}`}
+                aria-label={t("openLivePreviewOn", { name: getMappingLabel(primaryMapping) })}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-signal-500 hover:bg-signal-600 shadow-sm transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/45 ${hasPortMenu ? "rounded-l-[10px] rounded-r-none" : "rounded-[10px]"}`}
             >
                 <Play className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true" />
-                Live Preview
+                {t("livePreview")}
                 <ExternalLink className="w-3.5 h-3.5 ml-0.5 opacity-80" strokeWidth={2.5} aria-hidden="true" />
             </a>
             {hasPortMenu && (
@@ -187,7 +192,7 @@ export const LivePreviewLink: FunctionComponent<LivePreviewLinkProps> = ({ sessi
                     <button
                         ref={triggerRef}
                         type="button"
-                        aria-label="Choose Live Preview port"
+                        aria-label={t("chooseLivePreviewPort")}
                         aria-haspopup="listbox"
                         aria-expanded={isOpen}
                         aria-controls={isOpen ? listboxId : undefined}
@@ -207,21 +212,21 @@ export const LivePreviewLink: FunctionComponent<LivePreviewLinkProps> = ({ sessi
                         <div
                             id={listboxId}
                             role="listbox"
-                            aria-label="Live Preview ports"
+                            aria-label={t("livePreviewPorts")}
                             onKeyDown={handleListboxKeyDown}
                             className="absolute right-0 top-full z-50 mt-2 w-64 overflow-hidden rounded-xl border border-black/[0.08] bg-white/95 py-1 shadow-[0_16px_36px_rgba(15,23,42,0.16)] backdrop-blur-xl dark:border-white/[0.1] dark:bg-void-800/95"
                         >
                             {portMappings.map((mapping, index) => {
                                 const label = getMappingLabel(mapping);
-                                const optionText = `:${mapping.containerPort}${mapping.hostPort ? ` -> :${mapping.hostPort}` : " -> pending"}`;
+                                const optionText = `:${mapping.containerPort}${mapping.hostPort ? ` -> :${mapping.hostPort}` : ` -> ${t("pending")}`}`;
                                 if (!mapping.hostPort) {
-                                    const reason = getUnavailableReason(mapping);
+                                    const reason = t("portUnavailableReason", { name: label });
                                     return (
                                         <div
                                             key={`${mapping.containerPort}-${index}`}
                                             role="option"
                                             aria-disabled="true"
-                                            aria-label={`${label} unavailable. ${reason}`}
+                                            aria-label={t("portUnavailableLabel", { name: label, reason })}
                                             tabIndex={-1}
                                             className="flex cursor-not-allowed flex-col gap-0.5 px-3 py-2.5 text-left opacity-70"
                                         >
@@ -239,7 +244,7 @@ export const LivePreviewLink: FunctionComponent<LivePreviewLinkProps> = ({ sessi
                                         rel="noopener noreferrer"
                                         role="option"
                                         aria-selected={mapping.containerPort === primaryMapping.containerPort}
-                                        aria-label={`Open Live Preview ${label} on container port ${mapping.containerPort}`}
+                                        aria-label={t("openLivePreviewPort", { name: label, port: mapping.containerPort })}
                                         tabIndex={index === firstRoutedOptionIndex ? 0 : -1}
                                         onClick={() => closeMenu(false)}
                                         className="flex flex-col gap-0.5 px-3 py-2.5 text-left transition-colors hover:bg-black/[0.04] focus:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-signal-500/45 dark:hover:bg-white/[0.06] dark:focus:bg-white/[0.06]"
