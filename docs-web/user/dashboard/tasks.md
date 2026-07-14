@@ -110,6 +110,12 @@ The menu opens with click, Enter, Space, Arrow Up, or Arrow Down. Arrow keys mov
 
 Unavailable and optimistic actions stay visible but inert, with a reason directly beneath the action label so users can understand why an action cannot run. Enabled external destinations open safely in a new tab. The trigger remains available while a card is saving so these reasons are still discoverable, while duplicate task mutations remain suppressed.
 
+## Responsive and keyboard behavior
+
+On wide screens, the three lanes share one row when space permits. On phones, they stack vertically and card titles, dependency identifiers, and action menus remain within the page width without creating document-level horizontal scrolling. Menus are positioned inside the current viewport even when their card is near an edge.
+
+The board keeps accessible lane counts and status announcements during loading, filtering, optimistic saves, realtime refreshes, and empty or error states. Opening a task menu with the keyboard moves focus to its first enabled action; `Escape` returns focus to the same task-labelled trigger. Cancelling deletion also returns focus to that trigger, and reduced-motion mode preserves the same status text and focus treatment while disabling drag movement.
+
 ## Status legend
 
 | Lane | States | Meaning |
