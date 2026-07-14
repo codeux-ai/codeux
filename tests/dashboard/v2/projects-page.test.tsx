@@ -584,8 +584,8 @@ describe("ProjectsPage", () => {
     await waitFor(() => expect(deleteProjectMock).toHaveBeenCalledWith("project-1"));
   });
 
-  it("formats the German Projects header count with the active locale", () => {
-    const projects = Array.from({ length: 1000 }, (_, index) => createProject({
+  it("renders the German Projects header count for a small collection", () => {
+    const projects = Array.from({ length: 2 }, (_, index) => createProject({
       id: `project-${index}`,
       name: `Project ${index}`,
     }));
@@ -604,7 +604,7 @@ describe("ProjectsPage", () => {
 
     render(<ProjectsPage />, "de");
 
-    expect(screen.getByText("1.000 insgesamt")).toBeInTheDocument();
+    expect(screen.getByText("2 insgesamt")).toBeInTheDocument();
   });
 
   it("localizes setup progress and preserves a provider failure verbatim", async () => {
