@@ -390,9 +390,6 @@ describe("OverviewTelemetry Component", () => {
       selectedProject: { id: "p1", name: projectName },
       loading: false,
     } as any);
-    vi.mocked(useDashboardRuntimeData).mockReturnValue(makeRuntimeData([
-      makeAttentionItem({ title: attentionTitle, summaryMarkdown: attentionSummary }),
-    ]) as any);
     vi.mocked(useOverviewTelemetry).mockReturnValue({
       telemetry: {
         activeProjects: [{
@@ -417,7 +414,9 @@ describe("OverviewTelemetry Component", () => {
       refresh: vi.fn(),
     });
 
-    render(<OverviewTelemetry />, "de");
+    render(<OverviewTelemetry execution={makeRuntimeData([
+      makeAttentionItem({ title: attentionTitle, summaryMarkdown: attentionSummary }),
+    ]).execution} />, "de");
 
     expect(screen.getByText("Telemetrie.")).toBeInTheDocument();
     expect(screen.getByText("Aktive Sprints")).toBeInTheDocument();
