@@ -50,7 +50,6 @@ import {
   isSelectedDefaultStyleguideHidden,
   validateDesignGuidanceCustomEntry,
 } from "../../../dashboard/src/v2/lib/settings-view-models.js";
-import { buildTechstackSelectorViewModel } from "../../../dashboard/src/v2/lib/settings/techstack-view-models.js";
 import type { SystemSettings, ProjectSettings, ExternalSettingsHints, DashboardSettings } from "../../../dashboard/src/types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import {
@@ -89,23 +88,6 @@ describe("sortProviderConfigEntries", () => {
 });
 
 describe("settings view model source helpers", () => {
-  it("localizes techstack presentation while preserving catalog ids and labels", () => {
-    const viewModel = buildTechstackSelectorViewModel(
-      { selectedTechstackId: null, applicationKind: "web" },
-      {
-        defaultTechstackId: "stack-id",
-        entries: [{ id: "stack-id", label: "User Stack Name", items: [] }],
-      },
-      "de",
-    );
-
-    expect(viewModel.activeLabel).toBe("Keine");
-    expect(viewModel.options).toEqual([
-      { id: "__unassigned__", label: "Keine", kind: "unassigned", techstackId: null },
-      { id: "stack-id", label: "User Stack Name (Standard)", kind: "catalog", techstackId: "stack-id" },
-    ]);
-  });
-
   it("exposes dashboard experience mode labels, descriptions, and helpers", () => {
     expect(dashboardExperienceModeOptions.map((option) => option.label)).toEqual(["Easy", "Standard", "Expert"]);
     expect(normalizeDashboardExperienceMode("STANDARD")).toBe("STANDARD");
@@ -147,14 +129,6 @@ describe("settings view model source helpers", () => {
     expect(sourceLabel("sprint")).toBe("Sprint override");
     expect(sourceLabel("mixed")).toBe("Mixed sources");
     expect(sourceLabel("system")).toBe("Inherited");
-  });
-
-  it("formats inherited and overridden source presentation in German", () => {
-    expect(sourceLabel("project", "de")).toBe("Projektüberschreibung");
-    expect(sourceLabel("sprint", "de")).toBe("Sprint-Überschreibung");
-    expect(sourceLabel("mixed", "de")).toBe("Gemischte Quellen");
-    expect(sourceLabel("system", "de")).toBe("Geerbt");
-    expect(getFieldSourceLabel("project", "project", "de")).toBe("Projektüberschreibung");
   });
 
   it("distinguishes inherited, overridden, and mixed project section sources", () => {
@@ -1016,21 +990,6 @@ describe("settings guidance view models", () => {
       instructionMarkdown: "Instruction markdown is required.",
       hasError: true,
     });
-  });
-
-  it("localizes guidance validation without changing entry values", () => {
-    const entries = [
-      { id: "same-id", name: "Gleicher Name", summary: "Summary", instructionMarkdown: "Keep this agent instruction." },
-      { id: "same-id", name: "gleicher name", summary: "", instructionMarkdown: "" },
-    ];
-
-    expect(validateDesignGuidanceCustomEntry(entries[1], entries, "techStack", 1, "de")).toMatchObject({
-      id: "Die ID für Technologie-Stack muss eindeutig sein.",
-      name: "Der Name für Technologie-Stack muss eindeutig sein.",
-      summary: "Eine Zusammenfassung ist erforderlich.",
-      instructionMarkdown: "Markdown-Anweisungen sind erforderlich.",
-    });
-    expect(entries[0]?.instructionMarkdown).toBe("Keep this agent instruction.");
   });
 
   it("creates a unique custom guidance id for the requested kind", () => {

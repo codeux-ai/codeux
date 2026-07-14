@@ -20,6 +20,8 @@ import { buildProjectCreationSettingsOverride } from "../lib/settings-updaters.j
 import { DEFAULT_DASHBOARD_SETTINGS } from "../lib/settings.js";
 import { fetchProjectInvocations } from "./lib/invocation-api.js";
 import { startProjectSetup } from "./lib/project-api.js";
+import { useDashboardI18n } from "./i18n/context.js";
+import { projectMessages } from "./i18n/messages/projects.js";
 import {
   buildProjectsPageViewModel,
   PROJECT_FILTER_DEFINITIONS,
@@ -36,22 +38,26 @@ const createDefaultSetupOptions = (): ProjectSetupOptions => ({
 });
 
 const SETUP_OPTIONS = [
-  { key: "agents", label: "Agents", description: "Specialists and routing." },
-  { key: "quicksprints", label: "Quicksprints", description: "Sprint templates." },
-  { key: "previewScript", label: "Preview Script", description: "Container startup." },
-  { key: "ci", label: "CI", description: "Basic checks." },
-  { key: "techstack", label: "Techstack", description: "Detect and assign from manifests." },
-  { key: "docs", label: "Docs", description: "Embed repository docs into Knowledge docs.", icon: BookOpen },
+  { key: "agents", labelKey: "setupAgents", descriptionKey: "setupAgentsDescription" },
+  { key: "quicksprints", labelKey: "setupQuicksprints", descriptionKey: "setupQuicksprintsDescription" },
+  { key: "previewScript", labelKey: "setupPreviewScript", descriptionKey: "setupPreviewScriptDescription" },
+  { key: "ci", labelKey: "setupCi", descriptionKey: "setupCiDescription" },
+  { key: "techstack", labelKey: "setupTechstack", descriptionKey: "setupTechstackDescription" },
+  { key: "docs", labelKey: "setupDocs", descriptionKey: "setupDocsDescription", icon: BookOpen },
 ] as const;
 
 export const ProjectsPage: FunctionComponent = () => {
   const navigate = useNavigate();
+  const { formatNumber, translate, translatePlural } = useDashboardI18n();
   const [showModal, setShowModal] = useState(false);
   const [modalSourceType, setModalSourceType] = useState<AddProjectModalSourceType>("local");
   const [setupProjectId, setSetupProjectId] = useState<string | null>(null);
   const [runningSetupProjectIds, setRunningSetupProjectIds] = useState<Set<string>>(() => new Set());
   const [setupInvocationByProjectId, setSetupInvocationByProjectId] = useState<Record<string, string>>({});
   const [setupError, setSetupError] = useState<string | null>(null);
+  const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [setupOptions, setSetupOptions] = useState<ProjectSetupOptions>(() => createDefaultSetupOptions());
   const [activeFilter, setActiveFilter] = useState<ProjectFilter>("All");
   const {
@@ -107,7 +113,7 @@ export const ProjectsPage: FunctionComponent = () => {
     setRunningSetupProjectIds((previous) => new Set(previous).add(projectId));
     addToast({
       type: "info",
-      message: `Starting project initialization for ${projectName}. The invocation rail will open as soon as tracking is ready.`,
+      message: translate(projectMessages, "setupStarting", { name: projectName }),
       autoDismissMs: 7000,
     });
 
@@ -119,10 +125,13 @@ export const ProjectsPage: FunctionComponent = () => {
         }));
         addToast({
           type: "info",
-          message: `Project initialization is running for ${projectName}. Invocation ${started.invocationId.slice(0, 8)} is available now.`,
+          message: translate(projectMessages, "setupRunning", {
+            name: projectName,
+            invocation: started.invocationId.slice(0, 8),
+          }),
           autoDismissMs: 0,
           action: {
-            label: "Open invocation",
+            label: translate(projectMessages, "openInvocation"),
             onClick: () => openInvocation(started.invocationId),
           },
         });
@@ -133,14 +142,14 @@ export const ProjectsPage: FunctionComponent = () => {
       })
       .then(({ started, invocation }) => {
         if (invocation.status === "failed") {
-          throw new Error(invocation.lastErrorMessage || "Project initialization invocation failed.");
+          throw new Error(invocation.lastErrorMessage || translate(projectMessages, "setupInvocationFailed"));
         }
         addToast({
           type: "success",
-          message: `Project initialization finished for ${projectName}. Review the invocation output for generated artifacts.`,
+          message: translate(projectMessages, "setupFinished", { name: projectName }),
           autoDismissMs: 9000,
           action: {
-            label: "Open invocation",
+            label: translate(projectMessages, "openInvocation"),
             onClick: () => openInvocation(started.invocationId),
           },
         });
@@ -149,7 +158,7 @@ export const ProjectsPage: FunctionComponent = () => {
         const message = setupFailure instanceof Error ? setupFailure.message : String(setupFailure);
         addToast({
           type: "error",
-          message: `Project initialization failed for ${projectName}: ${message}`,
+          message: translate(projectMessages, "setupFailed", { name: projectName, message }),
           autoDismissMs: 0,
         });
       })
@@ -201,6 +210,7 @@ export const ProjectsPage: FunctionComponent = () => {
   };
 
   const activeSetupProject = sources.find((source) => source.id === setupProjectId) ?? null;
+  const activeDeleteProject = sources.find((source) => source.id === deleteProjectId) ?? null;
   const isActiveSetupRunning = activeSetupProject
     ? runningSetupProjectIds.has(activeSetupProject.id)
     : false;
@@ -219,9 +229,35 @@ export const ProjectsPage: FunctionComponent = () => {
     setSetupError(null);
   };
 
+  const openDeleteDialog = (projectId: string) => {
+    setDeleteProjectId(projectId);
+    setDeleteError(null);
+  };
+
+  const closeDeleteDialog = () => {
+    if (isDeletingProject) return;
+    setDeleteProjectId(null);
+    setDeleteError(null);
+  };
+
+  const handleDeleteProject = async () => {
+    if (!activeDeleteProject || isDeletingProject) return;
+    setIsDeletingProject(true);
+    setDeleteError(null);
+    try {
+      await deleteProject(activeDeleteProject.id);
+      setDeleteProjectId(null);
+    } catch (deleteFailure) {
+      const message = deleteFailure instanceof Error ? deleteFailure.message : String(deleteFailure);
+      setDeleteError(translate(projectMessages, "deleteFailed", { message }));
+    } finally {
+      setIsDeletingProject(false);
+    }
+  };
+
   return (
     <>
-      <PageContainer aria-label="Projects" className="min-w-0 gap-7 overflow-x-clip">
+      <PageContainer aria-label={translate(projectMessages, "projects")} className="min-w-0 gap-7 overflow-x-clip">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72 bg-[radial-gradient(ellipse_at_top_left,rgba(0,171,132,0.07),transparent_58%)] dark:bg-[radial-gradient(ellipse_at_top_left,rgba(0,171,132,0.09),transparent_58%)]"
@@ -229,21 +265,21 @@ export const ProjectsPage: FunctionComponent = () => {
 
         <PageHeader
           icon={FolderOpen}
-          eyebrow="Source repositories"
-          title="Manage Projects"
-          subtitle="Connect repositories and local directories, choose the active workspace, and keep project setup close at hand."
+          eyebrow={translate(projectMessages, "sourceRepositories")}
+          title={translate(projectMessages, "manageProjects")}
+          subtitle={translate(projectMessages, "projectsSubtitle")}
           actions={(
             <>
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 {viewModel.runningCount > 0 ? (
                   <span className="inline-flex items-center gap-2 rounded-full border border-status-green/20 bg-status-green/[0.07] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-status-green">
                     <span className="h-1.5 w-1.5 rounded-full bg-status-green" aria-hidden="true" />
-                    {viewModel.runningCount} Running
+                    {translatePlural(projectMessages, "runningCount", viewModel.runningCount)}
                   </span>
                 ) : null}
                 <span className="inline-flex items-center gap-2 rounded-full border border-black/[0.07] bg-white/55 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300">
                   <FolderOpen className="h-3 w-3" aria-hidden="true" />
-                  {viewModel.totalCount} Total
+                  {translatePlural(projectMessages, "totalCount", viewModel.totalCount)}
                 </span>
               </div>
               <button
@@ -252,7 +288,7 @@ export const ProjectsPage: FunctionComponent = () => {
                 className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-signal-500 px-4 text-sm font-semibold text-white shadow-sm motion-safe:transition-colors motion-safe:duration-150 hover:bg-signal-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900"
               >
                 <Sparkles className="h-4 w-4" aria-hidden="true" />
-                New Project
+                {translate(projectMessages, "newProject")}
               </button>
             </>
           )}
@@ -260,10 +296,10 @@ export const ProjectsPage: FunctionComponent = () => {
 
         <div
           role="tablist"
-          aria-label="Filter projects by status"
+          aria-label={translate(projectMessages, "filterProjects")}
           className="flex w-full min-w-0 flex-wrap gap-1.5 rounded-2xl border border-black/[0.06] bg-white/50 p-1.5 shadow-sm backdrop-blur-xl dark:border-white/[0.07] dark:bg-void-800/45 sm:w-fit"
         >
-          {PROJECT_FILTER_DEFINITIONS.map(({ filter }) => {
+          {PROJECT_FILTER_DEFINITIONS.map(({ filter, labelKey }) => {
             const isActive = activeFilter === filter;
             return (
               <button
@@ -279,7 +315,7 @@ export const ProjectsPage: FunctionComponent = () => {
                     : "text-slate-500 hover:bg-black/[0.04] hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/[0.05] dark:hover:text-white"
                 }`}
               >
-                <span className="truncate">{filter}</span>
+                <span className="truncate">{translate(projectMessages, labelKey)}</span>
                 <span
                   className={`shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[9px] ${
                     isActive
@@ -287,7 +323,7 @@ export const ProjectsPage: FunctionComponent = () => {
                       : "bg-black/[0.05] text-slate-400 dark:bg-white/[0.06]"
                   }`}
                 >
-                  {viewModel.counts[filter]}
+                  {formatNumber(viewModel.counts[filter])}
                 </span>
               </button>
             );
@@ -297,13 +333,13 @@ export const ProjectsPage: FunctionComponent = () => {
         <div
           id="project-card-region"
           role="region"
-          aria-label="Project cards"
+          aria-label={translate(projectMessages, "projectCards")}
           aria-busy={loading ? "true" : undefined}
           className="min-w-0"
         >
           {loading ? (
             <div role="status" aria-live="polite" aria-busy="true" className="min-w-0">
-              <span className="sr-only">Loading projects.</span>
+              <span className="sr-only">{translate(projectMessages, "loadingProjects")}</span>
               <SkeletonLoader
                 show
                 loadingLabel=""
@@ -319,7 +355,7 @@ export const ProjectsPage: FunctionComponent = () => {
           ) : error ? (
             <div role="alert" aria-live="assertive" className="flex min-w-0 flex-col items-start gap-4 rounded-2xl border border-status-red/20 bg-status-red/[0.06] p-5 text-status-red sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <p className="font-display text-base font-semibold">Projects could not be loaded</p>
+                <p className="font-display text-base font-semibold">{translate(projectMessages, "projectsLoadFailed")}</p>
                 <p className="mt-1 break-words text-sm">{error}</p>
               </div>
               <button
@@ -328,7 +364,7 @@ export const ProjectsPage: FunctionComponent = () => {
                 className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-status-red/25 bg-white/60 px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red dark:bg-white/[0.06]"
               >
                 <Plus className="h-4 w-4" aria-hidden="true" />
-                Add Project
+                {translate(projectMessages, "addProject")}
               </button>
             </div>
           ) : (
@@ -336,21 +372,26 @@ export const ProjectsPage: FunctionComponent = () => {
               {viewModel.isEmpty ? (
                 <div role="status" aria-live="polite" className="flex min-h-[390px] min-w-0 flex-col items-center justify-center rounded-[1.5rem] border border-black/[0.07] bg-white/55 p-6 text-center shadow-sm backdrop-blur-xl dark:border-white/[0.08] dark:bg-void-800/50">
                   <FolderOpen className="h-8 w-8 text-signal-500" aria-hidden="true" />
-                  <p className="mt-4 font-display text-lg font-semibold text-slate-900 dark:text-white">No projects connected</p>
-                  <p className="mt-2 max-w-xs text-sm leading-relaxed text-slate-500 dark:text-slate-400">No projects connected. Add a project to start tracking work.</p>
+                  <p className="mt-4 font-display text-lg font-semibold text-slate-900 dark:text-white">{translate(projectMessages, "noProjects")}</p>
+                  <p className="mt-2 max-w-xs text-sm leading-relaxed text-slate-500 dark:text-slate-400">{translate(projectMessages, "noProjectsDescription")}</p>
                 </div>
               ) : null}
 
               {viewModel.isFilteredEmpty ? (
                 <div role="status" aria-live="polite" className="flex min-h-[390px] min-w-0 flex-col items-center justify-center rounded-[1.5rem] border border-black/[0.07] bg-white/55 p-6 text-center shadow-sm backdrop-blur-xl dark:border-white/[0.08] dark:bg-void-800/50">
-                  <p className="font-display text-lg font-semibold text-slate-900 dark:text-white">No {activeFilter.toLowerCase()} projects</p>
-                  <p className="mt-2 max-w-xs text-sm leading-relaxed text-slate-500 dark:text-slate-400">Choose another filter to see the rest of your projects.</p>
+                  <p className="font-display text-lg font-semibold text-slate-900 dark:text-white">{
+                    translate(
+                      projectMessages,
+                      PROJECT_FILTER_DEFINITIONS.find(({ filter }) => filter === activeFilter)?.emptyMessageKey ?? "noProjects",
+                    )
+                  }</p>
+                  <p className="mt-2 max-w-xs text-sm leading-relaxed text-slate-500 dark:text-slate-400">{translate(projectMessages, "filteredEmptyDescription")}</p>
                   <button
                     type="button"
                     onClick={() => setActiveFilter("All")}
                     className="mt-5 rounded-xl border border-black/[0.09] bg-white/60 px-4 py-2 text-sm font-semibold text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 dark:border-white/[0.1] dark:bg-white/[0.05] dark:text-slate-200"
                   >
-                    Show all projects
+                    {translate(projectMessages, "showAllProjects")}
                   </button>
                 </div>
               ) : null}
@@ -363,7 +404,7 @@ export const ProjectsPage: FunctionComponent = () => {
                     isSettingUp={runningSetupProjectIds.has(source.id)}
                     setupInvocationId={setupInvocationByProjectId[source.id] ?? null}
                     onSelect={() => { void selectProject(source.id); }}
-                    onDelete={() => { void deleteProject(source.id); }}
+                    onDelete={() => openDeleteDialog(source.id)}
                     onSetup={() => openSetupDialog(source.id)}
                     onOpenInvocation={() => {
                       const invocationId = setupInvocationByProjectId[source.id];
@@ -405,23 +446,23 @@ export const ProjectsPage: FunctionComponent = () => {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-300">
                     <Bot className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    Project Setup Agent
+                    {translate(projectMessages, "setupAgent")}
                   </div>
                   <h2 id="setup-project-title" title={activeSetupProject.name} className="mt-3 truncate font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white sm:text-2xl">
-                    Setup {activeSetupProject.name}
+                    {translate(projectMessages, "setupProjectTitle", { name: activeSetupProject.name })}
                   </h2>
                   <p id="setup-project-description" className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                    Choose which repository artifacts the setup agent should prepare.
+                    {translate(projectMessages, "setupDescription")}
                   </p>
                 </div>
                 <button
                   type="button"
-                  aria-label="Close project setup"
+                  aria-label={translate(projectMessages, "closeProjectSetup")}
                   onClick={() => setSetupProjectId(null)}
                   disabled={isActiveSetupRunning}
                   className="shrink-0 rounded-xl border border-black/[0.07] px-3 py-2 text-xs font-semibold text-slate-500 motion-safe:transition-colors motion-safe:duration-150 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:text-white"
                 >
-                  Close
+                  {translate(projectMessages, "close")}
                 </button>
               </div>
             </div>
@@ -450,8 +491,8 @@ export const ProjectsPage: FunctionComponent = () => {
                       </span>
                     ) : null}
                     <span className="min-w-0 flex-1">
-                      <span className="block text-xs font-semibold uppercase tracking-[0.12em]">{option.label}</span>
-                      <span className="mt-1 block text-xs font-medium leading-relaxed opacity-75">{option.description}</span>
+                      <span className="block text-xs font-semibold uppercase tracking-[0.12em]">{translate(projectMessages, option.labelKey)}</span>
+                      <span className="mt-1 block text-xs font-medium leading-relaxed opacity-75">{translate(projectMessages, option.descriptionKey)}</span>
                     </span>
                   </button>
                 ))}
@@ -470,7 +511,7 @@ export const ProjectsPage: FunctionComponent = () => {
                 disabled={isActiveSetupRunning}
                 className="min-h-11 rounded-xl px-4 text-sm font-semibold text-slate-500 motion-safe:transition-colors motion-safe:duration-150 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:text-white"
               >
-                Cancel
+                {translate(projectMessages, "cancel")}
               </button>
               <button
                 type="button"
@@ -484,7 +525,52 @@ export const ProjectsPage: FunctionComponent = () => {
                 ) : (
                   <Bot className="h-4 w-4" aria-hidden="true" />
                 )}
-                {isActiveSetupRunning ? "Setting up..." : "Setup Project"}
+                {translate(projectMessages, isActiveSetupRunning ? "settingUp" : "runSetupProject")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {activeDeleteProject ? (
+        <div
+          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/55 p-4 backdrop-blur-xl"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-project-title"
+          aria-describedby="delete-project-description"
+          aria-busy={isDeletingProject || undefined}
+        >
+          <div className="w-full max-w-md rounded-[1.75rem] border border-black/[0.06] bg-white p-6 shadow-[0_32px_80px_rgba(0,0,0,0.28)] dark:border-white/[0.08] dark:bg-void-800 sm:p-7">
+            <h2 id="delete-project-title" className="font-display text-xl font-semibold text-slate-900 dark:text-white">
+              {translate(projectMessages, "confirmDeleteTitle", { name: activeDeleteProject.name })}
+            </h2>
+            <p id="delete-project-description" className="mt-3 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+              {translate(projectMessages, "confirmDeleteDescription")}
+            </p>
+            {deleteError ? (
+              <p role="alert" aria-live="assertive" className="mt-4 rounded-xl bg-status-red/[0.08] p-3 text-sm font-semibold text-status-red">
+                {deleteError}
+              </p>
+            ) : null}
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={closeDeleteDialog}
+                disabled={isDeletingProject}
+                className="min-h-11 rounded-xl px-4 text-sm font-semibold text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-300"
+              >
+                {translate(projectMessages, "cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => { void handleDeleteProject(); }}
+                disabled={isDeletingProject}
+                aria-busy={isDeletingProject || undefined}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-status-red px-5 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:focus-visible:ring-offset-void-800"
+              >
+                {isDeletingProject ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" /> : null}
+                {translate(projectMessages, isDeletingProject ? "deletingProject" : "confirmDelete")}
               </button>
             </div>
           </div>

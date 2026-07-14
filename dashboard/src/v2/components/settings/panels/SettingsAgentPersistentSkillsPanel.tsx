@@ -3,8 +3,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks"
 import { Database } from "lucide-preact";
 import type { SkillStorageRecord } from "../../../../types.js";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
-import { useDashboardI18n } from "../../../i18n/index.js";
-import { settingsAgentsGuidanceMessages } from "../../../i18n/messages/settings-agents-guidance.js";
 import { fetchSkillStorages, updateAgentPreset } from "../../../lib/agent-preset-api.js";
 import { PersistentSkillStorageManager } from "../PersistentSkillStorageManager.js";
 import { Row, Toggle } from "../SettingsFormFields.js";
@@ -35,7 +33,6 @@ const reconcileAgentSkillState = (
 };
 
 export const SettingsAgentPersistentSkillsPanel: FunctionComponent<SettingsAgentPersistentSkillsPanelProps> = ({ state }) => {
-  const { translate } = useDashboardI18n();
   const { selectedProject, projectAgentPresets = EMPTY_AGENT_PRESETS } = state;
   const [storages, setStorages] = useState<SkillStorageRecord[]>([]);
   const [agentState, setAgentState] = useState<Record<string, AgentSkillState>>({});
@@ -77,14 +74,14 @@ export const SettingsAgentPersistentSkillsPanel: FunctionComponent<SettingsAgent
         if (!cancelled) handleStoragesChange(records);
       })
       .catch((loadError) => {
-        if (!cancelled) setError(translate(settingsAgentsGuidanceMessages, "skillsLoadError", { error: errorMessage(loadError) }));
+        if (!cancelled) setError(`Could not load skill storages. ${errorMessage(loadError)}`);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
 
     return () => { cancelled = true; };
-  }, [handleStoragesChange, selectedProject?.id, translate]);
+  }, [handleStoragesChange, selectedProject?.id]);
 
   const storageNames = useMemo(() => new Map(storages.map((storage) => [storage.id, storage.name])), [storages]);
 
@@ -113,7 +110,7 @@ export const SettingsAgentPersistentSkillsPanel: FunctionComponent<SettingsAgent
       }));
       setError(null);
     } catch (updateError) {
-      setError(translate(settingsAgentsGuidanceMessages, "skillsAttachmentError", { error: errorMessage(updateError) }));
+      setError(`Could not update persistent skill attachments. ${errorMessage(updateError)}`);
     } finally {
       setBusy(null);
     }
@@ -135,45 +132,40 @@ export const SettingsAgentPersistentSkillsPanel: FunctionComponent<SettingsAgent
       }));
       setError(null);
     } catch (updateError) {
-      setError(translate(settingsAgentsGuidanceMessages, "skillsRetrievalError", { error: errorMessage(updateError) }));
+      setError(`Could not update persistent skill retrieval. ${errorMessage(updateError)}`);
     } finally {
       setBusy(null);
     }
   };
 
   const statusSummary = !selectedProject
-    ? translate(settingsAgentsGuidanceMessages, "skillsSelectProjectSummary")
+    ? "Select a project to manage storage and agent attachments."
     : loading
-      ? translate(settingsAgentsGuidanceMessages, "skillsLoadingSummary")
-      : translate(settingsAgentsGuidanceMessages, "skillsAvailableSummary", {
-        storageCount: storages.length,
-        storageNoun: translate(settingsAgentsGuidanceMessages, storages.length === 1 ? "skillsStorageSingular" : "skillsStoragePlural"),
-        agentCount: projectAgentPresets.length,
-        agentNoun: translate(settingsAgentsGuidanceMessages, projectAgentPresets.length === 1 ? "skillsAgentSingular" : "skillsAgentPlural"),
-      });
+      ? "Loading project skill storages…"
+      : `${storages.length} ${storages.length === 1 ? "storage" : "storages"} available · ${projectAgentPresets.length} project ${projectAgentPresets.length === 1 ? "agent" : "agents"}`;
 
   return (
     <SectionCard
-      title={translate(settingsAgentsGuidanceMessages, "skillsTitle")}
+      title="Persistent Skill Storage"
       watermark="SKL"
       icon={<Database strokeWidth={2.4} />}
       accent="teal"
-      summary={translate(settingsAgentsGuidanceMessages, "skillsSummary")}
-      configureLabel={translate(settingsAgentsGuidanceMessages, "skillsConfigure")}
+      summary="Attach curated project knowledge to selected agents and keep runtime retrieval explicitly controlled."
+      configureLabel="Manage skill storage"
       highlights={[
-        { label: translate(settingsAgentsGuidanceMessages, "skillsStorages"), value: loading ? translate(settingsAgentsGuidanceMessages, "loading") : storages.length, tone: storages.length > 0 ? "active" : "neutral" },
-        { label: translate(settingsAgentsGuidanceMessages, "skillsProjectAgents"), value: projectAgentPresets.length },
-        { label: translate(settingsAgentsGuidanceMessages, "skillsRetrievalEnabled"), value: Object.values(agentState).filter((entry) => entry.enabled && entry.storageIds.length > 0).length },
+        { label: "Storages", value: loading ? "Loading" : storages.length, tone: storages.length > 0 ? "active" : "neutral" },
+        { label: "Project agents", value: projectAgentPresets.length },
+        { label: "Retrieval enabled", value: Object.values(agentState).filter((entry) => entry.enabled && entry.storageIds.length > 0).length },
       ]}
     >
       <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,0.7fr)_minmax(16rem,1.3fr)]">
         <div className="min-w-0 rounded-[1.2rem] border border-black/[0.06] bg-black/[0.02] p-4 dark:border-white/[0.06] dark:bg-white/[0.025]">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">{translate(settingsAgentsGuidanceMessages, "skillsStatus")}</span>
-            {!selectedProject ? <span className="rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-300">{translate(settingsAgentsGuidanceMessages, "projectOnly")}</span> : null}
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">Storage status</span>
+            {!selectedProject ? <span className="rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-300">Project only</span> : null}
           </div>
           <p role="status" aria-live="polite" className="mt-2 text-sm font-semibold leading-relaxed text-slate-800 dark:text-slate-100">{statusSummary}</p>
-          <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{translate(settingsAgentsGuidanceMessages, "skillsSeparateFromMemory")}</p>
+          <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">Storage is separate from memory. Creating a storage does not enable runtime retrieval.</p>
         </div>
         <PersistentSkillStorageManager project={selectedProject ?? null} storages={storages} onStoragesChange={handleStoragesChange} />
       </div>
@@ -182,36 +174,36 @@ export const SettingsAgentPersistentSkillsPanel: FunctionComponent<SettingsAgent
         <div role="alert" className="rounded-[1rem] border border-status-red/25 bg-status-red/[0.08] px-4 py-3 text-xs font-semibold text-status-red">{error}</div>
       ) : null}
 
-      <Row label={translate(settingsAgentsGuidanceMessages, "skillsAttachmentsLabel")} description={translate(settingsAgentsGuidanceMessages, "skillsAttachmentsDescription")} last>
+      <Row label="Agent storage attachments" description="Attach project storage separately for each agent, then explicitly enable retrieval. Attachment changes save immediately." last>
         <div className="grid min-w-0 w-full gap-3" aria-busy={busy ? "true" : undefined}>
           {!selectedProject ? (
-            <div role="status" className="rounded-[1rem] border border-dashed border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">{translate(settingsAgentsGuidanceMessages, "skillsSelectProjectAttachments")}</div>
+            <div role="status" className="rounded-[1rem] border border-dashed border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">Select a project to attach persistent skill storage to project agents.</div>
           ) : loading ? (
-            <div role="status" className="rounded-[1rem] border border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs font-semibold text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">{translate(settingsAgentsGuidanceMessages, "skillsLoadingAttachments")}</div>
+            <div role="status" className="rounded-[1rem] border border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs font-semibold text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">Loading storage attachments…</div>
           ) : projectAgentPresets.length === 0 ? (
-            <div role="status" className="rounded-[1rem] border border-dashed border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">{translate(settingsAgentsGuidanceMessages, "skillsCreateAgentsFirst")}</div>
+            <div role="status" className="rounded-[1rem] border border-dashed border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">Create project agents before attaching persistent skill storage.</div>
           ) : projectAgentPresets.map((preset) => {
             const current = getPresetState(preset.id);
             const active = current.enabled && current.storageIds.length > 0;
             const toggleReasonId = `persistent-skills-${preset.id}-reason`;
             const enableDisabled = current.storageIds.length === 0 || Boolean(busy);
             return (
-              <section key={preset.id} aria-label={translate(settingsAgentsGuidanceMessages, "skillsSectionAria", { name: preset.name })} className="min-w-0 rounded-[1rem] border border-black/[0.06] bg-white/65 p-3 dark:border-white/[0.06] dark:bg-white/[0.04]">
+              <section key={preset.id} aria-label={`${preset.name} persistent skills`} className="min-w-0 rounded-[1rem] border border-black/[0.06] bg-white/65 p-3 dark:border-white/[0.06] dark:bg-white/[0.04]">
                 <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <div className="break-words text-sm font-semibold text-slate-800 dark:text-slate-100">{preset.name}</div>
                     <div id={toggleReasonId} className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                       {current.storageIds.length === 0
-                        ? translate(settingsAgentsGuidanceMessages, "skillsAttachBeforeEnable")
+                        ? "Attach at least one storage before enabling persistent skills."
                         : active
-                          ? translate(settingsAgentsGuidanceMessages, "skillsRetrievalActive")
-                          : translate(settingsAgentsGuidanceMessages, "skillsRetrievalInactive")}
+                          ? "Retrieval is enabled for attached storages."
+                          : "Storage attached; retrieval remains off until enabled."}
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center gap-3">
-                    <span className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${active ? "border-signal-500/25 bg-signal-500/[0.08] text-signal-700 dark:text-signal-200" : "border-black/[0.06] bg-black/[0.03] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"}`}>{translate(settingsAgentsGuidanceMessages, active ? "enabled" : "skillsDefaultOff")}</span>
+                    <span className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${active ? "border-signal-500/25 bg-signal-500/[0.08] text-signal-700 dark:text-signal-200" : "border-black/[0.06] bg-black/[0.03] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"}`}>{active ? "Enabled" : "Default off"}</span>
                     <Toggle
-                      aria-label={translate(settingsAgentsGuidanceMessages, "skillsEnableAria", { name: preset.name })}
+                      aria-label={`Enable persistent skills for ${preset.name}`}
                       aria-describedby={toggleReasonId}
                       value={active}
                       disabled={enableDisabled}
@@ -220,9 +212,9 @@ export const SettingsAgentPersistentSkillsPanel: FunctionComponent<SettingsAgent
                   </div>
                 </div>
                 <fieldset className="mt-3 min-w-0" disabled={Boolean(busy) || storages.length === 0}>
-                  <legend className="sr-only">{translate(settingsAgentsGuidanceMessages, "skillsAttachmentsLegend", { name: preset.name })}</legend>
+                  <legend className="sr-only">Storage attachments for {preset.name}</legend>
                   {storages.length === 0 ? (
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{translate(settingsAgentsGuidanceMessages, "skillsNoStorages")}</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">No storages available. Use Manage storages to create one.</span>
                   ) : (
                     <div className="flex min-w-0 flex-wrap gap-2">
                       {storages.map((storage) => {
@@ -242,7 +234,7 @@ export const SettingsAgentPersistentSkillsPanel: FunctionComponent<SettingsAgent
                     </div>
                   )}
                 </fieldset>
-                {busy ? <div role="status" className="mt-2 text-xs font-semibold text-slate-500 dark:text-slate-400">{translate(settingsAgentsGuidanceMessages, "skillsSavingAttachments")}</div> : null}
+                {busy ? <div role="status" className="mt-2 text-xs font-semibold text-slate-500 dark:text-slate-400">Saving attachment changes…</div> : null}
               </section>
             );
           })}

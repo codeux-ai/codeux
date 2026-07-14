@@ -1,13 +1,20 @@
 /** @vitest-environment happy-dom */
 /** @jsx h */
 import { h } from "preact";
-import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/preact";
+import { render as testingRender, screen, fireEvent, cleanup, waitFor } from "@testing-library/preact";
+import type { ComponentChildren } from "preact";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { AddProjectModal } from "../../../dashboard/src/v2/components/ui/AddProjectModal.js";
 import { fetchLocalDirectories } from "../../../dashboard/src/v2/lib/project-api.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+import type { DashboardLocale } from "../../../dashboard/src/v2/i18n/locales.js";
 
 expect.extend(matchers);
+
+const render = (children: ComponentChildren, locale: DashboardLocale = "en") => testingRender(
+  <DashboardI18nProvider initialLocale={locale} storage={null}>{children}</DashboardI18nProvider>,
+);
 
 vi.mock("gsap", () => ({
   default: {
@@ -282,6 +289,85 @@ describe("AddProjectModal", () => {
     });
   });
 
+  it("submits unchanged local and Git import payloads from the German modal", async () => {
+    const onAdd = vi.fn().mockResolvedValue(undefined);
+    const first = render(<AddProjectModal onClose={vi.fn()} onAdd={onAdd} />, "de");
+
+    fireEvent.input(screen.getByLabelText(/Projektname/i), { target: { value: "Lokales Projekt" } });
+    fireEvent.input(screen.getByLabelText(/Verzeichnispfad/i), { target: { value: "/workspace/lokal" } });
+    fireEvent.click(screen.getByText("Mit Projekteinrichtungs-Agent initialisieren").closest("label")!);
+    fireEvent.submit(screen.getByLabelText(/Projektname/i).closest("form")!);
+
+    await waitFor(() => expect(onAdd).toHaveBeenCalledWith({
+      name: "Lokales Projekt",
+      type: "local",
+      path: "/workspace/lokal",
+      setup: {
+        enabled: false,
+        options: {
+          agents: true,
+          quicksprints: true,
+          previewScript: false,
+          ci: true,
+          techstack: true,
+          docs: false,
+        },
+      },
+    }));
+
+    first.unmount();
+    onAdd.mockClear();
+    render(<AddProjectModal onClose={vi.fn()} onAdd={onAdd} />, "de");
+    fireEvent.click(screen.getByRole("button", { name: "Git-URL" }));
+    fireEvent.input(screen.getByLabelText(/Projektname/i), { target: { value: "Remote Projekt" } });
+    fireEvent.input(screen.getByLabelText(/Repository-URL/i), { target: { value: "https://example.com/team/repo.git" } });
+    fireEvent.input(screen.getByLabelText(/In Verzeichnis klonen/i), { target: { value: "/workspace/clones" } });
+    fireEvent.click(screen.getByText("Mit Projekteinrichtungs-Agent initialisieren").closest("label")!);
+    fireEvent.submit(screen.getByLabelText(/Projektname/i).closest("form")!);
+
+    await waitFor(() => expect(onAdd).toHaveBeenCalledWith({
+      name: "Remote Projekt",
+      type: "git",
+      path: "https://example.com/team/repo.git",
+      cloneDir: "/workspace/clones",
+      setup: {
+        enabled: false,
+        options: {
+          agents: true,
+          quicksprints: true,
+          previewScript: false,
+          ci: true,
+          techstack: true,
+          docs: false,
+        },
+      },
+    }));
+  });
+
+  it("announces German validation without translating entered values or API failures", async () => {
+    const onAdd = vi.fn().mockRejectedValue(new Error("provider diagnostic 42"));
+    render(<AddProjectModal onClose={vi.fn()} onAdd={onAdd} />, "de");
+    fireEvent.click(screen.getByRole("button", { name: "Git-URL" }));
+    fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("Erforderliche Felder prüfen");
+      expect(screen.getByText("Projektname ist erforderlich.")).toBeInTheDocument();
+      expect(screen.getByText("Repository-URL ist erforderlich.")).toBeInTheDocument();
+    });
+
+    fireEvent.input(screen.getByLabelText(/Projektname/i), { target: { value: "Unverändert" } });
+    fireEvent.input(screen.getByLabelText(/Repository-URL/i), { target: { value: "ssh://host/Unverändert.git" } });
+    fireEvent.click(screen.getByText("Mit Projekteinrichtungs-Agent initialisieren").closest("label")!);
+    fireEvent.submit(screen.getByLabelText(/Projektname/i).closest("form")!);
+
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("provider diagnostic 42"));
+    expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({
+      name: "Unverändert",
+      path: "ssh://host/Unverändert.git",
+    }));
+  });
+
   it("browses into a directory and applies it to the local path input", async () => {
     vi.mocked(fetchLocalDirectories)
       .mockResolvedValueOnce({
@@ -315,6 +401,24 @@ describe("AddProjectModal", () => {
 
     expect(screen.getByLabelText(/Directory Path/i)).toHaveValue("/home/user/project");
     expect(screen.getByText("Selected directory: /home/user/project")).toBeInTheDocument();
+  });
+
+  it("formats the German directory-picker count with the active locale", async () => {
+    vi.mocked(fetchLocalDirectories).mockResolvedValue({
+      currentPath: "/home/user",
+      parentPath: "/home",
+      rootPath: "/",
+      homePath: "/home/user",
+      directories: Array.from({ length: 1000 }, (_, index) => ({
+        name: `directory-${index}`,
+        path: `/home/user/directory-${index}`,
+      })),
+    });
+
+    render(<AddProjectModal onClose={vi.fn()} onAdd={vi.fn()} />, "de");
+    fireEvent.click(screen.getByRole("button", { name: "Durchsuchen" }));
+
+    expect(await screen.findByText("1.000 Unterverzeichnisse in /home/user.")).toBeInTheDocument();
   });
 
   it("applies the directory picker selection to the optional clone directory", async () => {

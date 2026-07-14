@@ -1,8 +1,9 @@
 /**
  * @vitest-environment jsdom
  */
-import { render, screen, cleanup, waitFor } from "@testing-library/preact";
+import { render as testingRender, screen, cleanup, waitFor } from "@testing-library/preact";
 import { fireEvent } from "@testing-library/preact";
+import type { ComponentChildren } from "preact";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { ProjectSettingsEditor } from "../../dashboard/src/v2/components/settings/ProjectSettingsEditor.jsx";
 import { SettingsModelsPanel } from "../../dashboard/src/v2/components/settings/panels/SettingsModelsPanel.js";
@@ -13,8 +14,20 @@ import { DEFAULT_DASHBOARD_SETTINGS } from "../../src/repositories/settings-defa
 import * as matchers from '@testing-library/jest-dom/matchers';
 import type { SettingsPageState } from "../../dashboard/src/v2/hooks/use-settings-page-state.js";
 import type { ProjectSettings, SystemSettings } from "../../dashboard/src/types.js";
-import { DashboardI18nProvider } from "../../dashboard/src/v2/i18n/context.js";
+import { DashboardI18nProvider } from "../../dashboard/src/v2/i18n/index.js";
 expect.extend(matchers);
+
+const render = (children: ComponentChildren) => {
+  const result = testingRender(
+    <DashboardI18nProvider initialLocale="en" storage={null}>{children}</DashboardI18nProvider>,
+  );
+  return {
+    ...result,
+    rerender: (nextChildren: ComponentChildren) => result.rerender(
+      <DashboardI18nProvider initialLocale="en" storage={null}>{nextChildren}</DashboardI18nProvider>,
+    ),
+  };
+};
 
 vi.mock("../../dashboard/src/v2/lib/project-api.js", () => ({
   fetchLocalFiles: vi.fn(),

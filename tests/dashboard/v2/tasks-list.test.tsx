@@ -340,7 +340,7 @@ const baseProps: any = {
             goal: "Exercise reduced-motion sprint scope status",
             status: "running",
             showcasePinned: false,
-            startDate: null,
+            startDate: "2026-07-05",
             endDate: null,
             featureBranch: null,
             baseCommitSha: null,
@@ -366,7 +366,7 @@ const baseProps: any = {
         const runningDot = container.querySelector('[data-sprint-status-dot="running"]');
         expect(runningDot).toBeVisible();
         expect(screen.getByRole("option", { name: /SPR-7: Runtime Scope/i })).toBeInTheDocument();
-        expect(screen.getByText("2026-07-05")).toBeInTheDocument();
+        expect(screen.getByText("Jul 5")).toBeInTheDocument();
         expect(screen.getByText(/10 tasks, 5% complete/)).toBeInTheDocument();
 
         const tokens = (runningDot?.getAttribute("class") ?? "").split(/\s+/).filter(Boolean);
