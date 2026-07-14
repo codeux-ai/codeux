@@ -45,6 +45,12 @@ For mounted-file custody, `CODE_UX_CREDENTIAL_KEY_FILE` identifies a regular, ow
 
 Electron serializes first-use root-key creation, persists only the OS-protected blob through an atomic owner-only file replacement, and refuses credential operations when `safeStorage` is unavailable. Vault and KMS adapters validate 32-byte caller-owned key material and report the active key id/version in health results. No provider silently falls back to plaintext or an insecure locally derived key.
 
+| Deployment boundary | Root-key custody | Provisioning behavior |
+| --- | --- | --- |
+| Normal CLI dashboard on loopback with local authentication | Owner-only file under the user-home Code UX security directory | Automatically created on first use and reused after restart. A normal local dashboard user does not mount or configure a key file. |
+| Electron desktop | Operating-system `safeStorage` | Automatically creates and persists only the OS-protected blob; unavailable `safeStorage` blocks credential operations. |
+| Dashboard-disabled headless, server mode, authenticated dashboard, non-loopback binding, or remote credential management | Explicit mounted file, Vault, or KMS provider | Never auto-provisions local custody. Setup and recovery fail closed until the configured provider reports available, secure key identity and version metadata. |
+
 ## Recovery and rotation
 
 Back up root keys independently from `app.db`. For the normal local dashboard, back up `~/.code-ux/security/credential-root.key` while preserving owner-only handling; for external providers, retain every referenced key version. Losing a required key version makes its ciphertext unrecoverable by design. Restoring only SQLite is insufficient.
@@ -70,3 +76,9 @@ Credential security changes are exercised against a normal isolated local runtim
 The credentialed-automation drill proves that missing, revoked, cross-project, wrong-kind, insufficient-capability, and unavailable-backend bindings fail before a provider or custom node can be invoked. Its disclosure canary is checked across public responses, structured records, SQLite text columns, generated workspaces, Docker command inputs, validation artifacts, graph JSON, dashboard records, and browser/iframe-visible state; encrypted binary envelopes are the only intentional storage location.
 
 Production-bundle Playwright coverage enables the documented Nodes and Custom Dashboards feature gates inside its isolated runtime. It exercises Settings lifecycle feedback and recovery, node binding/replacement/unbinding through publication and a local mock-provider run, custom-dashboard build/runtime slots and publication blocking, keyboard focus restoration, and narrow-viewport operation without external provider or network dependencies. A second independently homed runtime explicitly selects the mounted-file provider without a configured file; the browser verifies unavailable health and recovery guidance, preserves visible non-secret metadata, and proves create, test, rotate, replace, promote, and revoke controls cannot emit mutation requests until custody recovers.
+
+## Troubleshooting without disclosure
+
+- If custody is unavailable, inspect the metadata-only credential health or readiness result and the configured provider name. For the normal loopback dashboard, verify ownership, file type, and owner-only modes on the existing Code UX security path; for Electron, restore OS `safeStorage`; for headless or remote operation, restore the configured mount, Vault, or KMS version. Never paste, print, regenerate over, or move root-key material into a repository to diagnose the failure.
+- If a mutation reports a stale `expectedVersion`, refresh credential metadata and review the newer scope, capabilities, validation state, and status before retrying. Do not reuse the rejected request blindly and do not bypass the comparison check.
+- If encrypted rows exist but their key version is unavailable, restore the exact retained provider version before starting runners. Replacing it with a new key does not decrypt old envelopes; restore from the independent custody backup or recover the affected credential through the supported replacement workflow after the runtime is ready.

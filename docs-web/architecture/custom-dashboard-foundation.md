@@ -15,6 +15,12 @@ Primary records:
 
 Dashboard status values are `draft`, `validating`, `validated`, `published`, `rejected`, and `archived`. Validation status values are `queued`, `building`, `running`, `passed`, `failed`, and `cancelled`.
 
+### Feature baseline and bounded addition
+
+Repository history provides the negative baseline for this subsystem: at the pre-feature `dev` commit `716ac2c55`, `CustomDashboardManifest` had no `credentialSlots`, and mutable dashboard and immutable revision records had no `credentialBindings` or binding revision. The implemented change is intentionally limited to bounded manifest declarations, credential-ID bindings in dedicated draft/revision columns, metadata-only compatibility review, optimistic binding mutation, and validation/publication gates. It does not migrate provider secrets and it does not add custom-dashboard secret injection.
+
+Declarations are normalized and bounded for count, slot ID, label, phase (`build` or `runtime`), allowed kinds, and required capabilities. Bindings contain only `slotId` and `credentialId`; generic draft/revision writes cannot set them, and immutable revisions snapshot them. The phase is policy metadata for review and validation, not permission to inject a value into build or runtime artifacts.
+
 ## Persistence
 
 SQLite tables are created in both the initial schema and startup migrations:
@@ -59,7 +65,9 @@ Validation flow:
 - A validation session is marked `passed` only after install, build, start, and root URL health checks succeed. Build/start/health failures are recorded as failed validation reports with bounded log excerpts.
 - Runtime metadata persists the workspace path, log path, host port, container id/name, image, validation URL path, commands, latest error/log excerpt, and a browser-ready Vite `dist` artifact for passed revisions so the published viewer can render TSX-based drafts without a live validation container.
 
-Validation does not publish or activate dashboards. A successful run only marks the revision validation status as `passed`; publication remains gated by `publishRevision`. REST and MCP publication re-run metadata-only binding review immediately before calling the repository, then require either a revision already marked `passed` with a valid report or an explicit passed validation session for that revision. Failed binding review returns sanitized slot-specific issues without credential IDs or values; queued/running/cancelled validation, missing state, and cross-revision sessions are rejected before the publication pointer changes.
+Validation does not publish or activate dashboards. A successful run only marks the revision validation status as `passed`; publication remains gated by `publishRevision`. REST and MCP publication re-run metadata-only binding review immediately before calling the repository, then require either a revision already marked `passed` with a valid report or an explicit passed validation session for that revision. Failed binding review, queued/running/cancelled validation, missing state, and cross-revision sessions are rejected before the publication pointer changes.
+
+No custom-dashboard service resolves credential plaintext. Build workspaces, generated files and Vite artifacts, Docker arguments/mounts/environment, validation reports/logs, generic REST/MCP records, viewer configuration, iframe `srcdoc`, data-bridge payloads, and `postMessage` traffic receive neither credential values nor binding IDs. Only the dedicated metadata-management response may return binding IDs alongside non-secret credential metadata.
 
 ## REST and MCP Surface
 
