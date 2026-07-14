@@ -10,8 +10,16 @@ import type {
   ChatConnectorHttpOutboundRequest,
   ChatConnectorProfile,
 } from "../domain/chat-connectors/types.js";
+import {
+  parseImessageBridgeResponse,
+  type ImessageBridgeEnvelope,
+} from "../domain/chat-connectors/providers/imessage.js";
 import { ChatConnectorOutboundResponseError } from "../domain/chat-connectors/types.js";
 import { redactText } from "../shared/security/redaction.js";
+import {
+  ImessageNativeBridge,
+  ImessageNativeBridgeError,
+} from "./chat-providers/imessage-native-bridge.js";
 
 export interface ChatProviderOutboundBridgePayload {
   providerKind: string;
@@ -68,6 +76,7 @@ export function createDefaultChatProviderOutboundAdapter(): ChatProviderOutbound
 }
 
 export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutboundAdapter {
+  private readonly imessageNativeBridge = new ImessageNativeBridge();
   private readonly rateLimitReadyAt = new Map<string, number>();
 
   async send(context: ChatProviderOutboundAdapterContext): Promise<ChatProviderOutboundAdapterResult> {
@@ -76,8 +85,8 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
       profile = getChatConnectorProfileForMode(context.connection.providerKind, context.connection.bridgeMode);
       const request = profile.outbound.buildRequest(context);
       return request.transport === "http"
-        ? this.sendHttp(context, profile, request)
-        : this.sendNative(context, profile, request);
+        ? await this.sendHttp(context, profile, request)
+        : await this.sendNative(context, profile, request);
     } catch (error) {
       if (error instanceof ChatProviderOutboundAdapterError) {
         throw error;
@@ -145,18 +154,22 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
     }
 
     let parsed: ChatProviderOutboundAdapterResult;
-    try {
-      parsed = profile.outbound.parseResponse(responseText, responseContext);
-    } catch (error) {
-      if (error instanceof ChatConnectorOutboundResponseError) {
-        throw new ChatProviderOutboundAdapterError(
-          error.message,
-          error.retryable,
-          error.statusCode ?? response.status,
-          error.retryAfterMs ?? retryAfterMs,
-        );
+    if (context.connection.providerKind === "imessage") {
+      parsed = parseImessageBridgeResponse(responseText, context.correlationId);
+    } else {
+      try {
+        parsed = profile.outbound.parseResponse(responseText, responseContext);
+      } catch (error) {
+        if (error instanceof ChatConnectorOutboundResponseError) {
+          throw new ChatProviderOutboundAdapterError(
+            error.message,
+            error.retryable,
+            error.statusCode ?? response.status,
+            error.retryAfterMs ?? retryAfterMs,
+          );
+        }
+        throw error;
       }
-      throw error;
     }
     if (parsed.failure) {
       throw new ChatProviderOutboundAdapterError(
@@ -207,8 +220,25 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
       throw new ChatProviderOutboundAdapterError("Native bridge command is not configured.", false);
     }
 
-    const env: NodeJS.ProcessEnv = { ...process.env };
     const bridgeToken = getFirstSecret(context.connection.secrets, request.tokenSecretKeys);
+    if (context.connection.providerKind === "imessage") {
+      try {
+        return await this.imessageNativeBridge.send({
+          command: request.command,
+          workingDirectory: request.workingDirectory,
+          bridgeToken,
+          correlationId: context.correlationId,
+          request: request.body as ImessageBridgeEnvelope,
+          timeoutMs: request.timeoutMs,
+        });
+      } catch (error) {
+        if (error instanceof ImessageNativeBridgeError) {
+          throw new ChatProviderOutboundAdapterError(error.message, error.retryable);
+        }
+        throw error;
+      }
+    }
+    const env: NodeJS.ProcessEnv = { ...process.env };
     if (bridgeToken) {
       env.CODEUX_CHAT_BRIDGE_TOKEN = bridgeToken;
     }
