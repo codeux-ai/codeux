@@ -29,9 +29,9 @@ The controls keep the current sprint scope and filters visible while you work:
 
 Each lane is a named region whose accessible name includes its count, such as **In Progress lane, 2 tasks**. The board uses one column on phones, two columns when lanes remain readable, and three columns on wide screens. Lane frames and drop surfaces keep a stable height while filters settle, data loads, or a lane is empty, so adjacent work does not collapse or jump. Loading lanes use card-shaped skeletons; empty lanes explain whether the result comes from filters, the selected sprint, or project-wide scope; refresh failures appear as an assertive board update message without removing the current board context.
 
-Reduced-motion mode removes card entrance movement, selector rotation, sprint-status pulse, progress transitions, skeleton shimmer, and drop-target transitions. Static labels, borders, focus rings, progress values, lane counts, empty states, and drag guidance remain available.
+Reduced-motion mode removes board, card, selector, progress, menu, and drop-target movement and disables pointer dragging. Static labels, borders, focus rings, progress values, lane counts, empty states, action availability reasons, and drag-disabled guidance remain available.
 
-Task cards show the task title, status, priority, dependency state, downstream dependents, executor metadata, recent activity context, optional self-reflection ratings, and available actions. Dragging a card to another lane changes its status when that transition is available.
+Each task card shows its task identifier, title, status, and priority first. Compact metadata can then show a non-default executor or worker agent, session state and identifier, QA and CI state, dependency blocker count, optimistic saving state, source and assignee, runtime duration, pull-request state, creation or live-start time, and an optional self-reflection rating. The footer always keeps the task-labelled **Actions** trigger visible. Dragging a card to another lane changes its status when that transition is available.
 
 When a worker reports a task-run self-reflection rating, the shared rating badge appears in the compact card metadata near the task id, status, and priority. It shows the overall `overallRating` as a numeric score with a compact 5-star meter. Hovering the badge, or focusing it with the keyboard, opens a viewport-positioned details panel with each section from `sections`: the section label, matching stars, numeric rating, and any note captured by the worker. Tasks without a captured rating, including older tasks that never produced one, do not render an empty badge slot.
 
@@ -92,23 +92,23 @@ Validation keeps the current draft visible. If a required field is missing, the 
 
 ## Dependencies
 
-Dependencies determine whether a task is ready to run. A task with incomplete dependencies remains blocked until those dependencies move to a completed state. Cards keep the blocker count visible and render each dependency row with only its task identifier and normalized current status, including distinct ready-for-QA, QA-failed, and unknown states. The complete dependency title and blocker context remain available to assistive technology and in the row tooltip.
+Dependencies determine whether a task is ready to run. A task with any dependency that is not completed remains blocked, including one whose dependency is **Ready for QA**. Cards use an amber blocker summary when work is blocked and a green clear summary when every dependency is completed. Each compact dependency row visibly contains only its task identifier and one normalized status: **Resolved**, **Ready for QA**, **In progress**, **QA failed**, **Blocked**, or **Unknown**. The complete dependency title, raw status, and blocking or resolved meaning remain available to assistive technology and in the row tooltip.
 
 The editor prevents invalid dependency selections such as dependency cycles. When a dependency cannot be selected, the reason is shown in the editor rather than silently hiding the option.
 
 ## Task actions
 
-Every task card keeps a visible, task-labelled **Actions** trigger in its footer. Activating it opens a grouped menu for execution and navigation, task management, and destructive actions:
+Every task card keeps a visible, task-labelled **Actions** trigger in its footer. Activating it opens three groups:
 
-- **Edit** opens the full task editor for content, dependencies, executor mode, and worker-agent selection.
-- **Rerun** starts a fresh execution attempt for the task when rerun is available.
-- **Preview** opens the task's available runtime preview when one exists.
-- **Live** opens live task context when runtime details are available.
-- **Delete** removes the task after confirmation.
+- **Execution & navigation** contains **Rerun**, **Preview**, the eligible **PR** or **PR pending** entry, and **Live** or **Live idle**. Rerun is an informational disabled item that directs you to Live; it does not dispatch a run from the Tasks page. Preview opens the sprint preview when the task belongs to a sprint. PR opens an existing pull request in a new tab, while PR pending explains that no pull request is available yet. Live opens the runtime page only after runtime context exists.
+- **Task management** contains **Edit**, which opens the full inline task editor for content, dependencies, executor mode, and worker-agent selection.
+- **Danger zone** contains **Delete**.
 
-The menu opens with click, Enter, Space, Arrow Up, or Arrow Down. Arrow keys move between enabled actions, Home and End jump to the first and last enabled actions, and Escape or clicking outside closes it and restores focus to the trigger. Deleting still requires confirmation, and cancelling returns focus to the task's Actions trigger.
+The menu opens with click, Enter, Space, Arrow Up, or Arrow Down. Opening focuses the first enabled action; Arrow Up opens at the last enabled action. Arrow keys wrap between enabled actions, Home and End jump to the first and last enabled actions, and Enter or Space activates the focused action. Escape or clicking outside closes the menu and restores focus to the trigger.
 
-Unavailable and optimistic actions stay visible but inert, with a reason directly beneath the action label so users can understand why an action cannot run. Enabled external destinations open safely in a new tab. The trigger remains available while a card is saving so these reasons are still discoverable, while duplicate task mutations remain suppressed.
+Unavailable actions included by the current task and project settings stay visible but inert, with the reason directly beneath the action label. For example, Preview explains when a task has no sprint, Live explains when runtime has not started, and every action explains when an optimistic save temporarily makes it unavailable. The trigger remains available while a card is saving so these reasons are still discoverable, while duplicate mutations remain suppressed. When project settings disable task pull requests and the task has no existing PR, the menu omits the PR entry instead of showing a misleading pending action.
+
+Edit does not ask for confirmation: it opens the editor with the current task values, and Cancel closes the editor without saving. Save keeps the selected sprint scope and active filters in place. Delete closes the menu and opens a **Delete Task** confirmation that names the task, states that removal cannot be undone, and requires holding the destructive button until confirmation completes. Cancelling or pressing Escape leaves the task in place and returns focus to that card's **Actions** trigger.
 
 ## Responsive and keyboard behavior
 
