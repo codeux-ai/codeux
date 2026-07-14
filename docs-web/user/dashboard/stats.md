@@ -73,7 +73,10 @@ Exposes administrative invocation telemetry without leaving Stats:
 Cost data is visualized directly within the Usage Graph and Composition views, fueled by provider configurations.
 - You can set `Token pricing` (input / output) on a per-provider-instance basis in **Settings -> Integrations**.
 - The Stats page applies these settings retroactively to the raw token telemetry for the selected window.
-- **Zero-price / No-pricing behavior:** If a provider has no pricing configured, or if the price is set to `$0.00`, invocations for that provider are tracked and visualized in token counts but will contribute $0.00 to aggregate cost series and cost-focused widgets.
+- Configured model pricing is authoritative. When it is unavailable, Stats uses a valid provider-reported cost as fallback, including a legitimate reported `$0.00` value.
+- Cost coverage distinguishes configured-pricing calls, provider-reported fallback calls, and unpriced calls. A zero-dollar covered call is different from an invocation that has no usable pricing source, and an empty window reports zero calls in every category.
+- Current pricing settings recalculate historical Stats projections when the snapshot is requested; changing pricing does not rewrite stored invocation telemetry.
+- Cost analytics group multiple runs of the same conceptual sprint into one canonical sprint row. The existing Sprint Telemetry ledger remains run-oriented.
 
 ## Underlying telemetry
 
