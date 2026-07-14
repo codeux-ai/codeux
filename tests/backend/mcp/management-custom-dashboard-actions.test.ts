@@ -286,7 +286,7 @@ describe("manage_custom_dashboards", () => {
     expect(archived.result.dashboard.status).toBe("archived");
   });
 
-  it("lists metadata-only slots and approval-gates project-owned bind and unbind actions", async () => {
+  it("runs the metadata-only slot lifecycle through MCP with approval, conflict refresh, retry, and unbind", async () => {
     const canary = "CUSTOM_DASHBOARD_REAL_SECRET_CANARY_7f8d9a";
     const { handler, repository, credentialBroker, projectId } = await createFixture();
     const dashboard = repository.createDraft(projectId, {
@@ -298,6 +298,14 @@ describe("manage_custom_dashboards", () => {
       name: "Metrics",
       kind: "http.token",
       value: canary,
+      scope: "project",
+      allowedProjectIds: [],
+      capabilities: ["metrics.read"],
+    });
+    const replacement = await credentialBroker.create(projectId, {
+      name: "Replacement metrics",
+      kind: "http.token",
+      value: `${canary}_REPLACEMENT`,
       scope: "project",
       allowedProjectIds: [],
       capabilities: ["metrics.read"],
@@ -392,19 +400,58 @@ describe("manage_custom_dashboards", () => {
     expect(JSON.stringify(deniedPublication)).not.toContain(canary);
     expect(repository.getDashboardById(dashboard.id)?.publishedRevisionId).toBeNull();
 
-    const unbindArgs = {
+    const replaceArgs = {
+      action: "bind_credential" as const,
+      projectId,
+      dashboardId: dashboard.id,
+      slotId: "metrics_api",
+      credentialId: replacement.id,
+      expectedBindingRevision: 2,
+    };
+    expect(parseResponse(await handler.handleManageCustomDashboards(replaceArgs)).approvalRequired).toBe(true);
+    const replaced = parseResponse(await handler.handleManageCustomDashboards({
+      ...replaceArgs,
+      approval: { confirmed: true },
+    }));
+    expect(replaced.result.bindings).toMatchObject({ valid: true, credentialBindingRevision: 3 });
+    expect(replaced.result.bindings.slots[0].binding.credentialId).toBe(replacement.id);
+    expect(JSON.stringify(replaced)).not.toContain(canary);
+
+    const staleUnbindArgs = {
       action: "unbind_credential" as const,
       projectId,
       dashboardId: dashboard.id,
       slotId: "metrics_api",
       expectedBindingRevision: 2,
     };
-    expect(parseResponse(await handler.handleManageCustomDashboards(unbindArgs)).approvalRequired).toBe(true);
-    const unbound = parseResponse(await handler.handleManageCustomDashboards({
-      ...unbindArgs,
+    expect(parseResponse(await handler.handleManageCustomDashboards(staleUnbindArgs)).approvalRequired).toBe(true);
+    const conflict = parseResponse(await handler.handleManageCustomDashboards({
+      ...staleUnbindArgs,
       approval: { confirmed: true },
     }));
-    expect(unbound.result.bindings).toMatchObject({ valid: false, credentialBindingRevision: 3 });
+    expect(conflict.result).toMatchObject({ status: "error", errorType: "runtime" });
+    expect(conflict.result.message).toMatch(/expected revision 2, current revision 3/i);
+    expect(repository.getDashboardById(dashboard.id)?.credentialBindings).toEqual([
+      { slotId: "metrics_api", credentialId: replacement.id },
+    ]);
+    expect(JSON.stringify(conflict)).not.toContain(canary);
+
+    const refreshed = parseResponse(await handler.handleManageCustomDashboards({
+      action: "list_credential_slots",
+      projectId,
+      dashboardId: dashboard.id,
+    }));
+    expect(refreshed.result.bindings).toMatchObject({ valid: true, credentialBindingRevision: 3 });
+    expect(refreshed.result.bindings.slots[0].binding.credentialId).toBe(replacement.id);
+
+    const retryUnbindArgs = { ...staleUnbindArgs, expectedBindingRevision: 3 };
+    expect(parseResponse(await handler.handleManageCustomDashboards(retryUnbindArgs)).approvalRequired).toBe(true);
+    const unbound = parseResponse(await handler.handleManageCustomDashboards({
+      ...retryUnbindArgs,
+      approval: { confirmed: true },
+    }));
+    expect(unbound.result.bindings).toMatchObject({ valid: false, credentialBindingRevision: 4 });
+    expect(JSON.stringify(unbound)).not.toContain(canary);
     expect(repository.getDashboardById(dashboard.id)?.credentialBindings).toEqual([]);
   });
 

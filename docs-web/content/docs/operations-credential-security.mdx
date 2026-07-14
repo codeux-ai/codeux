@@ -51,7 +51,7 @@ Validation failures return `400`, project/management denials return `403`, concu
 
 ## Integrated verification contract
 
-Credential security is verified against an isolated normal local runtime. Automated coverage concurrently provisions local key custody, restarts with the same home and SQLite database, resolves the stored value only through an authorized runtime call, and confirms that metadata persists while public REST and MCP payloads remain value-free. It also covers lifecycle conflicts and mutations, typed validation failures, and explicit key-provider outages.
+Credential security is verified against an isolated normal local runtime. A composition-root restart test constructs successive `CodeUxServer` instances against the same home, confirming that production wiring recovers SQLite metadata, local-file key identity, named bindings, and authorized runtime resolution. Automated coverage also provisions custody concurrently and confirms that public REST and MCP payloads remain value-free. It covers lifecycle conflicts and mutations, typed validation failures, explicit key-provider outages, and custom-dashboard MCP slot listing, approval-gated binding, stale-conflict refresh/retry, and unbinding.
 
 Credentialed automation tests require missing, revoked, cross-project, wrong-kind, insufficient-capability, and unavailable-backend bindings to fail before provider or custom-node invocation. A distinctive disclosure canary is scanned across public responses, structured records, SQLite text columns, workspaces, Docker inputs, validation artifacts, graph/dashboard records, and browser or iframe state; only encrypted binary envelopes may contain it.
 

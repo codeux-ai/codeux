@@ -47,6 +47,13 @@ import { createLogger, type Logger } from "../../../src/shared/logging/logger.js
 
 interface JobFixture { id: string; name: string; selected: boolean }
 
+interface ComposedCredentialRuntime {
+  appDbStorage: AppDbStorage;
+  credentialBroker: CredentialBroker;
+  projectManagementRepository: ProjectManagementRepository;
+  close(): Promise<void>;
+}
+
 const EXPECTED_RECORD_COUNT = 20;
 const EXPECTED_SELECTED_MESSAGE_COUNT = 5;
 const FIRST_SECRET_CANARY = "E2E_SECRET_CANARY";
@@ -167,6 +174,97 @@ async function waitForActiveRun(repository: NodeFlowRepository, flowId: string):
 }
 
 describe("credentialed automation authoring-to-execution", () => {
+  it("persists credentials across CodeUxServer production-composition restarts", async () => {
+    vi.stubEnv("VITEST_IN_MEMORY_DB", "false");
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-composed-credential-runtime-"));
+    temporaryDirectories.push(root);
+    vi.stubEnv("HOME", root);
+    vi.stubEnv("USERPROFILE", root);
+    vi.stubEnv("CODE_UX_HOME", path.join(root, ".code-ux"));
+    vi.stubEnv("DASHBOARD_HOST", "127.0.0.1");
+    vi.stubEnv("CODE_UX_DASHBOARD_AUTH_MODE", "local");
+    vi.stubEnv("CODE_UX_REMOTE_CREDENTIAL_MANAGEMENT", "false");
+    vi.stubEnv("CODE_UX_CREDENTIAL_KEY_PROVIDER", "");
+    vi.stubEnv("CODE_UX_CREDENTIAL_KEY_FILE", "");
+    vi.resetModules();
+
+    const [{ CodeUxServer }, { loadAppConfig }, { resetRuntimeShutdownForTests }] = await Promise.all([
+      import("../../../src/server/code-ux-server.js"),
+      import("../../../src/config/app-config.js"),
+      import("../../../src/services/shutdown-state.js"),
+    ]);
+    const appConfig = loadAppConfig(["node", "index.js", "--no-mcp-https"], path.resolve(process.cwd()));
+    const databasePath = path.join(root, ".code-ux", "app.db");
+    const keyPath = path.join(root, ".code-ux", "security", "credential-root.key");
+    const canary = "COMPOSED_RUNTIME_SECRET_CANARY_39bc8d6a";
+    let firstRuntime: ComposedCredentialRuntime | null = null;
+    let restartedRuntime: ComposedCredentialRuntime | null = null;
+
+    const closeRuntime = async (runtime: ComposedCredentialRuntime): Promise<void> => {
+      await runtime.close();
+      runtime.appDbStorage.close();
+      resetRuntimeShutdownForTests();
+    };
+
+    try {
+      firstRuntime = new CodeUxServer({ projectRoot: path.resolve(process.cwd()), appConfig }) as unknown as ComposedCredentialRuntime;
+      expect(firstRuntime.appDbStorage.getPath()).toBe(databasePath);
+      const project = firstRuntime.projectManagementRepository.createProject({
+        name: "Approved local test project",
+        sourceType: "local",
+        sourceRef: path.join(root, "project"),
+      });
+      const credential = await firstRuntime.credentialBroker.create(project.id, {
+        name: "Composed runtime credential",
+        kind: "http",
+        value: canary,
+        scope: "project",
+        allowedProjectIds: [],
+        capabilities: ["read"],
+      });
+      firstRuntime.credentialBroker.bind(project.id, credential.id, {
+        bindingKey: "composed-runtime",
+        requiredCapabilities: ["read"],
+      });
+      const initialHealth = await firstRuntime.credentialBroker.health();
+      expect(initialHealth).toMatchObject({ available: true, secure: true, provider: "local-file", keyVersion: 1 });
+      expect(JSON.stringify(firstRuntime.credentialBroker.list(project.id))).not.toContain(canary);
+      expect((await fs.stat(keyPath)).mode & 0o777).toBe(0o600);
+
+      await closeRuntime(firstRuntime);
+      firstRuntime = null;
+
+      restartedRuntime = new CodeUxServer({ projectRoot: path.resolve(process.cwd()), appConfig }) as unknown as ComposedCredentialRuntime;
+      expect(restartedRuntime.appDbStorage.getPath()).toBe(databasePath);
+      const metadata = restartedRuntime.credentialBroker.list(project.id);
+      expect(metadata).toEqual([
+        expect.objectContaining({ id: credential.id, name: "Composed runtime credential", configured: true, version: 1 }),
+      ]);
+      expect(JSON.stringify(metadata)).not.toContain(canary);
+      const restartedHealth = await restartedRuntime.credentialBroker.health();
+      expect(restartedHealth).toMatchObject({
+        available: true,
+        secure: true,
+        provider: "local-file",
+        keyId: initialHealth.keyId,
+        keyVersion: initialHealth.keyVersion,
+      });
+      const resolved = await restartedRuntime.credentialBroker.resolve({
+        projectId: project.id,
+        bindingKey: "composed-runtime",
+        requiredCapabilities: ["read"],
+        allowedKinds: ["http"],
+        workspaceId: "composed-runtime-restart",
+      });
+      expect(resolved).toMatchObject({ credentialId: credential.id, value: canary, version: 1 });
+      expect(sqliteText(restartedRuntime.appDbStorage)).not.toContain(canary);
+      expect(await readableWorkspaceText(root)).not.toContain(canary);
+    } finally {
+      if (restartedRuntime) await closeRuntime(restartedRuntime);
+      if (firstRuntime) await closeRuntime(firstRuntime);
+    }
+  });
+
   it("persists local-runtime custody and exercises the complete REST lifecycle without exposing plaintext", async () => {
     vi.stubEnv("VITEST_IN_MEMORY_DB", "false");
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-local-credential-runtime-"));
