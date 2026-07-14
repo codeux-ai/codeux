@@ -107,10 +107,14 @@ async function holdToConfirm(page: Page, button: Locator): Promise<void> {
   await page.mouse.up();
 }
 
-async function activateButtonWithKeyboard(page: Page, button: Locator): Promise<void> {
-  await button.scrollIntoViewIfNeeded();
-  await button.focus();
+async function openTaskActionMenu(page: Page, taskKey: string, title: string): Promise<Locator> {
+  const trigger = page.getByRole('button', { name: `Open task actions for task ${taskKey}: ${title}` });
+  await trigger.scrollIntoViewIfNeeded();
+  await trigger.focus();
   await page.keyboard.press('Enter');
+  const menu = page.getByRole('menu', { name: `Actions for task ${taskKey}: ${title}` });
+  await expect(menu).toBeVisible();
+  return menu;
 }
 
 async function clickSprintMenuAction(page: Page, sprintName: string, action: 'Edit' | 'Delete'): Promise<void> {
@@ -237,7 +241,7 @@ test.describe('sprint and task lifecycle', () => {
     await page.goto(`/tasks?projectId=${encodeURIComponent(project.id)}&sprintId=${encodeURIComponent(sprint.id)}`);
     await expectProjectSelected(page, project.name);
     await expectSprintSelected(page, sprint.name);
-    await expect(page.getByRole('heading', { level: 1, name: 'Task Board' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Tasks' })).toBeVisible();
 
     const newTaskButton = page.getByRole('button', { name: 'New Task' });
     await expect(newTaskButton).toBeEnabled();
@@ -254,11 +258,12 @@ test.describe('sprint and task lifecycle', () => {
 
     const createdTask = await getTaskByTitle(page, project.id, taskTitle, sprint.id);
     taskIdsForCleanup.push(createdTask.id);
-    await expect(page.getByRole('button', { name: `Edit task ${createdTask.taskKey}: ${taskTitle}` })).toBeVisible();
+    await expect(page.getByRole('button', { name: `Open task actions for task ${createdTask.taskKey}: ${taskTitle}` })).toBeVisible();
     expect(createdTask.promptMarkdown).toContain('deterministic');
     expect(createdTask.priority).toBe('medium');
 
-    await activateButtonWithKeyboard(page, page.getByRole('button', { name: `Edit task ${createdTask.taskKey}: ${taskTitle}` }));
+    let taskMenu = await openTaskActionMenu(page, createdTask.taskKey, taskTitle);
+    await taskMenu.getByRole('menuitem', { name: `Edit task ${createdTask.taskKey}: ${taskTitle}` }).click();
     await expect(page.getByText('Edit Task', { exact: true })).toBeVisible();
     await page.getByPlaceholder('Fix navigation layout shift').fill(editedTaskTitle);
     await page.getByRole('button', { name: 'high' }).click();
@@ -268,15 +273,17 @@ test.describe('sprint and task lifecycle', () => {
       const tasks = await fetchTasksViaApi(request, project.id, sprint.id);
       return tasks.find((task) => task.id === createdTask.id);
     }).toMatchObject({ title: editedTaskTitle, priority: 'high' });
-    await expect(page.getByRole('button', { name: `Delete task ${createdTask.taskKey}: ${editedTaskTitle}` })).toBeVisible();
+    const editedTaskTrigger = page.getByRole('button', { name: `Open task actions for task ${createdTask.taskKey}: ${editedTaskTitle}` });
+    await expect(editedTaskTrigger).toBeVisible();
 
-    await activateButtonWithKeyboard(page, page.getByRole('button', { name: `Delete task ${createdTask.taskKey}: ${editedTaskTitle}` }));
+    taskMenu = await openTaskActionMenu(page, createdTask.taskKey, editedTaskTitle);
+    await taskMenu.getByRole('menuitem', { name: `Delete task ${createdTask.taskKey}: ${editedTaskTitle}` }).click();
     const dialog = page.getByRole('dialog', { name: 'Delete Task' });
     await expect(dialog).toBeVisible();
     await holdToConfirm(page, dialog.getByRole('button', { name: 'Hold to Delete Task' }));
 
     await expectTaskAbsent(page, project.id, createdTask.id);
-    await expect(page.getByRole('button', { name: `Delete task ${createdTask.taskKey}: ${editedTaskTitle}` })).toHaveCount(0);
+    await expect(editedTaskTrigger).toHaveCount(0);
     taskIdsForCleanup = taskIdsForCleanup.filter((taskId) => taskId !== createdTask.id);
     await deleteSprint(request, project.id, sprint.id);
     sprintIdsForCleanup = sprintIdsForCleanup.filter((sprintId) => sprintId !== sprint.id);
