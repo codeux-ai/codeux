@@ -12,6 +12,8 @@ import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { formatSprintDisplay, formatSprintTitle } from "../../lib/format-sprint.js";
 import { formatSprintKey } from "../../lib/sprint-ledger-state.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 interface GlobalSearchProps {
     projectId: string | null;
@@ -21,6 +23,7 @@ interface GlobalSearchProps {
 }
 
 export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, selectedProject, sprints, sprintKeyPrefix = "SPR" }) => {
+    const { translate } = useOptionalDashboardI18n();
     const searchBarRef = useRef<HTMLButtonElement>(null);
     const searchBarContainerRef = useRef<HTMLDivElement>(null);
 
@@ -160,7 +163,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
             (s.sprintId && s.sprintId.toLowerCase().includes(lowerQuery))
         ).map((s: SprintPreviewSession) => ({
             id: s.id,
-            name: s.containerName || 'Unnamed Container',
+            name: s.containerName || translate(shellMessages, "unnamedContainer"),
             routeContainerId: s.id,
             status: s.status
         }));
@@ -171,7 +174,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
             agents: filteredAgents,
             containers: filteredContainers
         };
-    }, [debouncedQuery, sprints, sprintKeyPrefix, tasks, selectedProject, agentPresets, sessions]);
+    }, [debouncedQuery, sprints, sprintKeyPrefix, tasks, selectedProject, agentPresets, sessions, translate]);
 
     return (
         <>
@@ -199,7 +202,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
                     aria-haspopup="dialog"
                     aria-controls={isSearchOpen ? "global-search-overlay" : undefined}
                 >
-                    <span className="block min-w-0 truncate">Search workspace</span>
+                    <span className="block min-w-0 truncate">{translate(shellMessages, "searchWorkspace")}</span>
                 </button>
                 <div className="pointer-events-none absolute inset-y-0 right-0 z-10 hidden items-center pr-2.5 lg:flex">
                     <kbd className="inline-flex h-5 min-w-9 items-center justify-center gap-0.5 rounded-md border border-black/[0.08] bg-black/[0.035] px-1.5 font-mono text-[9px] font-semibold text-slate-500 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-400">
@@ -211,7 +214,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
             <button
                 type="button"
                 onClick={() => setIsSearchOpen(true)}
-                aria-label="Open search"
+                aria-label={translate(shellMessages, "openSearch")}
                 aria-expanded={isSearchOpen}
                 aria-haspopup="dialog"
                 aria-controls={isSearchOpen ? "global-search-overlay" : undefined}

@@ -1,5 +1,4 @@
 import type { AgentAvatarConfig } from "../types.js";
-import type { DashboardLocale } from "../i18n/index.js";
 
 /* ════════════════════════════════════════════════════════════════════════
  *  Avatar expressions
@@ -184,27 +183,6 @@ export const ROBOT_BASE_COLOR_OPTIONS = [
   { id: "navy",     label: "Deep Navy",   hex: "#0F1E3D" },
   { id: "plum",     label: "Plum Noir",   hex: "#1F0F2A" },
 ] as const;
-
-const GERMAN_AVATAR_OPTION_LABELS: Readonly<Record<string, string>> = {
-  Classic: "Klassisch", Square: "Eckig", Tall: "Hoch", Pebble: "Kiesel", Soft: "Weich",
-  "Smile Arcs": "Lächelbögen", Visor: "Visier", "Single Lens": "Einzellinse", Pixel: "Pixel", Heart: "Herz",
-  Jewel: "Juwel", Bunny: "Hasenohren", Beacon: "Leuchtfeuer", Signal: "Signal", None: "Keine",
-  Clean: "Schlicht", Pulse: "Puls", "Jade Dust": "Jadestaub", Halo: "Halo", Orbit: "Umlaufbahn",
-  Bumper: "Stoßfänger", Studio: "Studio", Earbuds: "Ohrhörer", "Halo Loop": "Halo-Ring", "Wing Fins": "Flügelfinnen",
-  "Signal Jade": "Signaljade", "Ember Amber": "Glutbernstein", "Cosmic Violet": "Kosmisches Violett",
-  "Warm Coral": "Warmes Korall", "Sky Blue": "Himmelblau", "Neon Fuchsia": "Neonfuchsia",
-  "Forest Emerald": "Waldsmaragd", "Luxe Gold": "Luxusgold", Crimson: "Karminrot", Lavender: "Lavendel",
-  "Electric Cyan": "Elektrisches Cyan", "Rose Quartz": "Rosenquarz", Noir: "Noir", Pearl: "Perlmutt",
-  Void: "Leere", Ice: "Eis", Sapphire: "Saphir", Ruby: "Rubin", "Royal Violet": "Königsviolett",
-  Forest: "Wald", Bronze: "Bronze", "Vivid Amber": "Leuchtendes Bernstein", Lilac: "Flieder",
-  Ivory: "Elfenbein", Cream: "Creme", Arctic: "Arktis", Sage: "Salbei", "Rose Dust": "Rosenstaub",
-  Onyx: "Onyx", Graphite: "Graphit", Charcoal: "Anthrazit", Midnight: "Mitternacht", "Deep Navy": "Tiefes Marineblau",
-  "Plum Noir": "Pflaumen-Noir",
-};
-
-export const getAgentAvatarOptionLabel = (label: string, locale: DashboardLocale): string => (
-  locale === "de" ? GERMAN_AVATAR_OPTION_LABELS[label] ?? label : label
-);
 
 export type RobotChassis    = typeof ROBOT_CHASSIS_OPTIONS[number]["id"];
 export type RobotEyes       = typeof ROBOT_EYE_OPTIONS[number]["id"];

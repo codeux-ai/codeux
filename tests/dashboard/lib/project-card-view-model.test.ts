@@ -252,4 +252,35 @@ describe("project-card-view-model", () => {
       isEmpty: false,
     });
   });
+
+  it("formats authored card copy, dates, and percentages for German without changing source values", () => {
+    const project = createProject({
+      sourceType: "git",
+      sourceRef: "https://github.com/acme/widgets.git",
+      repoUrl: "https://github.com/acme/widgets.git",
+      gitProvider: "github",
+      gitHostDomain: "github.com",
+      completedTasks: 3,
+      openTasks: 1,
+      lastRunAt: "2026-01-04T05:06:07.000Z",
+    });
+
+    const viewModel = buildProjectCardViewModel(project, "de");
+
+    expect(viewModel.sourceBadge).toEqual({
+      kind: "remote-git",
+      label: "Remote-Git",
+      description: "GitHub-Repository auf github.com.",
+    });
+    expect(viewModel.gitUrl.value).toBe("https://github.com/acme/widgets.git");
+    expect(viewModel.providerLabel.value).toBe("GitHub");
+    expect(viewModel.lastRunAt.value).toBe("4. Jan. 2026, 5:06");
+    expect(viewModel.taskCompletion.value).toBe("75 %");
+    expect(buildProjectCardActions("de").map((action) => action.label)).toEqual([
+      "Öffnen",
+      "Projekt einrichten",
+      "Einstellungen",
+      "Löschen",
+    ]);
+  });
 });

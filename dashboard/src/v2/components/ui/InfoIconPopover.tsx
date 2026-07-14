@@ -7,6 +7,8 @@ import { calculatePosition } from "../../lib/positioning/index.js";
 import { MOTION_TOKENS } from "../../lib/motion/tokens.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 interface InfoIconPopoverProps {
     className?: string;
@@ -17,7 +19,9 @@ interface InfoIconPopoverProps {
     label?: string;
 }
 
-export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ className = "", title = "Placeholders", items = [], sections = [], summary, label }) => {
+export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ className = "", title, items = [], sections = [], summary, label }) => {
+    const { translate } = useOptionalDashboardI18n();
+    const resolvedTitle = title ?? translate(shellMessages, "placeholders");
     const isReducedMotion = useReducedMotion();
     const [isVisible, setIsVisible] = useState(false);
     const [isRendered, setIsRendered] = useState(false);
@@ -162,7 +166,7 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
             onClick={handleClick}
             onFocusCapture={handleMouseEnter}
             onBlurCapture={handleMouseLeave}
-            aria-label={label || "More information about this field"}
+            aria-label={label || translate(shellMessages, "moreFieldInformation")}
             aria-haspopup={hasInteractiveContent ? "dialog" : "true"}
             aria-expanded={isVisible}
             aria-describedby={!hasInteractiveContent && isVisible ? "info-popover-panel" : undefined}
@@ -184,13 +188,13 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
                     style={{ top: coords.top, left: coords.left }}
                     role={hasInteractiveContent ? "dialog" : "tooltip"}
                     tabIndex={-1}
-                    aria-label={title || "Information"}
+                    aria-label={resolvedTitle || translate(shellMessages, "information")}
                     onMouseEnter={handleMouseEnter}
                     onMouseLeave={handleMouseLeave}
                 >
                     {title ? (
                         <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400 mb-3">
-                            {title}
+                                {resolvedTitle}
                         </div>
                     ) : null}
                     {summary ? (
@@ -222,7 +226,7 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
                                             type="button"
                                             onClick={() => handleCopy(p.key)}
                                             className="opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 p-0.5 hover:bg-slate-100 dark:hover:bg-void-600 rounded"
-                                            title="Copy placeholder"
+                                            title={translate(shellMessages, "copyPlaceholder")}
                                         >
                                             {copiedKey === p.key ? (
                                                 <Check className="w-3 h-3 text-green-500" strokeWidth={2} />

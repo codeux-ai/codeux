@@ -4,6 +4,8 @@ import { Link } from "@tanstack/react-router";
 import { AgentAvatarSvg } from "../agents/AgentAvatarSvg.js";
 import type { AgentSearchItem, ContainerSearchItem, SearchCategoryId, SearchItem, SprintSearchItem, TaskSearchItem } from "./SearchOverlay";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 interface SearchResultRowProps {
     item: SearchItem;
@@ -20,18 +22,6 @@ interface SearchResultRowProps {
 
 const disabledStatuses = new Set(["unavailable", "disabled"]);
 
-function getDisabledReason(item: SearchItem): string | undefined {
-    if (!item.status || !disabledStatuses.has(item.status)) return undefined;
-    return item.status === "disabled" ? "Disabled" : "Unavailable";
-}
-
-function getDisabledExplanation(item: SearchItem): string | undefined {
-    if (!item.status || !disabledStatuses.has(item.status)) return undefined;
-    return item.status === "disabled"
-        ? "This result is disabled and cannot be opened."
-        : "This result is unavailable and cannot be opened.";
-}
-
 export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
     item,
     categoryType,
@@ -44,12 +34,18 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
     isLoadingAdjacent = false,
     onClick,
 }) => {
+    const { translate } = useOptionalDashboardI18n();
     const interactionTokens = useInteractionTokens();
     const transitionDuration = interactionTokens.selectionMovement.duration;
     const transitionTimingFunction = interactionTokens.selectionMovement.ease;
     const avatarConfig = "avatarConfig" in item ? item.avatarConfig : null;
-    const disabledReason = getDisabledReason(item);
-    const disabledExplanation = getDisabledExplanation(item);
+    const isInactive = Boolean(item.status && disabledStatuses.has(item.status));
+    const disabledReason = isInactive
+        ? translate(shellMessages, item.status === "disabled" ? "resultDisabled" : "resultUnavailable")
+        : undefined;
+    const disabledExplanation = isInactive
+        ? translate(shellMessages, item.status === "disabled" ? "disabledResultHelp" : "unavailableResultHelp")
+        : undefined;
     const isDisabled = Boolean(disabledReason);
     const resolvedOptionId = optionId ?? `search-result-${item.id.replace(/[^A-Za-z0-9_-]/g, "-")}`;
     const disabledDescriptionId = isDisabled ? `${resolvedOptionId}-disabled-reason` : undefined;

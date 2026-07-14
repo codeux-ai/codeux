@@ -8,8 +8,6 @@ import type {
 import type { SkillStorageRecord } from "../../types.js";
 import { fetchSkillStorageContents } from "../../lib/agent-preset-api.js";
 import { Tooltip } from "../ui/Tooltip.js";
-import { useDashboardI18n } from "../../i18n/index.js";
-import { agentsMessages } from "../../i18n/messages/agents.js";
 
 const MAX_VISIBLE_SKILLS = 4;
 const MAX_VISIBLE_TAGS = 3;
@@ -33,7 +31,6 @@ const truncatePreview = (value: string): { text: string; truncated: boolean } =>
 };
 
 const SkillSummary: FunctionComponent<{ skill: SkillStorageContentSummary }> = ({ skill }) => {
-  const { formatNumber, translate, translatePlural } = useDashboardI18n();
   const preview = truncatePreview(skill.contentPreview);
   const visibleTags = skill.tags.slice(0, MAX_VISIBLE_TAGS);
   const hiddenTagCount = skill.tags.length - visibleTags.length;
@@ -49,7 +46,7 @@ const SkillSummary: FunctionComponent<{ skill: SkillStorageContentSummary }> = (
         </p>
       ) : null}
       {visibleTags.length > 0 ? (
-        <div className="mt-2 flex flex-wrap gap-1" aria-label={translate(agentsMessages, "tagsFor", { name: skill.name })}>
+        <div className="mt-2 flex flex-wrap gap-1" aria-label={`Tags for ${skill.name}`}>
           {visibleTags.map((tag) => (
             <span
               key={tag}
@@ -60,9 +57,7 @@ const SkillSummary: FunctionComponent<{ skill: SkillStorageContentSummary }> = (
             </span>
           ))}
           {hiddenTagCount > 0 ? (
-            <span className="text-[9px] font-bold text-slate-400">
-              {translatePlural(agentsMessages, "hiddenTags", hiddenTagCount, { count: formatNumber(hiddenTagCount) })}
-            </span>
+            <span className="text-[9px] font-bold text-slate-400">+{hiddenTagCount} tags</span>
           ) : null}
         </div>
       ) : null}
@@ -71,7 +66,7 @@ const SkillSummary: FunctionComponent<{ skill: SkillStorageContentSummary }> = (
           <p>{preview.text}</p>
           {preview.truncated ? (
             <span className="mt-1 block font-sans text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">
-              {translate(agentsMessages, "previewTruncated")}
+              Preview truncated
             </span>
           ) : null}
         </div>
@@ -84,12 +79,11 @@ const StorageDisclosure: FunctionComponent<{
   storage: SkillStorageRecord;
   state: LoadState;
 }> = ({ storage, state }) => {
-  const { formatNumber, translate, translatePlural } = useDashboardI18n();
   if (state.status === "idle" || state.status === "loading") {
     return (
       <div className="flex min-h-24 w-[min(22rem,calc(100vw-2rem))] items-center justify-center gap-2 text-xs text-slate-500 dark:text-slate-300" aria-live="polite">
         <LoaderCircle className="h-4 w-4 animate-spin text-signal-500" aria-hidden="true" />
-        {translate(agentsMessages, "loadingStorage")}
+        Loading storage contents…
       </div>
     );
   }
@@ -99,10 +93,10 @@ const StorageDisclosure: FunctionComponent<{
       <div className="w-[min(22rem,calc(100vw-2rem))]" aria-live="polite">
         <div className="flex items-center gap-2 text-xs font-bold text-status-red">
           <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-          {translate(agentsMessages, "loadStorageFailed")}
+          Couldn’t load storage contents
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-300">
-          {translate(agentsMessages, "retryStorageBody")}
+          Hover or focus the chip again, or press Enter while it is focused, to retry.
         </p>
       </div>
     );
@@ -111,7 +105,7 @@ const StorageDisclosure: FunctionComponent<{
   const { contents } = state;
   const visibleSkills = contents.skills.slice(0, MAX_VISIBLE_SKILLS);
   const hiddenLoadedCount = contents.skills.length - visibleSkills.length;
-  const skillCount = `${formatNumber(contents.skills.length)}${contents.truncated ? "+" : ""}`;
+  const skillCount = `${contents.skills.length}${contents.truncated ? "+" : ""}`;
 
   return (
     <div className="max-h-[min(32rem,calc(100vh-2rem))] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto" aria-live="polite">
@@ -121,17 +115,17 @@ const StorageDisclosure: FunctionComponent<{
             {storage.name}
           </div>
           <p className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-300">
-            {contents.storage.description || storage.description || translate(agentsMessages, "noStorageDescription")}
+            {contents.storage.description || storage.description || "No storage description."}
           </p>
         </div>
         <span className="shrink-0 rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-700 dark:text-signal-200">
-          {translatePlural(agentsMessages, "skillCount", contents.skills.length, { count: skillCount })}
+          {skillCount} {contents.skills.length === 1 && !contents.truncated ? "skill" : "skills"}
         </span>
       </div>
 
       {visibleSkills.length === 0 ? (
         <div className="mt-3 rounded-xl border border-dashed border-black/[0.08] bg-black/[0.02] px-3 py-4 text-center text-[11px] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.025] dark:text-slate-400">
-          {translate(agentsMessages, "noSkills")}
+          No skills saved in this storage.
         </div>
       ) : (
         <ul className="mt-3 space-y-2">
@@ -141,12 +135,12 @@ const StorageDisclosure: FunctionComponent<{
 
       {hiddenLoadedCount > 0 ? (
         <p className="mt-3 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-          {translatePlural(agentsMessages, "hiddenSkills", hiddenLoadedCount, { count: formatNumber(hiddenLoadedCount) })}
+          {hiddenLoadedCount} more loaded skill{hiddenLoadedCount === 1 ? "" : "s"} hidden from this preview.
         </p>
       ) : null}
       {contents.truncated ? (
         <p className="mt-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-          {translate(agentsMessages, "moreSkills")}
+          More skills are available beyond this bounded response.
         </p>
       ) : null}
     </div>
@@ -158,7 +152,6 @@ export const PersistentSkillStorageChip: FunctionComponent<{
   attached?: boolean;
   className?: string;
 }> = ({ storage, attached = true, className = "" }) => {
-  const { translate } = useDashboardI18n();
   const [state, setState] = useState<LoadState>({ status: "idle" });
   const requestInFlight = useRef(false);
   const storageKey = `${storage.projectId}:${storage.id}`;
@@ -222,7 +215,7 @@ export const PersistentSkillStorageChip: FunctionComponent<{
         onPointerEnter={loadContents}
         onFocusCapture={loadContents}
         onClick={loadContents}
-        aria-label={translate(agentsMessages, "inspectStorage", { name: storage.name })}
+        aria-label={`Inspect attached skill storage ${storage.name}`}
         title={storage.name}
       >
         {state.status === "loading" ? (

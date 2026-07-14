@@ -8,6 +8,8 @@ import {
 import { NoticePanel } from "./SettingsSurface.js";
 import { SHARED_INTERACTION_CLASSES } from "../ui/Button.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import type { DashboardLocale } from "../../i18n/locales.js";
+import { getDocumentDashboardLocale, getLocalizedSettingsCategoryText, getSettingsShellMessage } from "../../i18n/messages/settings-shell.js";
 
 import { AlertTriangle, Bot, BrainCircuit, Compass, Cpu, Layers3, Monitor, Palette, Plug, Server, SlidersHorizontal, Target } from "lucide-preact";
 
@@ -26,6 +28,11 @@ export const CATEGORIES: Category[] = [
   { id: "danger", num: "12", label: "Danger Zone", icon: AlertTriangle, accent: "red", description: "Reset project overrides only when needed", danger: true },
 ];
 
+export const getLocalizedSettingsCategories = (locale: DashboardLocale): Category[] => CATEGORIES.map((category) => {
+  const localized = getLocalizedSettingsCategoryText(locale, category.id);
+  return localized ? { ...category, ...localized } : category;
+});
+
 const CATEGORY_GROUPS: ReadonlyArray<{ label: string; categoryIds: ReadonlyArray<CategoryId> }> = [
   { label: "Basics", categoryIds: ["general", "appearance"] },
   { label: "AI & Knowledge", categoryIds: ["models", "agents", "memory", "techstacks", "guidance"] },
@@ -34,9 +41,21 @@ const CATEGORY_GROUPS: ReadonlyArray<{ label: string; categoryIds: ReadonlyArray
   { label: "System", categoryIds: ["danger"] },
 ];
 
-const getCategoryGroupLabel = (categoryId: CategoryId): string => (
-  CATEGORY_GROUPS.find((group) => group.categoryIds.includes(categoryId))?.label ?? "Settings"
-);
+const getCategoryGroupLabel = (categoryId: CategoryId, locale: DashboardLocale): string => {
+  const groupLabel = CATEGORY_GROUPS.find((group) => group.categoryIds.includes(categoryId))?.label;
+  const key = groupLabel === "Basics"
+    ? "groupBasics"
+    : groupLabel === "AI & Knowledge"
+      ? "groupAiKnowledge"
+      : groupLabel === "Delivery"
+        ? "groupDelivery"
+        : groupLabel === "Connections"
+          ? "groupConnections"
+          : groupLabel === "System"
+            ? "groupSystem"
+            : "groupSettings";
+  return getSettingsShellMessage(locale, key);
+};
 
 export interface SettingsCategoryRailProps {
   filteredCategories: Category[];
@@ -65,6 +84,10 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
   desktopOnly = false,
   activeButtonRef,
 }) => {
+  const locale = getDocumentDashboardLocale();
+  const t = (key: Parameters<typeof getSettingsShellMessage>[1], variables?: Parameters<typeof getSettingsShellMessage>[2]): string => (
+    getSettingsShellMessage(locale, key, variables)
+  );
   const normalizedSearch = settingsSearch.trim().toLowerCase();
   const railRef = useRef<HTMLElement | null>(null);
   const buttonsRef = useRef<(HTMLButtonElement | null)[]>([]);
@@ -75,9 +98,9 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
   const instructionsId = useId();
   const instructionsText = normalizedSearch
     ? filteredCategories.length > 0
-      ? `Showing ${filteredCategories.length} categories for "${settingsSearch.trim()}". Use arrow keys to move through matching categories.`
-      : `No categories match "${settingsSearch.trim()}". Clear search or try routing, provider, auth, CI, agent, or memory.`
-    : "Use arrow keys to move through settings categories.";
+      ? t("categorySearchInstructions", { count: filteredCategories.length, searchTerm: settingsSearch.trim() })
+      : t("categoryNoSearchResults", { searchTerm: settingsSearch.trim() })
+    : t("categoryInstructions");
   const selectionTransitionStyle = {
     transitionDuration: tokens.selectionMovement.duration,
     transitionTimingFunction: tokens.selectionMovement.ease,
@@ -149,7 +172,7 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
   return (
     <nav
       ref={railRef}
-      aria-label="Settings categories"
+      aria-label={t("settingsCategories")}
       onScroll={updateRailMetrics}
       style={railHeightStyle}
       data-motion-contract="selectionMovement"
@@ -187,8 +210,8 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
         const isSearchMatch = Boolean(normalizedSearch && matchPreview.length > 0);
         const isPending = pendingCategory === category.id;
         const disabled = Boolean(disabledCategoryReason);
-        const groupLabel = getCategoryGroupLabel(category.id);
-        const showGroupLabel = index === 0 || getCategoryGroupLabel(filteredCategories[index - 1].id) !== groupLabel;
+        const groupLabel = getCategoryGroupLabel(category.id, locale);
+        const showGroupLabel = index === 0 || getCategoryGroupLabel(filteredCategories[index - 1].id, locale) !== groupLabel;
 
         return (
           <Fragment key={category.id}>
@@ -243,8 +266,8 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
                 style={selectionTransitionStyle}
               >
               {category.label}
-                {isActive ? <span className="sr-only">, selected</span> : null}
-                {isPending ? <span className="sr-only">, pending</span> : null}
+                {isActive ? <span className="sr-only">{t("selected")}</span> : null}
+                {isPending ? <span className="sr-only">{t("pending")}</span> : null}
               </div>
               {variant === "drawer" ? <div
                 className={`mt-0.5 break-words text-[10px] font-medium leading-tight transition-colors ${isActive ? (isDanger ? "text-status-red/70" : "text-signal-700/70 dark:text-signal-300/70") : "text-slate-400 group-hover:text-slate-500 dark:text-slate-500 dark:group-hover:text-slate-400"}`}
@@ -265,9 +288,10 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
                 </div>
               ) : null}
               {disabled && disabledCategoryReason ? (
+                // Accessibility contract: the localized badge remains a visible "Disabled" state.
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400">
-                    Disabled
+                    {t("disabled")}
                   </span>
                 </div>
               ) : null}
@@ -278,8 +302,8 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
       })}
 
       {filteredCategories.length === 0 ? (
-        <NoticePanel title="No matches" tone="warning">
-          Keep the search field focused, clear it with Backspace, or try broader terms like `routing`, `CI`, `auth`, `agent`, or `memory`.
+        <NoticePanel title={t("noMatches")} tone="warning">
+          {t("noMatchesHelp")}
         </NoticePanel>
       ) : null}
 

@@ -5,7 +5,7 @@ import { Clock, Eye, FolderGit2, GitPullRequest, Maximize2, RotateCcw, Settings,
 import { WaveFluid } from "../ui/WaveFluid.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
 import type { Task } from "../../types.js";
-import { PRIORITY_CFG, STATUS_CFG } from "../../lib/tasks-constants.js";
+import { PRIORITY_CFG, STATUS_CFG, getTaskPriorityLabel, getTaskStatusLabel } from "../../lib/tasks-constants.js";
 import { useTaskCardMotion, useTaskCardDragMotion } from "../../lib/motion/task-card-motion.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -22,6 +22,9 @@ import { getSafeUrl } from "../../lib/safe-url.js";
 import { SelfReflectionRatingBadge } from "./SelfReflectionRatingBadge.js";
 import { SprintReviewBadge } from "../sprints/SprintReviewBadge.js";
 import { CiStatusBadge } from "../ui/CiStatusBadge.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { taskMessages } from "../../i18n/messages/tasks.js";
+import { formatTaskTimeState } from "../../lib/tasks/task-presentation.js";
 
 export const KanbanTaskCard: FunctionComponent<{
   viewModel: TaskCardViewModel;
@@ -37,47 +40,58 @@ export const KanbanTaskCard: FunctionComponent<{
   const { task, humanizedCreatedAt, dependencyIndicators, selfReflectionRating, ciStatusPresentation, sessionId, sessionState, prUrl, liveRunningTime, liveStartedAt } = viewModel;
   const cardRef = useRef<HTMLDivElement>(null);
   const pri = PRIORITY_CFG[task.priority];
-  const statusLabel = STATUS_CFG[task.status].label;
+  const { locale, translate, translatePlural, formatList, formatNumber } = useOptionalDashboardI18n();
+  const statusLabel = getTaskStatusLabel(task.status, locale);
+  const priorityLabel = getTaskPriorityLabel(task.priority, locale);
+  const taskTimeLabel = formatTaskTimeState(task.time, locale);
   const interactionTokens = useInteractionTokens();
   const blockerCount = dependencyIndicators.filter((dep) => dep.isBlocking ?? dep.status !== "completed").length;
-  const dependencyActionLabel = viewModel.dependencyActionLabel ?? (blockerCount > 0 ? `${blockerCount} dependency ${blockerCount === 1 ? "blocker" : "blockers"}` : "Dependencies clear");
-  const qaNoReviewLabel = viewModel.qaReviewLabel ?? "QA no review";
-  const dragStateLabel = viewModel.dragStateLabel ?? "Pointer drag only; keyboard reordering is not supported";
+  const dependencyActionLabel = viewModel.dependencyActionLabel ?? (blockerCount > 0
+    ? translatePlural(taskMessages, "dependencyBlockers", blockerCount, { count: formatNumber(blockerCount) })
+    : translate(taskMessages, "dependenciesClear"));
+  const qaNoReviewLabel = viewModel.qaReviewLabel ?? translate(taskMessages, "qaNoReview");
+  const dragStateLabel = viewModel.dragStateLabel ?? translate(taskMessages, "dragPointerOnly");
   const shouldShowExecutorLabel = viewModel.executorLabel !== "Auto";
   const cardActions = viewModel.actions ?? [];
   const hasPullRequestMetadata = viewModel.hasPullRequestMetadata ?? true;
   const dependencySummary = dependencyIndicators.length === 0
-    ? "No dependency blockers."
-    : `${dependencyIndicators.length} ${dependencyIndicators.length === 1 ? "dependency" : "dependencies"}; ${blockerCount === 0 ? "no blockers" : `${blockerCount} ${blockerCount === 1 ? "blocker" : "blockers"}`}: ${dependencyIndicators.map((dep) => `${dep.id} ${dep.stateLabel ?? dep.status.replace(/_/g, " ")}`).join(", ")}.`;
+    ? translate(taskMessages, "noDependencyBlockers")
+    : translate(taskMessages, "dependencySummary", {
+      dependencies: translatePlural(taskMessages, "dependencyCount", dependencyIndicators.length, { count: formatNumber(dependencyIndicators.length) }),
+      blockers: blockerCount === 0
+        ? translate(taskMessages, "noBlockers")
+        : translatePlural(taskMessages, "dependencyBlockers", blockerCount, { count: formatNumber(blockerCount) }),
+      details: formatList(dependencyIndicators.map((dep) => `${dep.id} ${dep.stateLabel ?? getTaskStatusLabel(dep.status, locale)}`)),
+    });
   const reviewDetails = task.latestReview?.summary?.trim();
   const reviewSummary = task.latestReview
     ? reviewDetails
-      ? `QA review details available: ${reviewDetails}${/[.!?]$/.test(reviewDetails) ? "" : "."}`
-      : "QA review details available."
-    : "No QA review recorded.";
-  const ciSummary = ciStatusPresentation?.accessibleLabel ?? "No CI workflow evidence.";
+      ? translate(taskMessages, "qaReviewAvailableDetails", { details: `${reviewDetails}${/[.!?]$/.test(reviewDetails) ? "" : "."}` })
+      : translate(taskMessages, "qaReviewAvailable")
+    : translate(taskMessages, "noQaReview");
+  const ciSummary = ciStatusPresentation?.accessibleLabel ?? translate(taskMessages, "noCiEvidence");
   const runtimeSummary = liveRunningTime
-    ? `Live runtime ${liveRunningTime}${sessionState ? `, session ${sessionState}` : ""}.`
+    ? translate(taskMessages, "liveRuntimeSummary", { duration: liveRunningTime, session: sessionState ? translate(taskMessages, "sessionSummary", { session: sessionState }) : "" })
     : sessionState
-      ? `Runtime session ${sessionState}.`
-      : "Runtime not started.";
-  const prSummary = prUrl ? "Pull request available." : hasPullRequestMetadata ? "No pull request available yet." : "Pull request creation disabled.";
+      ? translate(taskMessages, "runtimeSession", { session: sessionState })
+      : translate(taskMessages, "runtimeNotStarted");
+  const prSummary = translate(taskMessages, prUrl ? "prAvailable" : hasPullRequestMetadata ? "prUnavailable" : "prDisabled");
   const isReducedMotion = useReducedMotion();
   const isDragDisabled = isReducedMotion || !!task.isOptimistic;
   const effectiveIsDragging = isDragging && !isDragDisabled;
   const savingDescriptionId = task.isOptimistic ? `task-card-saving-${task.recordId}` : undefined;
   const cardStateAnnouncement = [
-    `Task ${task.id} status is now ${statusLabel}.`,
+    translate(taskMessages, "taskStatusNow", { id: task.id, status: statusLabel }),
     dependencyIndicators.length > 0
       ? blockerCount === 0
-        ? `Dependency blockers resolved for task ${task.id}.`
-        : `${dependencyActionLabel} for task ${task.id}.`
-      : `No dependency blockers for task ${task.id}.`,
+        ? translate(taskMessages, "blockersResolvedForTask", { id: task.id })
+        : translate(taskMessages, "blockersForTask", { blockers: dependencyActionLabel, id: task.id })
+      : translate(taskMessages, "noBlockersForTask", { id: task.id }),
     reviewSummary,
     ciSummary,
     prSummary,
     runtimeSummary,
-    task.isOptimistic ? `Saving task ${task.id}; actions that would change this task are temporarily unavailable.` : null,
+    task.isOptimistic ? translate(taskMessages, "savingTaskActions", { id: task.id }) : null,
   ].filter(Boolean).join(" ");
   const StatusIcon = STATUS_CFG[task.status].icon;
   const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel, triggerRef } = useConfirmDialog();
@@ -88,13 +102,13 @@ export const KanbanTaskCard: FunctionComponent<{
     live_runtime: Maximize2,
   };
   const unavailableActionSummary = task.isOptimistic
-    ? `Saving task ${task.id}; actions are paused.`
+    ? translate(taskMessages, "savingTaskPaused", { id: task.id })
     : cardActions
       .filter((action) => action.disabledReason)
       .map((action) => action.label)
       .join(", ");
   const unavailableActionSummaryText = unavailableActionSummary && !task.isOptimistic
-    ? `Unavailable: ${unavailableActionSummary}.`
+    ? translate(taskMessages, "unavailableActions", { actions: unavailableActionSummary })
     : unavailableActionSummary;
 
   const [flashTriggerCount, setFlashTriggerCount] = useState(0);
@@ -121,7 +135,7 @@ export const KanbanTaskCard: FunctionComponent<{
       onDragStart={!isDragDisabled ? (onDragStart as any) : undefined}
       onDragEnd={!isDragDisabled ? (onDragEnd as any) : undefined}
       aria-describedby={savingDescriptionId ? `task-card-kbd-${task.recordId} ${savingDescriptionId}` : `task-card-kbd-${task.recordId}`}
-      aria-label={`Task ${task.id}: ${task.title}. Status ${statusLabel}. Priority ${pri.label}. ${dependencySummary} ${reviewSummary} ${ciSummary} ${runtimeSummary} ${prSummary} ${dragStateLabel}.`}
+      aria-label={translate(taskMessages, "taskCardLabel", { id: task.id, title: task.title, status: statusLabel, priority: priorityLabel, dependencies: dependencySummary, review: reviewSummary, ci: ciSummary, runtime: runtimeSummary, pr: prSummary, drag: dragStateLabel })}
       data-optimistic={task.isOptimistic ? "true" : undefined}
       data-blocked={blockerCount > 0 ? "true" : undefined}
       data-dragging={effectiveIsDragging ? "true" : undefined}
@@ -147,14 +161,14 @@ export const KanbanTaskCard: FunctionComponent<{
     >
       <span id={`task-card-kbd-${task.recordId}`} className="sr-only">
         {isReducedMotion
-          ? "Draggable reordering is disabled in reduced motion mode."
+          ? translate(taskMessages, "reducedMotionDragDisabled")
           : task.isOptimistic
-            ? "Draggable reordering is disabled while task changes are saving."
-            : "Draggable task. Drag and drop is pointer-only. Keyboard reordering is not supported."}
+            ? translate(taskMessages, "savingDragDisabled")
+            : translate(taskMessages, "draggablePointerOnly")}
       </span>
       {savingDescriptionId && (
         <span id={savingDescriptionId} className="sr-only">
-          Saving task {task.id}; edit, delete, and drag actions are temporarily unavailable.
+          {translate(taskMessages, "savingEditDeleteDrag", { id: task.id })}
         </span>
       )}
       <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
@@ -170,7 +184,7 @@ export const KanbanTaskCard: FunctionComponent<{
             {task.id.toUpperCase()}
           </span>
           <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.1em] text-slate-400">
-            <span className="sr-only">, Status: </span><span aria-live="polite" aria-atomic="true" className="sr-only">Task {task.id} status is now {statusLabel}</span>
+            <span className="sr-only">, {translate(taskMessages, "status")}: </span><span aria-live="polite" aria-atomic="true" className="sr-only">{translate(taskMessages, "taskStatusNowInline", { id: task.id, status: statusLabel })}</span>
             <StatusIcon className="w-3 h-3" aria-hidden="true" style={{ color: STATUS_CFG[task.status].hex }} />
             <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2 py-0.5 text-[9px] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300">
               {statusLabel}
@@ -186,7 +200,7 @@ export const KanbanTaskCard: FunctionComponent<{
         </div>
         <div className={`flex shrink-0 items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-[0.14em] ${pri.bg} ${pri.color}`}>
           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${pri.dot}`} aria-hidden="true" />
-          <span className="sr-only">Priority: </span>{pri.label}
+          <span className="sr-only">{translate(taskMessages, "priority")}: </span>{priorityLabel}
         </div>
       </div>
 
@@ -205,15 +219,15 @@ export const KanbanTaskCard: FunctionComponent<{
         {agentPresetName && (
           <span className="inline-flex items-center gap-1 rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 min-w-0 max-w-full">
             <AgentSelectAvatarIcon avatarConfig={agentPresetAvatarConfig} seed={agentPresetName} />
-            <span className="sr-only">Agent: </span><span className="truncate min-w-0">{agentPresetName}</span>
+            <span className="sr-only">{translate(taskMessages, "agent")}: </span><span className="truncate min-w-0">{agentPresetName}</span>
           </span>
         )}
         {sessionState && (
-          <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 min-w-0 break-all max-w-full"><span className="sr-only">Session state: </span>{sessionState}
+          <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 min-w-0 break-all max-w-full"><span className="sr-only">{translate(taskMessages, "sessionState")}: </span>{sessionState}
           </span>
         )}
         {sessionId && (
-          <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 font-mono min-w-0 break-all max-w-full"><span className="sr-only">Session ID: </span>{sessionId}
+          <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 font-mono min-w-0 break-all max-w-full"><span className="sr-only">{translate(taskMessages, "sessionId")}: </span>{sessionId}
           </span>
         )}
         {task.latestReview ? (
@@ -221,7 +235,7 @@ export const KanbanTaskCard: FunctionComponent<{
         ) : (
           <span
             className="min-w-0 max-w-full truncate rounded-full border border-slate-400/20 bg-slate-400/[0.08] px-2.5 py-1 text-slate-500 dark:text-slate-300"
-            aria-label="QA review state: no review recorded."
+            aria-label={translate(taskMessages, "qaReviewNoReviewAria")}
           >
             {qaNoReviewLabel}
           </span>
@@ -234,14 +248,14 @@ export const KanbanTaskCard: FunctionComponent<{
         {dependencyIndicators.length > 0 && (
           <span
             className={`rounded-full border px-2.5 py-1 ${blockerCount > 0 ? "border-status-amber/25 bg-status-amber/[0.08] text-status-amber" : "border-status-green/20 bg-status-green/[0.08] text-status-green"}`}
-            aria-label={blockerCount > 0 ? `${dependencyActionLabel}. Dependencies blocked.` : `${dependencyActionLabel}. No dependency blockers.`}
+            aria-label={translate(taskMessages, blockerCount > 0 ? "dependenciesBlockedAria" : "dependenciesClearAria", { label: dependencyActionLabel })}
           >
             {dependencyActionLabel}
           </span>
         )}
         {task.isOptimistic && (
           <span className="rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-2.5 py-1 text-signal-600 dark:text-signal-400">
-            {viewModel.optimisticSavingLabel ?? "Saving"}
+            {viewModel.optimisticSavingLabel ?? translate(taskMessages, "saving")}
           </span>
         )}
       </div>
@@ -260,7 +274,7 @@ export const KanbanTaskCard: FunctionComponent<{
               {task.assignee[0]}
             </span>
           </div>
-          <span className="sr-only">Assignee: </span><span className="font-medium truncate min-w-0">{task.assignee}</span>
+          <span className="sr-only">{translate(taskMessages, "assignee")}: </span><span className="font-medium truncate min-w-0">{task.assignee}</span>
         </div>
       </div>
 
@@ -271,16 +285,16 @@ export const KanbanTaskCard: FunctionComponent<{
           <div className="kanban-card__meta-slots flex min-w-0 flex-wrap items-center gap-2" aria-busy={task.isOptimistic ? "true" : "false"} aria-live="polite" aria-atomic="false">
             <div
               className="kanban-card__meta-slot kanban-card__meta-slot--duration flex min-h-7 min-w-0 items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.03] px-2 text-[10px] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-500"
-              aria-label={liveRunningTime ? `Live runtime: ${liveRunningTime}` : `Duration: ${task.time ?? "Not started"}`}
+              aria-label={`${translate(taskMessages, liveRunningTime ? "liveRuntime" : "duration")}: ${liveRunningTime ?? taskTimeLabel}`}
             >
               <Clock className="w-3 h-3 shrink-0" strokeWidth={2} aria-hidden="true" />
-              <span className="sr-only">{liveRunningTime ? "Live runtime: " : "Duration: "}</span>
+              <span className="sr-only">{translate(taskMessages, liveRunningTime ? "liveRuntime" : "duration")}: </span>
               <span className={`kanban-card__meta-state text-[9px] font-bold uppercase tracking-[0.12em] ${liveRunningTime ? "text-signal-600 dark:text-signal-400" : "text-slate-400 dark:text-slate-500"}`}>
-                {liveRunningTime ? "Live" : "Idle"}
+                {translate(taskMessages, liveRunningTime ? "live" : "idle")}
               </span>
               <span aria-live={liveRunningTime ? "polite" : undefined} aria-atomic="true">
                 <LiveDurationBadge
-                  durationText={liveRunningTime ?? task.time ?? "Not started"}
+                  durationText={liveRunningTime ?? taskTimeLabel}
                   flashTriggerCount={flashTriggerCount}
                 />
               </span>
@@ -292,30 +306,30 @@ export const KanbanTaskCard: FunctionComponent<{
                 rel="noopener noreferrer"
                 className="kanban-card__meta-slot kanban-card__meta-slot--pr flex min-h-7 items-center gap-1 rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-2 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:text-signal-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:text-signal-400 dark:hover:text-signal-300"
                 onClick={(e) => e.stopPropagation()}
-                aria-label={`Open pull request for task ${task.id}`}
+                aria-label={translate(taskMessages, "openPrForTask", { id: task.id })}
               >
                 <GitPullRequest className="w-3 h-3" strokeWidth={2} aria-hidden="true" />
-                <span>PR ready</span>
+                <span>{translate(taskMessages, "prReady")}</span>
               </a>
             )}
             {!prUrl && hasPullRequestMetadata && (
               <span
                 className="kanban-card__meta-slot kanban-card__meta-slot--pr flex min-h-7 items-center rounded-full border border-black/[0.06] bg-black/[0.03] px-2 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-500"
-                aria-label={`Pull request pending for task ${task.id}`}
+                aria-label={translate(taskMessages, "prPendingForTask", { id: task.id })}
               >
-                PR pending
+                {translate(taskMessages, "prPending")}
               </span>
             )}
           </div>
           <span
             className="kanban-card__meta-slot kanban-card__meta-slot--timestamp text-[9px] font-mono text-slate-300 dark:text-slate-700"
-            aria-label={liveStartedAt ? `Live started ${formatTimeAgo(liveStartedAt)}` : `Created ${humanizedCreatedAt}`}
+            aria-label={translate(taskMessages, liveStartedAt ? "liveStarted" : "created", { time: liveStartedAt ? formatTimeAgo(liveStartedAt, Date.now(), locale) : humanizedCreatedAt })}
           >
-            {liveStartedAt ? `· ${formatTimeAgo(liveStartedAt)}` : humanizedCreatedAt}
+            {liveStartedAt ? `· ${formatTimeAgo(liveStartedAt, Date.now(), locale)}` : humanizedCreatedAt}
           </span>
         </div>
 
-        <div className="kanban-card__actions mt-3 flex w-full max-w-full flex-wrap items-center justify-end gap-1 rounded-2xl border border-black/[0.05] bg-white/90 p-1 shadow-[0_2px_12px_rgba(0,0,0,0.06)] backdrop-blur-md dark:border-white/[0.08] dark:bg-void-700/95 dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)]" aria-label={`Actions for task ${task.id}`} data-motion-contract="controlFeedback">
+        <div className="kanban-card__actions mt-3 flex w-full max-w-full flex-wrap items-center justify-end gap-1 rounded-2xl border border-black/[0.05] bg-white/90 p-1 shadow-[0_2px_12px_rgba(0,0,0,0.06)] backdrop-blur-md dark:border-white/[0.08] dark:bg-void-700/95 dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)]" aria-label={translate(taskMessages, "actionsForTask", { id: task.id })} data-motion-contract="controlFeedback">
           {unavailableActionSummaryText && (
             <span className="kanban-card__action-reason-summary" aria-hidden="true">
               {unavailableActionSummaryText}
@@ -324,7 +338,7 @@ export const KanbanTaskCard: FunctionComponent<{
           {cardActions.map((action) => {
             const ActionIcon = actionIconByKind[action.kind];
             const disabledReason = task.isOptimistic
-              ? `Saving task ${task.id}; ${action.label} is temporarily unavailable.`
+              ? translate(taskMessages, "temporarilyUnavailable", { id: task.id, action: action.label })
               : action.disabledReason;
             const actionClassName = `kanban-card__action inline-flex min-h-8 items-center gap-1.5 rounded-full px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
               disabledReason
@@ -371,7 +385,7 @@ export const KanbanTaskCard: FunctionComponent<{
                   <span className="kanban-card__action-label">{action.label}</span>
                 </button>
                 <span id={reasonId} className="sr-only">
-                  {disabledReason ?? "Unavailable"}
+                  {disabledReason ?? translate(taskMessages, "unavailable")}
                 </span>
               </Fragment>
             );
@@ -382,7 +396,7 @@ export const KanbanTaskCard: FunctionComponent<{
             aria-busy={task.isOptimistic ? "true" : undefined}
             aria-describedby={task.isOptimistic ? `task-card-edit-reason-${task.recordId}` : undefined}
             className="kanban-card__action inline-flex min-h-8 items-center gap-1.5 rounded-full px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors active:scale-95 hover:text-signal-600 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:text-slate-400 dark:hover:text-signal-400"
-            title={task.isOptimistic ? `Edit unavailable while task ${task.id} is saving` : `Edit task ${task.id}`} aria-label={`Edit task ${task.id}: ${task.title}`}
+            title={translate(taskMessages, task.isOptimistic ? "editUnavailable" : "editTask", { id: task.id })} aria-label={translate(taskMessages, "editTaskTarget", { id: task.id, title: task.title })}
             onClick={(event) => {
               event.stopPropagation();
               if (!task.isOptimistic) {
@@ -391,11 +405,11 @@ export const KanbanTaskCard: FunctionComponent<{
             }}
           >
             <span className="kanban-card__action-icon"><Settings className="w-3 h-3" aria-hidden="true" /></span>
-            <span className="kanban-card__action-label">Edit</span>
+            <span className="kanban-card__action-label">{translate(taskMessages, "edit")}</span>
           </button>
           {task.isOptimistic && (
             <span id={`task-card-edit-reason-${task.recordId}`} className="sr-only">
-              Saving task {task.id}; edit is temporarily unavailable.
+              {translate(taskMessages, "editSaving", { id: task.id })}
             </span>
           )}
           <button
@@ -405,17 +419,17 @@ export const KanbanTaskCard: FunctionComponent<{
             aria-busy={task.isOptimistic ? "true" : undefined}
             aria-describedby={task.isOptimistic ? `task-card-delete-reason-${task.recordId}` : undefined}
             className="kanban-card__action inline-flex min-h-8 items-center gap-1.5 rounded-full px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors active:scale-95 hover:text-status-red disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30 dark:text-slate-400"
-            title={task.isOptimistic ? `Delete unavailable while task ${task.id} is saving` : `Delete task ${task.id}`} aria-label={`Delete task ${task.id}: ${task.title}`}
+            title={translate(taskMessages, task.isOptimistic ? "deleteUnavailable" : "deleteTaskTarget", { id: task.id, title: task.title })} aria-label={translate(taskMessages, "deleteTaskTarget", { id: task.id, title: task.title })}
             onClick={async (e) => {
               e.stopPropagation();
               if (task.isOptimistic) {
                 return;
               }
               const confirmed = await requestConfirm({
-                title: "Delete Task",
-                body: `Delete "${task.title}"? This removes the task card and cannot be undone.`,
-                confirmLabel: "Delete Task",
-                cancelLabel: "Cancel",
+                title: translate(taskMessages, "deleteTask"),
+                body: translate(taskMessages, "deleteConfirm", { title: task.title }),
+                confirmLabel: translate(taskMessages, "deleteTask"),
+                cancelLabel: translate(taskMessages, "cancel"),
                 destructive: true
               });
               if (confirmed) {
@@ -426,11 +440,11 @@ export const KanbanTaskCard: FunctionComponent<{
             }}
           >
             <span className="kanban-card__action-icon"><Trash2 className="w-3 h-3" aria-hidden="true" /></span>
-            <span className="kanban-card__action-label">Delete</span>
+            <span className="kanban-card__action-label">{translate(taskMessages, "delete")}</span>
           </button>
           {task.isOptimistic && (
             <span id={`task-card-delete-reason-${task.recordId}`} className="sr-only">
-              Saving task {task.id}; delete is temporarily unavailable.
+              {translate(taskMessages, "deleteSaving", { id: task.id })}
             </span>
           )}
         </div>

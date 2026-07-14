@@ -1,5 +1,24 @@
 export const SETTINGS_NAVIGATION_SESSION_KEY = "codeux:settings-navigation:v1";
 
+export const SETTINGS_CATEGORY_IDS = [
+  "general",
+  "appearance",
+  "models",
+  "agents",
+  "memory",
+  "techstacks",
+  "guidance",
+  "sprint",
+  "browser",
+  "integrations",
+  "mcp",
+  "danger",
+] as const;
+
+const isSettingsCategoryId = (value: unknown): value is (typeof SETTINGS_CATEGORY_IDS)[number] => (
+  typeof value === "string" && SETTINGS_CATEGORY_IDS.some((categoryId) => categoryId === value)
+);
+
 export interface SettingsNavigationState {
   activeCategory: string;
   activeInvocationRoute: string;
@@ -23,14 +42,14 @@ export const readSettingsNavigationState = (): SettingsNavigationState | null =>
       return null;
     }
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (!isSafeNavigationToken(parsed.activeCategory) || !isSafeNavigationToken(parsed.activeInvocationRoute)) {
+    if (!isSettingsCategoryId(parsed.activeCategory) || !isSafeNavigationToken(parsed.activeInvocationRoute)) {
       return null;
     }
     const focusedSectionsInput = parsed.focusedSections;
     const focusedSections = focusedSectionsInput && typeof focusedSectionsInput === "object" && !Array.isArray(focusedSectionsInput)
       ? Object.fromEntries(
         Object.entries(focusedSectionsInput)
-          .filter(([category, section]) => isSafeNavigationToken(category) && isSafeNavigationToken(section)),
+          .filter(([category, section]) => isSettingsCategoryId(category) && isSafeNavigationToken(section)),
       ) as Record<string, string>
       : {};
     return {

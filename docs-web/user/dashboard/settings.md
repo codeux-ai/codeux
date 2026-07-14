@@ -45,6 +45,12 @@ The desktop rail and mobile category drawer include these Expert-mode categories
 
 Each category opens one or more **content panels** with grouped fields. Inputs are typed (text, number with min/max, toggle, multi-select) and validate inline.
 
+## Dashboard language and card help
+
+Open **Appearance → Display Settings → Language** to switch dashboard-authored interface copy between English and Deutsch. The change applies immediately in both System and Project views, persists in browser-local storage, updates the document language for assistive technology, and never dirties or submits the Settings draft.
+
+Settings card titles and their help popovers follow the selected language, including the purpose summary, controlled-functions guidance, recommended configuration, and risk notes. Card identity, documentation links, provider names, technical values, runtime/API messages, saved instructions, and the linked English documentation remain unchanged.
+
 ### Language-first speech output
 
 Open **AI Models -> Configure speech** and choose the output language first. Code UX preselects the catalog's preferred compatible local model and a matching voice. The recommendation keeps **Selected**, **Installed / Download required**, and **Output enabled / off** visible as separate states; the normal **Save Changes** action still controls when the draft becomes active.

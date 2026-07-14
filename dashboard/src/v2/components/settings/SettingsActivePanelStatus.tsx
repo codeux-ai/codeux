@@ -1,5 +1,6 @@
 import type { FunctionComponent, JSX } from "preact";
 import type { SettingsPageState } from "../../hooks/use-settings-page-state.js";
+import { getDocumentDashboardLocale, getSettingsShellMessage, type SettingsShellMessageKey } from "../../i18n/messages/settings-shell.js";
 
 const formatCategoryLabel = (category: SettingsPageState["activeCategory"]): string => (
   `${category.charAt(0).toUpperCase()}${category.slice(1)}`
@@ -18,33 +19,35 @@ export const SettingsActivePanelStatus: FunctionComponent<{
   className,
   style,
 }) => {
+  const locale = getDocumentDashboardLocale();
+  const t = (key: SettingsShellMessageKey, variables?: Parameters<typeof getSettingsShellMessage>[2]): string => getSettingsShellMessage(locale, key, variables);
   const { activeCategory, activeDirty, activeSaving, error, saveMessage, loading, resettingProject } = state;
   const activeCategoryLabel = state.activeCategoryConfig?.label ?? formatCategoryLabel(activeCategory);
 
   const panelStatus = error
-    ? `${activeCategoryLabel} settings blocked: ${error}`
+    ? t("panelBlocked", { category: activeCategoryLabel, error })
     : resettingProject
-      ? `${activeCategoryLabel} project override reset is pending.`
+      ? t("panelResetPending", { category: activeCategoryLabel })
       : activeSaving
-        ? `${activeCategoryLabel} settings save is pending.`
+        ? t("panelSavePending", { category: activeCategoryLabel })
         : saveMessage
-          ? `${activeCategoryLabel} settings saved. ${saveMessage}`
+          ? t("panelSavedMessage", { category: activeCategoryLabel, message: saveMessage })
           : activeDirty
-            ? `${activeCategoryLabel} settings have local unsaved changes.`
-            : `${activeCategoryLabel} settings are saved.`;
+            ? t("panelDirty", { category: activeCategoryLabel })
+            : t("panelSaved", { category: activeCategoryLabel });
   const visibleSaveState = error
-    ? "Blocked"
+    ? t("blocked")
     : loading
-      ? "Loading"
+      ? t("loading")
       : resettingProject
-        ? "Resetting"
+        ? t("resetting")
         : activeSaving
-          ? "Saving"
+          ? t("saving")
           : activeDirty
-            ? "Unsaved changes"
+            ? t("unsavedChanges")
             : saveMessage
-              ? "Saved"
-              : "Saved";
+              ? t("saved")
+              : t("saved");
   const statusStyle = sticky
     ? ({
       ...style,
@@ -67,7 +70,7 @@ export const SettingsActivePanelStatus: FunctionComponent<{
         style={statusStyle}
         className={statusClassName}
       >
-        <span className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">Active panel</span>
+        <span className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">{t("activePanel")}</span>
         <span className="min-w-0 max-w-full break-words text-slate-800 dark:text-slate-100">{activeCategoryLabel}</span>
         <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">/</span>
         <span className={`min-w-0 max-w-full break-words ${error ? "text-status-red" : activeSaving || loading || resettingProject ? "text-signal-700 dark:text-signal-300" : activeDirty ? "text-amber-700 dark:text-amber-200" : "text-status-green"}`}>

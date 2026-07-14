@@ -15,6 +15,7 @@ import { fetchAgentPresets } from "../../lib/agent-preset-api.js";
 import { createTask, deleteTask, updateTask } from "../../lib/project-api.js";
 import { createMockTask } from "../../components/tasks/__tests__/fixtures/tasks.fixture.js";
 import type { ExecutionRuntimeEventSummary } from "../../../types.js";
+import { DashboardI18nProvider } from "../../i18n/context.js";
 
 expect.extend(matchers);
 
@@ -915,5 +916,52 @@ describe("TasksPage.cards Integration", () => {
       expect(refreshSprints).toHaveBeenCalled();
       expect(screen.queryByText("Optimistic Created Task")).not.toBeInTheDocument();
     });
+  });
+
+  it("supports German filtering and reports deletion failures verbatim", async () => {
+    const task = createMockTask({
+      recordId: "task_rec_de",
+      id: "TASK_KEY_DE",
+      title: "Keep stored task title",
+      status: "pending",
+      priority: "high",
+      time: "Active",
+    });
+    (useProjectData as unknown as any).mockReturnValue({
+      projects: [{ id: "proj_1", name: "Keep Project Name" }],
+      selectedProject: { id: "proj_1", name: "Keep Project Name" },
+    });
+    (useSprints as unknown as any).mockReturnValue({
+      data: [{ id: "sprint_1", number: 1, name: "Keep Sprint Name", status: "running", startDate: "2026-07-14", endDate: "2026-07-20", date: "Wrong preformatted date", tasksCount: 1, completion: 0, active: true }],
+      loading: false,
+      selectedSprintId: "sprint_1",
+      selectSprint: vi.fn(),
+      refetch: vi.fn(),
+    });
+    (useProjectTasks as any).mockReturnValue({ tasks: [task], loading: false, error: null, refresh: vi.fn() });
+    (deleteTask as unknown as any).mockRejectedValue(new Error("Backend delete detail 42"));
+
+    render(
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <ProjectDataContext.Provider value={{ projects: [{ id: "proj_1", name: "Keep Project Name" } as any], selectedProject: { id: "proj_1", name: "Keep Project Name" } as any } as any}>
+          <TasksPage />
+        </ProjectDataContext.Provider>
+      </DashboardI18nProvider>,
+    );
+
+    expect(screen.getAllByRole("region", { name: "Aufgabenboard" })).toHaveLength(2);
+    expect(screen.getByText("Keep stored task title")).toBeInTheDocument();
+    expect(screen.getByText("Aktiv")).toBeInTheDocument();
+    expect(screen.getByText("14. Juli – 20. Juli")).toBeInTheDocument();
+    expect(screen.queryByText("Wrong preformatted date")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Aufgaben mit hoher Priorität anzeigen" }));
+    expect(await screen.findByText(/Aufgabenfilter geändert.*Priorität Hoch/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Aufgabe TASK_KEY_DE löschen/i }));
+    const confirmDelete = screen.getByRole("button", { name: /Aufgabe löschen/i });
+    fireEvent.pointerDown(confirmDelete);
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Backend delete detail 42"), { timeout: 2000 });
+    expect(screen.getByText("Keep stored task title")).toBeInTheDocument();
+    fireEvent.pointerUp(confirmDelete);
   });
 });

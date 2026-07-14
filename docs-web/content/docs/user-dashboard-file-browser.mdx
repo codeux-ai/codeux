@@ -3,12 +3,6 @@
 The **File Browser** page (dock label **Files**, `/files`) lets you inspect a project's files and
 review a sprint's Git changes from inside the dashboard, without switching to a terminal or editor.
 
-When the dashboard locale is German, all File Browser controls, status text, loading and recovery
-states, viewer chrome, and accessible names are shown in German. Counts and the snapshot date use
-German number and date formatting. Repository data remains exact: paths, filenames, file and diff
-content, syntax metadata, Git refs, project and sprint names, binary metadata, and backend errors are
-not translated.
-
 ## Sessions
 
 The File Browser works through a **session** bound to a sprint, so you can browse the exact state a

@@ -2,19 +2,11 @@
 /** @jsx h */
 import { h } from "preact";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { render as testingRender, cleanup, screen } from "@testing-library/preact";
+import { render, cleanup } from "@testing-library/preact";
 import * as matchers from '@testing-library/jest-dom/matchers';
 import { HeaderStats } from "../../../dashboard/src/v2/components/HeaderStats.js";
-import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
-import type { DashboardLocale } from "../../../dashboard/src/v2/i18n/locales.js";
 
 expect.extend(matchers);
-
-const renderHeaderStats = (pageData: any, locale: DashboardLocale = "en") => testingRender(
-    <DashboardI18nProvider initialLocale={locale} storage={null}>
-        <HeaderStats pageData={pageData} />
-    </DashboardI18nProvider>,
-);
 
 // Mock the getTotalLength function for SVG paths in jsdom
 beforeEach(() => {
@@ -53,7 +45,7 @@ describe("HeaderStats", () => {
             isLoading: false
         };
 
-        const { container } = renderHeaderStats(mockPageData);
+        const { container } = render(<HeaderStats pageData={mockPageData as any} />);
 
         // Assert Total Tokens rendering
         expect(container.textContent).toContain("Total Tokens");
@@ -82,32 +74,5 @@ describe("HeaderStats", () => {
         expect(cards[2].innerHTML).toContain('stroke="#FFB800"');
         // Card 4: Completed Tasks (Green #00E0A0)
         expect(cards[3].innerHTML).toContain('stroke="#00E0A0"');
-    });
-
-    it("localizes German loading and active metrics while preserving project text", () => {
-        const projectName = "Ein sehr langes Project name that remains verbatim";
-        const pageData = {
-            projects: [],
-            selectedProject: { id: "p1", name: projectName },
-            sprints: [],
-            tasks: [],
-            stats: { usage: { totalTokens: 12500, totalCostUsd: 1234.5, invocationCount: 1234, activeTimeMs: 65000 } },
-            isLoading: false,
-        };
-
-        renderHeaderStats(pageData, "de");
-
-        expect(screen.getByRole("region", { name: "Kennzahlen der Übersicht" })).toBeInTheDocument();
-        expect(screen.getByText("Tokens gesamt")).toBeInTheDocument();
-        expect(screen.getByText("12,5k")).toBeInTheDocument();
-        expect(screen.getByText(projectName)).toBeInTheDocument();
-        expect(screen.getByText(new Intl.NumberFormat("de").format(1234))).toBeInTheDocument();
-        const expectedCost = new Intl.NumberFormat("de", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(1234.5);
-        expect(screen.getByText((_, element) => element?.textContent === expectedCost)).toBeInTheDocument();
-    });
-
-    it("announces German loading state through a polite busy live region", () => {
-        renderHeaderStats({ projects: [], selectedProject: null, sprints: [], tasks: [], stats: null, isLoading: true }, "de");
-        expect(screen.getByRole("status", { name: "Übersichtskennzahlen werden geladen" })).toHaveAttribute("aria-busy", "true");
     });
 });

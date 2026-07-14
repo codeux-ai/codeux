@@ -1,10 +1,9 @@
 /** @vitest-environment jsdom */
 import { h } from "preact";
-import { cleanup, fireEvent, screen } from "@testing-library/preact";
+import { cleanup, render, fireEvent, screen } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { AgentMcpManagePanel } from "../AgentMcpManageModal.js";
-import { renderWithI18n, renderWithI18n as render } from "./render-with-i18n.js";
 import type { AgentMcpAccessConfig, CustomMcpServer } from "../../../types.js";
 import { TOOL_DEFINITIONS } from "../../../../../../src/contracts/mcp-tool-definitions.js";
 import { codeUxAgentMcpAccess, schedulerOnlyAgentMcpAccess } from "../../../lib/agent-mcp-display.js";
@@ -68,22 +67,6 @@ describe("AgentMcpManagePanel", () => {
     fireEvent.click(screen.getByRole("switch", { name: "Link Enabled Server" }));
     expect(screen.getByText("Enabled Server linked. Save Agent to persist MCP server access.")).toBeInTheDocument();
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ linkedServerIds: ["server_enabled"] }));
-  });
-
-  test("localizes German MCP controls while preserving server names", () => {
-    renderWithI18n(
-      <AgentMcpManagePanel
-        value={value}
-        onChange={vi.fn()}
-        onClose={vi.fn()}
-        availableServers={servers}
-      />,
-      "de",
-    );
-
-    expect(screen.getByText("MCP-Zugriff")).toBeInTheDocument();
-    expect(screen.getByText("Enabled Server")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Fertig" })).toBeInTheDocument();
   });
 
   test("starts from default-deny and enables non-dashboard Code UX access with scheduler off", () => {

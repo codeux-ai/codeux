@@ -35,14 +35,11 @@ import { InstructionFileCard } from "./components/agents/InstructionFileCard.js"
 import { InstructionFileEditorPanel } from "./components/agents/InstructionFileEditorPanel.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
 import { SectionDivider } from "./components/ui/SectionDivider.js";
-import { useDashboardI18n } from "./i18n/index.js";
-import type { DashboardMessageVariables, DashboardTextMessageKey } from "./i18n/index.js";
-import { agentsMessages } from "./i18n/messages/agents.js";
 
 /* ── Roster summary stat ── */
 type RosterStatProps = {
   label: string;
-  value: string;
+  value: number;
   accent: "signal" | "amber" | "rose" | "slate";
   icon: typeof Bot;
 };
@@ -101,10 +98,6 @@ type PageActionFeedback = {
 
 /* ── Main Page ── */
 export const AgentsPage: FunctionComponent = () => {
-  const { formatNumber, translate, translatePlural } = useDashboardI18n();
-  const t = (key: DashboardTextMessageKey<typeof agentsMessages>, variables?: DashboardMessageVariables): string => (
-    translate(agentsMessages, key, variables)
-  );
   const contentRef = useRef<HTMLElement>(null);
   const pushButtonRef = useRef<HTMLButtonElement>(null);
   const pushPickerRef = useRef<HTMLDivElement>(null);
@@ -304,7 +297,7 @@ export const AgentsPage: FunctionComponent = () => {
   const handleCreate = async (): Promise<void> => {
     if (!selectedProject) return;
     try {
-      setActionFeedback({ tone: "pending", message: t("creatingPreset") });
+      setActionFeedback({ tone: "pending", message: "Creating agent preset..." });
       const created = await createAgentPreset(selectedProject.id, {
         name: `Agent ${presets.length + 1}`,
         instructionMarkdown: "",
@@ -315,26 +308,26 @@ export const AgentsPage: FunctionComponent = () => {
       setSelectedPresetId(created.id);
       setIsEditing(true);
       setError(null);
-      setActionFeedback({ tone: "success", message: t("presetCreated") });
+      setActionFeedback({ tone: "success", message: "Agent preset created. Complete the required fields, then save." });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       setError(message);
-      setActionFeedback({ tone: "error", message: t("creationFailed", { error: message }), retry: () => void handleCreate() });
+      setActionFeedback({ tone: "error", message: `Agent creation failed: ${message}`, retry: () => void handleCreate() });
     }
   };
 
   const handleImport = async (presetId: string): Promise<void> => {
     setImportingId(presetId);
-    setActionFeedback({ tone: "pending", message: t("importingPreset") });
+    setActionFeedback({ tone: "pending", message: "Importing preset from markdown..." });
     try {
       const updated = await importAgentPresetFromMarkdown(presetId);
       setPresets((cur) => cur.map((p) => (p.id === updated.id ? updated : p)));
       setError(null);
-      setActionFeedback({ tone: "success", message: t("presetImported") });
+      setActionFeedback({ tone: "success", message: "Agent preset imported from markdown." });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       setError(message);
-      setActionFeedback({ tone: "error", message: t("importFailed", { error: message }), retry: () => void handleImport(presetId) });
+      setActionFeedback({ tone: "error", message: `Import failed: ${message}`, retry: () => void handleImport(presetId) });
     } finally {
       setImportingId(null);
     }
@@ -344,16 +337,16 @@ export const AgentsPage: FunctionComponent = () => {
     if (!selectedProject || !projectFileSavingEnabled) return;
     const preferredPresetId = selectedPresetId;
     setPullingFromFiles(true);
-    setActionFeedback({ tone: "pending", message: t("pullingPresets") });
+    setActionFeedback({ tone: "pending", message: "Pulling agent presets from project files..." });
     try {
       await pullAgentPresetsFromMarkdown(selectedProject.id);
       await refreshPresets(preferredPresetId);
       setError(null);
-      setActionFeedback({ tone: "success", message: t("presetsPulled") });
+      setActionFeedback({ tone: "success", message: "Agent presets pulled from project files." });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       setError(message);
-      setActionFeedback({ tone: "error", message: t("pullFailed", { error: message }), retry: () => void handlePullFromFiles() });
+      setActionFeedback({ tone: "error", message: `Pull failed: ${message}`, retry: () => void handlePullFromFiles() });
     } finally {
       setPullingFromFiles(false);
     }
@@ -363,16 +356,16 @@ export const AgentsPage: FunctionComponent = () => {
     if (!selectedProject || !projectFileSavingEnabled) return;
     const preferredPresetId = selectedPresetId;
     setPushingToFiles(true);
-    setActionFeedback({ tone: "pending", message: t("pushingPresets") });
+    setActionFeedback({ tone: "pending", message: "Pushing agent presets to project files..." });
     try {
       await pushAgentPresetsToMarkdown(selectedProject.id);
       await refreshPresets(preferredPresetId);
       setError(null);
-      setActionFeedback({ tone: "success", message: t("presetsPushed") });
+      setActionFeedback({ tone: "success", message: "Agent presets pushed to project files." });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       setError(message);
-      setActionFeedback({ tone: "error", message: t("pushFailed", { error: message }), retry: () => void handlePushToFiles() });
+      setActionFeedback({ tone: "error", message: `Push failed: ${message}`, retry: () => void handlePushToFiles() });
     } finally {
       setPushingToFiles(false);
     }
@@ -382,16 +375,16 @@ export const AgentsPage: FunctionComponent = () => {
     if (!projectFileSavingEnabled) return;
     const preferredPresetId = selectedPresetId;
     setExportingId(presetId);
-    setActionFeedback({ tone: "pending", message: t("pushingPreset") });
+    setActionFeedback({ tone: "pending", message: "Pushing agent preset to project file..." });
     try {
       await exportAgentPresetToMarkdown(presetId);
       await refreshPresets(preferredPresetId);
       setError(null);
-      setActionFeedback({ tone: "success", message: t("presetPushed") });
+      setActionFeedback({ tone: "success", message: "Agent preset pushed to project file." });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       setError(message);
-      setActionFeedback({ tone: "error", message: t("pushFailed", { error: message }), retry: () => void handlePushPresetToFile(presetId) });
+      setActionFeedback({ tone: "error", message: `Push failed: ${message}`, retry: () => void handlePushPresetToFile(presetId) });
     } finally {
       setExportingId(null);
     }
@@ -424,7 +417,7 @@ export const AgentsPage: FunctionComponent = () => {
       } else if (pushMode === "commit_and_push") {
         if (!result.pushedBranch) {
           setPushResult(null);
-          setError(t("noRemote"));
+          setError("Agent presets were committed locally, but no remote origin is configured for this repository.");
         } else {
           setPushResult({
             mode: pushMode,
@@ -435,7 +428,7 @@ export const AgentsPage: FunctionComponent = () => {
         }
       } else if (!result.pullRequestUrl) {
         setPushResult(null);
-        setError(t("noPullRequestUrl"));
+        setError("Agent presets were committed locally, but no pull request URL was returned.");
       } else {
         setPushResult({
           mode: pushMode,
@@ -455,17 +448,17 @@ export const AgentsPage: FunctionComponent = () => {
 
   const handleSave = async (presetId: string, next: Parameters<typeof updateAgentPreset>[1]): Promise<void> => {
     setSavingId(presetId);
-    setActionFeedback({ tone: "pending", message: t("savingPreset") });
+    setActionFeedback({ tone: "pending", message: "Saving agent preset..." });
     try {
       const updated = await updateAgentPreset(presetId, next);
       setPresets((cur) => cur.map((p) => (p.id === updated.id ? updated : p)));
       setIsEditing(false);
       setError(null);
-      setActionFeedback({ tone: "success", message: t("presetSaved") });
+      setActionFeedback({ tone: "success", message: "Agent preset saved." });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       setError(message);
-      setActionFeedback({ tone: "error", message: t("saveFailed", { error: message }), retry: () => void handleSave(presetId, next) });
+      setActionFeedback({ tone: "error", message: `Save failed: ${message}`, retry: () => void handleSave(presetId, next) });
     } finally {
       setSavingId(null);
     }
@@ -473,7 +466,7 @@ export const AgentsPage: FunctionComponent = () => {
 
   const handleDelete = async (presetId: string): Promise<void> => {
     setDeletingId(presetId);
-    setActionFeedback({ tone: "pending", message: t("deletingPreset") });
+    setActionFeedback({ tone: "pending", message: "Deleting agent preset..." });
     try {
       await deleteAgentPreset(presetId);
       setPresets((cur) => {
@@ -485,11 +478,11 @@ export const AgentsPage: FunctionComponent = () => {
         return next;
       });
       setError(null);
-      setActionFeedback({ tone: "success", message: t("presetDeleted") });
+      setActionFeedback({ tone: "success", message: "Agent preset deleted." });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       setError(message);
-      setActionFeedback({ tone: "error", message: t("deleteFailed", { error: message }), retry: () => void handleDelete(presetId) });
+      setActionFeedback({ tone: "error", message: `Delete failed: ${message}`, retry: () => void handleDelete(presetId) });
     } finally {
       setDeletingId(null);
     }
@@ -499,9 +492,9 @@ export const AgentsPage: FunctionComponent = () => {
     const projectId = selectedProject?.id;
     if (!projectId || projectId !== notice.projectId || updatingBaseAgentRole) return;
 
-    const roleLabel = notice.role === "planning_agent" ? t("planningAgent") : t("projectManager");
+    const roleLabel = notice.role === "planning_agent" ? "Planning agent" : "Project manager";
     setUpdatingBaseAgentRole(notice.role);
-    setActionFeedback({ tone: "pending", message: t("updatingAgentWithAi", { name: notice.selectedAgentName }) });
+    setActionFeedback({ tone: "pending", message: `Updating ${notice.selectedAgentName} with AI...` });
     try {
       await applyBaseAgentUpdate(projectId, notice.role);
       if (selectedProjectIdRef.current !== projectId) return;
@@ -517,14 +510,14 @@ export const AgentsPage: FunctionComponent = () => {
       setError(null);
       setActionFeedback({
         tone: "success",
-        message: t("baseUpdateSuccess", { role: roleLabel }),
+        message: `${roleLabel} compatibility instructions updated. Custom behavior and instructions were preserved.`,
       });
     } catch (updateError) {
       if (selectedProjectIdRef.current !== projectId) return;
       const message = updateError instanceof Error ? updateError.message : String(updateError);
       setActionFeedback({
         tone: "error",
-        message: t("baseUpdateFailed", { role: roleLabel, error: message }),
+        message: `${roleLabel} update failed: ${message}`,
         retry: () => void handleBaseAgentUpdate(notice),
       });
     } finally {
@@ -681,17 +674,17 @@ export const AgentsPage: FunctionComponent = () => {
 
     if (pushResult.mode === "commit_only") {
       return pushResult.committed
-        ? t("committedLocally")
-        : t("nothingToCommit");
+        ? "Agent presets were committed locally."
+        : "No agent preset changes were available to commit.";
     }
 
     if (pushResult.mode === "commit_and_push") {
-      return pushResult.pushedBranch ? t("pushedToBranch", { branch: pushResult.pushedBranch }) : null;
+      return pushResult.pushedBranch ? `Pushed agent presets to ${pushResult.pushedBranch}.` : null;
     }
 
     return pushResult.pullRequestUrl ? (
       <>
-        {t("openedPullRequestAt")} {" "}
+        Opened a pull request at{" "}
         <a
           href={pushResult.pullRequestUrl}
           target="_blank"
@@ -704,10 +697,10 @@ export const AgentsPage: FunctionComponent = () => {
         .
       </>
     ) : null;
-  }, [pushResult, translate]);
+  }, [pushResult]);
 
   return (
-    <PageContainer aria-label={t("agents")} containerRef={contentRef} padding="agents" className="gap-10 md:gap-14">
+    <PageContainer aria-label="Agents" containerRef={contentRef} padding="agents" className="gap-10 md:gap-14">
       <AgentsHero
         selectedProject={selectedProject}
         projectLoading={projectLoading}
@@ -730,23 +723,23 @@ export const AgentsPage: FunctionComponent = () => {
               ) : (
                 <GitBranch className="h-3.5 w-3.5" strokeWidth={2.3} />
               )}
-              {pushing ? t("pushing") : t("pushAgents")}
+              {pushing ? "Pushing..." : "Push Agents"}
             </button>
 
             {pushPickerOpen && (
               <div
                 ref={pushPickerRef}
                 role="dialog"
-                aria-label={t("pushAgents")}
+                aria-label="Push Agents"
                 className="absolute right-0 top-full z-20 mt-3 w-[min(92vw,24rem)] rounded-2xl border border-black/[0.08] bg-white/95 p-4 shadow-[0_16px_36px_rgba(15,23,42,0.14)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-void-800/95 dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)]"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-500">
-                      {t("pushAgents")}
+                      Push Agents
                     </div>
                     <p className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                      {t("pushDialogBody")}
+                      Choose where to send the current .code-ux/agents changes.
                     </p>
                   </div>
                   <button
@@ -754,15 +747,15 @@ export const AgentsPage: FunctionComponent = () => {
                     onClick={() => setPushPickerOpen(false)}
                     className="rounded-full border border-black/[0.06] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-black/[0.03] hover:text-slate-800 dark:border-white/[0.08] dark:text-slate-400 dark:hover:bg-white/[0.05] dark:hover:text-white"
                   >
-                    {t("close")}
+                    Close
                   </button>
                 </div>
 
                 <div className="mt-4 space-y-2">
                   {([
-                    { value: "commit_only", label: t("commitLocally"), description: t("commitLocallyBody") },
-                    { value: "commit_and_push", label: t("pushToBranch"), description: t("pushToBranchBody") },
-                    { value: "pull_request", label: t("openPullRequest"), description: t("openPullRequestBody") },
+                    { value: "commit_only", label: "Commit locally", description: "Create a local commit only." },
+                    { value: "commit_and_push", label: "Push to branch", description: "Commit, then push the branch to origin." },
+                    { value: "pull_request", label: "Open pull request", description: "Commit, push, and open a PR." },
                   ] as const).map((option) => (
                     <label
                       key={option.value}
@@ -793,7 +786,7 @@ export const AgentsPage: FunctionComponent = () => {
                 {pushMode !== "commit_only" && (
                   <label className="mt-4 flex flex-col gap-2">
                     <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
-                      {t("branchName")}
+                      Branch name
                     </span>
                     <input
                       type="text"
@@ -811,7 +804,7 @@ export const AgentsPage: FunctionComponent = () => {
                     onClick={() => setPushPickerOpen(false)}
                     className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-black/[0.03] hover:text-slate-900 dark:border-white/[0.06] dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
                   >
-                    {t("cancel")}
+                    Cancel
                   </button>
                   <button
                     type="button"
@@ -824,7 +817,7 @@ export const AgentsPage: FunctionComponent = () => {
                     ) : (
                       <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2.4} />
                     )}
-                    {pushing ? t("pushing") : t("push")}
+                    {pushing ? "Pushing..." : "Push"}
                   </button>
                 </div>
               </div>
@@ -838,11 +831,11 @@ export const AgentsPage: FunctionComponent = () => {
 
       {/* Roster summary strip — only when project is loaded */}
       {selectedProject && presets.length > 0 && (
-        <section aria-label={t("rosterSummary")} className="grid w-full grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-4">
-          <RosterStat label={t("totalAgents")} value={formatNumber(rosterStats.total)} accent="signal" icon={Bot} />
-          <RosterStat label={t("synced")} value={formatNumber(rosterStats.synced)} accent="signal" icon={ShieldCheck} />
-          <RosterStat label={t("drift")} value={formatNumber(rosterStats.drift)} accent={rosterStats.drift > 0 ? "amber" : "slate"} icon={AlertTriangle} />
-          <RosterStat label={t("databaseOnly")} value={formatNumber(rosterStats.local)} accent="slate" icon={Database} />
+        <section aria-label="Roster Summary" className="grid w-full grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-4">
+          <RosterStat label="Total Agents" value={rosterStats.total} accent="signal" icon={Bot} />
+          <RosterStat label="Synced" value={rosterStats.synced} accent="signal" icon={ShieldCheck} />
+          <RosterStat label="Drift" value={rosterStats.drift} accent={rosterStats.drift > 0 ? "amber" : "slate"} icon={AlertTriangle} />
+          <RosterStat label="Database Only" value={rosterStats.local} accent="slate" icon={Database} />
         </section>
       )}
 
@@ -885,7 +878,7 @@ export const AgentsPage: FunctionComponent = () => {
               onClick={actionFeedback.retry}
               className="rounded-full border border-current/25 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors hover:bg-current/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-current/30"
             >
-              {t("retry")}
+              Retry
             </button>
           )}
         </div>
@@ -898,12 +891,12 @@ export const AgentsPage: FunctionComponent = () => {
           className="flex min-h-[3rem] items-center gap-3 rounded-2xl border border-black/[0.06] bg-white/45 px-5 py-3 text-sm font-medium text-slate-500 backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.025] dark:text-slate-400"
         >
           <Loader2 className="h-4 w-4 animate-spin text-signal-500" aria-hidden="true" strokeWidth={2.2} />
-          {t("checkingBaseUpdates")}
+          Checking for base-agent updates...
         </div>
       )}
 
       {!baseAgentNoticesLoading && baseAgentUpdateNotices.length > 0 && (
-        <div className="flex flex-col gap-3" aria-label={t("baseAgentUpdates")}>
+        <div className="flex flex-col gap-3" aria-label="Base-agent updates">
           {baseAgentUpdateNotices.map((notice) => (
             <BaseAgentUpdateNotice
               key={notice.role}
@@ -921,14 +914,14 @@ export const AgentsPage: FunctionComponent = () => {
         <div className="flex items-start gap-3 rounded-2xl border border-black/[0.05] bg-white/40 px-5 py-3.5 text-[13px] leading-relaxed text-slate-500 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02] dark:text-slate-400">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" strokeWidth={2} />
           {projectFileSavingEnabled
-            ? t("mirroringEnabled")
-            : t("mirroringDisabled")}
+            ? "Markdown mirroring enabled — saving writes a companion file under .code-ux/agents."
+            : "Markdown mirroring disabled — edits stay in the database only."}
         </div>
       )}
 
       {/* Section divider — pure overview-style */}
       {selectedProject && presets.length > 0 && (
-        <SectionDivider label={t("roster")} className="py-1 md:py-2" />
+        <SectionDivider label="Roster" className="py-1 md:py-2" />
       )}
 
       {/* Content */}
@@ -937,20 +930,20 @@ export const AgentsPage: FunctionComponent = () => {
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-signal-500/10 text-signal-600 shadow-sm ring-1 ring-slate-900/5 dark:bg-signal-500/15 dark:text-signal-400 dark:ring-white/[0.06]">
             <Bot className="h-8 w-8 text-signal-600 dark:text-signal-400" strokeWidth={1.2} />
           </div>
-          <h3 className="mb-2 font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">{t("pickProjectTitle")}</h3>
-          <p className="max-w-sm text-sm leading-relaxed text-slate-500 dark:text-slate-400">{t("pickProjectBody")}</p>
+          <h3 className="mb-2 font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">Pick A Project To Begin</h3>
+          <p className="max-w-sm text-sm leading-relaxed text-slate-500 dark:text-slate-400">Choose a project from the top navigation and your roster of agents will load here.</p>
         </div>
       ) : presets.length === 0 && instructionFiles.length === 0 && !loading ? (
         <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-[1.9rem] border border-dashed border-black/[0.08] bg-white/40 px-8 py-16 text-center backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/40">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-signal-500/10 text-signal-600 shadow-sm ring-1 ring-slate-900/5 dark:bg-signal-500/15 dark:text-signal-400 dark:ring-white/[0.06]">
             <Bot className="h-8 w-8 text-signal-600 dark:text-signal-400" strokeWidth={1.2} />
           </div>
-          <h3 className="mb-2 font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">{t("quietWorkshopTitle")}</h3>
-          <p className="max-w-sm text-sm leading-relaxed text-slate-500 dark:text-slate-400">{t("quietWorkshopBody")}</p>
+          <h3 className="mb-2 font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">The Workshop Is Quiet</h3>
+          <p className="max-w-sm text-sm leading-relaxed text-slate-500 dark:text-slate-400">Spin up your first specialist. Give it a name, a personality, an avatar — and operator-grade system instructions.</p>
           <div className="mt-4">
             <button type="button" onClick={() => void handleCreate()} className="group inline-flex items-center gap-2 rounded-full bg-signal-500 px-6 py-3 text-sm font-bold text-white dark:text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:scale-[1.03] hover:bg-signal-400 hover:shadow-[0_0_32px_rgba(0,224,160,0.36)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2">
               <Plus className="h-4.5 w-4.5 transition-transform group-hover:rotate-90" strokeWidth={2.5} />
-              {t("createFirstAgent")}
+              Create First Agent
             </button>
           </div>
         </div>
@@ -962,11 +955,11 @@ export const AgentsPage: FunctionComponent = () => {
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between px-1">
                 <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
-                  {translatePlural(agentsMessages, "agentCount", presets.length, { count: formatNumber(presets.length) })}
+                  {presets.length} Agent{presets.length !== 1 ? "s" : ""}
                 </span>
                 {loading && (
                   <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-signal-500">
-                    {t("refreshing")}
+                    Refreshing…
                   </span>
                 )}
               </div>
@@ -991,7 +984,7 @@ export const AgentsPage: FunctionComponent = () => {
                   <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-signal-500/10 text-signal-600 dark:bg-signal-500/15 dark:text-signal-400">
                     <Plus className="h-5 w-5 transition-transform group-hover:rotate-90" strokeWidth={2.4} />
                   </span>
-                  <span className="text-[13px] font-bold text-slate-600 dark:text-slate-300">{t("createYourFirstAgent")}</span>
+                  <span className="text-[13px] font-bold text-slate-600 dark:text-slate-300">Create your first agent</span>
                 </button>
               )}
             </div>
@@ -1002,7 +995,7 @@ export const AgentsPage: FunctionComponent = () => {
                 <div className="flex items-center gap-3 px-1">
                   <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
                     <FileText className="h-3 w-3" strokeWidth={2.4} />
-                    {t("instructionFiles")}
+                    Instruction Files
                   </span>
                   <div className="h-px flex-1 bg-gradient-to-r from-black/[0.08] to-transparent dark:from-white/[0.08]" />
                 </div>
@@ -1068,7 +1061,7 @@ export const AgentsPage: FunctionComponent = () => {
                   <Bot className="h-7 w-7" strokeWidth={1.6} />
                 </div>
                 <p className="max-w-xs text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                  {t("selectAgentOrFile")}
+                  Select an agent or an instruction file from the left to view and edit it.
                 </p>
               </div>
             )}

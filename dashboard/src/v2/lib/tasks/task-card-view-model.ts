@@ -1,7 +1,8 @@
 import type { Task, TaskStatus, TaskExecutorType } from "../../types.js";
 import type { CiStatusPresentation } from "../ci-status-presentation.js";
 import { type LiveTaskEnrichment } from "./live-task-enrichment.js";
-import { formatDuration } from "../format-duration.js";
+import type { DashboardLocale } from "../../i18n/locales.js";
+import { translateTask, translateTaskPlural } from "../../i18n/messages/tasks.js";
 
 export interface DependencyIndicator {
   recordId: string;
@@ -16,6 +17,7 @@ export interface DependencyIndicator {
 
 export interface TaskCardViewModel {
   task: Task;
+  presentationLocale?: DashboardLocale;
   humanizedCreatedAt: string;
   executorLabel: string;
   dependencyIndicators: DependencyIndicator[];
@@ -51,6 +53,7 @@ export interface TaskCardViewModelOptions {
   taskPullRequestsEnabled?: boolean;
   ciStatusPresentation?: CiStatusPresentation | null;
   ciStatusSourceSignature?: string;
+  locale?: DashboardLocale;
 }
 
 const EXECUTOR_LABEL: Record<TaskExecutorType, string> = {
@@ -60,29 +63,45 @@ const EXECUTOR_LABEL: Record<TaskExecutorType, string> = {
   mcp_worker: "Worker",
 };
 
-export function formatTimeAgo(iso: string, now: number = Date.now()): string {
+export function formatTaskDuration(totalSeconds: number, locale: DashboardLocale = "en"): string {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+  const number = new Intl.NumberFormat(locale);
+  if (locale === "en") {
+    if (hours > 0) return `${number.format(hours)}h ${number.format(minutes)}m ${number.format(remainingSeconds)}s`;
+    if (minutes > 0) return `${number.format(minutes)}m ${number.format(remainingSeconds)}s`;
+    return `${number.format(remainingSeconds)}s`;
+  }
+  if (hours > 0) return `${number.format(hours)} Std. ${number.format(minutes)} Min. ${number.format(remainingSeconds)} Sek.`;
+  if (minutes > 0) return `${number.format(minutes)} Min. ${number.format(remainingSeconds)} Sek.`;
+  return `${number.format(remainingSeconds)} Sek.`;
+}
+
+export function formatTimeAgo(iso: string, now: number = Date.now(), locale: DashboardLocale = "en"): string {
   const timestamp = new Date(iso).getTime();
   if (isNaN(timestamp)) {
     return "--";
   }
 
   const mins = Math.floor((now - timestamp) / 60000);
-  if (mins < 0) return "just now";
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 0) return translateTask(locale, "justNow");
+  if (mins < 60) return translateTask(locale, "minutesAgo", { count: new Intl.NumberFormat(locale).format(mins) });
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+  if (hrs < 24) return translateTask(locale, "hoursAgo", { count: new Intl.NumberFormat(locale).format(hrs) });
+  return translateTask(locale, "daysAgo", { count: new Intl.NumberFormat(locale).format(Math.floor(hrs / 24)) });
 }
 
 export function getExecutorLabel(executorType: TaskExecutorType): string {
   return EXECUTOR_LABEL[executorType] || "Unknown";
 }
 
-export function getDependencyPresentation(status: TaskStatus, isKnown = true): Pick<DependencyIndicator, "stateLabel" | "stateDescription" | "isBlocking"> {
+export function getDependencyPresentation(status: TaskStatus, isKnown = true, locale: DashboardLocale = "en"): Pick<DependencyIndicator, "stateLabel" | "stateDescription" | "isBlocking"> {
   if (!isKnown) {
     return {
-      stateLabel: "Unknown",
-      stateDescription: "Dependency record is missing",
+      stateLabel: translateTask(locale, "unknown"),
+      stateDescription: translateTask(locale, "dependencyMissing"),
       isBlocking: true,
     };
   }
@@ -90,49 +109,49 @@ export function getDependencyPresentation(status: TaskStatus, isKnown = true): P
   switch (status) {
     case "completed":
       return {
-        stateLabel: "Resolved",
-        stateDescription: "Dependency completed",
+        stateLabel: translateTask(locale, "resolved"),
+        stateDescription: translateTask(locale, "dependencyCompleted"),
         isBlocking: false,
       };
     case "coding_completed":
       return {
-        stateLabel: "Ready for QA",
-        stateDescription: "Dependency coding is complete and awaiting QA",
+        stateLabel: translateTask(locale, "readyForQa"),
+        stateDescription: translateTask(locale, "dependencyAwaitingQa"),
         isBlocking: true,
       };
     case "in_progress":
       return {
-        stateLabel: "In progress",
-        stateDescription: "Dependency is currently running",
+        stateLabel: translateTask(locale, "inProgressLower"),
+        stateDescription: translateTask(locale, "dependencyRunning"),
         isBlocking: true,
       };
     case "QA_REVIEW_FAILED":
       return {
-        stateLabel: "QA failed",
-        stateDescription: "Dependency failed QA review",
+        stateLabel: translateTask(locale, "qaFailedLower"),
+        stateDescription: translateTask(locale, "dependencyFailedQa"),
         isBlocking: true,
       };
     case "pending":
     default:
       return {
-        stateLabel: "Blocked",
-        stateDescription: "Dependency is waiting to start",
+        stateLabel: translateTask(locale, "blocked"),
+        stateDescription: translateTask(locale, "dependencyWaiting"),
         isBlocking: true,
       };
   }
 }
 
-function buildDependencyActionLabel(indicators: DependencyIndicator[]): string {
+function buildDependencyActionLabel(indicators: DependencyIndicator[], locale: DashboardLocale): string {
   if (indicators.length === 0) {
-    return "Dependencies clear";
+    return translateTask(locale, "dependenciesClear");
   }
 
   const blockerCount = indicators.filter((dep) => dep.isBlocking).length;
   if (blockerCount === 0) {
-    return `${indicators.length} dependencies clear`;
+    return translateTask(locale, "dependenciesClearCount", { count: new Intl.NumberFormat(locale).format(indicators.length) });
   }
 
-  return `${blockerCount} dependency ${blockerCount === 1 ? "blocker" : "blockers"}`;
+  return translateTaskPlural(locale, "dependencyBlockers", blockerCount, { count: new Intl.NumberFormat(locale).format(blockerCount) });
 }
 
 function buildTaskCardActions(
@@ -140,46 +159,46 @@ function buildTaskCardActions(
   prUrl?: string,
   hasLiveRuntime = false,
   taskPullRequestsEnabled = true,
+  locale: DashboardLocale = "en",
 ): TaskCardActionDescriptor[] {
-  const target = `task ${task.id}: ${task.title}`;
   const actions: TaskCardActionDescriptor[] = [
     {
       kind: "rerun",
-      label: "Rerun",
-      ariaLabel: `Rerun ${target}`,
-      title: "Rerun is available from the Live task detail workflow.",
-      disabledReason: `Open Live to rerun task ${task.id}.`,
+      label: translateTask(locale, "rerun"),
+      ariaLabel: translateTask(locale, "rerunTarget", { id: task.id, title: task.title }),
+      title: translateTask(locale, "rerunLiveTitle"),
+      disabledReason: translateTask(locale, "rerunLiveReason", { id: task.id }),
     },
     {
       kind: "preview",
-      label: "Preview",
-      ariaLabel: `Open sprint preview for ${target}`,
-      title: task.sprintId ? "Open the sprint preview workspace." : "Select a sprint before opening preview.",
+      label: translateTask(locale, "preview"),
+      ariaLabel: translateTask(locale, "previewTarget", { id: task.id, title: task.title }),
+      title: translateTask(locale, task.sprintId ? "previewOpen" : "previewSelectSprint"),
       href: task.sprintId ? `/browser?sprintId=${encodeURIComponent(task.sprintId)}` : undefined,
-      disabledReason: task.sprintId ? undefined : `Task ${task.id} has no sprint preview.`,
+      disabledReason: task.sprintId ? undefined : translateTask(locale, "previewUnavailable", { id: task.id }),
     },
   ];
 
   if (taskPullRequestsEnabled || prUrl) {
     actions.push({
       kind: "pull_request",
-      label: prUrl ? "PR" : "PR pending",
-      ariaLabel: `Open pull request for ${target}`,
-      title: prUrl ? "Open pull request in a new tab." : "No pull request is available yet.",
+      label: prUrl ? "PR" : translateTask(locale, "prPending"),
+      ariaLabel: translateTask(locale, "prTarget", { id: task.id, title: task.title }),
+      title: translateTask(locale, prUrl ? "prOpenNewTab" : "prNoAvailable"),
       href: prUrl,
       external: true,
-      disabledReason: prUrl ? undefined : `No pull request is available for task ${task.id} yet.`,
+      disabledReason: prUrl ? undefined : translateTask(locale, "prNoAvailableTask", { id: task.id }),
     });
   }
 
   actions.push(
     {
       kind: "live_runtime",
-      label: hasLiveRuntime ? "Live" : "Live idle",
-      ariaLabel: `Open live runtime for ${target}`,
-      title: hasLiveRuntime ? "Open the live runtime page." : "Runtime has not started for this task.",
+      label: translateTask(locale, hasLiveRuntime ? "live" : "liveIdle"),
+      ariaLabel: translateTask(locale, "liveTarget", { id: task.id, title: task.title }),
+      title: translateTask(locale, hasLiveRuntime ? "liveOpen" : "liveNotStartedTask"),
       href: hasLiveRuntime ? "/live" : undefined,
-      disabledReason: hasLiveRuntime ? undefined : `Live runtime has not started for task ${task.id}.`,
+      disabledReason: hasLiveRuntime ? undefined : translateTask(locale, "liveNotStartedTaskId", { id: task.id }),
     },
   );
 
@@ -192,20 +211,21 @@ export function buildTaskCardViewModel(
   liveEnrichment?: LiveTaskEnrichment,
   options: TaskCardViewModelOptions = {},
 ): TaskCardViewModel {
+  const locale = options.locale ?? "en";
   const dependencyIndicators: DependencyIndicator[] = (task.dependsOnTaskIds || []).map(depId => {
     const depTask = taskLookup.get(depId);
     if (!depTask) {
-      const presentation = getDependencyPresentation("pending", false);
+      const presentation = getDependencyPresentation("pending", false, locale);
       return {
         recordId: depId,
         id: depId,
-        title: `Unknown Task (${depId})`,
+        title: translateTask(locale, "unknownTask", { id: depId }),
         status: "pending", // default fallback
         isKnown: false,
         ...presentation,
       };
     }
-    const presentation = getDependencyPresentation(depTask.status);
+    const presentation = getDependencyPresentation(depTask.status, true, locale);
     return {
       recordId: depTask.recordId,
       id: depTask.id,
@@ -216,7 +236,7 @@ export function buildTaskCardViewModel(
     };
   });
   const liveRunningTime = liveEnrichment?.liveTotalSeconds && liveEnrichment.liveTotalSeconds > 0
-    ? formatDuration(liveEnrichment.liveTotalSeconds)
+    ? formatTaskDuration(liveEnrichment.liveTotalSeconds, locale)
     : undefined;
   const hasLiveRuntime = Boolean(liveEnrichment?.sessionId || liveEnrichment?.sessionState || liveRunningTime);
   const prUrl = liveEnrichment?.prUrl || undefined;
@@ -225,18 +245,19 @@ export function buildTaskCardViewModel(
 
   return {
     task,
-    humanizedCreatedAt: formatTimeAgo(task.createdAt),
+    presentationLocale: locale,
+    humanizedCreatedAt: formatTimeAgo(task.createdAt, Date.now(), locale),
     executorLabel: getExecutorLabel(task.executorType),
     dependencyIndicators,
-    dependencyActionLabel: buildDependencyActionLabel(dependencyIndicators),
-    qaReviewLabel: task.latestReview ? undefined : "QA no review",
+    dependencyActionLabel: buildDependencyActionLabel(dependencyIndicators, locale),
+    qaReviewLabel: task.latestReview ? undefined : translateTask(locale, "qaNoReview"),
     ciStatusPresentation: options.ciStatusPresentation ?? null,
     ciStatusSourceSignature: options.ciStatusSourceSignature ?? "",
-    optimisticSavingLabel: task.isOptimistic ? "Saving task changes" : null,
+    optimisticSavingLabel: task.isOptimistic ? translateTask(locale, "savingTaskChanges") : null,
     dragStateLabel: task.isOptimistic
-      ? "Pointer drag disabled while task changes are saving; keyboard reordering is not supported"
-      : "Pointer drag only; keyboard reordering is not supported",
-    actions: buildTaskCardActions(task, prUrl, hasLiveRuntime, taskPullRequestsEnabled),
+      ? translateTask(locale, "optimisticDragState")
+      : translateTask(locale, "dragPointerOnly"),
+    actions: buildTaskCardActions(task, prUrl, hasLiveRuntime, taskPullRequestsEnabled, locale),
     selfReflectionRating: task.selfReflectionRating,
     sessionId: liveEnrichment?.sessionId,
     sessionState: liveEnrichment?.sessionState,

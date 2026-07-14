@@ -7,8 +7,6 @@ import {
   setAgentKnowledgeSubscriptions,
   type KnowledgeDocument,
 } from "../../lib/knowledge-api.js";
-import { useDashboardI18n } from "../../i18n/index.js";
-import { agentsMessages } from "../../i18n/messages/agents.js";
 
 /**
  * Per-agent knowledge subscription manager. Lets an agent subscribe to documents from the project's
@@ -21,7 +19,6 @@ export const AgentKnowledgePanel: FunctionComponent<{
   disabled?: boolean;
   onSubscriptionsChanged?: (documentIds: string[]) => void;
 }> = ({ agentPresetId, projectId, disabled, onSubscriptionsChanged }) => {
-  const { formatNumber, translate, translatePlural } = useDashboardI18n();
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
@@ -55,12 +52,12 @@ export const AgentKnowledgePanel: FunctionComponent<{
       setSelected(new Set(persisted));
       onSubscriptionsChanged?.(persisted);
     } catch (err) {
-      setError(err instanceof Error ? err.message : translate(agentsMessages, "failedSubscription"));
+      setError(err instanceof Error ? err.message : "Failed to update subscription");
       setSelected(selected);
     } finally {
       setSavingId(null);
     }
-  }, [agentPresetId, onSubscriptionsChanged, selected, translate]);
+  }, [agentPresetId, onSubscriptionsChanged, selected]);
 
   const toggle = useCallback(async (documentId: string) => {
     const next = new Set(selected);
@@ -113,9 +110,9 @@ export const AgentKnowledgePanel: FunctionComponent<{
     return (
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-black/[0.08] px-6 py-10 text-center dark:border-white/[0.08]">
         <Library className="h-7 w-7 text-slate-300 dark:text-slate-600" strokeWidth={1.8} />
-        <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">{translate(agentsMessages, "knowledgeEmpty")}</p>
+        <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">The knowledge library is empty.</p>
         <a href="/knowledge" className="inline-flex items-center gap-1.5 text-[12px] font-bold text-signal-600 hover:underline dark:text-signal-400">
-          {translate(agentsMessages, "addKnowledgeDocuments")} <ExternalLink className="h-3 w-3" />
+          Add documents on the Knowledge page <ExternalLink className="h-3 w-3" />
         </a>
       </div>
     );
@@ -124,8 +121,8 @@ export const AgentKnowledgePanel: FunctionComponent<{
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 dark:text-slate-500">
-        <span>{translate(agentsMessages, "knowledgeSummary", { selected: formatNumber(selectedCount), total: formatNumber(documents.length) })}</span>
-        {selectedCount > 0 && <span>{translate(agentsMessages, "manifestTokens", { count: formatNumber(manifestTokens) })}</span>}
+        <span>{selectedCount} subscribed · {documents.length} in library</span>
+        {selectedCount > 0 && <span>~{manifestTokens} tok manifest</span>}
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -135,7 +132,7 @@ export const AgentKnowledgePanel: FunctionComponent<{
             type="search"
             value={query}
             onInput={(event) => setQuery(event.currentTarget.value)}
-            placeholder={translate(agentsMessages, "searchKnowledge")}
+            placeholder="Search knowledge"
             className="w-full rounded-xl border border-black/[0.06] bg-white/50 py-2 pl-8 pr-3 text-[12px] font-medium text-slate-700 outline-none transition-colors placeholder:text-slate-400 focus:border-signal-500/40 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-200 dark:placeholder:text-slate-500"
           />
         </div>
@@ -147,7 +144,7 @@ export const AgentKnowledgePanel: FunctionComponent<{
             className="inline-flex items-center gap-1.5 rounded-xl border border-black/[0.06] bg-white/45 px-2.5 py-2 text-[11px] font-bold text-slate-500 transition-colors hover:bg-white hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.07] dark:hover:text-white"
           >
             {savingId === "__bulk__" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckSquare className="h-3.5 w-3.5" strokeWidth={2.3} />}
-            {translate(agentsMessages, "selectAll")}
+            Select all
           </button>
           <button
             type="button"
@@ -156,7 +153,7 @@ export const AgentKnowledgePanel: FunctionComponent<{
             className="inline-flex items-center gap-1.5 rounded-xl border border-black/[0.06] bg-white/45 px-2.5 py-2 text-[11px] font-bold text-slate-500 transition-colors hover:bg-white hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.07] dark:hover:text-white"
           >
             <Square className="h-3.5 w-3.5" strokeWidth={2.3} />
-            {translate(agentsMessages, "unselectAll")}
+            Unselect all
           </button>
         </div>
       </div>
@@ -166,7 +163,7 @@ export const AgentKnowledgePanel: FunctionComponent<{
       <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto pr-1">
         {filteredDocuments.length === 0 ? (
           <div className="rounded-xl border border-dashed border-black/[0.08] px-4 py-8 text-center text-[12px] font-semibold text-slate-400 dark:border-white/[0.08] dark:text-slate-500">
-            {translate(agentsMessages, "noMatchingKnowledge")}
+            No matching knowledge documents.
           </div>
         ) : filteredDocuments.map((doc) => {
           const isSelected = selected.has(doc.id);
@@ -191,9 +188,7 @@ export const AgentKnowledgePanel: FunctionComponent<{
                 {doc.summary && <div className="truncate text-[11px] text-slate-400 dark:text-slate-500">{doc.summary}</div>}
               </div>
               <span className={`shrink-0 text-[10px] font-bold ${isReady ? "text-slate-400" : "text-amber-500"}`}>
-                {isReady
-                  ? translatePlural(agentsMessages, "chunkCount", doc.chunkCount, { count: formatNumber(doc.chunkCount) })
-                  : translate(agentsMessages, doc.status === "error" ? "errorStatus" : "embedding")}
+                {isReady ? `${doc.chunkCount} chunks` : doc.status === "error" ? "error" : "embedding…"}
               </span>
             </button>
           );
