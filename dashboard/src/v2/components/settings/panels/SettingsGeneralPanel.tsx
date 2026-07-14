@@ -6,7 +6,7 @@ import { ActionFeedbackRegion } from "../../ui/ActionFeedbackRegion.js";
 import { NumberInput, OptionCardChoiceGroup, PillChoiceGroup, Row, Toggle, TextInput, SelectInput } from "../SettingsFormFields.js";
 import { LocalFilePickerField } from "../LocalFilePickerField.js";
 import { OpenSourceSoftwareModal } from "../OpenSourceSoftwareModal.js";
-import type { ProjectSettings } from "../../../../../../src/contracts/settings-scope-types.js";
+import type { ProjectSettings, SystemRuntimeSettings } from "../../../../../../src/contracts/settings-scope-types.js";
 import type { DashboardExperienceMode } from "../../../../types.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
 import { Bot, Cog, Database, ExternalLink, FolderOpen, RotateCcw, Scale, SlidersHorizontal, Sparkles } from "lucide-preact";
@@ -15,7 +15,7 @@ import { useProjectData } from "../../../context/project-data.js";
 import { dashboardExperienceModeOptions } from "../../../lib/experience-mode.js";
 import { getSafeUrl } from "../../../lib/safe-url.js";
 import { SHARED_INTERACTION_CLASSES } from "../../ui/Button.js";
-import { getSettingsOperationsNumberError, useSettingsOperationsTranslations } from "../../../i18n/messages/settings-operations.js";
+import { getSettingsOperationsNumberError, useSettingsOperationsTranslations, type SettingsOperationsTranslate } from "../../../i18n/messages/settings-operations.js";
 
 const CODEUX_LICENSE_URL = getSafeUrl("https://github.com/codeux-ai/codeux/blob/main/LICENSE");
 
@@ -26,6 +26,24 @@ const toRestartSprintPolicy = (value: string) => (
 const toRestartInvocationPolicy = (value: string) => (
   value === "cancel" || value === "restart" ? value : "continue"
 );
+
+const getRuntimeLogLevelCaption = (
+  value: SystemRuntimeSettings["consoleLogLevel"],
+  t: SettingsOperationsTranslate,
+): string => {
+  switch (value) {
+    case "off":
+      return t("Off");
+    case "debug":
+      return t("Debug");
+    case "info":
+      return t("Info");
+    case "warn":
+      return t("Warn");
+    case "error":
+      return t("Error");
+  }
+};
 
 const ExperienceModeCard: FunctionComponent<{
   settings: ProjectSettings;
@@ -456,8 +474,8 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
             accent="sky"
             highlights={[
               { label: t("Dashboard"), value: t("Port {port}", { port: systemSettings?.runtime.dashboardPort ?? 4444 }), tone: "active" },
-              { label: t("Console"), value: systemSettings?.runtime.consoleLogLevel ?? "info" },
-              { label: t("Debug file"), value: systemSettings?.runtime.debugLogFileLevel ?? "error" },
+              { label: t("Console"), value: getRuntimeLogLevelCaption(systemSettings?.runtime.consoleLogLevel ?? "info", t) },
+              { label: t("Debug file"), value: getRuntimeLogLevelCaption(systemSettings?.runtime.debugLogFileLevel ?? "error", t) },
             ]}
           >
             <Row label={t("Dashboard port")} description={t("System-wide HTTP port for the dashboard server.")}>

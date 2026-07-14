@@ -3,7 +3,7 @@ import type { ProjectSettings } from "../../../../types.js";
 import { SelectInput, NumberInput } from "../SettingsFormFields.js";
 import { Row } from "./SharedPanelComponents.js";
 import { getProviderModelOptions } from "../../../lib/settings-view-models.js";
-import { useSettingsOperationsTranslations } from "../../../i18n/messages/settings-operations.js";
+import { getSettingsOperationsNumberError, useSettingsOperationsTranslations } from "../../../i18n/messages/settings-operations.js";
 
 export const WorkerPanel: FunctionComponent<{
   settings: ProjectSettings;
@@ -65,6 +65,7 @@ export const WorkerPanel: FunctionComponent<{
               value={settings.workers.maxConcurrency}
               min={1}
               max={100}
+              errorText={getSettingsOperationsNumberError(settings.workers.maxConcurrency, 1, 100, t)}
               onChange={(value) => update({
                 workers: {
                   ...settings.workers,
@@ -78,6 +79,7 @@ export const WorkerPanel: FunctionComponent<{
               value={settings.workers.timeoutSeconds}
               min={60}
               max={3600}
+              errorText={getSettingsOperationsNumberError(settings.workers.timeoutSeconds, 60, 3600, t)}
               onChange={(value) => update({
                 workers: {
                   ...settings.workers,

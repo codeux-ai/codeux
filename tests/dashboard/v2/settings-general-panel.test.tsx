@@ -11,6 +11,7 @@ import { fetchLocalFiles } from "../../../dashboard/src/v2/lib/project-api.js";
 import { cloneProjectSettings } from "../../../dashboard/src/v2/lib/settings/project-overrides.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
+import { SettingsDetailWorkspaceProvider } from "../../../dashboard/src/v2/components/settings/panels/SharedPanelComponents.js";
 
 expect.extend(matchers);
 
@@ -357,5 +358,29 @@ describe("SettingsGeneralPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Durchsuchen" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Path is outside allowed roots");
     expect(screen.getByLabelText("Container-Einrichtungsskript")).toHaveValue(setupScriptPath);
+  });
+
+  it("localizes German System Runtime summary values without changing logging enums", () => {
+    const state = createSystemState();
+    state.systemSettings.runtime.consoleLogLevel = "warn";
+    state.systemSettings.runtime.debugLogFileLevel = "error";
+
+    render(
+      <DashboardI18nProvider initialLocale="de">
+        <SettingsDetailWorkspaceProvider>
+          <SettingsGeneralPanel state={state as any} />
+        </SettingsDetailWorkspaceProvider>
+      </DashboardI18nProvider>,
+    );
+
+    const runtimeCard = screen.getByRole("heading", { name: "Systemlaufzeit" }).closest("section");
+    expect(runtimeCard).not.toBeNull();
+    expect(within(runtimeCard!).getByText("Warnung")).toBeInTheDocument();
+    expect(within(runtimeCard!).getByText("Fehler")).toBeInTheDocument();
+    expect(within(runtimeCard!).queryByText("warn")).not.toBeInTheDocument();
+    expect(within(runtimeCard!).queryByText("error")).not.toBeInTheDocument();
+    expect(state.systemSettings.runtime.consoleLogLevel).toBe("warn");
+    expect(state.systemSettings.runtime.debugLogFileLevel).toBe("error");
+    expect(state.updateSystem).not.toHaveBeenCalled();
   });
 });
