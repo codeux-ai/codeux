@@ -3,6 +3,8 @@ import { LayoutDashboard, Plus } from "lucide-preact";
 import { Button } from "../ui/Button.js";
 import type { CustomDashboardRecord } from "../../types.js";
 import { getDashboardStatusView } from "../../lib/custom-dashboard-view-models.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { customDashboardMessages } from "../../i18n/messages/custom-dashboards.js";
 
 interface CustomDashboardListProps {
   dashboards: CustomDashboardRecord[];
@@ -18,20 +20,23 @@ export const CustomDashboardList: FunctionComponent<CustomDashboardListProps> = 
   onSelect,
   onCreate,
   creating,
-}) => (
-  <section
-    aria-label="Custom dashboards"
+}) => {
+  const { locale, translate } = useDashboardI18n();
+
+  return (
+    <section
+    aria-label={translate(customDashboardMessages, "dashboardsListAriaLabel")}
     className="flex min-h-[18rem] flex-col rounded-[1.4rem] border border-black/[0.08] bg-white/70 p-3 shadow-[0_18px_52px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.05]"
   >
     <div className="mb-3 flex items-center justify-between gap-3 px-1">
-      <h2 className="font-display text-sm font-bold text-slate-900 dark:text-white">Dashboards</h2>
+      <h2 className="font-display text-sm font-bold text-slate-900 dark:text-white">{translate(customDashboardMessages, "dashboardsListTitle")}</h2>
       <Button size="sm" variant="signal" icon={Plus} pending={creating} onClick={onCreate}>
-        New
+        {translate(customDashboardMessages, "newDashboard")}
       </Button>
     </div>
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
       {dashboards.map((dashboard) => {
-        const status = getDashboardStatusView(dashboard.status);
+        const status = getDashboardStatusView(dashboard.status, locale);
         const active = dashboard.id === selectedDashboardId;
         return (
           <button
@@ -63,5 +68,6 @@ export const CustomDashboardList: FunctionComponent<CustomDashboardListProps> = 
         );
       })}
     </div>
-  </section>
-);
+    </section>
+  );
+};

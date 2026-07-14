@@ -10,6 +10,9 @@ import {
   createDefaultCustomDashboardDraft,
   getDashboardStatusView,
   getRevisionValidationLabel,
+  getValidationIssueExplanation,
+  getValidationReportSummary,
+  getValidationStageStateLabel,
   getValidationStages,
   hasDraftChanged,
   parseJsonDraft,
@@ -112,5 +115,25 @@ describe("custom dashboard view models", () => {
 
     expect(hasDraftChanged(dashboard, draft)).toBe(false);
     expect(hasDraftChanged(dashboard, { ...draft, title: "Changed" })).toBe(true);
+  });
+
+  it("translates German presentation through stable identifiers and preserves detached diagnostics", () => {
+    expect(getDashboardStatusView("published", "de").label).toBe("Veröffentlicht");
+    expect(getRevisionValidationLabel("building", "de")).toBe("Wird gebaut");
+    expect(getValidationStages("running", "de").map((stage) => stage.label)).toEqual(["Build", "Start", "Systemzustand"]);
+    expect(getValidationStageStateLabel("pending", "de")).toBe("Ausstehend");
+
+    const parseFailure = parseJsonDraft("{", "Manifest", "de");
+    expect(parseFailure.ok).toBe(false);
+    expect(parseFailure.ok ? "" : parseFailure.message).toContain("Manifest enthält ungültiges JSON:");
+
+    const rawDiagnostic = "vite build failed at src/dashboard.tsx:17";
+    expect(getValidationIssueExplanation({ field: "runtime", code: "validation_failed", message: rawDiagnostic }, "de")).toBe(rawDiagnostic);
+    expect(getValidationIssueExplanation({ field: "runtime", code: "container_missing", message: "Validation container is no longer present." }, "de")).toBe("Der Validierungscontainer ist nicht mehr vorhanden.");
+    expect(getValidationReportSummary({
+      valid: false,
+      summary: rawDiagnostic,
+      issues: [{ field: "runtime", code: "validation_failed", message: rawDiagnostic }],
+    }, "de")).toBe(rawDiagnostic);
   });
 });
