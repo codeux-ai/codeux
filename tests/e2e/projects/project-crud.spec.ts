@@ -13,7 +13,6 @@ async function prepareProjectsPage(page: Page, request: APIRequestContext): Prom
   await suppressDashboardTour(page);
   await page.addInitScript(() => {
     localStorage.setItem('codeux:sidebar:minimized', 'false');
-    localStorage.setItem('codeux.dashboard.locale.v1', 'de');
   });
 }
 
@@ -36,18 +35,18 @@ async function findProjectByName(request: APIRequestContext, projectName: string
 }
 
 function projectCard(page: Page, projectName: string): Locator {
-  return page.getByRole('article', { name: `Projekt: ${projectName}`, exact: true });
+  return page.getByRole('article', { name: `Project: ${projectName}`, exact: true });
 }
 
 async function selectProjectCard(page: Page, projectName: string): Promise<void> {
   const card = projectCard(page, projectName);
-  const selectedButton = card.getByRole('button', { name: `Ausgewähltes Projekt: ${projectName}`, exact: true });
+  const selectedButton = card.getByRole('button', { name: `Selected project: ${projectName}`, exact: true });
   if (await selectedButton.isVisible()) {
     await selectedButton.click();
     return;
   }
 
-  await card.getByRole('button', { name: `Projekt auswählen: ${projectName}`, exact: true }).click();
+  await card.getByRole('button', { name: `Select project: ${projectName}`, exact: true }).click();
   await expect(selectedButton).toBeVisible();
 }
 
@@ -65,28 +64,28 @@ test.describe('project CRUD lifecycle', () => {
     }
   });
 
-  test('creates, selects, and deletes a local project through the German Projects UI', async ({ page, request }, testInfo) => {
+  test('creates, selects, and deletes a local project through the Projects UI', async ({ page, request }, testInfo) => {
     const prefix = createE2eFixturePrefix({ testInfo, fixtureKey: 'project-crud' });
     const projectName = `${prefix} local checkout`;
     const checkoutPath = process.cwd();
 
     await page.goto('/projects');
     await hideDashboardAssistant(page);
-    await expect(page.getByRole('heading', { name: 'Projekte verwalten' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Manage Projects' })).toBeVisible();
 
-    await page.getByRole('button', { name: 'Projekt hinzufügen' }).last().click();
-    const dialog = page.getByRole('dialog', { name: /Projekt hinzufügen/i });
+    await page.getByRole('button', { name: 'Add Project' }).last().click();
+    const dialog = page.getByRole('dialog', { name: /Add Project/i });
     await expect(dialog).toBeVisible();
-    await dialog.getByLabel(/Projektname/).fill(projectName);
-    await dialog.getByRole('button', { name: 'Lokales Projekt' }).click();
-    await dialog.getByLabel(/Verzeichnispfad/).fill(checkoutPath);
+    await dialog.getByLabel(/Project Name/).fill(projectName);
+    await dialog.getByRole('button', { name: 'Local Project' }).click();
+    await dialog.getByLabel(/Directory Path/).fill(checkoutPath);
 
-    const setupCheckbox = dialog.getByLabel(/Mit Projekteinrichtungs-Agent initialisieren/);
+    const setupCheckbox = dialog.getByLabel(/Initialize with Project Setup Agent/);
     await expect(setupCheckbox).toBeChecked();
-    await dialog.getByText('Mit Projekteinrichtungs-Agent initialisieren').click();
+    await dialog.getByText('Initialize with Project Setup Agent').click();
     await expect(setupCheckbox).not.toBeChecked();
 
-    await dialog.getByRole('button', { name: 'Projekt hinzufügen' }).click();
+    await dialog.getByRole('button', { name: 'Add Project' }).click();
     await expect(dialog).toBeHidden();
 
     const createdProject = await findProjectByName(request, projectName);
@@ -106,10 +105,7 @@ test.describe('project CRUD lifecycle', () => {
       return projects.selectedProjectId;
     }).toBe(createdProject.id);
 
-    await projectCard(page, projectName).getByRole('button', { name: 'Projekt löschen' }).click();
-    const deleteDialog = page.getByRole('dialog', { name: `${projectName} löschen?`, exact: true });
-    await expect(deleteDialog).toBeVisible();
-    await deleteDialog.getByRole('button', { name: 'Projekt löschen' }).click();
+    await projectCard(page, projectName).getByRole('button', { name: 'Delete project' }).click();
     await expect(projectCard(page, projectName)).toHaveCount(0);
 
     await expect.poll(async () => {

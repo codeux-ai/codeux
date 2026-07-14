@@ -5,6 +5,7 @@ import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OPEN_SOURCE_SOFTWARE } from "../../../lib/open-source-software.js";
 import { OpenSourceSoftwareModal } from "../OpenSourceSoftwareModal.js";
+import { DashboardI18nProvider } from "../../../i18n/index.js";
 
 vi.mock("gsap", () => {
   const gsap = {
@@ -30,6 +31,14 @@ function Harness() {
       <button type="button" onClick={() => setIsOpen(true)}>Inspect open-source software</button>
       <OpenSourceSoftwareModal isOpen={isOpen} onClose={() => setIsOpen(false)} />
     </main>
+  );
+}
+
+function GermanHarness() {
+  return (
+    <DashboardI18nProvider initialLocale="de">
+      <Harness />
+    </DashboardI18nProvider>
   );
 }
 
@@ -122,6 +131,32 @@ describe("OpenSourceSoftwareModal", () => {
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: "Open Source Software" })).not.toBeInTheDocument();
+      expect(trigger).toHaveFocus();
+    });
+  });
+
+  it("localizes German catalog controls and usage areas while preserving metadata and focus restoration", async () => {
+    render(<GermanHarness />);
+    const trigger = screen.getByRole("button", { name: "Inspect open-source software" });
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    const dialog = await screen.findByRole("dialog", { name: "Open-Source-Software" });
+    const search = within(dialog).getByRole("searchbox", { name: "Softwarekatalog durchsuchen" });
+    await waitFor(() => expect(search).toHaveFocus());
+
+    fireEvent.input(search, { target: { value: "Paketierte App" } });
+    expect(within(dialog).getByText(`1 von ${OPEN_SOURCE_SOFTWARE.length} Projekten angezeigt`)).toBeInTheDocument();
+    expect(within(dialog).getByText("Electron")).toBeInTheDocument();
+    expect(within(dialog).getByText("Paketierte App")).toBeInTheDocument();
+    expect(within(dialog).getByText("MIT")).toBeInTheDocument();
+
+    fireEvent.input(search, { target: { value: "keine-übereinstimmung" } });
+    expect(within(dialog).getByText("Keine passenden Open-Source-Projekte")).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Open-Source-Software" })).not.toBeInTheDocument();
       expect(trigger).toHaveFocus();
     });
   });

@@ -3,6 +3,8 @@ import { useEffect, useState } from "preact/hooks";
 import { Copy, Download, Minus, Square, X } from "lucide-preact";
 import { RobotLogo } from "./brand/RobotLogo.js";
 import { useUpdateStatus } from "../hooks/use-update-status.js";
+import { useOptionalDashboardI18n } from "../i18n/context.js";
+import { shellMessages } from "../i18n/messages/shell.js";
 
 declare const __APP_VERSION__: string;
 
@@ -18,6 +20,7 @@ interface TitleBarProps {
 }
 
 export const TitleBar: FunctionComponent<TitleBarProps> = ({ appearanceVariant = "translucent" }) => {
+  const { translate } = useOptionalDashboardI18n();
   const desktop = typeof window !== "undefined" ? window.codeUxDesktop : undefined;
   const windowApi = desktop?.window;
   const [platform, setPlatform] = useState<Platform>(() => resolvePlatform(desktop?.platform));
@@ -57,7 +60,9 @@ export const TitleBar: FunctionComponent<TitleBarProps> = ({ appearanceVariant =
     event.stopPropagation();
     void desktop?.openUpdates?.();
   };
-  const updateLabel = latestVersion ? `Update available: v${latestVersion}` : "Open updates";
+  const updateLabel = latestVersion
+    ? translate(shellMessages, "titlebarUpdateAvailable", { version: latestVersion })
+    : translate(shellMessages, "titlebarOpenUpdates");
 
   const controls = isMac ? null : (
     <div className="flex items-stretch h-full titlebar-no-drag">
@@ -68,7 +73,7 @@ export const TitleBar: FunctionComponent<TitleBarProps> = ({ appearanceVariant =
           void windowApi.minimize();
         }}
         onDblClick={stopTitleBarDoubleClick}
-        aria-label="Minimize window"
+        aria-label={translate(shellMessages, "minimizeWindow")}
         className="titlebar-no-drag h-full w-11 flex items-center justify-center text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-black/[0.06] dark:hover:bg-white/[0.06] transition-colors focus:outline-none focus-visible:bg-black/[0.06] dark:focus-visible:bg-white/[0.06]"
       >
         <Minus aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={1.75} />
@@ -80,7 +85,7 @@ export const TitleBar: FunctionComponent<TitleBarProps> = ({ appearanceVariant =
           void toggleMaximize();
         }}
         onDblClick={stopTitleBarDoubleClick}
-        aria-label={isMaximized ? "Restore window" : "Maximize window"}
+        aria-label={translate(shellMessages, isMaximized ? "restoreWindow" : "maximizeWindow")}
         className="titlebar-no-drag h-full w-11 flex items-center justify-center text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-black/[0.06] dark:hover:bg-white/[0.06] transition-colors focus:outline-none focus-visible:bg-black/[0.06] dark:focus-visible:bg-white/[0.06]"
       >
         {isMaximized ? (
@@ -96,7 +101,7 @@ export const TitleBar: FunctionComponent<TitleBarProps> = ({ appearanceVariant =
           void windowApi.close();
         }}
         onDblClick={stopTitleBarDoubleClick}
-        aria-label="Close window"
+        aria-label={translate(shellMessages, "closeWindow")}
         className="titlebar-no-drag h-full w-11 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-white hover:bg-[#E81123] focus:outline-none focus-visible:bg-[#E81123] focus-visible:text-white transition-colors"
       >
         <X aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={1.75} />
@@ -142,7 +147,7 @@ export const TitleBar: FunctionComponent<TitleBarProps> = ({ appearanceVariant =
             className="titlebar-no-drag inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-600 transition-colors hover:border-amber-500/35 hover:bg-amber-500/15 hover:text-amber-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/45 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-400 dark:hover:border-amber-300/35 dark:hover:bg-amber-400/15 dark:hover:text-amber-300"
           >
             <Download aria-hidden="true" className="h-3 w-3" strokeWidth={2} />
-            Update
+            {translate(shellMessages, "titlebarUpdate")}
           </button>
         ) : null}
       </div>

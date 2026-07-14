@@ -7,6 +7,7 @@ import {
   NODE_FLOW_NODE_WIDTH,
   type NodeFlowCanvasNode,
 } from "../../lib/node-flow-view-models.js";
+import { useNodesI18n } from "../../i18n/messages/nodes.js";
 
 interface NodeFlowCanvasProps {
   graph: NodeFlowGraph;
@@ -21,6 +22,7 @@ export const NodeFlowCanvas: FunctionComponent<NodeFlowCanvasProps> = ({
   onSelectNode,
   onMoveNode,
 }) => {
+  const { t } = useNodesI18n();
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragFrameRef = useRef<number | null>(null);
   const pendingDragRef = useRef<{ nodeId: string; position: { x: number; y: number } } | null>(null);
@@ -81,7 +83,7 @@ export const NodeFlowCanvas: FunctionComponent<NodeFlowCanvasProps> = ({
 
   return (
     <section
-      aria-label="Node flow canvas"
+      aria-label={t("nodeFlowCanvas")}
       className="relative min-h-[26rem] overflow-auto rounded-[1.6rem] border border-black/[0.08] bg-white/85 shadow-[0_18px_52px_rgba(15,23,42,0.06)] dark:border-white/[0.08] dark:bg-void-800/90"
       ref={canvasRef}
       onPointerMove={handlePointerMove}
@@ -155,10 +157,11 @@ const CanvasNode: FunctionComponent<{
   onSelect: () => void;
   onPointerDown: (event: JSX.TargetedPointerEvent<HTMLButtonElement>) => void;
 }> = ({ node, selected, onSelect, onPointerDown }) => {
+  const { t, tp } = useNodesI18n();
   return (
     <button
       type="button"
-      aria-label={`Select node ${node.title}`}
+      aria-label={t("selectNode", { title: node.title })}
       aria-pressed={selected}
       className={`absolute flex touch-none select-none flex-col items-start justify-between rounded-[1.35rem] border p-4 text-left shadow-sm transition-[border-color,box-shadow,transform,background-color] motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 ${
         selected
@@ -176,7 +179,7 @@ const CanvasNode: FunctionComponent<{
       <span className="max-w-full truncate text-[11px] font-bold uppercase tracking-[0.16em] text-signal-600 dark:text-signal-400">{node.type}</span>
       <span className="max-w-full break-words text-base font-bold leading-tight text-slate-900 dark:text-white">{node.title}</span>
       <span className="line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-        {node.description || `${node.widgetSchema?.fields.length ?? 0} widgets`}
+        {node.description || tp("widgetCount", node.widgetSchema?.fields.length ?? 0)}
       </span>
     </button>
   );

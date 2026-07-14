@@ -31,7 +31,6 @@ This document records the implemented low-noise gallery, responsive layout, and 
 - A load failure uses an assertive alert with the returned error and an **Add Project** action. A collection with no projects and a filter with no matches use polite status surfaces; the no-match state also provides **Show all projects**.
 - Each project is a named article. Its primary selection surface and footer selection button are native buttons with stable `aria-pressed` state. The selected badge is a named status, task completion is a labelled progress bar, and status dots expose readable status text.
 - Every interactive control has a visible focus ring. Setup, settings, and delete buttons stop event propagation so keyboard or pointer activation cannot also select the card.
-- Delete opens a localized confirmation dialog that names the project, explains that the checkout is retained, prevents duplicate confirmation while pending, and leaves a verbatim API diagnostic available for retry when deletion fails.
 - The shared Add Project modal traps focus, initially focuses the project name, restores focus when closed, labels required fields, and exposes source/setup choices as keyboard-focusable controls. Invalid submit announces one summary, marks affected fields, moves focus to the first invalid field, and scrolls the modal body to it.
 - Directory browsing politely announces loading, the current path, empty folders, and selection; failures use an alert. Pending submission marks the submit action busy, disables close/cancel/submit with a reason, and leaves retryable errors in the modal.
 
@@ -44,10 +43,7 @@ This document records the implemented low-noise gallery, responsive layout, and 
 
 ## Preserved workflows
 
-- English and German use the same stable source types, initialization modes, setup option keys, settings overrides, and API payloads. Only dashboard-authored labels and announcements change; names, paths, repository identifiers, branches, providers, application-kind contract values, and runtime diagnostics remain verbatim.
-- Project timestamps, counts, and percentages use the active locale. The feature-owned project catalog is also consumed by the shared Add Project and New Project modals, so callers on other routes inherit the active language without caller changes.
-
 - **Add Project** opens the shared modal in local-import mode, from which users can choose Local Project, Git URL, or New Project. **New Project** opens the same modal with New Project selected; it sends the existing `new-local` or `new-remote` initialization contract and does not scaffold application source in the dashboard.
 - Selecting either card selection control persists the active project. **Project settings** first selects that project and then routes to `/config`.
-- **Delete project** first opens the localized confirmation dialog, then invokes the existing dashboard deletion request and refreshes the collection; it does not introduce a new deletion API or initialization contract. MCP deletion remains approval-gated.
+- **Delete project** invokes the existing dashboard deletion request and refreshes the collection; it does not introduce a new deletion API or initialization contract. MCP deletion remains approval-gated.
 - **Setup project** opens the existing setup-scope dialog for agents, quicksprints, preview script, CI, techstack detection, and opt-in docs embedding. Starting setup uses the existing background setup endpoint, reports progress through toasts and the card, polls the matching invocation, and exposes **Open invocation** as soon as its ID is available and again in completion feedback.

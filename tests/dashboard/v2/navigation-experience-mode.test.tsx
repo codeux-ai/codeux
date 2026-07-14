@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KineticDock } from "../../../dashboard/src/v2/components/KineticDock.js";
 import { Sidebar } from "../../../dashboard/src/v2/components/layout/Sidebar.js";
 import type { DashboardExperienceMode } from "../../../dashboard/src/types.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
 
 const mocks = vi.hoisted(() => ({
   useProjectData: vi.fn(),
@@ -206,5 +207,16 @@ describe("primary navigation experience modes", () => {
 
     expect(getDockNavigationLabels()).toEqual(["Chat", "Stats", "Live", "Config", "Docs"]);
     expect(screen.queryByRole("link", { name: "Browser" })).not.toBeInTheDocument();
+  });
+
+  it("uses the same stable navigation labels across German dock and sidebar surfaces", () => {
+    setEffectiveSettings("EASY");
+    render(<DashboardI18nProvider initialLocale="de"><KineticDock /></DashboardI18nProvider>);
+    expect(screen.getByRole("navigation", { name: "Dock-Navigation" })).toHaveTextContent("Dokumentation");
+    cleanup();
+
+    render(<DashboardI18nProvider initialLocale="de"><Sidebar /></DashboardI18nProvider>);
+    expect(screen.getByLabelText("Hauptnavigation")).toHaveTextContent("Dokumentation");
+    expect(screen.getByRole("link", { name: "Dokumentation" })).toHaveAttribute("href", "/docs");
   });
 });

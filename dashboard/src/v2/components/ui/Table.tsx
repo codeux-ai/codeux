@@ -5,6 +5,8 @@ import { type ComponentChildren } from "preact";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-preact";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 interface TableProps {
   children: ComponentChildren;
@@ -17,10 +19,12 @@ interface TableProps {
   busy?: boolean;
 }
 
-export function Table({ children, className = "", caption, ariaLabel, ariaLabelledBy, resultCount, resultLabel = "rows", busy }: TableProps) {
+export function Table({ children, className = "", caption, ariaLabel, ariaLabelledBy, resultCount, resultLabel, busy }: TableProps) {
+  const { formatNumber, translate } = useOptionalDashboardI18n();
+  const resolvedResultLabel = resultLabel ?? translate(shellMessages, "rows");
   const hasResultCount = typeof resultCount === "number";
   const resultCountCopy = hasResultCount
-    ? `${busy ? "Updating results. " : ""}${resultCount.toLocaleString()} ${resultLabel} shown.`
+    ? `${busy ? translate(shellMessages, "updatingResults") : ""}${translate(shellMessages, "resultsShown", { count: formatNumber(resultCount), label: resolvedResultLabel })}`
     : "";
   return (
     <div className={`overflow-x-hidden lg:overflow-visible ${className}`}>
@@ -150,12 +154,6 @@ interface TableCellProps {
   sortLabel?: string;
 }
 
-function getSortCopy(ariaSort?: TableCellProps["ariaSort"]): string {
-  if (ariaSort === "ascending") return "sorted ascending";
-  if (ariaSort === "descending") return "sorted descending";
-  return "not sorted";
-}
-
 function SortIcon({ ariaSort }: { ariaSort?: TableCellProps["ariaSort"] }) {
   if (ariaSort === "ascending") {
     return <ArrowUp className="h-3 w-3 shrink-0" aria-hidden="true" />;
@@ -167,12 +165,13 @@ function SortIcon({ ariaSort }: { ariaSort?: TableCellProps["ariaSort"] }) {
 }
 
 export function TableCell({ children, className = "", isFirst, isLast, isHeader, align = "left", colSpan, mobileLabel, ariaSort, onSort, sortLabel }: TableCellProps) {
+  const { translate } = useOptionalDashboardI18n();
   const alignClass = align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left";
 
   if (isHeader) {
     const roundedClass = isFirst ? "rounded-l-2xl border-l" : isLast ? "rounded-r-2xl border-r pr-6" : "";
     const plClass = isFirst ? "pl-6" : "";
-    const sortCopy = getSortCopy(ariaSort);
+    const sortCopy = translate(shellMessages, ariaSort === "ascending" ? "sortedAscending" : ariaSort === "descending" ? "sortedDescending" : "notSorted");
     const resolvedAriaSort = onSort ? (ariaSort ?? "none") : ariaSort;
     return (
       <th scope="col" aria-sort={resolvedAriaSort}

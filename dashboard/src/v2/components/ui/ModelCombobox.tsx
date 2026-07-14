@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 import { AvantgardeSelect, type SelectOption } from "./AvantgardeSelect.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import type { ModelCatalogEntry } from "../../../../../src/domain/model-catalog/model-catalog-types.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 let catalogPromise: Promise<ModelCatalogEntry[]> | null = null;
 
@@ -77,7 +79,8 @@ export const ModelCombobox: FunctionComponent<{
   "aria-describedby"?: string;
   /** Scopes the browsable model list to a single models.dev provider id, paired with an API provider field. */
   providerId?: string;
-}> = ({ value, onChange, disabled = false, placeholder = "Search models…", "aria-label": ariaLabel, "aria-describedby": ariaDescribedby, providerId }) => {
+}> = ({ value, onChange, disabled = false, placeholder, "aria-label": ariaLabel, "aria-describedby": ariaDescribedby, providerId }) => {
+  const { translate } = useOptionalDashboardI18n();
   const catalog = useModelCatalog();
 
   const options = useMemo<SelectOption[]>(() => {
@@ -121,7 +124,7 @@ export const ModelCombobox: FunctionComponent<{
         onChange={onChange}
         options={options}
         disabled={disabled}
-        placeholder={placeholder}
+        placeholder={placeholder ?? translate(shellMessages, "searchModels")}
         searchable
         allowCustomValue
         maxVisibleOptions={providerId ? 100 : undefined}

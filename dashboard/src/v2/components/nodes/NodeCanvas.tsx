@@ -16,6 +16,7 @@ import {
   NodeCanvasNodeCard,
 } from "./NodeCanvasNodeCard.js";
 import { NodeCanvasToolbar } from "./NodeCanvasToolbar.js";
+import { useNodesI18n } from "../../i18n/messages/nodes.js";
 
 interface NodeCanvasViewport {
   x: number;
@@ -54,6 +55,7 @@ export const NodeCanvas: FunctionComponent<NodeCanvasProps> = ({
   onDeleteEdge,
   onMoveNode,
 }) => {
+  const { locale, t } = useNodesI18n();
   const surfaceRef = useRef<HTMLDivElement>(null);
   const nodeRefs = useRef(new Map<string, HTMLButtonElement>());
   const [viewport, setViewport] = useState<NodeCanvasViewport>(DEFAULT_VIEWPORT);
@@ -62,7 +64,7 @@ export const NodeCanvas: FunctionComponent<NodeCanvasProps> = ({
   const [nodeDrag, setNodeDrag] = useState<{ pointerId: number; nodeId: string; offsetX: number; offsetY: number } | null>(null);
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(graph.selection.nodeIds[0] ?? graph.nodes[0]?.id ?? null);
 
-  const issues = useMemo(() => validationIssues ?? validateNodeCanvasGraph(graph), [graph, validationIssues]);
+  const issues = useMemo(() => validationIssues ?? validateNodeCanvasGraph(graph, locale), [graph, locale, validationIssues]);
   const issuesByNodeId = useMemo(() => {
     const grouped = new Map<string, NodeCanvasValidationIssue[]>();
     for (const issue of issues) {
@@ -217,14 +219,14 @@ export const NodeCanvas: FunctionComponent<NodeCanvasProps> = ({
   if (loading) {
     return (
       <section
-        aria-label="Node canvas loading"
+        aria-label={t("nodeCanvasLoadingLabel")}
         className={`relative min-h-[30rem] overflow-hidden rounded-[1.35rem] border border-black/[0.08] bg-white/60 shadow-[0_20px_70px_rgba(15,23,42,0.08)] dark:border-white/[0.08] dark:bg-white/[0.035] ${className}`}
       >
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:32px_32px]" />
         <div className="relative flex min-h-[30rem] items-center justify-center">
           <div className="flex items-center gap-3 rounded-[1rem] border border-black/[0.08] bg-white/88 px-4 py-3 text-sm font-semibold text-slate-600 shadow-[0_16px_44px_rgba(15,23,42,0.10)] dark:border-white/[0.10] dark:bg-void-900/82 dark:text-slate-300">
             <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-            Loading node canvas
+            {t("loadingNodeCanvas")}
           </div>
         </div>
       </section>
@@ -234,13 +236,13 @@ export const NodeCanvas: FunctionComponent<NodeCanvasProps> = ({
   if (graph.nodes.length === 0) {
     return (
       <section
-        aria-label="Empty node canvas"
+        aria-label={t("emptyNodeCanvas")}
         className={`relative min-h-[30rem] overflow-hidden rounded-[1.35rem] border border-dashed border-black/[0.12] bg-white/55 dark:border-white/[0.14] dark:bg-white/[0.035] ${className}`}
       >
         <EmptyState
           icon={<Workflow className="h-7 w-7" aria-hidden="true" />}
-          title="No nodes on this canvas"
-          description="Add nodes from the parent panel to start building a workflow graph."
+          title={t("noCanvasNodes")}
+          description={t("noCanvasNodesDescription")}
         />
       </section>
     );
@@ -254,7 +256,7 @@ export const NodeCanvas: FunctionComponent<NodeCanvasProps> = ({
       ref={surfaceRef}
       role="application"
       tabIndex={0}
-      aria-label="Node canvas"
+      aria-label={t("nodeCanvas")}
       className={`relative min-h-[30rem] touch-none overflow-hidden rounded-[1.35rem] border border-black/[0.08] bg-slate-50/90 shadow-[0_20px_70px_rgba(15,23,42,0.08)] outline-none focus-visible:ring-2 focus-visible:ring-signal-500/55 dark:border-white/[0.08] dark:bg-void-950/70 ${panDrag ? "cursor-grabbing" : "cursor-grab"} ${className}`}
       onPointerDown={handleSurfacePointerDown}
       onPointerMove={handlePointerMove}

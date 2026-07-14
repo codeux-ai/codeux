@@ -11,6 +11,12 @@ The **Memory** page (`/memory`) manages Code UX's two-tier semantic memory syste
 
 Both tiers are vector-indexed using a locally-running embedding model (ONNX Runtime). No memory ever leaves your machine.
 
+## Dashboard language
+
+The Memory route follows the dashboard's active English or German locale. Page controls, map and sidebar labels, filters, search status, confirmations, validation, empty/loading/error guidance, accessible announcements, and embedding-model actions are translated. Dates, counts, strengths, percentages, sizes, and plural forms use locale-aware formatting.
+
+Localization never rewrites persisted knowledge or backend/catalog data. Memory content, claims, evidence, tags, agent names, model IDs and descriptions, language and license metadata, URLs, filenames, and server/API diagnostics remain verbatim. German category terms such as `Architektur` can match the corresponding stable stored category key without changing that key.
+
 ## Categories
 
 Each memory has a **category**:

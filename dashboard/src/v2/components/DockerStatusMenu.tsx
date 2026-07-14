@@ -12,6 +12,8 @@ import { Box, CircleAlert, Play, Square, Terminal } from "lucide-preact";
 import { useFocusTrap } from "../hooks/use-focus-trap";
 import { fetchOnboardingReadiness } from "../../lib/api/dashboard-api.js";
 import type { OnboardingRuntimeReadiness } from "../../types.js";
+import { useOptionalDashboardI18n } from "../i18n/context.js";
+import { shellMessages } from "../i18n/messages/shell.js";
 
 export interface DockerContainer {
   id: string;
@@ -24,6 +26,7 @@ export interface DockerContainer {
 }
 
 export const DockerStatusMenu: FunctionComponent = () => {
+    const { formatNumber, translate } = useOptionalDashboardI18n();
     const [containers, setContainers] = useState<DockerContainer[]>([]);
     const [readiness, setReadiness] = useState<OnboardingRuntimeReadiness | null>(null);
     const [loading, setLoading] = useState(false);
@@ -127,9 +130,12 @@ export const DockerStatusMenu: FunctionComponent = () => {
 
     const activeContainers = containers.filter(c => c.state === "running");
     const clusterNotReady = readiness?.cluster.status === "not_ready";
-    const dockerStatusLabel = clusterNotReady
-        ? `Docker Status: runtime not ready, ${activeContainers.length} active containers`
-        : `Docker Status: ${activeContainers.length} active containers`;
+    const activeCount = formatNumber(activeContainers.length);
+    const dockerStatusLabel = translate(
+        shellMessages,
+        clusterNotReady ? "dockerStatusNotReady" : "dockerStatus",
+        { count: activeCount },
+    );
 
     return (
       <div className="relative inline-flex items-center gap-2" ref={containerRef}>
@@ -153,7 +159,7 @@ export const DockerStatusMenu: FunctionComponent = () => {
                         !
                     </span>
                 </span>
-                Runtime not ready
+                {translate(shellMessages, "runtimeNotReady")}
             </div>
         ) : null}
         <div
@@ -222,17 +228,19 @@ export const DockerStatusMenu: FunctionComponent = () => {
                     role="dialog"
                     id={menuId}
                     aria-modal="true"
-                    aria-label="Active Docker Containers"
+                    aria-label={translate(shellMessages, "activeDockerContainers")}
                     className="fixed inset-x-4 top-[72px] md:inset-auto md:absolute md:top-full md:right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50 flex flex-col"
                 >
                     <div className="px-4 py-3 border-b border-black/[0.04] dark:border-white/[0.04] flex items-center justify-between shrink-0">
                         <span className="text-xs font-bold uppercase tracking-[0.1em] text-slate-800 dark:text-slate-200">
-                            Docker Containers
+                            {translate(shellMessages, "dockerContainers")}
                         </span>
                         <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-black/[0.03] dark:bg-white/[0.03]">
                             <span className={`w-1.5 h-1.5 rounded-full ${clusterNotReady ? "bg-status-red motion-safe:animate-pulse motion-reduce:animate-none" : "bg-signal-500 motion-safe:animate-pulse"}`} />
                             <span className={`text-[10px] font-mono font-medium ${clusterNotReady ? "text-status-red" : "text-slate-500 dark:text-slate-400"}`}>
-                                {clusterNotReady ? "Not Ready" : `${activeContainers.length} Active`}
+                                {clusterNotReady
+                                    ? translate(shellMessages, "notReady")
+                                    : translate(shellMessages, "activeCount", { count: activeCount })}
                             </span>
                         </div>
                     </div>
@@ -240,16 +248,16 @@ export const DockerStatusMenu: FunctionComponent = () => {
                     <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
                         {loading ? (
                             <div className="flex items-center justify-center py-8">
-                                <span className="text-xs font-medium text-slate-400">Loading containers...</span>
+                                <span className="text-xs font-medium text-slate-400">{translate(shellMessages, "loadingContainers")}</span>
                             </div>
                         ) : clusterNotReady ? (
                             <div className="flex flex-col gap-3 px-4 py-5">
                                 <div className="flex items-start gap-3 rounded-xl border border-status-red/25 bg-status-red/10 p-3">
                                     <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-status-red" strokeWidth={2.4} aria-hidden="true" />
                                     <div>
-                                        <div className="text-sm font-bold text-slate-800 dark:text-slate-100">Docker is mandatory</div>
+                                        <div className="text-sm font-bold text-slate-800 dark:text-slate-100">{translate(shellMessages, "dockerMandatory")}</div>
                                         <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                                            Docker is not running or not reachable. Code UX runs provider CLIs inside containers, so task execution cannot start until Docker is available.
+                                            {translate(shellMessages, "dockerMandatoryHelp")}
                                         </div>
                                     </div>
                                 </div>
@@ -270,8 +278,8 @@ export const DockerStatusMenu: FunctionComponent = () => {
                         ) : containers.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
                                 <Box className="w-8 h-8 text-slate-300 dark:text-slate-600 mb-2" strokeWidth={1.5} />
-                                <span className="text-sm font-medium text-slate-600 dark:text-slate-300">No Containers</span>
-                                <span className="text-xs text-slate-400 mt-1">Docker is not running any containers.</span>
+                                <span className="text-sm font-medium text-slate-600 dark:text-slate-300">{translate(shellMessages, "noContainers")}</span>
+                                <span className="text-xs text-slate-400 mt-1">{translate(shellMessages, "noContainersHelp")}</span>
                             </div>
                         ) : (
                             <div className="flex flex-col p-1.5 gap-1.5">

@@ -2,7 +2,6 @@ import { createContext, type ComponentChildren, type FunctionComponent } from "p
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState } from "preact/hooks";
 import { createDashboardFormatters, type DashboardFormatters } from "./formatters.js";
 import {
-  DEFAULT_DASHBOARD_LOCALE,
   resolveDashboardLocale,
   translateDashboardMessage,
   translateDashboardPlural,
@@ -50,39 +49,19 @@ export interface DashboardI18nProviderProps {
   storage?: DashboardLocaleStorage | null;
 }
 
-const fallbackFormatters = createDashboardFormatters("en");
-const FALLBACK_DASHBOARD_I18N: DashboardI18nContextValue = {
+const createFallbackDashboardI18n = (): DashboardI18nContextValue => ({
   locale: "en",
   setLocale: () => undefined,
   translate: (bundle, key, variables) => translateDashboardMessage(bundle, "en", key, variables),
   translatePlural: (bundle, key, count, variables, options) => (
     translateDashboardPlural(bundle, "en", key, count, variables, options)
   ),
-  ...fallbackFormatters,
-};
+  ...createDashboardFormatters("en"),
+});
+
+const FALLBACK_DASHBOARD_I18N = createFallbackDashboardI18n();
 
 const DashboardI18nContext = createContext<DashboardI18nContextValue>(FALLBACK_DASHBOARD_I18N);
-
-const defaultDashboardFormatters = createDashboardFormatters(DEFAULT_DASHBOARD_LOCALE);
-const defaultDashboardI18n: DashboardI18nContextValue = {
-  locale: DEFAULT_DASHBOARD_LOCALE,
-  setLocale: () => {},
-  translate: (bundle, key, variables) => translateDashboardMessage(
-    bundle,
-    DEFAULT_DASHBOARD_LOCALE,
-    key,
-    variables,
-  ),
-  translatePlural: (bundle, key, count, variables, options) => translateDashboardPlural(
-    bundle,
-    DEFAULT_DASHBOARD_LOCALE,
-    key,
-    count,
-    variables,
-    options,
-  ),
-  ...defaultDashboardFormatters,
-};
 
 export const syncDashboardDocumentLocale = (locale: DashboardLocale): void => {
   if (typeof document !== "undefined") {
@@ -163,9 +142,10 @@ export const useDashboardI18n = (): DashboardI18nContextValue => {
 };
 
 /**
- * Returns the active dashboard locale when mounted in the application and an
- * English compatibility value for independently rendered feature surfaces.
+ * Shared presentation primitives are also rendered in isolation by tests and
+ * embedders. They use the English compatibility locale when no root provider
+ * is present, while the mounted dashboard still reacts to provider updates.
  */
-export const useOptionalDashboardI18n = (): DashboardI18nContextValue => (
-  useContext(DashboardI18nContext) ?? defaultDashboardI18n
+ export const useOptionalDashboardI18n = (): DashboardI18nContextValue => (
+   useContext(DashboardI18nContext) ?? FALLBACK_DASHBOARD_I18N
 );

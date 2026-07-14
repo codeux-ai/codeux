@@ -105,4 +105,16 @@ describe("getSprintStatusPresentation", () => {
     });
     expect(result.statusLabel).toBe("Draft");
   });
+
+  it("localizes dashboard fallbacks without rewriting supplied server detail", () => {
+    const result = getSprintStatusPresentation({
+      state: "paused",
+      pauseSource: "manual",
+      humanInterventionReason: "Operator-authored reason",
+    }, "de");
+
+    expect(result.statusLabel).toBe("Pausiert");
+    expect(result.title).toBe("Sprint für manuellen Eingriff pausiert");
+    expect(result.reason).toBe("Operator-authored reason");
+  });
 });

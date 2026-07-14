@@ -16,8 +16,6 @@ import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import type { AvailableGitProviders } from "../../lib/project-api.js";
-import { useDashboardI18n } from "../../i18n/context.js";
-import { projectMessages } from "../../i18n/messages/projects.js";
 
 interface NewProjectModalProps {
   onClose: () => void;
@@ -41,7 +39,6 @@ const detailInputClass = `mt-2.5 ${detailInputSurfaceClass}`;
 const modalMinHeight = "min(640px, calc(100vh - 2rem))";
 
 export const NewProjectModal: FunctionComponent<NewProjectModalProps> = ({ onClose, onAdd, providers }) => {
-    const { translate } = useDashboardI18n();
     const cardRef     = useRef<HTMLDivElement>(null);
     const fieldsRef   = useRef<HTMLDivElement>(null);
 
@@ -62,15 +59,15 @@ export const NewProjectModal: FunctionComponent<NewProjectModalProps> = ({ onClo
 
     const validationErrors = useMemo(() => {
         const errors: Record<string, string> = {};
-        if (!name.trim()) errors.name = translate(projectMessages, "projectNameRequired");
+        if (!name.trim()) errors.name = "Project Name is required.";
 
         if (initMode === 'new-local' && !localPath.trim()) {
-            errors.path = translate(projectMessages, "directoryPathRequired");
+            errors.path = "Directory Path is required.";
         } else if (initMode === 'new-remote' && !repoName.trim()) {
-            errors.path = translate(projectMessages, "repositoryNameRequired");
+            errors.path = "Repository Name is required.";
         }
         return errors;
-    }, [name, initMode, localPath, repoName, translate]);
+    }, [name, initMode, localPath, repoName]);
 
     useLayoutEffect(() => {
         const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.backdrop.duration;
@@ -187,7 +184,7 @@ export const NewProjectModal: FunctionComponent<NewProjectModalProps> = ({ onClo
                 {/* ── Left decorative panel ── */}
                 <div className="relative w-52 shrink-0 bg-void-900 dark:bg-void-950 flex flex-col justify-between p-8 overflow-hidden">
                     <span className="absolute -top-2 -left-4 text-[7.5rem] font-black text-white/[0.035] font-display leading-none pointer-events-none select-none tracking-tighter">
-                        {translate(projectMessages, "newProject")}
+                        NEW
                     </span>
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="w-44 h-44 bg-ember-500/[0.08] animate-organic" style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%' }} />
@@ -196,12 +193,12 @@ export const NewProjectModal: FunctionComponent<NewProjectModalProps> = ({ onClo
                     </div>
                     <div className="relative z-10 flex items-center gap-2 text-ember-500 font-mono font-bold text-[10px] tracking-[0.2em] uppercase">
                         <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
-                        {translate(projectMessages, "initialize")}
+                        Initialize
                     </div>
                     <div className="relative z-10">
-                        <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/25 font-mono mb-1.5">{translate(projectMessages, "mode")}</div>
+                        <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/25 font-mono mb-1.5">Mode</div>
                         <div className="text-base font-semibold text-white font-mono tracking-tight leading-snug">
-                            {translate(projectMessages, initMode === 'new-local' ? "localRepo" : "remoteRepo")}
+                            {initMode === 'new-local' ? 'Local Repo' : 'Remote Repo'}
                         </div>
                         <div className="mt-3 w-8 h-[2px] bg-ember-500/50" />
                     </div>
@@ -213,15 +210,15 @@ export const NewProjectModal: FunctionComponent<NewProjectModalProps> = ({ onClo
                     <div className="flex items-start justify-between mb-6 lg:mb-8">
                         <div>
                             <h2 id="new-project-modal-title" className="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight font-display leading-none">
-                                {translate(projectMessages, "newProjectTitle")}
+                                New Project.
                             </h2>
                             <p className="text-xs font-medium text-slate-400 mt-2 tracking-wide">
-                                {translate(projectMessages, "initializeRepositoryDescription")}
+                                Initialize a git repo locally or on a remote provider
                             </p>
                         </div>
                         <button
                             onClick={handleClose}
-                            aria-label={translate(projectMessages, "closeDialog")}
+                            aria-label="Close dialog"
                             className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all active:scale-95 shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
                         >
                             <X aria-hidden="true" className="w-4 h-4" />
@@ -241,7 +238,7 @@ export const NewProjectModal: FunctionComponent<NewProjectModalProps> = ({ onClo
                             {/* Project Name */}
                             <div className="group/field">
                                 <label htmlFor="new-project-name" className={fieldLabelClass}>
-                                    {translate(projectMessages, "projectName")}
+                                    Project Name
                                 </label>
                                 <input
                                     id="new-project-name"
@@ -251,7 +248,7 @@ export const NewProjectModal: FunctionComponent<NewProjectModalProps> = ({ onClo
                                         setName((e.target as HTMLInputElement).value);
                                         if (submitError) setSubmitError(null);
                                     }}
-                                    placeholder={translate(projectMessages, "projectNamePlaceholder")}
+                                    placeholder="My Awesome Project"
                                     className={projectNameInputClass}
                                     required
                                     autoFocus
@@ -265,7 +262,7 @@ export const NewProjectModal: FunctionComponent<NewProjectModalProps> = ({ onClo
                             {/* Init Mode Toggle */}
                             <fieldset>
                                 <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">
-                                    {translate(projectMessages, "initMode")}
+                                    Init Mode
                                 </legend>
                                 <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1">
                                     <button
@@ -278,7 +275,7 @@ export const NewProjectModal: FunctionComponent<NewProjectModalProps> = ({ onClo
                                         }`}
                                     >
                                         <FolderInput className="w-3.5 h-3.5" strokeWidth={2} />
-                                        {translate(projectMessages, "localRepo")}
+                                        Local Repo
                                     </button>
                                     <button
                                         type="button"
@@ -290,7 +287,7 @@ export const NewProjectModal: FunctionComponent<NewProjectModalProps> = ({ onClo
                                         }`}
                                     >
                                         <Cloud className="w-3.5 h-3.5" strokeWidth={2} />
-                                        {translate(projectMessages, "remoteRepo")}
+                                        Remote Repo
                                     </button>
                                 </div>
                             </fieldset>
@@ -299,7 +296,7 @@ export const NewProjectModal: FunctionComponent<NewProjectModalProps> = ({ onClo
                             {initMode === 'new-local' ? (
                                 <div className="group/field">
                                     <label htmlFor="new-project-path" className={`${fieldLabelClass} flex items-center gap-1.5`}>
-                                        <FolderInput className="w-3 h-3" /> {translate(projectMessages, "directoryPath")}
+                                        <FolderInput className="w-3 h-3" /> Directory Path
                                     </label>
                                     <div className="mt-2.5 flex flex-col gap-2 sm:flex-row sm:items-stretch">
                                         <input
@@ -321,10 +318,10 @@ export const NewProjectModal: FunctionComponent<NewProjectModalProps> = ({ onClo
                                             type="button"
                                             onClick={() => handleOpenDirectoryPicker('localPath')}
                                             className="flex shrink-0 items-center justify-center gap-2 rounded-[1.15rem] border border-black/[0.06] bg-void-900 px-4 py-3 text-xs font-black uppercase tracking-[0.14em] text-white transition-all duration-250 hover:-translate-y-px hover:bg-void-800 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 dark:border-white/[0.08] dark:bg-white/[0.08] dark:text-white dark:hover:bg-white/[0.12]"
-                                            title={translate(projectMessages, "browseDirectories")}
+                                            title="Browse directories"
                                         >
                                             <FolderOpen className="h-4 w-4" />
-                                            {translate(projectMessages, "browse")}
+                                            Browse
                                         </button>
                                     </div>
                                     {validationErrors.path && touched.path && <div id="new-project-path-error" className="text-xs text-red-500 mt-1 font-medium">{validationErrors.path}</div>}
@@ -334,14 +331,14 @@ export const NewProjectModal: FunctionComponent<NewProjectModalProps> = ({ onClo
                                     {noProviders ? (
                                         <div className="flex items-center gap-2 rounded-2xl border border-status-red/20 bg-status-red/5 p-4 text-xs font-medium text-status-red">
                                             <AlertCircle className="h-4 w-4 shrink-0" />
-                                            {translate(projectMessages, "noGitProviders")}
+                                            No git providers configured. Add a GitHub or GitLab token in Settings.
                                         </div>
                                     ) : (
                                         <>
                                             {providers.github && providers.gitlab && (
                                                 <fieldset>
                                                     <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">
-                                                        {translate(projectMessages, "provider")}
+                                                        Provider
                                                     </legend>
                                                     <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1">
                                                         <button
@@ -372,7 +369,7 @@ export const NewProjectModal: FunctionComponent<NewProjectModalProps> = ({ onClo
 
                                             <div className="group/field">
                                                 <label htmlFor="new-project-repo-name" className={fieldLabelClass}>
-                                                    {translate(projectMessages, "repoName")}
+                                                    Repo Name
                                                 </label>
                                                 <input
                                                     id="new-project-repo-name"
@@ -394,8 +391,8 @@ export const NewProjectModal: FunctionComponent<NewProjectModalProps> = ({ onClo
 
                                             <div className="group/field">
                                                 <label htmlFor="new-project-clone-into" className={`${fieldLabelClass} flex items-center gap-1.5`}>
-                                                    <FolderInput className="w-3 h-3" /> {translate(projectMessages, "cloneInto")}
-                                                    <span className="ml-1 text-slate-300 dark:text-slate-600 normal-case font-medium tracking-normal">({translate(projectMessages, "optional")})</span>
+                                                    <FolderInput className="w-3 h-3" /> Clone Into
+                                                    <span className="ml-1 text-slate-300 dark:text-slate-600 normal-case font-medium tracking-normal">(optional)</span>
                                                 </label>
                                                 <div className="mt-2.5 flex flex-col gap-2 sm:flex-row sm:items-stretch">
                                                     <input
@@ -410,17 +407,17 @@ export const NewProjectModal: FunctionComponent<NewProjectModalProps> = ({ onClo
                                                         type="button"
                                                         onClick={() => handleOpenDirectoryPicker('cloneDir')}
                                                         className="flex shrink-0 items-center justify-center gap-2 rounded-[1.15rem] border border-black/[0.06] bg-void-900 px-4 py-3 text-xs font-black uppercase tracking-[0.14em] text-white transition-all duration-250 hover:-translate-y-px hover:bg-void-800 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 dark:border-white/[0.08] dark:bg-white/[0.08] dark:text-white dark:hover:bg-white/[0.12]"
-                                                        title={translate(projectMessages, "browseCloneDirectory")}
+                                                        title="Browse clone directory"
                                                     >
                                                         <FolderOpen className="h-4 w-4" />
-                                                        {translate(projectMessages, "browse")}
+                                                        Browse
                                                     </button>
                                                 </div>
                                             </div>
 
                                             <fieldset>
                                                 <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">
-                                                    {translate(projectMessages, "visibility")}
+                                                    Visibility
                                                 </legend>
                                                 <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1">
                                                     <button
@@ -433,7 +430,7 @@ export const NewProjectModal: FunctionComponent<NewProjectModalProps> = ({ onClo
                                                         }`}
                                                     >
                                                         <Lock className="w-3.5 h-3.5" strokeWidth={2} />
-                                                        {translate(projectMessages, "private")}
+                                                        Private
                                                     </button>
                                                     <button
                                                         type="button"
@@ -445,7 +442,7 @@ export const NewProjectModal: FunctionComponent<NewProjectModalProps> = ({ onClo
                                                         }`}
                                                     >
                                                         <Globe className="w-3.5 h-3.5" strokeWidth={2} />
-                                                        {translate(projectMessages, "public")}
+                                                        Public
                                                     </button>
                                                 </div>
                                             </fieldset>
@@ -464,7 +461,7 @@ export const NewProjectModal: FunctionComponent<NewProjectModalProps> = ({ onClo
                                     onClick={handleClose}
                                     className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 rounded"
                                 >
-                                    {translate(projectMessages, "cancel")}
+                                    Cancel
                                 </button>
                                 <button
                                     type="submit"
@@ -473,11 +470,11 @@ export const NewProjectModal: FunctionComponent<NewProjectModalProps> = ({ onClo
                                     className="group/btn flex items-center gap-2.5 px-6 py-3 bg-ember-500 hover:bg-ember-400 disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-700 dark:disabled:text-slate-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] disabled:shadow-none active:scale-95 disabled:active:scale-100 hover:-translate-y-px disabled:hover:-translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
                                 >
                                     {isSubmitting ? (
-                                        <><Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /><span className="sr-only">{translate(projectMessages, "loading")}</span></>
+                                        <><Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /><span className="sr-only">Loading</span></>
                                     ) : (
                                         <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
                                     )}
-                                    {translate(projectMessages, isSubmitting ? "initializing" : "createProject")}
+                                    {isSubmitting ? "Initializing..." : "Create Project"}
                                 </button>
                             </div>
                         </div>
