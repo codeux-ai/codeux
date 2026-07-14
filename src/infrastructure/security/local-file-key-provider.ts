@@ -13,6 +13,10 @@ const ROOT_KEY_BYTES = 32;
 const DIRECTORY_MODE = 0o700;
 const FILE_MODE = 0o600;
 const UNSUPPORTED_FSYNC_ERROR_CODES = new Set(["EINVAL", "ENOTSUP", "EOPNOTSUPP", "EPERM", "EISDIR"]);
+// Node reports synthesized POSIX modes and no UID on Windows. The trusted local
+// dashboard path remains beneath the current user's profile and inherits its ACL.
+const SUPPORTS_POSIX_PERMISSION_BITS = process.platform !== "win32";
+const NOFOLLOW_FLAG = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0;
 
 function unavailable(message: string): KeyProviderUnavailableError {
   return new KeyProviderUnavailableError(message);
@@ -133,7 +137,7 @@ export class LocalFileKeyProvider implements KeyProvider {
     if (!hasExpectedOwner(info)) {
       throw unavailable("Local credential root-key directory chain must be owned by the current user.");
     }
-    if (requireOwnerOnlyMode && (info.mode & 0o777) !== DIRECTORY_MODE) {
+    if (SUPPORTS_POSIX_PERMISSION_BITS && requireOwnerOnlyMode && (info.mode & 0o777) !== DIRECTORY_MODE) {
       throw unavailable("Local credential root-key directory must use owner-only permissions (0700).");
     }
   }
@@ -155,7 +159,7 @@ export class LocalFileKeyProvider implements KeyProvider {
     if (!pathInfo.isFile()) {
       throw unavailable("Local credential root-key path must resolve to a regular file.");
     }
-    if ((pathInfo.mode & 0o777) !== FILE_MODE) {
+    if (SUPPORTS_POSIX_PERMISSION_BITS && (pathInfo.mode & 0o777) !== FILE_MODE) {
       throw unavailable("Local credential root-key file must use owner-only permissions (0600).");
     }
     if (!hasExpectedOwner(pathInfo)) {
@@ -167,12 +171,14 @@ export class LocalFileKeyProvider implements KeyProvider {
 
     let handle: FileHandle | undefined;
     try {
-      handle = await open(this.filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+      handle = await open(this.filePath, constants.O_RDONLY | NOFOLLOW_FLAG);
       const openInfo = await handle.stat();
       if (!openInfo.isFile() || openInfo.dev !== pathInfo.dev || openInfo.ino !== pathInfo.ino) {
         throw unavailable("Local credential root-key file changed during validation.");
       }
-      if ((openInfo.mode & 0o777) !== FILE_MODE || !hasExpectedOwner(openInfo) || openInfo.size !== ROOT_KEY_BYTES) {
+      if ((SUPPORTS_POSIX_PERMISSION_BITS && (openInfo.mode & 0o777) !== FILE_MODE)
+        || !hasExpectedOwner(openInfo)
+        || openInfo.size !== ROOT_KEY_BYTES) {
         throw unavailable("Local credential root-key file security changed during validation.");
       }
       const key = await handle.readFile();
@@ -197,7 +203,7 @@ export class LocalFileKeyProvider implements KeyProvider {
     try {
       temporaryHandle = await open(
         temporaryPath,
-        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | NOFOLLOW_FLAG,
         FILE_MODE,
       );
       await temporaryHandle.writeFile(generated);
