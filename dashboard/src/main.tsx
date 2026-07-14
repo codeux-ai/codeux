@@ -28,6 +28,12 @@ import { ASSISTANT_OPEN_ADD_PROJECT_EVENT } from "./v2/lib/no-project-chat-assis
 import { isDashboardFeatureEnabled } from "./v2/lib/dashboard-feature-flags.js";
 import { buildProjectCreationSettingsOverride } from "./lib/settings-updaters.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "./lib/settings.js";
+import {
+  DashboardI18nProvider,
+  initializeDashboardLocale,
+  useDashboardI18n,
+} from "./v2/i18n/index.js";
+import { appMessages } from "./v2/i18n/messages/app.js";
 import "./styles.css";
 
 const isElectron = typeof window !== "undefined" && Boolean(window.codeUxDesktop);
@@ -53,6 +59,7 @@ const BackgroundManager = lazy(() => import("./v2/components/backgrounds/Backgro
 
 // 0. AppLayout extracted to use context hooks
 const AppLayout = () => {
+  const { translate } = useDashboardI18n();
   const { selectedProject, createProject } = useProjectData();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
@@ -238,7 +245,7 @@ const AppLayout = () => {
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[200] focus:bg-white dark:focus:bg-void-800 focus:text-slate-900 dark:focus:text-slate-100 focus:px-4 focus:py-2 focus:rounded-xl focus:shadow-lg focus:ring-2 focus:ring-signal-500 focus-visible:outline-none"
       >
-        Skip to main content
+        {translate(appMessages, "skipToMainContent")}
       </a>
       {isElectron && <TitleBar />}
       <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -291,8 +298,13 @@ const AppLayout = () => {
             isMobileMenuOpen={isMobileSidebarOpen}
           />
 
-          <main id="main-content" tabIndex={-1} aria-label="Main content" className={`flex-1 overflow-y-auto dashboard-scrollbar relative ${showSidebar ? 'pb-20 lg:pb-0' : 'pb-32'}`} style={{ contain: 'layout style' }}>
-            <Suspense fallback={<div className="flex-1 p-8"><SkeletonPanel /></div>}>
+          <main id="main-content" tabIndex={-1} aria-label={translate(appMessages, "mainContent")} className={`flex-1 overflow-y-auto dashboard-scrollbar relative ${showSidebar ? 'pb-20 lg:pb-0' : 'pb-32'}`} style={{ contain: 'layout style' }}>
+            <Suspense fallback={(
+              <div className="flex-1 p-8" role="status" aria-live="polite" aria-busy="true">
+                <span className="sr-only">{translate(appMessages, "loadingDashboard")}</span>
+                <SkeletonPanel />
+              </div>
+            )}>
               <Outlet />
             </Suspense>
           </main>
@@ -310,7 +322,7 @@ const AppLayout = () => {
             }}
           />
         )}
-        <footer className="sr-only">Dashboard Footer</footer>
+        <footer className="sr-only">{translate(appMessages, "dashboardFooter")}</footer>
       </div>
       </div>
     </div>
@@ -473,7 +485,13 @@ const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, p
 const router = createRouter({ routeTree, defaultPreload: "intent", defaultPreloadDelay: 50 });
 
 // 4. Entry
-const Root = () => <RouterProvider router={router} />;
+const initialDashboardLocale = initializeDashboardLocale();
+
+const Root = () => (
+  <DashboardI18nProvider initialLocale={initialDashboardLocale}>
+    <RouterProvider router={router} />
+  </DashboardI18nProvider>
+);
 
 const container = document.getElementById("app");
 if (!container) throw new Error("Dashboard root element '#app' not found");

@@ -14,6 +14,7 @@ It is for contributors and integrators who need to reason about *how* Code UX ma
 | 4 | [Virtual workers](./virtual-workers.md) | Provisioning, lifecycle, Docker vs host execution, attention-item handling |
 | 5 | [CI integration](./ci-integration.md) | Feature PR gate, merge protocol, autofix retries, conflict handling |
 | 6 | [Dashboard architecture](./dashboard-architecture.md) | Preact stack, real-time client, route map, state model |
+| 6a | [Dashboard internationalization](./dashboard-internationalization.md) | Typed locale state, feature catalogs, persistence, and native formatting |
 | 7 | [Data model](./data-model.md) | Projects, sprints, tasks, runs, dispatches, memory, conversations |
 | 8 | [Custom dashboard foundation](./custom-dashboard-foundation.md) | Persisted dashboard manifests, generated bundles, validation history, and publication state |
 | 9 | [Execution invocation tracking](./execution-invocation-tracking.md) | Provider parser normalization, usage isolation, live telemetry, transcript persistence |
@@ -34,7 +35,7 @@ Agent persistent skill storage is opt-in per preset. A shared project-owned agen
 
 - **For new contributors** — read 1, 3, 7 in that order.
 - **For MCP integrators** — read 1, 2, 8.
-- **For dashboard / UI work** — read 1, 6, 7.
+- **For dashboard / UI work** — read 1, 6, 6a.
 - **For ops / SRE** — read 1, 5, 9.
 
 Each architecture page links to the relevant source files so you can audit the implementation against this document.
