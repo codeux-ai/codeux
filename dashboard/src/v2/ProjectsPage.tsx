@@ -274,16 +274,12 @@ export const ProjectsPage: FunctionComponent = () => {
                 {viewModel.runningCount > 0 ? (
                   <span className="inline-flex items-center gap-2 rounded-full border border-status-green/20 bg-status-green/[0.07] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-status-green">
                     <span className="h-1.5 w-1.5 rounded-full bg-status-green" aria-hidden="true" />
-                    {translatePlural(projectMessages, "runningCount", viewModel.runningCount, {
-                      count: formatNumber(viewModel.runningCount),
-                    })}
+                    {translatePlural(projectMessages, "runningCount", viewModel.runningCount)}
                   </span>
                 ) : null}
                 <span className="inline-flex items-center gap-2 rounded-full border border-black/[0.07] bg-white/55 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300">
                   <FolderOpen className="h-3 w-3" aria-hidden="true" />
-                  {translatePlural(projectMessages, "totalCount", viewModel.totalCount, {
-                    count: formatNumber(viewModel.totalCount),
-                  })}
+                  {translatePlural(projectMessages, "totalCount", viewModel.totalCount)}
                 </span>
               </div>
               <button

@@ -85,7 +85,7 @@ function focusFirstInvalidField(formId: string, scrollContainerId: string, reduc
 }
 
 export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClose, onAdd, initialSourceType, quickActionDefaults }) => {
-    const { formatNumber, translate, translatePlural } = useDashboardI18n();
+    const { translate, translatePlural } = useDashboardI18n();
     const fieldsRef   = useRef<HTMLFormElement>(null);
     const transitionSurfaceRef = useRef<HTMLDivElement>(null);
     const previousTransitionKeyRef = useRef<string | null>(null);
@@ -340,7 +340,6 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                         "childDirectories",
                         directoryListing.directories.length,
                         {
-                            count: formatNumber(directoryListing.directories.length),
                             path: directoryListing.currentPath,
                         },
                     )

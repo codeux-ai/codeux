@@ -584,6 +584,29 @@ describe("ProjectsPage", () => {
     await waitFor(() => expect(deleteProjectMock).toHaveBeenCalledWith("project-1"));
   });
 
+  it("formats the German Projects header count with the active locale", () => {
+    const projects = Array.from({ length: 1000 }, (_, index) => createProject({
+      id: `project-${index}`,
+      name: `Project ${index}`,
+    }));
+    vi.mocked(useProjectData).mockReturnValue({
+      projects,
+      selectedProjectId: "project-0",
+      loading: false,
+      error: null,
+      refreshProjects: vi.fn(),
+      selectProject: selectProjectMock,
+      createProject: createProjectMock,
+      updateProject: vi.fn(),
+      deleteProject: deleteProjectMock,
+      selectedProject: projects[0],
+    } as any);
+
+    render(<ProjectsPage />, "de");
+
+    expect(screen.getByText("1.000 insgesamt")).toBeInTheDocument();
+  });
+
   it("localizes setup progress and preserves a provider failure verbatim", async () => {
     vi.useFakeTimers();
     vi.mocked(fetchProjectInvocations).mockResolvedValue([{

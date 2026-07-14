@@ -403,6 +403,24 @@ describe("AddProjectModal", () => {
     expect(screen.getByText("Selected directory: /home/user/project")).toBeInTheDocument();
   });
 
+  it("formats the German directory-picker count with the active locale", async () => {
+    vi.mocked(fetchLocalDirectories).mockResolvedValue({
+      currentPath: "/home/user",
+      parentPath: "/home",
+      rootPath: "/",
+      homePath: "/home/user",
+      directories: Array.from({ length: 1000 }, (_, index) => ({
+        name: `directory-${index}`,
+        path: `/home/user/directory-${index}`,
+      })),
+    });
+
+    render(<AddProjectModal onClose={vi.fn()} onAdd={vi.fn()} />, "de");
+    fireEvent.click(screen.getByRole("button", { name: "Durchsuchen" }));
+
+    expect(await screen.findByText("1.000 Unterverzeichnisse in /home/user.")).toBeInTheDocument();
+  });
+
   it("applies the directory picker selection to the optional clone directory", async () => {
     vi.mocked(fetchLocalDirectories)
       .mockResolvedValueOnce({
