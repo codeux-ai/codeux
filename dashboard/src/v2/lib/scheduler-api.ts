@@ -8,13 +8,6 @@ import type {
   UpdateSchedulerEntryInput,
 } from "../types.js";
 import { fetchJson } from "../../lib/api/fetch-json.js";
-import { createDashboardFormatters } from "../i18n/formatters.js";
-import {
-  resolveDashboardLocale,
-  translateDashboardMessage,
-  type DashboardLocale,
-} from "../i18n/locales.js";
-import { schedulerMessages } from "../i18n/messages/scheduler.js";
 
 export interface AgentSchedulerSummaryEntry {
   id: string;
@@ -40,71 +33,31 @@ export const fetchProjectSchedule = async (
   return fetchJson<SchedulerCollectionResponse>(`${url.pathname}${url.search}`, { signal });
 };
 
-const activePresentationLocale = (): DashboardLocale => resolveDashboardLocale(
-  typeof document === "undefined" ? undefined : document.documentElement.lang,
-);
-
-export const formatSchedulerDateValueInTimeZone = (
-  value: Date | number,
-  locale: DashboardLocale,
-  options: Omit<Intl.DateTimeFormatOptions, "timeZone">,
-  timeZone?: string,
-): string => {
-  const formatters = createDashboardFormatters(locale);
-  if (timeZone) {
-    try {
-      return formatters.formatDate(value, { ...options, timeZone });
-    } catch {
-      // Legacy rows may contain timezone identifiers unsupported by the host.
-      // Keep the identifier verbatim in the UI and format in the active locale.
-    }
-  }
-  return formatters.formatDate(value, options);
-};
-
-const scheduleAnchorOffsetLabel = (offsetMinutes: number | undefined, locale: DashboardLocale): string => {
+const scheduleAnchorOffsetLabel = (offsetMinutes?: number): string => {
   const offset = Math.max(0, Math.floor(Number(offsetMinutes ?? 0)));
   if (offset === 0) {
     return "";
   }
-  return translateDashboardMessage(
-    schedulerMessages,
-    locale,
-    offset === 1 ? "offsetOneMinute" : "offsetManyMinutes",
-    { count: offset },
-  );
+  return offset === 1 ? " + 1 minute" : ` + ${offset} minutes`;
 };
 
-export const formatScheduleDateTime = (
-  iso: string | null | undefined,
-  locale: DashboardLocale = activePresentationLocale(),
-  timeZone?: string,
-): string => {
+const formatScheduleDateTime = (iso: string | null | undefined): string => {
   if (!iso) {
-    return translateDashboardMessage(schedulerMessages, locale, "noScheduledTime");
+    return "No scheduled time";
   }
   const date = new Date(iso);
   if (!Number.isFinite(date.getTime())) {
-    return translateDashboardMessage(schedulerMessages, locale, "noScheduledTime");
+    return "No scheduled time";
   }
-  return formatSchedulerDateValueInTimeZone(date, locale, {
+  return date.toLocaleString(undefined, {
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }, timeZone);
+  });
 };
 
-const statusLabel = (status: ScheduleStatus, locale: DashboardLocale): string => {
-  const key = {
-    scheduled: "statusScheduled",
-    paused: "statusPaused",
-    completed: "statusCompleted",
-    failed: "statusFailed",
-    cancelled: "statusCancelled",
-  } as const;
-  return translateDashboardMessage(schedulerMessages, locale, key[status]);
-};
+const statusLabel = (status: ScheduleStatus): string => status.replaceAll("_", " ");
 
 const isAgentSchedulerSource = (entry: SchedulerEntryRecord): boolean => {
   if (entry.targetType === "agent_wakeup") {
@@ -128,35 +81,24 @@ export const isActiveAgentSchedulerEntry = (entry: SchedulerEntryRecord): entry 
 
 export const toAgentSchedulerSummaryEntry = (entry: SchedulerEntryRecord & {
   targetType: "agent_wakeup" | "task";
-}, locale: DashboardLocale = activePresentationLocale()): AgentSchedulerSummaryEntry => {
+}): AgentSchedulerSummaryEntry => {
   const scheduledAt = entry.nextRunAt ?? entry.scheduledFor ?? null;
-  const offset = scheduleAnchorOffsetLabel(entry.scheduleAnchor?.offsetMinutes, locale);
   const timingSummary = entry.scheduleAnchor?.mode === "after_sprint_end"
-    ? translateDashboardMessage(schedulerMessages, locale, "anchorAfterSourceSprint", {
-      sprintId: entry.scheduleAnchor.sourceSprintId,
-      offset,
-    })
-    : entry.scheduleAnchor?.mode === "after_task_end"
-      ? translateDashboardMessage(schedulerMessages, locale, "anchorAfterSourceTask", {
-        taskId: entry.scheduleAnchor.sourceTaskId,
-        offset,
-      })
-      : translateDashboardMessage(schedulerMessages, locale, "scheduledFor", {
-        date: formatScheduleDateTime(scheduledAt, locale, entry.timezone),
-      });
+    ? `After source sprint ${entry.scheduleAnchor.sourceSprintId} ends${scheduleAnchorOffsetLabel(entry.scheduleAnchor.offsetMinutes)}`
+    : `Scheduled for ${formatScheduleDateTime(scheduledAt)}`;
 
   if (entry.targetType === "agent_wakeup") {
     return {
       id: entry.id,
       targetType: entry.targetType,
-      label: translateDashboardMessage(schedulerMessages, locale, "targetAgentWakeup"),
-      title: entry.title || entry.agentWakeupTarget?.title || translateDashboardMessage(schedulerMessages, locale, "targetAgentWakeup"),
+      label: "Agent wakeup",
+      title: entry.title || entry.agentWakeupTarget?.title || "Agent wakeup",
       status: entry.status,
-      statusLabel: statusLabel(entry.status, locale),
+      statusLabel: statusLabel(entry.status),
       timingSummary,
       targetSummary: entry.agentWakeupTarget?.threadId
-        ? translateDashboardMessage(schedulerMessages, locale, "threadSummary", { threadId: entry.agentWakeupTarget.threadId })
-        : translateDashboardMessage(schedulerMessages, locale, "projectChatWakeup"),
+        ? `Thread ${entry.agentWakeupTarget.threadId}`
+        : "Project chat wakeup",
       scheduledAt,
     };
   }
@@ -164,17 +106,14 @@ export const toAgentSchedulerSummaryEntry = (entry: SchedulerEntryRecord & {
   return {
     id: entry.id,
     targetType: entry.targetType,
-    label: translateDashboardMessage(schedulerMessages, locale, "taskRun"),
-    title: entry.title || translateDashboardMessage(schedulerMessages, locale, "scheduledTaskRun"),
+    label: "Task run",
+    title: entry.title || "Scheduled task run",
     status: entry.status,
-    statusLabel: statusLabel(entry.status, locale),
+    statusLabel: statusLabel(entry.status),
     timingSummary,
     targetSummary: entry.taskTarget?.taskId
-      ? translateDashboardMessage(schedulerMessages, locale, "taskSummary", {
-        taskId: entry.taskTarget.taskId,
-        provider: entry.taskTarget.provider ? ` · ${entry.taskTarget.provider}` : "",
-      })
-      : translateDashboardMessage(schedulerMessages, locale, "taskRerun"),
+      ? `Task ${entry.taskTarget.taskId}${entry.taskTarget.provider ? ` · ${entry.taskTarget.provider}` : ""}`
+      : "Task rerun",
     scheduledAt,
   };
 };
@@ -194,13 +133,12 @@ const scheduleSortValue = (entry: AgentSchedulerSummaryEntry): number => {
 export const fetchActiveAgentSchedulerEntries = async (
   projectId: string,
   signal?: AbortSignal,
-  locale: DashboardLocale = activePresentationLocale(),
 ): Promise<AgentSchedulerSummaryEntry[]> => {
   const window = buildAgentScheduleWindow();
   const schedule = await fetchProjectSchedule(projectId, window.from, window.to, signal);
   return schedule.entries
     .filter(isActiveAgentSchedulerEntry)
-    .map((entry) => toAgentSchedulerSummaryEntry(entry, locale))
+    .map(toAgentSchedulerSummaryEntry)
     .sort((left, right) => scheduleSortValue(left) - scheduleSortValue(right) || left.title.localeCompare(right.title));
 };
 

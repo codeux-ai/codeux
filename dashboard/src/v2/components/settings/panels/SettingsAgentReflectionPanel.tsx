@@ -3,14 +3,18 @@ import { Sparkles } from "lucide-preact";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../lib/settings.js";
 import type { ProjectSettings } from "../../../../types.js";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
+import { useDashboardI18n } from "../../../i18n/index.js";
+import { settingsAgentsGuidanceMessages } from "../../../i18n/messages/settings-agents-guidance.js";
+import { getFieldSourceLabel } from "../../../lib/settings-view-models.js";
 import { SelfReflectionControls } from "./QAPanel.js";
-import { SectionCard, getFieldBadge } from "./SharedPanelComponents.js";
+import { SectionCard } from "./SharedPanelComponents.js";
 
 export interface SettingsAgentReflectionPanelProps {
   state: SettingsPageState;
 }
 
 export const SettingsAgentReflectionPanel: FunctionComponent<SettingsAgentReflectionPanelProps> = ({ state }) => {
+  const { locale, translate } = useDashboardI18n();
   const {
     activeScope,
     setActiveScope,
@@ -60,37 +64,58 @@ export const SettingsAgentReflectionPanel: FunctionComponent<SettingsAgentReflec
     }));
   };
 
-  const badgeFor = (path: string): string | undefined => getFieldBadge(activeScope, projectSources, path);
+  const badgeFor = (path: string): string | undefined => {
+    if (activeScope !== "project") return undefined;
+    return getFieldSourceLabel(projectSources[path], "project", locale) ?? undefined;
+  };
+  const reflectionCopy = {
+    enableAria: (title: string) => translate(settingsAgentsGuidanceMessages, "reflectionEnableAria", { title }),
+    optedIn: translate(settingsAgentsGuidanceMessages, "reflectionOptedIn"),
+    offByDefault: translate(settingsAgentsGuidanceMessages, "reflectionOffDefault"),
+    maxImprovementAttempts: translate(settingsAgentsGuidanceMessages, "reflectionMaxAttempts"),
+    maxImprovementAttemptsAria: (title: string) => translate(settingsAgentsGuidanceMessages, "reflectionMaxAttemptsAria", { title }),
+    criteriaRows: translate(settingsAgentsGuidanceMessages, "reflectionCriteriaRows"),
+    addCriterion: translate(settingsAgentsGuidanceMessages, "reflectionAddCriterion"),
+    emptyCriteria: translate(settingsAgentsGuidanceMessages, "reflectionEmptyCriteria"),
+    label: translate(settingsAgentsGuidanceMessages, "reflectionLabel"),
+    ratingPrompt: translate(settingsAgentsGuidanceMessages, "reflectionRatingPrompt"),
+    threshold: translate(settingsAgentsGuidanceMessages, "reflectionThreshold"),
+    criterionFallback: (number: number) => translate(settingsAgentsGuidanceMessages, "reflectionCriterionFallback", { number }),
+    thresholdAria: (label: string) => translate(settingsAgentsGuidanceMessages, "reflectionThresholdAria", { label }),
+    removeCriterionAria: (label: string) => translate(settingsAgentsGuidanceMessages, "reflectionRemoveCriterionAria", { label }),
+  };
 
   return (
     <SectionCard
-      title="Self-Reflection"
+      title={translate(settingsAgentsGuidanceMessages, "reflectionTitle")}
       watermark="REF"
       icon={<Sparkles strokeWidth={2.4} />}
       accent="fuchsia"
-      summary="Review planning and QA quality checks at a glance, then tune the criteria behind each reflection pass."
-      configureLabel="Tune self-reflection"
+      summary={translate(settingsAgentsGuidanceMessages, "reflectionSummary")}
+      configureLabel={translate(settingsAgentsGuidanceMessages, "reflectionConfigure")}
       highlights={[
-        { label: "Planning", value: planning.enabled ? "Enabled" : "Off", tone: planning.enabled ? "active" : "neutral" },
-        { label: "Quality assurance", value: qualityAssurance.enabled ? "Enabled" : "Off", tone: qualityAssurance.enabled ? "active" : "neutral" },
-        { label: "Criteria", value: `${planning.criteria.length + qualityAssurance.criteria.length} total` },
+        { label: translate(settingsAgentsGuidanceMessages, "reflectionPlanning"), value: translate(settingsAgentsGuidanceMessages, planning.enabled ? "enabled" : "off"), tone: planning.enabled ? "active" : "neutral" },
+        { label: translate(settingsAgentsGuidanceMessages, "reflectionQa"), value: translate(settingsAgentsGuidanceMessages, qualityAssurance.enabled ? "enabled" : "off"), tone: qualityAssurance.enabled ? "active" : "neutral" },
+        { label: translate(settingsAgentsGuidanceMessages, "reflectionCriteria"), value: translate(settingsAgentsGuidanceMessages, "reflectionCriteriaTotal", { count: planning.criteria.length + qualityAssurance.criteria.length }) },
       ]}
     >
       <SelfReflectionControls
-        title="Planning self-reflection"
-        description="Optionally rates sprint planning output against editable criteria and can request improved planning before accepting it."
+        title={translate(settingsAgentsGuidanceMessages, "reflectionPlanningTitle")}
+        description={translate(settingsAgentsGuidanceMessages, "reflectionPlanningDescription")}
         settings={planning}
         update={(next) => updateReflection("planning", next)}
         getBadge={badgeFor}
         basePath="agents.selfReflection.planning"
+        copy={reflectionCopy}
       />
       <SelfReflectionControls
-        title="QA self-reflection"
-        description="Optionally rates QA review output against editable criteria and can request improved QA output before accepting it."
+        title={translate(settingsAgentsGuidanceMessages, "reflectionQaTitle")}
+        description={translate(settingsAgentsGuidanceMessages, "reflectionQaDescription")}
         settings={qualityAssurance}
         update={(next) => updateReflection("qualityAssurance", next)}
         getBadge={badgeFor}
         basePath="agents.selfReflection.qualityAssurance"
+        copy={reflectionCopy}
         last
       />
     </SectionCard>

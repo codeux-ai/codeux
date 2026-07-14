@@ -43,4 +43,10 @@ AI Models and Memory settings use a feature-owned catalog for routing diagrams, 
 
 Speech and model contracts remain locale-neutral. Provider and model IDs, language tags, BCP-47 values, voice IDs, API-returned metadata, license and attribution text, endpoints, and runtime diagnostics are displayed unchanged. Choosing a recommended speech model only updates the settings draft; a model download starts only after the user accepts the localized license confirmation.
 
+## Settings localization boundaries
+
+The Agents, Techstacks, and Guidance settings surfaces use `messages/settings-agents-guidance.ts`. Component copy follows the provider's active locale, while locale-explicit presentation helpers accept `en` or `de` for tests and non-component consumers.
+
+Localization stops at the persistence boundary: agent and stack ids, preset and storage names, package labels, application-kind values, reflection criteria, memory/instruction markdown, and custom guidance remain byte-for-byte as authored. Persistent-skill storage creation, editing, deletion, and agent attachments still mutate immediately; changing locale does not move those operations into the Settings draft or bypass pending, confirmation, recovery, and focus-restoration behavior.
+
 For onboarding specifically, provider and dependency names, detected paths, model IDs, command snippets and installation output, and API-returned readiness diagnostics stay verbatim. The locale changes only dashboard-owned framing and accessible names; submitted provider IDs, enums, credentials, and settings drafts are unchanged.

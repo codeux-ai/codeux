@@ -15,6 +15,8 @@ Use it when you are configuring a new project, auditing inherited settings, or d
 
 System scope owns stack entries, default-stack selection, and technology items; project scope chooses a stack, clears to Unassigned, and selects web or desktop app kind.
 
+Catalog controls, validation, empty states, and application-kind labels follow the active dashboard locale. Stored stack ids, catalog labels, technology/package names, and the `web` or `desktop` application-kind values remain unchanged.
+
 | Control Surface | Runtime Effect | Review Before Saving |
 | --- | --- | --- |
 | Settings card fields | Updates the active Settings scope after you save the page. | Confirm whether you are editing System or Project scope. |

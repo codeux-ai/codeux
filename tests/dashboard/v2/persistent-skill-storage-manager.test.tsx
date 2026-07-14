@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { PersistentSkillStorageManager } from "../../../dashboard/src/v2/components/settings/PersistentSkillStorageManager.js";
+import { DashboardI18nProvider, type DashboardLocale } from "../../../dashboard/src/v2/i18n/index.js";
 import {
   createSkillStorage,
   deleteSkillStorage,
@@ -51,8 +52,17 @@ const contents = {
 };
 
 const openManager = (): void => {
-  fireEvent.click(screen.getByRole("button", { name: "Manage storages" }));
+  fireEvent.click(screen.getByRole("button", { name: /Manage storages|Speicher verwalten/ }));
 };
+
+const renderManager = (
+  props: Parameters<typeof PersistentSkillStorageManager>[0],
+  locale: DashboardLocale = "en",
+) => render(
+  <DashboardI18nProvider initialLocale={locale} storage={null}>
+    <PersistentSkillStorageManager {...props} />
+  </DashboardI18nProvider>,
+);
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -70,30 +80,30 @@ afterEach(() => {
 
 describe("PersistentSkillStorageManager", () => {
   it("opens from a project-only summary and communicates the unavailable state", async () => {
-    render(<PersistentSkillStorageManager project={null} storages={[]} onStoragesChange={vi.fn()} />);
+    renderManager({ project: null, storages: [], onStoragesChange: vi.fn() }, "de");
 
-    expect(screen.getByText("Project storage unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Projektspeicher nicht verfügbar")).toBeInTheDocument();
     openManager();
 
-    expect(await screen.findByRole("dialog", { name: "Persistent skill storage" })).toBeInTheDocument();
-    expect(screen.getByText("Select a project first")).toBeInTheDocument();
-    expect(screen.getByText(/storages are owned by one project/i)).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Persistenter Skill-Speicher" })).toBeInTheDocument();
+    expect(screen.getByText("Zuerst ein Projekt auswählen")).toBeInTheDocument();
+    expect(screen.getByText(/gehören jeweils zu einem Projekt/i)).toBeInTheDocument();
     expect(fetchSkillStorages).not.toHaveBeenCalled();
   });
 
   it("shows loading, empty, and load-failure states in an announced region", async () => {
     let resolveList: ((value: SkillStorageRecord[]) => void) | undefined;
     vi.mocked(fetchSkillStorages).mockImplementationOnce(() => new Promise((resolve) => { resolveList = resolve; }));
-    render(<PersistentSkillStorageManager project={project} storages={[]} onStoragesChange={vi.fn()} />);
+    renderManager({ project, storages: [], onStoragesChange: vi.fn() }, "de");
     openManager();
 
-    expect(await screen.findByText("Loading storages…")).toBeInTheDocument();
+    expect(await screen.findByText("Speicher werden geladen…")).toBeInTheDocument();
     resolveList?.([]);
-    expect(await screen.findByText("No project storages yet")).toBeInTheDocument();
+    expect(await screen.findByText("Noch keine Projektspeicher")).toBeInTheDocument();
 
     cleanup();
     vi.mocked(fetchSkillStorages).mockRejectedValueOnce(new Error("Storage service unavailable"));
-    render(<PersistentSkillStorageManager project={project} storages={[]} onStoragesChange={vi.fn()} />);
+    renderManager({ project, storages: [], onStoragesChange: vi.fn() }, "de");
     openManager();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Storage service unavailable");
@@ -104,7 +114,7 @@ describe("PersistentSkillStorageManager", () => {
     vi.mocked(fetchSkillStorages).mockResolvedValueOnce([]);
     vi.mocked(createSkillStorage).mockImplementationOnce(() => new Promise((resolve) => { resolveCreate = resolve; }));
     const onStoragesChange = vi.fn();
-    render(<PersistentSkillStorageManager project={project} storages={[]} onStoragesChange={onStoragesChange} />);
+    renderManager({ project, storages: [], onStoragesChange });
     openManager();
     await screen.findByText("No project storages yet");
 
@@ -128,7 +138,7 @@ describe("PersistentSkillStorageManager", () => {
   it("edits with updateSkillStorage and supports cancelling an edit", async () => {
     vi.mocked(fetchSkillStorages).mockResolvedValueOnce([storage]);
     vi.mocked(updateSkillStorage).mockResolvedValueOnce({ ...storage, name: "Updated Review", description: "Updated notes" });
-    render(<PersistentSkillStorageManager project={project} storages={[storage]} onStoragesChange={vi.fn()} />);
+    renderManager({ project, storages: [storage], onStoragesChange: vi.fn() });
     openManager();
     await screen.findByText("1 skill available");
 
@@ -152,26 +162,46 @@ describe("PersistentSkillStorageManager", () => {
 
   it("requires the target name before deletion and restores focus when cancelled", async () => {
     vi.mocked(fetchSkillStorages).mockResolvedValueOnce([storage]);
-    render(<PersistentSkillStorageManager project={project} storages={[storage]} onStoragesChange={vi.fn()} />);
+    renderManager({ project, storages: [storage], onStoragesChange: vi.fn() }, "de");
     openManager();
-    await screen.findByText("1 skill available");
+    await screen.findByText("1 Skill verfügbar");
 
-    const deleteButton = screen.getByRole("button", { name: "Delete Review Skills" });
+    const deleteButton = screen.getByRole("button", { name: "Review Skills löschen" });
     fireEvent.click(deleteButton);
-    const confirmButton = screen.getByRole("button", { name: "Type Review Skills to enable Delete storage" });
+    const confirmButton = screen.getByRole("button", { name: "Gib Review Skills ein, um „Speicher löschen“ zu aktivieren" });
     expect(confirmButton).toBeDisabled();
-    fireEvent.input(screen.getByLabelText("Type Review Skills to confirm"), { target: { value: "Wrong name" } });
+    fireEvent.input(screen.getByLabelText("Gib Review Skills zur Bestätigung ein"), { target: { value: "Wrong name" } });
     expect(confirmButton).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Keep storage" }));
+    fireEvent.click(screen.getByRole("button", { name: "Speicher behalten" }));
     await waitFor(() => expect(deleteButton).toHaveFocus());
     expect(deleteSkillStorage).not.toHaveBeenCalled();
 
     fireEvent.click(deleteButton);
-    fireEvent.input(screen.getByLabelText("Type Review Skills to confirm"), { target: { value: "Review Skills" } });
-    fireEvent.click(screen.getByRole("button", { name: "Delete storage" }));
+    fireEvent.input(screen.getByLabelText("Gib Review Skills zur Bestätigung ein"), { target: { value: "Review Skills" } });
+    fireEvent.click(screen.getByRole("button", { name: "Speicher löschen" }));
 
     await waitFor(() => expect(deleteSkillStorage).toHaveBeenCalledWith(project.id, storage.id));
-    expect(await screen.findByText("Review Skills was deleted.")).toBeInTheDocument();
-    expect(screen.getByText("No project storages yet")).toBeInTheDocument();
+    expect(await screen.findByText("Review Skills wurde gelöscht.")).toBeInTheDocument();
+    expect(screen.getByText("Noch keine Projektspeicher")).toBeInTheDocument();
+  });
+
+  it("recovers from a failed German deletion and restores the destructive trigger", async () => {
+    vi.mocked(deleteSkillStorage).mockRejectedValueOnce(new Error("Speicherdienst nicht erreichbar"));
+    renderManager({ project, storages: [storage], onStoragesChange: vi.fn() }, "de");
+    openManager();
+    await screen.findByText("1 Skill verfügbar");
+
+    const deleteButton = screen.getByRole("button", { name: "Review Skills löschen" });
+    fireEvent.click(deleteButton);
+    fireEvent.input(screen.getByLabelText("Gib Review Skills zur Bestätigung ein"), {
+      target: { value: "Review Skills" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Speicher löschen" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Review Skills konnte nicht gelöscht werden. Speicherdienst nicht erreichbar",
+    );
+    await waitFor(() => expect(deleteButton).toHaveFocus());
+    expect(screen.getByText("Review Skills")).toBeInTheDocument();
   });
 });
