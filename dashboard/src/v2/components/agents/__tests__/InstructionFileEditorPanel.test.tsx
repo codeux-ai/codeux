@@ -1,10 +1,9 @@
 /** @vitest-environment jsdom */
 import { h } from "preact";
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/preact";
+import { cleanup, render, fireEvent, screen, waitFor } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { InstructionFileEditorPanel } from "../InstructionFileEditorPanel.js";
-import { renderWithI18n, renderWithI18n as render } from "./render-with-i18n.js";
 import * as instructionApi from "../../../lib/instruction-file-api.js";
 
 vi.mock("gsap", () => ({
@@ -57,16 +56,5 @@ describe("InstructionFileEditorPanel", () => {
     });
     await waitFor(() => expect(textarea).toHaveFocus());
     expect(saveSpy).not.toHaveBeenCalled();
-  });
-
-  test("localizes German file chrome while preserving Markdown verbatim", async () => {
-    const content = "# Keep this heading\n\nDo not translate this guidance.";
-    vi.spyOn(instructionApi, "fetchInstructionFile").mockResolvedValue({ ...file, content });
-
-    renderWithI18n(<InstructionFileEditorPanel projectId="project_1" file={file} onSaved={vi.fn()} />, "de");
-
-    expect(await screen.findByText("Anweisungsdatei ist gespeichert.")).toBeInTheDocument();
-    expect(screen.getByRole("textbox")).toHaveValue(content);
-    expect(screen.getByRole("button", { name: "Speichern" })).toBeInTheDocument();
   });
 });

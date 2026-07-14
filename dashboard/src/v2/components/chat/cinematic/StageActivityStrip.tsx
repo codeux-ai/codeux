@@ -1,5 +1,7 @@
 import type { FunctionComponent } from "preact";
 import type { CinematicActivityCue } from "../../../lib/cinematic-activity.js";
+import { useDashboardI18n } from "../../../i18n/context.js";
+import { chatMessages } from "../../../i18n/messages/chat.js";
 
 export interface StageActivityStripProps {
   backgroundActivityCount: number;
@@ -33,6 +35,7 @@ export const StageActivityStrip: FunctionComponent<StageActivityStripProps> = ({
   backgroundCue,
   foregroundCue,
 }) => {
+  const { formatNumber, translate } = useDashboardI18n();
   const primaryCue = foregroundCue ?? backgroundCue;
   if (!primaryCue) return null;
 
@@ -48,7 +51,7 @@ export const StageActivityStrip: FunctionComponent<StageActivityStripProps> = ({
         {foregroundCue && backgroundCue && (
           <div className="mt-2 border-t border-black/[0.05] pt-1.5 dark:border-white/[0.07]">
             <span className="block truncate font-mono text-[9px] uppercase tracking-[0.11em] text-slate-400 dark:text-slate-500">
-              {backgroundActivityCount} other active · {backgroundCue.label}
+              {translate(chatMessages, "otherActive", { count: formatNumber(backgroundActivityCount), label: backgroundCue.label })}
             </span>
           </div>
         )}

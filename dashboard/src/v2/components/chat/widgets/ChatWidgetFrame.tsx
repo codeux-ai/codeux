@@ -1,4 +1,6 @@
 import { type FunctionComponent, type ComponentChildren } from "preact";
+import { useDashboardI18n } from "../../../i18n/context.js";
+import { chatMessages } from "../../../i18n/messages/chat.js";
 
 export type ExecutionStatus = "queued" | "running" | "completed" | "failed";
 
@@ -15,6 +17,7 @@ export const ChatWidgetFrame: FunctionComponent<ChatWidgetFrameProps> = ({
   header,
   footer
 }) => {
+  const { locale, translate } = useDashboardI18n();
   const getAccentBar = (): string => {
     switch (status) {
       case "running":
@@ -48,7 +51,7 @@ export const ChatWidgetFrame: FunctionComponent<ChatWidgetFrameProps> = ({
     <div
       class={`${getContainerStyles()} ${getAccentBar()} ${opacityClass} overflow-hidden`}
       role="region"
-      aria-label={`Widget: ${status}`}
+      aria-label={translate(chatMessages, "widgetStatus", { status: locale === "en" ? status : translate(chatMessages, status === "queued" ? "queuedLabel" : status) })}
     >
       {header && (
         <div class="px-4 py-2.5 border-b border-black/[0.04] dark:border-white/[0.04] flex items-center justify-between text-[12px] font-medium text-slate-700 dark:text-slate-300">

@@ -19,13 +19,13 @@ export const SectionHeader: FunctionComponent<SectionHeaderProps> = ({
 }) => (
     <div className={`flex items-end justify-between px-2 overflow-hidden ${className}`}>
         <div className="relative">
-            <span aria-hidden="true" className="text-[6rem] font-black tracking-[0.2em] text-[color:var(--fill-muted-hover)] absolute -top-8 -left-3 pointer-events-none select-none font-display leading-none overflow-hidden">
+            <h2 className="text-[6rem] font-black tracking-[0.2em] text-[color:var(--fill-muted-hover)] absolute -top-8 -left-3 pointer-events-none select-none font-display leading-none overflow-hidden">
                 {watermark}
-            </span>
-            <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white relative z-10 flex items-center gap-2.5">
-                <span aria-hidden="true">{icon}</span>
-                {title}
             </h2>
+            <h3 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white relative z-10 flex items-center gap-2.5">
+                {icon}
+                {title}
+            </h3>
         </div>
     </div>
 );

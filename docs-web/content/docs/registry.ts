@@ -396,7 +396,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/settings-display-settings',
     section: 'User Guide',
     title: "Display Settings",
-    description: "Controls the dashboard shell layout, theme, accent color, motion preference, and desktop zoom when available.",
+    description: "Controls the dashboard shell layout, language, theme, accent color, motion preference, and desktop zoom when available.",
   },
   'settings-background': {
     id: 'settings-background',

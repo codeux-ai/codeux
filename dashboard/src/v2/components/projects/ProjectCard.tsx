@@ -15,6 +15,8 @@ import {
 import type { Source, SourceStatus } from "../../types.js";
 import type { ProjectCardDisplayValue } from "../../types.js";
 import { buildProjectCardViewModel } from "../../lib/project-card-view-model.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { projectMessages } from "../../i18n/messages/projects.js";
 import { StatusDot } from "../ui/StatusDot.js";
 
 export interface ProjectCardProps {
@@ -29,11 +31,11 @@ export interface ProjectCardProps {
   onSettings: () => void;
 }
 
-const STATUS_LABELS: Record<SourceStatus, string> = {
-  running: "Running",
-  failed: "Failed",
-  intervention: "Needs review",
-  idle: "Idle",
+const STATUS_MESSAGE_KEYS: Record<SourceStatus, "statusRunning" | "statusFailed" | "statusNeedsReview" | "statusIdle"> = {
+  running: "statusRunning",
+  failed: "statusFailed",
+  intervention: "statusNeedsReview",
+  idle: "statusIdle",
 };
 
 const STATUS_TEXT_CLASSES: Record<SourceStatus, string> = {
@@ -123,16 +125,24 @@ export const ProjectCard: FunctionComponent<ProjectCardProps> = ({
   onOpenInvocation,
   onSettings,
 }) => {
-  const viewModel = useMemo(() => buildProjectCardViewModel(source), [source]);
+  const { locale, formatNumber, translate } = useDashboardI18n();
+  const viewModel = useMemo(() => buildProjectCardViewModel(source, locale), [locale, source]);
   const location = viewModel.gitUrl.isEmpty ? viewModel.localDirectory : viewModel.gitUrl;
-  const locationLabel = viewModel.gitUrl.isEmpty ? "Path" : "Repository";
-  const lastRunStatus = viewModel.lastRunStatus.isEmpty ? "No runs yet" : viewModel.lastRunStatus.value;
+  const locationLabel = translate(projectMessages, viewModel.gitUrl.isEmpty ? "path" : "repository");
+  const lastRunStatus = viewModel.lastRunStatus.isEmpty
+    ? translate(projectMessages, "noRunsYet")
+    : viewModel.lastRunStatus.value;
   const completion = viewModel.taskCompletion.percentage ?? 0;
-  const selectionLabel = isSelected ? `Selected project: ${source.name}` : `Select project: ${source.name}`;
+  const selectionLabel = translate(
+    projectMessages,
+    isSelected ? "selectedProject" : "selectProject",
+    { name: source.name },
+  );
+  const statusLabel = translate(projectMessages, STATUS_MESSAGE_KEYS[source.status]);
 
   return (
     <article
-      aria-label={`Project: ${source.name}`}
+      aria-label={translate(projectMessages, "projectArticle", { name: source.name })}
       data-selected={isSelected ? "true" : "false"}
       data-running={source.status === "running" ? "true" : "false"}
       className={`flex h-full min-h-[390px] min-w-0 flex-col overflow-hidden rounded-[1.5rem] border bg-white/70 p-5 shadow-sm backdrop-blur-xl dark:bg-void-800/65 ${
@@ -166,19 +176,19 @@ export const ProjectCard: FunctionComponent<ProjectCardProps> = ({
           {isSelected ? (
             <span
               role="status"
-              aria-label={`${source.name} is selected`}
+              aria-label={translate(projectMessages, "projectIsSelected", { name: source.name })}
               className="inline-flex shrink-0 items-center gap-1 rounded-full bg-signal-500/[0.12] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-signal-700 dark:text-signal-300"
             >
               <Check className="h-3 w-3" aria-hidden="true" />
-              Selected
+              {translate(projectMessages, "selected")}
             </span>
           ) : null}
         </span>
 
         <span className="mt-4 flex items-center justify-between gap-3 border-y border-black/[0.06] py-3 dark:border-white/[0.07]">
           <span className={`inline-flex items-center gap-2 text-xs font-semibold ${STATUS_TEXT_CLASSES[source.status]}`}>
-            <StatusDot status={source.status} />
-            {STATUS_LABELS[source.status]}
+            <span aria-hidden="true"><StatusDot status={source.status} /></span>
+            <span aria-label={translate(projectMessages, "statusLabel", { status: statusLabel })}>{statusLabel}</span>
           </span>
           <span className="max-w-[50%] truncate rounded-full border border-black/[0.07] bg-black/[0.025] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300">
             {viewModel.sourceBadge.label}
@@ -190,12 +200,12 @@ export const ProjectCard: FunctionComponent<ProjectCardProps> = ({
             icon={viewModel.gitUrl.isEmpty ? <MapPin className="h-3 w-3" aria-hidden="true" /> : <Link className="h-3 w-3" aria-hidden="true" />}
             label={locationLabel}
             value={location}
-            fallback="Not set"
+            fallback={translate(projectMessages, "notSet")}
             mono
             testId="project-location"
           />
-          <DetailRow icon={<GitBranch className="h-3 w-3" aria-hidden="true" />} label="Branch" value={viewModel.branch} fallback="Not set" mono testId="project-branch" />
-          <DetailRow icon={<Clock3 className="h-3 w-3" aria-hidden="true" />} label="Last run" value={viewModel.lastRunAt} fallback="No runs yet" testId="project-last-run" />
+          <DetailRow icon={<GitBranch className="h-3 w-3" aria-hidden="true" />} label={translate(projectMessages, "branch")} value={viewModel.branch} fallback={translate(projectMessages, "notSet")} mono testId="project-branch" />
+          <DetailRow icon={<Clock3 className="h-3 w-3" aria-hidden="true" />} label={translate(projectMessages, "lastRun")} value={viewModel.lastRunAt} fallback={translate(projectMessages, "noRunsYet")} testId="project-last-run" />
           <span className="block truncate text-right text-[11px] text-slate-400 dark:text-slate-500" title={lastRunStatus}>
             {lastRunStatus}
           </span>
@@ -206,7 +216,7 @@ export const ProjectCard: FunctionComponent<ProjectCardProps> = ({
         <button
           type="button"
           disabled={!setupInvocationId}
-          aria-label={setupInvocationId ? "Open setup invocation" : "Project setup invocation is starting"}
+          aria-label={translate(projectMessages, setupInvocationId ? "openSetupInvocation" : "setupInvocationStarting")}
           aria-busy="true"
           onClick={(event) => {
             event.stopPropagation();
@@ -216,7 +226,7 @@ export const ProjectCard: FunctionComponent<ProjectCardProps> = ({
         >
           <span className="inline-flex min-w-0 items-center gap-2 text-xs font-semibold">
             <Loader2 className="h-3.5 w-3.5 shrink-0 motion-safe:animate-spin" aria-hidden="true" />
-            <span className="truncate">Project setup running</span>
+            <span className="truncate">{translate(projectMessages, "projectSetupRunning")}</span>
           </span>
           {setupInvocationId ? <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : null}
         </button>
@@ -224,17 +234,17 @@ export const ProjectCard: FunctionComponent<ProjectCardProps> = ({
 
       <div className="mt-auto pt-5">
         <div className="grid grid-cols-3 divide-x divide-black/[0.06] rounded-xl bg-black/[0.025] py-2 dark:divide-white/[0.07] dark:bg-white/[0.035]">
-          <Stat label="Sprints" value={source.sprintsCount} />
-          <Stat label="Open" value={viewModel.taskCompletion.openTasks} />
-          <Stat label="Done" value={viewModel.taskCompletion.completedTasks} />
+          <Stat label={translate(projectMessages, "sprints")} value={formatNumber(source.sprintsCount)} />
+          <Stat label={translate(projectMessages, "open")} value={formatNumber(viewModel.taskCompletion.openTasks)} />
+          <Stat label={translate(projectMessages, "done")} value={formatNumber(viewModel.taskCompletion.completedTasks)} />
         </div>
         <div className="mt-3 flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
-          <span>Completion</span>
+          <span>{translate(projectMessages, "completion")}</span>
           <span className="font-mono text-slate-600 dark:text-slate-300">{viewModel.taskCompletion.value}</span>
         </div>
         <div
           role="progressbar"
-          aria-label={`${source.name} task completion`}
+          aria-label={translate(projectMessages, "taskCompletion", { name: source.name })}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={completion}
@@ -247,7 +257,9 @@ export const ProjectCard: FunctionComponent<ProjectCardProps> = ({
           <button
             type="button"
             aria-pressed={isSelected}
-            aria-label={isSelected ? `${source.name} is selected` : `Select ${source.name}`}
+            aria-label={isSelected
+              ? translate(projectMessages, "projectIsSelected", { name: source.name })
+              : translate(projectMessages, "selectNamedProject", { name: source.name })}
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();
@@ -259,18 +271,18 @@ export const ProjectCard: FunctionComponent<ProjectCardProps> = ({
                 : "border border-black/[0.09] bg-white/55 text-slate-700 hover:border-signal-500/35 hover:text-signal-700 dark:border-white/[0.1] dark:bg-white/[0.04] dark:text-slate-200 dark:hover:text-signal-300"
             }`}
           >
-            {isSelected ? "Selected" : "Select project"}
+            {translate(projectMessages, isSelected ? "selected" : "selectProjectAction")}
           </button>
-          <ActionButton label={isSettingUp ? "Project setup is already running" : "Setup project"} icon={<Bot className="h-4 w-4" aria-hidden="true" />} onClick={onSetup} disabled={isSettingUp} busy={isSettingUp} />
-          <ActionButton label="Project settings" icon={<Settings className="h-4 w-4" aria-hidden="true" />} onClick={onSettings} />
-          <ActionButton label="Delete project" icon={<Trash2 className="h-4 w-4" aria-hidden="true" />} onClick={onDelete} danger />
+          <ActionButton label={translate(projectMessages, isSettingUp ? "setupAlreadyRunning" : "setupProject")} icon={<Bot className="h-4 w-4" aria-hidden="true" />} onClick={onSetup} disabled={isSettingUp} busy={isSettingUp} />
+          <ActionButton label={translate(projectMessages, "projectSettings")} icon={<Settings className="h-4 w-4" aria-hidden="true" />} onClick={onSettings} />
+          <ActionButton label={translate(projectMessages, "deleteProject")} icon={<Trash2 className="h-4 w-4" aria-hidden="true" />} onClick={onDelete} danger />
         </div>
       </div>
     </article>
   );
 };
 
-const Stat: FunctionComponent<{ label: string; value: number }> = ({ label, value }) => (
+const Stat: FunctionComponent<{ label: string; value: string }> = ({ label, value }) => (
   <span className="flex min-w-0 flex-col items-center gap-1">
     <span className="font-display text-base font-semibold tabular-nums text-slate-800 dark:text-slate-100">{value}</span>
     <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">{label}</span>

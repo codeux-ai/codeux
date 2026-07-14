@@ -8,6 +8,7 @@ import {
     isRouteNavigationItem,
     type PrimaryNavigationItem,
 } from "../../lib/navigation-items.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
 
 interface NavItemProps {
     item: PrimaryNavigationItem;
@@ -19,6 +20,7 @@ interface NavItemProps {
 }
 
 export const NavItem: FunctionComponent<NavItemProps> = ({ item, isActive, isMinimized, isMobile, onClose, elementRef }) => {
+    const { locale } = useOptionalDashboardI18n();
     const [tooltipTop, setTooltipTop] = useState<number>(0);
     const interactionTokens = useInteractionTokens();
     const controlTransitionStyle: JSX.CSSProperties = {
@@ -29,7 +31,7 @@ export const NavItem: FunctionComponent<NavItemProps> = ({ item, isActive, isMin
         transitionDuration: interactionTokens.selectionMovement.duration,
         transitionTimingFunction: interactionTokens.selectionMovement.ease,
     };
-    const label = getNavigationItemLabel(item, "sidebar");
+    const label = getNavigationItemLabel(item, "sidebar", locale);
     const isUnavailable = !!item.unavailableReason;
     const sidebarControlId = item.id === "config" ? "settings" : item.id;
     const tooltipId = isMinimized && !isMobile ? `nav-tooltip-${sidebarControlId}` : undefined;

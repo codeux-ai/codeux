@@ -5,13 +5,15 @@ export type ProjectFilter = "All" | "Running" | "Idle" | "Failed";
 export interface ProjectFilterDefinition {
   filter: ProjectFilter;
   status: SourceStatus | null;
+  labelKey: "filterAll" | "filterRunning" | "filterIdle" | "filterFailed";
+  emptyMessageKey: "noRunningProjects" | "noIdleProjects" | "noFailedProjects" | null;
 }
 
 export const PROJECT_FILTER_DEFINITIONS: readonly ProjectFilterDefinition[] = [
-  { filter: "All", status: null },
-  { filter: "Running", status: "running" },
-  { filter: "Idle", status: "idle" },
-  { filter: "Failed", status: "failed" },
+  { filter: "All", status: null, labelKey: "filterAll", emptyMessageKey: null },
+  { filter: "Running", status: "running", labelKey: "filterRunning", emptyMessageKey: "noRunningProjects" },
+  { filter: "Idle", status: "idle", labelKey: "filterIdle", emptyMessageKey: "noIdleProjects" },
+  { filter: "Failed", status: "failed", labelKey: "filterFailed", emptyMessageKey: "noFailedProjects" },
 ];
 
 export interface ProjectsPageViewModel {

@@ -6,15 +6,12 @@ import type { InstructionFileSummary } from "../../lib/instruction-file-api.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { getInstructionAccentHex, formatBytes } from "../../lib/instruction-file-display.js";
 import { INTERACTION_CSS_VARIABLES } from "../../lib/motion/tokens.js";
-import { useDashboardI18n } from "../../i18n/index.js";
-import { agentsMessages } from "../../i18n/messages/agents.js";
 
 export const InstructionFileCard: FunctionComponent<{
   file: InstructionFileSummary;
   isSelected: boolean;
   onClick: () => void;
 }> = ({ file, isSelected, onClick }) => {
-  const { locale, translate } = useDashboardI18n();
   const cardRef = useRef<HTMLButtonElement>(null);
   const accentHex = getInstructionAccentHex(file.providerId);
 
@@ -100,11 +97,11 @@ export const InstructionFileCard: FunctionComponent<{
                   : "border-black/[0.06] bg-black/[0.03] text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-500"
               }`}
             >
-              {file.exists ? formatBytes(file.size, locale) : (<><Plus className="h-2.5 w-2.5" strokeWidth={2.6} />{translate(agentsMessages, "new")}</>)}
+              {file.exists ? formatBytes(file.size) : (<><Plus className="h-2.5 w-2.5" strokeWidth={2.6} />New</>)}
             </span>
             {isSelected && (
               <span className="inline-flex items-center rounded-md border border-signal-500/25 bg-signal-500/[0.08] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.1em] text-signal-600 dark:text-signal-400">
-                {translate(agentsMessages, "selected")}
+                Selected
               </span>
             )}
           </div>

@@ -18,6 +18,9 @@ import { ConfirmDialog } from "./components/ui/ConfirmDialog.js";
 import { UnsavedChangesModal } from "./components/ui/UnsavedChangesModal.js";
 import { useConfirmDialog } from "./hooks/use-confirm-dialog.js";
 import { getSettingsSearchMatchPreview, type SettingsSearchMatches } from "./lib/settings-search-index.js";
+import { DASHBOARD_LOCALE_CHANGE_EVENT } from "./i18n/context.js";
+import type { DashboardLocale } from "./i18n/locales.js";
+import { getDocumentDashboardLocale, getLocalizedSettingsCategoryText, getSettingsShellMessage, type SettingsShellMessageKey } from "./i18n/messages/settings-shell.js";
 
 interface SettingsSearchStatusDetails {
   searchTerm: string;
@@ -35,20 +38,29 @@ export function getSettingsSearchStatusText({
   activeCategoryLabel,
   activeMatchPreview,
   smartFindPreview,
-}: SettingsSearchStatusDetails): string {
-  const categoryLabel = matchingCategoryCount === 1 ? "matching category" : "matching categories";
-  const resultLabel = resultCount === 1 ? "result" : "results";
+}: SettingsSearchStatusDetails, locale: DashboardLocale = getDocumentDashboardLocale()): string {
+  const t = (key: SettingsShellMessageKey, variables?: Parameters<typeof getSettingsShellMessage>[2]): string => getSettingsShellMessage(locale, key, variables);
+  const categoryLabel = t(matchingCategoryCount === 1 ? "matchingCategory" : "matchingCategories", { count: matchingCategoryCount });
+  const resultLabel = t(resultCount === 1 ? "searchResult" : "searchResults", { count: resultCount });
   const activePreviewText = activeMatchPreview.length
-    ? ` Active matches: ${activeMatchPreview.join(", ")}.`
+    ? ` ${t("activeMatches", { matches: activeMatchPreview.join(", ") })}`
     : "";
   const previewText = smartFindPreview.length
-    ? ` Match previews: ${smartFindPreview.join(", ")}.`
-    : " Match previews: none.";
+    ? ` ${t("matchPreviews", { matches: smartFindPreview.join(", ") })}`
+    : ` ${t("matchPreviewsNone")}`;
   const recoveryText = matchingCategoryCount === 0
-    ? " Clear the search or try routing, provider, auth, CI, agent, or memory."
+    ? ` ${t("searchRecovery")}`
     : "";
 
-  return `${resultCount} ${resultLabel} across ${matchingCategoryCount} ${categoryLabel} for "${searchTerm}". Active category: ${activeCategoryLabel}.${activePreviewText}${previewText}${recoveryText}`;
+  return t("searchStatus", {
+    results: resultLabel,
+    categories: categoryLabel,
+    searchTerm,
+    activeCategory: activeCategoryLabel,
+    activeMatches: activePreviewText,
+    previews: previewText,
+    recovery: recoveryText,
+  });
 }
 
 export interface SettingsSmartFindSearchProps {
@@ -72,6 +84,8 @@ export const SettingsSmartFindSearch: FunctionComponent<SettingsSmartFindSearchP
   activeCategoryConfig,
   interactionStyle,
 }) => {
+  const locale = getDocumentDashboardLocale();
+  const t = (key: SettingsShellMessageKey, variables?: Parameters<typeof getSettingsShellMessage>[2]): string => getSettingsShellMessage(locale, key, variables);
   const normalizedSearch = settingsSearch.trim();
   const isSearchActive = normalizedSearch.length > 0;
   const smartFindPreview = useMemo(() => (
@@ -94,12 +108,12 @@ export const SettingsSmartFindSearch: FunctionComponent<SettingsSmartFindSearchP
       activeCategoryLabel: activeCategoryConfig.label,
       activeMatchPreview,
       smartFindPreview,
-    })
+    }, locale)
     : null;
   return (
     <>
       <label htmlFor="settings-search" className="sr-only">
-        Search settings categories
+        {t("searchLabel")}
       </label>
       <div className="flex items-center gap-3 rounded-[1rem] border border-black/[0.06] bg-black/[0.03] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
         <Search className="h-4 w-4 shrink-0 text-slate-400" strokeWidth={2.1} />
@@ -109,7 +123,7 @@ export const SettingsSmartFindSearch: FunctionComponent<SettingsSmartFindSearchP
           type="text"
           value={settingsSearch}
           onInput={(event) => setSettingsSearch((event.currentTarget as HTMLInputElement).value)}
-          placeholder="Search categories, providers, CI, auth, prompts"
+          placeholder={t("searchPlaceholder")}
           aria-describedby="settings-search-results"
           className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200"
         />
@@ -120,7 +134,7 @@ export const SettingsSmartFindSearch: FunctionComponent<SettingsSmartFindSearchP
               setSettingsSearch("");
               searchInputRef.current?.focus({ preventScroll: true });
             }}
-            aria-label="Clear settings search"
+            aria-label={t("clearSearch")}
             style={interactionStyle}
             className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-black/[0.06] bg-white/80 text-slate-400 transition-colors hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:text-slate-100 dark:focus-visible:ring-offset-void-900"
           >
@@ -142,11 +156,11 @@ export const SettingsSmartFindSearch: FunctionComponent<SettingsSmartFindSearchP
         {isSearchActive ? (
           activeSearchStatus
         ) : (
-          `${filteredCategories.length} settings categories available.`
+          t("searchAvailable", { count: filteredCategories.length })
         )}
       </div>
       {isSearchActive && smartFindPreview.length > 0 ? (
-        <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Smart Find match previews">
+        <div className="mt-2 flex flex-wrap gap-1.5" aria-label={t("searchPreviewLabel")}>
           {smartFindPreview.map((match) => (
             <span key={match} className="max-w-full truncate rounded-full border border-signal-500/20 bg-signal-500/[0.06] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-700 dark:text-signal-200">
               {match}
@@ -201,7 +215,7 @@ export function focusFirstInvalidSettingsControl(root: ParentNode): string | nul
     : null;
   const message = describedError || ("validationMessage" in invalidControl && invalidControl.validationMessage
     ? invalidControl.validationMessage
-    : "Fix the highlighted setting before saving changes.");
+    : getSettingsShellMessage(getDocumentDashboardLocale(), "validationFallback"));
   invalidControl.setAttribute("aria-invalid", "true");
   if (typeof invalidControl.scrollIntoView === "function") {
     invalidControl.scrollIntoView({ block: "center", inline: "nearest", behavior: "auto" });
@@ -217,6 +231,14 @@ export function focusFirstInvalidSettingsControl(root: ParentNode): string | nul
 }
 
 export const SettingsPage: FunctionComponent = () => {
+  const [locale, setLocale] = useState<DashboardLocale>(() => getDocumentDashboardLocale());
+  const categories = useMemo(() => CATEGORIES.map((category) => {
+    const localized = getLocalizedSettingsCategoryText(locale, category.id);
+    return localized ? { ...category, ...localized } : category;
+  }), [locale]);
+  const t = useCallback((key: SettingsShellMessageKey, variables?: Parameters<typeof getSettingsShellMessage>[2]): string => (
+    getSettingsShellMessage(locale, key, variables)
+  ), [locale]);
   const headerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const contentTweenRef = useRef<ReturnType<typeof gsap.to> | null>(null);
@@ -224,12 +246,12 @@ export const SettingsPage: FunctionComponent = () => {
   const prefersReducedMotion = useReducedMotion();
   const gsapTokens = useGsapInteractionTokens();
   const interactionTokens = useInteractionTokens();
-  const [pendingCategory, setPendingCategory] = useState<typeof CATEGORIES[number]["id"] | null>(null);
+  const [pendingCategory, setPendingCategory] = useState<CategoryId | null>(null);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
   const resetProjectConfirm = useConfirmDialog();
   const saveDisabledReasonId = "settings-save-disabled-reason";
 
-  const state = useSettingsPageState(CATEGORIES);
+  const state = useSettingsPageState(categories, locale);
   const {
     clearFeedback,
     activeCategory,
@@ -255,6 +277,15 @@ export const SettingsPage: FunctionComponent = () => {
     saveAndLeave,
   } = state;
 
+  useEffect(() => {
+    const handleLocaleChange = (event: Event): void => {
+      const nextLocale = (event as CustomEvent<DashboardLocale>).detail;
+      setLocale(nextLocale || getDocumentDashboardLocale());
+    };
+    window.addEventListener(DASHBOARD_LOCALE_CHANGE_EVENT, handleLocaleChange);
+    return () => window.removeEventListener(DASHBOARD_LOCALE_CHANGE_EVENT, handleLocaleChange);
+  }, []);
+
   const normalizedSearch = settingsSearch.trim();
   const scopeControlStyle = {
     transitionDuration: interactionTokens.controlFeedback.duration,
@@ -268,23 +299,28 @@ export const SettingsPage: FunctionComponent = () => {
     const overridden = sources.filter((source) => source === "project").length;
     const inherited = sources.filter((source) => source === "system").length;
     if (overridden === 0 && inherited === 0) {
-      return "Project settings are inheriting system defaults until an override is edited.";
+      return t("projectAllInherited");
     }
-    return `${overridden} overridden ${overridden === 1 ? "setting" : "settings"} and ${inherited} inherited ${inherited === 1 ? "setting" : "settings"} in this project scope.`;
-  }, [activeScope, selectedProject, state.projectSources]);
+    return t("projectSourceSummary", {
+      overridden,
+      overriddenWord: t(overridden === 1 ? "settingSingular" : "settingPlural"),
+      inherited,
+      inheritedWord: t(inherited === 1 ? "settingSingular" : "settingPlural"),
+    });
+  }, [activeScope, selectedProject, state.projectSources, t]);
   const scopeStatusText = activeScope === "system"
-    ? "System scope selected. Editing live system defaults."
+    ? t("systemScopeStatus")
     : selectedProject
-      ? `Project scope selected. Editing overrides for ${selectedProject.name}. ${projectSourceSummary ?? "Inherited and overridden badges identify each setting source."}`
-      : "Project scope is unavailable until a project is selected.";
+      ? t("projectScopeStatus", { project: selectedProject.name, summary: projectSourceSummary ?? t("inheritanceDefault") })
+      : t("projectScopeUnavailable");
   const saveDisabledReason = activeSaving
-    ? "Settings are saving."
+    ? t("settingsSaving")
     : loading
-      ? "Settings are still loading."
+      ? t("settingsLoading")
       : activeScope === "project" && !selectedProject
-        ? "Select a project before saving project settings."
+        ? t("selectProjectBeforeSave")
         : !activeDirty
-          ? "No settings changes to save."
+          ? t("noChangesToSave")
           : undefined;
 
   useEffect(() => () => {
@@ -392,18 +428,18 @@ export const SettingsPage: FunctionComponent = () => {
       return;
     }
     const confirmed = await resetProjectConfirm.requestConfirm({
-      title: "Reset Project Overrides",
-      body: `Clear saved settings overrides for "${selectedProject.name}" and inherit system defaults again? Project tasks, sprints, memories, and history will be kept.`,
-      confirmLabel: "Reset Project",
+      title: t("resetProjectOverrides"),
+      body: t("resetProjectBody", { project: selectedProject.name }),
+      confirmLabel: t("resetProject"),
       destructive: true,
     });
     if (confirmed) {
       await handleResetProject();
     }
-  }, [handleResetProject, resetProjectConfirm, resettingProject, selectedProject]);
+  }, [handleResetProject, resetProjectConfirm, resettingProject, selectedProject, t]);
 
   return (
-    <PageContainer aria-label="Settings" padding="settings" className="gap-10">
+    <PageContainer aria-label={t("pageLabel")} padding="settings" className="gap-10">
       <ConfirmDialog
         isOpen={resetProjectConfirm.isOpen}
         options={resetProjectConfirm.options}
@@ -419,9 +455,9 @@ export const SettingsPage: FunctionComponent = () => {
         <div className="flex flex-col gap-5">
           <PageHeader
             icon={Settings}
-            eyebrow="Configuration"
-            title="Settings & Integration"
-            subtitle="Tune the system baseline, then shape project-level behavior with faster wayfinding, denser controls, and focused routing workspaces."
+            eyebrow={t("eyebrow")}
+            title={t("pageTitle")}
+            subtitle={t("pageSubtitle")}
           />
         </div>
 
@@ -468,7 +504,7 @@ export const SettingsPage: FunctionComponent = () => {
             </span>
             <span className="min-w-0">
               <span className={`block font-mono text-[9px] font-bold uppercase tracking-[0.18em] ${activeCategoryConfig.danger ? "text-status-red/75" : "text-[var(--settings-accent-text)]"}`}>
-                {activeCategoryConfig.num} · Active category
+                {activeCategoryConfig.num} · {t("activeCategory")}
               </span>
               <span className="mt-0.5 block text-sm font-bold text-slate-900 dark:text-white">{activeCategoryConfig.label}</span>
               <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-500 dark:text-slate-400">{activeCategoryConfig.description}</span>
@@ -491,12 +527,12 @@ export const SettingsPage: FunctionComponent = () => {
           <div className="ml-auto flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2">
             {activeScope === "project" ? (
               <ActionButton
-                label={resettingProject ? "Resetting Project" : "Reset Project"}
+                label={resettingProject ? t("resettingProject") : t("resetProject")}
                 onClick={() => void handleResetProjectRequest()}
                 tone="danger"
                 busy={resettingProject}
                 disabled={!selectedProject || resettingProject}
-                disabledReason={!selectedProject ? "Select a project before resetting overrides." : resettingProject ? "Project overrides are resetting." : undefined}
+                disabledReason={!selectedProject ? t("selectProjectBeforeReset") : resettingProject ? t("projectResetting") : undefined}
               />
             ) : null}
             <button
@@ -517,17 +553,17 @@ export const SettingsPage: FunctionComponent = () => {
               {activeSaving ? (
                 <>
                   <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.5} />
-                  Saving
+                  {t("saving")}
                 </>
               ) : saveMessage && !error ? (
                 <>
                   <Check className="h-4 w-4" strokeWidth={2.5} />
-                  Save Changes
+                  {t("saveChanges")}
                 </>
               ) : (
                 <>
                   <Zap className="h-4 w-4 transition-transform duration-200 group-hover:scale-110" strokeWidth={2} />
-                  Save Changes
+                  {t("saveChanges")}
                 </>
               )}
             </button>
@@ -554,20 +590,20 @@ export const SettingsPage: FunctionComponent = () => {
           id="settings-active-category-panel"
           ref={contentRef}
           role="region"
-          aria-label="Settings category panel"
+          aria-label={t("settingsCategoryPanel")}
           aria-busy={activeSaving || loading || resettingProject ? "true" : undefined}
           data-motion-contract="enterExit"
           className="flex min-w-0 flex-col gap-5 lg:col-start-2 lg:row-start-2"
         >
           <div className="flex flex-col gap-3">
             {loading ? (
-              <div role="status" aria-label="Loading settings" aria-live="polite" aria-busy="true" className="sr-only">
-                Loading settings.
+              <div role="status" aria-label={t("loadingSettings")} aria-live="polite" aria-busy="true" className="sr-only">
+                {t("loadingSettingsSentence")}
               </div>
             ) : null}
             <ActionFeedbackRegion
               status={error ? "error" : validationMessage ? "warning" : activeSaving || resettingProject ? "pending" : saveMessage ? "success" : activeDirty ? "warning" : "idle"}
-              message={error || validationMessage || (resettingProject ? "Resetting project overrides..." : activeSaving ? "Saving changes..." : saveMessage ? "Changes saved." : activeDirty ? "You have unsaved changes." : null)}
+              message={error || validationMessage || (resettingProject ? t("resettingOverridesProgress") : activeSaving ? t("savingChangesProgress") : saveMessage ? t("changesSaved") : activeDirty ? t("dirtyWarning") : null)}
               onDismiss={() => {
                 setValidationMessage(null);
                 clearFeedback();

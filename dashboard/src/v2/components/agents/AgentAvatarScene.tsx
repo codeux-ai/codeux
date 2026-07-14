@@ -57,15 +57,12 @@ import { extrudeLogoPath, type LogoShapeFrame } from "../../lib/logo-shapes.js";
 import { AgentAvatarSvg } from "./AgentAvatarSvg.js";
 import {
   AGENT_SCENE_TOOL_CATALOG,
-  getAgentSceneToolLabel,
   getToolMotionPose,
   type AgentSceneTool,
   type ToolAnimationRef,
   type ToolGeometryBlueprint,
   type ToolMaterialRole,
 } from "../../lib/agent-scene-tools.js";
-import { useDashboardI18n } from "../../i18n/index.js";
-import { agentsMessages } from "../../i18n/messages/agents.js";
 
 export type { AgentSceneTool } from "../../lib/agent-scene-tools.js";
 
@@ -993,7 +990,6 @@ export function AgentAvatarScene({
   pointerTracking = "hover",
   tool = null,
 }: AgentAvatarSceneProps) {
-  const { locale, translate } = useDashboardI18n();
   const mountRef = useRef<HTMLDivElement>(null);
   const [webglError, setWebglError] = useState(false);
   const [isReducedMotion, setIsReducedMotion] = useState(() => {
@@ -1549,9 +1545,7 @@ export function AgentAvatarScene({
         data-testid="agent-avatar-fallback"
         data-tool={tool ?? undefined}
         role="img"
-        aria-label={tool
-          ? translate(agentsMessages, "avatarPreviewWithTool", { tool: getAgentSceneToolLabel(tool, locale) })
-          : translate(agentsMessages, "avatarPreview")}
+        aria-label={tool ? `Agent avatar preview working with ${AGENT_SCENE_TOOL_CATALOG[tool].label}` : "Agent avatar preview"}
       >
         <AgentAvatarSvg config={config} expression={expression} className="w-full h-full max-w-[220px]" static />
         {tool && (
@@ -1559,7 +1553,7 @@ export function AgentAvatarScene({
             className="absolute bottom-3 right-3 rounded-full border border-signal-500/30 bg-white/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-700 shadow-sm dark:bg-void-900/90 dark:text-signal-300"
             data-testid="agent-avatar-static-tool"
           >
-            {getAgentSceneToolLabel(tool, locale)}
+            {AGENT_SCENE_TOOL_CATALOG[tool].label}
           </span>
         )}
       </div>

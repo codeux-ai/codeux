@@ -21,6 +21,8 @@ import type { DashboardExperienceMode } from "../../types.js";
 import type { DashboardFeatureFlagMap, DashboardFeatureId } from "./dashboard-feature-flags.js";
 import { isDashboardFeatureEnabled, resolveDashboardFeatureFlags } from "./dashboard-feature-flags.js";
 import { normalizeDashboardExperienceMode } from "./experience-mode.js";
+import { translateDashboardMessage, type DashboardLocale, type DashboardTextMessageKey } from "../i18n/locales.js";
+import { shellMessages } from "../i18n/messages/shell.js";
 
 export type NavigationItemId =
   | "chat"
@@ -69,6 +71,19 @@ export interface ExternalNavigationItem extends BaseNavigationItem {
 export type NavigationItem = RouteNavigationItem | ExternalNavigationItem;
 export type PrimaryNavigationItem = NavigationItem & {
   unavailableReason?: string;
+};
+
+const NAVIGATION_MESSAGE_KEYS: Record<NavigationItemId, {
+  label: DashboardTextMessageKey<typeof shellMessages>;
+  dockLabel?: DashboardTextMessageKey<typeof shellMessages>;
+}> = {
+  chat: { label: "navChat" }, overview: { label: "navOverview" }, sprints: { label: "navSprints" },
+  tasks: { label: "navTasks" }, agents: { label: "navAgents" }, nodes: { label: "navNodes" },
+  "custom-dashboards": { label: "navDashboards", dockLabel: "navDashboardsDock" },
+  stats: { label: "navStats" }, scheduler: { label: "navSchedule" }, memory: { label: "navMemory" },
+  knowledge: { label: "navKnowledge" }, browser: { label: "navBrowserPreview", dockLabel: "navBrowserDock" },
+  files: { label: "navFiles" }, live: { label: "navLive" }, docs: { label: "navDocs" },
+  config: { label: "navSettings", dockLabel: "navSettingsDock" },
 };
 
 interface GetPrimaryNavigationItemsOptions {
@@ -126,9 +141,15 @@ export const isRouteNavigationItem = (item: PrimaryNavigationItem): item is Rout
   item.kind === "route"
 );
 
-export const getNavigationItemLabel = (item: PrimaryNavigationItem, surface: NavigationSurface): string => (
-  surface === "dock" && item.dockLabel ? item.dockLabel : item.label
-);
+export const getNavigationItemLabel = (
+  item: PrimaryNavigationItem,
+  surface: NavigationSurface,
+  locale: DashboardLocale = "en",
+): string => {
+  const keys = NAVIGATION_MESSAGE_KEYS[item.id];
+  const key = surface === "dock" && keys.dockLabel ? keys.dockLabel : keys.label;
+  return translateDashboardMessage(shellMessages, locale, key);
+};
 
 export const getPrimaryNavigationItems = (
   mode: DashboardExperienceMode | null | undefined,

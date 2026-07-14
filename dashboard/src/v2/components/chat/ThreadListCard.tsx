@@ -5,6 +5,8 @@ import { formatRelativeChatTime } from "../../lib/chat-time.js";
 import { ChatAvatar } from "./ChatAvatar.js";
 import { ChatRuntimeBadge } from "./ChatRuntimeBadge.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { chatMessages } from "../../i18n/messages/chat.js";
 
 const statusTone = (pendingCount: number): string => (
   pendingCount > 0 ? "text-status-amber animate-pulse motion-reduce:animate-none" : "text-slate-400 dark:text-slate-500"
@@ -33,6 +35,7 @@ export const ThreadListCard: FunctionComponent<{
   deletingThreadId: string | null;
 }> = ({ threads, selectedThreadId, onSelect, onDelete, deletingThreadId }) => {
   const interactionTokens = useInteractionTokens();
+  const { formatNumber, locale, translate, translatePlural } = useDashboardI18n();
 
   return (
     <div className="space-y-3">
@@ -42,11 +45,11 @@ export const ThreadListCard: FunctionComponent<{
         const isReplay = !!thread.runtimeState?.replayRequired;
         const isPending = thread.pendingMessageCount > 0;
         const stateDescriptionId = `thread-card-state-${thread.id}`;
-        const selectionCopy = isSelected ? "Selected" : "Not selected";
+        const selectionCopy = translate(chatMessages, isSelected ? "selected" : "notSelected");
         const deliveryCopy = isPending
-          ? `${thread.pendingMessageCount} queued ${thread.pendingMessageCount === 1 ? "message" : "messages"}`
-          : "Synced";
-        const routeCopy = isReplay ? "Replay required" : isActive ? "Active session" : "New or compacted session";
+          ? translatePlural(chatMessages, "queuedMessages", thread.pendingMessageCount, { count: formatNumber(thread.pendingMessageCount) })
+          : translate(chatMessages, "synced");
+        const routeCopy = translate(chatMessages, isReplay ? "replayRequired" : isActive ? "activeSession" : "newOrCompactedSession");
 
         return (
           <div key={thread.id} className="group relative overflow-hidden rounded-[1.75rem]">
@@ -110,14 +113,14 @@ export const ThreadListCard: FunctionComponent<{
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.14em] ${STATUS_PILL.replay.bg} ${STATUS_PILL.replay.text} border ${STATUS_PILL.replay.border}`}>
                           <span className={`inline-block w-1.5 h-1.5 rounded-full ${STATUS_PILL.replay.dot}`} />
                           <AlertCircle className="h-2.5 w-2.5" />
-                          Replay Req
+                          {translate(chatMessages, "replayRequiredShort")}
                         </span>
                       )}
                       {isActive && (
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.14em] ${STATUS_PILL.active.bg} ${STATUS_PILL.active.text} border ${STATUS_PILL.active.border}`}>
                           <span className={`inline-block w-1.5 h-1.5 rounded-full ${STATUS_PILL.active.dot} motion-reduce:animate-none`} />
                           <Activity className="h-2.5 w-2.5" />
-                          Active
+                          {translate(chatMessages, "active")}
                         </span>
                       )}
                     </div>
@@ -129,7 +132,7 @@ export const ThreadListCard: FunctionComponent<{
 
                     {/* Preview */}
                     <div className="mt-2 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                      {thread.lastMessagePreview || "No messages yet."}
+                      {thread.lastMessagePreview || translate(chatMessages, "noMessagesYetSentence")}
                     </div>
                   </div>
                 </div>
@@ -138,13 +141,13 @@ export const ThreadListCard: FunctionComponent<{
                 <div className="shrink-0 flex flex-col items-end gap-1.5 pt-0.5">
                   <div className={`text-[10px] font-bold uppercase tracking-[0.14em] ${statusTone(thread.pendingMessageCount)}`}>
                     {isPending ? (
-                      <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-signal-500 animate-pulse motion-reduce:animate-none" /> pending</span>
+                      <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-signal-500 animate-pulse motion-reduce:animate-none" /> {translate(chatMessages, "pending")}</span>
                     ) : (
-                      "synced"
+                      translate(chatMessages, "syncedLower")
                     )}
                   </div>
                   <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
-                    {formatRelativeChatTime(thread.lastMessageAt)}
+                    {formatRelativeChatTime(thread.lastMessageAt, locale)}
                   </div>
                   {thread.messageCount > 0 && (
                     <div className="flex items-center gap-1 text-[10px] font-mono text-slate-400 dark:text-slate-500">
@@ -168,7 +171,7 @@ export const ThreadListCard: FunctionComponent<{
                 onDelete(thread.id);
               }}
               disabled={deletingThreadId === thread.id}
-              aria-label={deletingThreadId === thread.id ? `Deleting ${thread.title}` : `Delete ${thread.title}`}
+              aria-label={translate(chatMessages, deletingThreadId === thread.id ? "deletingThread" : "deleteThread", { title: thread.title })}
               aria-busy={deletingThreadId === thread.id}
               style={{
                 transitionProperty: "all",

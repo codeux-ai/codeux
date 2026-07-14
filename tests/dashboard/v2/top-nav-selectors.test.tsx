@@ -11,6 +11,7 @@ import { useProjectData } from "../../../dashboard/src/v2/context/project-data.j
 import { useSprints } from "../../../dashboard/src/hooks/useSprints.js";
 import { useProjectEffectiveSettings, clearProjectEffectiveSettingsCache } from "../../../dashboard/src/v2/hooks/use-project-effective-settings.js";
 import { saveProjectDesignGuidanceSettings } from "../../../dashboard/src/v2/lib/settings-api.js";
+import { DashboardI18nProvider, type DashboardLocale } from "../../../dashboard/src/v2/i18n/index.js";
 import {
   CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
   DESIGN_GUIDANCE_NONE_ID,
@@ -183,7 +184,7 @@ const renderTopNav = ({
   sprints = [sprintOne],
   selectedSprintId = "sprint-1",
   effectiveLoading = false,
-} = {}) => {
+} = {}, locale: DashboardLocale = "en") => {
   vi.mocked(useProjectData).mockReturnValue({
     projects,
     selectedProject,
@@ -223,7 +224,11 @@ const renderTopNav = ({
     refresh: refreshEffectiveSettings,
   } as any);
 
-  return render(<TopNav />);
+  return render(
+    <DashboardI18nProvider initialLocale={locale} storage={null}>
+      <TopNav />
+    </DashboardI18nProvider>,
+  );
 };
 
 describe("TopNav guidance and sprint selectors", () => {
@@ -425,5 +430,16 @@ describe("TopNav guidance and sprint selectors", () => {
       expect(selectSprint).toHaveBeenCalledWith("sprint-1");
       expect(screen.getByRole("status")).toHaveTextContent("Sprint switched to Build shell");
     });
+  });
+  it("reuses the translated Add Project modal from the global project selector", async () => {
+    const user = userEvent.setup();
+    renderTopNav({}, "de");
+
+    await user.click(screen.getByRole("button", { name: /Projektauswahl, ausgewähltes Projekt: Alpha/i }));
+    await user.click(screen.getByRole("button", { name: "Projekt hinzufügen" }));
+
+    expect(await screen.findByRole("dialog", { name: /Projekt hinzufügen/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Projektname/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lokales Projekt" })).toBeInTheDocument();
   });
 });

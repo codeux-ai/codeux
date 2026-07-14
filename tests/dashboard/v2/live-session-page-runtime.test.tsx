@@ -306,7 +306,7 @@ describe("LiveSessionPage Runtime Status", () => {
     });
 
     render(<LiveSessionPage />);
-    expect(screen.getByText("Paused")).toBeInTheDocument();
+    expect(screen.getAllByText("Paused").length).toBeGreaterThan(0);
     const runLog = screen.getByRole("log", { name: "Sprint run status rows" });
     expect(within(runLog).queryByText("Approve dependency and resume the sprint.")).not.toBeInTheDocument();
     fireEvent.click(within(runLog).getByRole("button", { name: /instructions/i }));
@@ -361,7 +361,8 @@ describe("LiveSessionPage Runtime Status", () => {
 
     render(<LiveSessionPage />);
     expect(screen.getByText("Stopped")).toBeInTheDocument();
-    expect(screen.getByText("Sprint Stopped By System")).toBeInTheDocument();
+    expect(screen.getAllByText("Worker pause").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("No executable work was available.").length).toBeGreaterThan(0);
     const runLog = screen.getByRole("log", { name: "Sprint run status rows" });
     expect(within(runLog).queryByText("Resolve the stop condition and restart when ready.")).not.toBeInTheDocument();
     fireEvent.click(within(runLog).getByRole("button", { name: /instructions/i }));
@@ -492,6 +493,67 @@ describe("LiveSessionPage Runtime Status", () => {
       expect(forceCompleteLiveTaskMock).toHaveBeenCalledWith("p1", "task-force-1");
     });
     expect(refreshRuntimeStatus).toHaveBeenCalled();
+  });
+
+  it("localizes force-complete failure chrome while preserving the API error on the task", async () => {
+    forceCompleteLiveTaskMock.mockRejectedValueOnce(new Error("force API trace-42"));
+    const task = {
+      record_id: "task-force-error",
+      sprint_id: "s1",
+      project_id: "p1",
+      id: "T_FORCE_ERROR",
+      title: "KEEP force target title verbatim",
+      prompt: "KEEP force target prompt verbatim",
+      depends_on: [],
+      is_independent: true,
+      status: "RUNNING" as const,
+    };
+    vi.mocked(useDashboardRuntimeData).mockReturnValue({
+      error: null,
+      initialLoadComplete: true,
+      transportState: "connected",
+      isRecovering: false,
+      snapshotUpdatedAt: new Date().toISOString(),
+      refreshRuntimeStatus: vi.fn().mockResolvedValue(undefined),
+      selectedSprintId: "s1",
+      status: {
+        project_id: "p1",
+        sprint_id: "s1",
+        sprint_number: 1,
+        timestamp: "2024-01-01T00:00:00Z",
+        subtasks: [task],
+      },
+      execution: mockExecution,
+      tasksWithLiveActivities: [task],
+    } as any);
+
+    render(
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <LiveSessionPage />
+      </DashboardI18nProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Aufgabe T_FORCE_ERROR zwangsweise abschließen" }));
+    expect(screen.getByRole("dialog", { name: "Aufgabe zwangsweise abschließen" }))
+      .toHaveTextContent("KEEP force target title verbatim");
+
+    vi.useFakeTimers();
+    const confirmButton = screen.getByRole("button", { name: /Zwangsweise abschließen/ });
+    fireEvent.pointerDown(confirmButton, { button: 0, pointerId: 1 });
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+    vi.useRealTimers();
+
+    await waitFor(() => {
+      expect(forceCompleteLiveTaskMock).toHaveBeenCalledWith("p1", "task-force-error");
+      expect(screen.getByText("force API trace-42")).toBeInTheDocument();
+    });
+    expect(screen.getAllByRole("alert").some((alert) => (
+      alert.textContent?.includes("konnte nicht zwangsweise abgeschlossen werden")
+    ))).toBe(true);
+    expect(screen.getAllByText(/KEEP force target prompt verbatim/).length).toBeGreaterThan(0);
   });
 
   it("renders Waiting for slot (2/2) for a queued dispatch with concurrency wait event", () => {
@@ -778,11 +840,11 @@ describe("LiveSessionPage Integration Isolation", () => {
 
     render(<LiveSessionPage />);
 
-    // Since we are looking at the older sprint, the task T1 should be shown as COMPLETED.
+    // Since we are looking at the older sprint, the task T1 should be shown as completed.
     // Even though there is a newer sprint running a task with the same key T1.
     // Stats should show 1 completed, 0 running.
     expect(screen.getAllByText("Task 1").length).toBeGreaterThan(0);
-    expect(screen.getByText("COMPLETED")).toBeInTheDocument();
+    expect(screen.getAllByText("Completed").length).toBeGreaterThan(0);
     expect(screen.queryByText("Task 1 (New)")).not.toBeInTheDocument();
   });
 
@@ -1335,6 +1397,27 @@ describe("LiveSessionPage Integration Isolation", () => {
 });
 
   it("renders LiveSessionPage with responsive min-w-0 flex columns for sidebars", () => {
-    // Tests that the LiveSessionPage panels use the correct flex classes.
-    expect(true).toBe(true);
+    cleanup();
+    vi.mocked(useProjectData).mockReturnValue({ selectedProjectId: "p1" } as any);
+    vi.mocked(useSprints).mockReturnValue({ selectedSprintId: "s1", selectedSprint: null, data: [], selectSprint: vi.fn(), loading: false, error: null, refetch: vi.fn() } as any);
+    vi.mocked(useDashboardRuntimeData).mockReturnValue({
+      error: null,
+      initialLoadComplete: true,
+      transportState: "connected",
+      isRecovering: false,
+      snapshotUpdatedAt: new Date().toISOString(),
+      refreshRuntimeStatus: vi.fn(),
+      selectedSprintId: "s1",
+      status: { subtasks: [], timestamp: "2024-01-01T00:00:00Z", project_id: "p1", sprint_id: "s1" },
+      execution: mockExecution,
+      tasksWithLiveActivities: [],
+    } as any);
+
+    render(<LiveSessionPage />);
+
+    const responsiveGrid = document.querySelector(".xl\\:grid-cols-12");
+    expect(responsiveGrid).toHaveClass("grid-cols-1", "xl:grid-cols-12");
+    expect(responsiveGrid?.children).toHaveLength(2);
+    expect(responsiveGrid?.children[0]).toHaveClass("min-w-0", "xl:col-span-8");
+    expect(responsiveGrid?.children[1]).toHaveClass("min-w-0", "xl:col-span-4");
   });

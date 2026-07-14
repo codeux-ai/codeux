@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "preact/hooks";
 import type { Task, TaskExecutorType, TaskPriority, TaskStatus, Sprint } from "../types.js";
-import { sprintAuthoringMessages } from "../i18n/messages/sprint-authoring.js";
-import { DEFAULT_DASHBOARD_LOCALE, translateDashboardMessage, type DashboardLocale } from "../i18n/locales.js";
+import type { DashboardLocale } from "../i18n/locales.js";
+import { translateTask } from "../i18n/messages/tasks.js";
 
 export interface TaskDraft {
   sprintId: string;
@@ -71,7 +71,7 @@ export const useTaskComposerState = (
   availableTasks: Task[],
   initialTask?: Task | null,
   initialSprintId?: string | null,
-  locale: DashboardLocale = DEFAULT_DASHBOARD_LOCALE,
+  locale: DashboardLocale = "en",
 ): TaskComposerState => {
   const defaultSprintId = initialTask?.sprintId || initialSprintId || sprints[0]?.id || "";
 
@@ -100,27 +100,26 @@ export const useTaskComposerState = (
 
   const validationErrors = useMemo(() => {
     const errors: Record<string, string> = {};
-    const t = (key: keyof typeof sprintAuthoringMessages.en): string => translateDashboardMessage(sprintAuthoringMessages, locale, key);
-    if (!sprintId) errors.sprintId = t("sprintRequired");
+    if (!sprintId) errors.sprintId = translateTask(locale, "validationSprint");
     if (!title.trim()) {
-      errors.title = t("taskTitleRequired");
+      errors.title = translateTask(locale, "validationTitle");
     } else if (title.trim().length < 3) {
-      errors.title = t("taskTitleMinLength");
+      errors.title = translateTask(locale, "validationTitleLength");
     }
     if (!description.trim()) {
-      errors.description = t("taskDetailsRequired");
+      errors.description = translateTask(locale, "validationDescription");
     }
     if (!promptMarkdown.trim()) {
-      errors.promptMarkdown = t("executionPromptRequired");
+      errors.promptMarkdown = translateTask(locale, "validationPrompt");
     }
     if (!executorType) {
-      errors.executorType = t("executorRequired");
+      errors.executorType = translateTask(locale, "validationExecutor");
     }
     if (!priority) {
-      errors.priority = t("priorityRequired");
+      errors.priority = translateTask(locale, "validationPriority");
     }
     if (!status) {
-      errors.status = t("statusRequired");
+      errors.status = translateTask(locale, "validationStatus");
     }
     return errors;
   }, [sprintId, title, description, promptMarkdown, executorType, priority, status, locale]);
