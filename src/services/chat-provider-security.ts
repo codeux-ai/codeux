@@ -5,13 +5,18 @@ import type { ChatConnectorHmacAuthentication } from "../domain/chat-connectors/
 
 export interface ChatProviderIngressSecurityRequest {
   headers: Record<string, string | string[] | undefined>;
-  rawBody: string;
+  rawBody: string | Uint8Array;
   now?: Date;
 }
 
 export interface ChatProviderIngressSecurityResult {
   authenticated: true;
-  method: "bearer" | "hmac";
+  method: string;
+  immediateResponse?: {
+    statusCode: number;
+    headers: Readonly<Record<string, string>>;
+    body: unknown;
+  };
 }
 
 export class ChatProviderIngressSecurityError extends Error {
@@ -48,11 +53,32 @@ export class ChatProviderIngressSecurity {
     }
 
     const profile = getChatConnectorProfileForMode(connection.providerKind, connection.bridgeMode);
+    const now = request.now ?? new Date();
+    const providerResult = profile.ingress.authenticateProviderRequest?.({
+      connection,
+      headers: request.headers,
+      rawBody: request.rawBody,
+      now,
+    }) ?? null;
+    if (providerResult) {
+      if (!providerResult.authenticated) {
+        throw new ChatProviderIngressSecurityError(
+          providerResult.code,
+          providerResult.message,
+          providerResult.statusCode,
+        );
+      }
+      return {
+        authenticated: true,
+        method: providerResult.method,
+        ...(providerResult.immediateResponse ? { immediateResponse: providerResult.immediateResponse } : {}),
+      };
+    }
     const authentication = profile.ingress.authentication[connection.bridgeMode];
     if (!authentication) {
       throw new ChatProviderIngressSecurityError("unsupported_authentication", "Unsupported chat provider authentication mode.", 403);
     }
-    const nowMs = (request.now ?? new Date()).getTime();
+    const nowMs = now.getTime();
     const timestamp = this.requireFreshTimestamp(request.headers, authentication.timestampHeaders, nowMs);
 
     if (authentication.type === "hmac_sha256") {
@@ -68,7 +94,7 @@ export class ChatProviderIngressSecurity {
         connectionId: connection.id,
         signature,
         timestamp,
-        rawBody: request.rawBody,
+        rawBody: rawBodyToString(request.rawBody),
         secret: hmacSecret,
         nowMs,
         authentication,
@@ -131,7 +157,7 @@ export class ChatProviderIngressSecurity {
     nowMs: number;
     authentication: ChatConnectorHmacAuthentication;
   }): void {
-    const normalizedSignature = normalizeSignature(input.signature);
+    const normalizedSignature = normalizeSignature(input.signature, input.authentication.signaturePrefix);
     if (!normalizedSignature) {
       throw new ChatProviderIngressSecurityError("invalid_signature", "Invalid chat provider ingress signature.", 401);
     }
@@ -222,8 +248,11 @@ function firstHeader(headers: Record<string, string | string[] | undefined>, nam
   return undefined;
 }
 
-function normalizeSignature(value: string): string | null {
+function normalizeSignature(value: string, requiredPrefix?: string): string | null {
   const trimmed = value.trim();
+  if (requiredPrefix && !trimmed.toLowerCase().startsWith(requiredPrefix.toLowerCase())) {
+    return null;
+  }
   const match = trimmed.match(/^(?:sha256=|v0=)?([a-f0-9]{64})$/i);
   return match?.[1]?.toLowerCase() || null;
 }
@@ -235,4 +264,8 @@ function constantTimeEquals(left: string, right: string): boolean {
     return false;
   }
   return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function rawBodyToString(rawBody: string | Uint8Array): string {
+  return typeof rawBody === "string" ? rawBody : Buffer.from(rawBody).toString("utf8");
 }

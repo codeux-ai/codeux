@@ -249,7 +249,9 @@ export class ChatProviderOutboundService {
     } catch (error) {
       const adapterError = normalizeAdapterError(error);
       const retryable = adapterError.retryable && attemptCount < this.maxAttempts;
-      const nextAttemptAt = retryable ? this.computeNextAttemptAt(attemptCount).toISOString() : null;
+      const nextAttemptAt = retryable
+        ? this.computeNextAttemptAt(attemptCount, adapterError.retryAfterMs).toISOString()
+        : null;
       const completion = {
         status: retryable ? "retryable_failure" : "failed",
         attemptCount,
@@ -326,8 +328,9 @@ export class ChatProviderOutboundService {
     return failed;
   }
 
-  private computeNextAttemptAt(attemptCount: number): Date {
-    const delay = this.initialBackoffMs * Math.pow(2, Math.max(0, attemptCount - 1));
+  private computeNextAttemptAt(attemptCount: number, retryAfterMs?: number): Date {
+    const exponentialDelay = this.initialBackoffMs * Math.pow(2, Math.max(0, attemptCount - 1));
+    const delay = Math.max(exponentialDelay, retryAfterMs ?? 0);
     return new Date(this.now().getTime() + delay);
   }
 

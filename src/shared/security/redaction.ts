@@ -27,6 +27,7 @@ const GITHUB_TOKEN_PATTERN = /\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-
 const GITLAB_TOKEN_PATTERN = /\b(?:glpat-[A-Za-z0-9_\-]{20,})\b/g;
 const JIRA_TOKEN_PATTERN = /\b(?:ATATT3xFfGF0[A-Za-z0-9_\-=]{20,})\b/g;
 const OPENAI_COMPATIBLE_TOKEN_PATTERN = /\b(?:sk|sess|sk-proj|sk-or-v1)-[A-Za-z0-9_-]{16,}\b/g;
+const SLACK_TOKEN_PATTERN = /\bxox[a-z]-[A-Za-z0-9-]{10,}\b/gi;
 const PROVIDER_SESSION_TOKEN_PATTERN = /\b(?:claude|codex|qwen|gemini|opencode|antigravity|agy|anthropic)[-_]?(?:session|auth|access|refresh)[-_]?(?:token|id)?[:=][A-Za-z0-9._~+/=-]{16,}\b/gi;
 const URL_CREDENTIAL_PATTERN = /(https?:\/\/)(?:[^:@"\/]+:[^:@"\/]+)@/gi;
 
@@ -51,6 +52,7 @@ export const redactText = (value: string): string => {
   sanitized = sanitized.replace(GITLAB_TOKEN_PATTERN, '[REDACTED]');
   sanitized = sanitized.replace(JIRA_TOKEN_PATTERN, '[REDACTED]');
   sanitized = sanitized.replace(OPENAI_COMPATIBLE_TOKEN_PATTERN, '[REDACTED]');
+  sanitized = sanitized.replace(SLACK_TOKEN_PATTERN, '[REDACTED]');
   sanitized = sanitized.replace(PROVIDER_SESSION_TOKEN_PATTERN, '[REDACTED]');
 
   return sanitized;
