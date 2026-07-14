@@ -398,6 +398,9 @@ const SURFACES = [
   ["Sprint ledger", "Sprint ledger card surface", LedgerSurface],
 ] as const;
 
+const TASK_SURFACES = SURFACES.slice(0, 2);
+const SPRINT_SURFACES = SURFACES.slice(2);
+
 function AllSurfaces({ data }: { data: SurfaceData }): VNode {
   return (
     <>
@@ -443,12 +446,12 @@ describe("shared QA and CI card status integration", () => {
     vi.clearAllMocks();
   });
 
-  it("renders equivalent requested-change QA and failed CI workflow semantics on all four cards", async () => {
+  it("keeps task gate detail on task cards and a stable Coding state on running sprint cards", async () => {
     const user = userEvent.setup();
     const data = buildSurfaceData(CI_HISTORY);
     const { container } = render(<AllSurfaces data={data} />);
 
-    for (const [, surfaceLabel] of SURFACES) {
+    for (const [, surfaceLabel] of TASK_SURFACES) {
       const surface = screen.getByRole("region", { name: surfaceLabel });
       const qaTrigger = within(surface).getByRole("button", { name: "QA review details" });
       expect(qaTrigger).toHaveAccessibleDescription(/QA changes requested/i);
@@ -458,21 +461,42 @@ describe("shared QA and CI card status integration", () => {
       const ciTrigger = within(surface).getByRole("button", {
         name: /CI status: CI failed.*Pull request ready.*Checks failed.*Blocked by checks.*Show workflow details/i,
       });
-      expect(ciTrigger).toHaveTextContent("CI failed");
-      expect(ciTrigger).toHaveClass("text-status-red");
+      expect(ciTrigger).toHaveTextContent("QA edits");
+      expect(ciTrigger).toHaveClass("text-blue-700");
       expect(surface.querySelector('[data-ci-icon="failure"]')).toHaveClass("text-status-red");
 
       await user.click(ciTrigger);
-      const workflow = within(surface).getByRole("region", { name: "CI workflow details" });
+      const workflow = screen.getByRole("region", { name: "CI workflow details" });
       expect(workflow.querySelector('[data-ci-step="pull_request"]')).toHaveAttribute("data-ci-step-state", "successful");
       expect(workflow.querySelector('[data-ci-step="checks"]')).toHaveAttribute("data-ci-step-state", "failed");
       expect(workflow.querySelector('[data-ci-step="merge"]')).toHaveAttribute("data-ci-step-state", "pending");
       expect(within(workflow).getByText("Checks failed")).toBeVisible();
+      await user.keyboard("{Escape}");
+    }
+
+    for (const [, surfaceLabel] of SPRINT_SURFACES) {
+      const surface = screen.getByRole("region", { name: surfaceLabel });
+      const qaTrigger = within(surface).getByRole("button", { name: "QA review details" });
+      expect(qaTrigger).toHaveAccessibleDescription(/QA changes requested/i);
+      expect(qaTrigger).toHaveClass("text-blue-700");
+
+      const workflowTrigger = within(surface).getByRole("button", {
+        name: /CI status: Coding in progress.*Show workflow details/i,
+      });
+      expect(workflowTrigger).toHaveTextContent("Coding in progress");
+      expect(surface.querySelector('[data-ci-icon="failure"]')).not.toBeInTheDocument();
+
+      await user.click(workflowTrigger);
+      const workflow = screen.getByRole("region", { name: "CI workflow details" });
+      expect(workflow.querySelector('[data-ci-step="pull_request"]')).toHaveAttribute("data-ci-step-state", "pending");
+      expect(workflow.querySelector('[data-ci-step="checks"]')).toHaveAttribute("data-ci-step-state", "pending");
+      expect(workflow.querySelector('[data-ci-step="merge"]')).toHaveAttribute("data-ci-step-state", "pending");
+      await user.keyboard("{Escape}");
     }
 
     expect(within(screen.getByRole("region", { name: "Task card surface" })).getByText("QA edits")).toBeVisible();
     expect(within(screen.getByRole("region", { name: "Live card surface" })).getByText("QA edits")).toBeVisible();
-    expect(container.querySelectorAll('[data-ci-icon="failure"]')).toHaveLength(4);
+    expect(container.querySelectorAll('[data-ci-icon="failure"]')).toHaveLength(2);
   });
 
   it.each(SURFACES)("opens and fully operates the %s QA details without pointer input", async (_name, surfaceLabel, Surface) => {
@@ -569,18 +593,28 @@ describe("shared QA and CI card status integration", () => {
     expect(taskScoped.liveItem.ciPresentation?.label).toBe("CI pending");
 
     const { rerender } = render(<AllSurfaces data={recovered} />);
-    for (const [, surfaceLabel] of SURFACES) {
+    for (const [, surfaceLabel] of TASK_SURFACES) {
       const surface = screen.getByRole("region", { name: surfaceLabel });
       expect(within(surface).getByRole("button", { name: /CI status: CI pending/i })).toBeVisible();
       expect(within(surface).queryByText("CI failed")).not.toBeInTheDocument();
       expect(surface.querySelector('[data-ci-icon="failure"]')).not.toBeInTheDocument();
     }
+    for (const [, surfaceLabel] of SPRINT_SURFACES) {
+      const surface = screen.getByRole("region", { name: surfaceLabel });
+      expect(within(surface).getByRole("button", { name: /CI status: Coding in progress/i })).toBeVisible();
+      expect(surface.querySelector('[data-ci-icon="failure"]')).not.toBeInTheDocument();
+    }
 
     rerender(<AllSurfaces data={matchingAttention} />);
-    for (const [, surfaceLabel] of SURFACES) {
+    for (const [, surfaceLabel] of TASK_SURFACES) {
       const surface = screen.getByRole("region", { name: surfaceLabel });
       expect(within(surface).getByRole("button", { name: /CI status: CI failed/i })).toBeVisible();
       expect(surface.querySelector('[data-ci-icon="failure"]')).toHaveClass("text-status-red");
+    }
+    for (const [, surfaceLabel] of SPRINT_SURFACES) {
+      const surface = screen.getByRole("region", { name: surfaceLabel });
+      expect(within(surface).getByRole("button", { name: /CI status: Coding in progress/i })).toBeVisible();
+      expect(surface.querySelector('[data-ci-icon="failure"]')).not.toBeInTheDocument();
     }
   });
 
@@ -599,15 +633,15 @@ describe("shared QA and CI card status integration", () => {
     ciTrigger.focus();
     await user.keyboard("{Enter}");
     expect(ciTrigger).toHaveFocus();
-    expect(within(taskSurface).getByRole("region", { name: "CI workflow details" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "CI workflow details" })).toBeVisible();
 
     view.rerender(<AllSurfaces data={replay} />);
     expect(ciTrigger).toHaveFocus();
     expect(ciTrigger).toHaveAttribute("aria-expanded", "true");
-    expect(within(taskSurface).getByRole("region", { name: "CI workflow details" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "CI workflow details" })).toBeVisible();
 
     await user.keyboard("{Escape}");
-    expect(within(taskSurface).queryByRole("region", { name: "CI workflow details" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "CI workflow details" })).not.toBeInTheDocument();
     expect(ciTrigger).toHaveFocus();
   });
 });

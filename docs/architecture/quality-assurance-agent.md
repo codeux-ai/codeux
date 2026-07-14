@@ -208,7 +208,7 @@ This separation keeps repository writes, provider calls, task status mutations, 
 - if the latest QA verdict is `changes_requested`, Code UX keeps the merge blocked at the retry cap unless a completed Code UX-applied QA continuation is waiting for verification
 - if the latest QA verdict is `changes_requested` and a same-session CLI QA follow-up completes after that verdict, Code UX schedules verification before applying `FINISH_TASK`, `FAIL_TASK`, or `ESCALATE_TO_HUMAN`
 - a passing task QA result is final for that completion state and is not retriggered just because orchestration loops again
-- task-level QA runs are now surfaced in task list records and live runtime snapshots. The Tasks page and Live page both show a compact QA badge, including a spinner state while the latest task QA run is still `running`.
+- task-level QA runs are surfaced in task list records and live runtime snapshots. Tasks, Live, Sprints, and Overview project the latest review into the shared six-stage delivery workflow badge, including an active QA stage while the latest task QA run is still `running`.
 
 ### Sprint completion QA
 

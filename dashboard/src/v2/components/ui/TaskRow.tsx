@@ -3,7 +3,7 @@ import { memo } from "preact/compat";
 import { FolderGit2, CheckCircle2, Circle, PlayCircle, Clock, Play, Square, Settings, Maximize2, Loader2 } from "lucide-preact";
 import type { Task } from "../../types.js";
 import type { TaskStreamState } from "../../hooks/use-overview-stream-actions.js";
-import { SprintReviewBadge } from "../sprints/SprintReviewBadge.js";
+import { WorkflowStatusBadge } from "./WorkflowStatusBadge.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 interface TaskRowProps {
@@ -47,11 +47,15 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
                 <span className={`text-base md:text-lg font-bold tracking-tight text-slate-900 dark:text-white truncate group-hover:translate-x-1.5 transition-transform duration-300 ease-out ${task.status === 'completed' ? 'opacity-50' : task.status === 'coding_completed' ? 'opacity-80' : ''}`}>
                     {task.title}
                 </span>
-                {task.latestReview && (
-                    <div className="ml-3 shrink-0">
-                        <SprintReviewBadge summary={task.latestReview} compact showCompactLabel align="right" />
-                    </div>
-                )}
+                <div className="ml-3 shrink-0">
+                    <WorkflowStatusBadge
+                        scope="task"
+                        status={task.status}
+                        review={task.latestReview}
+                        compact
+                        align="right"
+                    />
+                </div>
             </div>
 
             {/* Source */}

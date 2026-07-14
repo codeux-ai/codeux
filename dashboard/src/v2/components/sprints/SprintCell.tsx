@@ -22,9 +22,8 @@ import type { ExecutionHumanInterventionSummary, Sprint, SprintStatus } from "..
 import { WaveFluid } from "../ui/WaveFluid.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
 import { HumanInterventionBadge } from "../ui/HumanInterventionBadge.js";
-import { CiStatusBadge } from "../ui/CiStatusBadge.js";
+import { WorkflowStatusBadge } from "../ui/WorkflowStatusBadge.js";
 import type { CiStatusPresentation } from "../../lib/ci-status-presentation.js";
-import { SprintReviewBadge } from "./SprintReviewBadge.js";
 import { SprintActionMenu } from "./SprintActionMenu.js";
 import {
   resolveSprintAttentionIndicatorState,
@@ -350,19 +349,21 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
             {formatBubbleTime(sprint.createdAt)}
           </div>
         </div>
-        {(showInterventionBadge || sprint.latestReview || ciStatus) && (
-          <div className="absolute right-4 top-4 z-[60] flex max-w-[11rem] flex-wrap items-center justify-end gap-2 lg:right-5 lg:top-5 lg:max-w-[13rem]">
-            {sprint.latestReview && (
-              <SprintReviewBadge summary={sprint.latestReview} compact align="right" />
-            )}
-            <CiStatusBadge presentation={ciStatus} compact />
+        <div className="absolute right-4 top-4 z-[60] flex max-w-[11rem] flex-wrap items-center justify-end gap-2 lg:right-5 lg:top-5 lg:max-w-[13rem]">
+            <WorkflowStatusBadge
+              scope="sprint"
+              status={sprint.status}
+              review={sprint.latestReview}
+              ciPresentation={ciStatus}
+              compact
+              align="right"
+            />
             {showInterventionBadge && humanIntervention && (
               <div className={reducedMotion ? "" : "animate-pulse"} style={interventionPulseStyle}>
                 <HumanInterventionBadge summary={humanIntervention} label="Needs you" compact align="right" />
               </div>
             )}
-          </div>
-        )}
+        </div>
 
         <div className={`inline-flex items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.03] px-4 py-1.5 font-mono text-[11px] font-bold tracking-[0.14em] transition-transform group-hover:-translate-y-3 group-focus-within:-translate-y-3 motion-reduce:transform-none dark:border-white/[0.06] dark:bg-white/[0.03] ${accentColor}`} style={controlFeedbackStyle}>
           <Sparkles className="h-3.5 w-3.5" strokeWidth={2.2} />

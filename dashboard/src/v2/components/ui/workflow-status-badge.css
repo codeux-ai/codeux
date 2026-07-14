@@ -1,0 +1,38 @@
+@keyframes workflow-dot-flow {
+  0% {
+    background-position: 50% -8px;
+  }
+  100% {
+    background-position: 50% 8px;
+  }
+}
+
+@keyframes workflow-chevron-breathe {
+  0%, 100% {
+    transform: translateX(-2px);
+    opacity: 0.6;
+  }
+  50% {
+    transform: translateX(2px);
+    opacity: 1;
+  }
+}
+
+.workflow-status__connector {
+  background-image: radial-gradient(circle, currentColor 1.2px, transparent 1.5px);
+  background-position: 50% -8px;
+  background-repeat: repeat-y;
+  background-size: 4px 8px;
+  animation: workflow-dot-flow 850ms linear infinite;
+}
+
+.workflow-status__chevron {
+  animation: workflow-chevron-breathe 1.35s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workflow-status__connector,
+  .workflow-status__chevron {
+    animation: none;
+  }
+}

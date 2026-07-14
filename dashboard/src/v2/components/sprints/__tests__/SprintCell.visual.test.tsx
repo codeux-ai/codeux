@@ -198,7 +198,7 @@ describe("SprintCell visuals", () => {
     expect(container.querySelector(".border-orange-400\\/35")).toBeInTheDocument();
   });
 
-  it("shows CI failure steps and requested-change QA details without replacing lifecycle status", () => {
+  it("keeps a running sprint on Coding while retaining requested-change QA details", () => {
     const { container } = render(
       <SprintCell
         sprint={{
@@ -231,17 +231,22 @@ describe("SprintCell visuals", () => {
 
     expect(screen.getByText("Running")).toBeInTheDocument();
     expect(screen.queryByText("CI")).not.toBeInTheDocument();
-    const ciTrigger = screen.getByRole("button", { name: /CI status: CI failed.*Show workflow details/i });
-    expect(ciTrigger).toHaveClass("text-status-red");
-    expect(container.querySelector('[data-ci-icon="failure"]')).toHaveClass("text-status-red");
+    const ciTrigger = screen.getByRole("button", { name: /CI status: Coding in progress.*Show workflow details/i });
+    expect(ciTrigger).toHaveClass("text-signal-700");
+    expect(ciTrigger).toHaveTextContent("Coding in progress");
+    expect(container.querySelector('[data-ci-icon="failure"]')).not.toBeInTheDocument();
 
     fireEvent.click(ciTrigger);
     const workflow = screen.getByRole("region", { name: "CI workflow details" });
     expect(within(workflow).getByText("Pull request")).toBeVisible();
-    expect(within(workflow).getByText("Checks")).toBeVisible();
+    expect(within(workflow).getByText("CI")).toBeVisible();
     expect(within(workflow).getByText("Merge")).toBeVisible();
+    expect(within(workflow).getByText("Waiting for pull request")).toBeVisible();
+    expect(within(workflow).getByText("Checks pending")).toBeVisible();
+    expect(within(workflow).getByText("Merge pending")).toBeVisible();
 
     const qaTrigger = screen.getByRole("button", { name: "QA review details" });
+    expect(qaTrigger).toHaveClass("text-blue-700");
     expect(qaTrigger).toHaveAccessibleDescription(/QA changes requested/i);
     fireEvent.click(qaTrigger);
     const review = screen.getByRole("region", { name: "QA Changes Requested" });

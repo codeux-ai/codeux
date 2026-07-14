@@ -150,7 +150,7 @@ describe("SprintsPage Status Regression", () => {
     expect(screen.queryByText("Needs you")).not.toBeInTheDocument();
   });
 
-  it("renders the same accessible failed CI and requested-change QA state in gallery and ledger", () => {
+  it("keeps running gallery and ledger workflows on Coding while exposing requested-change QA", () => {
     const sprintWithReview = {
       ...basePageData.sortedSprints[0],
       status: "running",
@@ -178,12 +178,13 @@ describe("SprintsPage Status Regression", () => {
 
     const { container } = render(<SprintsPage />);
 
-    expect(screen.getAllByRole("button", { name: /CI status: CI failed.*Show workflow details/i })).toHaveLength(2);
-    expect(container.querySelectorAll('[data-ci-icon="failure"]')).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /CI status: Coding in progress.*Show workflow details/i })).toHaveLength(2);
+    expect(container.querySelectorAll('[data-ci-icon="failure"]')).toHaveLength(0);
     const reviewTriggers = screen.getAllByRole("button", { name: "QA review details" });
     expect(reviewTriggers).toHaveLength(2);
     for (const trigger of reviewTriggers) {
       expect(trigger).toHaveAccessibleDescription(/QA changes requested/i);
+      expect(trigger).toHaveClass("text-blue-700");
     }
   });
 });

@@ -31,13 +31,13 @@ Each lane is a named region whose accessible name includes its count, such as **
 
 Reduced-motion mode removes board, card, selector, progress, menu, and drop-target movement and disables pointer dragging. Static labels, borders, focus rings, progress values, lane counts, empty states, action availability reasons, and drag-disabled guidance remain available.
 
-Each task card shows its task identifier, title, status, and priority first. Compact metadata can then show a non-default executor or worker agent, session state and identifier, QA and CI state, dependency blocker count, optimistic saving state, source and assignee, runtime duration, pull-request state, creation or live-start time, and an optional self-reflection rating. The footer always keeps the task-labelled **Actions** trigger visible. Dragging a card to another lane changes its status when that transition is available.
+Each task card shows its task identifier, title, status, and priority first. Compact metadata can then show a non-default executor or worker agent, session state and identifier, the unified delivery workflow, dependency blocker count, optimistic saving state, source and assignee, runtime duration, pull-request state, creation or live-start time, and an optional self-reflection rating. The footer always keeps the task-labelled **Actions** trigger visible. Dragging a card to another lane changes its status when that transition is available.
 
 When a worker reports a task-run self-reflection rating, the shared rating badge appears in the compact card metadata near the task id, status, and priority. It shows the overall `overallRating` as a numeric score with a compact 5-star meter. Hovering the badge, or focusing it with the keyboard, opens a viewport-positioned details panel with each section from `sections`: the section label, matching stars, numeric rating, and any note captured by the worker. Tasks without a captured rating, including older tasks that never produced one, do not render an empty badge slot.
 
-## QA review states and follow-up specifications
+## Delivery workflow and QA review details
 
-Task cards use the same QA review badge as Sprints and Live. The badge represents the latest persisted review summary independently of the task lane or phase, so requested-change details remain available while a follow-up run is active and after a reconnect.
+Task cards use the shared bright delivery workflow badge in place of the standalone QA and CI badges. The task lifecycle label remains visible beside it, while the badge itself always exposes Coding → Pull request → QA → CI → Merge → Completion. Lifecycle and review state keep the badge durable when CI evidence is absent or refreshing.
 
 | Presentation | Meaning |
 | --- | --- |
@@ -46,21 +46,24 @@ Task cards use the same QA review badge as Sprints and Live. The badge represent
 | Blue pencil, **QA edits** / **QA changes requested** | QA completed successfully and requested changes. This is an actionable review outcome, not a provider failure. |
 | Red X, **QA failed** | The QA provider run failed, errored, or was cancelled before returning a usable verdict. It does not mean QA requested code changes. |
 
-Hovering the badge, focusing it with the keyboard, or activating it opens an accessible, viewport-positioned review card. The card is named by its review heading and can include the outcome, summary, findings, fix instructions, target task key, reviewer, reviewed time, and generated follow-up tasks. Focus may move between the badge, card, and disclosure buttons without closing it. `Escape` closes the card and restores focus to the badge; moving the pointer away closes it after a short grace period when focus is not inside, and a mouse or touch press outside dismisses it. On touch devices, tap the badge to open it and tap outside to dismiss it.
+Hovering, focusing, or activating the badge opens an opaque, viewport-positioned workflow card. Six circles on the left are connected by motion-safe animated dots. When review data exists, an animated chevron reveals an adjacent opaque QA review card with the outcome, summary, findings, fix instructions, target task key, reviewer, reviewed time, and generated follow-up tasks. `Escape` closes the surface and restores focus to the exact workflow or QA-chevron trigger that opened it; outside pointer or touch input dismisses it.
 
 Generated follow-up task specifications are collapsed initially, so long prompts do not dominate the review. Each **Follow-up task N** button exposes `aria-expanded` and can be toggled with the keyboard or touch. Expansion reveals the generated title, description, priority, dependency task keys (or **None**), and full Markdown prompt in a bounded scrolling area. The card uses one column on constrained screens, may split summary and findings on wider screens, clamps to the viewport, and scrolls vertically when needed. Reduced motion removes spinner, pulse, rotation, and transition movement without removing labels, borders, focus rings, expanded content, or state semantics.
 
-## Pull request, checks, and merge workflow
+## Six-stage delivery flow
 
-The CI badge summarizes a three-step workflow shared by Sprints, Tasks, and Live:
+The workflow badge summarizes six stages shared by Sprints, Tasks, Overview, and Live:
 
-1. **Pull request** — waiting for a PR, missing a required PR, or PR ready.
-2. **Checks** — pending, running, passed, or failed checks.
-3. **Merge** — waiting for checks, QA, or review; checking mergeability; ready to merge; merging; merged; not required; conflict; or failed merge attempt.
+1. **Coding** — waiting, queued, preparing, active, quota/capacity wait, paused, complete, or failed.
+2. **Pull request** — waiting for a PR, missing a required PR, creating, or ready.
+3. **QA** — pending, reviewing, passed, blue **QA edits**, or provider/runtime failure.
+4. **CI** — checks pending, running, passed, or failed.
+5. **Merge** — waiting, checking mergeability, ready, merging, merged, not required, conflict, or failed attempt.
+6. **Completion** — waiting, complete, failed, or cancelled.
 
 The four first-class workflow states are `pending`, `in_progress`, `successful`, and `failed`. Pending uses a neutral clock, `in_progress` is presented as running with the signal-colored progress treatment, `successful` uses a green check, and `failed` uses a red X. Failed wins over in progress, in progress wins over pending, and pending wins over successful when the overall badge is derived from the three steps.
 
-The red X is reserved for an actual failed workflow step: failed CI checks, a merge conflict, or a failed merge attempt. A review blocker is not a CI failure: checks remain passed and Merge reads **Waiting for review** in a pending state. A merge conflict fails the Merge step and is labelled **Merge conflict**, which keeps it distinct from **CI failed** at Checks. QA provider failure is shown by the separate QA badge and does not become a CI failure. Activate the CI badge to inspect all three step labels and states; `Escape` closes the details and returns focus to the badge.
+The red X is reserved for an actual provider/runtime or workflow failure. Requested QA edits use the bright blue pencil treatment, not failure red. A review blocker is not a CI failure: CI remains passed and Merge reads **Waiting for review**. A merge conflict belongs to Merge and remains distinct from **CI failed**.
 
 These badges do not poll per card. Task feature-PR gates are persisted as `ci_gate_status` task-run events, and unresolved CI repair attention remains active while its item is `open` or `claimed`. The card projection selects the newest matching task event by creation time and then event ID, combines it with active attention, and uses persisted task merge metadata only as durable fallback evidence when no matching event is available.
 
