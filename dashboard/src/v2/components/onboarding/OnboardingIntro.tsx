@@ -3,6 +3,7 @@ import { useLayoutEffect, useEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { RobotLogo } from "../brand/RobotLogo.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useOnboardingMessages } from "../../i18n/messages/onboarding.js";
 
 /*
   Onboarding intro — Luminous Particle Nebula Constellation.
@@ -114,6 +115,7 @@ const GOSSAMER_RINGS: GossamerRing[] = [
 ];
 
 export const OnboardingIntro: FunctionComponent<OnboardingIntroProps> = ({ onExitStart, onComplete }) => {
+    const { t } = useOnboardingMessages();
     const backdropRef = useRef<HTMLDivElement>(null);
     const vignetteRef = useRef<HTMLDivElement>(null);
     const stageRef = useRef<HTMLDivElement>(null);
@@ -570,7 +572,7 @@ export const OnboardingIntro: FunctionComponent<OnboardingIntroProps> = ({ onExi
                         className="font-mono text-[11px] font-bold uppercase text-signal-500"
                         style={{ opacity: 0, letterSpacing: "0.45em" }}
                     >
-                        Welcome to
+                        {t("welcomeTo")}
                     </span>
 
                     <h1
@@ -582,7 +584,7 @@ export const OnboardingIntro: FunctionComponent<OnboardingIntroProps> = ({ onExi
                     </h1>
 
                     <span ref={taglineRef} className="mt-2 text-sm font-medium tracking-[0.04em] text-white" style={{ opacity: 0 }}>
-                        Agentic Runtime
+                        {t("agenticRuntime")}
                     </span>
                 </div>
             </div>

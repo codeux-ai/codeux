@@ -12,6 +12,8 @@ The runtime is isolated under `dashboard/src/v2/i18n/`:
 - `context.tsx` provides locale state, synchronous switching, translated messages, cross-tab synchronization, and `<html lang>` updates.
 - `messages/` contains feature-owned catalogs so lazy route bundles do not become part of an eager monolithic catalog.
 
+Onboarding owns `messages/onboarding.ts`. Its catalog covers the full first-run flow, readiness and installation framing, provider setup, validation and save announcements, plus the responsive guided tour. Locale-explicit helpers localize reducer defaults and other pure presentation data without coupling settings drafts or persistence helpers to Preact context.
+
 The provider restores storage and updates `document.documentElement.lang` before the application root renders. Missing, invalid, unavailable, or throwing storage safely resolves to English. Storage events from another tab update locale state immediately; clearing the key resets the dashboard to English.
 
 ## Adding a feature catalog
@@ -34,3 +36,27 @@ const { translate, translatePlural, formatNumber } = useDashboardI18n();
 English and German must declare exactly the same top-level keys. Interpolation treats replacement values as literal text, plural messages require an `other` form, and locale-aware formatting delegates to the browser's native `Intl` implementation.
 
 Keep each catalog with its owning feature and import it only where the feature is loaded. Translate dashboard-authored interface copy only. Never translate provider output, API responses, stored instructions, project data, runtime diagnostics, or user-authored content.
+
+## Agents route boundary
+
+The lazy `/agents` route imports its own `messages/agents.ts` catalog. English and German cover the roster, preset detail/editor, validation, avatar customization, instruction files, memory and MCP configuration, repository push feedback, compatibility updates, loading and empty states, and accessibility labels. Dates, counts, token estimates, byte sizes, and plural messages use the active locale.
+
+Agent-authored and runtime data stays byte-for-byte outside translation: preset names and labels, system instructions, memory templates, Markdown files, MCP server/tool names, storage names, provider/model names, repository and invocation output, and API errors. Persisted identifiers and configuration values are likewise unchanged; the route translates only their presentation.
+
+## Settings localization boundaries
+
+The Agents, Techstacks, and Guidance settings surfaces use `messages/settings-agents-guidance.ts`. Component copy follows the provider's active locale, while locale-explicit presentation helpers accept `en` or `de` for tests and non-component consumers.
+
+Localization stops at the persistence boundary: agent and stack ids, preset and storage names, package labels, application-kind values, reflection criteria, memory/instruction markdown, and custom guidance remain byte-for-byte as authored. Persistent-skill storage creation, editing, deletion, and agent attachments still mutate immediately; changing locale does not move those operations into the Settings draft or bypass pending, confirmation, recovery, and focus-restoration behavior.
+
+## Overview route
+
+The Overview route owns `messages/overview.ts`. Its headers, landmarks, metric and telemetry labels, source and task states, controls, plural counts, live-region announcements, and loading/empty/error fallbacks support English and German. Locale-bound formatters present counts, percentages, dates, costs, durations, and runtime times without changing timestamp interpretation, data ordering, polling, or realtime behavior.
+
+Live project, sprint, task, branch, repository, provider, and model values remain verbatim. Server errors, attention descriptions, and runtime-authored execution text are also outside the translation boundary.
+
+Active-stream task rows localize their status labels and announcements, but the duration field always renders the runtime-provided task duration unchanged for pending, active, review, and completed tasks.
+
+Browser Preview is the first route-wide catalog. Its components use the active locale for copy, pluralized session/environment counts, and pending port summaries, while URLs, paths, commands, environment data, logs, names, ports, container identifiers, and server diagnostics remain literal runtime values.
+
+For onboarding specifically, provider and dependency names, detected paths, model IDs, command snippets and installation output, and API-returned readiness diagnostics stay verbatim. The locale changes only dashboard-owned framing and accessible names; submitted provider IDs, enums, credentials, and settings drafts are unchanged.

@@ -14,6 +14,8 @@ import {
   getProviderTypeLabel,
   sortProviderConfigEntries,
 } from "./settings-view-models.js";
+import type { DashboardLocale } from "../i18n/locales.js";
+import { translateOnboardingMessage } from "../i18n/messages/onboarding.js";
 
 export const providerMountFields: Partial<Record<ProviderId, keyof SystemSettings["defaults"]["cliWorkflow"]>> = {
   gemini: "containerMountGeminiAuth",
@@ -39,16 +41,18 @@ export const PROVIDER_TYPES: ProviderId[] = ["jules", "gemini", "antigravity", "
 
 const EASY_PROVIDER_PRIORITY: ProviderId[] = ["codex", "gemini", "claude-code", "qwen-code", "opencode", "antigravity"];
 
-export const providerDescriptions: Record<ProviderId, string> = {
-  jules: "Google Jules API service for agent session and workspace orchestration.",
-  gemini: "Gemini CLI with local OAuth auth-copy or API-key based execution.",
-  codex: "Codex CLI for OpenAI-powered local container execution.",
-  "claude-code": "Claude Code CLI with local auth-copy or provider API key.",
-  "qwen-code": "Qwen Code CLI with OAuth, Alibaba Coding Plan, or custom model provider config.",
-  opencode: "OpenCode CLI with local auth, provider keys, or OpenAI-compatible endpoints.",
-  antigravity: "Antigravity CLI (agy) for Google-powered local container execution.",
-  "mockup-cli": "Internal test-only mock provider.",
-};
+export const getProviderDescriptions = (locale: DashboardLocale = "en"): Record<ProviderId, string> => ({
+  jules: translateOnboardingMessage(locale, "providerDescriptionJules"),
+  gemini: translateOnboardingMessage(locale, "providerDescriptionGemini"),
+  codex: translateOnboardingMessage(locale, "providerDescriptionCodex"),
+  "claude-code": translateOnboardingMessage(locale, "providerDescriptionClaude"),
+  "qwen-code": translateOnboardingMessage(locale, "providerDescriptionQwen"),
+  opencode: translateOnboardingMessage(locale, "providerDescriptionOpenCode"),
+  antigravity: translateOnboardingMessage(locale, "providerDescriptionAntigravity"),
+  "mockup-cli": translateOnboardingMessage(locale, "providerDescriptionMock"),
+});
+
+export const providerDescriptions = getProviderDescriptions();
 
 export const getProviderWatermark = (providerId: ProviderId): string => (
   providerId === "jules" ? "JLS"
@@ -64,12 +68,12 @@ export const buildProviderConfigId = (providerId: ProviderId): ProviderConfigId 
   `${providerId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
 );
 
-export const defaultReadiness: OnboardingRuntimeReadiness = {
+export const getDefaultReadiness = (locale: DashboardLocale = "en"): OnboardingRuntimeReadiness => ({
   checkedAt: "",
   cluster: {
     status: "not_ready",
-    label: "Checking",
-    detail: "Runtime checks are loading.",
+    label: translateOnboardingMessage(locale, "checking"),
+    detail: translateOnboardingMessage(locale, "runtimeChecksLoading"),
   },
   dependencies: [],
   providers: [],
@@ -78,7 +82,9 @@ export const defaultReadiness: OnboardingRuntimeReadiness = {
     recommendedMode: null,
     options: [],
   },
-};
+});
+
+export const defaultReadiness = getDefaultReadiness();
 
 export const getProviderInitialSelection = (
   providers: OnboardingProviderCredentialStatus[],

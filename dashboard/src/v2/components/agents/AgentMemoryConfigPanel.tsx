@@ -3,6 +3,8 @@ import { useMemo, useState, useEffect } from "preact/hooks";
 import { BrainCircuit, Check, ChevronDown, ChevronUp, X } from "lucide-preact";
 import { DEFAULT_AGENT_MEMORY_CONFIG, MEMORY_CATEGORIES, type AgentMemoryConfig, type MemoryCategory } from "../../memory-types.js";
 import { INTERACTION_CSS_VARIABLES } from "../../lib/motion/tokens.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import { agentsMessages } from "../../i18n/messages/agents.js";
 
 export interface AgentMemoryConfigPanelProps {
   onClose: () => void;
@@ -11,29 +13,20 @@ export interface AgentMemoryConfigPanelProps {
   disabled?: boolean;
 }
 
-const TIER_OPTIONS: Array<{ value: AgentMemoryConfig["tier"]; label: string }> = [
-  { value: "short_term", label: "Short Term" },
-  { value: "both", label: "Both" },
-  { value: "long_term", label: "Long Term" },
+const TIER_OPTIONS: Array<{ value: AgentMemoryConfig["tier"]; labelKey: "shortTerm" | "both" | "longTerm" }> = [
+  { value: "short_term", labelKey: "shortTerm" },
+  { value: "both", labelKey: "both" },
+  { value: "long_term", labelKey: "longTerm" },
 ];
 
 const MAX_STRENGTH = 1;
 const MIN_STRENGTH = 0;
 const STRENGTH_STEP = 0.05;
 
-const toTitleCase = (value: string): string =>
-  value
-    .split(/[\s_-]+/g)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-
 const clampStrength = (value: number): number => {
   if (Number.isNaN(value)) return 0;
   return Math.min(MAX_STRENGTH, Math.max(MIN_STRENGTH, value));
 };
-
-const formatPercent = (value: number): string => `${Math.round(clampStrength(value) * 100)}%`;
 
 const areStrengthsEqual = (left: number, right: number): boolean => Math.abs(left - right) < 1e-9;
 
@@ -86,6 +79,21 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
   onChange,
   disabled = false,
 }) => {
+  const { formatNumber, translate } = useDashboardI18n();
+  const formatPercent = (strength: number): string => formatNumber(clampStrength(strength), {
+    style: "percent",
+    maximumFractionDigits: 0,
+  });
+  const categoryLabel = (category: MemoryCategory): string => translate(agentsMessages, ({
+    architecture: "categoryArchitecture",
+    codebase: "categoryCodebase",
+    context: "categoryContext",
+    preferences: "categoryPreferences",
+    patterns: "categoryPatterns",
+    decision: "categoryDecision",
+    error: "categoryError",
+    learning: "categoryLearning",
+  } as const)[category]);
   const [showOverrides, setShowOverrides] = useState(false);
   useEffect(() => {
     if (disabled) setShowOverrides(false);
@@ -159,10 +167,10 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
           </div>
           <div className="min-w-0">
             <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">
-              Agents & Memory
+              {translate(agentsMessages, "agentsMemory")}
             </div>
             <h2 className="truncate font-display text-base font-semibold tracking-tight text-slate-900 dark:text-white">
-              Memory Injection
+              {translate(agentsMessages, "memoryInjection")}
             </h2>
           </div>
         </div>
@@ -171,7 +179,7 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={translate(agentsMessages, "close")}
             disabled={disabled}
             className="flex h-8 w-8 items-center justify-center rounded-full border border-black/[0.08] bg-white/60 text-slate-500 transition-colors hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
           >
@@ -183,7 +191,7 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
             disabled={disabled}
             className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.06] bg-white/60 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
           >
-            Defaults
+            {translate(agentsMessages, "defaults")}
           </button>
         </div>
       </div>
@@ -198,16 +206,16 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
               : "border-black/[0.05] bg-white/35 text-slate-500 dark:border-white/[0.05] dark:bg-white/[0.02] dark:text-slate-400"
           }`}
         >
-          {disabled ? "Memory filters are locked while the agent is saving." : "Memory filter changes are pending until the agent is saved."}
+          {translate(agentsMessages, disabled ? "memoryLocked" : "memoryPending")}
         </div>
         <section className="rounded-2xl border border-black/[0.05] bg-white/35 p-4 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                Tier
+                {translate(agentsMessages, "tier")}
               </h3>
               <p className="mt-1 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
-                Choose whether this agent receives short-term, long-term, or both memory scopes.
+                {translate(agentsMessages, "tierBody")}
               </p>
             </div>
           </div>
@@ -231,8 +239,8 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
                     transitionTimingFunction: INTERACTION_CSS_VARIABLES.selectionMovement.ease,
                   }}
                 >
-                  {option.label}
-                  {active && <span className="sr-only"> selected</span>}
+                  {translate(agentsMessages, option.labelKey)}
+                  {active && <span className="sr-only"> {translate(agentsMessages, "selected")}</span>}
                 </button>
               );
             })}
@@ -243,10 +251,10 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
               <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                Categories
+                {translate(agentsMessages, "categories")}
               </h3>
               <p className="mt-1 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
-                Empty means all categories are included.
+                {translate(agentsMessages, "categoriesBody")}
               </p>
             </div>
             <button
@@ -258,13 +266,13 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
               disabled={disabled}
               className="inline-flex items-center rounded-full border border-black/[0.06] bg-white/60 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
             >
-              Select All
+              {translate(agentsMessages, "selectAll")}
             </button>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {MEMORY_CATEGORIES.map((category) => {
               const selected = isCategoryEnabled(value.categories, category);
-              const label = toTitleCase(category);
+              const label = categoryLabel(category);
               return (
                 <button
                   key={category}
@@ -285,7 +293,7 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
                   <span className="min-w-0 truncate">{label}</span>
                   <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-current/20 px-1.5 py-0.5 text-[8px] uppercase tracking-[0.12em]">
                     {selected && <Check className="h-3 w-3" strokeWidth={2.8} />}
-                    {selected ? "Selected" : "Off"}
+                    {translate(agentsMessages, selected ? "selected" : "off")}
                   </span>
                 </button>
               );
@@ -297,10 +305,10 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
               <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                Minimum Strength
+                {translate(agentsMessages, "minimumStrength")}
               </h3>
               <p className="mt-1 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
-                0% means no minimum.
+                {translate(agentsMessages, "noMinimum")}
               </p>
             </div>
             <button
@@ -310,7 +318,7 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
               className="inline-flex items-center gap-1 rounded-full border border-black/[0.06] bg-white/60 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
               aria-expanded={showOverrides}
             >
-              Per-category overrides
+              {translate(agentsMessages, "perCategoryOverrides")}
               {showOverrides ? <ChevronUp className="h-3 w-3" strokeWidth={2.4} /> : <ChevronDown className="h-3 w-3" strokeWidth={2.4} />}
             </button>
           </div>
@@ -319,7 +327,7 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
             <div className="rounded-2xl border border-black/[0.05] bg-white/45 p-3 dark:border-white/[0.05] dark:bg-white/[0.03]">
               <div className="mb-2 flex items-center justify-between gap-3">
                 <label htmlFor="agent-memory-min-strength" className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
-                  Global minimum
+                  {translate(agentsMessages, "globalMinimum")}
                 </label>
                 <span className="font-mono text-[11px] font-bold text-slate-500 dark:text-slate-400">
                   {formatPercent(value.minStrength)}
@@ -334,7 +342,7 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
                 value={value.minStrength}
                 disabled={disabled}
                 onInput={(event) => setMinStrength(Number((event.currentTarget as HTMLInputElement).value))}
-                aria-label="Minimum strength"
+                aria-label={translate(agentsMessages, "minimumStrength")}
                 className="w-full accent-signal-500"
               />
             </div>
@@ -343,7 +351,7 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
               <div className="flex flex-col gap-2">
                 {visibleCategories.map((category) => {
                   const override = value.minStrengthPerCategory[category] ?? value.minStrength;
-                  const label = toTitleCase(category);
+                  const label = categoryLabel(category);
                   const inputId = `agent-memory-min-strength-${category}`;
                   return (
                     <div
@@ -367,7 +375,7 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
                         value={override}
                         disabled={disabled}
                         onInput={(event) => setCategoryStrength(category, Number((event.currentTarget as HTMLInputElement).value))}
-                        aria-label={`${label} minimum strength`}
+                        aria-label={translate(agentsMessages, "categoryMinimumStrength", { category: label })}
                         className="w-full accent-signal-500"
                       />
                     </div>
@@ -376,7 +384,7 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
 
                 {visibleCategories.length === 0 && (
                   <div className="rounded-2xl border border-dashed border-black/[0.08] bg-white/30 px-4 py-3 text-[12px] leading-relaxed text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.02] dark:text-slate-500">
-                    No categories selected for injection.
+                    {translate(agentsMessages, "noCategories")}
                   </div>
                 )}
               </div>
@@ -387,17 +395,17 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
         <section className="rounded-2xl border border-black/[0.05] bg-white/35 p-4 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
           <div className="mb-3">
             <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-              Max Memories
+              {translate(agentsMessages, "maxMemories")}
             </h3>
             <p className="mt-1 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
-              Use 0 for unlimited.
+              {translate(agentsMessages, "zeroUnlimited")}
             </p>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-2">
               <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
-                Max Short Term
+                {translate(agentsMessages, "maxShortTerm")}
               </span>
               <input
                 type="number"
@@ -405,17 +413,17 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
                 step={1}
                 inputMode="numeric"
                 value={formatMemoryCount(value.maxShortTerm)}
-                placeholder="Unlimited"
+                placeholder={translate(agentsMessages, "unlimited")}
                 disabled={disabled}
                 onInput={(event) => setMaxCount("maxShortTerm", event.currentTarget.value)}
-                aria-label="Max Short Term"
+                aria-label={translate(agentsMessages, "maxShortTerm")}
                 className="rounded-2xl border border-black/[0.05] bg-white/45 px-4 py-3 text-[13px] font-medium text-slate-900 outline-none transition-all placeholder-slate-400 focus:border-signal-500 focus:ring-4 focus:ring-signal-500/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-white dark:placeholder-slate-600 dark:focus:ring-signal-500/15"
               />
             </label>
 
             <label className="flex flex-col gap-2">
               <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
-                Max Long Term
+                {translate(agentsMessages, "maxLongTerm")}
               </span>
               <input
                 type="number"
@@ -423,10 +431,10 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
                 step={1}
                 inputMode="numeric"
                 value={formatMemoryCount(value.maxLongTerm)}
-                placeholder="Unlimited"
+                placeholder={translate(agentsMessages, "unlimited")}
                 disabled={disabled}
                 onInput={(event) => setMaxCount("maxLongTerm", event.currentTarget.value)}
-                aria-label="Max Long Term"
+                aria-label={translate(agentsMessages, "maxLongTerm")}
                 className="rounded-2xl border border-black/[0.05] bg-white/45 px-4 py-3 text-[13px] font-medium text-slate-900 outline-none transition-all placeholder-slate-400 focus:border-signal-500 focus:ring-4 focus:ring-signal-500/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-white dark:placeholder-slate-600 dark:focus:ring-signal-500/15"
               />
             </label>
