@@ -603,7 +603,7 @@ describe("dashboard accessibility quality regressions", () => {
     expect(screen.getByRole("radiogroup", { name: `${provider.name} Authentifizierungsmodus` })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: `${provider.name} Anbieter-ID` })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: `Entfernen: ${provider.name}` })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Delete task TASK-LONG:/ })).toHaveAccessibleName(/Very long task title/);
+    expect(screen.getByRole("button", { name: /Aufgabe TASK-LONG löschen:/ })).toHaveAccessibleName(/Very long task title/);
     expect(container.querySelector(".kanban-card h4")).toHaveClass("break-words");
     expect(screen.getByRole("list", { name: "1 Vorschau-Sitzung" })).toHaveClass("overflow-x-auto");
     expect(screen.getByRole("button", { name: `Vorschau-Sitzung ${previewSession.sprintName} auswählen` })).toHaveAccessibleName(

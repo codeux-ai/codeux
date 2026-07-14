@@ -632,7 +632,7 @@ describe("SettingsIntegrationsPanel", () => {
 
       render(<SettingsIntegrationsPanel state={state as any} />, "de");
 
-      expect(await screen.findByText("Notion – Konfiguration")).toBeTruthy();
+      expect(await screen.findByText("Importer-Konfiguration")).toBeTruthy();
       expect(screen.getByText("Unterstützung für schreibgeschützte Importe")).toBeTruthy();
       expect(screen.getByText("Datenbank-ID")).toBeTruthy();
       expect((screen.getByLabelText("Notion API-Token") as HTMLInputElement).value).toBe("credential-value-verbatim");
