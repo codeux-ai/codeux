@@ -55,6 +55,7 @@ If the saved setting does not appear to take effect:
 - A fix continuation created by the review that reaches the configured cap gets one final verification review. A CLI continuation with no patch and no commits ahead is treated as `follow_up_no_progress` and applies the exhaustion policy immediately; repeated continuations cannot extend the budget indefinitely.
 - Recovered failed, cancelled, or errored QA attempts retry only within the bounded infrastructure grace. All terminal attempts count toward the hard ceiling, so repeated container loss eventually opens the configured handoff.
 - Sprint QA review limits count review cycles, not the number of findings in each earlier cycle. The final configured cycle is verification-only: if it does not pass, Code UX opens one sprint-scoped human handoff and does not create another automatic follow-up batch. Completed follow-up work cannot bypass that exhausted-budget handoff merely because it changed the task snapshot.
+- After a person reviews a blocked sprint result, **Mark QA Pass** in the Sprints page action menu creates a durable manual passing verdict and resolves only the sprint-level QA handoff. The control is disabled while an automated sprint review is running; it does not approve task-level QA failures or unrelated attention.
 
 ## Related Documentation
 
