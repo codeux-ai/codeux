@@ -24,6 +24,36 @@ import {
   isSupportedDashboardJsonContentType,
 } from "./request-parsers.js";
 
+export const DEFAULT_DASHBOARD_API_RATE_LIMIT_MAX = 600;
+export const E2E_DASHBOARD_API_RATE_LIMIT_MAX_ENV = "CODEUX_E2E_DASHBOARD_API_RATE_LIMIT_MAX";
+const MAX_E2E_DASHBOARD_API_RATE_LIMIT = 100_000;
+
+export function resolveDashboardApiRateLimitMax(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const configured = env[E2E_DASHBOARD_API_RATE_LIMIT_MAX_ENV]?.trim();
+  if (!configured) {
+    return DEFAULT_DASHBOARD_API_RATE_LIMIT_MAX;
+  }
+  if (env.CODEUX_E2E_MODE !== "1") {
+    throw new Error(`${E2E_DASHBOARD_API_RATE_LIMIT_MAX_ENV} is restricted to CODEUX_E2E_MODE=1.`);
+  }
+  if (!/^\d+$/.test(configured)) {
+    throw new Error(`${E2E_DASHBOARD_API_RATE_LIMIT_MAX_ENV} must be a whole number.`);
+  }
+  const parsed = Number(configured);
+  if (
+    !Number.isSafeInteger(parsed)
+    || parsed < DEFAULT_DASHBOARD_API_RATE_LIMIT_MAX
+    || parsed > MAX_E2E_DASHBOARD_API_RATE_LIMIT
+  ) {
+    throw new Error(
+      `${E2E_DASHBOARD_API_RATE_LIMIT_MAX_ENV} must be between ${DEFAULT_DASHBOARD_API_RATE_LIMIT_MAX} and ${MAX_E2E_DASHBOARD_API_RATE_LIMIT}.`,
+    );
+  }
+  return parsed;
+}
+
 function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
 }
@@ -61,7 +91,7 @@ export const applyDashboardPreRouteMiddleware = (
   const authService = options.headlessAuthService ?? new HeadlessAuthService();
   app.use("/api", createHttpRateLimiter({
     windowMs: 60_000,
-    max: 600,
+    max: resolveDashboardApiRateLimitMax(),
     onLimited: (req) => dashboardLogger.warn("Dashboard API request rate limit exceeded", {
       logPurpose: "security",
       method: req.method,

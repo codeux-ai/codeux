@@ -271,7 +271,14 @@ When a retryable provider error occurs, Code UX appends an explicit system event
 
 If `autoStart` is enabled, Code UX starts orchestration after the tasks are created unless planning self-reflection is enabled and the final reflection decision does not pass. In that case the valid planned tasks stay saved, and the operator can start the sprint manually after review.
 
-Provider slot recovery also runs before every provider claim, including providers configured with `maxConcurrentTasks = 0` (unlimited). If a Docker-backed planning invocation is still marked `running` but the container with its `code-ux.session-id` label has disappeared and the linked execution invocation has been idle long enough, Code UX marks the provider and execution invocation failed so the next planning request is not blocked by an orphaned runtime row. Startup recovery also closes stale `running` planning invocation audit rows that never linked to provider runtime or whose provider invocation is already terminal, keeping the dashboard invocation ledger from showing historical planning work as active.
+Provider claims first use the atomic SQLite capacity boundary. Successful claims do not query Docker.
+When a bounded claim is denied, stale-slot recovery joins a throttled process-wide Docker inventory;
+after the invocation age/activity guards pass, a missing labelled container lets Code UX fail the
+orphaned provider/execution invocation and retry the claim. This avoids a Docker reconciliation
+probe for every planning request while retaining stale-slot recovery. Startup recovery also closes
+stale `running` planning invocation audit rows that never linked to provider runtime or whose
+provider invocation is already terminal, keeping the dashboard invocation ledger from showing
+historical planning work as active.
 
 Startup recovery also reconciles the task-coding runtime projections that sprint dashboards use to decide whether work is active. It closes stale `task_coding`, `cli_task_coding`, and `cli_task_followup` audit rows when the linked task run, provider invocation, or sprint run is already terminal; releases orphaned running `task_coding` provider rows whose task or sprint is terminal; and finalizes active task runs that no longer have dispatch/provider/execution linkage. Paused sprint-run rows are only failed automatically when the owning sprint is no longer `running`, so legitimate manual pauses remain resumable while old idle sprint runs stop appearing stuck.
 

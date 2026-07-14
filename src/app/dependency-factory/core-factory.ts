@@ -48,6 +48,7 @@ import { KnowledgeIngestionService } from "../../services/knowledge-ingestion-se
 import { KnowledgeService } from "../../services/knowledge-service.js";
 import { NodeFlowService } from "../../services/node-flow-service.js";
 import { ProviderConcurrencyService } from "../../services/provider-concurrency-service.js";
+import { AdaptiveProviderAdmissionPolicy } from "../../services/adaptive-provider-admission-policy.js";
 import { DashboardSettings, ExternalSettingsHints } from "../../contracts/app-types.js";
 import { loadExternalSettingsHints } from "../../config/external-settings.js";
 import { createLogger, type Logger } from "../../shared/logging/logger.js";
@@ -273,6 +274,12 @@ export function createCoreDependencies(
     projectManagementRepository,
     logger: logger.child({ component: "provider-concurrency-service" }),
     dockerService: new DockerService(),
+    admissionPolicy: process.env.VITEST
+      ? undefined
+      : new AdaptiveProviderAdmissionPolicy({
+          executionRepository,
+          logger: logger.child({ component: "provider-admission-policy" }),
+        }),
   });
   const sprintPreviewRepository = new SprintPreviewRepository(appDbStorage);
   const sprintPreviewService = new SprintPreviewService({

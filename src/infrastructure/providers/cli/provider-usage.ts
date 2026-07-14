@@ -6,7 +6,7 @@ import { countTokens as countAnthropicTokens } from "@anthropic-ai/tokenizer";
 import { encodingForModel } from "js-tiktoken";
 import type { TokenUsageSource } from "../../../contracts/execution-types.js";
 import type { ParsedConversationTurn } from "./provider-logs/provider-conversation-types.js";
-import { parseCodexRolloutJsonl, parseCodexExecStdout } from "./provider-logs/codex-log-parser.js";
+import { parseCodexRolloutJsonl, parseCodexExecStdout, type CodexLogResult } from "./provider-logs/codex-log-parser.js";
 import { parseOpenCodeJsonLines, parseOpenCodeExport, subtractOpenCodeBaseline } from "./provider-logs/opencode-log-parser.js";
 import {
   buildQwenConversation,
@@ -66,6 +66,10 @@ export interface ProviderUsageTelemetry {
    *  qwen, opencode, etc.). Empty when the provider does not support structured
    *  parsing or the logs were unavailable (estimated usage). */
   conversation: ParsedConversationTurn[];
+  /** Monotonic parser revision used to skip remapping unchanged conversations. */
+  conversationRevision?: number;
+  /** First normalized turn whose content/order changed at this revision. */
+  conversationChangedFromIndex?: number;
 }
 
 function emptyTelemetry(): ProviderUsageTelemetry {
@@ -338,6 +342,8 @@ export async function collectProviderUsageTelemetry(args: {
   nativeSessionId?: string | null;
   claudeSessionJsonl?: string | null;
   codexSessionJson?: string | null;
+  /** Pre-parsed live rollout state supplied by the incremental watcher. */
+  codexRollout?: CodexLogResult | null;
   qwenReportedUsage?: QwenUsageTotals | null;
   qwenConversation?: ParsedConversationTurn[] | null;
   startTimeMs?: number;
@@ -418,21 +424,24 @@ export async function collectProviderUsageTelemetry(args: {
     // the transcript is broken into proper turns even when the rollout file is
     // unavailable — otherwise the raw JSON event stream would be persisted as a
     // single unreadable message.
-    const rollout = args.codexSessionJson
+    const rollout = args.codexRollout ?? (args.codexSessionJson
       ? parseCodexRolloutJsonl(args.codexSessionJson, args.startTimeMs)
-      : null;
-    const stdout = parseCodexExecStdout(args.stdout);
+      : null);
+    const needsStdoutFallback = !rollout?.usage
+      || rollout.conversation.length === 0
+      || !rollout.nativeSessionId;
+    const stdout = needsStdoutFallback ? parseCodexExecStdout(args.stdout) : null;
     const parsedConversation = (rollout?.conversation && rollout.conversation.length > 0)
       ? rollout.conversation
-      : stdout.conversation;
+      : stdout?.conversation ?? [];
     const conversation = withLeadingUserTurn(parsedConversation, args.prompt);
     // Prefer the captured `--output-last-message` file; otherwise derive a clean
     // assistant transcript from the parsed turns rather than dumping raw stdout.
     const lastAssistantText = [...parsedConversation].reverse().find((t) => t.kind === "assistant")?.text?.trim();
     const transcriptText = args.capturedText?.trim() || lastAssistantText || fallbackOutput;
-    const usage = rollout?.usage ?? stdout.usage;
-    const rawUsageJson = rollout?.usage ? rollout.rawUsageJson : stdout.rawUsageJson;
-    const nativeSessionId = rollout?.nativeSessionId ?? stdout.nativeSessionId ?? args.nativeSessionId ?? null;
+    const usage = rollout?.usage ?? stdout?.usage ?? null;
+    const rawUsageJson = rollout?.usage ? rollout.rawUsageJson : stdout?.rawUsageJson ?? null;
+    const nativeSessionId = rollout?.nativeSessionId ?? stdout?.nativeSessionId ?? args.nativeSessionId ?? null;
     if (usage) {
       return {
         ...emptyTelemetry(),
@@ -446,11 +455,15 @@ export async function collectProviderUsageTelemetry(args: {
         transcriptText,
         nativeSessionId,
         conversation,
+        conversationRevision: rollout?.conversationRevision,
+        conversationChangedFromIndex: rollout?.conversationChangedFromIndex,
       };
     }
     const estimated = estimateTelemetry("codex", args.model, args.prompt, transcriptText);
     estimated.nativeSessionId = nativeSessionId;
     estimated.conversation = conversation;
+    estimated.conversationRevision = rollout?.conversationRevision;
+    estimated.conversationChangedFromIndex = rollout?.conversationChangedFromIndex;
     return estimated;
   }
 

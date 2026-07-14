@@ -1,5 +1,6 @@
 import { runCommandStrict, type CommandResult } from "./cli-process-runner.js";
 import { resolveHttpsAuthOrFallback, type GitHttpAuthOptions } from "./git-http-auth.js";
+import { createHash } from "node:crypto";
 
 export type GitBranchSyncRunner = (
   command: string,
@@ -15,7 +16,12 @@ export interface GitBranchSyncOptions extends GitHttpAuthOptions {
 }
 
 const DEFAULT_FETCH_TIMEOUT_MS = 120_000;
+const DEFAULT_SYNC_FRESHNESS_MS = 3_000;
 const repoSyncLocks = new Map<string, Promise<void>>();
+const syncsInFlight = new Map<string, Promise<boolean>>();
+const recentSuccessfulSyncs = new Map<string, number>();
+const runnerIds = new WeakMap<GitBranchSyncRunner, number>();
+let nextRunnerId = 1;
 
 const getDefaultFetchTimeoutMs = (): number => {
   const raw = process.env.CODE_UX_GIT_FETCH_TIMEOUT_MS?.trim();
@@ -130,6 +136,35 @@ export async function syncRemoteBranchIfAvailable(
   branch: string | undefined,
   runnerOrOptions?: GitBranchSyncRunner | GitBranchSyncOptions,
 ): Promise<boolean> {
+  const options = normalizeOptions(runnerOrOptions);
+  const syncKey = buildSyncKey(repoPath, branch, options);
+  const freshUntil = recentSuccessfulSyncs.get(syncKey) ?? 0;
+  if (freshUntil > Date.now()) {
+    return true;
+  }
+  recentSuccessfulSyncs.delete(syncKey);
+  const existing = syncsInFlight.get(syncKey);
+  if (existing) {
+    return await existing;
+  }
+
+  const sync = syncRemoteBranchWithRepoLock(repoPath, branch, options)
+    .then((result) => {
+      if (result) recentSuccessfulSyncs.set(syncKey, Date.now() + DEFAULT_SYNC_FRESHNESS_MS);
+      return result;
+    })
+    .finally(() => {
+      if (syncsInFlight.get(syncKey) === sync) syncsInFlight.delete(syncKey);
+    });
+  syncsInFlight.set(syncKey, sync);
+  return await sync;
+}
+
+async function syncRemoteBranchWithRepoLock(
+  repoPath: string,
+  branch: string | undefined,
+  options: GitBranchSyncOptions,
+): Promise<boolean> {
   const previousLock = repoSyncLocks.get(repoPath) || Promise.resolve();
   let releaseLock!: () => void;
   const currentLock = previousLock.then(() => new Promise<void>((resolve) => {
@@ -138,13 +173,29 @@ export async function syncRemoteBranchIfAvailable(
   repoSyncLocks.set(repoPath, currentLock);
   await previousLock;
   try {
-    return await syncRemoteBranchIfAvailableUnlocked(repoPath, branch, runnerOrOptions);
+    return await syncRemoteBranchIfAvailableUnlocked(repoPath, branch, options);
   } finally {
     releaseLock();
     if (repoSyncLocks.get(repoPath) === currentLock) {
       repoSyncLocks.delete(repoPath);
     }
   }
+}
+
+function buildSyncKey(repoPath: string, branch: string | undefined, options: GitBranchSyncOptions): string {
+  const runner = options.runner || defaultGitRunner;
+  let runnerId = runnerIds.get(runner);
+  if (!runnerId) {
+    runnerId = nextRunnerId++;
+    runnerIds.set(runner, runnerId);
+  }
+  const authFingerprint = createHash("sha256")
+    .update(options.githubToken || "")
+    .update("\0")
+    .update(options.gitlabToken || "")
+    .digest("hex")
+    .slice(0, 12);
+  return `${repoPath}\0${branch?.trim() || ""}\0${runnerId}\0${authFingerprint}\0${options.fetchTimeoutMs || ""}`;
 }
 
 async function syncRemoteBranchIfAvailableUnlocked(

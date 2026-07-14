@@ -633,7 +633,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                   </div>
                   <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
                     <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Cap</div>
-                    <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{provider.maxConcurrentTasks || "∞"}</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{provider.maxConcurrentTasks || (provider.provider === "jules" ? "∞" : "Auto")}</div>
                   </div>
                 </div>
               </div>
@@ -669,7 +669,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                       ariaLabel={`${provider.name} base weight`}
                     />
                   </Row>
-                  <Row label="Max concurrent tasks" description="Provider-level cap; 0 means unlimited." last>
+                  <Row label="Max concurrent tasks" description={provider.provider === "jules" ? "Provider-level cap; 0 means unlimited hosted work." : "Provider-level hard cap; 0 uses adaptive CPU and memory admission."} last>
                     <NumberInput value={provider.maxConcurrentTasks} min={0} max={50} onChange={(value) => updateProviderSettings(providerConfigId, { maxConcurrentTasks: value })} />
                   </Row>
                 </div>
@@ -1029,7 +1029,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                         </div>
                         <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
                           <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Cap</div>
-                          <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{provider.maxConcurrentTasks || "∞"}</div>
+                          <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{provider.maxConcurrentTasks || (provider.provider === "jules" ? "∞" : "Auto")}</div>
                         </div>
                       </div>
                     </div>

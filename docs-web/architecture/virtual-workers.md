@@ -30,34 +30,26 @@ Bearer tokens and local provider credentials remain local and are not logged by 
 [Reconcile loop, every 3 s]
    │
    ▼
-For each project that needs attention:
+For each project that has worker work:
    │
-   ├─ pickNextWorkerAttention(projectId)   // pull next eligible item
+   ├─ Resolve workers.maxConcurrency and provider capacity
    │
-   ├─ if found:
-   │     ├─ Create ephemeral virtual endpoint in WorkerEndpointRepository
-   │     ├─ Assign worker to project (ProjectWorkerAssignmentService)
-   │     ├─ handleAttentionItem(endpoint.id, item, reason)
-   │     │     │
-   │     │     ├─ For coding/ci_fix/merge_conflict:
-   │     │     │     ├─ Resolve provider settings & model
-   │     │     │     ├─ Provision worktree (WorkspaceManager)
-   │     │     │     ├─ Spawn CLI (DOCKER or HOST mode)
-   │     │     │     │
-   │     │     │     ├─ [Session poll loop, every 2 s]
-   │     │     │     │     ├─ Pull session state
-   │     │     │     │     ├─ Update dispatch (workerTaskDispatchService)
-   │     │     │     │     └─ Exit on terminal state or cancel
-   │     │     │     │
-   │     │     │     └─ Cleanup worktree (unless preserve policy)
-   │     │     │
-   │     │     └─ For action_required (plan / clarification):
-   │     │           └─ Auto-approve or auto-reply (per automationInterventions)
-   │     │
-   │     └─ Release worker assignment & delete ephemeral endpoint
+   ├─ worker attention pending/running?
+   │     └─ wait for active dispatches, then run one exclusive attention cycle
    │
-   └─ if no item: skip project
+   └─ otherwise reserve distinct dispatches up to both limits
+         ├─ atomically claim each dispatch lease
+         ├─ create one ephemeral endpoint/assignment per dispatch
+         ├─ run provider/workspace cycles concurrently
+         └─ release each assignment and endpoint independently
 ```
+
+The process-local cycle registry prevents duplicate task/dispatch reservations and overlapping
+reconcile passes; atomic SQLite leases remain the cross-process authority. Provider capacity is
+checked before an endpoint is created, and the local budget is consumed as a batch fans out.
+Attention claims use a conditional SQLite update and remain project-exclusive because repairs can
+change shared state. Attention arriving after durable coding runs started waits for them instead of
+cancelling them.
 
 Default reconcile cadence: `VIRTUAL_WORKER_RECONCILE_MS = 3000`. Default session poll: `VIRTUAL_WORKER_SESSION_POLL_MS = 2000`. Initial scheduling uses microtasks to coalesce rapid events, but follow-up cycles after `remaining_worker_work` are deferred on the reconcile cadence so stale or unchanged worker state cannot starve dashboard HTTP probes or shutdown handling.
 
@@ -128,7 +120,7 @@ Docker-backed planning uses a read-only snapshot workspace instead of a mutable 
 
 Provider CLI workspace preparation is centralized through `InvocationWorkspacePreparer`. Its shared provider-invocation option builder constructs snapshot checkout, git policy, and fresh/continue lifecycle values for Docker provider calls, while its continuation resolver locates preserved workspaces and their current branches. Fresh Docker invocations in `REMOTE` git mode use explicit remote refs only: planning, project setup, dashboard/chat replies, worker inbox replies, node-flow provider prompts, QA review snapshots, task coding, QA follow-up, CI autofix, and merge-conflict repair all materialize from `origin/<branch>` refs rather than local branches or the host repo's current checkout. Dashboard/chat replies resolve dashboard settings with the project scope before building this policy, so local Git projects keep `LOCAL` snapshot behavior and do not require `origin/<defaultBranch>`. Continuation/restart flows may reuse a preserved workspace for provider-session continuity; if a preserved workspace is missing and a new workspace must be materialized, the same remote-only branch policy applies.
 
-When a LOCAL branch advances while an isolated worker is running, patch materialization applies the worker diff on top of that current descendant tip so concurrent task merges are retained.
+Docker-volume artifact export performs Git discovery, staging, binary diffing, and temporary-index cleanup in one helper-container invocation instead of paying four or five Docker control-plane round trips per completed task. Host-side patch transaction files live under Git's administrative directory so materialization stays on the warm project Git helper rather than creating one-shot helpers for external temporary binds. When a LOCAL branch advances while an isolated worker is running, patch materialization applies the diff against its true workspace base and three-way merges the resulting tree onto the current descendant tip. Concurrent work is retained, identical already-landed file additions are de-duplicated, and genuine overlapping edits remain conflicts.
 
 ## Session lifecycle
 

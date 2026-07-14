@@ -39,6 +39,10 @@ import {
   GOOGLE_DRIVE_CONTAINER_TARGET,
   type GoogleDriveRuntimeMount,
 } from "../../../services/google-drive-mount-service.js";
+import type {
+  ProviderTranscriptChunk,
+  ProviderTranscriptCursor,
+} from "./provider-transcript-chunks.js";
 import { managedRuntimeService, type ManagedRuntimeService } from "../../../services/managed-runtime-service.js";
 import {
   PROVIDER_TOOL_MOUNT,
@@ -58,6 +62,10 @@ const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
 );
 
 const CONTAINER_PROVIDER_ARGV_FILE = "/opt/code-ux/provider-argv.sh";
+const PROVIDER_CPU_SHARES = "768";
+const LAUNCH_ARTIFACT_INVALID_PREFIX = "CODE_UX_LAUNCH_ARTIFACT_INVALID:";
+
+type LaunchArtifactKind = "runtime-volume" | "provider-tool" | "playwright-browser" | "runtime-image";
 
 export interface IDockerRunner {
   ensureWorkspace(args: {
@@ -93,6 +101,10 @@ export interface IDockerRunner {
   readWorkspaceFile?(cwd: string, targetPath: string): Promise<string | null>;
   readWorkspaceFileBase64?(cwd: string, targetPath: string): Promise<string | null>;
   readLatestWorkspaceFile?(cwd: string, dirPath: string, glob?: string): Promise<string | null>;
+  readWorkspaceFileChunk?(cwd: string, targetPath: string, cursor: ProviderTranscriptCursor, maxBytes?: number): Promise<ProviderTranscriptChunk | null>;
+  readLatestWorkspaceFileChunk?(cwd: string, dirPath: string, glob: string, cursor: ProviderTranscriptCursor, maxBytes?: number): Promise<ProviderTranscriptChunk | null>;
+  readWorkspaceFileMetadata?(cwd: string, targetPath: string): Promise<string | null>;
+  readWorkspaceDirectoryMetadata?(cwd: string, dirPath: string, glob?: string): Promise<string | null>;
   readWorkspaceJsonArray?(cwd: string, dirPath: string): Promise<string | null>;
   removeWorkspaceDir?(cwd: string, dirPath: string): Promise<void>;
 }
@@ -171,12 +183,6 @@ export class DockerRunner implements IDockerRunner {
     const workspace = this.resolveWorkspace(cwd);
     const runAsRoot = workflowSettings.containerRunAsRoot === true;
     const userSpec = runAsRoot ? "" : await this.resolveDockerUserSpec(repoPath);
-    await this.workspaceManager.ensureRuntimeVolume(cwd, {
-      // Create and label the paired volume now, but perform the ownership
-      // repair at the final launch boundary below. Image/config preparation
-      // and startup pruning may overlap this earlier phase after a restart.
-      initializeOwnership: false,
-    });
     const runtimeHome = CONTAINER_RUNTIME_HOME;
     const runtimeNpmPrefix = pathPosix.join(runtimeHome, ".npm-global");
     const runtimeNpmCache = pathPosix.join(runtimeHome, ".npm-cache");
@@ -187,16 +193,16 @@ export class DockerRunner implements IDockerRunner {
 
     const setupScriptPath = await this.resolveContainerSetupScriptPath(workflowSettings, repoPath, emitActivity);
     const runtimeRoot = resolveDockerRuntimeRoot(repoPath);
-    const baseImage = await this.runtimeService.resolveImage(
+    let baseImage = await this.runtimeService.resolveImage(
       workflowSettings,
       installPlaywrightBrowsers ? "browser" : "base",
     );
-    const [preparedTool, preparedBrowser] = await Promise.all([
+    let [preparedTool, preparedBrowser] = await Promise.all([
       providerLabel === "mockup-cli"
         ? Promise.resolve(null)
-        : this.toolManager.prepare(providerLabel, workflowSettings),
+        : this.toolManager.prepare(providerLabel, workflowSettings, { resolvedImage: baseImage }),
       installPlaywrightBrowsers && workflowSettings.containerImageMode !== "custom"
-        ? this.browserManager.prepare(workflowSettings)
+        ? this.browserManager.prepare(workflowSettings, { resolvedImage: baseImage })
         : Promise.resolve(null),
     ]);
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-docker-"));
@@ -233,6 +239,9 @@ export class DockerRunner implements IDockerRunner {
         containerName,
         ...DOCKER_BRIDGE_NETWORK_ARGS,
         ...DOCKER_NO_NEW_PRIVILEGES_ARGS,
+        "--cpu-shares",
+        PROVIDER_CPU_SHARES,
+        ...(workflowSettings.containerImageMode !== "custom" ? ["--pull", "never"] : []),
         "--workdir",
         CONTAINER_WORKSPACE_ROOT,
         "--label",
@@ -396,22 +405,23 @@ export class DockerRunner implements IDockerRunner {
         }));
       }
 
-      const bootstrapScript = new DockerBootstrapBuilder().build({
-        runtimeNpmPrefix,
-        runtimeNpmCache,
-        runSetupScript: resolvedImage.runSetupScriptAtRuntime,
-      });
+      const bootstrapScript = [
+        this.buildLaunchArtifactValidation({
+          runtimeOwner: runAsRoot ? null : userSpec || null,
+          providerBinary: preparedTool ? `${PROVIDER_TOOL_MOUNT}/bin/${preparedTool.binary}` : null,
+          browserMounted: Boolean(preparedBrowser),
+        }),
+        new DockerBootstrapBuilder().build({
+          runtimeNpmPrefix,
+          runtimeNpmCache,
+          runSetupScript: resolvedImage.runSetupScriptAtRuntime,
+        }),
+      ].filter(Boolean).join("\n");
 
-      dockerArgs.push(resolvedImage.image, "bash", "-c", bootstrapScript, "provider-runner", command);
+      let launchImage = resolvedImage.image;
+      dockerArgs.push(launchImage, "bash", "-c", bootstrapScript, "provider-runner", command);
 
       emitActivity(`Running ${providerLabel} in Docker image ${resolvedImage.image} (workspace volume: ${workspace.volumeName}, runtime volume: ${runtimeVolumeName}).`);
-
-      // The container name is deterministic per (provider, sessionId), so a retried
-      // invocation for the same session (e.g. a chat turn superseded and resumed after
-      // an abort) reuses it. Docker's `--rm` cleanup from a just-killed previous run is
-      // asynchronous and can still be in flight, so force-remove any stale container
-      // occupying the name first rather than racing `docker run --name` against it.
-      await this.removeProviderContainer(containerName);
 
       let abortKillIssued = false;
       const killContainerOnAbort = (): void => {
@@ -436,31 +446,77 @@ export class DockerRunner implements IDockerRunner {
 
       try {
         const runDocker = async (): Promise<CommandResult> => {
-          // Reassert immediately before every launch attempt. Keeping this
-          // adjacent to `docker run` closes the restart/pruner race where a
-          // correctly labelled volume could be recreated as root-owned after
-          // early preparation but before the non-root provider starts.
-          if (!runAsRoot) {
-            await this.workspaceManager.ensureRuntimeVolume(cwd, {
-              initializeOwnership: true,
-              ownerSpec: userSpec || undefined,
-              forceOwnershipInitialization: true,
-            });
-          }
+          await this.workspaceManager.ensureRuntimeVolume(cwd, {
+            initializeOwnership: !runAsRoot,
+            ownerSpec: userSpec || undefined,
+          });
           return runStreamingCommand("docker", dockerArgs, process.cwd(), process.env, {
             signal,
             onStdoutLine: (line) => emitActivity(line, "agent"),
             onStderrLine: (line) => emitActivity(`[${providerLabel}] ${line}`, "provider"),
           });
         };
-        const firstResult = await runDocker();
-        if (!firstResult.ok && this.isDockerNameConflict(firstResult, containerName) && !signal?.aborted) {
-          emitActivity(`Retrying ${providerLabel} after reclaiming stale Docker container ${containerName}.`, "provider");
-          await this.removeProviderContainer(containerName);
-          await this.sleep(500);
-          return await runDocker();
+        let result = await runDocker();
+        const repairedArtifacts = new Set<LaunchArtifactKind>();
+        let reclaimedContainerName = false;
+        for (;;) {
+          if (result.ok || signal?.aborted) break;
+          const invalidArtifact = this.detectInvalidLaunchArtifact(result, workflowSettings.containerImageMode !== "custom");
+          if (invalidArtifact && !repairedArtifacts.has(invalidArtifact)) {
+            repairedArtifacts.add(invalidArtifact);
+            emitActivity(`Repairing invalid Docker launch artifact (${invalidArtifact}) before retrying ${providerLabel}.`, "provider");
+            if (invalidArtifact === "runtime-volume") {
+              await this.workspaceManager.repairRuntimeVolume(cwd, {
+                initializeOwnership: !runAsRoot,
+                ownerSpec: userSpec || undefined,
+              });
+            } else if (invalidArtifact === "provider-tool" && preparedTool) {
+              const previousVolume = preparedTool.volumeName;
+              this.toolManager.invalidatePreparedVolume(previousVolume);
+              preparedTool = await this.toolManager.prepare(providerLabel, workflowSettings, { resolvedImage: baseImage });
+              this.replaceDockerVolumeSource(dockerArgs, previousVolume, preparedTool.volumeName);
+            } else if (invalidArtifact === "playwright-browser" && preparedBrowser) {
+              const previousVolume = preparedBrowser.volumeName;
+              this.browserManager.invalidatePreparedVolume(previousVolume);
+              preparedBrowser = await this.browserManager.prepare(workflowSettings, { resolvedImage: baseImage });
+              this.replaceDockerVolumeSource(dockerArgs, previousVolume, preparedBrowser.volumeName);
+            } else if (invalidArtifact === "runtime-image") {
+              this.runtimeService.invalidateImage(baseImage);
+              const repairedBaseImage = await this.runtimeService.resolveImage(
+                workflowSettings,
+                installPlaywrightBrowsers ? "browser" : "base",
+              );
+              const repairedImage = await new DockerSetupImageCache().resolveImage({
+                baseImage: repairedBaseImage,
+                setupScriptPath,
+                cacheEnabled: workflowSettings.containerCacheSetupScriptImage,
+                installPlaywrightBrowsers: workflowSettings.containerImageMode === "custom" && installPlaywrightBrowsers,
+                runtimeRoot,
+                repoPath,
+                signal,
+                onActivity: emitActivity,
+                onProgress: input.onSetupImageProgress,
+                mapSourcePathForDaemon: (sourcePath, label) =>
+                  this.mapDockerSourcePathForDaemon(sourcePath, repoPath, sessionId, label, emitActivity),
+              });
+              this.replaceDockerImage(dockerArgs, launchImage, repairedImage.image);
+              baseImage = repairedBaseImage;
+              launchImage = repairedImage.image;
+            }
+            result = await runDocker();
+            continue;
+          }
+          if (!reclaimedContainerName && this.isDockerNameConflict(result, containerName)) {
+            reclaimedContainerName = true;
+            emitActivity(`Retrying ${providerLabel} after reclaiming stale Docker container ${containerName}.`, "provider");
+            await this.removeProviderContainer(containerName);
+            await this.sleep(500);
+            result = await runDocker();
+            continue;
+          }
+          break;
         }
-        return firstResult;
+        return result;
       } finally {
         if (signal) {
           signal.removeEventListener("abort", killContainerOnAbort);
@@ -478,6 +534,59 @@ export class DockerRunner implements IDockerRunner {
       `CODE_UX_PROVIDER_ARGS=(${quotedArgs})`,
       "",
     ].join("\n");
+  }
+
+  private buildLaunchArtifactValidation(args: {
+    runtimeOwner: string | null;
+    providerBinary: string | null;
+    browserMounted: boolean;
+  }): string {
+    const checks: string[] = [];
+    if (args.runtimeOwner) {
+      checks.push(
+        `if [ "$(cat ${this.shellSingleQuote(`${CONTAINER_RUNTIME_HOME}/.codeux-owner`)} 2>/dev/null || true)" != ${this.shellSingleQuote(args.runtimeOwner)} ] || [ "$(stat -c '%u:%g' ${this.shellSingleQuote(CONTAINER_RUNTIME_HOME)} 2>/dev/null || true)" != ${this.shellSingleQuote(args.runtimeOwner)} ]; then echo ${this.shellSingleQuote(`${LAUNCH_ARTIFACT_INVALID_PREFIX}runtime-volume`)} >&2; exit 86; fi`,
+      );
+    }
+    if (args.providerBinary) {
+      checks.push(
+        `if [ ! -x ${this.shellSingleQuote(args.providerBinary)} ] || [ ! -f ${this.shellSingleQuote(`${PROVIDER_TOOL_MOUNT}/.codeux-provider-tool.json`)} ]; then echo ${this.shellSingleQuote(`${LAUNCH_ARTIFACT_INVALID_PREFIX}provider-tool`)} >&2; exit 86; fi`,
+      );
+    }
+    if (args.browserMounted) {
+      checks.push(
+        `if [ ! -f ${this.shellSingleQuote(`${PLAYWRIGHT_BROWSERS_MOUNT}/.codeux-playwright-browser.json`)} ]; then echo ${this.shellSingleQuote(`${LAUNCH_ARTIFACT_INVALID_PREFIX}playwright-browser`)} >&2; exit 86; fi`,
+      );
+    }
+    return checks.join("\n");
+  }
+
+  private detectInvalidLaunchArtifact(result: CommandResult, managedImage: boolean): LaunchArtifactKind | null {
+    if (result.ok) return null;
+    const text = `${result.stderr || ""}\n${result.stdout || ""}`;
+    for (const kind of ["runtime-volume", "provider-tool", "playwright-browser"] as const) {
+      if (text.includes(`${LAUNCH_ARTIFACT_INVALID_PREFIX}${kind}`)) return kind;
+    }
+    if (
+      managedImage
+      && /(?:no such image|unable to find image|manifest unknown|pull access denied)/i.test(text)
+    ) {
+      return "runtime-image";
+    }
+    return null;
+  }
+
+  private replaceDockerVolumeSource(dockerArgs: string[], previousVolume: string, nextVolume: string): void {
+    if (previousVolume === nextVolume) return;
+    const source = `source=${previousVolume},`;
+    const replacement = `source=${nextVolume},`;
+    for (let index = 0; index < dockerArgs.length; index += 1) {
+      if (dockerArgs[index].includes(source)) dockerArgs[index] = dockerArgs[index].replace(source, replacement);
+    }
+  }
+
+  private replaceDockerImage(dockerArgs: string[], previousImage: string, nextImage: string): void {
+    const index = dockerArgs.lastIndexOf(previousImage);
+    if (index >= 0) dockerArgs[index] = nextImage;
   }
 
   private async writeRestrictiveFile(filePath: string, content: string | Buffer): Promise<void> {
@@ -554,6 +663,136 @@ export class DockerRunner implements IDockerRunner {
     } catch {
       return null;
     }
+  }
+
+  async readWorkspaceFileMetadata(cwd: string, targetPath: string): Promise<string | null> {
+    const workspace = this.resolveWorkspace(cwd);
+    const script = `[ -f ${this.shellSingleQuote(targetPath)} ] && stat -c '%d:%i:%s:%Y' ${this.shellSingleQuote(targetPath)}`;
+    try {
+      const result = await this.volumeHelperPool.exec(
+        workspace.volumeName,
+        ["sh", "-c", script],
+        buildRuntimeVolumeName(workspace.volumeName),
+      );
+      return result.ok && result.stdout.trim() ? result.stdout.trim() : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async readWorkspaceDirectoryMetadata(cwd: string, dirPath: string, glob = "*.json"): Promise<string | null> {
+    if (!/^[*?.A-Za-z0-9_-]+$/.test(glob)) return null;
+    const workspace = this.resolveWorkspace(cwd);
+    const quotedDir = this.shellSingleQuote(dirPath);
+    const script = `for f in ${quotedDir}/${glob}; do [ -f "$f" ] || continue; stat -c '%n:%s:%Y' "$f"; done | cksum`;
+    try {
+      const result = await this.volumeHelperPool.exec(
+        workspace.volumeName,
+        ["sh", "-c", script],
+        buildRuntimeVolumeName(workspace.volumeName),
+      );
+      return result.ok && result.stdout.trim() ? result.stdout.trim() : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async readWorkspaceFileChunk(
+    cwd: string,
+    targetPath: string,
+    cursor: ProviderTranscriptCursor,
+    maxBytes = 2 * 1024 * 1024,
+  ): Promise<ProviderTranscriptChunk | null> {
+    return this.readWorkspaceFileChunkWithSelector(cwd, `f=${this.shellSingleQuote(targetPath)}`, cursor, maxBytes);
+  }
+
+  async readLatestWorkspaceFileChunk(
+    cwd: string,
+    dirPath: string,
+    glob: string,
+    cursor: ProviderTranscriptCursor,
+    maxBytes = 2 * 1024 * 1024,
+  ): Promise<ProviderTranscriptChunk | null> {
+    if (!/^[*?.A-Za-z0-9_-]+$/.test(glob)) {
+      return null;
+    }
+    const quotedDir = this.shellSingleQuote(dirPath);
+    return this.readWorkspaceFileChunkWithSelector(
+      cwd,
+      `f=$(ls -1t ${quotedDir}/${glob} 2>/dev/null | head -1)`,
+      cursor,
+      maxBytes,
+    );
+  }
+
+  private async readWorkspaceFileChunkWithSelector(
+    cwd: string,
+    fileSelector: string,
+    cursor: ProviderTranscriptCursor,
+    maxBytes: number,
+  ): Promise<ProviderTranscriptChunk | null> {
+    const workspace = this.resolveWorkspace(cwd);
+    const offset = Number.isSafeInteger(cursor.offset) && cursor.offset >= 0 ? cursor.offset : 0;
+    const boundedMaxBytes = Math.min(Math.max(Math.floor(maxBytes), 1), 2 * 1024 * 1024);
+    const expectedSource = this.shellSingleQuote(cursor.sourceId || "");
+    const script = [
+      fileSelector,
+      `[ -n "$f" ] && [ -f "$f" ] || exit 3`,
+      `size=$(wc -c < "$f" | tr -d ' ')`,
+      `source_id=$(stat -c '%d:%i' "$f" 2>/dev/null || stat -c '%i' "$f" 2>/dev/null)`,
+      `start=${offset}`,
+      `reset=0`,
+      `if [ "$source_id" != ${expectedSource} ] || [ "$size" -lt "$start" ]; then start=0; reset=1; fi`,
+      `count=$((size - start)); [ "$count" -gt ${boundedMaxBytes} ] && count=${boundedMaxBytes}`,
+      `next=$((start + count))`,
+      `printf '__CODEUX_CHUNK_V1__\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "$source_id" "$start" "$next" "$size" "$reset"`,
+      // Alpine 3.20's BusyBox dd supports byte-based offsets. Keep a large I/O
+      // block size here: bs=1 makes a multi-megabyte telemetry poll perform one
+      // read/write operation per byte under high concurrency.
+      `[ "$count" -eq 0 ] || dd if="$f" ibs=64k obs=64k skip="$start" count="$count" iflag=skip_bytes,count_bytes status=none 2>/dev/null | base64`,
+    ].join("; ");
+    try {
+      const result = await this.volumeHelperPool.exec(
+        workspace.volumeName,
+        ["sh", "-c", script],
+        buildRuntimeVolumeName(workspace.volumeName),
+      );
+      return result.ok ? this.parseWorkspaceFileChunk(result.stdout) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private parseWorkspaceFileChunk(stdout: string): ProviderTranscriptChunk | null {
+    const newlineIndex = stdout.indexOf("\n");
+    const header = (newlineIndex >= 0 ? stdout.slice(0, newlineIndex) : stdout).trim();
+    const [marker, sourceId, startText, nextText, totalText, resetText] = header.split("\t");
+    const startOffset = Number(startText);
+    const nextOffset = Number(nextText);
+    const totalBytes = Number(totalText);
+    if (
+      marker !== "__CODEUX_CHUNK_V1__"
+      || !sourceId
+      || !Number.isSafeInteger(startOffset)
+      || !Number.isSafeInteger(nextOffset)
+      || !Number.isSafeInteger(totalBytes)
+      || startOffset < 0
+      || nextOffset < startOffset
+      || totalBytes < nextOffset
+    ) {
+      return null;
+    }
+    const contentBase64 = newlineIndex >= 0
+      ? stdout.slice(newlineIndex + 1).replace(/\s+/g, "")
+      : "";
+    return {
+      sourceId,
+      startOffset,
+      nextOffset,
+      totalBytes,
+      contentBase64,
+      reset: resetText === "1",
+    };
   }
 
   /**

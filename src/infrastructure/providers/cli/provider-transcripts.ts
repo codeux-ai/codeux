@@ -18,6 +18,130 @@ import {
 } from "./provider-usage.js";
 import { extractJsonContainer } from "./provider-logs/usage-parse-utils.js";
 import { IDockerRunner } from "./docker-runner.js";
+import type {
+  ProviderTranscriptChunk,
+  ProviderTranscriptCursor,
+} from "./provider-transcript-chunks.js";
+
+const DEFAULT_TRANSCRIPT_CHUNK_BYTES = 2 * 1024 * 1024;
+
+async function resolveLatestCodexHostSessionPath(): Promise<string | null> {
+  const now = new Date();
+  const sessionsDir = path.join(
+    os.homedir(),
+    ".codex",
+    "sessions",
+    now.getFullYear().toString(),
+    (now.getMonth() + 1).toString().padStart(2, "0"),
+    now.getDate().toString().padStart(2, "0"),
+  );
+  try {
+    const files = (await fs.readdir(sessionsDir)).filter((file) => file.endsWith(".jsonl"));
+    const candidates = await Promise.all(files.map(async (file) => {
+      const filePath = path.join(sessionsDir, file);
+      const stat = await fs.stat(filePath).catch(() => null);
+      return { filePath, mtimeMs: stat?.mtimeMs ?? 0 };
+    }));
+    candidates.sort((left, right) => right.mtimeMs - left.mtimeMs);
+    return candidates[0]?.filePath ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function readHostFileChunk(
+  filePath: string,
+  cursor: ProviderTranscriptCursor,
+  maxBytes = DEFAULT_TRANSCRIPT_CHUNK_BYTES,
+): Promise<ProviderTranscriptChunk | null> {
+  const stat = await fs.stat(filePath).catch(() => null);
+  if (!stat?.isFile()) {
+    return null;
+  }
+  const sourceId = `${stat.dev}:${stat.ino}`;
+  const reset = cursor.sourceId !== sourceId || stat.size < cursor.offset;
+  const startOffset = reset ? 0 : cursor.offset;
+  const byteCount = Math.min(Math.max(stat.size - startOffset, 0), maxBytes);
+  const buffer = Buffer.allocUnsafe(byteCount);
+  if (byteCount > 0) {
+    const handle = await fs.open(filePath, "r");
+    try {
+      await handle.read(buffer, 0, byteCount, startOffset);
+    } finally {
+      await handle.close();
+    }
+  }
+  return {
+    sourceId,
+    startOffset,
+    nextOffset: startOffset + byteCount,
+    totalBytes: stat.size,
+    contentBase64: buffer.toString("base64"),
+    reset,
+  };
+}
+
+export async function readCodexLatestSessionChunk(
+  cwd: string,
+  executionMode: CliWorkflowSettings["executionMode"],
+  cursor: ProviderTranscriptCursor,
+  dockerRunner: Pick<IDockerRunner, "readLatestWorkspaceFileChunk">,
+): Promise<ProviderTranscriptChunk | null> {
+  if (executionMode === "DOCKER") {
+    const now = new Date();
+    const sessionsDir = pathPosix.join(
+      CONTAINER_RUNTIME_HOME,
+      ".codex",
+      "sessions",
+      now.getFullYear().toString(),
+      (now.getMonth() + 1).toString().padStart(2, "0"),
+      now.getDate().toString().padStart(2, "0"),
+    );
+    return await dockerRunner.readLatestWorkspaceFileChunk?.(
+      cwd,
+      sessionsDir,
+      "*.jsonl",
+      cursor,
+      DEFAULT_TRANSCRIPT_CHUNK_BYTES,
+    ) ?? null;
+  }
+  const filePath = await resolveLatestCodexHostSessionPath();
+  return filePath ? readHostFileChunk(filePath, cursor) : null;
+}
+
+export async function readClaudeSessionJsonlChunk(
+  cwd: string,
+  nativeSessionId: string,
+  executionMode: CliWorkflowSettings["executionMode"],
+  cursor: ProviderTranscriptCursor,
+  dockerRunner: Pick<IDockerRunner, "readWorkspaceFileChunk">,
+): Promise<ProviderTranscriptChunk | null> {
+  const slug = cwd.replace(/[/\\:]/g, "-");
+  const sessionPath = executionMode === "DOCKER"
+    ? pathPosix.join(
+        CONTAINER_RUNTIME_HOME,
+        ".claude",
+        "projects",
+        CONTAINER_WORKSPACE_ROOT.replaceAll(pathPosix.sep, "-"),
+        `${nativeSessionId}.jsonl`,
+      )
+    : path.join(
+        process.env.HOME || process.env.USERPROFILE || os.homedir(),
+        ".claude",
+        "projects",
+        slug,
+        `${nativeSessionId}.jsonl`,
+      );
+  if (executionMode === "DOCKER") {
+    return await dockerRunner.readWorkspaceFileChunk?.(
+      cwd,
+      sessionPath,
+      cursor,
+      DEFAULT_TRANSCRIPT_CHUNK_BYTES,
+    ) ?? null;
+  }
+  return readHostFileChunk(sessionPath, cursor);
+}
 
 function recoverJsonObjectRecords(value: string): Record<string, unknown>[] {
   const records: Record<string, unknown>[] = [];

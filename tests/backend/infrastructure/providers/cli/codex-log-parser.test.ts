@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  CodexRolloutAccumulator,
   parseCodexExecStdout,
   parseCodexRolloutJsonl,
 } from "../../../../../src/infrastructure/providers/cli/provider-logs/codex-log-parser.js";
@@ -409,6 +410,88 @@ describe("parseCodexRolloutJsonl", () => {
     });
     expect(result.conversation).toHaveLength(1);
     expect(result.conversation[0]).toMatchObject({ kind: "user", text: "new prompt" });
+  });
+});
+
+describe("CodexRolloutAccumulator", () => {
+  it("keeps unchanged snapshots stable and parses appended records cumulatively", () => {
+    const accumulator = new CodexRolloutAccumulator();
+    const initial = [
+      sessionMeta("incremental-session"),
+      userMessage("2026-06-01T10:00:00.000Z", "first"),
+      tokenCount("2026-06-01T10:00:01.000Z", usage(10, 2)),
+    ].join("\n");
+
+    const first = accumulator.update(initial);
+    expect(accumulator.update(initial)).toBe(first);
+
+    const appended = `${initial}\n${responseItem("2026-06-01T10:00:02.000Z", {
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: "second" }],
+    })}\n${tokenCount("2026-06-01T10:00:03.000Z", usage(14, 5))}`;
+    const second = accumulator.update(appended);
+
+    expect(second.nativeSessionId).toBe("incremental-session");
+    expect(second.usage).toMatchObject({ inputTokens: 14, outputTokens: 5 });
+    expect(second.conversation.map((turn) => turn.text)).toEqual(["first", "second"]);
+  });
+
+  it("updates repeated lifecycle items in place instead of duplicating them", () => {
+    const accumulator = new CodexRolloutAccumulator();
+    const started = responseItem("2026-06-01T10:00:00.000Z", {
+      type: "local_shell_call",
+      id: "command-1",
+      command: "pnpm test",
+      status: "in_progress",
+    });
+    accumulator.update(started);
+
+    const completed = responseItem("2026-06-01T10:00:01.000Z", {
+      type: "local_shell_call",
+      id: "command-1",
+      command: "pnpm test",
+      status: "completed",
+      output: "passed",
+      exit_code: 0,
+    });
+    const result = accumulator.update(`${started}\n${completed}`);
+
+    expect(result.conversation.map((turn) => turn.kind)).toEqual(["tool_call", "tool_result"]);
+    expect(result.conversation[0]).toMatchObject({ toolCallId: "command-1", toolStatus: "completed" });
+    expect(result.conversation[1]).toMatchObject({ toolOutput: "passed", toolStatus: "completed" });
+  });
+
+  it("resets safely after truncation or source rotation", () => {
+    const accumulator = new CodexRolloutAccumulator();
+    const first = [sessionMeta("old"), userMessage("2026-06-01T10:00:00.000Z", "old prompt")].join("\n");
+    accumulator.update(first, "rollout-old");
+
+    const truncated = sessionMeta("new");
+    expect(accumulator.update(truncated, "rollout-new")).toMatchObject({
+      nativeSessionId: "new",
+      conversation: [],
+    });
+
+    const rotated = [
+      sessionMeta("rotated"),
+      userMessage("2026-06-01T10:01:00.000Z", "rotated prompt"),
+      userMessage("2026-06-01T10:01:01.000Z", "rotated follow-up"),
+    ].join("\n");
+    const result = accumulator.update(rotated, "rollout-rotated");
+    expect(result.nativeSessionId).toBe("rotated");
+    expect(result.conversation.map((turn) => turn.text)).toEqual(["rotated prompt", "rotated follow-up"]);
+  });
+
+  it("recovers a JSON record split across snapshots", () => {
+    const accumulator = new CodexRolloutAccumulator();
+    const record = userMessage("2026-06-01T10:00:00.000Z", "complete later");
+    const splitAt = Math.floor(record.length / 2);
+
+    expect(accumulator.update(record.slice(0, splitAt)).conversation).toEqual([]);
+    expect(accumulator.update(record).conversation).toEqual([
+      expect.objectContaining({ kind: "user", text: "complete later" }),
+    ]);
   });
 });
 

@@ -57,7 +57,7 @@ Settings are evaluated in cascade: **System → Project → Sprint** (with built
       "authType": "apiKey" | "localAuth" | "dashboardAuth",
       "qwenAuthMode": "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER",
       "openCodeAuthMode": "LOCAL_AUTH" | "ENV_KEY" | "CUSTOM_PROVIDER",
-      "maxConcurrentTasks": 0    // 0 = unlimited
+      "maxConcurrentTasks": 0    // local: adaptive CPU/memory admission; Jules: unlimited
     }
   },
   "routing": {

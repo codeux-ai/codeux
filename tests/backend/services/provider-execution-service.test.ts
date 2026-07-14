@@ -61,8 +61,10 @@ describe("ProviderExecutionService", () => {
     executionRepository = {
       createExecutionInvocation: vi.fn().mockReturnValue(executionInvocationState),
       getExecutionInvocation: vi.fn(() => executionInvocationState as any),
+      listExecutionInvocationMessages: vi.fn().mockReturnValue([]),
       appendExecutionInvocationMessage: vi.fn(),
       clearExecutionInvocationMessages: vi.fn(),
+      syncExecutionInvocationMessages: vi.fn(),
       createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "prov-inv-1" }),
       getProviderInvocationUsage: vi.fn().mockReturnValue({ id: "prov-inv-1", status: "running" }),
       updateProviderInvocationUsage: vi.fn(),
@@ -888,16 +890,13 @@ describe("ProviderExecutionService", () => {
     });
 
     expect(providerRunner.runProviderForText).toHaveBeenCalled();
-    expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledWith("exec-inv-1");
-    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+    expect(executionRepository.syncExecutionInvocationMessages).toHaveBeenCalledWith(
       "exec-inv-1",
+      expect.arrayContaining([
       expect.objectContaining({
         role: "user",
         contentMarkdown: "Review this diff.",
       }),
-    );
-    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
-      "exec-inv-1",
       expect.objectContaining({
         role: "assistant",
         contentMarkdown: "I will inspect the diff and verify the rollout.",
@@ -907,9 +906,6 @@ describe("ProviderExecutionService", () => {
           model: "test-model",
         }),
       }),
-    );
-    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
-      "exec-inv-1",
       expect.objectContaining({
         role: "tool",
         contentMarkdown: "",
@@ -924,10 +920,7 @@ describe("ProviderExecutionService", () => {
           provider: "claude-code",
           model: "test-model",
         }),
-      })
-    );
-    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
-      "exec-inv-1",
+      }),
       expect.objectContaining({
         role: "tool",
         toolCallsJson: expect.objectContaining({ output: "file contents" }),
@@ -937,14 +930,12 @@ describe("ProviderExecutionService", () => {
           provider: "claude-code",
           model: "test-model",
         }),
-      })
-    );
-    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
-      "exec-inv-1",
+      }),
       expect.objectContaining({
         role: "assistant",
         contentMarkdown: "{\"verdict\":\"pass\"}",
-      })
+      }),
+      ]),
     );
   });
 
@@ -1080,11 +1071,9 @@ describe("ProviderExecutionService", () => {
     "persists parsed $provider conversations through the normalized final path",
     async (providerCase) => {
       const persistedMessages: AppendExecutionInvocationMessageInput[] = [];
-      executionRepository.clearExecutionInvocationMessages.mockImplementation(() => {
-        persistedMessages.length = 0;
-      });
-      executionRepository.appendExecutionInvocationMessage.mockImplementation((_id, message) => {
-        persistedMessages.push(message);
+      executionRepository.syncExecutionInvocationMessages.mockImplementation((_id, messages) => {
+        persistedMessages.splice(0, persistedMessages.length, ...messages);
+        return { inserted: messages.length, updated: 0, deleted: 0, unchanged: 0 };
       });
 
       const prompt = [
@@ -1125,8 +1114,8 @@ describe("ProviderExecutionService", () => {
         expectTextOutput: providerCase.expectTextOutput,
       });
 
-      expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledWith("exec-inv-1");
-      expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledTimes(1);
+      expect(executionRepository.syncExecutionInvocationMessages).toHaveBeenCalledWith("exec-inv-1", persistedMessages);
+      expect(executionRepository.syncExecutionInvocationMessages).toHaveBeenCalledTimes(1);
       expect(executionRepository.updateProviderInvocationUsage).toHaveBeenCalledWith(
         "prov-inv-1",
         expect.objectContaining({
@@ -1232,10 +1221,10 @@ describe("ProviderExecutionService", () => {
         conversation: liveConversation as any,
       });
 
-      expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledTimes(1);
-      expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+      expect(executionRepository.syncExecutionInvocationMessages).toHaveBeenCalledTimes(1);
+      expect(executionRepository.syncExecutionInvocationMessages).toHaveBeenCalledWith(
         "exec-inv-1",
-        expect.objectContaining({
+        expect.arrayContaining([expect.objectContaining({
           role: "tool",
           toolCallsJson: expect.objectContaining({
             arguments: "{\"path\":\".\"}",
@@ -1246,11 +1235,11 @@ describe("ProviderExecutionService", () => {
             toolName: "list_files",
             toolStatus: "completed",
           }),
-        }),
+        })]),
       );
-      expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+      expect(executionRepository.syncExecutionInvocationMessages).toHaveBeenCalledWith(
         "exec-inv-1",
-        expect.objectContaining({
+        expect.arrayContaining([expect.objectContaining({
           role: "tool",
           toolCallsJson: expect.objectContaining({
             output: "src\n tests",
@@ -1259,19 +1248,17 @@ describe("ProviderExecutionService", () => {
             kind: "tool_result",
             toolName: "list_files",
           }),
-        }),
+        })]),
       );
-      expect(executionRepository.appendExecutionInvocationMessage).not.toHaveBeenCalledWith(
-        "exec-inv-1",
-        expect.objectContaining({ contentMarkdown: "{\"tasks\":[\"final\"]}" }),
-      );
+      const liveMessages = executionRepository.syncExecutionInvocationMessages.mock.calls[0]?.[1] ?? [];
+      expect(liveMessages).not.toContainEqual(expect.objectContaining({ contentMarkdown: "{\"tasks\":[\"final\"]}" }));
 
       opts.onTelemetry({
         ...mockResult.usageTelemetry,
         transcriptText: "live planning transcript",
         conversation: liveConversation as any,
       });
-      expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledTimes(1);
+      expect(executionRepository.syncExecutionInvocationMessages).toHaveBeenCalledTimes(1);
 
       return {
         ...mockResult,
@@ -1293,7 +1280,7 @@ describe("ProviderExecutionService", () => {
     });
 
     expect(providerRunner.runProviderForText).toHaveBeenCalled();
-    expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledTimes(1);
+    expect(executionRepository.syncExecutionInvocationMessages).toHaveBeenCalledTimes(1);
     expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
       "exec-inv-1",
       expect.objectContaining({
@@ -1348,20 +1335,20 @@ describe("ProviderExecutionService", () => {
       trackPromptInInvocation: false,
     });
 
-    expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledTimes(2);
-    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+    expect(executionRepository.syncExecutionInvocationMessages).toHaveBeenCalledTimes(2);
+    expect(executionRepository.syncExecutionInvocationMessages).toHaveBeenLastCalledWith(
       "exec-inv-1",
-      expect.objectContaining({
+      expect.arrayContaining([expect.objectContaining({
         role: "assistant",
         contentMarkdown: "bravo",
         metadata: expect.objectContaining({
           kind: "reasoning",
         }),
-      }),
+      })]),
     );
-    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+    expect(executionRepository.syncExecutionInvocationMessages).toHaveBeenLastCalledWith(
       "exec-inv-1",
-      expect.objectContaining({
+      expect.arrayContaining([expect.objectContaining({
         role: "tool",
         toolCallsJson: expect.objectContaining({
           arguments: "{\"b\":2}",
@@ -1370,11 +1357,11 @@ describe("ProviderExecutionService", () => {
           kind: "tool_call",
           toolStatus: "final",
         }),
-      }),
+      })]),
     );
-    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+    expect(executionRepository.syncExecutionInvocationMessages).toHaveBeenLastCalledWith(
       "exec-inv-1",
-      expect.objectContaining({
+      expect.arrayContaining([expect.objectContaining({
         role: "tool",
         toolCallsJson: expect.objectContaining({
           output: "other",
@@ -1382,7 +1369,7 @@ describe("ProviderExecutionService", () => {
         metadata: expect.objectContaining({
           kind: "tool_result",
         }),
-      }),
+      })]),
     );
   });
 
@@ -1400,12 +1387,9 @@ describe("ProviderExecutionService", () => {
       metadata: message.metadata ?? null,
       createdAt: "2026-07-10T00:00:00.000Z",
     }))) as any;
-    executionRepository.clearExecutionInvocationMessages.mockImplementation(() => {
-      persistedMessages.length = 0;
-    });
-    executionRepository.appendExecutionInvocationMessage.mockImplementation((_id, message) => {
-      persistedMessages.push(message);
-      return {} as any;
+    executionRepository.syncExecutionInvocationMessages.mockImplementation((_id, messages) => {
+      persistedMessages.splice(0, persistedMessages.length, ...messages);
+      return { inserted: messages.length, updated: 0, deleted: 0, unchanged: 0 };
     });
     providerRunner.runProviderForText.mockImplementation(async (opts: any) => {
       const usageTelemetry = {
@@ -1440,7 +1424,7 @@ describe("ProviderExecutionService", () => {
     expect(persistedMessages).not.toContainEqual(expect.objectContaining({
       contentMarkdown: "Parser-supplied prompt",
     }));
-    expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledTimes(1);
+    expect(executionRepository.syncExecutionInvocationMessages).toHaveBeenCalledTimes(1);
   });
 
   it("skips the message rewrite when a telemetry tick repeats the same conversation", async () => {
@@ -1476,7 +1460,56 @@ describe("ProviderExecutionService", () => {
     });
 
     // Two distinct states persisted (the duplicate middle tick was skipped), not three.
-    expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledTimes(2);
+    expect(executionRepository.syncExecutionInvocationMessages).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses parser revisions to reconcile only an appended or lifecycle-updated suffix", async () => {
+    const initialConversation = Array.from({ length: 50 }, (_, index) => ({
+      kind: "assistant",
+      text: `turn-${index}`,
+    }));
+    const appendedConversation = [...initialConversation, { kind: "assistant", text: "turn-50" }];
+    const lifecycleConversation = appendedConversation.map((turn, index) => index === 40
+      ? { ...turn, text: "turn-40-completed" }
+      : turn);
+    providerRunner.runProvider.mockImplementation(async (opts: any) => {
+      opts.onTelemetry({
+        ...mockResult.usageTelemetry,
+        conversation: initialConversation,
+        conversationRevision: 50,
+        conversationChangedFromIndex: 0,
+      });
+      opts.onTelemetry({
+        ...mockResult.usageTelemetry,
+        conversation: initialConversation,
+        conversationRevision: 50,
+        conversationChangedFromIndex: 0,
+      });
+      opts.onTelemetry({
+        ...mockResult.usageTelemetry,
+        conversation: appendedConversation,
+        conversationRevision: 51,
+        conversationChangedFromIndex: 50,
+      });
+      opts.onTelemetry({
+        ...mockResult.usageTelemetry,
+        conversation: lifecycleConversation,
+        conversationRevision: 52,
+        conversationChangedFromIndex: 40,
+      });
+      return {
+        ...mockResult,
+        usageTelemetry: { ...mockResult.usageTelemetry, conversation: [], transcriptText: "" },
+      };
+    });
+
+    await service.executeProvider({ ...defaultArgs, trackPromptInInvocation: false });
+
+    expect(executionRepository.syncExecutionInvocationMessages).toHaveBeenCalledTimes(3);
+    expect(executionRepository.syncExecutionInvocationMessages.mock.calls[1]?.[2]).toEqual({ changedFromIndex: 50 });
+    expect(executionRepository.syncExecutionInvocationMessages.mock.calls[2]?.[2]).toEqual({ changedFromIndex: 40 });
+    const finalMessages = executionRepository.syncExecutionInvocationMessages.mock.calls[2]?.[1] ?? [];
+    expect(finalMessages[40]).toMatchObject({ contentMarkdown: "turn-40-completed" });
   });
 
   it("skips provider usage writes when a telemetry tick repeats the same usage state", async () => {

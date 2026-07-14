@@ -107,6 +107,19 @@ describe("CommandRunner", () => {
     expect(stdoutLines).toEqual(["no_newline_at_end"]);
   });
 
+  it("bounds an unfinished streamed line instead of retaining unbounded child output", async () => {
+    const stdoutLines: string[] = [];
+    const script = `
+      process.stdout.write('0123456789');
+      setTimeout(() => process.stdout.write('abcdefghij'), 10);
+    `;
+    await runner.run(node, ["-e", script], {
+      maxStdoutChars: 10,
+      onStdoutLine: (line) => stdoutLines.push(line),
+    });
+    expect(stdoutLines).toEqual(["abcdefghij"]);
+  });
+
   it("should preserve raw stdout when trimOutput is disabled", async () => {
     const result = await runner.run(node, ["-e", "process.stdout.write('hello\\n   \\n')"], {
       trimOutput: false,

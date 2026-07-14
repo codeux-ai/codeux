@@ -112,6 +112,7 @@ export type DocsSlug =
   | 'architecture-card-ci-status-projection'
   | 'architecture-custom-dashboard-foundation'
   | 'architecture-custom-nodes'
+  | 'architecture-high-concurrency-orchestration'
   | 'architecture-managed-container-runtime'
   | 'architecture-node-flow-builtins-and-security'
   | 'architecture-node-flow-durable-execution'
@@ -894,6 +895,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Custom Node Architecture and Security",
     description: "Custom nodes are project-owned TypeScript packages that pass explicit validation and publication gates before Code UX can execute them. Generated code is never imported or evaluated by the Code UX server.",
   },
+  'architecture-high-concurrency-orchestration': {
+    id: 'architecture-high-concurrency-orchestration',
+    path: '/docs/architecture-high-concurrency-orchestration',
+    section: 'Architecture',
+    title: "High-Concurrency Docker Orchestration",
+    description: "Code UX keeps local provider and CI work parallel while reserving host capacity for Docker, SQLite, the dashboard, and interactive replies.",
+  },
   'architecture-managed-container-runtime': {
     id: 'architecture-managed-container-runtime',
     path: '/docs/architecture-managed-container-runtime',
@@ -1069,6 +1077,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-card-ci-status-projection'],
   docsRegistry['architecture-custom-dashboard-foundation'],
   docsRegistry['architecture-custom-nodes'],
+  docsRegistry['architecture-high-concurrency-orchestration'],
   docsRegistry['architecture-managed-container-runtime'],
   docsRegistry['architecture-node-flow-builtins-and-security'],
   docsRegistry['architecture-node-flow-durable-execution'],

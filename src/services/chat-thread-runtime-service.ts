@@ -1683,12 +1683,6 @@ export class ChatThreadRuntimeService {
         }),
         continueSessionId,
         nativeSessionOperation: "compact",
-        onActivity: (desc, originator) => {
-          this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
-            role: originator === "user" ? "user" : "assistant",
-            contentMarkdown: `[Status] ${desc}`,
-          });
-        },
       });
 
       const markdown = normalizeProviderReply(result.text);

@@ -56,18 +56,29 @@ Virtual workers create `worker_endpoints.endpoint_type = virtual_cli` and do not
 
 ## Cycle Behavior
 
-Each virtual cycle is project-scoped and one-shot:
+Each virtual cycle is project-scoped and one-shot, but a project may run several independent coding
+cycles concurrently:
 
-1. Scheduler notices worker work for a project.
-2. Code UX creates an ephemeral virtual endpoint and project assignment.
-3. The cycle handles one worker-owned attention item or one pending dispatch.
-4. It executes that single unit of work.
-5. It releases the assignment and deletes the endpoint.
-6. If more worker work remains, it schedules another cycle.
+1. The scheduler resolves the effective worker and provider capacity before creating an endpoint.
+2. It reserves distinct pending dispatches in the process-local cycle registry and claims each
+   dispatch through its atomic SQLite lease.
+3. Each admitted dispatch receives its own ephemeral endpoint and assignment and runs independently.
+4. Fan-out is bounded by `workers.maxConcurrency` and the selected provider's current effective
+   capacity. A local batch consumes its provider budget as cycles launch; the atomic provider claim
+   remains the final cross-process authority.
+5. Each cycle releases its assignment and deletes its endpoint independently when it settles.
 
-This is intentionally not an endless watch loop.
+The same dispatch or task cannot receive two in-process reservations. Reconcile passes do not
+overlap, and deferred scheduling is coalesced per project. This is intentionally not an endless
+watch loop.
 
-The background reconcile loop stays conservative (`3s`) to avoid unnecessary sqlite write contention, while virtual worker session completion polling is tighter (`2s`) because it only checks local session and dispatch state. Initial scheduling operations use microtask queueing to consolidate rapid sync events while preventing simultaneous cycle overlap for the same project. If a cycle finishes and work still remains, follow-up scheduling is deferred on the reconcile timer cadence instead of recursively queueing more microtasks, so dashboard HTTP probes and shutdown signals stay responsive even when persisted worker state is temporarily unchanged.
+Worker-owned attention remains exclusive because repair or intervention work can change shared
+project state. Waiting attention prevents new coding cycles, waits for current project dispatches to
+settle, and then runs alone. Attention claims use a conditional SQLite update so a second worker
+cannot steal an already-claimed item. Attention that arrives after durable coding work started does
+not cancel that work.
+
+The background reconcile loop stays conservative (`3s`) to avoid unnecessary sqlite write contention, while virtual worker session completion polling is tighter (`2s`) because it only checks local session and dispatch state. Initial scheduling operations use microtask queueing to consolidate rapid sync events. If a cycle finishes and work still remains, follow-up scheduling is deferred on the reconcile timer cadence instead of recursively queueing more microtasks, so dashboard HTTP probes and shutdown signals stay responsive even when persisted worker state is temporarily unchanged.
 
 ## Planning Boundary
 
@@ -75,7 +86,8 @@ Virtual worker scheduling is split between pure domain policies and the stateful
 
 - `src/domain/workers/virtual-worker-scheduling-policy.ts` decides whether a project should schedule a cycle from plain inputs: worker execution mode, active-cycle state, queued-cycle state, next eligible attention item, and pending-dispatch presence.
 - The same policy module filters attention eligibility, defers orchestrator-managed clarification retries, chooses attention routing (`merge_conflict`, `ci_fix`, `action_required`, or human escalation), and formats virtual claim reasons for open versus reclaimable claimed items.
-- `src/domain/workers/virtual-worker-cycle-plan.ts` combines the next attention item, the next dispatch claim, resolved settings, and provider capacity into a typed `VirtualWorkerCycleAction`. Dispatches keep precedence over attention when both are available.
+- `src/services/virtual-worker-cycle-registry.ts` owns the minimal in-process reservation state needed
+  for parallel dispatches while durable dispatch and attention ownership remains in SQLite.
 
 The pure helpers receive repository/service state as values and do not mutate storage, call providers, start containers, or log. This makes idle worker selection, busy worker skipping, retry deferral, disabled worker mode, and attention escalation directly unit-testable.
 
@@ -144,7 +156,7 @@ Merge-conflict handling intentionally stays isolated from the original task work
 
 For task-scoped CI autofix, Code UX defaults to continuing the original task coding session exactly like a QA follow-up: it reuses the logical/native provider session, provider family, effective model, coding-agent instructions, and preserved task workspace. Settings → AI Models → CI fix exposes **Continue from same session and model as coding task** as an opt-out; disabling it uses the standalone CI Fix route. Sprint-level final-merge repair has no originating task session and always uses that route. The CI-fix prompt also receives the active agent's memory context and writes new durable learnings back into memory from the reused workspace.
 
-Workspace artifact export captures both tracked edits and newly created untracked files from the worker workspace. This matters for CI autofix follow-ups that add missing modules or tests after the original task run; the exporter uses a temporary Git index for untracked files and still excludes the transient `.task-learnings.md` memory-capture file, legacy `.code-ux-home/` provider state, and root `.pnpm-store/` package-cache state from commits. It asks Git to discover untracked files internally before diffing, so preserved Docker workspaces with many untracked paths cannot exceed command argument limits. When a LOCAL branch advances while an isolated worker is running, patch materialization applies the worker diff on top of that current descendant tip so concurrent task merges are retained. Current Docker workers keep provider HOME and Code UX-managed npm/pnpm cache paths in a paired runtime volume mounted outside `/workspace`, so fresh workspaces contain only the coding checkout.
+Workspace artifact export captures both tracked edits and newly created untracked files from the worker workspace. This matters for CI autofix follow-ups that add missing modules or tests after the original task run; the exporter uses a temporary Git index for untracked files and still excludes the transient `.task-learnings.md` memory-capture file, legacy `.code-ux-home/` provider state, and root `.pnpm-store/` package-cache state from commits. It asks Git to discover untracked files internally before diffing, so preserved Docker workspaces with many untracked paths cannot exceed command argument limits. Docker-volume exports fuse discovery, staging, diffing, and temporary-index cleanup into one helper-container invocation, avoiding four or five Docker control-plane round trips per completed task. Host-side patch transaction files stay inside Git's administrative directory, keeping materialization commands on the warm project Git helper instead of forcing one-shot helpers for an external temporary-index bind. When a LOCAL branch advances while an isolated worker is running, patch materialization first applies the diff against the workspace's true base, then three-way merges that tree onto the current descendant worker tip. Concurrent branch work is retained, an identical file already materialized by the original task is de-duplicated, and genuine overlapping edits still fail as conflicts. Current Docker workers keep provider HOME and Code UX-managed npm/pnpm cache paths in a paired runtime volume mounted outside `/workspace`, so fresh workspaces contain only the coding checkout.
 
 Immediately before every Docker provider launch attempt, Code UX reasserts ownership of that runtime volume for the container's effective non-root UID/GID. Performing this at the atomic `docker run` boundary covers newly created, previously root-owned, and concurrently recreated volumes, preventing restart recovery or startup pruning from leaving CI/QA repair unable to create provider configuration or cache directories. Workspace seed helpers explicitly trust the mounted `/workspace` path while initializing Git, then restore the provider UID/GID; this keeps restart recovery from tripping Git's dubious-ownership protection on a correctly non-root-owned volume.
 
@@ -211,4 +223,9 @@ When running inside isolated or containerized worker environments (e.g., Gemini 
 - **POSIX and Windows Path Matching**: CLI session queries in the tracking repository match using both Windows and POSIX-normalized host paths, falling back to `/workspace` when matching containerized sessions.
 
 ## Scheduling and Execution Split
-To enable pure unit testing of virtual worker scheduling rules, Code UX extracts cycle planning into a pure domain function (`planVirtualWorkerCycle`). The VirtualWorkerService gathers state (e.g. attention items, task dispatches, available provider concurrency) and passes it to the planner. The planner then returns an explicit `VirtualWorkerCycleAction` without producing side effects, and the service executes the requested routing decision.
+
+Pure eligibility and attention-routing rules remain in
+`virtual-worker-scheduling-policy.ts`. Parallel fan-out needs current per-dispatch settings, provider
+budgets, and durable claims, so `VirtualWorkerService` coordinates those side effects while
+`VirtualWorkerCycleRegistry` enforces only in-process duplicate/exclusivity rules. This removes the
+obsolete serial cycle-plan layer without moving cross-process ownership out of SQLite.

@@ -12,6 +12,12 @@ import {
   QwenUsageTotals,
   ParsedConversationTurn,
 } from "./provider-usage.js";
+import { CodexRolloutAccumulator, type CodexLogResult } from "./provider-logs/codex-log-parser.js";
+import {
+  ProviderTranscriptChunkDecoder,
+  type ProviderTranscriptChunk,
+  type ProviderTranscriptCursor,
+} from "./provider-transcript-chunks.js";
 
 export interface TelemetryWatcherOptions {
   provider: CliProviderId;
@@ -37,8 +43,10 @@ export interface TelemetryWatcherOptions {
   pollIntervalMs?: number;
   getClaudeSessionJsonlMetadata?: (nativeSessionId: string) => Promise<string | null>;
   readClaudeSessionJsonl: (nativeSessionId: string) => Promise<string | null>;
+  readClaudeSessionJsonlChunk?: (nativeSessionId: string, cursor: ProviderTranscriptCursor) => Promise<ProviderTranscriptChunk | null>;
   getCodexLatestSessionJsonMetadata?: () => Promise<string | null>;
   readCodexLatestSessionJson: () => Promise<string | null>;
+  readCodexLatestSessionChunk?: (cursor: ProviderTranscriptCursor) => Promise<ProviderTranscriptChunk | null>;
   getQwenLogDataMetadata?: () => Promise<string | null>;
   readQwenLogData: () => Promise<{ usage: QwenUsageTotals | null; conversation: ParsedConversationTurn[] } | null>;
   getAntigravityLogMetadata?: (logPath: string) => Promise<string | null>;
@@ -55,6 +63,8 @@ interface FullReadInputs {
   resolvedNativeSessionId: string | null;
   claudeSessionJsonl: string | null;
   codexSessionJson: string | null;
+  codexRollout: CodexLogResult | null;
+  codexIncrementalSignature: string | null;
   qwenLog: { usage: QwenUsageTotals | null; conversation: ParsedConversationTurn[] } | null;
   antigravityTranscriptJsonl: string | null;
 }
@@ -71,6 +81,7 @@ interface FullReadResult {
 }
 
 const FAILURE_BACKOFF_MAX_SKIPPED_POLLS = 20;
+const MAX_INCREMENTAL_CHUNKS_PER_POLL = 4;
 
 function buildMetadataSourceSignature(args: {
   provider: CliProviderId;
@@ -98,6 +109,7 @@ async function buildTelemetrySourceSignature(args: {
   stderr: string;
   claudeSessionJsonl: string | null;
   codexSessionJson: string | null;
+  codexIncrementalSignature: string | null;
   qwenLog: { usage: QwenUsageTotals | null; conversation: ParsedConversationTurn[] } | null;
   antigravityTranscriptJsonl: string | null;
   antigravityTempDbPath: string | null;
@@ -110,6 +122,7 @@ async function buildTelemetrySourceSignature(args: {
     signatureForString(args.stderr),
     signatureForString(args.claudeSessionJsonl || ""),
     signatureForString(args.codexSessionJson || ""),
+    args.codexIncrementalSignature || "",
     signatureForString(args.antigravityTranscriptJsonl || ""),
   ];
 
@@ -166,8 +179,17 @@ export class ProviderTelemetryWatcher {
   private lastFailureWarningCount = 0;
   private failureBackoff: FailureBackoffState | null = null;
   private resolvedNativeSessionId: string | null = null;
+  private readonly codexRolloutAccumulator: CodexRolloutAccumulator | null;
+  private readonly codexChunkDecoder = new ProviderTranscriptChunkDecoder();
+  private readonly claudeChunkDecoder = new ProviderTranscriptChunkDecoder();
+  private claudeJsonlChunks: string[] = [];
+  private wakeWait: (() => void) | null = null;
 
-  constructor(private readonly opts: TelemetryWatcherOptions) {}
+  constructor(private readonly opts: TelemetryWatcherOptions) {
+    this.codexRolloutAccumulator = opts.provider === "codex"
+      ? new CodexRolloutAccumulator(opts.startedMs)
+      : null;
+  }
 
   start() {
     this.active = true;
@@ -176,6 +198,7 @@ export class ProviderTelemetryWatcher {
 
   async stop() {
     this.active = false;
+    this.wakeWait?.();
     if (this.promise) {
       await this.promise.catch(() => undefined);
     }
@@ -184,6 +207,22 @@ export class ProviderTelemetryWatcher {
       this.tempDbPath = null;
       await fs.rm(tempDbPath, { force: true }).catch(() => undefined);
     }
+  }
+
+  async readFinalCodexRollout(): Promise<CodexLogResult | null> {
+    if (!this.opts.readCodexLatestSessionChunk || !this.codexRolloutAccumulator) {
+      return null;
+    }
+    const result = await this.collectIncrementalCodexInputs(null, {
+      resolvedNativeSessionId: this.resolvedNativeSessionId || this.opts.nativeSessionId,
+      claudeSessionJsonl: null,
+      codexSessionJson: null,
+      codexRollout: null,
+      codexIncrementalSignature: null,
+      qwenLog: null,
+      antigravityTranscriptJsonl: null,
+    });
+    return result.inputs.codexRollout;
   }
 
   private async loop() {
@@ -257,6 +296,8 @@ export class ProviderTelemetryWatcher {
           resolvedNativeSessionId,
           claudeSessionJsonl,
           codexSessionJson,
+          codexRollout,
+          codexIncrementalSignature,
           qwenLog,
           antigravityTranscriptJsonl,
         } = fullReadInputs.inputs;
@@ -269,6 +310,7 @@ export class ProviderTelemetryWatcher {
           stderr,
           claudeSessionJsonl,
           codexSessionJson,
+          codexIncrementalSignature,
           qwenLog,
           antigravityTranscriptJsonl,
           antigravityTempDbPath: this.tempDbPath,
@@ -283,6 +325,10 @@ export class ProviderTelemetryWatcher {
           continue;
         }
 
+        const parsedCodexRollout: CodexLogResult | null = codexRollout
+          ?? (codexSessionJson && this.codexRolloutAccumulator
+            ? this.codexRolloutAccumulator.update(codexSessionJson)
+            : null);
         const telemetry = await collectProviderUsageTelemetry({
           provider: this.opts.provider,
           model: this.opts.model,
@@ -294,6 +340,7 @@ export class ProviderTelemetryWatcher {
           nativeSessionId: resolvedNativeSessionId || this.opts.nativeSessionId,
           claudeSessionJsonl,
           codexSessionJson,
+          codexRollout: parsedCodexRollout,
           qwenReportedUsage: qwenLog?.usage ?? null,
           qwenConversation: qwenLog?.conversation ?? null,
           startTimeMs: this.opts.startedMs,
@@ -338,11 +385,16 @@ export class ProviderTelemetryWatcher {
       resolvedNativeSessionId: this.resolvedNativeSessionId || this.opts.nativeSessionId,
       claudeSessionJsonl: null,
       codexSessionJson: null,
+      codexRollout: null,
+      codexIncrementalSignature: null,
       qwenLog: null,
       antigravityTranscriptJsonl: null,
     };
 
     if (this.opts.provider === "claude-code" && this.opts.nativeSessionId) {
+      if (this.opts.readClaudeSessionJsonlChunk) {
+        return this.collectIncrementalClaudeInputs(args.preReadSourceSignature, emptyInputs);
+      }
       return {
         skipped: false,
         preReadSourceSignature: args.preReadSourceSignature,
@@ -355,6 +407,9 @@ export class ProviderTelemetryWatcher {
     }
 
     if (this.opts.provider === "codex") {
+      if (this.opts.readCodexLatestSessionChunk && this.codexRolloutAccumulator) {
+        return this.collectIncrementalCodexInputs(args.preReadSourceSignature, emptyInputs);
+      }
       return {
         skipped: false,
         preReadSourceSignature: args.preReadSourceSignature,
@@ -387,6 +442,73 @@ export class ProviderTelemetryWatcher {
     };
   }
 
+  private async collectIncrementalCodexInputs(
+    preReadSourceSignature: string | null,
+    emptyInputs: FullReadInputs,
+  ): Promise<FullReadResult> {
+    let latestRollout: CodexLogResult | null = null;
+    let signature: string | null = null;
+    let sourceId: string | null = null;
+    let reset = false;
+    const decodedParts: string[] = [];
+    for (let index = 0; index < MAX_INCREMENTAL_CHUNKS_PER_POLL; index += 1) {
+      const chunk = await this.opts.readCodexLatestSessionChunk!(this.codexChunkDecoder.cursor);
+      if (!chunk) {
+        break;
+      }
+      const decoded = this.codexChunkDecoder.consume(chunk);
+      signature = `${chunk.sourceId}:${chunk.nextOffset}:${chunk.totalBytes}`;
+      sourceId = decoded.sourceId;
+      reset ||= decoded.reset;
+      if (decoded.text) decodedParts.push(decoded.text);
+      if (decoded.complete || chunk.nextOffset === chunk.startOffset) {
+        break;
+      }
+    }
+    if (sourceId) {
+      latestRollout = this.codexRolloutAccumulator!.appendChunk(
+        decodedParts.join(""),
+        sourceId,
+        reset,
+      );
+    }
+    return {
+      skipped: false,
+      preReadSourceSignature,
+      inputs: {
+        ...emptyInputs,
+        codexRollout: latestRollout,
+        codexIncrementalSignature: signature,
+      },
+    };
+  }
+
+  private async collectIncrementalClaudeInputs(
+    preReadSourceSignature: string | null,
+    emptyInputs: FullReadInputs,
+  ): Promise<FullReadResult> {
+    for (let index = 0; index < MAX_INCREMENTAL_CHUNKS_PER_POLL; index += 1) {
+      const chunk = await this.opts.readClaudeSessionJsonlChunk!(
+        this.opts.nativeSessionId!,
+        this.claudeChunkDecoder.cursor,
+      );
+      if (!chunk) break;
+      const decoded = this.claudeChunkDecoder.consume(chunk);
+      if (decoded.reset) this.claudeJsonlChunks = [];
+      if (decoded.text) this.claudeJsonlChunks.push(decoded.text);
+      if (decoded.complete || chunk.nextOffset === chunk.startOffset) break;
+    }
+    return {
+      skipped: false,
+      preReadSourceSignature,
+      inputs: {
+        ...emptyInputs,
+        resolvedNativeSessionId: this.opts.nativeSessionId,
+        claudeSessionJsonl: this.claudeJsonlChunks.length > 0 ? this.claudeJsonlChunks.join("") : null,
+      },
+    };
+  }
+
   private async collectAntigravityFullReadInputs(args: {
     preReadSourceSignature: string | null;
     stdout: string;
@@ -402,6 +524,8 @@ export class ProviderTelemetryWatcher {
           resolvedNativeSessionId,
           claudeSessionJsonl: null,
           codexSessionJson: null,
+          codexRollout: null,
+          codexIncrementalSignature: null,
           qwenLog: null,
           antigravityTranscriptJsonl: null,
         },
@@ -426,6 +550,8 @@ export class ProviderTelemetryWatcher {
             resolvedNativeSessionId,
             claudeSessionJsonl: null,
             codexSessionJson: null,
+            codexRollout: null,
+            codexIncrementalSignature: null,
             qwenLog: null,
             antigravityTranscriptJsonl: null,
           },
@@ -441,6 +567,8 @@ export class ProviderTelemetryWatcher {
           resolvedNativeSessionId,
           claudeSessionJsonl: null,
           codexSessionJson: null,
+          codexRollout: null,
+          codexIncrementalSignature: null,
           qwenLog: null,
           antigravityTranscriptJsonl: null,
         },
@@ -456,6 +584,8 @@ export class ProviderTelemetryWatcher {
         resolvedNativeSessionId,
         claudeSessionJsonl: null,
         codexSessionJson: null,
+        codexRollout: null,
+        codexIncrementalSignature: null,
         qwenLog: null,
         antigravityTranscriptJsonl,
       },
@@ -656,15 +786,20 @@ export class ProviderTelemetryWatcher {
       return;
     }
     await new Promise<void>((resolve) => {
-      let timeout: NodeJS.Timeout;
-      const onAbort = () => {
-        clearTimeout(timeout);
+      let timeout: NodeJS.Timeout | null = null;
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        if (timeout) clearTimeout(timeout);
         this.opts.signal?.removeEventListener("abort", onAbort);
+        if (this.wakeWait === finish) this.wakeWait = null;
         resolve();
       };
+      const onAbort = () => finish();
+      this.wakeWait = finish;
       timeout = setTimeout(() => {
-        this.opts.signal?.removeEventListener("abort", onAbort);
-        resolve();
+        finish();
       }, ms);
       this.opts.signal?.addEventListener("abort", onAbort, { once: true });
     });

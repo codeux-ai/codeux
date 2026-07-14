@@ -1,7 +1,7 @@
 import { buildProviderSettingsOverride } from "./provider-settings-override.js";
 import { randomUUID } from "crypto";
 import type { CliWorkflowSettings, DashboardSettings, GitCiRunStatus, JulesSession, ProviderId, ProviderSettings, QwenModelProviderSettings, ThinkingMode, WorkerExecutionMode, Subtask } from "../contracts/app-types.js";
-import type { ProviderInvocationUsageRecord, WorkerTaskDispatchClaim } from "../contracts/execution-types.js";
+import type { ProviderInvocationUsageRecord, TaskDispatchRecord, WorkerTaskDispatchClaim } from "../contracts/execution-types.js";
 import type { ProjectAttentionItemRecord } from "../contracts/project-attention-types.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
 import type { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
@@ -57,8 +57,11 @@ import {
   resolveVirtualWorkerAttentionRoute,
   type VirtualWorkerAttentionRoute,
 } from "../domain/workers/virtual-worker-scheduling-policy.js";
-import { planVirtualWorkerCycle } from "../domain/workers/virtual-worker-cycle-plan.js";
 import { getFailedJobLabels, getFailedLogSnippets, selectNewestCiRun } from "../sprint/ci-status-utils.js";
+import {
+  VirtualWorkerCycleRegistry,
+  type VirtualWorkerCycleReservation,
+} from "./virtual-worker-cycle-registry.js";
 
 const VIRTUAL_WORKER_RECONCILE_MS = 3_000;
 const VIRTUAL_WORKER_SESSION_POLL_MS = 2_000;
@@ -83,6 +86,10 @@ interface TaskCiFixContinuation {
   previousInvocation: ProviderInvocationUsageRecord | null;
   workerAgent: AgentPresetRecord | null;
 }
+
+type VirtualWorkerCycleWork =
+  | { kind: "attention"; attentionItemId: string }
+  | { kind: "dispatch"; dispatchId: string; taskId: string; sprintId: string };
 
 function sleep(ms: number): Promise<void> {
   if (ms <= 0) {
@@ -204,13 +211,21 @@ export class VirtualWorkerService {
 
   private readonly providerRunner = new ProviderRunner(new DockerRunner());
 
+  private readonly cycleRegistry = new VirtualWorkerCycleRegistry();
+
   private readonly activeCycles = new Map<string, Promise<void>>();
 
   private readonly scheduledProjects = new Set<string>();
 
+  private readonly launchingProjects = new Set<string>();
+
   private readonly deferredProjectSchedules = new Map<string, ReturnType<typeof setTimeout>>();
 
   private reconcileTimer: ReturnType<typeof setInterval> | null = null;
+
+  private reconcileInProgress = false;
+
+  private stopped = false;
 
   private readonly providerExecutionService: ProviderExecutionService;
 
@@ -234,6 +249,7 @@ export class VirtualWorkerService {
     if (this.reconcileTimer) {
       return;
     }
+    this.stopped = false;
 
     this.cleanupOrphanedVirtualWorkers();
     void this.reconcile().catch((error) => {
@@ -248,6 +264,7 @@ export class VirtualWorkerService {
   }
 
   stop(): void {
+    this.stopped = true;
     if (this.reconcileTimer) {
       clearInterval(this.reconcileTimer);
       this.reconcileTimer = null;
@@ -259,7 +276,7 @@ export class VirtualWorkerService {
   }
 
   scheduleProject(projectId: string, reason: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): void {
-    if (this.activeCycles.has(projectId) || this.scheduledProjects.has(projectId) || this.deferredProjectSchedules.has(projectId)) {
+    if (this.stopped || this.scheduledProjects.has(projectId) || this.launchingProjects.has(projectId) || this.deferredProjectSchedules.has(projectId)) {
       return;
     }
     if (!this.projectNeedsVirtualWorker(projectId, resolver)) {
@@ -269,27 +286,25 @@ export class VirtualWorkerService {
     this.scheduledProjects.add(projectId);
     queueMicrotask(() => {
       this.scheduledProjects.delete(projectId);
-      if (this.activeCycles.has(projectId) || !this.projectNeedsVirtualWorker(projectId, resolver)) {
+      if (this.stopped || !this.projectNeedsVirtualWorker(projectId, resolver)) {
         return;
       }
-
-      const cycle = this.runProjectCycle(projectId, reason, resolver)
+      this.launchingProjects.add(projectId);
+      void this.launchAvailableProjectCycles(projectId, reason, resolver)
         .catch((error) => {
-          this.deps.logger?.error("Virtual worker cycle failed", { projectId, reason, error });
+          this.deps.logger?.error("Virtual worker project launch failed", { projectId, reason, error });
         })
         .finally(() => {
-          this.activeCycles.delete(projectId);
-          if (this.projectNeedsVirtualWorker(projectId, resolver)) {
+          this.launchingProjects.delete(projectId);
+          if (!this.stopped && this.projectNeedsVirtualWorker(projectId, resolver)) {
             this.scheduleProjectLater(projectId, "remaining_worker_work", resolver);
           }
         });
-
-      this.activeCycles.set(projectId, cycle);
     });
   }
 
   private scheduleProjectLater(projectId: string, reason: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): void {
-    if (this.activeCycles.has(projectId) || this.scheduledProjects.has(projectId) || this.deferredProjectSchedules.has(projectId)) {
+    if (this.stopped || this.scheduledProjects.has(projectId) || this.launchingProjects.has(projectId) || this.deferredProjectSchedules.has(projectId)) {
       return;
     }
     if (!this.projectNeedsVirtualWorker(projectId, resolver)) {
@@ -305,6 +320,18 @@ export class VirtualWorkerService {
   }
 
   async reconcile(): Promise<void> {
+    if (this.stopped || this.reconcileInProgress) {
+      return;
+    }
+    this.reconcileInProgress = true;
+    try {
+      this.reconcileProjects();
+    } finally {
+      this.reconcileInProgress = false;
+    }
+  }
+
+  private reconcileProjects(): void {
     const cycleCache = new Map<string, DashboardSettings>();
     const resolver = (pId: string, sId?: string | null): DashboardSettings => {
       const key = `${pId}:${sId ?? ""}`;
@@ -322,11 +349,11 @@ export class VirtualWorkerService {
     const activeProjectIds = computeReconciliationCandidates(
       activeAttentionProjects,
       pendingDispatchProjects,
-      Array.from(this.activeCycles.keys())
+      this.cycleRegistry.listProjectIds(),
     );
 
     for (const projectId of activeProjectIds) {
-      if (this.activeCycles.has(projectId) || this.scheduledProjects.has(projectId) || this.deferredProjectSchedules.has(projectId)) {
+      if (this.scheduledProjects.has(projectId) || this.launchingProjects.has(projectId) || this.deferredProjectSchedules.has(projectId)) {
         continue;
       }
       if (this.projectNeedsVirtualWorker(projectId, resolver, pendingDispatchProjects.includes(projectId))) {
@@ -349,20 +376,23 @@ export class VirtualWorkerService {
     const nextAttentionItem = peekNextWorkerAttention(activeItems, effectiveResolver);
     const projectHasPendingDispatch = hasPendingDispatch
       ?? this.deps.executionRepository.listProjectIdsWithPendingDispatches().includes(projectId);
-    const pendingDispatchAvailable = projectHasPendingDispatch && this.deps.executionRepository
-      .listTaskDispatches({ projectId })
-      .some((dispatch) => (
-        dispatch.status === "queued"
-        && !hasPendingManagerClarificationForScope({
-          taskId: dispatch.taskId,
-          dispatchId: dispatch.id,
-        }, activeItems)
-      ));
-    const executionMode = !nextAttentionItem && pendingDispatchAvailable
-      ? resolveWorkerExecutionMode(effectiveResolver(projectId))
-      : "VIRTUAL";
+    const eligibleDispatches = projectHasPendingDispatch
+      ? this.listEligibleQueuedDispatches(projectId, activeItems)
+      : [];
+    const pendingDispatchAvailable = !nextAttentionItem && eligibleDispatches.some((dispatch) => {
+      const settings = effectiveResolver(projectId, dispatch.sprintId);
+      const maxCycles = Math.max(1, Math.floor(settings.workers.maxConcurrency));
+      return resolveWorkerExecutionMode(settings) === "VIRTUAL"
+        && this.cycleRegistry.countProject(projectId) < maxCycles
+        && !this.cycleRegistry.hasAttention(projectId)
+        && !this.cycleRegistry.hasDispatchConflict(projectId, dispatch.id, dispatch.taskId);
+    });
+    const executionMode: WorkerExecutionMode = "VIRTUAL";
+    const projectCycleBlocked = nextAttentionItem
+      ? this.cycleRegistry.countProject(projectId) > 0
+      : !pendingDispatchAvailable;
     return projectNeedsVirtualWorker(
-      this.activeCycles.has(projectId),
+      projectCycleBlocked,
       nextAttentionItem,
       executionMode,
       pendingDispatchAvailable,
@@ -370,17 +400,197 @@ export class VirtualWorkerService {
     );
   }
 
-  private async runProjectCycle(projectId: string, reason: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): Promise<void> {
+  private listEligibleQueuedDispatches(
+    projectId: string,
+    activeItems: ProjectAttentionItemRecord[],
+  ): TaskDispatchRecord[] {
+    return this.deps.executionRepository.listTaskDispatches({ projectId })
+      .filter((dispatch) => (
+        dispatch.status === "queued"
+        && !hasPendingManagerClarificationForScope({
+          taskId: dispatch.taskId,
+          dispatchId: dispatch.id,
+        }, activeItems)
+      ));
+  }
+
+  private async launchAvailableProjectCycles(
+    projectId: string,
+    reason: string,
+    resolver?: (pId: string, sId?: string | null) => DashboardSettings,
+  ): Promise<void> {
+    const effectiveResolver = resolver || ((pId: string, sId?: string | null) => this.resolveDashboardSettings(pId, sId));
+    const activeItems = this.deps.projectAttentionService.listActiveProjectItems(projectId);
+    const attentionItem = peekNextWorkerAttention(activeItems, effectiveResolver);
+    if (attentionItem) {
+      const reservation: VirtualWorkerCycleReservation = {
+        id: `attention:${attentionItem.id}:${randomUUID()}`,
+        projectId,
+        kind: "attention",
+        attentionItemId: attentionItem.id,
+        taskId: attentionItem.taskId || undefined,
+      };
+      if (this.cycleRegistry.tryReserve(reservation, 1)) {
+        this.startReservedCycle(reservation, { kind: "attention", attentionItemId: attentionItem.id }, reason, resolver);
+      }
+      return;
+    }
+
+    const providerBudgets = new Map<ProviderId, number>();
+    for (const dispatch of this.listEligibleQueuedDispatches(projectId, activeItems)) {
+      const settings = effectiveResolver(projectId, dispatch.sprintId);
+      if (resolveWorkerExecutionMode(settings) !== "VIRTUAL") {
+        continue;
+      }
+      const providerConfigId = settings.workers.virtualWorkerProvider;
+      const providerSettings = settings.aiProvider.providers[providerConfigId];
+      const provider = providerSettings?.provider || "codex";
+      let providerBudget = providerBudgets.get(provider);
+      if (providerBudget === undefined) {
+        const capacityService = this.deps.providerConcurrencyService as ProviderConcurrencyService & {
+          getAvailableCapacityCount?: (
+            providerId: ProviderId,
+            limit: number,
+            purpose?: "task_coding",
+          ) => Promise<number | null>;
+        };
+        if (typeof capacityService.getAvailableCapacityCount === "function") {
+          const available = await capacityService.getAvailableCapacityCount(
+            provider,
+            providerSettings?.maxConcurrentTasks ?? 0,
+            "task_coding",
+          );
+          providerBudget = available ?? Number.POSITIVE_INFINITY;
+        } else {
+          providerBudget = await capacityService.hasAvailableCapacity(
+            provider,
+            providerSettings?.maxConcurrentTasks ?? 0,
+          ) ? Number.POSITIVE_INFINITY : 0;
+        }
+        providerBudgets.set(provider, providerBudget);
+      }
+      if (providerBudget <= 0) {
+        continue;
+      }
+      const maxCycles = Math.max(1, Math.floor(settings.workers.maxConcurrency));
+      const reservation: VirtualWorkerCycleReservation = {
+        id: `dispatch:${dispatch.id}:${randomUUID()}`,
+        projectId,
+        kind: "dispatch",
+        dispatchId: dispatch.id,
+        taskId: dispatch.taskId,
+        providerId: provider,
+      };
+      if (!this.cycleRegistry.tryReserve(reservation, maxCycles)) {
+        continue;
+      }
+      providerBudgets.set(provider, providerBudget - 1);
+      this.startReservedCycle(reservation, {
+        kind: "dispatch",
+        dispatchId: dispatch.id,
+        taskId: dispatch.taskId,
+        sprintId: dispatch.sprintId,
+      }, reason, resolver);
+    }
+  }
+
+  private startReservedCycle(
+    reservation: VirtualWorkerCycleReservation,
+    work: VirtualWorkerCycleWork,
+    reason: string,
+    resolver?: (pId: string, sId?: string | null) => DashboardSettings,
+  ): void {
+    const cycle = this.runProjectCycle(reservation.projectId, reason, resolver, work)
+      .catch((error) => {
+        this.deps.logger?.error("Virtual worker cycle failed", {
+          projectId: reservation.projectId,
+          reason,
+          cycleKind: reservation.kind,
+          dispatchId: reservation.dispatchId ?? null,
+          attentionItemId: reservation.attentionItemId ?? null,
+          error,
+        });
+      })
+      .finally(() => {
+        this.activeCycles.delete(reservation.id);
+        this.cycleRegistry.release(reservation.id);
+        if (!this.stopped && this.projectNeedsVirtualWorker(reservation.projectId, resolver)) {
+          this.scheduleProjectLater(reservation.projectId, "remaining_worker_work", resolver);
+        }
+      });
+    this.activeCycles.set(reservation.id, cycle);
+  }
+
+  private async runProjectCycle(
+    projectId: string,
+    reason: string,
+    resolver?: (pId: string, sId?: string | null) => DashboardSettings,
+    requestedWork?: VirtualWorkerCycleWork,
+  ): Promise<void> {
     const effectiveResolver = resolver || ((pId, sId) => this.resolveDashboardSettings(pId, sId));
+    const activeItems = this.deps.projectAttentionService.listActiveProjectItems(projectId);
+    const nextAttentionItem = peekNextWorkerAttention(activeItems, effectiveResolver);
+    const attentionItem = requestedWork?.kind === "attention"
+      ? nextAttentionItem?.id === requestedWork.attentionItemId ? nextAttentionItem : null
+      : requestedWork?.kind === "dispatch"
+        ? null
+        : nextAttentionItem;
+
+    // Repair/worker attention is project-exclusive. New coding work waits until
+    // the attention item is settled, while already-running provider work keeps
+    // its durable dispatch lease and is allowed to finish normally.
+    if (nextAttentionItem && requestedWork?.kind === "dispatch") {
+      return;
+    }
+
+    const nextDispatch = attentionItem
+      ? null
+      : this.listEligibleQueuedDispatches(projectId, activeItems)
+        .find((dispatch) => !requestedWork || (
+          requestedWork.kind === "dispatch"
+          && dispatch.id === requestedWork.dispatchId
+          && dispatch.taskId === requestedWork.taskId
+        )) ?? null;
+    if (!attentionItem && !nextDispatch) {
+      return;
+    }
+
+    const attentionRoute = attentionItem
+      ? resolveVirtualWorkerAttentionRoute(attentionItem)
+      : null;
+    if (attentionRoute === "skip_orchestrator_handled") {
+      return;
+    }
+
+    const cycleSettings = effectiveResolver(projectId, nextDispatch?.sprintId || attentionItem?.sprintId);
+    let cycleProviderType: ProviderId;
+    let providerLimit: number;
+    if (attentionItem && attentionRoute) {
+      const capacity = await this.resolveAttentionProviderCapacity(attentionItem, attentionRoute, cycleSettings);
+      cycleProviderType = capacity.provider;
+      providerLimit = capacity.limit;
+    } else {
+      const providerConfigId = cycleSettings.workers.virtualWorkerProvider;
+      const providerSettings = cycleSettings.aiProvider.providers[providerConfigId];
+      cycleProviderType = providerSettings?.provider || "codex";
+      providerLimit = providerSettings?.maxConcurrentTasks ?? 0;
+    }
+
+    if (!(await this.deps.providerConcurrencyService.hasAvailableCapacity(cycleProviderType, providerLimit))) {
+      this.deps.logger?.info("Virtual worker deferred until the routed provider has capacity", {
+        projectId,
+        provider: cycleProviderType,
+        dispatchId: nextDispatch?.id ?? null,
+        attentionItemId: attentionItem?.id ?? null,
+        attentionType: attentionItem?.attentionType ?? null,
+      });
+      return;
+    }
 
     // Create the virtual endpoint first so that downstream operations (like task dispatch) have a valid target ID.
-    // If the planner determines no work is needed, the endpoint is safely cleaned up in the finally block.
-    const initialCycleSettings = this.resolveCycleSettings(projectId, resolver);
-    const initialCycleProviderType = initialCycleSettings.aiProvider.providers[initialCycleSettings.workers.virtualWorkerProvider]?.provider || "codex";
-
     const endpoint = this.deps.workerEndpointRepository.createVirtualEndpoint({
       endpointKey: `virtual:${projectId}:${Date.now().toString(36)}:${sanitizeToken(randomUUID().slice(0, 8))}`,
-      displayName: `Virtual ${this.getProviderLabel(initialCycleProviderType)} Worker`,
+      displayName: `Virtual ${this.getProviderLabel(cycleProviderType)} Worker`,
       status: "connected",
       transport: "internal",
       capabilities: {
@@ -392,23 +602,19 @@ export class VirtualWorkerService {
     this.deps.projectWorkerAssignmentService.ensureWorkerAssignment(projectId, endpoint.id);
 
     try {
-      const activeItems = this.deps.projectAttentionService.listActiveProjectItems(projectId);
-      const attentionItem = peekNextWorkerAttention(activeItems, effectiveResolver);
-      const nextDispatch = this.deps.executionRepository
-        .listTaskDispatches({ projectId })
-        .find((dispatch) => (
-          dispatch.status === "queued"
-          && !hasPendingManagerClarificationForScope({
-            taskId: dispatch.taskId,
-            dispatchId: dispatch.id,
-          }, activeItems)
-        ));
-      // Do not lease ordinary coding work while a CI/merge repair is waiting.
-      // A leased dispatch is durable, so claiming it and then prioritizing the
-      // attention item would strand the dispatch until lease recovery.
-      const dispatchClaim = attentionItem || !nextDispatch
-        ? null
-        : this.deps.workerTaskDispatchService.claimNextDispatchForWorker({
+      if (attentionItem && attentionRoute) {
+        await this.handleAttentionItem(
+          endpoint.id,
+          attentionItem,
+          reason,
+          attentionRoute,
+          planVirtualWorkerAttentionClaim(attentionItem, reason).claimReason,
+        );
+        return;
+      }
+
+      if (nextDispatch) {
+        const dispatchClaim = this.deps.workerTaskDispatchService.claimNextDispatchForWorker({
           projectId,
           workerEndpointId: endpoint.id,
           executionMode: "VIRTUAL",
@@ -416,35 +622,9 @@ export class VirtualWorkerService {
           taskId: nextDispatch.taskId,
           sprintId: nextDispatch.sprintId,
         });
-
-      const plan = await planVirtualWorkerCycle({
-        projectId,
-        cycleReason: reason,
-        attentionItem,
-        dispatchClaim,
-        isProviderConcurrencyAvailable: async (pId, limit) => await this.deps.providerConcurrencyService.hasAvailableCapacity(pId, limit),
-        resolveSettings: effectiveResolver,
-        resolveAttentionProviderCapacity: async (item, attentionRoute, settings) => (
-          await this.resolveAttentionProviderCapacity(item, attentionRoute, settings)
-        ),
-      });
-
-      if (plan.type === "HANDLE_ATTENTION") {
-        await this.handleAttentionItem(
-          endpoint.id,
-          plan.attentionItem,
-          reason,
-          plan.attentionRoute,
-          plan.claimReason,
-        );
-      } else if (plan.type === "DISPATCH_READY") {
-        await this.handleTaskDispatch(endpoint.id, plan.dispatchClaim);
-      } else if (plan.type === "PROVIDER_CONCURRENCY_UNAVAILABLE") {
-        this.deps.logger?.info("Virtual worker deferred until the routed provider has capacity", {
-          projectId,
-          attentionItemId: attentionItem?.id ?? null,
-          attentionType: attentionItem?.attentionType ?? null,
-        });
+        if (dispatchClaim) {
+          await this.handleTaskDispatch(endpoint.id, dispatchClaim);
+        }
       }
     } finally {
       this.deps.projectWorkerAssignmentService.releaseWorkerAssignment(projectId, endpoint.id, "virtual_worker_cycle_complete");
@@ -571,14 +751,10 @@ export class VirtualWorkerService {
   }
 
   private resolveCycleSettings(projectId: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): DashboardSettings {
-    const effectiveResolver = resolver || ((pId, sId) => this.resolveDashboardSettings(pId, sId));
+    const effectiveResolver = resolver || ((pId: string, sId?: string | null) => this.resolveDashboardSettings(pId, sId));
     const attentionItem = this.deps.projectAttentionService.listActiveProjectItems(projectId)
       .find((item) => item.ownerType === "worker");
-    if (attentionItem) {
-      return effectiveResolver(projectId, attentionItem.sprintId);
-    }
-
-    return effectiveResolver(projectId);
+    return effectiveResolver(projectId, attentionItem?.sprintId);
   }
 
   private async resolveAttentionProviderCapacity(
@@ -606,7 +782,7 @@ export class VirtualWorkerService {
       const providerSettings = settings.aiProvider.providers[providerConfigId];
       return {
         provider: providerSettings?.provider || "codex",
-        limit: settings.workers.maxConcurrency,
+        limit: providerSettings?.maxConcurrentTasks ?? 0,
       };
     }
 
