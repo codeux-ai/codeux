@@ -17,6 +17,8 @@ The action button launches onboarding so you can revisit provider, project, and 
 
 Easy mode follows the short Setup mode, Installation, Introduction, Provider, and GitHub sequence. The Introduction presents the container-first runtime and credential boundary before provider setup. Easy provider selection offers Antigravity, Codex, Claude Code, Qwen Code, and OpenCode; deprecated Gemini CLI remains available in Standard, Expert, and Settings but is not shown in Easy. Every Easy provider card initially selects **Dashboard Login**. Operators can still explicitly switch the selected provider to **Local Copy** before finishing.
 
+The flow and its guided dashboard tour follow the active English or German dashboard locale, including keyboard-accessible names, validation, progress, readiness framing, and completion feedback. Provider names, detected paths, model IDs, runtime diagnostics, and installation output remain unchanged, and locale selection never changes the settings values submitted by onboarding.
+
 | Control Surface | Runtime Effect | Review Before Saving |
 | --- | --- | --- |
 | Settings card fields | Updates the active Settings scope after you save the page. | Confirm whether you are editing System or Project scope. |

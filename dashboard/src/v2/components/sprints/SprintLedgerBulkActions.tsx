@@ -5,6 +5,8 @@ import { Heart, Loader2, Play, Trash2, X } from "lucide-preact";
 import gsap from "gsap";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { getBulkActionButtonLabel, getBulkActionMessage, getBulkPendingReason, type BulkLedgerAction } from "../../lib/sprint-ledger-state.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import { sprintsMessages } from "../../i18n/messages/sprints.js";
 
 export interface SprintLedgerBulkActionsProps {
   selectedCount: number;
@@ -39,24 +41,25 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
   controlTransitionStyle,
   deleteButtonRef,
 }) => {
+  const { formatNumber, locale, translate, translatePlural } = useDashboardI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const prevSelectedCount = useRef(selectedCount);
   const { expansionCollapse } = useGsapInteractionTokens();
 
   const effectivePendingAction: BulkLedgerAction = currentAction
     ?? (isStartPending ? "start" : isDeletePending ? "delete" : isPinPending ? "pin" : null);
-  const feedbackMessage = getBulkActionMessage(effectivePendingAction ?? currentAction, selectedCount, Boolean(isAnyPending));
-  const pendingReason = getBulkPendingReason(effectivePendingAction, selectedCount);
+  const feedbackMessage = getBulkActionMessage(effectivePendingAction ?? currentAction, selectedCount, Boolean(isAnyPending), locale);
+  const pendingReason = getBulkPendingReason(effectivePendingAction, selectedCount, locale);
   const disabledTitle = isAnyPending ? pendingReason : undefined;
   const isBulkPinning = isPinPending && currentAction !== "unpin";
   const isBulkUnpinning = isPinPending && currentAction === "unpin";
   const feedbackId = "sprint-ledger-bulk-action-feedback";
   const pendingReasonId = "sprint-ledger-bulk-action-pending-reason";
   const disabledDescription = isAnyPending ? `${feedbackId} ${pendingReasonId}` : undefined;
-  const pinLabel = getBulkActionButtonLabel("pin", Boolean(isBulkPinning));
-  const unpinLabel = getBulkActionButtonLabel("unpin", Boolean(isBulkUnpinning));
-  const startLabel = getBulkActionButtonLabel("start", Boolean(isStartPending));
-  const deleteLabel = getBulkActionButtonLabel("delete", Boolean(isDeletePending));
+  const pinLabel = getBulkActionButtonLabel("pin", Boolean(isBulkPinning), locale);
+  const unpinLabel = getBulkActionButtonLabel("unpin", Boolean(isBulkUnpinning), locale);
+  const startLabel = getBulkActionButtonLabel("start", Boolean(isStartPending), locale);
+  const deleteLabel = getBulkActionButtonLabel("delete", Boolean(isDeletePending), locale);
   const handleBulkShowcaseEnable = () => {
     if (isAnyPending) return;
     onBulkShowcaseEnable();
@@ -122,7 +125,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
     >
       <div
         role="region"
-        aria-label="Sprint ledger bulk actions"
+        aria-label={translate(sprintsMessages, "sprintLedgerBulkActions")}
         className="flex flex-col gap-3 border-b border-signal-500/20 bg-signal-500/[0.08] px-4 py-3 backdrop-blur-xl dark:bg-signal-500/[0.1] sm:px-6 lg:flex-row lg:items-center lg:justify-between"
       >
         <div className="flex min-w-0 items-center gap-3" aria-busy={isAnyPending ? "true" : undefined}>
@@ -131,7 +134,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
           </div>
           <div className="min-w-0">
             <div className="text-sm font-bold text-slate-900 dark:text-white">
-              {selectedCount} of {totalCount} selected
+              {translate(sprintsMessages, "selectedOfTotal", { selected: formatNumber(selectedCount), total: formatNumber(totalCount) })}
             </div>
             <div id={feedbackId} className="text-xs text-slate-500 dark:text-slate-400">
               {feedbackMessage}
@@ -146,7 +149,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            aria-label={isBulkPinning ? `Pinning ${selectedCount} selected sprints` : `Pin ${selectedCount} selected sprints to showcase`}
+            aria-label={translatePlural(sprintsMessages, isBulkPinning ? "pinningSelectedCountPlural" : "pinSelectedToShowcasePlural", selectedCount, { count: formatNumber(selectedCount) })}
             title={disabledTitle}
             aria-disabled={isAnyPending}
             aria-busy={isBulkPinning ? "true" : undefined}
@@ -163,7 +166,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
           </button>
           <button
             type="button"
-            aria-label={isBulkUnpinning ? `Unpinning ${selectedCount} selected sprints` : `Unpin ${selectedCount} selected sprints from showcase`}
+            aria-label={translatePlural(sprintsMessages, isBulkUnpinning ? "unpinningSelectedCountPlural" : "unpinSelectedFromShowcasePlural", selectedCount, { count: formatNumber(selectedCount) })}
             title={disabledTitle}
             aria-disabled={isAnyPending}
             aria-busy={isBulkUnpinning ? "true" : undefined}
@@ -180,7 +183,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
           </button>
           <button
             type="button"
-            aria-label={isStartPending ? `Starting ${selectedCount} selected sprints` : `Start ${selectedCount} selected sprints`}
+            aria-label={translatePlural(sprintsMessages, isStartPending ? "startingSelectedCountPlural" : "startSelectedCountPlural", selectedCount, { count: formatNumber(selectedCount) })}
             title={disabledTitle}
             aria-disabled={isAnyPending}
             aria-busy={isStartPending ? "true" : undefined}
@@ -198,7 +201,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
           <button
             ref={deleteButtonRef}
             type="button"
-            aria-label={isDeletePending ? `Deleting ${selectedCount} selected sprints` : `Delete ${selectedCount} selected sprints. Permanent action.`}
+            aria-label={translatePlural(sprintsMessages, isDeletePending ? "deletingSelectedCountPlural" : "deleteSelectedPermanentPlural", selectedCount, { count: formatNumber(selectedCount) })}
             title={disabledTitle}
             aria-disabled={isAnyPending}
             aria-busy={isDeletePending ? "true" : undefined}
@@ -215,7 +218,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
           </button>
           <button
             type="button"
-            aria-label="Clear sprint selection"
+            aria-label={translate(sprintsMessages, "clearSprintSelection")}
             title={disabledTitle}
             aria-disabled={isAnyPending}
             aria-describedby={disabledDescription}
@@ -225,12 +228,12 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             style={controlTransitionStyle}
           >
             <X className="h-3.5 w-3.5" strokeWidth={2.2} />
-            Clear
+            {translate(sprintsMessages, "clear")}
           </button>
         </div>
       </div>
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-        {selectedCount === 0 && prevSelectedCount.current > 0 ? "Selection cleared" : feedbackMessage}
+        {selectedCount === 0 && prevSelectedCount.current > 0 ? translate(sprintsMessages, "selectionClearedShort") : feedbackMessage}
       </div>
     </div>
   );
