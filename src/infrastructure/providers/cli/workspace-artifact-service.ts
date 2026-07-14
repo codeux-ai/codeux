@@ -194,6 +194,7 @@ export class WorkspaceArtifactService {
       const materialized = await this.materializePatchCommit({
         repoPath: args.repoPath,
         baseRef: materializationBaseRef,
+        patchBaseRef: args.baseRef,
         workerBranch: args.workerBranch,
         patchPath,
         commitMessage: args.commitMessage,
@@ -226,6 +227,7 @@ export class WorkspaceArtifactService {
   private async materializePatchCommit(args: {
     repoPath: string;
     baseRef: string;
+    patchBaseRef: string;
     workerBranch: string;
     patchPath: string;
     commitMessage: string;
@@ -255,12 +257,22 @@ export class WorkspaceArtifactService {
     };
 
     try {
-      await git(["read-tree", args.baseRef]);
+      let tree: string;
       if (args.hasPatch) {
+        await git(["read-tree", args.patchBaseRef]);
         await git(["apply", "--cached", "--binary", args.patchPath]);
+        const patchTree = (await git(["write-tree"])).trim();
+        if (args.patchBaseRef === args.baseRef) {
+          tree = patchTree;
+        } else {
+          await git(["read-tree", "-m", args.patchBaseRef, args.baseRef, patchTree]);
+          tree = (await git(["write-tree"])).trim();
+        }
+      } else {
+        await git(["read-tree", args.baseRef]);
+        tree = (await git(["write-tree"])).trim();
       }
 
-      const tree = (await git(["write-tree"])).trim();
       const baseTree = (await git(["rev-parse", `${args.baseRef}^{tree}`])).trim();
       if (!tree || (tree === baseTree && !args.forceCommitForMergeParent)) {
         return {};
