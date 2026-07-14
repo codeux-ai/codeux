@@ -64,6 +64,8 @@ The application shell and File Browser are localized. The File Browser owns `mes
 
 Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged.
 
+Operational Settings categories use a feature-owned catalog for General, Sprint, QA, Automation, Worker, Browser, and Danger controls plus their branch, PR-template, file-picker, and open-source dialogs. Translated captions map back to the existing serialized enum values; branch tokens, paths, command examples, default instruction templates, dependency metadata, API errors, and runtime diagnostics remain verbatim.
+
 Memory category labels participate in localized text search, but their stored category keys remain unchanged. The route imports its catalog with the feature rather than adding it to the eager shell bundle.
 
 Localization applies only to dashboard-authored interface copy. Memory titles and content, claims, evidence, tags, agent names, model IDs, catalog descriptions, languages, licenses, URLs, filenames, server errors, API responses, provider output, stored instructions, and project or sprint data remain unchanged.

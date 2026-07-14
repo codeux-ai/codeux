@@ -1,12 +1,13 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { ExternalLink, Search } from "lucide-preact";
-import { OPEN_SOURCE_SOFTWARE, type OpenSourceSoftwareEntry } from "../../lib/open-source-software.js";
+import { getOpenSourceSoftwareUsageAreaLabel, OPEN_SOURCE_SOFTWARE, type OpenSourceSoftwareEntry } from "../../lib/open-source-software.js";
 import { getSafeUrl } from "../../lib/safe-url.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { Input } from "../ui/Input.js";
 import { Modal } from "../ui/Modal.js";
 import { SHARED_INTERACTION_CLASSES } from "../ui/Button.js";
+import { useSettingsOperationsTranslations } from "../../i18n/messages/settings-operations.js";
 
 export interface OpenSourceSoftwareModalProps {
   isOpen: boolean;
@@ -17,12 +18,12 @@ const TITLE_ID = "open-source-software-modal-title";
 const DESCRIPTION_ID = "open-source-software-modal-description";
 const SEARCH_ID = "open-source-software-search";
 
-function matchesSearch(entry: OpenSourceSoftwareEntry, normalizedQuery: string): boolean {
+function matchesSearch(entry: OpenSourceSoftwareEntry, normalizedQuery: string, localizedUsageArea: string): boolean {
   if (!normalizedQuery) {
     return true;
   }
 
-  return [entry.name, entry.usageArea, entry.license, entry.projectUrl]
+  return [entry.name, entry.usageArea, localizedUsageArea, entry.license, entry.projectUrl]
     .some((value) => value.toLocaleLowerCase().includes(normalizedQuery));
 }
 
@@ -33,10 +34,15 @@ export const OpenSourceSoftwareModal: FunctionComponent<OpenSourceSoftwareModalP
   const [query, setQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const tokens = useInteractionTokens();
+  const { locale, t } = useSettingsOperationsTranslations();
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const matchingEntries = useMemo(
-    () => OPEN_SOURCE_SOFTWARE.filter((entry) => matchesSearch(entry, normalizedQuery)),
-    [normalizedQuery],
+    () => OPEN_SOURCE_SOFTWARE.filter((entry) => matchesSearch(
+      entry,
+      normalizedQuery,
+      getOpenSourceSoftwareUsageAreaLabel(entry.usageArea, locale),
+    )),
+    [locale, normalizedQuery],
   );
 
   useEffect(() => {
@@ -57,17 +63,16 @@ export const OpenSourceSoftwareModal: FunctionComponent<OpenSourceSoftwareModalP
       <div className="flex min-h-0 flex-1 flex-col">
         <header className="shrink-0 border-b border-black/[0.06] px-4 py-5 dark:border-white/[0.06] sm:px-6">
           <h2 id={TITLE_ID} className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Open Source Software
+            {t("Open Source Software")}
           </h2>
           <p id={DESCRIPTION_ID} className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-            Browse the open-source projects included in the Code UX runtime, dashboard, and packaged application.
-            This catalog is informational and does not change your settings.
+            {t("Browse the open-source projects included in the Code UX runtime, dashboard, and packaged application. This catalog is informational and does not change your settings.")}
           </p>
 
           <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div className="min-w-0 flex-1 sm:max-w-md">
               <label htmlFor={SEARCH_ID} className="mb-1.5 block text-xs font-bold uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">
-                Search software catalog
+                {t("Search software catalog")}
               </label>
               <div className="relative">
                 <Search aria-hidden="true" className="pointer-events-none absolute left-3.5 top-[0.7rem] z-10 h-4 w-4 text-slate-400" />
@@ -77,14 +82,14 @@ export const OpenSourceSoftwareModal: FunctionComponent<OpenSourceSoftwareModalP
                   type="search"
                   value={query}
                   onInput={(event) => setQuery(event.currentTarget.value)}
-                  placeholder="Search by project, area, or license"
+                  placeholder={t("Search by project, area, or license")}
                   className="w-full min-w-0 pl-10"
                   autoComplete="off"
                 />
               </div>
             </div>
             <p role="status" aria-live="polite" className="pb-5 text-xs font-semibold text-slate-500 dark:text-slate-400">
-              {matchingEntries.length} of {OPEN_SOURCE_SOFTWARE.length} projects shown
+              {t("{shown} of {total} projects shown", { shown: matchingEntries.length, total: OPEN_SOURCE_SOFTWARE.length })}
             </p>
           </div>
         </header>
@@ -96,12 +101,12 @@ export const OpenSourceSoftwareModal: FunctionComponent<OpenSourceSoftwareModalP
           {matchingEntries.length > 0 ? (
             <div>
               <div aria-hidden="true" className="mb-2 hidden grid-cols-[minmax(0,1.4fr)_minmax(8rem,0.7fr)_minmax(0,1fr)_auto] gap-4 px-4 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 sm:grid">
-                <span>Project</span>
-                <span>Usage area</span>
-                <span>License</span>
-                <span>Project link</span>
+                <span>{t("Project")}</span>
+                <span>{t("Usage area")}</span>
+                <span>{t("License")}</span>
+                <span>{t("Project link")}</span>
               </div>
-              <ul role="list" aria-label="Open-source software catalog" className="space-y-2">
+              <ul role="list" aria-label={t("Open-source software catalog")} className="space-y-2">
                 {matchingEntries.map((entry) => {
                   const safeProjectUrl = getSafeUrl(entry.projectUrl);
 
@@ -109,36 +114,36 @@ export const OpenSourceSoftwareModal: FunctionComponent<OpenSourceSoftwareModalP
                     <li key={entry.id} className="rounded-[var(--radius-ui)] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-4 py-3">
                       <article className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(8rem,0.7fr)_minmax(0,1fr)_auto] sm:items-center sm:gap-4">
                         <div className="min-w-0">
-                          <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 sm:hidden">Project</span>
+                          <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 sm:hidden">{t("Project")}</span>
                           <h3 className="break-words text-sm font-bold text-slate-900 dark:text-white">{entry.name}</h3>
                         </div>
                         <div className="min-w-0">
-                          <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 sm:hidden">Usage area</span>
-                          <p className="break-words text-sm text-slate-600 dark:text-slate-300">{entry.usageArea}</p>
+                          <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 sm:hidden">{t("Usage area")}</span>
+                          <p className="break-words text-sm text-slate-600 dark:text-slate-300">{getOpenSourceSoftwareUsageAreaLabel(entry.usageArea, locale)}</p>
                         </div>
                         <div className="min-w-0">
-                          <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 sm:hidden">License</span>
+                          <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 sm:hidden">{t("License")}</span>
                           <p className="break-words text-sm text-slate-600 dark:text-slate-300">{entry.license}</p>
                         </div>
                         <div className="min-w-0">
-                          <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 sm:hidden">Project link</span>
+                          <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 sm:hidden">{t("Project link")}</span>
                           {safeProjectUrl ? (
                             <a
                               href={safeProjectUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              aria-label={`Visit the ${entry.name} project website`}
+                              aria-label={t("Visit the {name} project website", { name: entry.name })}
                               style={{
                                 transitionDuration: tokens.controlFeedback.duration,
                                 transitionTimingFunction: tokens.controlFeedback.ease,
                               }}
                               className="inline-flex items-center gap-1.5 rounded-md text-sm font-semibold text-signal-700 underline-offset-4 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] dark:text-signal-300"
                             >
-                              Project website
+                              {t("Project website")}
                               <ExternalLink aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
                             </a>
                           ) : (
-                            <span className="text-sm text-slate-500 dark:text-slate-400">Project website unavailable</span>
+                            <span className="text-sm text-slate-500 dark:text-slate-400">{t("Project website unavailable")}</span>
                           )}
                         </div>
                       </article>
@@ -149,9 +154,9 @@ export const OpenSourceSoftwareModal: FunctionComponent<OpenSourceSoftwareModalP
             </div>
           ) : (
             <div className="flex min-h-48 flex-col items-center justify-center rounded-[var(--radius-ui)] border border-dashed border-[color:var(--border-hairline)] px-6 py-10 text-center">
-              <p className="text-base font-bold text-slate-800 dark:text-slate-100">No matching open-source projects</p>
+              <p className="text-base font-bold text-slate-800 dark:text-slate-100">{t("No matching open-source projects")}</p>
               <p className="mt-1 max-w-md text-sm text-slate-500 dark:text-slate-400">
-                No projects match “{query.trim()}”. Try a project name, usage area, or license.
+                {t("No projects match “{query}”. Try a project name, usage area, or license.", { query: query.trim() })}
               </p>
             </div>
           )}
@@ -167,7 +172,7 @@ export const OpenSourceSoftwareModal: FunctionComponent<OpenSourceSoftwareModalP
             }}
             className={`${SHARED_INTERACTION_CLASSES} inline-flex items-center justify-center rounded-[var(--radius-ui)] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-4 py-2 text-sm font-bold text-slate-700 hover:bg-[var(--surface-glass-hover)] dark:text-slate-200`}
           >
-            Close
+            {t("Close")}
           </button>
         </footer>
       </div>

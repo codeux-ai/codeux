@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   OPEN_SOURCE_SOFTWARE,
+  getOpenSourceSoftwareUsageAreaLabel,
   type OpenSourceSoftwareEntry,
 } from "../../../dashboard/src/v2/lib/open-source-software.js";
 
@@ -60,6 +61,19 @@ describe("OPEN_SOURCE_SOFTWARE", () => {
       name: "Electron",
       usageArea: "Packaged app",
       license: "MIT",
+    });
+  });
+
+  it("localizes usage-area presentation without mutating canonical dependency metadata", () => {
+    const electron = findEntry("electron");
+
+    expect(getOpenSourceSoftwareUsageAreaLabel("Packaged app", "de")).toBe("Paketierte App");
+    expect(getOpenSourceSoftwareUsageAreaLabel("Runtime", "de")).toBe("Laufzeit");
+    expect(electron).toMatchObject({
+      name: "Electron",
+      usageArea: "Packaged app",
+      license: "MIT",
+      projectUrl: "https://github.com/electron/electron",
     });
   });
 });

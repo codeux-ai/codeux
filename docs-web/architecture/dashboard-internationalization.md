@@ -37,6 +37,8 @@ English and German must declare exactly the same top-level keys. Interpolation t
 
 Keep each catalog with its owning feature and import it only where the feature is loaded. Translate dashboard-authored interface copy only. Never translate provider output, API responses, stored instructions, project data, runtime diagnostics, or user-authored content.
 
+The operational Settings catalog covers General, Sprint, QA, Automation, Worker, Browser, and Danger controls and their related dialogs. Localized option captions continue to save the existing enum values, while branch tokens, paths, command examples, default instruction templates, dependency metadata, API errors, and runtime diagnostics are displayed unchanged.
+
 ## File Browser boundary
 
 The File Browser has a route-owned catalog for page and session controls, tree and change summaries, file and diff viewer chrome, Monaco loading states, recovery actions, and accessible names. Counts and the snapshot timestamp use the locale-bound `Intl` helpers.
