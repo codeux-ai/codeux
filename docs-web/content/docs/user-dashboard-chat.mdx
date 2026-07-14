@@ -2,7 +2,7 @@
 
 The **Chat** page (`/chat`) is a thread-based conversation surface that lets you talk to agents for project-backed Q&A, inspect execution invocation transcripts and MCP tool invocations, and get local onboarding help before any project exists.
 
-When the dashboard language is German, all Chat-owned controls, empty states, confirmations, status cues, widgets, speech controls, and accessible announcements use German. Times, counts, percentages, token estimates, durations, and retry timestamps follow German number and date conventions. Your messages, agent replies, prompts sent by quick actions, reasoning, tool traces, invocation logs, scheduled instructions, provider/runtime errors and statuses, entity names, and speech transcripts remain exactly as received.
+When the dashboard language is German, all Chat-owned controls, empty states, confirmations, known invocation status labels, transcript role labels, widgets, speech controls, and accessible announcements use German. Times, counts, percentages, token estimates, durations, and retry timestamps follow German number and date conventions. Your messages, agent replies, prompts sent by quick actions, reasoning, tool traces, invocation logs, scheduled instructions, provider-authored errors and status values, unknown invocation statuses, entity names, configured agent names, and speech transcripts remain exactly as received.
 
 ## Layout
 

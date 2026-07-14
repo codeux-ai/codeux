@@ -131,7 +131,9 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
     role = "jules";
   }
 
-  const senderName = (fromUser || fromTool) ? translate(chatMessages, "user") : agentName || (message.metadata?.agentName as string) || translate(chatMessages, "assistant");
+  const senderName = (fromUser || fromTool)
+    ? translate(chatMessages, "user")
+    : agentName || (message.metadata?.agentName as string) || translate(chatMessages, fromSystem ? "system" : "assistant");
   const providerLabel = message.metadata?.provider as string | undefined;
   const modelLabel = message.metadata?.model as string | undefined;
   const rawStatus = typeof message.metadata?.status === "string" ? message.metadata.status : null;
@@ -177,7 +179,7 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
           {/* Header Row */}
           <div className={`flex flex-wrap items-center gap-2 mb-1.5 text-xs text-slate-500 dark:text-slate-400 ${fromUser || fromTool ? "justify-end flex-row-reverse" : "justify-start"}`}>
             <span className={`font-semibold text-slate-900 dark:text-slate-300 flex items-center gap-1.5 ${message.role === "assistant" && agentName ? "" : "capitalize"}`}>
-              {message.role === "assistant" && agentName ? agentName : message.role}
+              {senderName}
               {isExternalApi && <Cloud className="h-3 w-3 text-signal-500" />}
             </span>
             {providerLabel && (

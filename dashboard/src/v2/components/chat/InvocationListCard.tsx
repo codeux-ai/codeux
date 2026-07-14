@@ -12,6 +12,28 @@ import { formatTokenCount } from "../../lib/chat-widget-view-models.js";
 import { formatInvocationPurpose, formatInvocationDuration, InvocationContextChips } from "./invocation-display.js";
 import { useDashboardI18n } from "../../i18n/context.js";
 import { chatMessages } from "../../i18n/messages/chat.js";
+import type { DashboardTextMessageKey } from "../../i18n/locales.js";
+
+type KnownInvocationStatus = ExecutionInvocationRecord["status"] | "queued";
+
+const INVOCATION_STATUS_MESSAGE_KEYS = {
+  running: "running",
+  completed: "completed",
+  failed: "failed",
+  cancelled: "cancelled",
+  paused: "paused",
+  queued: "queuedLabel",
+} as const satisfies Record<KnownInvocationStatus, DashboardTextMessageKey<typeof chatMessages>>;
+
+const getLocalizedInvocationStatus = (
+  status: string,
+  translate: ReturnType<typeof useDashboardI18n>["translate"],
+): string => {
+  if (!Object.prototype.hasOwnProperty.call(INVOCATION_STATUS_MESSAGE_KEYS, status)) {
+    return status;
+  }
+  return translate(chatMessages, INVOCATION_STATUS_MESSAGE_KEYS[status as KnownInvocationStatus]);
+};
 
 const formatErrorCategory = (value: ExecutionInvocationRecord["lastErrorCategory"], translate: ReturnType<typeof useDashboardI18n>["translate"]): string | null => {
   switch (value) {
@@ -126,7 +148,7 @@ export const InvocationListCard: FunctionComponent<{
       const isPending = invocationStatus === "queued" || (isRunning && invocation.messageCount === 0);
       const stateDescriptionId = `invocation-card-state-${invocation.id}`;
       const selectionCopy = translate(chatMessages, isSelected ? "selected" : "notSelected");
-      const runtimeCopy = invocationStatus;
+      const runtimeCopy = getLocalizedInvocationStatus(invocationStatus, translate);
       const agentPreset = invocation.agentPresetId
         ? agentPresets?.find((p) => p.id === invocation.agentPresetId)
         : undefined;
@@ -324,7 +346,7 @@ export const InvocationListCard: FunctionComponent<{
                 {invocation.id}
               </div>
               <span id={stateDescriptionId} className="sr-only">
-                {selectionCopy}. {runtimeCopy}. {translate(chatMessages, "statusPrefix")} {invocationStatus}.
+                {selectionCopy}. {runtimeCopy}. {translate(chatMessages, "statusPrefix")} {runtimeCopy}.
               </span>
             </div>
           </div>

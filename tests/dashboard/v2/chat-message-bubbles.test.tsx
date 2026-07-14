@@ -1482,7 +1482,7 @@ describe("Chat Message Bubbles", () => {
   });
 
   describe("InvocationListCard", () => {
-    it("renders the server invocation status verbatim and announces it", () => {
+    it("renders an unknown server invocation status verbatim and announces it", () => {
       const invocation: ExecutionInvocationRecord = {
         id: "inv-queued",
         projectId: "project-1",
@@ -1494,7 +1494,7 @@ describe("Chat Message Bubbles", () => {
         attentionItemId: null,
         providerInvocationId: null,
         type: "planning",
-        status: "queued",
+        status: "provider_waiting" as ExecutionInvocationRecord["status"],
         provider: null,
         model: null,
         systemPrompt: null,
@@ -1526,7 +1526,7 @@ describe("Chat Message Bubbles", () => {
       const statusSpan = container.querySelector('span[aria-live="polite"]');
       const card = container.querySelector('[role="button"]');
       expect(statusSpan).not.toBeNull();
-      expect(statusSpan?.textContent).toBe("queued");
+      expect(statusSpan?.textContent).toBe("provider_waiting");
       expect(statusSpan?.className).not.toContain("opacity-70");
       expect(card?.className).not.toContain("opacity-70");
       expect(container.textContent).not.toContain("Pending");

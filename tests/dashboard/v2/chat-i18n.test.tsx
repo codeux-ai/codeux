@@ -4,6 +4,8 @@ import "@testing-library/jest-dom/vitest";
 import type { ComponentChildren } from "preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatMessageBubble } from "../../../dashboard/src/v2/components/chat/ChatMessageBubble.js";
+import { InvocationListCard } from "../../../dashboard/src/v2/components/chat/InvocationListCard.js";
+import { InvocationMessageBubble } from "../../../dashboard/src/v2/components/chat/InvocationMessageBubble.js";
 import { SpeechInputButton } from "../../../dashboard/src/v2/components/speech/SpeechInputButton.js";
 import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
 import { buildCinematicQuickActions } from "../../../dashboard/src/v2/lib/cinematic-quick-actions.js";
@@ -13,9 +15,20 @@ import { getNoProjectAssistantPrompts } from "../../../dashboard/src/v2/lib/no-p
 import { formatTokenCount } from "../../../dashboard/src/v2/lib/token-estimate.js";
 import { getChatWidgetData, getWorkingBubbleData } from "../../../dashboard/src/v2/lib/chat-widget-view-models.js";
 import type { ChatLiveTaskWidget } from "../../../dashboard/src/v2/lib/chat-live-entities.js";
-import type { ChatMessageRecord } from "../../../dashboard/src/v2/types.js";
+import type { ChatMessageRecord, ExecutionInvocationMessageRecord, ExecutionInvocationRecord } from "../../../dashboard/src/v2/types.js";
 
-vi.mock("gsap", () => ({ default: { fromTo: vi.fn(), set: vi.fn(), to: vi.fn() } }));
+vi.mock("gsap", () => ({
+  default: {
+    context: vi.fn((callback: () => void) => {
+      callback();
+      return { revert: vi.fn() };
+    }),
+    fromTo: vi.fn(),
+    killTweensOf: vi.fn(),
+    set: vi.fn(),
+    to: vi.fn(),
+  },
+}));
 
 const message: ChatMessageRecord = {
   id: "message-1",
@@ -44,6 +57,46 @@ const task: ChatLiveTaskWidget = {
   isMerged: false,
   mergeIndicator: "Provider merge status",
 };
+
+const createInvocation = (status: string): ExecutionInvocationRecord => ({
+  id: `invocation-${status}`,
+  projectId: "project-1",
+  sprintId: null,
+  taskId: null,
+  sprintRunId: null,
+  dispatchId: null,
+  taskRunId: null,
+  attentionItemId: null,
+  providerInvocationId: null,
+  type: "planning",
+  status: status as ExecutionInvocationRecord["status"],
+  provider: "provider-name-verbatim",
+  model: "provider-model-verbatim",
+  systemPrompt: null,
+  startedAt: "2026-07-14T12:00:00.000Z",
+  finishedAt: null,
+  errorMessage: null,
+  lastErrorCategory: null,
+  lastErrorMessage: null,
+  lastRetryAfterIso: null,
+  messageCount: 1,
+  lastMessageAt: "2026-07-14T12:30:00.000Z",
+  createdAt: "2026-07-14T12:00:00.000Z",
+  updatedAt: "2026-07-14T12:30:00.000Z",
+});
+
+const createInvocationMessage = (
+  role: ExecutionInvocationMessageRecord["role"],
+  contentMarkdown: string,
+): ExecutionInvocationMessageRecord => ({
+  id: `message-${role}-${contentMarkdown}`,
+  invocationId: "invocation-1",
+  role,
+  contentMarkdown,
+  toolCallsJson: null,
+  createdAt: "2026-07-14T12:30:00.000Z",
+  metadata: null,
+});
 
 const renderGerman = (children: ComponentChildren) => render(
   <DashboardI18nProvider initialLocale="de" storage={null}>{children}</DashboardI18nProvider>,
@@ -131,6 +184,62 @@ describe("German Chat localization boundary", () => {
     expect(screen.getByText("Ausgabe")).toBeInTheDocument();
     expect(screen.getByText("{\"instruction\":\"NICHT ÜBERSETZEN\"}")).toBeInTheDocument();
     expect(screen.getByText("Provider-Ausgabe bleibt unverändert.")).toBeInTheDocument();
+  });
+
+  it("localizes known invocation statuses across visible and accessible card text while preserving unknown values", () => {
+    const expectedStatuses = [
+      ["running", "Wird ausgeführt"],
+      ["completed", "Abgeschlossen"],
+      ["failed", "Fehlgeschlagen"],
+      ["cancelled", "Abgebrochen"],
+      ["paused", "Pausiert"],
+      ["queued", "Eingereiht"],
+      ["provider_custom_status", "provider_custom_status"],
+    ] as const;
+    const { container } = renderGerman(
+      <InvocationListCard
+        invocations={expectedStatuses.map(([status]) => createInvocation(status))}
+        selectedInvocationId={null}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    for (const [status, expectedLabel] of expectedStatuses) {
+      const card = container.querySelector<HTMLElement>(`[data-status="${status}"]`);
+      expect(card).not.toBeNull();
+      expect(within(card as HTMLElement).getByText(expectedLabel, { selector: 'span[aria-live="polite"]' })).toBeInTheDocument();
+      expect(card).toHaveAttribute("aria-label", expect.stringContaining(expectedLabel));
+      const stateDescription = document.getElementById(card?.getAttribute("aria-describedby") || "");
+      expect(stateDescription).toHaveTextContent(`${expectedLabel}. Status: ${expectedLabel}.`);
+    }
+
+    expect(container).toHaveTextContent("provider-name-verbatim");
+    expect(container).toHaveTextContent("provider-model-verbatim");
+  });
+
+  it("localizes invocation structural role labels while preserving agent names and transcript content", () => {
+    renderGerman(
+      <div>
+        <InvocationMessageBubble message={createInvocationMessage("user", "USER TRANSCRIPT UNVERÄNDERT")} />
+        <InvocationMessageBubble message={createInvocationMessage("assistant", "ASSISTANT TRANSCRIPT UNVERÄNDERT")} />
+        <InvocationMessageBubble message={createInvocationMessage("system", "SYSTEM TRANSCRIPT UNVERÄNDERT")} />
+        <InvocationMessageBubble
+          message={createInvocationMessage("assistant", "NAMED TRANSCRIPT UNVERÄNDERT")}
+          agentName="Runtime Agent Name"
+        />
+      </div>,
+    );
+
+    expect(screen.getByText("Benutzer", { selector: "span.font-semibold" })).toBeInTheDocument();
+    expect(screen.getByText("Assistent", { selector: "span.font-semibold" })).toBeInTheDocument();
+    expect(screen.getByText("System", { selector: "span.font-semibold" })).toBeInTheDocument();
+    expect(screen.getByText("Runtime Agent Name", { selector: "span.font-semibold" })).toBeInTheDocument();
+    expect(document.body).toHaveTextContent("USER TRANSCRIPT UNVERÄNDERT");
+    expect(document.body).toHaveTextContent("ASSISTANT TRANSCRIPT UNVERÄNDERT");
+    expect(document.body).toHaveTextContent("SYSTEM TRANSCRIPT UNVERÄNDERT");
+    expect(document.body).toHaveTextContent("NAMED TRANSCRIPT UNVERÄNDERT");
+    expect(screen.queryByText("user", { selector: "span.font-semibold" })).not.toBeInTheDocument();
+    expect(screen.queryByText("assistant", { selector: "span.font-semibold" })).not.toBeInTheDocument();
   });
 
   it("announces unavailable speech input in German", () => {
