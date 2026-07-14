@@ -34,40 +34,6 @@ const withAgentPresetIds = (trigger: QaTriggerSettings, nextIds: string[]): QaTr
 type ReflectionLoopSettings = ProjectSettings["agents"]["selfReflection"]["planning"];
 type ReflectionCriterion = ReflectionLoopSettings["criteria"][number];
 
-export interface SelfReflectionControlsCopy {
-  enableAria: (title: string) => string;
-  optedIn: string;
-  offByDefault: string;
-  maxImprovementAttempts: string;
-  maxImprovementAttemptsAria: (title: string) => string;
-  criteriaRows: string;
-  addCriterion: string;
-  emptyCriteria: string;
-  label: string;
-  ratingPrompt: string;
-  threshold: string;
-  criterionFallback: (number: number) => string;
-  thresholdAria: (label: string) => string;
-  removeCriterionAria: (label: string) => string;
-}
-
-const DEFAULT_SELF_REFLECTION_COPY: SelfReflectionControlsCopy = {
-  enableAria: (title) => `Enable ${title}`,
-  optedIn: "Opted in",
-  offByDefault: "Off by default",
-  maxImprovementAttempts: "Max improvement attempts",
-  maxImprovementAttemptsAria: (title) => `${title} max improvement attempts`,
-  criteriaRows: "Criteria rows",
-  addCriterion: "Add criterion",
-  emptyCriteria: "No rating criteria are configured. Add a row before enabling self-reflection.",
-  label: "Label",
-  ratingPrompt: "Rating prompt",
-  threshold: "Threshold",
-  criterionFallback: (number) => `Criterion ${number}`,
-  thresholdAria: (label) => `${label} threshold`,
-  removeCriterionAria: (label) => `Remove ${label}`,
-};
-
 const clampThreshold = (value: number): number => (
   Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0
 );
@@ -82,8 +48,7 @@ export const SelfReflectionControls: FunctionComponent<{
   getBadge: (path: string) => string | undefined;
   basePath: string;
   last?: boolean;
-  copy?: SelfReflectionControlsCopy;
-}> = ({ title, description, settings, update, getBadge, basePath, last, copy = DEFAULT_SELF_REFLECTION_COPY }) => {
+}> = ({ title, description, settings, update, getBadge, basePath, last }) => {
   const updateCriterion = (criterionId: string, patch: Partial<ReflectionCriterion>): void => {
     update({
       ...settings,
@@ -120,7 +85,7 @@ export const SelfReflectionControls: FunctionComponent<{
       <div className="flex w-full min-w-0 flex-col gap-4">
         <div className="flex flex-wrap items-center gap-3">
           <Toggle
-            aria-label={copy.enableAria(title)}
+            aria-label={`Enable ${title}`}
             value={settings.enabled}
             onChange={(value) => update({ ...settings, enabled: value })}
           />
@@ -132,16 +97,16 @@ export const SelfReflectionControls: FunctionComponent<{
                 : "border-black/[0.06] bg-black/[0.03] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"
             }`}
           >
-            {settings.enabled ? copy.optedIn : copy.offByDefault}
+            {settings.enabled ? "Opted in" : "Off by default"}
           </span>
         </div>
 
         <label className="flex flex-col gap-2">
           <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
-            {copy.maxImprovementAttempts}
+            Max improvement attempts
           </span>
           <NumberInput
-            aria-label={copy.maxImprovementAttemptsAria(title)}
+            aria-label={`${title} max improvement attempts`}
             value={settings.maxImprovementAttempts}
             min={0}
             max={5}
@@ -155,7 +120,7 @@ export const SelfReflectionControls: FunctionComponent<{
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
-              {copy.criteriaRows}
+              Criteria rows
             </div>
             <button
               type="button"
@@ -163,13 +128,13 @@ export const SelfReflectionControls: FunctionComponent<{
               className="inline-flex items-center gap-2 rounded-full border border-signal-500/25 bg-signal-500/[0.08] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-700 transition-colors hover:bg-signal-500/[0.14] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:text-signal-200"
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2.4} />
-              {copy.addCriterion}
+              Add criterion
             </button>
           </div>
 
           {settings.criteria.length === 0 ? (
             <div className="rounded-[1rem] border border-dashed border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">
-              {copy.emptyCriteria}
+              No rating criteria are configured. Add a row before enabling self-reflection.
             </div>
           ) : (
             <div className="grid gap-3">
@@ -184,7 +149,7 @@ export const SelfReflectionControls: FunctionComponent<{
                   >
                     <label className="flex min-w-0 flex-col gap-1.5" htmlFor={labelId}>
                       <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-                        {copy.label}
+                        Label
                       </span>
                       <input
                         id={labelId}
@@ -196,7 +161,7 @@ export const SelfReflectionControls: FunctionComponent<{
                     </label>
                     <label className="flex min-w-0 flex-col gap-1.5" htmlFor={promptId}>
                       <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-                        {copy.ratingPrompt}
+                        Rating prompt
                       </span>
                       <textarea
                         id={promptId}
@@ -208,7 +173,7 @@ export const SelfReflectionControls: FunctionComponent<{
                     </label>
                     <label className="flex min-w-0 flex-col gap-1.5" htmlFor={thresholdId}>
                       <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-                        {copy.threshold}
+                        Threshold
                       </span>
                       <input
                         id={thresholdId}
@@ -217,7 +182,7 @@ export const SelfReflectionControls: FunctionComponent<{
                         max={1}
                         step={0.05}
                         value={criterion.threshold}
-                        aria-label={copy.thresholdAria(criterion.label || copy.criterionFallback(index + 1))}
+                        aria-label={`${criterion.label || `Criterion ${index + 1}`} threshold`}
                         onInput={(event) => updateCriterion(criterion.id, { threshold: clampThreshold(Number(event.currentTarget.value)) })}
                         className="rounded-xl border border-black/[0.08] bg-white/80 px-3 py-2 font-mono text-sm text-slate-800 outline-none focus:border-signal-500/40 focus:ring-2 focus:ring-signal-500/20 dark:border-white/[0.08] dark:bg-void-900/60 dark:text-slate-100"
                       />
@@ -226,7 +191,7 @@ export const SelfReflectionControls: FunctionComponent<{
                       <button
                         type="button"
                         onClick={() => removeCriterion(criterion.id)}
-                        aria-label={copy.removeCriterionAria(criterion.label || copy.criterionFallback(index + 1))}
+                        aria-label={`Remove ${criterion.label || `criterion ${index + 1}`}`}
                         className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-status-red/20 bg-status-red/[0.06] text-status-red transition-colors hover:bg-status-red/[0.12] focus:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30"
                       >
                         <Trash2 className="h-4 w-4" strokeWidth={2.4} />

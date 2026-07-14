@@ -8,7 +8,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/pr
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { cloneDefaultSettings } from "../../../dashboard/src/lib/settings.js";
 import { SettingsGuidancePanel } from "../../../dashboard/src/v2/components/settings/panels/SettingsGuidancePanel.js";
-import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
 import type { ProjectSettings } from "../../../dashboard/src/types.js";
 import { DESIGN_GUIDANCE_NONE_ID } from "../../../src/domain/settings/design-guidance-catalog.js";
 
@@ -38,67 +37,6 @@ afterEach(() => {
 });
 
 describe("SettingsGuidancePanel", () => {
-  it("shows German project context and duplicate validation without translating authored guidance", async () => {
-    const unavailableState = {
-      activeScope: "project",
-      activeSaving: false,
-      editableSettings: cloneDefaultSettings(),
-      selectedProject: null,
-      projectSources: {},
-      updateEditableSettings: vi.fn(),
-      getFieldReset: () => undefined,
-    } as never;
-    const unavailableView = render(
-      <DashboardI18nProvider initialLocale="de" storage={null}>
-        <SettingsGuidancePanel state={unavailableState} />
-      </DashboardI18nProvider>,
-    );
-    expect(screen.getByText("Projektbereich nicht verfügbar")).toBeInTheDocument();
-    unavailableView.unmount();
-
-    let latestSettings: ProjectSettings = cloneDefaultSettings();
-    const Harness = () => {
-      const [settings, setSettings] = useState<ProjectSettings>(latestSettings);
-      return (
-        <SettingsGuidancePanel
-          state={{
-            activeScope: "system",
-            activeSaving: false,
-            editableSettings: settings,
-            selectedProject: { id: "proj-1", name: "Test Project" },
-            projectSources: {},
-            updateEditableSettings: (recipe: (current: ProjectSettings) => ProjectSettings) => {
-              setSettings((current) => {
-                latestSettings = recipe(current);
-                return latestSettings;
-              });
-            },
-            getFieldReset: () => undefined,
-          } as never}
-        />
-      );
-    };
-
-    render(<DashboardI18nProvider initialLocale="de" storage={null}><Harness /></DashboardI18nProvider>);
-    fireEvent.click(screen.getByRole("button", { name: "Technologie-Stack hinzufügen" }));
-    fireEvent.click(screen.getByRole("button", { name: "Technologie-Stack hinzufügen" }));
-
-    const idInputs = await screen.findAllByLabelText(/Anleitungs-ID für Technologie-Stack/i);
-    const nameInputs = screen.getAllByLabelText(/Anleitungsname für Technologie-Stack/i);
-    fireEvent.input(idInputs[1]!, { target: { value: "custom-tech-stack" } });
-    fireEvent.input(nameInputs[1]!, { target: { value: "Custom Tech Stack" } });
-
-    await waitFor(() => {
-      expect(screen.getAllByText("Die ID für Technologie-Stack muss eindeutig sein.")).toHaveLength(2);
-      expect(screen.getAllByText("Der Name für Technologie-Stack muss eindeutig sein.")).toHaveLength(2);
-    });
-    expect(latestSettings.designGuidance.customTechStacks[0]?.instructionMarkdown).toBe(
-      "Describe the tech stack guidance workers should apply.",
-    );
-    expect(latestSettings.designGuidance.customTechStacks[1]?.id).toBe("custom-tech-stack");
-    expect(latestSettings.designGuidance.customTechStacks[1]?.name).toBe("Custom Tech Stack");
-  });
-
   it("adds, edits, selects, and deletes custom guidance entries without editing defaults", async () => {
     let latestSettings: ProjectSettings = cloneDefaultSettings();
     const updateEditableSettings = vi.fn();
@@ -128,7 +66,7 @@ describe("SettingsGuidancePanel", () => {
       );
     };
 
-    render(<DashboardI18nProvider storage={null}><Harness /></DashboardI18nProvider>);
+    render(<Harness />);
 
     expect(screen.getByText("Tech Stack")).toBeInTheDocument();
     expect(screen.getByText("Styleguide")).toBeInTheDocument();
@@ -188,7 +126,7 @@ describe("SettingsGuidancePanel", () => {
       );
     };
 
-    render(<DashboardI18nProvider storage={null}><Harness /></DashboardI18nProvider>);
+    render(<Harness />);
 
     fireEvent.click(screen.getByRole("button", { name: "Add Styleguide" }));
 
