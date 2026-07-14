@@ -2,6 +2,8 @@ import type { FunctionComponent } from "preact";
 import { useMemo, useRef, useState } from "preact/hooks";
 import { AlertCircle, Loader2, Plus, Target, X } from "lucide-preact";
 import { Modal } from "./Modal.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { sprintAuthoringMessages } from "../../i18n/messages/sprint-authoring.js";
 
 export interface AddSprintModalSubmission {
   name: string;
@@ -18,6 +20,8 @@ const fieldLabelClass = "text-[9px] font-bold uppercase tracking-[0.2em] text-sl
 const inputClass = "mt-2.5 w-full rounded-[1.15rem] border border-black/[0.06] bg-black/[0.025] px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition-all placeholder:text-slate-300 focus:border-signal-500/45 focus:bg-white focus:shadow-[0_0_0_1px_rgba(35,137,218,0.16)] focus-visible:outline-none dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-100 dark:placeholder:text-slate-600 dark:focus:border-signal-400/50 dark:focus:bg-white/[0.055] aria-[invalid=true]:border-status-red/60";
 
 export const AddSprintModal: FunctionComponent<AddSprintModalProps> = ({ projectName, onClose, onAdd }) => {
+  const { translate } = useDashboardI18n();
+  const t = (key: keyof typeof sprintAuthoringMessages.en, variables?: Record<string, string>): string => translate(sprintAuthoringMessages, key, variables);
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
   const [touched, setTouched] = useState({ name: false, goal: false });
@@ -26,9 +30,9 @@ export const AddSprintModal: FunctionComponent<AddSprintModalProps> = ({ project
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   const validationErrors = useMemo(() => ({
-    name: name.trim() ? null : "Sprint name is required.",
-    goal: goal.trim() ? null : "Sprint goal is required.",
-  }), [goal, name]);
+    name: name.trim() ? null : t("sprintNameRequiredPeriod"),
+    goal: goal.trim() ? null : t("sprintGoalRequired"),
+  }), [goal, name, translate]);
   const hasErrors = Boolean(validationErrors.name || validationErrors.goal);
 
   const handleClose = (): void => {
@@ -74,20 +78,20 @@ export const AddSprintModal: FunctionComponent<AddSprintModalProps> = ({ project
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-signal-600 dark:text-signal-300">
               <Target className="h-3.5 w-3.5" strokeWidth={2.4} />
-              New Sprint
+              {t("newSprint")}
             </div>
             <h2 id="add-sprint-modal-title" className="mt-2 break-words text-xl font-black tracking-tight text-slate-900 dark:text-white">
-              Add Sprint
+              {t("addSprint")}
             </h2>
             <p id="add-sprint-modal-description" className="mt-1 max-w-md text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">
-              Create an idle sprint for {projectName || "the active project"}.
+              {t("addSprintDescription", { projectName: projectName || t("activeProject") })}
             </p>
           </div>
           <button
             type="button"
             onClick={handleClose}
             disabled={isSubmitting}
-            aria-label="Close Add Sprint"
+            aria-label={t("closeAddSprint")}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-black/[0.06] hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-white"
           >
             <X className="h-4 w-4" strokeWidth={2.2} />
@@ -96,7 +100,7 @@ export const AddSprintModal: FunctionComponent<AddSprintModalProps> = ({ project
 
         <div className="grid gap-4 px-5 py-5">
           <label className="group/field block">
-            <span className={fieldLabelClass}>Sprint name</span>
+            <span className={fieldLabelClass}>{t("sprintNameLower")}</span>
             <input
               ref={nameInputRef}
               id="add-sprint-name"
@@ -106,7 +110,7 @@ export const AddSprintModal: FunctionComponent<AddSprintModalProps> = ({ project
               aria-describedby={touched.name && validationErrors.name ? "add-sprint-name-error" : undefined}
               onInput={(event) => setName(event.currentTarget.value)}
               onBlur={() => setTouched((current) => ({ ...current, name: true }))}
-              placeholder="Release prep"
+              placeholder={t("sprintNamePlaceholder")}
               className={inputClass}
             />
             {touched.name && validationErrors.name ? (
@@ -118,7 +122,7 @@ export const AddSprintModal: FunctionComponent<AddSprintModalProps> = ({ project
           </label>
 
           <label className="group/field block">
-            <span className={fieldLabelClass}>Goal</span>
+            <span className={fieldLabelClass}>{t("goal")}</span>
             <textarea
               id="add-sprint-goal"
               value={goal}
@@ -128,7 +132,7 @@ export const AddSprintModal: FunctionComponent<AddSprintModalProps> = ({ project
               aria-describedby={touched.goal && validationErrors.goal ? "add-sprint-goal-error" : undefined}
               onInput={(event) => setGoal(event.currentTarget.value)}
               onBlur={() => setTouched((current) => ({ ...current, goal: true }))}
-              placeholder="Describe the outcome this sprint should deliver."
+              placeholder={t("sprintGoalPlaceholder")}
               className={`${inputClass} min-h-32 resize-y leading-relaxed`}
             />
             {touched.goal && validationErrors.goal ? (
@@ -154,7 +158,7 @@ export const AddSprintModal: FunctionComponent<AddSprintModalProps> = ({ project
             disabled={isSubmitting}
             className="min-h-11 rounded-xl px-4 text-sm font-bold text-slate-500 transition-colors hover:bg-black/[0.04] hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-400 dark:hover:bg-white/[0.05] dark:hover:text-white"
           >
-            Cancel
+            {t("cancel")}
           </button>
           <button
             type="submit"
@@ -163,7 +167,7 @@ export const AddSprintModal: FunctionComponent<AddSprintModalProps> = ({ project
             className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-signal-500 px-4 text-sm font-black text-white shadow-sm transition-colors hover:bg-signal-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-signal-400 dark:text-void-900 dark:hover:bg-signal-300"
           >
             {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.2} /> : <Plus className="h-4 w-4" strokeWidth={2.4} />}
-            Create Sprint
+            {t("createSprint")}
           </button>
         </div>
       </form>

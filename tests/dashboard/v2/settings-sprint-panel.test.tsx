@@ -3,12 +3,20 @@
 /** @jsxFrag Fragment */
 import { h, Fragment } from "preact";
 import { useState } from "preact/hooks";
-import { describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/preact";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, fireEvent, waitFor, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { SettingsSprintPanel } from "../../../dashboard/src/v2/components/settings/panels/SettingsSprintPanel.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
+import { cloneProjectSettings } from "../../../dashboard/src/v2/lib/settings/project-overrides.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
+import type { ProjectSettings } from "../../../dashboard/src/types.js";
 
 expect.extend(matchers);
+
+afterEach(() => {
+  cleanup();
+});
 
 describe("SettingsSprintPanel", () => {
   it("renders Quality Assurance after Merge Gates & Autofix and preserves multi-agent QA project-scope updates", async () => {
@@ -197,5 +205,62 @@ describe("SettingsSprintPanel", () => {
       agentPresetIds: [],
       agentPresetId: null,
     });
+  });
+
+  it("maps German Git, QA, and guardrail captions to stable values and preserves numeric fallbacks", async () => {
+    let latestSettings = cloneProjectSettings(DEFAULT_DASHBOARD_SETTINGS);
+    latestSettings.git.githubMode = "REMOTE";
+    latestSettings.agents.qualityAssurance.enabled = true;
+
+    const Harness = () => {
+      const [settings, setSettings] = useState(latestSettings);
+      const update = (recipe: (current: ProjectSettings) => ProjectSettings): void => {
+        setSettings((current) => {
+          const next = recipe(current);
+          latestSettings = next;
+          return next;
+        });
+      };
+      return (
+        <DashboardI18nProvider initialLocale="de">
+          <SettingsSprintPanel
+            state={{
+              activeScope: "project",
+              setActiveScope: vi.fn(),
+              selectedProject: null,
+              editableSettings: settings,
+              projectSettings: null,
+              projectSources: {},
+              projectAgentPresetOptions: [],
+              updateProject: vi.fn(),
+              updateEditableSettings: update,
+            } as never}
+          />
+        </DashboardI18nProvider>
+      );
+    };
+
+    render(<Harness />);
+    expect(screen.getByText("Git-Ablauf")).toBeInTheDocument();
+    expect(screen.getByText("Qualitätssicherung")).toBeInTheDocument();
+    expect(screen.getByText("Schutzbegrenzungen")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: /^Lokal/ }));
+    expect(latestSettings.git.githubMode).toBe("LOCAL");
+
+    const exhaustionPolicy = screen.getByRole("button", { name: "Richtlinie bei ausgeschöpfter QA" });
+    fireEvent.click(exhaustionPolicy);
+    fireEvent.click(await screen.findByRole("option", { name: "Aufgabe fehlschlagen lassen" }));
+    expect(latestSettings.agents.qualityAssurance.exhaustionPolicy).toBe("FAIL_TASK");
+
+    const codingAttempts = screen.getByRole("spinbutton", { name: "Coding-Versuche" });
+    fireEvent.input(codingAttempts, { target: { value: "101" } });
+    fireEvent.blur(codingAttempts);
+    expect(latestSettings.guardrails.jobs.task_coding.cap).toBe(101);
+    expect(screen.getByRole("alert")).toHaveTextContent("Verwende einen Wert von höchstens 100.");
+
+    const sprintBranchInput = screen.getByRole("textbox", { name: "Sprint-Branch-Schema" });
+    fireEvent.input(sprintBranchInput, { target: { value: "release/{sprint_id}" } });
+    expect(latestSettings.git.sprintBranchScheme).toBe("release/{sprint_id}");
   });
 });

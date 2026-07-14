@@ -13,6 +13,8 @@ import {
     isRouteNavigationItem,
     type PrimaryNavigationItem,
 } from "../lib/navigation-items.js";
+import { useOptionalDashboardI18n } from "../i18n/context.js";
+import { shellMessages } from "../i18n/messages/shell.js";
 
 type DockItem = PrimaryNavigationItem;
 
@@ -43,6 +45,7 @@ interface KineticDockProps {
 }
 
 export const KineticDock: FunctionComponent<KineticDockProps> = ({ experienceMode }) => {
+    const { locale, translate } = useOptionalDashboardI18n();
     const dockRef    = useRef<HTMLDivElement>(null);
     const itemRefs   = useRef<(HTMLAnchorElement | null)[]>([]);
     const [indicatorState, setIndicatorState] = useState({ left: 22, initialized: false });
@@ -194,7 +197,7 @@ export const KineticDock: FunctionComponent<KineticDockProps> = ({ experienceMod
 
     const renderItem = (item: DockItem, globalIndex: number) => {
         const isActive = activeIndex === globalIndex;
-        const label = getNavigationItemLabel(item, "dock");
+        const label = getNavigationItemLabel(item, "dock", locale);
         const className = `relative group flex flex-col items-center justify-center w-[52px] h-[52px] min-w-[44px] min-h-[44px] shrink-0 snap-center rounded-[1.4rem] transition-[background-color,border-color,box-shadow] motion-reduce:transition-none duration-300 decoration-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F9F8F4] dark:focus-visible:ring-offset-void-800 ${
             isActive
                 ? "bg-signal-500/[0.12] shadow-[inset_0_0_0_1px_rgba(0,224,160,0.32),0_10px_24px_rgba(0,224,160,0.12)]"
@@ -272,7 +275,7 @@ export const KineticDock: FunctionComponent<KineticDockProps> = ({ experienceMod
             className="fixed bottom-0 left-0 right-0 z-50 flex justify-center items-end pointer-events-none px-4 max-w-[100vw] overflow-hidden"
         >
             <nav
-                aria-label="Dock navigation"
+                aria-label={translate(shellMessages, "dockNavigation")}
                 aria-describedby="dock-route-status"
                 ref={dockRef}
                 onPointerMove={handlePointerMove}
@@ -310,7 +313,9 @@ export const KineticDock: FunctionComponent<KineticDockProps> = ({ experienceMod
                 {/* Right edge scroll spacer */}
                 <div className="w-[1px] shrink-0" aria-hidden="true" />
                 <span id="dock-route-status" role="status" aria-live="polite" className="sr-only">
-                    Active route: {activeItem ? getNavigationItemLabel(activeItem, "dock") : "None"}
+                    {translate(shellMessages, "activeRoute", {
+                        label: activeItem ? getNavigationItemLabel(activeItem, "dock", locale) : translate(shellMessages, "none"),
+                    })}
                 </span>
             </nav>
         </div>

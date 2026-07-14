@@ -5,6 +5,8 @@ import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { AlertTriangle, RefreshCw } from "lucide-preact";
 import { SHARED_INTERACTION_CLASSES } from "./Button.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 interface UnsavedChangesModalProps {
   onConfirm: () => void;
@@ -21,6 +23,7 @@ export const UnsavedChangesModal: FunctionComponent<UnsavedChangesModalProps> = 
   saving = false,
   discarding = false,
 }) => {
+  const { translate } = useOptionalDashboardI18n();
   const backdropRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const saveButtonRef = useRef<HTMLButtonElement>(null);
@@ -132,17 +135,17 @@ export const UnsavedChangesModal: FunctionComponent<UnsavedChangesModalProps> = 
               <AlertTriangle className="h-5 w-5" />
             </div>
             <h2 id="unsaved-modal-title" className="text-xl font-bold tracking-tight text-void-900 dark:text-white">
-              Unsaved changes
+              {translate(shellMessages, "unsavedChanges")}
             </h2>
           </div>
           <p id="unsaved-modal-body" className="mt-4 text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">
-            You have unsaved settings. Save them before leaving, discard them without saving, or keep editing.
+            {translate(shellMessages, "unsavedChangesBody")}
           </p>
           <p className="mt-3 rounded-xl border border-status-red/20 bg-status-red/[0.06] px-3 py-2 text-xs font-semibold leading-relaxed text-status-red">
-            Discarding permanently drops the pending edits in this settings scope.
+            {translate(shellMessages, "unsavedDiscardWarning")}
           </p>
           <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
-            {isSaving ? "Saving changes before leaving." : isDiscarding ? "Discarding unsaved settings." : isPending ? "Closing unsaved changes dialog." : "Unsaved changes dialog ready."}
+            {translate(shellMessages, isSaving ? "unsavedSaving" : isDiscarding ? "unsavedDiscarding" : isPending ? "unsavedClosing" : "unsavedReady")}
           </div>
         </div>
 
@@ -154,7 +157,7 @@ export const UnsavedChangesModal: FunctionComponent<UnsavedChangesModalProps> = 
             aria-busy={pendingAction === "cancel" ? "true" : undefined}
             className={`w-full sm:w-auto px-5 py-2.5 text-xs font-bold uppercase tracking-widest rounded-xl border border-black/[0.06] bg-white/70 text-slate-600 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white ${SHARED_INTERACTION_CLASSES}`}
           >
-            Keep editing
+            {translate(shellMessages, "keepEditing")}
           </button>
           <button
             ref={discardButtonRef}
@@ -167,9 +170,9 @@ export const UnsavedChangesModal: FunctionComponent<UnsavedChangesModalProps> = 
             {isDiscarding ? (
               <span className="inline-flex items-center justify-center gap-2">
                 <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.4} />
-                Discarding
+                {translate(shellMessages, "discarding")}
               </span>
-            ) : "Discard without saving"}
+            ) : translate(shellMessages, "discardWithoutSaving")}
           </button>
           {onSave ? (
             <button
@@ -183,9 +186,9 @@ export const UnsavedChangesModal: FunctionComponent<UnsavedChangesModalProps> = 
               {isSaving ? (
                 <span className="inline-flex items-center justify-center gap-2">
                   <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.4} />
-                  Saving
+                  {translate(shellMessages, "saving")}
                 </span>
-              ) : "Save changes"}
+              ) : translate(shellMessages, "saveChanges")}
             </button>
           ) : null}
         </div>

@@ -7,6 +7,8 @@ import { normalizeAgentAvatarConfig } from "../../lib/agent-avatar.js";
 import type { AgentAvatarConfig } from "../../types.js";
 import { ProviderLogo } from "../ui/ProviderLogo.js";
 import { PROVIDER_CARD_TOKENS, providerLabels } from "../../lib/settings-view-models.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { chatMessages } from "../../i18n/messages/chat.js";
 
 export type AvatarRole = "user" | "jules" | "system" | "agent" | "container";
 
@@ -72,17 +74,18 @@ export const ChatAvatar: FunctionComponent<ChatAvatarProps> = ({
   avatarConfig,
   isDark = true,
 }) => {
+  const { translate } = useDashboardI18n();
   const matchedProviderId = role === "agent" && provider
     ? matchProviderToken(provider)
     : null;
 
   const getLabel = () => {
     if (role === "jules") return "Jules";
-    if (role === "container") return "Container Worker";
-    if (role === "system") return "System";
-    if (role === "user") return "User";
+    if (role === "container") return translate(chatMessages, "containerWorker");
+    if (role === "system") return translate(chatMessages, "systemName");
+    if (role === "user") return translate(chatMessages, "user");
     if (matchedProviderId) return providerLabels[matchedProviderId];
-    return agentName || "Agent";
+    return agentName || translate(chatMessages, "agent");
   };
 
   const renderIcon = () => {

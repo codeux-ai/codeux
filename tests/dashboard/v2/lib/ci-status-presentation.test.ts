@@ -205,4 +205,15 @@ describe("CI status presentation", () => {
     expect(presentation?.state).toBe("failed");
     expect(presentation?.failureKind).toBe("ci_checks");
   });
+
+  it("returns localized CI workflow labels for locale-explicit consumers", () => {
+    const presentation = deriveTaskCiStatusPresentation({
+      task: { ...task, merge_indicator: "PR_ONLY" },
+      events: [],
+    }, "de");
+
+    expect(presentation?.label).toBe("CI ausstehend");
+    expect(presentation?.steps[0]).toMatchObject({ label: "Pull Request", statusLabel: "Pull Request bereit" });
+    expect(presentation?.steps[2]).toMatchObject({ label: "Zusammenführung", statusLabel: "Zusammenführung nicht erforderlich" });
+  });
 });

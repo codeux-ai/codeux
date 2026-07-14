@@ -1,12 +1,13 @@
 /** @vitest-environment happy-dom */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, fireEvent, waitFor, within } from "@testing-library/preact";
+import { render as testingLibraryRender, fireEvent, waitFor, within } from "@testing-library/preact";
 import { h } from "preact";
 import { useState } from "preact/hooks";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { renderWithI18n } from "../render-with-i18n.js";
 import { cleanup } from "@testing-library/preact";
 import type { SprintLinkedIssueInput } from "../../../dashboard/src/v2/types.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
 /** @jsx h */
 
 expect.extend(matchers);
@@ -32,6 +33,14 @@ vi.mock("../../../dashboard/src/hooks/ExecutionTimelineContext.js", () => ({
 }));
 
 import { SprintComposer } from "../../../dashboard/src/v2/components/ui/SprintComposer.js";
+
+const render = (ui: Parameters<typeof testingLibraryRender>[0]) => {
+  const wrap = (content: Parameters<typeof testingLibraryRender>[0]) => (
+    <DashboardI18nProvider initialLocale="en" storage={null}>{content}</DashboardI18nProvider>
+  );
+  const result = testingLibraryRender(wrap(ui));
+  return { ...result, rerender: (nextUi: Parameters<typeof testingLibraryRender>[0]) => result.rerender(wrap(nextUi)) };
+};
 
 describe("SprintComposer", () => {
   beforeEach(() => {

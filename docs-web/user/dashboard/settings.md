@@ -45,6 +45,12 @@ The desktop rail and mobile category drawer include these Expert-mode categories
 
 Each category opens one or more **content panels** with grouped fields. Inputs are typed (text, number with min/max, toggle, multi-select) and validate inline.
 
+## Dashboard language and card help
+
+Open **Appearance → Display Settings → Language** to switch dashboard-authored interface copy between English and Deutsch. The change applies immediately in both System and Project views, persists in browser-local storage, updates the document language for assistive technology, and never dirties or submits the Settings draft.
+
+Settings card titles and their help popovers follow the selected language, including the purpose summary, controlled-functions guidance, recommended configuration, and risk notes. Card identity, documentation links, provider names, technical values, runtime/API messages, saved instructions, and the linked English documentation remain unchanged.
+
 ### Language-first speech output
 
 Open **AI Models -> Configure speech** and choose the output language first. Code UX preselects the catalog's preferred compatible local model and a matching voice. The recommendation keeps **Selected**, **Installed / Download required**, and **Output enabled / off** visible as separate states; the normal **Save Changes** action still controls when the draft becomes active.
@@ -136,6 +142,8 @@ Jules and the internal test provider do not use provider config files. Switching
 Dashboard Login opens the provider's real interactive CLI in the managed container. Each CLI starts as the normal non-root runtime user from a dedicated empty `/tmp/code-ux-login` directory instead of `/`, preventing discovery-oriented tools such as Qwen Code from warning about or scanning the container root. Credential storage and the read-only provider-tool volume are unchanged.
 
 The terminal interprets ANSI cursor and erase controls while removing non-display OSC/DCS strings such as Qwen window-title and terminal-color queries. Full-screen redraws stay within a bounded 100-column by 30-row layout, meaningful prompts and authentication links remain selectable, and output uses high-contrast white text. Click the console to focus it. Right-click exposes Paste without transferring focus away from the session, while Ctrl+V and Command+V continue to work normally. Arrow keys, Tab, Escape, Backspace, Ctrl+C, and Ctrl+D are sent directly to the provider CLI. Clipboard success or denial appears below the console instead of failing silently.
+
+When German is selected, dashboard-owned Integrations and MCP labels, instructions, validation, and accessible feedback are translated. Provider and product names, credentials, redacted secret placeholders, detected paths, endpoints, repository and tool identifiers, scopes, transport values, terminal output, and server-returned diagnostics remain exactly as supplied. Locale changes therefore do not alter saved settings, provider authentication, secure-storage checks, MCP installation, token regeneration, or terminal behavior.
 
 ## Connections panel
 

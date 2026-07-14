@@ -12,6 +12,7 @@ import { SVG_W, SVG_H, TOW_LINE_LENGTH, BADGE_OFFSET } from "./boat-race/constan
 import { useIsDark } from "./boat-race/utils.js";
 import { useBoatRaceAnimation } from "../hooks/useBoatRaceAnimation.js";
 import { useReducedMotion } from "../hooks/use-reduced-motion.js";
+import { useLiveI18n } from "../i18n/messages/live.js";
 
 /* ─── Props ──────────────────────────────────────────────────────────────── */
 
@@ -24,6 +25,7 @@ interface BoatRaceProps {
 
 
 export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispatches, hasSprintContext }) => {
+    const { locale, t, tp, formatNumber } = useLiveI18n();
     const shipsGroupRef = useRef<SVGGElement>(null);
     const isDark = useIsDark();
 
@@ -32,7 +34,7 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
 
 
 
-    const { activeShips, harbourCount, animatedPositionsSignal } = useBoatRaceAnimation(tasks, dispatches, hasSprintContext);
+    const { activeShips, harbourCount, animatedPositionsSignal } = useBoatRaceAnimation(tasks, dispatches, hasSprintContext, locale);
     const animatedPositions = animatedPositionsSignal.value;
 
     const raceHeightPx = useMemo(() => getBoatRaceHeightPx(activeShips.length), [activeShips.length]);
@@ -83,9 +85,9 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
                                 <div className="absolute inset-4 rounded-full bg-signal-500/[0.06] animate-pulse" />
                                 <Anchor className="w-7 h-7 text-slate-400 dark:text-white/20" strokeWidth={1.2} />
                             </div>
-                            <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500 dark:text-white/25">Fleet Awaiting Departure</p>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500 dark:text-white/25">{t("fleetAwaiting")}</p>
                             <p className="text-[11px] text-slate-400/60 dark:text-white/12 mt-3 font-mono max-w-xs mx-auto">
-                                {hasSprintContext ? "No tasks currently in the pipeline" : "Launch a sprint to begin the race"}
+                                {t(hasSprintContext ? "noTasksPipeline" : "launchSprintRace")}
                             </p>
                         </div>
                     </div>
@@ -106,19 +108,19 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
                             <div className="absolute inset-0 rounded-full bg-signal-500 shadow-[0_0_10px_rgba(0,224,160,0.6)]" />
                             <div className="absolute inset-0 rounded-full bg-signal-500 animate-ping opacity-30" />
                         </div>
-                        <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-white/35">Sprint Race</span>
+                        <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-white/35">{t("sprintRace")}</span>
                         <span className="text-[8px] font-mono text-slate-400 dark:text-white/15 ml-1">
-                            {activeShips.length + harbourCount} vessel{(activeShips.length + harbourCount) !== 1 ? "s" : ""}
+                            {tp("vessels", activeShips.length + harbourCount, { count: formatNumber(activeShips.length + harbourCount) })}
                         </span>
                     </div>
                     <div className="flex items-center gap-5 text-[7px] font-mono text-slate-400 dark:text-white/20 uppercase tracking-wider">
                         <span className="flex items-center gap-1.5">
                             <span className="inline-block w-2.5 h-1.5 rounded-[1px] bg-gradient-to-r from-[#E74C3C]/60 to-[#3498DB]/60" />
-                            Container
+                            {t("container")}
                         </span>
                         <span className="flex items-center gap-1.5">
                             <span className="inline-block w-2.5 h-2.5 rounded-sm border border-[#7A5518]/50 bg-[#5C3D0E]/30" />
-                            Wooden
+                            {t("wooden")}
                         </span>
                     </div>
                 </div>
@@ -128,7 +130,7 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
                     viewBox={`0 0 ${SVG_W} ${SVG_H}`}
                     className="w-full"
                     role="img"
-                    aria-label="Sprint Boat Race: Visual representation of task progress as ships racing across a harbour toward the finish line."
+                    aria-label={t("boatRaceAria")}
                     style={{ height: `${raceHeightPx}px` }}
                     preserveAspectRatio="xMidYMid meet"
                     onMouseMove={handleMouseMove}

@@ -4,6 +4,8 @@ import {
   resolvePromptSuggestionIconName,
   type PromptSuggestionViewModel,
 } from "../../lib/chat-suggestion-view-models.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { chatMessages } from "../../i18n/messages/chat.js";
 
 export interface PromptSuggestionTagsProps {
   suggestions: PromptSuggestionViewModel[];
@@ -34,6 +36,7 @@ export const PromptSuggestionTags: FunctionComponent<PromptSuggestionTagsProps> 
   onSelect,
   className = "",
 }) => {
+  const { translate } = useDashboardI18n();
   if (suggestions.length === 0) {
     return null;
   }
@@ -56,7 +59,7 @@ export const PromptSuggestionTags: FunctionComponent<PromptSuggestionTagsProps> 
               key={suggestion.key}
               type="button"
               className={tagClasses}
-              aria-label={`Use suggestion: ${suggestion.label}`}
+              aria-label={translate(chatMessages, "useSuggestion", { label: suggestion.label })}
               title={suggestion.label}
               onClick={() => onSelect(suggestion)}
             >

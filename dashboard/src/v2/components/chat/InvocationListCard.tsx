@@ -10,14 +10,38 @@ import { AgentSelectAvatarIcon } from "../agents/AgentSelectAvatarIcon.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { formatTokenCount } from "../../lib/chat-widget-view-models.js";
 import { formatInvocationPurpose, formatInvocationDuration, InvocationContextChips } from "./invocation-display.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { chatMessages } from "../../i18n/messages/chat.js";
+import type { DashboardTextMessageKey } from "../../i18n/locales.js";
 
-const formatErrorCategory = (value: ExecutionInvocationRecord["lastErrorCategory"]): string | null => {
+type KnownInvocationStatus = ExecutionInvocationRecord["status"] | "queued";
+
+const INVOCATION_STATUS_MESSAGE_KEYS = {
+  running: "running",
+  completed: "completed",
+  failed: "failed",
+  cancelled: "cancelled",
+  paused: "paused",
+  queued: "queuedLabel",
+} as const satisfies Record<KnownInvocationStatus, DashboardTextMessageKey<typeof chatMessages>>;
+
+const getLocalizedInvocationStatus = (
+  status: string,
+  translate: ReturnType<typeof useDashboardI18n>["translate"],
+): string => {
+  if (!Object.prototype.hasOwnProperty.call(INVOCATION_STATUS_MESSAGE_KEYS, status)) {
+    return status;
+  }
+  return translate(chatMessages, INVOCATION_STATUS_MESSAGE_KEYS[status as KnownInvocationStatus]);
+};
+
+const formatErrorCategory = (value: ExecutionInvocationRecord["lastErrorCategory"], translate: ReturnType<typeof useDashboardI18n>["translate"]): string | null => {
   switch (value) {
-    case "RATE_LIMITED": return "Rate limited";
-    case "QUOTA_EXHAUSTED": return "Quota exhausted";
-    case "AUTH_FAILURE": return "Auth failure";
-    case "PROVIDER_NOT_FOUND": return "Provider missing";
-    case "UNKNOWN": return "Error";
+    case "RATE_LIMITED": return translate(chatMessages, "rateLimited");
+    case "QUOTA_EXHAUSTED": return translate(chatMessages, "quotaExhausted");
+    case "AUTH_FAILURE": return translate(chatMessages, "authFailure");
+    case "PROVIDER_NOT_FOUND": return translate(chatMessages, "providerMissing");
+    case "UNKNOWN": return translate(chatMessages, "error");
     default: return null;
   }
 };
@@ -80,6 +104,7 @@ export const InvocationListCard: FunctionComponent<{
 }> = ({ invocations, selectedInvocationId, onSelect, agentPresets, sprintKeyPrefix = "SPR" }) => {
   const [showStats, setShowStats] = useState(readStoredStatsVisibility);
   const interactionTokens = useInteractionTokens();
+  const { formatNumber, locale, translate } = useDashboardI18n();
 
   const toggleStats = () => {
     setShowStats((current) => {
@@ -97,7 +122,7 @@ export const InvocationListCard: FunctionComponent<{
         type="button"
         onClick={toggleStats}
         aria-pressed={showStats}
-        title={showStats ? "Hide stats" : "Show stats"}
+        title={translate(chatMessages, showStats ? "hideStats" : "showStats")}
         style={{
           transitionProperty: "color, background-color, border-color, text-decoration-color, fill, stroke",
           transitionDuration: interactionTokens.controlFeedback.duration,
@@ -110,7 +135,7 @@ export const InvocationListCard: FunctionComponent<{
         }`}
       >
         <BarChart3 className="h-3.5 w-3.5" />
-        Stats
+        {translate(chatMessages, "stats")}
       </button>
     </div>
     {invocations.map((invocation) => {
@@ -122,20 +147,14 @@ export const InvocationListCard: FunctionComponent<{
       const isFailed = invocationStatus === "failed";
       const isPending = invocationStatus === "queued" || (isRunning && invocation.messageCount === 0);
       const stateDescriptionId = `invocation-card-state-${invocation.id}`;
-      const selectionCopy = isSelected ? "Selected" : "Not selected";
-      const runtimeCopy = isPending
-        ? "Routing or queued"
-        : isRunning
-          ? "Running"
-          : isFailed
-            ? "Failed"
-            : invocation.status;
+      const selectionCopy = translate(chatMessages, isSelected ? "selected" : "notSelected");
+      const runtimeCopy = getLocalizedInvocationStatus(invocationStatus, translate);
       const agentPreset = invocation.agentPresetId
         ? agentPresets?.find((p) => p.id === invocation.agentPresetId)
         : undefined;
 
-      const errorLabel = formatErrorCategory(invocation.lastErrorCategory);
-      const duration = formatInvocationDuration(invocation.startedAt || invocation.createdAt, invocation.finishedAt);
+      const errorLabel = formatErrorCategory(invocation.lastErrorCategory, translate);
+      const duration = formatInvocationDuration(invocation.startedAt || invocation.createdAt, invocation.finishedAt, locale);
       const totalTokens = invocation.totalTokens
         ?? ((invocation.inputTokens ?? 0) + (invocation.outputTokens ?? 0));
 
@@ -143,33 +162,33 @@ export const InvocationListCard: FunctionComponent<{
       // token breakdown, run size and timing. Kept to clean label/value pairs.
       const cells: StatCell[] = [
         {
-          label: "Status",
+          label: translate(chatMessages, "status"),
           value: (
             <span className={`flex items-center gap-1.5 ${ss.text}`}>
               <span className={`inline-block h-1.5 w-1.5 rounded-full ${ss.dot} ${isRunning ? "animate-pulse motion-reduce:animate-none motion-reduce:ring-2 motion-reduce:ring-signal-500/40" : ""}`} />
-              <span aria-live="polite" className="capitalize">{invocation.status}</span>
+              <span aria-live="polite">{runtimeCopy}</span>
             </span>
           ),
         },
-        { label: "Messages", value: invocation.messageCount ?? 0 },
+        { label: translate(chatMessages, "messages"), value: formatNumber(invocation.messageCount ?? 0) },
       ];
       if ((invocation.inputTokens ?? 0) > 0) {
-        cells.push({ label: "Input", value: formatTokenCount(invocation.inputTokens), tone: "text-signal-600 dark:text-signal-400" });
+        cells.push({ label: translate(chatMessages, "input"), value: formatTokenCount(invocation.inputTokens, locale), tone: "text-signal-600 dark:text-signal-400" });
       }
       if ((invocation.outputTokens ?? 0) > 0) {
-        cells.push({ label: "Output", value: formatTokenCount(invocation.outputTokens), tone: "text-purple-600 dark:text-purple-400" });
+        cells.push({ label: translate(chatMessages, "output"), value: formatTokenCount(invocation.outputTokens, locale), tone: "text-purple-600 dark:text-purple-400" });
       }
       if ((invocation.cachedInputTokens ?? 0) > 0) {
-        cells.push({ label: "Cached", value: formatTokenCount(invocation.cachedInputTokens), tone: "text-teal-600 dark:text-teal-400" });
+        cells.push({ label: translate(chatMessages, "cached"), value: formatTokenCount(invocation.cachedInputTokens, locale), tone: "text-teal-600 dark:text-teal-400" });
       }
       if (totalTokens > 0) {
-        cells.push({ label: "Total", value: formatTokenCount(totalTokens) });
+        cells.push({ label: translate(chatMessages, "total"), value: formatTokenCount(totalTokens, locale) });
       }
       if (duration) {
-        cells.push({ label: "Duration", value: duration });
+        cells.push({ label: translate(chatMessages, "duration"), value: duration });
       }
       if (errorLabel) {
-        cells.push({ label: "Error", value: errorLabel, tone: "text-status-amber", full: true });
+        cells.push({ label: translate(chatMessages, "error"), value: errorLabel, tone: "text-status-amber", full: true });
       }
       // Balance the grid: a lone trailing cell stretches across both columns.
       const lastIndex = cells.length - 1;
@@ -184,7 +203,7 @@ export const InvocationListCard: FunctionComponent<{
             tabIndex={0}
             aria-selected={isSelected ? "true" : "false"}
             aria-describedby={stateDescriptionId}
-            aria-label={`${formatInvocationPurpose(invocation.type)}. ${selectionCopy}. ${runtimeCopy}.`}
+            aria-label={`${formatInvocationPurpose(invocation.type, locale)}. ${selectionCopy}. ${runtimeCopy}.`}
             aria-current={isSelected ? "true" : undefined}
             data-selected={isSelected ? "true" : "false"}
             data-status={invocationStatus}
@@ -245,23 +264,23 @@ export const InvocationListCard: FunctionComponent<{
                     {isPending && (
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-status-amber/25 bg-status-amber/[0.10] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-status-amber">
                         <span className="h-1.5 w-1.5 rounded-full bg-status-amber animate-pulse motion-reduce:animate-none" />
-                        Routing
+                        {translate(chatMessages, "routing")}
                       </span>
                     )}
                     {isFailed && (
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-status-red/25 bg-status-red/[0.10] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-status-red">
-                        Failed
+                        {translate(chatMessages, "failed")}
                       </span>
                     )}
                     {isRunning && !isPending && (
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/25 bg-signal-500/[0.10] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-300">
                         <span className="h-1.5 w-1.5 rounded-full bg-signal-500 animate-pulse motion-reduce:animate-none" />
-                        Running
+                        {translate(chatMessages, "running")}
                       </span>
                     )}
                   </div>
                   <h3 className="truncate font-display text-[15px] font-bold leading-tight tracking-tight text-slate-900 dark:text-white">
-                    {formatInvocationPurpose(invocation.type)}
+                    {formatInvocationPurpose(invocation.type, locale)}
                   </h3>
                   <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
                     <span className="truncate font-medium">
@@ -278,7 +297,7 @@ export const InvocationListCard: FunctionComponent<{
                 </div>
 
                 <span className="shrink-0 pt-0.5 font-mono text-[10px] text-slate-400 dark:text-slate-500">
-                  {formatRelativeChatTime(invocation.lastMessageAt || invocation.createdAt)}
+                  {formatRelativeChatTime(invocation.lastMessageAt || invocation.createdAt, locale)}
                 </span>
               </div>
 
@@ -327,7 +346,7 @@ export const InvocationListCard: FunctionComponent<{
                 {invocation.id}
               </div>
               <span id={stateDescriptionId} className="sr-only">
-                {selectionCopy}. {runtimeCopy}. Status {invocationStatus}.
+                {selectionCopy}. {runtimeCopy}. {translate(chatMessages, "statusPrefix")} {runtimeCopy}.
               </span>
             </div>
           </div>

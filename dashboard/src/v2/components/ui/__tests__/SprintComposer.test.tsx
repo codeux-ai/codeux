@@ -4,13 +4,17 @@ import { render, screen, cleanup, waitFor, fireEvent } from "@testing-library/pr
 import userEvent from "@testing-library/user-event";
 import { SprintComposer } from "../SprintComposer.js";
 import { ExecutionTimelineProvider } from "../../../../hooks/ExecutionTimelineContext.js";
+import { DashboardI18nProvider } from "../../../i18n/context.js";
+import type { DashboardLocale } from "../../../i18n/locales.js";
 import "@testing-library/jest-dom/vitest";
 
-const renderWithContext = (ui: any) => {
+const renderWithContext = (ui: any, locale: DashboardLocale = "en") => {
   return render(
-    <ExecutionTimelineProvider execution={null}>
-      {ui}
-    </ExecutionTimelineProvider>
+    <DashboardI18nProvider initialLocale={locale} storage={null}>
+      <ExecutionTimelineProvider execution={null}>
+        {ui}
+      </ExecutionTimelineProvider>
+    </DashboardI18nProvider>
   );
 };
 
@@ -195,6 +199,45 @@ describe("SprintComposer", () => {
     expect(onStartNewSprint).toHaveBeenCalled();
     expect(onCancelMock).not.toHaveBeenCalled();
     expect(capturedShouldHandleResult?.()).toBe(false);
+  });
+
+  it("shows German validation while preserving plan-only authoring content", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    renderWithContext(<SprintComposer {...defaultProps} onSubmit={onSubmit} />, "de");
+
+    const nameInput = screen.getByRole("textbox", { name: "Sprintname" });
+    await userEvent.clear(nameInput);
+    await userEvent.click(screen.getByRole("button", { name: "Mit KI vorausplanen" }));
+
+    expect(screen.getByText("Sprintname ist erforderlich")).toBeInTheDocument();
+
+    const authoredName = "API-Härtung & Überprüfung";
+    const authoredGoal = "Keep `POST /v2/jobs` unchanged; prüfe retries verbatim.";
+    fireEvent.input(nameInput, { target: { value: authoredName } });
+    fireEvent.input(screen.getByPlaceholderText(/gewünschten Endzustand/), { target: { value: authoredGoal } });
+    fireEvent.click(screen.getByRole("button", { name: /^Nur planen/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Nur planen" }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({
+      name: authoredName,
+      goal: authoredGoal,
+      submitMode: "plan_only",
+    });
+  });
+
+  it("localizes provider failure chrome while preserving the server error", async () => {
+    const onImprovePrompt = vi.fn().mockRejectedValue(new Error("provider_id=codex-primary unavailable"));
+    renderWithContext(<SprintComposer {...defaultProps} onImprovePrompt={onImprovePrompt} />, "de");
+
+    fireEvent.input(screen.getByRole("textbox", { name: "Sprintname" }), { target: { value: "Fehlerpfad" } });
+    fireEvent.input(screen.getByPlaceholderText(/gewünschten Endzustand/), { target: { value: "Keep payload exact." } });
+    fireEvent.click(screen.getByRole("button", { name: "Mit KI vorausplanen" }));
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/provider_id=codex-primary unavailable/).length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: "Verbesserung erneut versuchen" })).toBeInTheDocument();
+    });
   });
 
 });

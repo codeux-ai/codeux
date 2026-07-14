@@ -5,6 +5,7 @@ import { AlertTriangle } from "lucide-preact";
 import { CollapsiblePanel } from "./ui/CollapsiblePanel.js";
 import { MARKDOWN_PROSE_CLASS } from "./ui/MarkdownEditorField.js";
 import { renderMarkdown } from "../../lib/markdown.js";
+import { useLiveI18n } from "../i18n/messages/live.js";
 export interface SprintProtocolProps {
     hasSprintContext: boolean;
     instructions?: string;
@@ -14,15 +15,16 @@ export const SprintProtocol: FunctionComponent<SprintProtocolProps> = memo(({
     hasSprintContext,
     instructions,
 }) => {
+    const { t } = useLiveI18n();
 
     const protocolMarkup = useMemo(() => (
         renderMarkdown(hasSprintContext ? instructions : undefined)
-        || '<p class="text-slate-400 dark:text-slate-600 italic">No active sprint protocol.</p>'
-    ), [hasSprintContext, instructions]);
+        || `<p class="text-slate-400 dark:text-slate-600 italic">${t("noActiveProtocol")}</p>`
+    ), [hasSprintContext, instructions, t]);
 
     return (
         <CollapsiblePanel
-            title="Protocol"
+            title={t("protocol")}
             icon={AlertTriangle}
             accentHex="#FFB800"
             defaultOpen={false}

@@ -8,6 +8,7 @@ import { AlertTriangle, CheckCircle2, ChevronDown } from "lucide-preact";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { RuntimeSnapshotSurfaceBadge, RuntimeSnapshotSurfaceNotice } from "./ExecutionRuntimePanel.js";
+import { useLiveI18n } from "../../i18n/messages/live.js";
 
 export const AttentionQueuePanel: FunctionComponent<{
     collapsible?: boolean;
@@ -16,6 +17,7 @@ export const AttentionQueuePanel: FunctionComponent<{
     collapsible = false,
     defaultOpen = true,
 }) => {
+    const { t, tp, formatNumber } = useLiveI18n();
     const { execution, snapshotSurface } = useExecutionTimeline();
     const [openState, setOpenState] = useState(defaultOpen);
     const contentId = useId();
@@ -51,12 +53,12 @@ export const AttentionQueuePanel: FunctionComponent<{
             dismissed: items.filter(i => i.status === "dismissed" || i.status === "expired").length,
         };
     }, [execution?.attentionItems]);
-    const summary = `${total} attention item${total === 1 ? "" : "s"}: ${open} open, ${claimed} claimed, ${resolved} resolved, ${dismissed} cleared.`;
+    const summary = t("attentionSummary", { total: formatNumber(total), open: formatNumber(open), claimed: formatNumber(claimed), resolved: formatNumber(resolved), cleared: formatNumber(dismissed) });
 
     if (!execution) {
         return (
             <div role="status" aria-live="polite" aria-busy="true" className="rounded-[1.75rem] border border-black/[0.08] bg-white p-5 text-[11px] font-mono text-slate-400 shadow-sm dark:border-white/[0.08] dark:bg-void-800 dark:text-slate-500">
-                Loading attention queue.
+                {t("loadingAttentionQueue")}
             </div>
         );
     }
@@ -64,12 +66,12 @@ export const AttentionQueuePanel: FunctionComponent<{
     const header = (
         <div className="flex min-w-0 flex-wrap items-center gap-2.5">
             <AlertTriangle className="h-4 w-4 text-status-amber" strokeWidth={1.7} aria-hidden="true" />
-            <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Attention Queue</span>
+            <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("attentionQueue")}</span>
             <div className="flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em]">
-                <span className="rounded-md bg-status-amber/10 px-2 py-0.5 font-mono text-status-amber">open {open}</span>
-                <span className="rounded-md bg-signal-500/10 px-2 py-0.5 font-mono text-signal-500">claimed {claimed}</span>
-                <span className="rounded-md bg-status-green/10 px-2 py-0.5 font-mono text-status-green">resolved {resolved}</span>
-                <span className="rounded-md bg-black/[0.03] px-2 py-0.5 font-mono text-slate-500 dark:bg-white/[0.04] dark:text-slate-400">cleared {dismissed}</span>
+                <span className="rounded-md bg-status-amber/10 px-2 py-0.5 font-mono text-status-amber">{t("openCount", { count: formatNumber(open) })}</span>
+                <span className="rounded-md bg-signal-500/10 px-2 py-0.5 font-mono text-signal-500">{t("claimedCount", { count: formatNumber(claimed) })}</span>
+                <span className="rounded-md bg-status-green/10 px-2 py-0.5 font-mono text-status-green">{t("resolved")} {formatNumber(resolved)}</span>
+                <span className="rounded-md bg-black/[0.03] px-2 py-0.5 font-mono text-slate-500 dark:bg-white/[0.04] dark:text-slate-400">{t("cleared")} {formatNumber(dismissed)}</span>
             </div>
             <RuntimeSnapshotSurfaceBadge surface={snapshotSurface} />
             <span className="sr-only">{summary}</span>
@@ -81,8 +83,8 @@ export const AttentionQueuePanel: FunctionComponent<{
                 <div className="flex items-start gap-3 rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] border-l-status-green bg-black/[0.015] p-3 dark:border-white/[0.04] dark:bg-white/[0.015]">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-status-green" strokeWidth={1.7} aria-hidden="true" />
                     <div>
-                        <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Queue clear</p>
-                        <p className="mt-1 text-[11px] font-mono leading-relaxed text-slate-400 dark:text-slate-500">All tasks and workers are proceeding normally.</p>
+                        <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">{t("queueClear")}</p>
+                        <p className="mt-1 text-[11px] font-mono leading-relaxed text-slate-400 dark:text-slate-500">{t("allProceeding")}</p>
                     </div>
                 </div>
         </div>
@@ -90,21 +92,21 @@ export const AttentionQueuePanel: FunctionComponent<{
         <>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                  {[
-                    { label: "Open", value: open, color: "text-status-amber" },
-                    { label: "Claimed", value: claimed, color: "text-signal-500" },
-                    { label: "Resolved", value: resolved, color: "text-status-green" },
-                    { label: "Cleared", value: dismissed, color: "text-slate-500" }
+                    { label: t("open"), value: open, color: "text-status-amber" },
+                    { label: t("claimed"), value: claimed, color: "text-signal-500" },
+                    { label: t("resolved"), value: resolved, color: "text-status-green" },
+                    { label: t("cleared"), value: dismissed, color: "text-slate-500" }
                  ].map(stat => (
                      <div key={stat.label} className="rounded-xl border border-black/[0.04] bg-white/55 px-3 py-2 dark:border-white/[0.06] dark:bg-void-900/30 min-w-0">
                          <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{stat.label}</div>
-                         <div className={`mt-1 font-mono text-base font-semibold leading-none ${stat.color}`}>{stat.value}</div>
+                         <div className={`mt-1 font-mono text-base font-semibold leading-none ${stat.color}`}>{formatNumber(stat.value)}</div>
                      </div>
                  ))}
             </div>
             {open > 0 && (
                 <div role="status" aria-live="polite" className="flex items-center gap-2 rounded-r-xl rounded-l-sm border border-l-2 border-status-amber/20 border-l-status-amber bg-status-amber/[0.055] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-status-amber">
                     <AlertTriangle className="h-3.5 w-3.5" strokeWidth={1.7} aria-hidden="true" />
-                    {open} item{open === 1 ? "" : "s"} need operator or worker attention
+                    {tp("needsAttention", open, { count: formatNumber(open) })}
                 </div>
             )}
             <AttentionLedger collapsible defaultOpen />
@@ -112,7 +114,7 @@ export const AttentionQueuePanel: FunctionComponent<{
     );
 
     return (
-        <div role="region" aria-label="Attention queue status" aria-busy={snapshotSurface?.isBusy || claimed > 0 ? "true" : undefined} className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
+        <div role="region" aria-label={t("attentionQueueStatus")} aria-busy={snapshotSurface?.isBusy || claimed > 0 ? "true" : undefined} className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
             {collapsible ? (
                 <button
                     type="button"
@@ -140,7 +142,7 @@ export const AttentionQueuePanel: FunctionComponent<{
             >
                 <div ref={contentRef} className={collapsible ? "collapsible-content overflow-hidden" : ""}>
                     <div className="relative z-10 flex flex-col gap-3 px-5 pb-5 pt-0">
-                        <RuntimeSnapshotSurfaceNotice surface={snapshotSurface} panelLabel="Attention queue" />
+                        <RuntimeSnapshotSurfaceNotice surface={snapshotSurface} panelLabel={t("attentionQueuePanelLabel")} />
                         {content}
                     </div>
                 </div>

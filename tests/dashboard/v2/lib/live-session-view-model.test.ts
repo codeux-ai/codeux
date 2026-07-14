@@ -8,6 +8,7 @@ import type {
 } from "../../../../dashboard/src/types.js";
 import {
   deriveFilteredLiveSessionTasks,
+  deriveLiveSessionTaskFilterAnnouncement,
   deriveLiveSessionStats,
   deriveLiveSessionSnapshotSurface,
   deriveLiveSessionTaskCardItems,
@@ -150,6 +151,12 @@ function createExecution(overrides: Partial<ExecutionDashboardSnapshot> = {}): E
 }
 
 describe("live-session-view-model", () => {
+  it("formats German filter announcements with locale-aware counts", () => {
+    expect(deriveLiveSessionTaskFilterAnnouncement("Running", 1_234, "de")).toBe(
+      "1.234 Aufgaben mit Status laufend werden angezeigt.",
+    );
+  });
+
   it("projects large task lists with sprint-scoped runtime metadata", () => {
     const tasks = Array.from({ length: 1_000 }, (_, index) => createTask({
       record_id: `task-record-${index}`,

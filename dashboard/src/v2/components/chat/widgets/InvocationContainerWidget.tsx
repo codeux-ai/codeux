@@ -2,6 +2,8 @@ import { type FunctionComponent } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { Terminal, CheckCircle2, AlertCircle } from "lucide-preact";
 import { STATUS_MESSAGE_MIN_INTERVAL_MS, selectAgentHumorMessage } from "../../../lib/agent-humor-messages.js";
+import { useDashboardI18n } from "../../../i18n/context.js";
+import { chatMessages } from "../../../i18n/messages/chat.js";
 
 export interface InvocationContainerWidgetProps {
   containerPhase: 'starting' | 'working' | 'completed' | 'failed';
@@ -38,12 +40,14 @@ export const InvocationContainerWidget: FunctionComponent<InvocationContainerWid
   agentName,
   nowMs,
 }) => {
+  const { locale, translate } = useDashboardI18n();
   const statusNowMs = useStatusMessageNowMs(nowMs);
   const activeStatusMessage = containerPhase === "starting" || containerPhase === "working"
     ? selectAgentHumorMessage({
       category: containerPhase,
       seed: ["invocation-container", agentName ?? "", providerName ?? "", modelName ?? "", containerPhase].join("|"),
       nowMs: statusNowMs,
+      locale,
     })
     : null;
 
@@ -52,7 +56,7 @@ export const InvocationContainerWidget: FunctionComponent<InvocationContainerWid
       <div
         class="flex min-w-0 items-center gap-3 rounded-xl transition-all duration-300 bg-black/[0.02] dark:bg-white/[0.02] px-4 py-3"
         role="status"
-        aria-label="Initializing container"
+        aria-label={translate(chatMessages, "initializingContainer")}
       >
         <span class="relative flex h-4 w-4 items-center justify-center">
           <span class="absolute inline-flex h-full w-full rounded-full bg-signal-500/25 motion-safe:animate-ping" />
@@ -70,7 +74,7 @@ export const InvocationContainerWidget: FunctionComponent<InvocationContainerWid
       <div
         class="flex min-w-0 items-center gap-3 rounded-xl transition-all duration-300 bg-black/[0.02] dark:bg-white/[0.02] px-4 py-3"
         role="status"
-        aria-label="Container working"
+        aria-label={translate(chatMessages, "containerWorking")}
       >
         <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-signal-500/[0.08]">
           <Terminal size={16} class="text-signal-600 dark:text-signal-400" />
@@ -86,7 +90,7 @@ export const InvocationContainerWidget: FunctionComponent<InvocationContainerWid
           </span>
           {providerName && (
             <span class="min-w-0 max-w-full truncate text-[11px] text-slate-400 dark:text-slate-500">
-              via {providerName}
+              {translate(chatMessages, "viaProvider", { provider: providerName })}
             </span>
           )}
         </div>
@@ -99,18 +103,18 @@ export const InvocationContainerWidget: FunctionComponent<InvocationContainerWid
       <div
         class="flex items-center gap-3 rounded-xl transition-all duration-300 bg-black/[0.02] dark:bg-white/[0.02] px-4 py-3"
         role="status"
-        aria-label="Container completed"
+        aria-label={translate(chatMessages, "containerCompleted")}
       >
         <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-status-green/[0.08]">
           <CheckCircle2 size={16} class="text-status-green" />
         </div>
         <div class="flex items-center gap-2">
           <span class="text-[12px] font-medium text-slate-600 dark:text-slate-300">
-            Completed
+            {translate(chatMessages, "completed")}
           </span>
           {agentName && (
             <span class="text-[11px] text-slate-400 dark:text-slate-500">
-              by {agentName}
+              {translate(chatMessages, "completedBy", { name: agentName })}
             </span>
           )}
         </div>
@@ -123,13 +127,13 @@ export const InvocationContainerWidget: FunctionComponent<InvocationContainerWid
     <div
       class="flex items-center gap-3 rounded-xl transition-all duration-300 bg-black/[0.02] dark:bg-white/[0.02] px-4 py-3"
       role="status"
-      aria-label="Container failed"
+      aria-label={translate(chatMessages, "containerFailed")}
     >
       <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-status-red/[0.08]">
         <AlertCircle size={16} class="text-status-red" />
       </div>
       <span class="text-[12px] font-medium text-slate-600 dark:text-slate-300">
-        Failed
+        {translate(chatMessages, "failed")}
       </span>
     </div>
   );

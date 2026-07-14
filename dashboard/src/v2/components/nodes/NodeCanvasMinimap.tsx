@@ -1,6 +1,7 @@
 import type { FunctionComponent } from "preact";
 import type { NodeCanvasGraph } from "../../lib/nodes-canvas-state.js";
 import { NODE_CANVAS_NODE_HEIGHT, NODE_CANVAS_NODE_WIDTH } from "./NodeCanvasNodeCard.js";
+import { useNodesI18n } from "../../i18n/messages/nodes.js";
 
 interface NodeCanvasMinimapProps {
   graph: NodeCanvasGraph;
@@ -18,6 +19,7 @@ export const NodeCanvasMinimap: FunctionComponent<NodeCanvasMinimapProps> = ({
   viewportSize,
   bounds,
 }) => {
+  const { t } = useNodesI18n();
   const scale = Math.min(
     MINIMAP_WIDTH / Math.max(1, bounds.width),
     MINIMAP_HEIGHT / Math.max(1, bounds.height),
@@ -36,7 +38,7 @@ export const NodeCanvasMinimap: FunctionComponent<NodeCanvasMinimapProps> = ({
     <div className="absolute bottom-3 right-3 z-20 hidden rounded-[0.85rem] border border-black/[0.08] bg-white/88 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.14)] backdrop-blur-xl dark:border-white/[0.10] dark:bg-void-900/82 sm:block">
       <svg
         role="img"
-        aria-label="Node canvas minimap"
+        aria-label={t("nodeCanvasMinimap")}
         width={MINIMAP_WIDTH}
         height={MINIMAP_HEIGHT}
         viewBox={`0 0 ${MINIMAP_WIDTH} ${MINIMAP_HEIGHT}`}

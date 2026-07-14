@@ -519,6 +519,7 @@ describe("provider availability helpers", () => {
     expect(getProviderAuthLabel("codex", mockSystemSettings, mockHints, false)).toBeNull();
     // Claude can still surface an active auth mount in Docker mode without an API key
     expect(getProviderAuthLabel("claude-code", mockSystemSettings, mockHints, true)).toBe("Auth mount enabled");
+    expect(getProviderAuthLabel("gemini", mockSystemSettings, mockHints, true, "de")).toBe("Auth-Einbindung aktiviert");
   });
 
   it("returns no auth display for an invalid provider config id", () => {

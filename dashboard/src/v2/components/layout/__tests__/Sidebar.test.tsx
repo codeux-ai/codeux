@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useRouterState } from "@tanstack/react-router";
 import { useProjectData } from "../../../context/project-data.js";
 import { useProjectEffectiveSettings } from "../../../hooks/use-project-effective-settings.js";
+import { DashboardI18nProvider } from "../../../i18n/context.js";
 import { Sidebar } from "../Sidebar.js";
 
 vi.mock("@tanstack/react-router", async () => {
@@ -137,6 +138,25 @@ describe("Sidebar", () => {
       expect(tooltip).not.toBeNull();
       expect(tooltip).toHaveClass("fixed", "whitespace-nowrap", "w-max");
     }
+  });
+
+  it("localizes the minimized toggle name and tooltip without changing its disclosure state", () => {
+    render(
+      <DashboardI18nProvider initialLocale="de">
+        <Sidebar />
+      </DashboardI18nProvider>,
+    );
+
+    const expandButton = screen.getByRole("button", { name: "Ausklappen" });
+
+    expect(expandButton).toHaveAccessibleName("Ausklappen");
+    expect(expandButton).toHaveAttribute("aria-describedby", "nav-tooltip-sidebar-toggle");
+    expect(expandButton).toHaveAttribute("aria-expanded", "false");
+    expect(within(expandButton).getByText("Ausklappen", { selector: "[aria-hidden='true']" })).toHaveClass(
+      "fixed",
+      "whitespace-nowrap",
+      "w-max",
+    );
   });
 
   it("names mobile sidebar landmarks distinctly", () => {

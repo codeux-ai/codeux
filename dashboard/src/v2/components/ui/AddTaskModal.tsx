@@ -8,6 +8,8 @@ import { Button } from "./Button.js";
 import { Modal } from "./Modal.js";
 import { FieldWrapper } from "../forms/FieldWrapper.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { sprintAuthoringMessages } from "../../i18n/messages/sprint-authoring.js";
 
 interface TaskDraft {
   sprintId: string;
@@ -32,12 +34,6 @@ interface AddTaskModalProps {
 
 const PRIORITY_OPTIONS: TaskPriority[] = ["critical", "high", "medium", "low"];
 const STATUS_OPTIONS: TaskStatus[] = ["pending", "in_progress", "completed"];
-const EXECUTOR_OPTIONS: Array<{ value: TaskExecutorType; label: string; description: string }> = [
-  { value: "auto", label: "Auto", description: "Use the default Code UX routing." },
-  { value: "docker_cli", label: "CLI", description: "Run through the isolated Docker workspace." },
-  { value: "jules", label: "Jules", description: "Force remote Jules execution." },
-];
-
 const choiceBaseClass = "flex items-center gap-2 rounded-xl border px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition-all focus-within:ring-2 disabled:cursor-not-allowed";
 const srOnlyInputClass = "sr-only peer";
 
@@ -77,6 +73,18 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   onClose,
   onSubmit,
 }) => {
+  const { translate } = useDashboardI18n();
+  const t = (key: keyof typeof sprintAuthoringMessages.en, variables?: Record<string, string | number>): string => translate(sprintAuthoringMessages, key, variables);
+  const executorOptions: Array<{ value: TaskExecutorType; label: string; description: string }> = [
+    { value: "auto", label: t("executorAuto"), description: t("executorAutoDescription") },
+    { value: "docker_cli", label: t("executorCli"), description: t("executorCliDescription") },
+    { value: "jules", label: t("executorJules"), description: t("executorJulesDescription") },
+  ];
+  const statusLabels: Record<TaskStatus, string> = {
+    pending: t("pending"), in_progress: t("inProgress"), completed: t("completed"),
+    QA_REVIEW_FAILED: t("qaReviewFailed"), coding_completed: t("codingCompleted"),
+  };
+  const priorityLabels: Record<TaskPriority, string> = { critical: t("critical"), high: t("high"), medium: t("medium"), low: t("low") };
   const fieldsRef = useRef<HTMLFormElement>(null);
   const reducedMotion = useReducedMotion();
   const [sprintId, setSprintId] = useState(initialTask?.sprintId || defaultSprintId || initialSprintId || sprints[0]?.id || "");
@@ -97,10 +105,10 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
 
   const validationErrors = useMemo(() => {
     const errors: Record<string, string> = {};
-    if (!sprintId) errors.sprintId = "Sprint is required.";
-    if (!title.trim()) errors.title = "Title is required.";
+    if (!sprintId) errors.sprintId = t("sprintRequired");
+    if (!title.trim()) errors.title = t("titleRequired");
     return errors;
-  }, [sprintId, title]);
+  }, [sprintId, title, translate]);
 
 
   const handleClose = () => {
@@ -129,11 +137,11 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   );
 
   const dependencyLiveMessage = dependencySearchQuery.trim()
-    ? `${dependencyOptions.length} dependency result${dependencyOptions.length === 1 ? "" : "s"} match "${dependencySearchQuery}". ${dependsOnTaskIds.length} selected.`
-    : `${totalDependencyCount} dependency option${totalDependencyCount === 1 ? "" : "s"} available. ${dependsOnTaskIds.length} selected.`;
+    ? t(dependencyOptions.length === 1 ? "dependencyResult" : "dependencyResults", { count: dependencyOptions.length, query: dependencySearchQuery, selected: dependsOnTaskIds.length })
+    : t(totalDependencyCount === 1 ? "dependencyOption" : "dependencyOptions", { count: totalDependencyCount, selected: dependsOnTaskIds.length });
   const dependencySearchIsEmpty = dependencySearchQuery.trim().length > 0 && dependencyOptions.length === 0;
   const taskSubmitDisabledReason = isSubmitting
-    ? "Task submission is in progress. Wait for it to finish or retry if it fails."
+    ? t("taskSubmitting")
     : undefined;
 
 
@@ -141,14 +149,14 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
     event.preventDefault();
     if (Object.keys(validationErrors).length > 0) {
       setTouched({ sprintId: true, title: true });
-      setError(`Review required fields: ${Object.values(validationErrors).join(" ")}`, { autoDismiss: false });
+      setError(t("reviewRequiredFields", { errors: Object.values(validationErrors).join(" ") }), { autoDismiss: false });
       setTimeout(() => focusFirstInvalidField('add-task-form', 'add-task-form-body', reducedMotion), 0);
       return;
     }
 
     setIsSubmitting(true);
     clearFeedback();
-    setPending("Saving task...");
+    setPending(t("savingTask"));
     try {
       await onSubmit({
         sprintId,
@@ -161,19 +169,19 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
         dependsOnTaskIds,
       });
       setIsSubmitting(false);
-      setSuccess("Task saved successfully.", { autoDismiss: false });
+      setSuccess(t("taskSaved"), { autoDismiss: false });
       window.setTimeout(() => onClose(), 700);
     } catch (err) {
       setIsSubmitting(false);
       const msg = err instanceof Error ? err.message : String(err);
-      setError(msg, { retryAction: () => fieldsRef.current?.requestSubmit(), retryLabel: "Retry", autoDismiss: false });
+      setError(msg, { retryAction: () => fieldsRef.current?.requestSubmit(), retryLabel: t("retryTask"), autoDismiss: false });
     }
   };
 
   const toggleDependency = (task: Task) => {
     setDependsOnTaskIds((current) => {
       const isSelected = current.includes(task.recordId);
-      setDependencySelectionAnnouncement(`${task.title} ${isSelected ? "removed from" : "added to"} dependencies.`);
+      setDependencySelectionAnnouncement(t(isSelected ? "dependencyRemoved" : "dependencyAdded", { task: task.title }));
       return isSelected
         ? current.filter((dependencyId) => dependencyId !== task.recordId)
         : [...current, task.recordId];
@@ -192,7 +200,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
       >
         <div className="relative hidden sm:flex w-56 shrink-0 bg-void-900 dark:bg-void-950 flex-col justify-between p-8 overflow-hidden">
           <span className="absolute -top-2 -left-4 text-[7.5rem] font-black text-white/[0.035] font-display leading-none pointer-events-none select-none tracking-tighter">
-            {initialTask ? "EDIT" : "TASK"}
+            {initialTask ? t("edit") : t("task")}
           </span>
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="w-44 h-44 bg-signal-500/[0.08] animate-organic" style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }} />
@@ -200,12 +208,12 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
           </div>
           <div className="relative z-10 flex items-center gap-2 text-signal-500 font-mono font-bold text-[10px] tracking-[0.2em] uppercase">
             <ListChecks className="w-3.5 h-3.5" strokeWidth={2.5} />
-            {initialTask ? "Update Task" : "New Task"}
+            {initialTask ? t("updateTask") : t("newTask")}
           </div>
           <div className="relative z-10">
-            <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/25 font-mono mb-1.5">Workflow</div>
+            <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/25 font-mono mb-1.5">{t("workflow")}</div>
             <div className="text-4xl font-black text-white font-display tracking-tight leading-none">
-              {status.replace("_", " ")}
+              {statusLabels[status]}
             </div>
             <div className="mt-3 w-8 h-[2px] bg-signal-500/50" />
           </div>
@@ -215,15 +223,15 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
           <div className="flex items-start justify-between shrink-0 p-5 sm:p-7 lg:px-8 lg:pt-8 lg:pb-6 border-b border-black/[0.04] dark:border-white/[0.04]">
             <div>
               <h2 id="add-task-modal-title" className="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight font-display leading-none">
-                {initialTask ? "Edit Task." : "Create Task."}
+                {initialTask ? `${t("editTask")}.` : `${t("createTask")}.`}
               </h2>
               <p className="text-xs font-medium text-slate-400 mt-2 tracking-wide">
-                Define sprint scope, execution prompt, and dependencies.
+                {t("taskModalDescription")}
               </p>
             </div>
             <button
               onClick={handleClose}
-              aria-label="Close dialog"
+              aria-label={t("closeDialog")}
               disabled={isSubmitting}
               aria-describedby={taskSubmitDisabledReason ? "add-task-submit-disabled-reason" : undefined}
               title={taskSubmitDisabledReason}
@@ -237,7 +245,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             <form ref={fieldsRef} id="add-task-form" onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
             <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} clearError={clearError} autoDismiss={feedback.autoDismiss} retryAction={feedback.retryAction} retryLabel={feedback.retryLabel} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <FieldWrapper label="Sprint" required error={validationErrors.sprintId} forceTouch={touched.sprintId} announceError={false}>
+              <FieldWrapper label={t("sprint")} required error={validationErrors.sprintId} forceTouch={touched.sprintId} announceError={false}>
                 <select
                   id="add-task-sprint"
                   value={sprintId}
@@ -249,14 +257,14 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                   onBlur={() => setTouched(prev => ({ ...prev, sprintId: true }))}
                   required
                 >
-                  <option value="" disabled>Select sprint</option>
+                  <option value="" disabled>{t("selectSprint")}</option>
                   {sprints.map((sprint) => (
                     <option key={sprint.id} value={sprint.id}>{sprint.name}</option>
                   ))}
                 </select>
               </FieldWrapper>
 
-              <FieldWrapper label="Title" required error={validationErrors.title} forceTouch={touched.title} announceError={false}>
+              <FieldWrapper label={t("title")} required error={validationErrors.title} forceTouch={touched.title} announceError={false}>
                 <input
                   id="add-task-title"
                   type="text"
@@ -266,7 +274,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                     if (feedback.status === "error") clearError();
                   }}
                   className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500"
-                  placeholder="Define the task scope"
+                  placeholder={t("taskTitleScopePlaceholder")}
                   required
                   onBlur={() => setTouched(prev => ({ ...prev, title: true }))}
                 />
@@ -275,8 +283,8 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <fieldset>
-                <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">Status</legend>
-                <div role="radiogroup" aria-label="Status" className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
+                <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">{t("status")}</legend>
+                <div role="radiogroup" aria-label={t("status")} className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
                   {STATUS_OPTIONS.map((option) => (
                     <label
                       key={option}
@@ -292,15 +300,15 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                         className={srOnlyInputClass}
                       />
                       <span aria-hidden="true" className={`h-2 w-2 rounded-full ${status === option ? "bg-signal-500" : "bg-slate-300 dark:bg-slate-600"}`} />
-                      {option.replace("_", " ")}
+                      {statusLabels[option]}
                     </label>
                   ))}
                 </div>
               </fieldset>
 
               <fieldset>
-                <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">Priority</legend>
-                <div role="radiogroup" aria-label="Priority" className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
+                <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">{t("priority")}</legend>
+                <div role="radiogroup" aria-label={t("priority")} className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
                   {PRIORITY_OPTIONS.map((option) => (
                     <label
                       key={option}
@@ -316,7 +324,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                         className={srOnlyInputClass}
                       />
                       <span aria-hidden="true" className={`h-2 w-2 rounded-full ${priority === option ? "bg-ember-500" : "bg-slate-300 dark:bg-slate-600"}`} />
-                      {option}
+                      {priorityLabels[option]}
                     </label>
                   ))}
                 </div>
@@ -326,10 +334,10 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             <fieldset>
               <legend className="flex items-center gap-2 mb-2.5">
                 <Bot className="w-3.5 h-3.5 text-signal-500" strokeWidth={2.3} />
-                <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Executor</span>
+                <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{t("executor")}</span>
               </legend>
-              <div role="radiogroup" aria-label="Executor" className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {EXECUTOR_OPTIONS.map((option) => (
+              <div role="radiogroup" aria-label={t("executor")} className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {executorOptions.map((option) => (
                   <label
                     key={option.value}
                     className={`rounded-2xl border px-4 py-3 text-left transition-all focus-within:ring-2 focus-within:ring-signal-500 cursor-pointer has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50 ${
@@ -357,23 +365,23 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               </div>
             </fieldset>
 
-            <FieldWrapper label="Description">
+            <FieldWrapper label={t("description")}>
               <textarea
                 id="add-task-description"
                 value={description}
                 onInput={(event) => setDescription((event.target as HTMLTextAreaElement).value)}
                 className="mt-2.5 w-full min-h-[110px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500 resize-none"
-                placeholder="Summarize the intent and outcome."
+                placeholder={t("taskDescriptionPlaceholder")}
               />
             </FieldWrapper>
 
-            <FieldWrapper label="Execution Prompt">
+            <FieldWrapper label={t("executionPrompt")}>
               <textarea
                 id="add-task-prompt"
                 value={promptMarkdown}
                 onInput={(event) => setPromptMarkdown((event.target as HTMLTextAreaElement).value)}
                 className="mt-2.5 w-full min-h-[150px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500 resize-none font-mono"
-                placeholder="Detailed markdown instructions for the agent."
+                placeholder={t("executionPromptMarkdownPlaceholder")}
               />
             </FieldWrapper>
 
@@ -381,15 +389,15 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               <div className="flex items-center justify-between mb-3">
                 <legend className="flex items-center gap-2">
                   <Target className="w-3.5 h-3.5 text-ember-500" strokeWidth={2.3} />
-                  <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Dependencies</span>
+                  <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{t("dependencies")}</span>
                 </legend>
                 {availableTasks.filter(t => t.sprintId === sprintId && t.recordId !== initialTask?.recordId).length > 5 && (
                   <div>
-                    <label htmlFor="dependency-search" className="sr-only">Filter dependencies</label>
+                    <label htmlFor="dependency-search" className="sr-only">{t("filterDependencies")}</label>
                     <input
                       id="dependency-search"
                       type="search"
-                      placeholder="Filter tasks..."
+                      placeholder={t("filterTasks")}
                       value={dependencySearchQuery}
                       onInput={(e) => setDependencySearchQuery((e.target as HTMLInputElement).value)}
                       aria-describedby="dependency-result-count"
@@ -417,11 +425,11 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               {dependencyOptions.length === 0 ? (
                 <div role="status" aria-live="polite" className="rounded-2xl border border-dashed border-black/[0.08] dark:border-white/[0.08] px-4 py-4 text-xs text-slate-400">
                   {totalDependencyCount === 0
-                    ? "No existing tasks in this sprint yet."
-                    : `No dependency results match "${dependencySearchQuery.trim()}". Clear the filter to show ${totalDependencyCount} available option${totalDependencyCount === 1 ? "" : "s"}.`}
+                    ? t("noExistingTasks")
+                    : t(totalDependencyCount === 1 ? "noDependencyResult" : "noDependencyResults", { query: dependencySearchQuery.trim(), count: totalDependencyCount })}
                 </div>
               ) : (
-                <div role="group" aria-label="Dependency choices" className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
+                <div role="group" aria-label={t("dependencyChoices")} className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
                   {dependencyOptions.map((task) => {
                     const active = dependsOnTaskIds.includes(task.recordId);
                     return (
@@ -444,7 +452,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-[10px] font-mono uppercase tracking-[0.14em] text-slate-400">{task.id}</span>
                             <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider ${task.priority === 'critical' ? 'bg-red-500/10 text-red-500' : task.priority === 'high' ? 'bg-orange-500/10 text-orange-500' : 'bg-slate-500/10 text-slate-500'}`}>
-                              {task.priority}
+                              {priorityLabels[task.priority]}
                             </span>
                           </div>
                           <div className="text-sm font-semibold truncate leading-tight">{task.title}</div>
@@ -455,7 +463,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                             : "border-slate-300 text-slate-400 dark:border-slate-600"
                         }`}>
                           {active && <Check aria-hidden="true" className="h-3 w-3" strokeWidth={3} />}
-                          {active ? "Selected" : "Add"}
+                          {active ? t("selected") : t("add")}
                         </span>
                       </label>
                     );
@@ -475,7 +483,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                 title={taskSubmitDisabledReason}
                 className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 rounded disabled:opacity-50 disabled:cursor-not-allowed py-2 sm:py-0 w-full sm:w-auto"
               >
-                Cancel
+                {t("cancel")}
               </button>
               <Button
                 type="submit"
@@ -487,7 +495,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                 className="w-full sm:w-auto"
               >
                 <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
-                {initialTask ? "Save Task" : "Create Task"}
+                {initialTask ? t("saveTask") : t("createTask")}
               </Button>
               <span id="add-task-submit-disabled-reason" className="sr-only">
                 {taskSubmitDisabledReason}

@@ -816,7 +816,7 @@ describe("TopNav shell accessibility", () => {
         rerender(<TopNav />);
 
         await waitFor(() => {
-            expect(screen.getByRole("status")).toHaveTextContent("Route changed to sprints");
+            expect(screen.getByRole("status")).toHaveTextContent("Route changed to Sprints");
         });
     });
 

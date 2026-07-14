@@ -34,6 +34,7 @@ export interface SelectAgentHumorMessageOptions {
   cycleDurationMs?: number;
   seed?: string | number | null;
   nowMs: number;
+  locale?: DashboardLocale;
 }
 
 const CATEGORY_SET: ReadonlySet<string> = new Set(AGENT_HUMOR_CATEGORIES);
@@ -379,6 +380,42 @@ export const AGENT_HUMOR_MESSAGES: Record<AgentHumorCategory, readonly string[]>
   ),
 };
 
+const buildGermanMessages = (
+  activity: string,
+  nouns: readonly string[],
+): readonly string[] => buildMessages(
+  nouns.map((noun) => `${activity} ${noun}`),
+  [
+    "mit ruhiger Zuversicht und klarer Beschriftung.",
+    "während der Umfang freundlich im Blick bleibt.",
+    "und hält die nächsten Schritte gut nachvollziehbar.",
+    "ohne den belegten Laufzeitstand auszuschmücken.",
+  ],
+);
+
+export const AGENT_HUMOR_MESSAGES_DE: Record<AgentHumorCategory, readonly string[]> = {
+  starting: buildGermanMessages("Startet", ["den Arbeitsbereich", "den Planungsdesk", "die Sprint-Ablage", "den kleinen Statusschalter", "die Aufgabenrampe"]),
+  working: buildGermanMessages("Bewegt", ["die Tickets durch den Ablauf", "den Sprint auf seiner Spur", "die Anforderungen Richtung Umsetzung", "das Task-Board zum nächsten Stand", "die Akzeptanzkriterien in passende Ordner"]),
+  delegating: buildGermanMessages("Übergibt", ["die Aufgabe an einen Spezialisten", "die Umsetzung an das passende Teammitglied", "den nächsten Schritt an fachkundige Hände", "das Arbeitspaket mit klarer Zuständigkeit", "die Aufgabe samt Kontext und Ziel"]),
+  planning: buildGermanMessages("Plant", ["die Arbeit in sinnvollen Schritten", "den ersten sorgfältigen Durchlauf", "die Abhängigkeiten in Reihenfolge", "den Weg vom Ziel zur Ausführung", "die Route vor dem Arbeitsbeginn"]),
+  qa_handoff: buildGermanMessages("Übergibt", ["die aktuelle Arbeit an QA", "die Änderung an die Prüfung", "die Nachweise an den Qualitätsdesk", "das Ergebnis an seine Kriterien", "die Verifikation an den nächsten Durchlauf"]),
+  completion: buildGermanMessages("Schließt", ["den aufgezeichneten Laufzeitschritt", "den abgeschlossenen Lauf im Protokoll", "den Anbieter-Durchgang", "den bekannten Ausführungsschritt", "die beendete Aktivität"]),
+  error: buildGermanMessages("Markiert", ["ein Laufzeitproblem", "den fehlgeschlagenen Schritt", "den sichtbaren Anbieterfehler", "das Ausführungsproblem", "den aufgezeichneten Fehlschlag"]),
+  thinking: buildGermanMessages("Prüft", ["die Sicht des Architekturdiagramms", "die Abwägungen in einer stillen Runde", "den Rat der Gummiente", "die Notiz für künftige Wartung", "den Weg mit den wenigsten Überraschungen"]),
+  tool_exec: buildGermanMessages("Schickt", ["einen Befehl durch das Terminal", "die Shell in einen kurzen Arbeitslauf", "den Prozess an seinen Platz", "das Skript durch seinen Durchlauf", "die Kommandozeile zur Statusabfrage"]),
+  tool_edit: buildGermanMessages("Bearbeitet", ["den Patch mit feinem Stift", "den Code mit vorsichtigen Schritten", "die Datei mit einer gezielten Verbesserung", "die Umsetzung entlang vorhandener Muster", "das Modul für den nächsten Leser"]),
+  tool_read: buildGermanMessages("Liest", ["die Datei samt Besprechungsnotizen", "den Quelltext mit frischem Kontext", "das Modul nach hilfreichen Spuren", "die benachbarten Typen", "das lokale Muster vor der Planung"]),
+  tool_search: buildGermanMessages("Durchsucht", ["die Korridore der Codebasis", "die passenden Ordner mit ripgrep", "die Referenzen zum Symbol", "die relevanten Ecken des Repositorys", "die Aufrufstellen mit einer kleinen Lupe"]),
+  tool_web: buildGermanMessages("Prüft", ["das Web mit einer Quellenliste", "den Browser mit professioneller Neugier", "die aktuellen öffentlichen Angaben", "die Seite samt Datumsangaben", "die Quelle vor der Zusammenfassung"]),
+  tool_generic: buildGermanMessages("Verwendet", ["die Werkzeugschublade mit sichtbaren Etiketten", "den Helfer für eine klar begrenzte Anfrage", "das Hilfsprogramm für praktische Details", "die Automatisierung für einen Arbeitsschritt", "das Werkzeug kurz in der Statusrunde"]),
+  mood: buildGermanMessages("Bleibt", ["konzentriert mit einem leicht theatralischen Klemmbrett", "ruhig zuversichtlich in einer vernünftigen Schriftart", "mit Besprechungsraum-Begeisterung bereit", "bei geordnetem Optimismus", "fröhlich genug zum Beschriften von Ordnern"]),
+};
+
+export const getAgentHumorMessages = (
+  category: AgentHumorCategory,
+  locale: DashboardLocale = "en",
+): readonly string[] => locale === "de" ? AGENT_HUMOR_MESSAGES_DE[category] : AGENT_HUMOR_MESSAGES[category];
+
 export const isAgentHumorCategory = (category: string): category is AgentHumorCategory => (
   CATEGORY_SET.has(category)
 );
@@ -436,9 +473,10 @@ export const selectAgentHumorMessage = ({
   cycleDurationMs,
   seed,
   nowMs,
+  locale = "en",
 }: SelectAgentHumorMessageOptions): string => {
   const resolvedCategory = isAgentHumorCategory(category) ? category : "tool_generic";
-  const messages = AGENT_HUMOR_MESSAGES[resolvedCategory];
+  const messages = getAgentHumorMessages(resolvedCategory, locale);
   const cycle = getAgentHumorCycle(nowMs, cycleDurationMs);
   const normalizedSeed = normalizeSeed(seed);
   const deckIndex = Math.floor(cycle.index / messages.length);
@@ -475,3 +513,4 @@ export const classifyToolHumorCategory = (toolName: string | null | undefined): 
   }
   return "tool_generic";
 };
+import type { DashboardLocale } from "../i18n/locales.js";

@@ -33,6 +33,10 @@ A practical review flow is:
 2. Save the smallest scope that should own the change. Use System for defaults that every project should inherit, and Project for repository-specific behavior.
 3. Reopen the Settings page after saving when the value controls startup behavior, provider routing, preview runtime, or destructive maintenance.
 
+## Localization And Protected Values
+
+MCP categories, installation controls, token actions, validation guidance, status announcements, and accessible labels follow the selected dashboard language. Tool names, server names, transports, commands, arguments, URLs, token values, generated configuration, and server-returned diagnostics remain verbatim so localization cannot alter the MCP contract.
+
 ## Risks And Gotchas
 
 Broad custom MCP access can expose external tools to more providers than intended.

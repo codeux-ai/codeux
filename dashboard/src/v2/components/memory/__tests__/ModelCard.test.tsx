@@ -1,21 +1,17 @@
 /** @vitest-environment happy-dom */
 /** @jsx h */
-import { h, type ComponentChildren } from "preact";
+import { h } from "preact";
 // @ts-ignore
 globalThis.React = { createElement: h };
-import { cleanup, render as renderTestingLibrary, screen, waitFor } from "@testing-library/preact";
+import { cleanup, screen, waitFor } from "@testing-library/preact";
+import { renderWithDashboardI18n as render } from "../../../../../../tests/dashboard/helpers/dashboard-i18n-test-utils.js";
 import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModelCard } from "../ModelCard.js";
 import type { EmbeddingModelWithStatus } from "../../../lib/memory-api.js";
-import { DashboardI18nProvider } from "../../../i18n/context.js";
 
 expect.extend(matchers);
-
-const render = (ui: ComponentChildren) => renderTestingLibrary(
-  <DashboardI18nProvider initialLocale="en" storage={null}>{ui}</DashboardI18nProvider>,
-);
 
 afterEach(() => {
   cleanup();
@@ -183,5 +179,19 @@ describe("ModelCard", () => {
     expect(link).toHaveAttribute("rel", "noreferrer");
     expect(screen.getByRole("link", { name: "MIT · operator asserted" })).toBeInTheDocument();
     expect(screen.queryByText("MIT · commercial use")).not.toBeInTheDocument();
+  });
+
+  it("localizes German controls while preserving catalog metadata", () => {
+    render(<ModelCard model={model()}
+      {...handlers()}
+      reembedding={false}
+      staleCount={0} />, "de");
+
+    expect(screen.getByText("Verfügbar")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Herunterladen" })).toBeInTheDocument();
+    expect(screen.getByText("BGE Small EN")).toBeInTheDocument();
+    expect(screen.getByText("Fast local English embeddings for responsive memory search.")).toBeInTheDocument();
+    expect(screen.getByText("English")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "MIT · kommerzielle Nutzung" })).toHaveAttribute("href", "https://example.test/license");
   });
 });

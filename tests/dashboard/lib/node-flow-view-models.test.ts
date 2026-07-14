@@ -4,12 +4,14 @@ import {
   applyWidgetDefaults,
   buildValidationMessagesByField,
   createDefaultNodeFlowGraph,
+  formatNodeFlowRunStatus,
   getValidationBadgeState,
   getWidgetFieldDefaultValue,
   isNodeFlowDirty,
   layoutNodeFlowGraph,
   redactNodeFlowSecrets,
   stableStringify,
+  summarizeNodeFlow,
   updateNodeInGraph,
 } from "../../../dashboard/src/v2/lib/node-flow-view-models.js";
 
@@ -113,5 +115,35 @@ describe("node-flow view models", () => {
       nested: { password: "[redacted]", ok: true },
       list: [{ token: "[redacted]" }],
     });
+  });
+
+  it("localizes German presentation models without translating stored graph or diagnostics", () => {
+    const defaultGraph = createDefaultNodeFlowGraph();
+    expect(defaultGraph.nodes[0]).toMatchObject({
+      id: "trigger",
+      type: "input",
+      title: "Run Input",
+      data: { label: "Manual run" },
+    });
+    expect(getValidationBadgeState(null, true, "de")).toMatchObject({
+      label: "Ungespeichert",
+      title: "Dieser Flow enthält ungespeicherte Änderungen.",
+    });
+    expect(getValidationBadgeState({ valid: false, errors: [{ field: "node", code: "provider", message: "PROVIDER_DIAGNOSTIC" }] }, false, "de"))
+      .toMatchObject({ label: "1 Problem", title: "PROVIDER_DIAGNOSTIC" });
+
+    const record: NodeFlowRecord = {
+      id: "flow-1", projectId: "project-1", title: "Stable title", description: "", graph: defaultGraph,
+      version: 1, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    expect(summarizeNodeFlow(record, "de").description).toBe("1 Node, 0 Kanten");
+
+    expect(formatNodeFlowRunStatus({
+      id: "run-1", flowId: "flow-1", projectId: "project-1", version: 1, publicationId: null,
+      status: "attention_required", policy: {} as never, leaseOwner: null, leaseExpiresAt: null,
+      heartbeatAt: null, cancelRequestedAt: null, executionInvocationId: null, triggerType: "manual",
+      triggerPayload: null, input: null, output: null, errorMessage: null, startedAt: null, finishedAt: null,
+      createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z",
+    }, "de")).toContain("Eingriff erforderlich");
   });
 });

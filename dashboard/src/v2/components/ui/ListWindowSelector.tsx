@@ -3,6 +3,8 @@ import { type ListWindowOption, LIST_WINDOW_OPTIONS } from "../../lib/list-windo
 import { ListFilter } from "lucide-preact";
 import { AvantgardeSelect } from "./AvantgardeSelect.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 interface ListWindowSelectorProps {
   value: ListWindowOption;
@@ -17,23 +19,30 @@ interface ListWindowSelectorProps {
 export const ListWindowSelector: FunctionComponent<ListWindowSelectorProps> = ({
   value,
   onChange,
-  label = "Show",
+  label,
   totalItems,
   visibleCount,
-  itemLabel = "items",
-  ariaLabel = "Select number of ledger entries",
+  itemLabel,
+  ariaLabel,
 }) => {
+  const { formatNumber, translate } = useOptionalDashboardI18n();
+  const resolvedLabel = label ?? translate(shellMessages, "show");
+  const resolvedItemLabel = itemLabel ?? translate(shellMessages, "items");
   const tokens = useInteractionTokens();
   const options = LIST_WINDOW_OPTIONS.map((option) => ({
     value: String(option),
-    label: `${label} ${option}`,
+    label: `${resolvedLabel} ${typeof option === "number" ? formatNumber(option) : translate(shellMessages, "all")}`,
     icon: <ListFilter className="h-3.5 w-3.5 text-slate-400" strokeWidth={2.1} />,
   }));
   const hasRange = typeof totalItems === "number" && typeof visibleCount === "number";
   const rangeText = hasRange
     ? totalItems === 0
-      ? `Showing 0 ${itemLabel}.`
-      : `Showing 1 to ${Math.min(visibleCount, totalItems).toLocaleString()} of ${totalItems.toLocaleString()} ${itemLabel}.`
+      ? translate(shellMessages, "showingNone", { itemLabel: resolvedItemLabel })
+      : translate(shellMessages, "showingRange", {
+          visibleCount: formatNumber(Math.min(visibleCount, totalItems)),
+          totalItems: formatNumber(totalItems),
+          itemLabel: resolvedItemLabel,
+        })
     : null;
 
   return (
@@ -54,7 +63,7 @@ export const ListWindowSelector: FunctionComponent<ListWindowSelectorProps> = ({
         options={options}
         variant="default"
         className="min-w-[8.75rem] motion-reduce:transition-none"
-        aria-label={ariaLabel}
+        aria-label={ariaLabel ?? translate(shellMessages, "selectLedgerEntries")}
       />
       {rangeText ? (
         <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">

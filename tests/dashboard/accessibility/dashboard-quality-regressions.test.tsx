@@ -100,7 +100,6 @@ import { FileViewer } from "../../../dashboard/src/v2/components/file-browser/Fi
 import { DiffViewer } from "../../../dashboard/src/v2/components/file-browser/DiffViewer.js";
 import { InvocationsTable } from "../../../dashboard/src/v2/pages/stats/components/system/InvocationsTable.js";
 import { WaveFluid } from "../../../dashboard/src/v2/components/ui/WaveFluid.js";
-
 const mockedUseReducedMotion = vi.mocked(useReducedMotion);
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -596,19 +595,22 @@ describe("dashboard accessibility quality regressions", () => {
           onRowExpand={vi.fn()}
         />
       </div>,
+      {},
+      "de",
     );
 
     expect(screen.getByRole("region", { name: provider.name })).toBeInTheDocument();
-    expect(screen.getByRole("radiogroup", { name: `${provider.name} authentication mode` })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: `Remove ${provider.name}` })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Delete task TASK-LONG:/ })).toHaveAccessibleName(/Very long task title/);
+    expect(screen.getByRole("radiogroup", { name: `${provider.name} Authentifizierungsmodus` })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `${provider.name} Anbieter-ID` })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Entfernen: ${provider.name}` })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Aufgabe TASK-LONG löschen:/ })).toHaveAccessibleName(/Very long task title/);
     expect(container.querySelector(".kanban-card h4")).toHaveClass("break-words");
-    expect(screen.getByRole("list", { name: "1 preview session" })).toHaveClass("overflow-x-auto");
-    expect(screen.getByRole("button", { name: `Select preview session ${previewSession.sprintName}` })).toHaveAccessibleName(
+    expect(screen.getByRole("list", { name: "1 Vorschau-Sitzung" })).toHaveClass("overflow-x-auto");
+    expect(screen.getByRole("button", { name: `Vorschau-Sitzung ${previewSession.sprintName} auswählen` })).toHaveAccessibleName(
       new RegExp(previewSession.sprintName),
     );
-    expect(screen.getByLabelText("Close preview window")).toBeInTheDocument();
-    expect(screen.getByLabelText(`Preview address for ${previewSession.sprintName}`)).toBeInTheDocument();
+    expect(screen.getByLabelText("Vorschaufenster schließen")).toBeInTheDocument();
+    expect(screen.getByLabelText(`Vorschau-Adresse für ${previewSession.sprintName}`)).toBeInTheDocument();
 
     const caption = screen.getByText(/Invocation ledger with sortable time/i);
     expect(caption.tagName.toLowerCase()).toBe("caption");

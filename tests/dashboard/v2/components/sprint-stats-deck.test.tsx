@@ -1,11 +1,12 @@
 /** @vitest-environment jsdom */
 /** @jsx h */
 import { h } from "preact";
-import { render } from "@testing-library/preact";
+import { render, screen } from "@testing-library/preact";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { SprintStatsDeck } from "../../../../dashboard/src/v2/components/SprintStatsDeck";
+import { SprintStatsDeck } from "../../../../dashboard/src/v2/components/SprintStatsDeck.js";
 import type { DashboardStats } from "../../../../dashboard/src/v2/types";
+import { DashboardI18nProvider } from "../../../../dashboard/src/v2/i18n/context.js";
 
 expect.extend(matchers);
 
@@ -122,5 +123,28 @@ describe("SprintStatsDeck", () => {
     expect(outputTile).toHaveTextContent("2.3k");
     expect(cachedTile).toHaveTextContent("Cached");
     expect(cachedTile).toHaveTextContent("3.5k");
+  });
+
+  it("localizes German stat legends, percentages, and durations", () => {
+    render(
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <SprintStatsDeck
+          hasSprintContext={true}
+          stats={mockStats}
+          tasks={[{}, {}, {}, {}] as never[]}
+          sprintTiming={mockSprintTiming}
+        />
+      </DashboardI18nProvider>,
+    );
+
+    const region = screen.getByRole("region", { name: "Live-Sprint-Statistik" });
+    expect(region).toBeInTheDocument();
+    expect(screen.getByText("Verstrichen")).toBeInTheDocument();
+    expect(region.textContent).toContain(new Intl.NumberFormat("de", {
+      style: "percent",
+      maximumFractionDigits: 0,
+    }).format(0.75));
+    expect(screen.getAllByText("1 Std. 0 Min. 0 Sek.").length).toBeGreaterThan(0);
+    expect(screen.getByText("Zusammenführungsstatus")).toBeInTheDocument();
   });
 });

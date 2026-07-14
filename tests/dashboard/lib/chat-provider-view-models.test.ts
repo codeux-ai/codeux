@@ -10,6 +10,8 @@ import type {
 import {
   buildChatProviderCatalogViewModel,
   createDefaultSetupForBridge,
+  getChatProviderBridgeSetupLabel,
+  getChatProviderFieldLabel,
   redactChatProviderError,
 } from "../../../dashboard/src/v2/lib/chat-provider-view-models.js";
 
@@ -126,5 +128,23 @@ describe("chat provider view models", () => {
   it("creates default setup and redacts common credential patterns", () => {
     expect(createDefaultSetupForBridge(definition, "managed_bridge")).toEqual({ pluginName: "slack" });
     expect(redactChatProviderError("token=abc123 secret: super-secret password=hunter2")).toBe("token=[redacted] secret: [redacted] password=[redacted]");
+  });
+
+  it("localizes German presentation state while preserving and redacting the provider diagnostic", () => {
+    const [card] = buildChatProviderCatalogViewModel({
+      definitions: [definition],
+      connections: [connection],
+      bindings: [createBinding({})],
+      deliveriesByConnection: { "conn-1": [createDelivery({ lastError: "Gateway Bearer sk-abcdefghijklmnopqrstuvwxyz123456 failed" })] },
+      locale: "de",
+    });
+
+    expect(card.connections[0]?.authStatusLabel).toBe("Authentifiziert");
+    expect(card.connections[0]?.recentFailedDeliveries[0]?.retryLabel).toBe("Wiederholbar");
+    expect(card.connections[0]?.recentFailedDeliveries[0]?.attemptLabel).toBe("2 Versuche");
+    expect(card.connections[0]?.recentFailedDeliveries[0]?.redactedError).toBe("Gateway Bearer [redacted] failed");
+    expect(getChatProviderBridgeSetupLabel(definition, "managed_bridge", "de")).toBe("Slack: Verwaltete Bridge");
+    expect(getChatProviderFieldLabel("Bridge API key", "de")).toBe("Bridge-API-Schlüssel");
+    expect(getChatProviderFieldLabel("Server-defined field", "de")).toBe("Server-defined field");
   });
 });

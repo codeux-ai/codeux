@@ -8,6 +8,8 @@ import { getSafeUrl } from "../../lib/safe-url.js";
 import { TerminalOutputBuffer } from "../../lib/terminal-output-buffer.js";
 import type { ContainerBuildProgress } from "../../../lib/activity.js";
 import { ContainerBuildStatusInfobox } from "../live-session/ContainerBuildStatusInfobox.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { settingsIntegrationsMessages } from "../../i18n/messages/settings-integrations.js";
 
 interface TerminalLoginModalProps {
   providerConfigId: string;
@@ -56,6 +58,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const { translate: t } = useDashboardI18n();
   const [status, setStatus] = useState<"connecting" | "active" | "exited" | "error">("connecting");
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [terminalOutput, setTerminalOutput] = useState<string>("");
@@ -72,7 +75,19 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
   const hasOpenedUrlRef = useRef<string | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
   const dialogTitleId = `terminal-login-title-${providerConfigId.replace(/\W/g, "-")}`;
-  const terminalRegionLabel = `${providerName} terminal login output for ${providerConfigId}`;
+  const terminalRegionLabel = providerName + t(settingsIntegrationsMessages, "terminalOutputMiddle") + providerConfigId;
+  const containerBuildCopy = {
+    cached: t(settingsIntegrationsMessages, "containerImageCached"),
+    fallback: t(settingsIntegrationsMessages, "containerBuildFellBack"),
+    waiting: t(settingsIntegrationsMessages, "waitingForContainerBuild"),
+    building: t(settingsIntegrationsMessages, "buildingContainerImage"),
+    setupCacheImage: t(settingsIntegrationsMessages, "setupCacheImage"),
+    loginBaseImage: t(settingsIntegrationsMessages, "loginBaseImage"),
+    description: t(settingsIntegrationsMessages, "containerBuildDescription"),
+    progressSuffix: t(settingsIntegrationsMessages, "buildProgressSuffix"),
+    percentCompleteSuffix: t(settingsIntegrationsMessages, "percentCompleteSuffix"),
+    progressUnavailable: t(settingsIntegrationsMessages, "progressNotAvailable"),
+  };
 
   // Close context menu on any global click
   useEffect(() => {
@@ -190,16 +205,16 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
     try {
       const text = await navigator.clipboard.readText();
       if (!text) {
-        setPasteFeedback({ kind: "error", message: "Clipboard is empty. Copy the login value, then try Paste again." });
+        setPasteFeedback({ kind: "error", message: t(settingsIntegrationsMessages, "clipboardEmpty") });
         return;
       }
       if (!sendTerminalInput(text)) {
-        setPasteFeedback({ kind: "error", message: "The terminal is not ready yet. Wait for Active session, then paste again." });
+        setPasteFeedback({ kind: "error", message: t(settingsIntegrationsMessages, "terminalNotReady") });
         return;
       }
-      setPasteFeedback({ kind: "success", message: "Clipboard text pasted into the active terminal session." });
+      setPasteFeedback({ kind: "success", message: t(settingsIntegrationsMessages, "clipboardPasted") });
     } catch {
-      setPasteFeedback({ kind: "error", message: "Clipboard access was blocked. Focus the terminal and use Ctrl+V or Command+V." });
+      setPasteFeedback({ kind: "error", message: t(settingsIntegrationsMessages, "clipboardBlocked") });
     } finally {
       focusTerminal();
     }
@@ -262,7 +277,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
         className="relative flex h-[min(680px,calc(100dvh-1.5rem))] w-[min(920px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-white/[0.1] bg-void-950 shadow-[var(--elevation-floating)] outline-none"
       >
         <p id="terminal-login-help" className="sr-only">
-          Interactive provider login terminal. Terminal control sequences are rendered as a clean text screen. Use the close button to leave because Escape is forwarded to the provider.
+          {t(settingsIntegrationsMessages, "terminalHelp")}
         </p>
         {/* Glow Effects */}
         <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-signal-500/30 to-transparent" />
@@ -274,8 +289,8 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
               <Terminal aria-hidden="true" className="h-4 w-4" />
             </div>
             <div>
-              <h3 id={dialogTitleId} className="text-sm font-semibold text-white">Login to {providerName}</h3>
-              <p className="text-[11px] text-slate-400 font-mono">Instance: {providerConfigId}</p>
+              <h3 id={dialogTitleId} className="text-sm font-semibold text-white">{t(settingsIntegrationsMessages, "loginTo")}{providerName}</h3>
+              <p className="text-[11px] text-slate-400 font-mono">{t(settingsIntegrationsMessages, "instance")} {providerConfigId}</p>
             </div>
           </div>
 
@@ -283,13 +298,13 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
             {status === "connecting" && (
               <div id="terminal-login-status" role="status" aria-live="polite" className="flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/5 px-2.5 py-1 text-[10px] font-semibold text-amber-300">
                 <RefreshCw aria-hidden="true" className="h-3 w-3 motion-safe:animate-spin" />
-                BOOTING CONTAINER
+                {t(settingsIntegrationsMessages, "bootingContainer")}
               </div>
             )}
             {status === "active" && (
               <div id="terminal-login-status" role="status" aria-live="polite" className="flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-2.5 py-1 text-[10px] font-semibold text-signal-300">
                 <div aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-signal-400 motion-safe:animate-pulse" />
-                ACTIVE SESSION
+                {t(settingsIntegrationsMessages, "activeSession")}
               </div>
             )}
             {status === "exited" && (
@@ -299,20 +314,20 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
                   : "border-status-red/20 bg-status-red/10 text-status-red"
               }`}>
                 {exitCode === 0 ? <Check aria-hidden="true" className="h-3 w-3" /> : <AlertCircle aria-hidden="true" className="h-3 w-3" />}
-                {exitCode === 0 ? "SUCCESSFUL" : `EXITED (${exitCode})`}
+                {exitCode === 0 ? t(settingsIntegrationsMessages, "successful") : `${t(settingsIntegrationsMessages, "exited")} (${exitCode})`}
               </div>
             )}
             {status === "error" && (
               <div id="terminal-login-status" role="alert" aria-live="assertive" className="flex items-center gap-1.5 rounded-full border border-status-red/20 bg-status-red/10 px-2.5 py-1 text-[10px] font-semibold text-status-red">
                 <AlertCircle aria-hidden="true" className="h-3 w-3" />
-                CONNECTION ERROR
+                {t(settingsIntegrationsMessages, "connectionError")}
               </div>
             )}
 
             <button
               type="button"
               onClick={onClose}
-              aria-label={`Close ${providerName} terminal login`}
+              aria-label={t(settingsIntegrationsMessages, "closeTerminalPrefix") + providerName + t(settingsIntegrationsMessages, "closeTerminalSuffix")}
               className="rounded-full p-2 text-slate-300 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-400 focus-visible:ring-offset-2 focus-visible:ring-offset-void-900"
             >
               <X aria-hidden="true" className="h-4 w-4" />
@@ -322,19 +337,19 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
 
         {/* Modal Content - The Terminal Screen */}
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-void-950 p-4 font-mono text-sm leading-relaxed text-white sm:p-6">
-          <ContainerBuildStatusInfobox progress={containerBuildProgress} className="mb-4 shrink-0" />
+          <ContainerBuildStatusInfobox progress={containerBuildProgress} copy={containerBuildCopy} className="mb-4 shrink-0" />
 
           {status === "connecting" && (
             <div role="status" aria-live="polite" className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-void-950/80 p-6">
               <RefreshCw aria-hidden="true" className="h-8 w-8 text-signal-400 motion-safe:animate-spin" />
               <div className="text-center">
-                <p className="text-sm font-semibold text-white">Starting Docker Environment</p>
+                <p className="text-sm font-semibold text-white">{t(settingsIntegrationsMessages, "startingDocker")}</p>
                 <p className="mt-1 text-xs text-slate-500">
-                  {containerBuildProgress ? "Preparing the login container image before opening the terminal." : "Mounting host credential workspace..."}
+                  {t(settingsIntegrationsMessages, containerBuildProgress ? "preparingLoginImage" : "mountingCredentials")}
                 </p>
               </div>
               {containerBuildProgress && (
-                <ContainerBuildStatusInfobox progress={containerBuildProgress} className="w-full max-w-xl text-left" />
+                <ContainerBuildStatusInfobox progress={containerBuildProgress} copy={containerBuildCopy} className="w-full max-w-xl text-left" />
               )}
             </div>
           )}
@@ -345,7 +360,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
                 <AlertCircle aria-hidden="true" className="h-6 w-6" />
               </div>
               <div className="text-center">
-                <p className="text-sm font-semibold text-white">Failed to connect to container</p>
+                <p className="text-sm font-semibold text-white">{t(settingsIntegrationsMessages, "failedContainerConnection")}</p>
                 <p className="mt-2 rounded-lg bg-white/5 px-4 py-2 text-xs text-slate-400 max-w-md break-words font-mono border border-white/5">{errorMessage}</p>
               </div>
               <button 
@@ -353,7 +368,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
                 onClick={onClose}
                 className="mt-4 rounded-xl bg-white/10 px-4 py-2 text-xs font-semibold text-white shadow-[var(--elevation-raised)] hover:bg-white/20 transition-colors"
               >
-                Close Window
+                {t(settingsIntegrationsMessages, "closeWindow")}
               </button>
             </div>
           )}
@@ -374,7 +389,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
             {/* Hidden textarea to capture keystrokes and paste operations */}
             <textarea
               ref={hiddenInputRef}
-              aria-label={`${providerName} terminal input for ${providerConfigId}`}
+              aria-label={providerName + t(settingsIntegrationsMessages, "terminalInputMiddle") + providerConfigId}
               onKeyDown={handleKeyDown}
               onInput={handleTextAreaInput}
               tabIndex={-1}
@@ -391,7 +406,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
               </pre>
             ) : (
               <div className="flex h-full items-center justify-center text-xs text-slate-600 italic select-none">
-                Awaiting terminal stream...
+                {t(settingsIntegrationsMessages, "awaitingTerminal")}
               </div>
             )}
             <div ref={terminalEndRef} />
@@ -419,9 +434,9 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
                     <Terminal aria-hidden="true" className="h-5 w-5 motion-safe:animate-pulse" />
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold text-white">Browser Authentication Requested</h4>
+                    <h4 className="text-xs font-bold text-white">{t(settingsIntegrationsMessages, "browserAuthRequested")}</h4>
                     <p className="mt-1 text-[11px] text-slate-400 leading-normal">
-                      {providerName} is waiting for authentication. Please log in using the button below.
+                      {providerName}{t(settingsIntegrationsMessages, "waitingForAuthSuffix")}
                     </p>
                   </div>
                 </div>
@@ -431,7 +446,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
                   rel="noopener noreferrer"
                   className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-signal-500 px-4 py-2.5 text-xs font-bold text-white dark:text-void-950 hover:bg-signal-400 transition-all duration-200 shadow-[var(--elevation-raised)] cursor-pointer"
                 >
-                  Authorize {providerName}
+                  {t(settingsIntegrationsMessages, "authorize")}{providerName}
                 </a>
               </div>
             </div>
@@ -440,8 +455,8 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
           {/* Sleek status hint */}
           {status === "active" && (
             <div className="mt-3 flex shrink-0 flex-col gap-1 text-[10px] font-mono text-slate-400 select-none sm:flex-row sm:items-center sm:justify-between">
-              <span>Click to type. Right-click for Paste; Ctrl+V or Command+V also works. Arrow keys, Tab, Escape, and Backspace are sent to the provider.</span>
-              <span className="shrink-0 font-semibold text-signal-300"><span aria-hidden="true">●</span> Interactive input ready</span>
+              <span>{t(settingsIntegrationsMessages, "terminalInputHelp")}</span>
+              <span className="shrink-0 font-semibold text-signal-300"><span aria-hidden="true">●</span> {t(settingsIntegrationsMessages, "interactiveReady")}</span>
             </div>
           )}
 
@@ -449,8 +464,8 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
             <div role={exitCode === 0 ? "status" : "alert"} aria-live={exitCode === 0 ? "polite" : "assertive"} className="mt-4 shrink-0 rounded-xl border border-white/5 bg-white/[0.02] p-4 text-center">
               <p className="text-xs text-slate-400 font-semibold">
                 {exitCode === 0 
-                  ? "Login finished successfully. Credentials were saved to the selected provider instance."
-                  : `Login exited with code ${exitCode}. Review the terminal output, then try again.`
+                  ? t(settingsIntegrationsMessages, "loginSuccess")
+                  : t(settingsIntegrationsMessages, "loginExitedPrefix") + exitCode + t(settingsIntegrationsMessages, "loginExitedSuffix")
                 }
               </p>
               <button
@@ -458,7 +473,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
                 onClick={onClose}
                 className="mt-3 inline-flex items-center justify-center rounded-xl bg-signal-500 px-4 py-2 text-xs font-bold text-white dark:text-void-950 hover:bg-signal-400 transition-colors"
               >
-                Done
+                {t(settingsIntegrationsMessages, "done")}
               </button>
             </div>
           )}
@@ -467,7 +482,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
         {contextMenu && (
           <div
             role="menu"
-            aria-label={`${providerName} terminal actions`}
+            aria-label={providerName + t(settingsIntegrationsMessages, "terminalActionsMiddle")}
             style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
             className="fixed z-[9999] min-w-[200px] overflow-hidden rounded-xl border border-white/[0.12] bg-void-900 p-1.5 shadow-[0_16px_36px_rgba(0,0,0,0.5)]"
             onClick={(e) => e.stopPropagation()}
@@ -480,7 +495,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
               className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-white transition-colors hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-400"
             >
               <ClipboardPaste aria-hidden="true" className="h-4 w-4 text-signal-300" />
-              Paste clipboard text
+              {t(settingsIntegrationsMessages, "pasteClipboard")}
             </button>
           </div>
         )}
