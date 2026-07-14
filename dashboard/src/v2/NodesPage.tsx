@@ -23,12 +23,18 @@ import {
   retryNodeFlowRun, rollbackNodeFlow, runNodeFlow, validateNodeFlowDraft,
   type NodeDefinitionSummary, type NodeFlowDryRunResponse, type NodeFlowVersionDiff,
 } from "./lib/node-flow-api.js";
+import { useNodesI18n } from "./i18n/messages/nodes.js";
 
 export const NODES_CANVAS_STORAGE_KEY = "codeux:nodes-canvas:v1";
 const migrationMarker = (projectId: string): string => `codeux:nodes-canvas:imported:${projectId}`;
-const errorMessage = (error: unknown): string => error instanceof Error ? error.message : "The node-flow request failed.";
 
 export const NodesPage: FunctionComponent = () => {
+  const { t } = useNodesI18n();
+  const translateRef = useRef(t);
+  translateRef.current = t;
+  const errorMessage = useCallback((requestError: unknown): string => (
+    requestError instanceof Error ? requestError.message : translateRef.current("requestFailed")
+  ), []);
   const { selectedProject, loading: projectLoading } = useProjectData();
   const projectId = selectedProject?.id ?? null;
   const projectRef = useRef(projectId); projectRef.current = projectId;
@@ -95,7 +101,7 @@ export const NodesPage: FunctionComponent = () => {
         setError(errorMessage(requestError));
       }
     }
-  }, []);
+  }, [errorMessage]);
 
   const loadLibrary = useCallback(async (nextProjectId: string, signal?: AbortSignal): Promise<void> => {
     setLoading(true); setError(null); setMigrationWarning(null);
@@ -112,10 +118,10 @@ export const NodesPage: FunctionComponent = () => {
           window.localStorage.setItem(migrationMarker(nextProjectId), imported.flowId);
           window.localStorage.removeItem(NODES_CANVAS_STORAGE_KEY);
           nextFlows = (await fetchNodeFlows(nextProjectId, signal)).flows;
-          setNotice("Legacy canvas imported once into this project's backend flow library.");
+          setNotice(translateRef.current("legacyImported"));
         } catch (migrationError) {
           if (!signal?.aborted && projectRef.current === nextProjectId) {
-            setMigrationWarning(`The legacy browser canvas could not be imported. Existing backend flows remain available. ${errorMessage(migrationError)}`);
+            setMigrationWarning(translateRef.current("legacyImportFailed", { diagnostic: errorMessage(migrationError) }));
           }
         }
       }
@@ -127,7 +133,7 @@ export const NodesPage: FunctionComponent = () => {
       } else { flowRef.current = null; selectedFlowRef.current = null; setRecord(null); setSelectedFlowId(null); setReview(null); }
     } catch (requestError) { if (!signal?.aborted) setError(errorMessage(requestError)); }
     finally { if (!signal?.aborted && projectRef.current === nextProjectId) setLoading(false); }
-  }, [applyRecord, loadReview]);
+  }, [applyRecord, errorMessage, loadReview]);
 
   useEffect(() => {
     flowRef.current = null; selectedFlowRef.current = null; reviewRequestRef.current += 1;
@@ -145,11 +151,11 @@ export const NodesPage: FunctionComponent = () => {
       setAgents(nextAgents);
       setAttachAgentId((current) => nextAgents.some((agent) => agent.id === current) ? current : "");
     } catch (requestError) {
-      if (!signal?.aborted && projectRef.current === nextProjectId) setAgentsError(`Could not load project agents: ${errorMessage(requestError)}`);
+      if (!signal?.aborted && projectRef.current === nextProjectId) setAgentsError(translateRef.current("agentsLoadFailed", { diagnostic: errorMessage(requestError) }));
     } finally {
       if (!signal?.aborted && projectRef.current === nextProjectId) setAgentsLoading(false);
     }
-  }, []);
+  }, [errorMessage]);
 
   useEffect(() => {
     setAgents([]); setAttachAgentId(""); setAgentsLoading(false);
@@ -165,11 +171,11 @@ export const NodesPage: FunctionComponent = () => {
       if (flowRef.current !== flowId) return;
       setAttachments(nextAttachments);
     } catch (requestError) {
-      if (!signal?.aborted && flowRef.current === flowId) setFlowAttachmentError(`Could not load flow attachments: ${errorMessage(requestError)}`);
+      if (!signal?.aborted && flowRef.current === flowId) setFlowAttachmentError(translateRef.current("attachmentsLoadFailed", { diagnostic: errorMessage(requestError) }));
     } finally {
       if (!signal?.aborted && flowRef.current === flowId) setAttachmentsLoading(false);
     }
-  }, []);
+  }, [errorMessage]);
 
   useEffect(() => {
     setAttachments([]); setAttachAgentId(""); setAttachmentsLoading(false); setAttachmentBusy(false); setFlowAttachmentError(null); setAttachmentMutationError(null);
@@ -182,14 +188,17 @@ export const NodesPage: FunctionComponent = () => {
     const key = `${selectedNode.definition.type}@${selectedNode.definition.version}`;
     if (definitions[key]) return;
     void fetchNodeDefinition(selectedNode.definition.type, selectedNode.definition.version).then((definition) => setDefinitions((current) => ({ ...current, [key]: definition }))).catch((requestError) => setError(errorMessage(requestError)));
-  }, [selectedNode?.definition?.type, selectedNode?.definition?.version]);
+  }, [errorMessage, selectedNode?.definition?.type, selectedNode?.definition?.version]);
 
   const refreshRuns = useCallback(async (): Promise<void> => {
     if (!record) return;
-    const response = await fetchNodeFlowRuns(record.id); setRuns(response.runs); setSelectedRunId((current) => current ?? response.runs[0]?.id ?? null);
+    const flowId = record.id;
+    const response = await fetchNodeFlowRuns(flowId);
+    if (flowRef.current !== flowId) return;
+    setRuns(response.runs); setSelectedRunId((current) => current ?? response.runs[0]?.id ?? null);
   }, [record]);
-  useEffect(() => { setRuns([]); setSelectedRunId(null); if (record) void refreshRuns().catch((requestError) => setError(errorMessage(requestError))); }, [record?.id]);
-  useEffect(() => { if (!selectedRunId) { setNodeRuns([]); setAttempts([]); setApprovals([]); return; } const controller = new AbortController(); void Promise.all([fetchNodeFlowNodeRuns(selectedRunId, controller.signal), fetchNodeFlowAttempts(selectedRunId, controller.signal), fetchNodeFlowApprovals(selectedRunId, controller.signal)]).then(([nodes, history, governed]) => { setNodeRuns(nodes.nodeRuns); setAttempts(history.attempts); setApprovals(governed.approvals); }).catch((requestError) => { if (!controller.signal.aborted) setError(errorMessage(requestError)); }); return () => controller.abort(); }, [selectedRunId]);
+  useEffect(() => { setRuns([]); setSelectedRunId(null); if (record) void refreshRuns().catch((requestError) => setError(errorMessage(requestError))); }, [errorMessage, record?.id, refreshRuns]);
+  useEffect(() => { if (!selectedRunId) { setNodeRuns([]); setAttempts([]); setApprovals([]); return; } const controller = new AbortController(); void Promise.all([fetchNodeFlowNodeRuns(selectedRunId, controller.signal), fetchNodeFlowAttempts(selectedRunId, controller.signal), fetchNodeFlowApprovals(selectedRunId, controller.signal)]).then(([nodes, history, governed]) => { setNodeRuns(nodes.nodeRuns); setAttempts(history.attempts); setApprovals(governed.approvals); }).catch((requestError) => { if (!controller.signal.aborted) setError(errorMessage(requestError)); }); return () => controller.abort(); }, [errorMessage, selectedRunId]);
 
   const act = async (action: () => Promise<void>): Promise<void> => { setBusy(true); setError(null); setNotice(null); try { await action(); } catch (requestError) { if (mountedRef.current) setError(errorMessage(requestError)); } finally { if (mountedRef.current) setBusy(false); } };
   const refreshAttachmentData = (): void => {
@@ -208,7 +217,7 @@ export const NodesPage: FunctionComponent = () => {
       if (projectRef.current !== mutationProjectId || flowRef.current !== flowId) return;
       setAttachments(nextAttachments); setAttachAgentId("");
     }).catch((requestError) => {
-      if (projectRef.current === mutationProjectId && flowRef.current === flowId) setAttachmentMutationError(`Could not attach agent: ${errorMessage(requestError)}`);
+      if (projectRef.current === mutationProjectId && flowRef.current === flowId) setAttachmentMutationError(t("attachFailed", { diagnostic: errorMessage(requestError) }));
     }).finally(() => {
       if (projectRef.current === mutationProjectId && flowRef.current === flowId) setAttachmentBusy(false);
     });
@@ -223,33 +232,33 @@ export const NodesPage: FunctionComponent = () => {
       if (projectRef.current !== mutationProjectId || flowRef.current !== flowId) return;
       setAttachments(nextAttachments);
     }).catch((requestError) => {
-      if (projectRef.current === mutationProjectId && flowRef.current === flowId) setAttachmentMutationError(`Could not detach agent: ${errorMessage(requestError)}`);
+      if (projectRef.current === mutationProjectId && flowRef.current === flowId) setAttachmentMutationError(t("detachFailed", { diagnostic: errorMessage(requestError) }));
     }).finally(() => {
       if (projectRef.current === mutationProjectId && flowRef.current === flowId) setAttachmentBusy(false);
     });
   };
   const selectFlow = (flowId: string): void => { const flow = flows.find((item) => item.id === flowId); if (!flow || !projectId) return; applyRecord(flow); void loadReview(projectId, flow.id); };
-  const createFlow = (): void => { if (!projectId) return; const targetProjectId = projectId; void act(async () => { const created = await createNodeFlowDraft(targetProjectId, { title: "Untitled automation", description: "", graph: createDefaultNodeFlowGraph() }); if (projectRef.current !== targetProjectId) return; const flow = await fetchNodeFlow(created.flowId); if (projectRef.current !== targetProjectId || !mountedRef.current) return; setFlows((current) => [flow, ...current.filter((item) => item.id !== flow.id)]); applyRecord(flow); setReview(created); setNotice("Draft created in the selected project."); }); };
-  const save = (): void => { if (!projectId || !record) return; void act(async () => { const result = await patchNodeFlowDraft(record.id, { projectId, draftRevision: record.version, title, description, graph }); if (result.conflict) { setError(`${result.conflict.message} Current revision is ${result.conflict.actualDraftRevision}.`); return; } const saved = await fetchNodeFlow(record.id); setFlows((current) => current.map((item) => item.id === saved.id ? saved : item)); applyRecord(saved); setReview(result.draft ?? null); setNotice("Draft saved to the canonical flow repository."); }); };
+  const createFlow = (): void => { if (!projectId) return; const targetProjectId = projectId; void act(async () => { const created = await createNodeFlowDraft(targetProjectId, { title: "Untitled automation", description: "", graph: createDefaultNodeFlowGraph() }); if (projectRef.current !== targetProjectId) return; const flow = await fetchNodeFlow(created.flowId); if (projectRef.current !== targetProjectId || !mountedRef.current) return; setFlows((current) => [flow, ...current.filter((item) => item.id !== flow.id)]); applyRecord(flow); setReview(created); setNotice(t("draftCreated")); }); };
+  const save = (): void => { if (!projectId || !record) return; void act(async () => { const result = await patchNodeFlowDraft(record.id, { projectId, draftRevision: record.version, title, description, graph }); if (result.conflict) { setError(`${result.conflict.message} ${t("currentRevision", { revision: result.conflict.actualDraftRevision })}`); return; } const saved = await fetchNodeFlow(record.id); setFlows((current) => current.map((item) => item.id === saved.id ? saved : item)); applyRecord(saved); setReview(result.draft ?? null); setNotice(t("draftSaved")); }); };
   const addNode = (summary: NodeDefinitionSummary): void => { void act(async () => { const definition = await fetchNodeDefinition(summary.type, summary.version); setDefinitions((current) => ({ ...current, [`${definition.type}@${definition.version}`]: definition })); let suffix = 1; while (graph.nodes.some((node) => node.id === `${definition.type}-${suffix}`)) suffix += 1; const node: NodeFlowNode = { id: `${definition.type}-${suffix}`, type: definition.type, title: definition.ui.label, description: definition.ui.description, definition: { type: definition.type, version: definition.version }, ports: definition.ports, widgetSchema: definition.ui.widgetSchema, data: {}, capabilities: definition.capabilities, sideEffect: definition.sideEffect, policy: definition.defaultPolicy, credentialBindings: [], position: { x: 80 + graph.nodes.length * 260, y: 100 } }; setGraph((current) => ({ ...current, nodes: [...current.nodes, node] })); setSelectedNodeId(node.id); }); };
   const validate = (): void => { if (!projectId || !record) return; void act(async () => setReview(await validateNodeFlowDraft(projectId, record.id))); };
   const runDry = (): void => { if (!projectId || !record) return; void act(async () => setDryRun(await dryRunNodeFlowDraft(projectId, record.id))); };
-  const publish = (): void => { if (!projectId || !record || !review) return; void act(async () => { setReview(await publishNodeFlowDraft(projectId, record.id, review.draftRevision)); setNotice("Draft published after governed review."); }); };
+  const publish = (): void => { if (!projectId || !record || !review) return; void act(async () => { setReview(await publishNodeFlowDraft(projectId, record.id, review.draftRevision)); setNotice(t("draftPublished")); }); };
   const compare = (): void => { if (!projectId || !record || !review?.publishedVersion) return; const publishedVersion = review.publishedVersion; void act(async () => setDiff(await compareNodeFlowVersions(projectId, record.id, publishedVersion, record.version))); };
   const rollback = (): void => { if (!projectId || !record || !review?.publishedVersion) return; void act(async () => { const next = await rollbackNodeFlow(projectId, record.id, review.publishedVersion!, record.version); const flow = await fetchNodeFlow(record.id); applyRecord(flow); setReview(next); }); };
   const run = (): void => { if (!projectId || !record) return; void act(async () => { const result = await runNodeFlow(record.id, { projectId, input: {} }); setRuns((current) => [result.run, ...current]); setSelectedRunId(result.run.id); setNodeRuns(result.nodeRuns); setAttempts(result.attempts ?? []); }); };
 
-  if (projectLoading) return <PageContainer><div role="status" className="p-10 text-sm text-slate-500">Loading project workspace…</div></PageContainer>;
-  if (!selectedProject) return <PageContainer><PageHeader icon={Workflow} eyebrow="Nodes" title="Automation workspace" subtitle="Select a project to load its governed node-flow library." /><EmptyState icon={<Workflow className="h-7 w-7" />} title="Select a project" description="Flows, credentials, publications, and run history are always scoped to a project." /></PageContainer>;
+  if (projectLoading) return <PageContainer><div role="status" className="p-10 text-sm text-slate-500">{t("loadingProjectWorkspace")}</div></PageContainer>;
+  if (!selectedProject) return <PageContainer><PageHeader icon={Workflow} eyebrow={t("nodes")} title={t("automationWorkspace")} subtitle={t("selectProjectSubtitle")} /><EmptyState icon={<Workflow className="h-7 w-7" />} title={t("selectProject")} description={t("projectScopeDescription")} /></PageContainer>;
   return <PageContainer className="gap-5" padding="workbench" aria-labelledby="nodes-workspace-title">
-    <PageHeader icon={Workflow} eyebrow={selectedProject.name} title={<span id="nodes-workspace-title">Automation workspace</span>} subtitle="Build from the governed registry, review policy and permissions, publish immutable versions, and debug redacted runs." actions={<><Button size="sm" icon={Plus} onClick={createFlow} disabled={busy}>New draft</Button><Button size="sm" variant="secondary" icon={Save} onClick={save} disabled={busy || !record || !dirty}>Save draft</Button><Button size="sm" variant="secondary" onClick={run} disabled={busy || !record || !review?.publishedVersion}>Run published</Button></>} />
-    {error ? <div role="alert" className="rounded-xl border border-status-red/25 bg-status-red/[0.07] p-3 text-sm text-status-red"><AlertTriangle className="mr-2 inline h-4 w-4" aria-hidden="true" />{error}<button type="button" className="ml-3 underline" onClick={() => void loadLibrary(selectedProject.id)}>Retry</button></div> : null}
-    {migrationWarning ? <div role="alert" className="rounded-xl border border-amber-500/25 bg-amber-500/[0.07] p-3 text-sm text-amber-800 dark:text-amber-200"><AlertTriangle className="mr-2 inline h-4 w-4" aria-hidden="true" />{migrationWarning}<button type="button" className="ml-3 underline" onClick={() => setMigrationWarning(null)}>Dismiss</button></div> : null}
+    <PageHeader icon={Workflow} eyebrow={selectedProject.name} title={<span id="nodes-workspace-title">{t("automationWorkspace")}</span>} subtitle={t("workspaceSubtitle")} actions={<><Button size="sm" icon={Plus} onClick={createFlow} disabled={busy}>{t("newDraft")}</Button><Button size="sm" variant="secondary" icon={Save} onClick={save} disabled={busy || !record || !dirty}>{t("saveDraft")}</Button><Button size="sm" variant="secondary" onClick={run} disabled={busy || !record || !review?.publishedVersion}>{t("runPublished")}</Button></>} />
+    {error ? <div role="alert" className="rounded-xl border border-status-red/25 bg-status-red/[0.07] p-3 text-sm text-status-red"><AlertTriangle className="mr-2 inline h-4 w-4" aria-hidden="true" />{error}<button type="button" className="ml-3 underline" onClick={() => void loadLibrary(selectedProject.id)}>{t("retry")}</button></div> : null}
+    {migrationWarning ? <div role="alert" className="rounded-xl border border-amber-500/25 bg-amber-500/[0.07] p-3 text-sm text-amber-800 dark:text-amber-200"><AlertTriangle className="mr-2 inline h-4 w-4" aria-hidden="true" />{migrationWarning}<button type="button" className="ml-3 underline" onClick={() => setMigrationWarning(null)}>{t("dismiss")}</button></div> : null}
     {notice ? <div role="status" className="rounded-xl border border-status-green/20 bg-status-green/[0.06] p-3 text-sm text-slate-700 dark:text-slate-200">{notice}</div> : null}
     <div className="flex min-w-0 flex-col gap-4 xl:flex-row"><NodeFlowLibrary flows={flows} selectedFlowId={selectedFlowId} loading={loading} onSelect={selectFlow} onCreate={createFlow} onDelete={(id) => void act(async () => { await deleteNodeFlow(id); await loadLibrary(selectedProject.id); })} />
-      <div className="min-w-0 flex-1">{record ? <div className="mb-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold uppercase text-slate-500">Flow name<input className="mt-1 w-full rounded-xl border border-black/[0.08] bg-white/70 px-3 py-2 text-sm normal-case dark:border-white/[0.08] dark:bg-white/[0.04]" value={title} onInput={(event) => setTitle(event.currentTarget.value)} /></label><label className="text-xs font-bold uppercase text-slate-500">Description<input className="mt-1 w-full rounded-xl border border-black/[0.08] bg-white/70 px-3 py-2 text-sm normal-case dark:border-white/[0.08] dark:bg-white/[0.04]" value={description} onInput={(event) => setDescription(event.currentTarget.value)} /></label></div> : null}{record ? <NodeFlowCanvas graph={graph} selectedNodeId={selectedNodeId} onSelectNode={setSelectedNodeId} onMoveNode={(id, position) => setGraph((current) => updateNodeInGraph(current, id, { position }))} /> : <EmptyState icon={<Workflow className="h-7 w-7" />} title="No flows in this project" description="Create a draft to start from the canonical backend workspace." primaryAction={<Button onClick={createFlow}>Create draft</Button>} />}</div>
+      <div className="min-w-0 flex-1">{record ? <div className="mb-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold uppercase text-slate-500">{t("flowName")}<input className="mt-1 w-full rounded-xl border border-black/[0.08] bg-white/70 px-3 py-2 text-sm normal-case dark:border-white/[0.08] dark:bg-white/[0.04]" value={title} onInput={(event) => setTitle(event.currentTarget.value)} /></label><label className="text-xs font-bold uppercase text-slate-500">{t("description")}<input className="mt-1 w-full rounded-xl border border-black/[0.08] bg-white/70 px-3 py-2 text-sm normal-case dark:border-white/[0.08] dark:bg-white/[0.04]" value={description} onInput={(event) => setDescription(event.currentTarget.value)} /></label></div> : null}{record ? <NodeFlowCanvas graph={graph} selectedNodeId={selectedNodeId} onSelectNode={setSelectedNodeId} onMoveNode={(id, position) => setGraph((current) => updateNodeInGraph(current, id, { position }))} /> : <EmptyState icon={<Workflow className="h-7 w-7" />} title={t("noProjectFlows")} description={t("createDraftDescription")} primaryAction={<Button onClick={createFlow}>{t("createDraft")}</Button>} />}</div>
       <NodePalette definitions={catalog} loading={loading} disabled={!record || busy} onCreateNode={addNode} />
-      {record ? <NodeFlowInspector selectedNode={selectedNode} definition={selectedDefinition} validation={review ? { valid: review.valid, errors: review.validationIssues } : null} requiredCredentials={review?.requiredCredentials.filter((item) => item.nodeId === selectedNode?.id) ?? []} agents={agents} attachments={attachments} attachAgentId={attachAgentId} attachmentsLoading={agentsLoading || attachmentsLoading} attachmentError={attachmentMutationError ?? flowAttachmentError ?? agentsError} attaching={attachmentBusy} onAttachAgentIdChange={setAttachAgentId} onAttachAgent={attachAgent} onDetachAgent={detachAgent} onRetryAttachments={refreshAttachmentData} onNodeChange={(id, update) => setGraph((current) => updateNodeInGraph(current, id, update))} onRequestCredential={(nodeId, slot) => { if (projectId && record) void act(async () => { await requestNodeFlowCredential(projectId, record.id, nodeId, slot); setNotice("Credential binding request recorded; secret material remains outside the graph."); }); }} /> : null}
+      {record ? <NodeFlowInspector selectedNode={selectedNode} definition={selectedDefinition} validation={review ? { valid: review.valid, errors: review.validationIssues } : null} requiredCredentials={review?.requiredCredentials.filter((item) => item.nodeId === selectedNode?.id) ?? []} agents={agents} attachments={attachments} attachAgentId={attachAgentId} attachmentsLoading={agentsLoading || attachmentsLoading} attachmentError={attachmentMutationError ?? flowAttachmentError ?? agentsError} attaching={attachmentBusy} onAttachAgentIdChange={setAttachAgentId} onAttachAgent={attachAgent} onDetachAgent={detachAgent} onRetryAttachments={refreshAttachmentData} onNodeChange={(id, update) => setGraph((current) => updateNodeInGraph(current, id, update))} onRequestCredential={(nodeId, slot) => { if (projectId && record) void act(async () => { await requestNodeFlowCredential(projectId, record.id, nodeId, slot); setNotice(t("credentialRequestRecorded")); }); }} /> : null}
     </div>
     {record ? <><NodeGovernancePanel review={review} dryRun={dryRun} diff={diff} busy={busy} onValidate={validate} onDryRun={runDry} onCompare={compare} onPublish={publish} onRollback={rollback} /><NodeRunDebugger runs={runs} selectedRunId={selectedRunId} nodeRuns={nodeRuns} attempts={attempts} approvals={approvals} busy={busy} onSelectRun={setSelectedRunId} onRefresh={() => void act(refreshRuns)} onCancel={() => { const active = runs.find((item) => item.id === selectedRunId); if (projectId && active) void act(async () => { await cancelNodeFlowRun(projectId, active.id); await refreshRuns(); }); }} onRetry={() => { const active = runs.find((item) => item.id === selectedRunId); if (projectId && active) void act(async () => { const result = await retryNodeFlowRun(projectId, active.id); setRuns((current) => [result.run, ...current]); setSelectedRunId(result.run.id); }); }} onApprovalDecision={(approvalId, decision) => void act(async () => { const result = await decideNodeFlowApproval(approvalId, decision); setRuns((current) => current.map((item) => item.id === result.run.id ? result.run : item)); setNodeRuns(result.nodeRuns); setAttempts(result.attempts ?? []); setApprovals((current) => current.map((item) => item.id === approvalId ? { ...item, status: result.status, decidedAt: result.decidedAt, decidedBy: result.decidedBy, decision: result.decision, updatedAt: result.updatedAt } : item)); })} /></> : null}
   </PageContainer>;

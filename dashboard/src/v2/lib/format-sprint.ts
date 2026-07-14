@@ -1,5 +1,8 @@
-export function formatSprintTitle(sprint?: { name?: string; sprintNumber?: number | string | null; number?: number | string | null } | null, sprintKeyPrefix: string = "SPR"): string {
-    if (!sprint) return "All Sprints";
+import { translateDashboardMessage, type DashboardLocale } from "../i18n/locales.js";
+import { sprintsMessages } from "../i18n/messages/sprints.js";
+
+export function formatSprintTitle(sprint?: { name?: string; sprintNumber?: number | string | null; number?: number | string | null } | null, sprintKeyPrefix: string = "SPR", locale: DashboardLocale = "en"): string {
+    if (!sprint) return translateDashboardMessage(sprintsMessages, locale, "allSprints");
 
     let num = sprint.sprintNumber || sprint.number;
     let name = sprint.name;
@@ -18,14 +21,14 @@ export function formatSprintTitle(sprint?: { name?: string; sprintNumber?: numbe
         // It handles optional spaces and colons/hyphens
         const prefixEscaped = sprintKeyPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const prefixRegex = new RegExp(`^${prefixEscaped}-${num}\\s*[:\\-]?\\s*`, 'i');
-        return name ? name.replace(prefixRegex, '') : `Sprint ${num}`;
+        return name ? name.replace(prefixRegex, '') : translateDashboardMessage(sprintsMessages, locale, "sprintNumber", { number: num });
     }
 
-    return name || "Unnamed Sprint";
+    return name || translateDashboardMessage(sprintsMessages, locale, "unnamedSprint");
 }
 
-export function formatSprintDisplay(sprint?: { name?: string; sprintNumber?: number | string | null; number?: number | string | null } | null, sprintKeyPrefix: string = "SPR"): string {
-    if (!sprint) return "All Sprints";
+export function formatSprintDisplay(sprint?: { name?: string; sprintNumber?: number | string | null; number?: number | string | null } | null, sprintKeyPrefix: string = "SPR", locale: DashboardLocale = "en"): string {
+    if (!sprint) return translateDashboardMessage(sprintsMessages, locale, "allSprints");
 
     let num = sprint.sprintNumber || sprint.number;
     const name = sprint.name;
@@ -37,8 +40,8 @@ export function formatSprintDisplay(sprint?: { name?: string; sprintNumber?: num
         }
     }
     if (num) {
-        return `${sprintKeyPrefix}-${num}: ${formatSprintTitle(sprint, sprintKeyPrefix)}`;
+        return `${sprintKeyPrefix}-${num}: ${formatSprintTitle(sprint, sprintKeyPrefix, locale)}`;
     }
 
-    return formatSprintTitle(sprint, sprintKeyPrefix);
+    return formatSprintTitle(sprint, sprintKeyPrefix, locale);
 }

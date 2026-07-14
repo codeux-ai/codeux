@@ -109,4 +109,48 @@ describe("usePreviewSessions", () => {
     // Loading shouldn't be set back to true during silent poll
     expect(result.current.loading).toBe(false);
   });
+
+  it("ignores stale session responses after the selected project changes", async () => {
+    let resolveFirst: ((value: Array<{ id: string; sprintId: string }>) => void) | null = null;
+    vi.mocked(fetchPreviewSessions)
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveFirst = resolve as typeof resolveFirst;
+      }) as any)
+      .mockResolvedValueOnce([{ id: "current", sprintId: "sp-current" }] as any);
+
+    const { result, rerender } = renderHook(
+      ({ projectId }) => usePreviewSessions({ projectId, pollInterval: 0 }),
+      { initialProps: { projectId: "p1" } },
+    );
+
+    rerender({ projectId: "p2" });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.sessions).toEqual([{ id: "current", sprintId: "sp-current" }]);
+
+    await act(async () => {
+      resolveFirst?.([{ id: "stale", sprintId: "sp-stale" }]);
+      await Promise.resolve();
+    });
+    expect(result.current.sessions).toEqual([{ id: "current", sprintId: "sp-current" }]);
+  });
+
+  it("retries after a network failure and preserves the raw diagnostic", async () => {
+    vi.mocked(fetchPreviewSessions)
+      .mockRejectedValueOnce(new Error("ECONNREFUSED preview-network"))
+      .mockResolvedValueOnce([{ id: "recovered", sprintId: "sp1" }] as any);
+
+    const { result } = renderHook(() => usePreviewSessions({ projectId: "p1", pollInterval: 0 }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.error).toBe("ECONNREFUSED preview-network");
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+    expect(result.current.error).toBeNull();
+    expect(result.current.sessions).toEqual([{ id: "recovered", sprintId: "sp1" }]);
+  });
 });

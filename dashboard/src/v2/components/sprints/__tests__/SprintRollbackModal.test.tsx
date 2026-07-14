@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Sprint } from "../../../types.js";
 import { SprintRollbackModal } from "../SprintRollbackModal.js";
 import { assessSprintRollback, createSprintRollback } from "../../../lib/project-api.js";
+import { renderWithI18n } from "../../../../../../tests/dashboard/render-with-i18n.js";
 
 expect.extend(matchers);
 
@@ -66,7 +67,7 @@ describe("SprintRollbackModal", () => {
       assessment: { sourceSprintId: sprint.id, eligible: true, recommendedMode: "automatic", reasons: [] },
     });
     const onCreated = vi.fn();
-    render(<SprintRollbackModal sprint={sprint} onClose={vi.fn()} onCreated={onCreated} />);
+    renderWithI18n(<SprintRollbackModal sprint={sprint} onClose={vi.fn()} onCreated={onCreated} />);
 
     expect(await screen.findByText("Safe automatic rollback available")).toBeInTheDocument();
     expect(screen.getByText(/local projects merge the branch locally/i)).toBeInTheDocument();
@@ -88,7 +89,7 @@ describe("SprintRollbackModal", () => {
       mode: "agent_assisted",
       assessment: { sourceSprintId: sprint.id, eligible: true, recommendedMode: "agent_assisted", reasons: [] },
     });
-    render(<SprintRollbackModal sprint={sprint} onClose={vi.fn()} onCreated={vi.fn()} />);
+    renderWithI18n(<SprintRollbackModal sprint={sprint} onClose={vi.fn()} onCreated={vi.fn()} />);
 
     await screen.findByText("Safe automatic rollback available");
     fireEvent.input(screen.getByRole("textbox", { name: /Rollback instructions/i }), {
@@ -97,5 +98,32 @@ describe("SprintRollbackModal", () => {
     expect(screen.getByText("A rollback coding invocation will be started.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Start agent rollback" }));
     await waitFor(() => expect(createSprintRollback).toHaveBeenCalledWith("project-1", "sprint-1", "Remove only feature XY."));
+  });
+
+  it("preserves rollback API failures verbatim and recovers on a German retry", async () => {
+    vi.mocked(assessSprintRollback).mockResolvedValue({
+      sourceSprintId: sprint.id,
+      eligible: true,
+      recommendedMode: "automatic",
+      reasons: ["Server safety assessment remains verbatim."],
+    });
+    vi.mocked(createSprintRollback)
+      .mockRejectedValueOnce(new Error("Rollback API failure for branch feature/sprint-1"))
+      .mockResolvedValueOnce({
+        rollbackSprint: { ...sprint, id: "rollback-3", kind: "rollback", rollbackSourceSprintId: sprint.id, rollbackMode: "automatic" },
+        mode: "automatic",
+        assessment: { sourceSprintId: sprint.id, eligible: true, recommendedMode: "automatic", reasons: [] },
+      });
+    const onCreated = vi.fn();
+    renderWithI18n(<SprintRollbackModal sprint={sprint} onClose={vi.fn()} onCreated={onCreated} />, {}, "de");
+
+    expect(await screen.findByText("Sicherer automatischer Rollback verfügbar")).toBeInTheDocument();
+    expect(screen.getByRole("listitem")).toHaveTextContent("Server safety assessment remains verbatim.");
+    fireEvent.click(screen.getByRole("button", { name: "Rollback erstellen" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Rollback API failure for branch feature/sprint-1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Rollback erstellen" }));
+    await waitFor(() => expect(createSprintRollback).toHaveBeenCalledTimes(2));
+    expect(onCreated).toHaveBeenCalledTimes(1);
   });
 });

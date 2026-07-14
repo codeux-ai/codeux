@@ -5,7 +5,7 @@ import {
 } from "../../../dashboard/src/v2/hooks/project-resource-utils.js";
 import { stabilizeExecutionSnapshot, areExecutionSnapshotsEquivalent } from "../../../dashboard/src/lib/runtime-snapshot-stability.js";
 import type { ExecutionDashboardSnapshot } from "../../../dashboard/src/types.js";
-import { toTaskViewModel } from "../../../dashboard/src/v2/lib/view-models.js";
+import { formatSprintDateRange, localizeTaskViewModelFallbacks, toTaskViewModel } from "../../../dashboard/src/v2/lib/view-models.js";
 import type {
   Sprint,
   SprintReviewSummary,
@@ -29,6 +29,25 @@ const qaSummary: SprintReviewSummary = {
     priority: "high",
   }],
 };
+
+describe("localized Overview view-model presentation", () => {
+  it("uses locale-aware sprint dates and translated dashboard fallbacks", () => {
+    expect(formatSprintDateRange("2026-07-13T00:00:00Z", "2026-07-14T00:00:00Z", { locale: "de" })).toBe(
+      `${new Intl.DateTimeFormat("de", { month: "short", day: "numeric" }).format(new Date("2026-07-13T00:00:00Z"))} - ${new Intl.DateTimeFormat("de", { month: "short", day: "numeric" }).format(new Date("2026-07-14T00:00:00Z"))}`,
+    );
+    expect(formatSprintDateRange(null, null, { locale: "de", scheduleTbd: "Zeitplan offen" })).toBe("Zeitplan offen");
+  });
+
+  it("does not translate a live project name that matches an English fallback word", () => {
+    const task = { source: "Unassigned", sprint: "Sprint" } as any;
+    expect(localizeTaskViewModelFallbacks(task, {
+      knownSourceNames: new Set(["Unassigned"]),
+      knownSprintNames: new Set(["Sprint"]),
+      unassigned: "Nicht zugewiesen",
+      sprint: "Sprint",
+    })).toBe(task);
+  });
+});
 
 function makeSprint(latestReview: SprintReviewSummary = qaSummary): Sprint {
   return {

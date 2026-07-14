@@ -1,8 +1,13 @@
 /** @vitest-environment happy-dom */
 import "@testing-library/jest-dom/vitest";
-import { render, screen, cleanup } from "@testing-library/preact";
+import { render as testingRender, screen, cleanup } from "@testing-library/preact";
 import { expect, test, vi, afterEach } from "vitest";
 import { LaunchContainerPanel } from "../../../../src/v2/components/browser/LaunchContainerPanel.js";
+import { DashboardI18nProvider } from "../../../../src/v2/i18n/context.js";
+
+const render = (ui: Parameters<typeof testingRender>[0]) => testingRender(ui, {
+  wrapper: ({ children }) => <DashboardI18nProvider initialLocale="en" storage={null}>{children}</DashboardI18nProvider>,
+});
 
 afterEach(() => {
   cleanup();

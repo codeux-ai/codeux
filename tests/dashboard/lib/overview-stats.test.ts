@@ -7,8 +7,12 @@ import {
   extractOpenTasksTrend, 
   extractCompletedTasksTrend,
   getDateWindow,
-  getTrendIndex
+  getTrendIndex,
+  formatOverviewCost,
+  formatOverviewDuration,
+  formatOverviewTokens,
 } from "../../../dashboard/src/v2/lib/overview-stats.js";
+import { createDashboardFormatters } from "../../../dashboard/src/v2/i18n/formatters.js";
 
 describe("overview-stats", () => {
   const fakeNow = new Date("2024-03-10T12:00:00Z");
@@ -20,6 +24,19 @@ describe("overview-stats", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("formats Overview metrics with German separators without changing precision", () => {
+    const { formatNumber } = createDashboardFormatters("de");
+    expect(formatOverviewTokens(12_500, formatNumber)).toBe("12,5k");
+    expect(formatOverviewTokens(1_250_000, formatNumber)).toBe("1,25M");
+    expect(formatOverviewCost(1234.5, formatNumber)).toBe(new Intl.NumberFormat("de", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(1234.5));
+    expect(formatOverviewDuration(65_000, formatNumber)).toBe("1m 5s");
   });
 
   it("computes project, sprint, and task summary counts", () => {

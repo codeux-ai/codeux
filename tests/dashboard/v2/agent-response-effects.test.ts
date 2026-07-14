@@ -67,6 +67,7 @@ describe("agent response effects", () => {
     const resolved = resolveAgentResponseEffect({ agentEffect: validEffect }, fence);
     expect(resolved?.emotion).toBe("proud");
     expect(getAgentResponseEffectCaption({ emotion: "curious", animation: "wink", durationMs: 900 })).toBe("Feeling curious.");
+    expect(getAgentResponseEffectCaption({ emotion: "curious", animation: "wink", durationMs: 900 }, "de")).toBe("Stimmung: Neugierig.");
+    expect(getAgentResponseEffectCaption({ emotion: "curious", animation: "wink", durationMs: 900, caption: "Keep this caption" }, "de")).toBe("Keep this caption");
   });
 });
-
