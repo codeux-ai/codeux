@@ -17,6 +17,12 @@ import {
 import type { SprintPreviewPortMapping, SprintPreviewSession } from "../../../types.js";
 import { buildInteractionTransition } from "../../lib/motion/tokens.js";
 import { formatPreviewPortTabLabel } from "../../lib/preview-origin.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import {
+  browserPreviewMessages,
+  type BrowserPreviewMessageKey,
+  type BrowserPreviewMessageVariables,
+} from "../../i18n/messages/browser-preview.js";
 
 interface PreviewWindowChromeProps {
   session: SprintPreviewSession | null;
@@ -44,13 +50,6 @@ const statusTone: Record<SprintPreviewSession["status"], string> = {
   error: "border-status-red/30 bg-status-red/10 text-status-red",
 };
 
-const statusLabel: Record<SprintPreviewSession["status"], string> = {
-  running: "Running",
-  starting: "Starting",
-  stopped: "Stopped",
-  error: "Error",
-};
-
 const controlTransition = buildInteractionTransition("controlFeedback");
 const windowTransition = buildInteractionTransition("enterExit", "opacity, transform");
 
@@ -70,6 +69,16 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
   onSelectPort,
   children,
 }) => {
+  const { translate } = useDashboardI18n();
+  const t = (key: BrowserPreviewMessageKey, variables?: BrowserPreviewMessageVariables) => (
+    translate(browserPreviewMessages, key, variables)
+  );
+  const statusLabel: Record<SprintPreviewSession["status"], string> = {
+    running: t("statusRunning"),
+    starting: t("statusStarting"),
+    stopped: t("statusStopped"),
+    error: t("statusError"),
+  };
   const [windowState, setWindowState] = useState<WindowState>("normal");
   const [navigationAnnouncement, setNavigationAnnouncement] = useState("");
   const restoreButtonRef = useRef<HTMLButtonElement>(null);
@@ -89,18 +98,18 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
   const addressLabelId = "preview-address-label";
   const controlsDisabled = !navigationEnabled || navigationBusy;
   const disabledDescriptionId = navigationBusy ? navigationPendingDescriptionId : containerDescriptionId;
-  const sessionName = session?.sprintName || "selected preview";
+  const sessionName = session?.sprintName || t("selectedPreview");
   const normalizedPath = addressValue || "/";
   const windowStateMessage = windowState === "normal"
-    ? "Preview window is open."
+    ? t("windowOpen")
     : windowState === "fullscreen"
-      ? "Preview window is fullscreen."
+      ? t("windowFullscreen")
       : windowState === "minimized"
-        ? "Preview window is minimized. Use Restore to reopen it."
-        : "Preview window is closed. The preview session can keep running in the background.";
+        ? t("windowMinimized")
+        : t("windowClosedAnnouncement");
   const navigationDescription = navigationBusy
-    ? "Preview navigation is sending the previous command. Wait for the control to become available before submitting another navigation command."
-    : navigationDisabledReason || "Preview navigation controls are disabled until the selected container is running and has a routed host port.";
+    ? t("navigationPendingReason")
+    : navigationDisabledReason || t("navigationDefaultReason");
   const visiblePortMappings = portMappings.length > 1 ? portMappings : [];
 
   const announceNavigation = (message: string) => {
@@ -166,9 +175,9 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
     return (
       <div className="flex min-h-[18rem] flex-col items-center justify-center px-6 py-16 text-center" role="status" aria-live="polite">
         <Compass className="h-12 w-12 text-slate-300 dark:text-slate-600" strokeWidth={1.5} />
-        <h2 className="mt-4 text-xl font-semibold text-slate-800 dark:text-slate-100">No preview active</h2>
+        <h2 className="mt-4 text-xl font-semibold text-slate-800 dark:text-slate-100">{t("noPreviewActive")}</h2>
         <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500 dark:text-slate-400">
-          Start a sprint preview to build the selected sprint into its own isolated container and browse it directly from the dashboard.
+          {t("noPreviewActiveDescription")}
         </p>
       </div>
     );
@@ -197,12 +206,12 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             ref={restoreButtonRef}
             type="button"
             onClick={() => setWindowState("normal")}
-            aria-label="Restore preview window"
+            aria-label={t("restorePreviewWindow")}
             className="inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-black/[0.08] px-3 text-[11px] font-semibold text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 motion-reduce:transition-none dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
             style={{ transition: controlTransition }}
           >
             <Maximize2 className="h-3 w-3" strokeWidth={2.5} />
-            Restore
+            {t("restore")}
           </button>
         </div>
       )}
@@ -214,19 +223,19 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             <div className="h-12 w-12 rounded-full border border-black/[0.08] flex items-center justify-center mb-4 dark:border-white/[0.08]">
               <X className="h-5 w-5 text-slate-400" strokeWidth={2} />
             </div>
-            <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Window Closed</h2>
+            <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100">{t("windowClosed")}</h2>
             <p className="mt-2 max-w-md text-sm leading-6 text-slate-500 dark:text-slate-400">
-              The preview window is closed but the session is still running in the background. Stop the session to end the container, or reopen the window.
+              {t("windowClosedDescription")}
             </p>
             <button
               ref={reopenButtonRef}
               type="button"
-              aria-label="Reopen preview window"
+              aria-label={t("reopenPreviewWindow")}
               onClick={() => setWindowState("normal")}
               className="mt-6 inline-flex h-10 items-center justify-center rounded-2xl border border-black/[0.08] px-4 text-sm font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 motion-reduce:transition-none dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
               style={{ transition: controlTransition }}
             >
-              Reopen Window
+              {t("reopenWindow")}
             </button>
           </div>
         </div>
@@ -252,8 +261,8 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
               <button
                 ref={closeButtonRef}
                 type="button"
-                title="Close window"
-                aria-label="Close preview window"
+                title={t("closeWindow")}
+                aria-label={t("closePreviewWindow")}
                 onClick={() => {
                   rememberChromeControl(closeButtonRef.current);
                   setWindowState("closed");
@@ -266,8 +275,8 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             <button
               ref={minimizeButtonRef}
               type="button"
-              title="Minimize window"
-              aria-label="Minimize preview window"
+              title={t("minimizeWindow")}
+              aria-label={t("minimizePreviewWindow")}
               onClick={() => {
                 rememberChromeControl(minimizeButtonRef.current);
                 setWindowState("minimized");
@@ -280,8 +289,8 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             <button
               ref={fullscreenButtonRef}
               type="button"
-              title={isFullscreen ? "Restore window" : "Maximize window"}
-              aria-label={isFullscreen ? "Restore preview window" : "Enter preview fullscreen"}
+              title={isFullscreen ? t("restoreWindow") : t("maximizeWindow")}
+              aria-label={isFullscreen ? t("restorePreviewWindow") : t("enterPreviewFullscreen")}
               onClick={() => {
                 rememberChromeControl(fullscreenButtonRef.current);
                 setWindowState(isFullscreen ? "normal" : "fullscreen");
@@ -304,7 +313,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
         {visiblePortMappings.length > 0 && (
           <div
             role="tablist"
-            aria-label={`Preview ports for ${sessionName}`}
+            aria-label={t("previewPortsFor", { name: sessionName })}
             aria-busy={navigationBusy}
             className="mt-3 flex min-w-0 gap-1 overflow-x-auto rounded-2xl border border-black/[0.06] bg-slate-100/70 p-1 dark:border-white/[0.06] dark:bg-void-950/50"
           >
@@ -312,8 +321,8 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
               const selected = mapping.containerPort === selectedContainerPort;
               const label = formatPreviewPortTabLabel(mapping);
               const routeLabel = mapping.hostPort
-                ? `${label} routed to host port ${mapping.hostPort}`
-                : `${label} waiting for a routed host port`;
+                ? t("routeToHostPort", { label, port: mapping.hostPort })
+                : t("routeWaitingHostPort", { label });
               return (
                 <button
                   key={mapping.containerPort}
@@ -323,7 +332,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
                   type="button"
                   role="tab"
                   aria-selected={selected}
-                  aria-label={`Select preview port ${routeLabel}`}
+                  aria-label={t("selectPreviewPort", { route: routeLabel })}
                   aria-controls="preview-window-frame"
                   tabIndex={selected ? 0 : -1}
                   onClick={() => selectPortTab(mapping)}
@@ -354,7 +363,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
           <button
             type="button"
             onClick={() => {
-              announceNavigation(controlsDisabled ? navigationDescription : "Going back in the preview.");
+              announceNavigation(controlsDisabled ? navigationDescription : t("goingBack"));
               if (!controlsDisabled) {
                 onNavigateBack();
               }
@@ -362,9 +371,9 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             disabled={controlsDisabled}
             aria-disabled={controlsDisabled}
             aria-busy={navigationBusy || (!navigationEnabled && session?.status === 'starting')}
-            aria-label={`Go back in preview session ${sessionName}`}
+            aria-label={t("goBackForSession", { name: sessionName })}
             aria-describedby={controlsDisabled ? disabledDescriptionId : undefined}
-            title={controlsDisabled ? navigationDescription : "Go back"}
+            title={controlsDisabled ? navigationDescription : t("goBack")}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
             style={{ transition: controlTransition }}
           >
@@ -373,7 +382,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
           <button
             type="button"
             onClick={() => {
-              announceNavigation(controlsDisabled ? navigationDescription : "Going forward in the preview.");
+              announceNavigation(controlsDisabled ? navigationDescription : t("goingForward"));
               if (!controlsDisabled) {
                 onNavigateForward();
               }
@@ -381,9 +390,9 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             disabled={controlsDisabled}
             aria-disabled={controlsDisabled}
             aria-busy={navigationBusy || (!navigationEnabled && session?.status === 'starting')}
-            aria-label={`Go forward in preview session ${sessionName}`}
+            aria-label={t("goForwardForSession", { name: sessionName })}
             aria-describedby={controlsDisabled ? disabledDescriptionId : undefined}
-            title={controlsDisabled ? navigationDescription : "Go forward"}
+            title={controlsDisabled ? navigationDescription : t("goForward")}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
             style={{ transition: controlTransition }}
           >
@@ -392,7 +401,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
           <button
             type="button"
             onClick={() => {
-              announceNavigation(controlsDisabled ? navigationDescription : "Reloading the preview.");
+              announceNavigation(controlsDisabled ? navigationDescription : t("reloadingPreview"));
               if (!controlsDisabled) {
                 onReload();
               }
@@ -400,9 +409,9 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             disabled={controlsDisabled}
             aria-disabled={controlsDisabled}
             aria-busy={navigationBusy || (!navigationEnabled && session?.status === 'starting')}
-            aria-label={`Reload preview session ${sessionName} at ${normalizedPath}`}
+            aria-label={t("reloadForSession", { name: sessionName, path: normalizedPath })}
             aria-describedby={controlsDisabled ? disabledDescriptionId : undefined}
-            title={controlsDisabled ? navigationDescription : "Reload preview"}
+            title={controlsDisabled ? navigationDescription : t("reloadPreview")}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
             style={{ transition: controlTransition }}
           >
@@ -412,14 +421,14 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             className="flex min-w-0 flex-1 items-center"
             onSubmit={(event) => {
               event.preventDefault();
-              announceNavigation(controlsDisabled ? navigationDescription : `Navigating preview to ${addressValue}.`);
+              announceNavigation(controlsDisabled ? navigationDescription : t("navigatingToPath", { path: addressValue }));
               if (!controlsDisabled) {
                 onAddressSubmit(addressValue);
               }
             }}
           >
             <label id={addressLabelId} className="sr-only" htmlFor="preview-address-input">
-              Preview address for {sessionName}
+              {t("previewAddressFor", { name: sessionName })}
             </label>
             <input
               id="preview-address-input"
@@ -428,10 +437,10 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
               disabled={controlsDisabled}
               aria-disabled={controlsDisabled}
               aria-busy={navigationBusy || (!navigationEnabled && session?.status === 'starting')}
-              aria-label={`Preview address for ${sessionName}`}
+              aria-label={t("previewAddressFor", { name: sessionName })}
               aria-describedby={controlsDisabled ? disabledDescriptionId : undefined}
-              title={controlsDisabled ? navigationDescription : "Preview address"}
-              placeholder={controlsDisabled ? "Preview navigation unavailable..." : "Enter path..."}
+              title={controlsDisabled ? navigationDescription : t("previewAddress")}
+              placeholder={controlsDisabled ? t("navigationUnavailablePlaceholder") : t("enterPath")}
               className="h-10 w-full rounded-2xl border border-black/[0.08] bg-white/80 px-4 font-mono text-sm text-slate-800 outline-none transition focus:border-signal-500/40 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-100"
               style={{ transition: controlTransition }}
             />

@@ -1,7 +1,7 @@
 /** @jsx h */
 // @vitest-environment happy-dom
 import { h } from "preact";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
+import { render as testingRender, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { LivePreviewLink } from "../../../dashboard/src/v2/components/ui/LivePreviewLink.js";
@@ -16,6 +16,15 @@ vi.mock("@tanstack/react-router", async () => {
 import { CollapsiblePanel } from "../../../dashboard/src/v2/components/ui/CollapsiblePanel.js";
 import { Search } from "lucide-preact";
 import type { SprintPreviewSession } from "../../../dashboard/src/types.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+
+const render = (ui: Parameters<typeof testingRender>[0], options?: Parameters<typeof testingRender>[1]) => testingRender(ui, {
+    ...options,
+    wrapper: ({ children }) => <DashboardI18nProvider initialLocale="en" storage={null}>{children}</DashboardI18nProvider>,
+});
+const renderGerman = (ui: Parameters<typeof testingRender>[0]) => testingRender(ui, {
+    wrapper: ({ children }) => <DashboardI18nProvider initialLocale="de" storage={null}>{children}</DashboardI18nProvider>,
+});
 
 expect.extend(matchers);
 
@@ -78,6 +87,30 @@ describe("LivePreviewLink CTA", () => {
         expect(link).toBeInTheDocument();
         expect(link.getAttribute("href")).toContain("/test-path");
         expect(link.getAttribute("href")).toContain("preview-sess-1");
+    });
+
+    it("localizes safe external-link controls while preserving paths, labels, and port values", async () => {
+        renderGerman(
+            <LivePreviewLink
+                session={makeSession({
+                    lastKnownPath: "/prüfung?token=literal-value",
+                    portMappings: [
+                        { containerPort: 5173, hostPort: 3000, label: "App", isPrimary: true },
+                        { containerPort: 6006, hostPort: 3001, label: "Storybook" },
+                    ],
+                })}
+            />,
+        );
+
+        const primary = screen.getByRole("link", { name: "Live-Vorschau auf App öffnen" });
+        expect(primary).toHaveAttribute("target", "_blank");
+        expect(primary).toHaveAttribute("rel", "noopener noreferrer");
+        expect(primary.getAttribute("href")).toContain("/pr%C3%BCfung?token=literal-value");
+
+        fireEvent.keyDown(screen.getByRole("button", { name: "Port für Live-Vorschau auswählen" }), { key: "ArrowDown" });
+        const secondary = await screen.findByRole("option", { name: "Live-Vorschau Storybook auf Container-Port 6006 öffnen" });
+        expect(secondary).toHaveAttribute("href", expect.stringContaining("previewPort=6006"));
+        expect(secondary).toHaveAttribute("rel", "noopener noreferrer");
     });
 
     it("keeps a single routed port as a one-click primary link without the port menu", () => {

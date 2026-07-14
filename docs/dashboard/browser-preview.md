@@ -32,6 +32,13 @@ The browser preview provides an integrated environment for interacting with runn
 - Use `asyncFeedback` for launch/rebuild/stop/script-save/log-refresh feedback and `ActionFeedbackRegion` progress/result surfaces.
 - Under reduced motion, spinners and rail movement must snap or stop while status badges, button labels, `aria-busy`, visible disabled reasons, and log status copy remain visible.
 
+## Localization Boundary
+
+- Browser Preview dashboard copy is available in English and German through the feature-owned `browser-preview.ts` catalog. This includes page chrome, session menus and rails, launch/rebuild/stop controls, environment editors, port states, logs status, confirmations, validation context, empty/error states, and live announcements.
+- Session and environment counts use the active locale's native number and plural formatting. Pending port summaries accept an explicit locale for non-component consumers while preserving mapping order and the numeric port notation used by routing.
+- Preview URLs, normalized paths, startup commands and scripts, environment names and values, container IDs, container logs, project and sprint names, and backend diagnostics remain runtime data. They are rendered verbatim and are never translated or inserted into message-catalog templates as diagnostics.
+- API modules continue to return their existing payloads and raw error messages. The Browser surface may place localized dashboard-owned context before a raw diagnostic, but does not alter the diagnostic or the preview/session lifecycle.
+
 ## Accessibility Expectations
 - Interactive elements (session menus, sliders, actions) must be fully keyboard accessible.
 - Iframes and embedded views must have descriptive titles indicating their purpose and target.

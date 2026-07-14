@@ -2,9 +2,23 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { normalizePath, buildPreviewOrigin, buildPreviewUrl } from "../../../dashboard/src/v2/lib/preview-origin.js";
+import { normalizePath, buildPreviewOrigin, buildPreviewUrl, formatPreviewPortMappingsSummary } from "../../../dashboard/src/v2/lib/preview-origin.js";
 
 describe("preview-origin utilities", () => {
+  it("localizes pending port summaries without reordering or reformatting valid ports", () => {
+    const session = {
+      containerAppPort: 5173,
+      hostPort: 40123,
+      portMappings: [
+        { containerPort: 5173, hostPort: 40123, label: "App", isPrimary: true },
+        { containerPort: 6006, hostPort: null, label: "Storybook" },
+      ],
+    } as any;
+
+    expect(formatPreviewPortMappingsSummary(session, "de")).toBe("App :5173 -> :40123 · Storybook :6006 -> ausstehend");
+    expect(formatPreviewPortMappingsSummary({ ...session, portMappings: [{ containerPort: 70_000, hostPort: 1 }] }, "de")).toBe("Port ausstehend");
+  });
+
   describe("normalizePath", () => {
     it("handles null/undefined gracefully", () => {
       expect(normalizePath(null)).toBe("/");
