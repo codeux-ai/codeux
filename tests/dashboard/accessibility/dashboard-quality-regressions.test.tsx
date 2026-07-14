@@ -91,6 +91,7 @@ import { LiveTransportBanner } from "../../../dashboard/src/v2/components/live-s
 import { ActionFeedbackRegion } from "../../../dashboard/src/v2/components/ui/ActionFeedbackRegion.js";
 import { FileViewer } from "../../../dashboard/src/v2/components/file-browser/FileViewer.js";
 import { DiffViewer } from "../../../dashboard/src/v2/components/file-browser/DiffViewer.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
 import { InvocationsTable } from "../../../dashboard/src/v2/pages/stats/components/system/InvocationsTable.js";
 import { WaveFluid } from "../../../dashboard/src/v2/components/ui/WaveFluid.js";
 
@@ -491,19 +492,19 @@ describe("dashboard accessibility quality regressions", () => {
     expectLiveRegion(screen.getByRole("alert"), { role: "alert", live: "assertive" });
     cleanup();
 
-    const file = render(<FileViewer file={null} loading error={null} isDark={false} />);
+    const file = render(<DashboardI18nProvider initialLocale="en" storage={null}><FileViewer file={null} loading error={null} isDark={false} /></DashboardI18nProvider>);
     expectLiveRegion(screen.getByRole("status"), { role: "status", live: "polite" });
-    file.rerender(<FileViewer file={null} loading={false} error={null} isDark={false} />);
+    file.rerender(<DashboardI18nProvider initialLocale="en" storage={null}><FileViewer file={null} loading={false} error={null} isDark={false} /></DashboardI18nProvider>);
     expect(screen.getByRole("status")).toHaveTextContent("No file selected");
-    file.rerender(<FileViewer file={null} loading={false} error="read failed" isDark={false} />);
+    file.rerender(<DashboardI18nProvider initialLocale="en" storage={null}><FileViewer file={null} loading={false} error="read failed" isDark={false} /></DashboardI18nProvider>);
     expect(screen.getByRole("alert")).toHaveTextContent("read failed");
     cleanup();
 
-    const diff = render(<DiffViewer diff={null} loading error={null} isDark={false} sideBySide={false} />);
+    const diff = render(<DashboardI18nProvider initialLocale="en" storage={null}><DiffViewer diff={null} loading error={null} isDark={false} sideBySide={false} /></DashboardI18nProvider>);
     expectLiveRegion(screen.getByRole("status"), { role: "status", live: "polite" });
-    diff.rerender(<DiffViewer diff={null} loading={false} error={null} isDark={false} sideBySide={false} />);
+    diff.rerender(<DashboardI18nProvider initialLocale="en" storage={null}><DiffViewer diff={null} loading={false} error={null} isDark={false} sideBySide={false} /></DashboardI18nProvider>);
     expect(screen.getByRole("status")).toHaveTextContent("No change selected");
-    diff.rerender(<DiffViewer diff={null} loading={false} error="diff failed" isDark={false} sideBySide={false} />);
+    diff.rerender(<DashboardI18nProvider initialLocale="en" storage={null}><DiffViewer diff={null} loading={false} error="diff failed" isDark={false} sideBySide={false} /></DashboardI18nProvider>);
     expect(screen.getByRole("alert")).toHaveTextContent("diff failed");
     cleanup();
 

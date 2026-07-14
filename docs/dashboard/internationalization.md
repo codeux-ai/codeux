@@ -47,10 +47,12 @@ Interpolation replaces only named `{variable}` tokens through literal string sub
 
 ## Translation scope
 
-The initial application bundle translates only root-owned shell copy: the skip link, main landmark label, route loading announcement, and hidden footer. Route catalogs should be imported with their route when those features are localized.
+The application shell and File Browser are localized. The File Browser owns `messages/file-browser.ts` and translates page, session, file tree, changes, viewer, diff, loading, recovery, Monaco loading, and accessibility chrome. Counts and the displayed snapshot timestamp use the active locale's `Intl` formatters.
 
 Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged.
 
+For File Browser specifically, paths, filenames, file contents, diff text, syntax language IDs, Git refs, project and sprint names, binary metadata, and backend error details pass through unchanged. Localized recovery sentences may surround an error detail, but the detail itself is interpolated verbatim. Git change ordering and diff calculations are not locale-dependent.
+
 ## Verification
 
-Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization.
+Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. File Browser coverage lives in `tests/dashboard/v2/file-browser-page.test.tsx`, `tests/dashboard/v2/components/file-browser.test.tsx`, the colocated File Browser regression suite, and `tests/e2e/projects/file-browser.spec.ts`. Together they cover German sessions and controls, locale-aware summaries, repository-data preservation, keyboard/accessibility behavior, stale data, failures, binary files, diffs, long paths, and responsive containment.
