@@ -414,6 +414,19 @@ export interface ExecutionUsageTotals {
   estimatedInvocationCount: number;
   unavailableInvocationCount: number;
   unsupportedInvocationCount: number;
+  /** Explains which source made the aggregate cost trustworthy. Optional for
+   * compatibility with snapshots persisted or constructed before cost coverage
+   * was added; project Stats snapshots always populate it. */
+  costCoverage?: ExecutionCostCoverage;
+}
+
+export interface ExecutionCostCoverage {
+  configuredPricingInvocationCount: number;
+  providerReportedCostInvocationCount: number;
+  unpricedInvocationCount: number;
+  /** Provider-reported USD included in totalCostUsd only when configured model
+   * pricing was unavailable. A reported zero remains covered with amount 0. */
+  providerReportedCostUsd: number;
 }
 
 export interface ExecutionInvocationStatusCounts {
@@ -525,6 +538,11 @@ export interface ProjectExecutionStatsChartSeries {
   formatter?: 'tokens' | 'duration' | 'number' | 'percent';
 }
 
+export interface ProjectCostAnalyticsSummary {
+  /** Cost rows grouped by conceptual sprint rather than individual sprint run. */
+  sprints: ExecutionStatsEntitySummary[];
+}
+
 export interface ProjectExecutionStatsSnapshot {
   projectId: string;
   projectName: string;
@@ -533,6 +551,8 @@ export interface ProjectExecutionStatsSnapshot {
   range: ProjectStatsRangeSummary;
   generatedAt: string;
   usage: ExecutionUsageTotals;
+  /** Additive cost-specific projections that must not change existing ledgers. */
+  costAnalytics?: ProjectCostAnalyticsSummary;
   git: ExecutionGitStatsSummary;
   mergeConflictCount?: number;
   activeSprint: {

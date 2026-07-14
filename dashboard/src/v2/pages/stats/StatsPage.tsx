@@ -17,6 +17,7 @@ import styles from "./StatsPage.module.css";
 const MODE_LABELS = {
   trend: "Trend",
   composition: "Composition",
+  cost: "Cost",
   models: "Models",
   reliability: "Providers",
   ledgers: "Ledgers",

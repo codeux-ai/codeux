@@ -41,14 +41,15 @@ vi.mock("../../../dashboard/src/v2/pages/stats/components/AnalysisStudioSection.
   }: {
     stats: { tasks: Array<{ label: string }>; sprints: Array<{ label: string }> };
     loading: boolean;
-    visualMode: "trend" | "composition" | "models" | "reliability" | "ledgers" | "system";
-    setVisualMode: (mode: "trend" | "composition" | "models" | "reliability" | "ledgers" | "system") => void;
+    visualMode: "trend" | "composition" | "cost" | "models" | "reliability" | "ledgers" | "system";
+    setVisualMode: (mode: "trend" | "composition" | "cost" | "models" | "reliability" | "ledgers" | "system") => void;
   }) => (
     <section aria-label="Mock analysis studio">
       <div role="status" aria-live="polite">{loading ? "Refreshing" : "Ready"}</div>
       <div role="group" aria-label="Studio mode controls">
         <button type="button" onClick={() => setVisualMode("trend")} aria-pressed={visualMode === "trend"}>Trend</button>
         <button type="button" onClick={() => setVisualMode("composition")} aria-pressed={visualMode === "composition"}>Composition</button>
+        <button type="button" onClick={() => setVisualMode("cost")} aria-pressed={visualMode === "cost"}>Cost</button>
         <button type="button" onClick={() => setVisualMode("models")} aria-pressed={visualMode === "models"}>Models</button>
         <button type="button" onClick={() => setVisualMode("reliability")} aria-pressed={visualMode === "reliability"}>Reliability</button>
         <button type="button" onClick={() => setVisualMode("ledgers")} aria-pressed={visualMode === "ledgers"}>Ledgers</button>
@@ -63,6 +64,7 @@ vi.mock("../../../dashboard/src/v2/pages/stats/components/AnalysisStudioSection.
           <div>Token Anatomy</div>
         </div>
       ) : null}
+      {visualMode === "cost" ? <div>Cost analysis</div> : null}
       {visualMode === "models" ? <div>Model performance matrix</div> : null}
       {visualMode === "reliability" ? (
         <div>
@@ -304,7 +306,7 @@ describe("StatsPage Shell", () => {
     expect(commandControls.querySelector(".overflow-x-auto")).not.toBeInTheDocument();
     expect(commandControls.querySelector(".min-w-max")).not.toBeInTheDocument();
 
-    for (const label of ["Trend", "Composition", "Models", "Providers", "Ledgers", "System"]) {
+    for (const label of ["Trend", "Composition", "Cost", "Models", "Providers", "Ledgers", "System"]) {
       expect(within(modeGroup).getByRole("button", { name: label })).toBeInTheDocument();
     }
   });
@@ -436,11 +438,13 @@ describe("StatsPage Shell", () => {
     expect(within(modeGroup).getByText("Selected analytics mode: Trend.")).toBeInTheDocument();
 
     fireEvent.click(within(modeGroup).getByRole("button", { name: "Composition" }));
+    fireEvent.click(within(modeGroup).getByRole("button", { name: "Cost" }));
     fireEvent.click(within(modeGroup).getByRole("button", { name: "Providers" }));
     fireEvent.click(within(modeGroup).getByRole("button", { name: "System" }));
     expect(setVisualMode).toHaveBeenNthCalledWith(1, "composition");
-    expect(setVisualMode).toHaveBeenNthCalledWith(2, "reliability");
-    expect(setVisualMode).toHaveBeenNthCalledWith(3, "system");
+    expect(setVisualMode).toHaveBeenNthCalledWith(2, "cost");
+    expect(setVisualMode).toHaveBeenNthCalledWith(3, "reliability");
+    expect(setVisualMode).toHaveBeenNthCalledWith(4, "system");
 
     expect(screen.getByRole("region", { name: "Trend metrics" })).toBeInTheDocument();
     expect(screen.getByLabelText("Mock analysis studio")).toHaveTextContent("Trend analysis");
@@ -460,6 +464,7 @@ describe("StatsPage Shell", () => {
     const modes = [
       ["trend", "Trend metrics", "Trend analysis"],
       ["composition", "Composition metrics", "Composition analysis"],
+      ["cost", "Cost metrics", "Cost analysis"],
       ["models", "Models metrics", "Model performance matrix"],
       ["reliability", "Providers metrics", "Reliability analysis"],
       ["ledgers", "Ledgers metrics", "Task Telemetry"],
