@@ -209,7 +209,11 @@ describe("ChatProviderOutboundService", () => {
       }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ id: "444444444444444444" }), { status: 200 }));
     const adapter = new ConfiguredChatProviderOutboundAdapter({ fetch: fetchImpl, wait, now: () => 1_000 });
-    const service = new ChatProviderOutboundService({ chatProviderRepository: context.providerRepository, adapter });
+    const service = new ChatProviderOutboundService({
+      chatProviderRepository: context.providerRepository,
+      chatProviderSecretService: context.secretService,
+      adapter,
+    });
 
     const delivery = await service.deliverReply(fixture);
 
@@ -253,7 +257,11 @@ describe("ChatProviderOutboundService", () => {
     const adapter = new ConfiguredChatProviderOutboundAdapter({
       fetch: vi.fn(async () => new Response("server echoed official-bot-token", { status: 403 })),
     });
-    const service = new ChatProviderOutboundService({ chatProviderRepository: context.providerRepository, adapter });
+    const service = new ChatProviderOutboundService({
+      chatProviderRepository: context.providerRepository,
+      chatProviderSecretService: context.secretService,
+      adapter,
+    });
 
     const delivery = await service.deliverReply(fixture);
 

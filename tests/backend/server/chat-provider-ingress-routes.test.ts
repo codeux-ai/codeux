@@ -157,7 +157,7 @@ describe("chat provider ingress routes", () => {
   it("authenticates official Discord interactions and returns PONG through the production ingress boundary", async () => {
     const context = await startTestServer();
     const project = createProject(context, "discord-official-ingress");
-    const connection = context.chatProviderRepository.createConnection({
+    const connection = await context.chatProviderSecretService.createConnection({
       providerKind: "discord",
       displayName: "Discord official API",
       bridgeMode: "official_api",

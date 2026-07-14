@@ -176,7 +176,10 @@ describe("Slack chat connector profile", () => {
       },
     }));
     registerChatProviderIngressRoutes(app, {
-      chatProviderRepository: { getConnectionInternal: () => providerConnection },
+      chatProviderRepository: {
+        getConnectionInternal: () => providerConnection,
+        insertIngressReplayReceipt: () => true,
+      },
       chatProviderIngressService: { processInbound },
     } as unknown as DashboardDependencies);
 
