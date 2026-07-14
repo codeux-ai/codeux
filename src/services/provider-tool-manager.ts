@@ -104,9 +104,12 @@ const createStatus = (provider: ProviderToolId): ProviderToolStatus => ({
 
 export class ProviderToolManager {
   private readonly inFlight = new Map<string, Promise<PreparedProviderTool>>();
+  private readonly verificationInFlight = new Map<string, Promise<boolean>>();
+  private readonly failedVerificationsInProcess = new Set<string>();
   private readonly active = new Map<string, PreparedProviderTool>();
+  private readonly verifiedInProcess = new Set<string>();
   private readonly statePath: string;
-  private stateLoaded = false;
+  private stateLoadPromise?: Promise<void>;
   private persistQueue: Promise<void> = Promise.resolve();
   private readonly statuses = new Map<ProviderToolId, ProviderToolStatus>(
     PROVIDER_TOOL_IDS.map((provider) => [provider, createStatus(provider)]),
@@ -129,10 +132,14 @@ export class ProviderToolManager {
     return isProviderToolId(provider) ? { ...this.statuses.get(provider)! } : null;
   }
 
+  invalidatePreparedVolume(volumeName: string): void {
+    this.forgetVolumeVerification(volumeName);
+  }
+
   async prepare(
     provider: ProviderId | string,
     workflow: CliWorkflowSettings,
-    options: { logger?: Logger; checkForUpdate?: boolean } = {},
+    options: { logger?: Logger; checkForUpdate?: boolean; resolvedImage?: string } = {},
   ): Promise<PreparedProviderTool> {
     if (!isProviderToolId(provider)) {
       throw new Error(`Provider '${provider}' does not use a managed CLI tool.`);
@@ -144,7 +151,7 @@ export class ProviderToolManager {
     });
     let image: string;
     try {
-      image = await this.runtime.resolveImage(workflow, "base");
+      image = options.resolvedImage ?? await this.runtime.resolveImage(workflow, "base");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.updateStatus(provider, {
@@ -157,8 +164,6 @@ export class ProviderToolManager {
     const compatibilityKey = this.runtime.getCompatibilityKey(image);
     const jobKey = `${provider}:${compatibilityKey}`;
     await this.loadState();
-    const existing = this.inFlight.get(jobKey);
-    if (existing) return await existing;
     const cached = this.active.get(jobKey);
     if (cached && !options.checkForUpdate && await this.isVerifiedVolume(cached.volumeName, provider, cached.version, image)) {
       this.updateStatus(provider, {
@@ -171,6 +176,11 @@ export class ProviderToolManager {
       });
       return cached;
     }
+    // A background stable-channel check must not make an invocation wait when the previous
+    // immutable volume is already verified. Update preparation writes a new versioned volume and
+    // switches only future calls, so returning the current cache here is race-safe.
+    const existing = this.inFlight.get(jobKey);
+    if (existing) return await existing;
 
     const promise = this.withCrossProcessLock(jobKey, async () => (
       await this.prepareInternal(provider, image, compatibilityKey, options.logger)
@@ -185,14 +195,19 @@ export class ProviderToolManager {
     providers: Iterable<ProviderId>,
     workflow: CliWorkflowSettings,
     logger?: Logger,
+    options: { minimumUpdateIntervalMs?: number } = {},
   ): Promise<void> {
     const active = Array.from(new Set(Array.from(providers).filter(isProviderToolId)));
+    const minimumUpdateIntervalMs = Math.max(0, Math.floor(options.minimumUpdateIntervalMs ?? 0));
+    const stateIsFresh = minimumUpdateIntervalMs > 0
+      ? await this.isPersistedStateFresh(minimumUpdateIntervalMs)
+      : false;
     const concurrency = 2;
     let cursor = 0;
     const workers = Array.from({ length: Math.min(concurrency, active.length) }, async () => {
       while (cursor < active.length) {
         const provider = active[cursor++];
-        await this.prepare(provider, workflow, { logger, checkForUpdate: true }).catch((error: unknown) => {
+        await this.prepare(provider, workflow, { logger, checkForUpdate: !stateIsFresh }).catch((error: unknown) => {
           logger?.warn("Provider CLI update failed; retaining the last verified volume.", {
             provider,
             error: error instanceof Error ? error.message : String(error),
@@ -201,6 +216,13 @@ export class ProviderToolManager {
       }
     });
     await Promise.all(workers);
+  }
+
+  private async isPersistedStateFresh(maxAgeMs: number): Promise<boolean> {
+    const stat = await fs.stat(this.statePath).catch(() => null);
+    if (!stat) return false;
+    const ageMs = Date.now() - stat.mtimeMs;
+    return ageMs >= 0 && ageMs < maxAgeMs;
   }
 
   private async prepareInternal(
@@ -241,6 +263,7 @@ export class ProviderToolManager {
       }
 
       this.updateStatus(provider, { state: "queued", stepText: `Preparing ${provider} ${release.version}.`, progressPercent: 20 });
+      this.forgetVolumeVerification(volumeName);
       await this.commands.run("docker", ["volume", "rm", "-f", volumeName]);
       const create = await this.commands.run("docker", [
         "volume", "create",
@@ -256,12 +279,14 @@ export class ProviderToolManager {
       this.updateStatus(provider, { state: "downloading", stepText: `Downloading ${provider} ${release.version}.`, progressPercent: 30 });
       const install = await this.installProvider(provider, release, image, volumeName);
       if (!install.ok) {
+        this.forgetVolumeVerification(volumeName);
         await this.commands.run("docker", ["volume", "rm", "-f", volumeName]);
         throw new Error(this.describeInstallFailure(provider, release, install));
       }
 
       this.updateStatus(provider, { state: "verifying", stepText: `Verifying ${provider} ${release.version}.`, progressPercent: 90 });
       if (!await this.isVerifiedVolume(volumeName, provider, release.version, image)) {
+        this.forgetVolumeVerification(volumeName);
         await this.commands.run("docker", ["volume", "rm", "-f", volumeName]);
         throw new Error(`${provider} installation did not produce a valid verified marker.`);
       }
@@ -427,8 +452,32 @@ export class ProviderToolManager {
     version: string,
     image: string,
   ): Promise<boolean> {
+    if (this.verifiedInProcess.has(volumeName)) return true;
+    const verificationKey = `${volumeName}\0${provider}\0${version}\0${image}`;
+    if (this.failedVerificationsInProcess.has(verificationKey)) return false;
+    const existing = this.verificationInFlight.get(verificationKey);
+    if (existing) return await existing;
+    const verification = this.verifyVolume(volumeName, provider, version, image).finally(() => {
+      if (this.verificationInFlight.get(verificationKey) === verification) {
+        this.verificationInFlight.delete(verificationKey);
+      }
+    });
+    this.verificationInFlight.set(verificationKey, verification);
+    return await verification;
+  }
+
+  private async verifyVolume(
+    volumeName: string,
+    provider: ProviderToolId,
+    version: string,
+    image: string,
+  ): Promise<boolean> {
+    const verificationKey = `${volumeName}\0${provider}\0${version}\0${image}`;
     const inspect = await this.commands.run("docker", ["volume", "inspect", volumeName]).catch(() => null);
-    if (!inspect?.ok) return false;
+    if (!inspect?.ok) {
+      this.failedVerificationsInProcess.add(verificationKey);
+      return false;
+    }
     const spec = PROVIDER_SPECS[provider];
     const verifyScript = [
       `const fs=require('fs')`,
@@ -441,7 +490,21 @@ export class ProviderToolManager {
       image, "bash", "-lc",
       `node -e ${this.shellQuote(verifyScript)} && ${PROVIDER_TOOL_MOUNT}/bin/${spec.binary} --version >/dev/null`,
     ]);
+    if (verify.ok) {
+      this.verifiedInProcess.add(volumeName);
+      this.failedVerificationsInProcess.delete(verificationKey);
+    } else {
+      this.failedVerificationsInProcess.add(verificationKey);
+    }
     return verify.ok;
+  }
+
+  private forgetVolumeVerification(volumeName: string): void {
+    this.verifiedInProcess.delete(volumeName);
+    const prefix = `${volumeName}\0`;
+    for (const key of this.failedVerificationsInProcess) {
+      if (key.startsWith(prefix)) this.failedVerificationsInProcess.delete(key);
+    }
   }
 
   private preparedTool(provider: ProviderToolId, volumeName: string, version: string): PreparedProviderTool {
@@ -459,25 +522,28 @@ export class ProviderToolManager {
   }
 
   private async loadState(): Promise<void> {
-    if (this.stateLoaded) return;
-    this.stateLoaded = true;
-    try {
-      const parsed = JSON.parse(await fs.readFile(this.statePath, "utf8")) as Record<string, PreparedProviderTool>;
-      for (const [key, tool] of Object.entries(parsed)) {
-        if (!tool || !isProviderToolId(tool.provider) || typeof tool.volumeName !== "string" || typeof tool.version !== "string") continue;
-        this.active.set(key, tool);
-        this.updateStatus(tool.provider, {
-          state: "ready",
-          installedVersion: tool.version,
-          targetVersion: tool.version,
-          progressPercent: 100,
-          stepText: `${tool.provider} ${tool.version} is ready.`,
-          error: null,
-        });
-      }
-    } catch {
-      // First successful preparation creates the state file.
+    if (!this.stateLoadPromise) {
+      this.stateLoadPromise = (async () => {
+        try {
+          const parsed = JSON.parse(await fs.readFile(this.statePath, "utf8")) as Record<string, PreparedProviderTool>;
+          for (const [key, tool] of Object.entries(parsed)) {
+            if (!tool || !isProviderToolId(tool.provider) || typeof tool.volumeName !== "string" || typeof tool.version !== "string") continue;
+            this.active.set(key, tool);
+            this.updateStatus(tool.provider, {
+              state: "ready",
+              installedVersion: tool.version,
+              targetVersion: tool.version,
+              progressPercent: 100,
+              stepText: `${tool.provider} ${tool.version} is ready.`,
+              error: null,
+            });
+          }
+        } catch {
+          // First successful preparation creates the state file.
+        }
+      })();
     }
+    await this.stateLoadPromise;
   }
 
   private persistState(): Promise<void> {

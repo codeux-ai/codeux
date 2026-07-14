@@ -281,7 +281,7 @@ export function queryExecutionInvocationMessages(
     SELECT *
     FROM execution_invocation_messages
     WHERE invocation_id = ?
-    ORDER BY created_at ASC
+    ORDER BY created_at ASC, rowid ASC
   `;
   const rows = db.prepare(sql).all(invocationId) as ExecutionInvocationMessageRow[];
   return rows.map(mapExecutionInvocationMessageRow);

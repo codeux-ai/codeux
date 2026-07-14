@@ -560,10 +560,13 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     const browser = options.playwrightBrowserManager ?? playwrightBrowserManager;
     const settings = options.getSystemSettings();
     const runtimeLogger = dashboardLogger.child({ component: "managed-runtime-prewarm" });
+    const automaticAssetCheckIntervalMs = 6 * 60 * 60 * 1_000;
     void (async () => {
       let browserPreload: Promise<unknown> = Promise.resolve();
       if (settings.defaults.cliWorkflow.containerImageMode !== "custom") {
-        await runtime.checkForUpdates(runtimeLogger);
+        await runtime.checkForUpdates(runtimeLogger, {
+          minimumIntervalMs: automaticAssetCheckIntervalMs,
+        });
         if (settings.defaults.cliWorkflow.containerInstallPlaywrightBrowsers !== false) {
           browserPreload = browser.prepare(settings.defaults.cliWorkflow, { logger: runtimeLogger }).catch((error: unknown) => {
             runtimeLogger.warn("Playwright browser preload failed; provider CLI preparation will continue.", {
@@ -578,6 +581,7 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
           getActiveProviderTypes(settings),
           settings.defaults.cliWorkflow,
           runtimeLogger,
+          { minimumUpdateIntervalMs: automaticAssetCheckIntervalMs },
         ),
       ]);
     })().catch((error: unknown) => {

@@ -7,14 +7,18 @@ Code UX dispatches work across **seven providers**, each accepting one or more *
 | Provider | Type | Auth detection path | Default `maxConcurrentTasks` |
 | --- | --- | --- | --- |
 | `jules` | Hosted Jules Agent API | `JULES_API_KEY` env | `15` |
-| `gemini` | Local Gemini CLI (deprecated) | `~/.gemini/` | `0` (unlimited) |
-| `codex` | Local Codex CLI (OpenAI) | `~/.codex/` | `0` (unlimited) |
-| `claude-code` | Local Claude Code CLI | `~/.claude/` | `0` (unlimited) |
-| `qwen-code` | Local Qwen Code CLI | `~/.qwen/` | `0` (unlimited) |
-| `opencode` | Local OpenCode CLI (multi-model) | `~/.local/share/opencode/` or `~/.config/opencode/` | `0` (unlimited) |
-| `antigravity` | Local Antigravity CLI | `~/.antigravity/` | `0` (unlimited) |
+| `gemini` | Local Gemini CLI (deprecated) | `~/.gemini/` | `0` (adaptive) |
+| `codex` | Local Codex CLI (OpenAI) | `~/.codex/` | `0` (adaptive) |
+| `claude-code` | Local Claude Code CLI | `~/.claude/` | `0` (adaptive) |
+| `qwen-code` | Local Qwen Code CLI | `~/.qwen/` | `0` (adaptive) |
+| `opencode` | Local OpenCode CLI (multi-model) | `~/.local/share/opencode/` or `~/.config/opencode/` | `0` (adaptive) |
+| `antigravity` | Local Antigravity CLI | `~/.antigravity/` | `0` (adaptive) |
 
-All non-Jules providers are *virtual workers*. In the default Docker workflow, Code UX downloads only activated provider CLIs into versioned local Docker volumes, mounts them read-only, and checks their stable channels for updates on every startup. Selecting a provider in onboarding starts preparation before Login. Authentication still uses each provider's normal login flow and is stored separately from the tool volume.
+All non-Jules providers are *virtual workers*. In the default Docker workflow, Code UX downloads only activated provider CLIs into versioned local Docker volumes, mounts them read-only, and checks their stable channels when the persisted six-hour update watermark is due. Selecting a provider in onboarding starts preparation before Login. Authentication still uses each provider's normal login flow and is stored separately from the tool volume.
+
+For local providers, a concurrency value of `0` selects automatic CPU/memory admission. A positive
+value remains a hard provider ceiling. Jules runs remotely and retains the hosted unlimited meaning
+for `0`.
 
 Gemini CLI remains supported for existing and new configurations but is deprecated in the UI, excluded from fresh Easy recommendations, and accompanied by a migration action toward Antigravity. Code UX does not silently change Gemini credentials, defaults, or routing.
 

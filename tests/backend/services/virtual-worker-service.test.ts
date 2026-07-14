@@ -75,6 +75,28 @@ async function createFixture() {
   };
 }
 
+function createSchedulingService(
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+  hasAvailableCapacity = vi.fn().mockResolvedValue(true),
+): VirtualWorkerService {
+  return new VirtualWorkerService({
+    settingsRepository: fixture.settingsRepository,
+    sessionTracking: fixture.sessionTracking,
+    executionRepository: fixture.executionRepository,
+    projectManagementRepository: fixture.projectManagementRepository,
+    workerEndpointRepository: fixture.workerEndpointRepository,
+    projectWorkerAssignmentRepository: fixture.projectWorkerAssignmentRepository,
+    projectWorkerAssignmentService: new ProjectWorkerAssignmentService(
+      fixture.projectWorkerAssignmentRepository,
+      fixture.workerEndpointRepository,
+    ),
+    projectAttentionService: fixture.projectAttentionService,
+    workerTaskDispatchService: fixture.workerTaskDispatchService,
+    cliWorkflowService: { startTask: vi.fn() } as any,
+    providerConcurrencyService: { hasAvailableCapacity } as any,
+  });
+}
+
 afterEach(async () => {
   vi.useRealTimers();
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
@@ -166,7 +188,7 @@ describe("VirtualWorkerService", () => {
     expect(settingsSpy.mock.calls.length).toBeLessThanOrEqual(1);
   });
 
-  it("reconcile skips projects already scheduled or active", async () => {
+  it("reconcile does not overlap exclusive attention or already-scheduled project work", async () => {
     const {
       settingsRepository,
       sessionTracking,
@@ -230,18 +252,25 @@ describe("VirtualWorkerService", () => {
 
     // Mock projectNeedsVirtualWorker to observe it
     const spyProjectNeeds = vi.spyOn(virtualWorkerService as any, "projectNeedsVirtualWorker");
+    const scheduleSpy = vi.spyOn(virtualWorkerService, "scheduleProject");
 
-    // Force active cycle
-    (virtualWorkerService as any).activeCycles.set(virtualProject.id, Promise.resolve());
+    const attentionItem = projectAttentionService.listActiveProjectItems(virtualProject.id)[0];
+    const reservationId = `attention:${attentionItem.id}:test`;
+    (virtualWorkerService as any).cycleRegistry.tryReserve({
+      id: reservationId,
+      projectId: virtualProject.id,
+      kind: "attention",
+      attentionItemId: attentionItem.id,
+    }, 1);
 
     await virtualWorkerService.reconcile();
 
-    // Since the project is active, it should be skipped and projectNeedsVirtualWorker should not be called
-    expect(spyProjectNeeds).not.toHaveBeenCalled();
+    expect(spyProjectNeeds).toHaveBeenCalled();
+    expect(scheduleSpy).not.toHaveBeenCalled();
 
-    // Clear the map and test scheduled projects
-    (virtualWorkerService as any).activeCycles.delete(virtualProject.id);
+    (virtualWorkerService as any).cycleRegistry.release(reservationId);
     (virtualWorkerService as any).scheduledProjects.add(virtualProject.id);
+    spyProjectNeeds.mockClear();
 
     await virtualWorkerService.reconcile();
 
@@ -719,6 +748,180 @@ describe("VirtualWorkerService", () => {
     });
 
     expect((virtualWorkerService as any).projectNeedsVirtualWorker(project.id)).toBe(true);
+  });
+
+  it("runs two independent project dispatch cycles concurrently and cleans reservations", async () => {
+    const fixture = await createFixture();
+    const project = fixture.projectManagementRepository.createProject({
+      name: "Parallel Dispatch Project",
+      sourceType: "local",
+      sourceRef: "/workspace/parallel-dispatch",
+      defaultBranch: "main",
+    });
+    fixture.settingsRepository.saveProjectSettings(project.id, {
+      workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "codex", maxConcurrency: 2 },
+    });
+    const sprint = fixture.projectManagementRepository.createSprint(project.id, { name: "Parallel Sprint", number: 1 });
+    const sprintRun = fixture.executionRepository.createSprintRun({ projectId: project.id, sprintId: sprint.id, status: "running" });
+    for (const title of ["Independent one", "Independent two"]) {
+      const task = fixture.projectManagementRepository.createTask(project.id, { sprintId: sprint.id, title });
+      fixture.executionRepository.createTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        executorType: "docker_cli",
+        status: "queued",
+      } as any);
+    }
+
+    const service = createSchedulingService(fixture);
+    const resolveCycles: Array<() => void> = [];
+    const cycleSpy = vi.spyOn(service as any, "runProjectCycle").mockImplementation(() => (
+      new Promise<void>((resolve) => resolveCycles.push(resolve))
+    ));
+
+    service.scheduleProject(project.id, "parallel_test");
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(cycleSpy).toHaveBeenCalledTimes(2);
+    expect((service as any).cycleRegistry.countProject(project.id)).toBe(2);
+
+    // A second scheduling signal cannot duplicate the active task/dispatch work.
+    service.scheduleProject(project.id, "duplicate_signal");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cycleSpy).toHaveBeenCalledTimes(2);
+
+    resolveCycles.forEach((resolve) => resolve());
+    await vi.advanceTimersByTimeAsync(0);
+    expect((service as any).cycleRegistry.countProject(project.id)).toBe(0);
+    expect((service as any).activeCycles.size).toBe(0);
+    service.stop();
+  });
+
+  it("enforces project max concurrency and avoids two cycles for the same task", async () => {
+    const fixture = await createFixture();
+    const project = fixture.projectManagementRepository.createProject({
+      name: "Bounded Dispatch Project",
+      sourceType: "local",
+      sourceRef: "/workspace/bounded-dispatch",
+      defaultBranch: "main",
+    });
+    fixture.settingsRepository.saveProjectSettings(project.id, {
+      workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "codex", maxConcurrency: 2 },
+    });
+    const sprint = fixture.projectManagementRepository.createSprint(project.id, { name: "Bounded Sprint", number: 1 });
+    const sprintRun = fixture.executionRepository.createSprintRun({ projectId: project.id, sprintId: sprint.id, status: "running" });
+    const firstTask = fixture.projectManagementRepository.createTask(project.id, { sprintId: sprint.id, title: "Shared task" });
+    const secondTask = fixture.projectManagementRepository.createTask(project.id, { sprintId: sprint.id, title: "Other task" });
+    for (const taskId of [firstTask.id, firstTask.id, secondTask.id]) {
+      fixture.executionRepository.createTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId,
+        sprintRunId: sprintRun.id,
+        executorType: "docker_cli",
+        status: "queued",
+      } as any);
+    }
+
+    const service = createSchedulingService(fixture);
+    const cycleSpy = vi.spyOn(service as any, "runProjectCycle").mockReturnValue(new Promise<void>(() => undefined));
+
+    service.scheduleProject(project.id, "bounded_test");
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(cycleSpy).toHaveBeenCalledTimes(2);
+    const scheduledTaskIds = cycleSpy.mock.calls.map((call) => call[3].taskId);
+    expect(new Set(scheduledTaskIds).size).toBe(2);
+    expect((service as any).cycleRegistry.countProject(project.id)).toBe(2);
+    service.stop();
+  });
+
+  it("gives worker attention precedence over queued coding dispatches", async () => {
+    const fixture = await createFixture();
+    const project = fixture.projectManagementRepository.createProject({
+      name: "Attention First Project",
+      sourceType: "local",
+      sourceRef: "/workspace/attention-first",
+      defaultBranch: "main",
+    });
+    fixture.settingsRepository.saveProjectSettings(project.id, {
+      workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "codex", maxConcurrency: 3 },
+    });
+    const sprint = fixture.projectManagementRepository.createSprint(project.id, { name: "Attention Sprint", number: 1 });
+    const task = fixture.projectManagementRepository.createTask(project.id, { sprintId: sprint.id, title: "Queued task" });
+    const sprintRun = fixture.executionRepository.createSprintRun({ projectId: project.id, sprintId: sprint.id, status: "running" });
+    fixture.executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "queued",
+    } as any);
+    const attention = fixture.projectAttentionService.openItem({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: null,
+      attentionType: "ci_fix_required",
+      severity: "high",
+      ownerType: "worker",
+      title: "Repair CI",
+      summaryMarkdown: "Repair before more coding starts.",
+      payload: null,
+    });
+
+    const service = createSchedulingService(fixture);
+    const cycleSpy = vi.spyOn(service as any, "runProjectCycle").mockReturnValue(new Promise<void>(() => undefined));
+
+    service.scheduleProject(project.id, "attention_test");
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(cycleSpy).toHaveBeenCalledOnce();
+    expect(cycleSpy.mock.calls[0]?.[3]).toEqual({ kind: "attention", attentionItemId: attention.id });
+    expect((service as any).cycleRegistry.hasAttention(project.id)).toBe(true);
+    service.stop();
+  });
+
+  it("does not create an endpoint or claim a dispatch while provider pressure denies capacity", async () => {
+    const fixture = await createFixture();
+    const project = fixture.projectManagementRepository.createProject({
+      name: "Pressure Project",
+      sourceType: "local",
+      sourceRef: "/workspace/pressure-project",
+      defaultBranch: "main",
+    });
+    fixture.settingsRepository.saveProjectSettings(project.id, {
+      workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "codex", maxConcurrency: 2 },
+    });
+    const sprint = fixture.projectManagementRepository.createSprint(project.id, { name: "Pressure Sprint", number: 1 });
+    const task = fixture.projectManagementRepository.createTask(project.id, { sprintId: sprint.id, title: "Wait for capacity" });
+    const sprintRun = fixture.executionRepository.createSprintRun({ projectId: project.id, sprintId: sprint.id, status: "running" });
+    const dispatch = fixture.executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "queued",
+    } as any);
+    const hasAvailableCapacity = vi.fn().mockResolvedValue(false);
+    const service = createSchedulingService(fixture, hasAvailableCapacity);
+
+    await (service as any).runProjectCycle(project.id, "pressure_test", undefined, {
+      kind: "dispatch",
+      dispatchId: dispatch.id,
+      taskId: task.id,
+      sprintId: sprint.id,
+    });
+
+    expect(hasAvailableCapacity).toHaveBeenCalledWith("codex", expect.any(Number));
+    expect(fixture.workerTaskDispatchService.claimNextDispatchForWorker).not.toHaveBeenCalled();
+    expect(fixture.workerEndpointRepository.listWorkerEndpoints().filter((endpoint) => endpoint.endpointType === "virtual_cli")).toEqual([]);
+    expect(fixture.executionRepository.getTaskDispatch(dispatch.id)?.status).toBe("queued");
   });
 
   it("does not schedule or claim a queued dispatch for the clarification's task", async () => {

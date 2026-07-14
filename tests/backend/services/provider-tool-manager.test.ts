@@ -68,7 +68,7 @@ describe("ProviderToolManager", () => {
   };
 
   it("installs a stable npm provider once and reuses its verified read-only volume", async () => {
-    const { manager, stream, fetchImpl } = await createHarness();
+    const { manager, run, stream, fetchImpl } = await createHarness();
     const first = await manager.prepare("codex", DEFAULT_DASHBOARD_SETTINGS.cliWorkflow);
     const second = await manager.prepare("codex", DEFAULT_DASHBOARD_SETTINGS.cliWorkflow);
 
@@ -81,6 +81,12 @@ describe("ProviderToolManager", () => {
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(manager.getStatus("codex")).toMatchObject({ state: "ready", installedVersion: "1.2.3" });
+    expect(run.mock.calls.filter(([, args]) => args[0] === "run")).toHaveLength(1);
+
+    manager.invalidatePreparedVolume(first.volumeName);
+    await manager.prepare("codex", DEFAULT_DASHBOARD_SETTINGS.cliWorkflow);
+    expect(run.mock.calls.filter(([, args]) => args[0] === "run")).toHaveLength(2);
+    expect(stream).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -135,6 +141,43 @@ describe("ProviderToolManager", () => {
     expect(stream).toHaveBeenCalledTimes(1);
   });
 
+  it("does not block a warm invocation behind a background update check", async () => {
+    const { manager, fetchImpl } = await createHarness();
+    const current = await manager.prepare("codex", DEFAULT_DASHBOARD_SETTINGS.cliWorkflow);
+    let releaseUpdate: ((response: Response) => void) | undefined;
+    fetchImpl.mockImplementationOnce(() => new Promise<Response>((resolve) => {
+      releaseUpdate = resolve;
+    }) as any);
+
+    const update = manager.prepare("codex", DEFAULT_DASHBOARD_SETTINGS.cliWorkflow, {
+      checkForUpdate: true,
+    });
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+    const warm = await Promise.race([
+      manager.prepare("codex", DEFAULT_DASHBOARD_SETTINGS.cliWorkflow).then((value) => value.volumeName),
+      new Promise<string>((resolve) => setTimeout(() => resolve("blocked"), 50)),
+    ]);
+
+    expect(warm).toBe(current.volumeName);
+    releaseUpdate?.(new Response(JSON.stringify({
+      version: "1.2.3",
+      dist: { integrity: "sha512-test" },
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+    await update;
+  });
+
+  it("accepts a resolved runtime image without resolving it again", async () => {
+    const { manager } = await createHarness();
+    const runtime = (manager as any).runtime;
+
+    await manager.prepare("codex", DEFAULT_DASHBOARD_SETTINGS.cliWorkflow, {
+      resolvedImage: "example/runtime@sha256:browser",
+    });
+
+    expect(runtime.resolveImage).not.toHaveBeenCalled();
+    expect(runtime.getCompatibilityKey).toHaveBeenCalledWith("example/runtime@sha256:browser");
+  });
+
   it("treats a thrown missing-volume probe as a first installation", async () => {
     const { manager } = await createHarness({ throwOnFirstMissingInspect: true });
 
@@ -171,5 +214,19 @@ describe("ProviderToolManager", () => {
     await manager.checkActiveProviders(["codex", "jules", "codex"], DEFAULT_DASHBOARD_SETTINGS.cliWorkflow);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(manager.getStatus("gemini")?.state).toBe("not_installed");
+  });
+
+  it("reuses fresh persisted provider assets during automatic startup checks", async () => {
+    const { manager, fetchImpl } = await createHarness();
+    await manager.prepare("codex", DEFAULT_DASHBOARD_SETTINGS.cliWorkflow);
+
+    await manager.checkActiveProviders(
+      ["codex"],
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow,
+      undefined,
+      { minimumUpdateIntervalMs: 6 * 60 * 60 * 1_000 },
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 });

@@ -20,6 +20,7 @@ import {
   writeExecutionInvocationUpdate,
   writeClearExecutionInvocationMessages,
   writeExecutionInvocationMessage,
+  writeSyncExecutionInvocationMessages,
 } from "./execution/execution-invocation-writes.js";
 import {
   writeProviderInvocationRuntimeAssociation,
@@ -48,7 +49,9 @@ import type {
   ExecutionInvocationMessageRecord,
   CreateExecutionInvocationInput,
   UpdateExecutionInvocationInput,
-  AppendExecutionInvocationMessageInput
+  AppendExecutionInvocationMessageInput,
+  SyncExecutionInvocationMessagesResult,
+  SyncExecutionInvocationMessagesOptions,
 } from "../contracts/execution-types.js";
 
 import type {
@@ -399,6 +402,27 @@ export class ExecutionRepository {
       invocationId,
       input,
       (projectId, includeOverview) => this.notifyRealtime(projectId, includeOverview)
+    );
+  }
+
+  syncExecutionInvocationMessages(
+    invocationId: string,
+    inputs: AppendExecutionInvocationMessageInput[],
+    options: SyncExecutionInvocationMessagesOptions = {},
+  ): SyncExecutionInvocationMessagesResult {
+    return writeSyncExecutionInvocationMessages(
+      this.db,
+      this.logger,
+      {
+        getSprintRun: (id) => this.getSprintRun(id),
+        getTaskDispatch: (id) => this.getTaskDispatch(id),
+        getTaskRun: (id) => this.getTaskRun(id),
+        getExecutionInvocation: (id) => this.getExecutionInvocation(id),
+      },
+      invocationId,
+      inputs,
+      (projectId, includeOverview) => this.notifyRealtime(projectId, includeOverview),
+      options,
     );
   }
 

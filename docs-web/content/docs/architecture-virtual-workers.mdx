@@ -30,34 +30,26 @@ Bearer tokens and local provider credentials remain local and are not logged by 
 [Reconcile loop, every 3 s]
    │
    ▼
-For each project that needs attention:
+For each project that has worker work:
    │
-   ├─ pickNextWorkerAttention(projectId)   // pull next eligible item
+   ├─ Resolve workers.maxConcurrency and provider capacity
    │
-   ├─ if found:
-   │     ├─ Create ephemeral virtual endpoint in WorkerEndpointRepository
-   │     ├─ Assign worker to project (ProjectWorkerAssignmentService)
-   │     ├─ handleAttentionItem(endpoint.id, item, reason)
-   │     │     │
-   │     │     ├─ For coding/ci_fix/merge_conflict:
-   │     │     │     ├─ Resolve provider settings & model
-   │     │     │     ├─ Provision worktree (WorkspaceManager)
-   │     │     │     ├─ Spawn CLI (DOCKER or HOST mode)
-   │     │     │     │
-   │     │     │     ├─ [Session poll loop, every 2 s]
-   │     │     │     │     ├─ Pull session state
-   │     │     │     │     ├─ Update dispatch (workerTaskDispatchService)
-   │     │     │     │     └─ Exit on terminal state or cancel
-   │     │     │     │
-   │     │     │     └─ Cleanup worktree (unless preserve policy)
-   │     │     │
-   │     │     └─ For action_required (plan / clarification):
-   │     │           └─ Auto-approve or auto-reply (per automationInterventions)
-   │     │
-   │     └─ Release worker assignment & delete ephemeral endpoint
+   ├─ worker attention pending/running?
+   │     └─ wait for active dispatches, then run one exclusive attention cycle
    │
-   └─ if no item: skip project
+   └─ otherwise reserve distinct dispatches up to both limits
+         ├─ atomically claim each dispatch lease
+         ├─ create one ephemeral endpoint/assignment per dispatch
+         ├─ run provider/workspace cycles concurrently
+         └─ release each assignment and endpoint independently
 ```
+
+The process-local cycle registry prevents duplicate task/dispatch reservations and overlapping
+reconcile passes; atomic SQLite leases remain the cross-process authority. Provider capacity is
+checked before an endpoint is created, and the local budget is consumed as a batch fans out.
+Attention claims use a conditional SQLite update and remain project-exclusive because repairs can
+change shared state. Attention arriving after durable coding runs started waits for them instead of
+cancelling them.
 
 Default reconcile cadence: `VIRTUAL_WORKER_RECONCILE_MS = 3000`. Default session poll: `VIRTUAL_WORKER_SESSION_POLL_MS = 2000`. Initial scheduling uses microtasks to coalesce rapid events, but follow-up cycles after `remaining_worker_work` are deferred on the reconcile cadence so stale or unchanged worker state cannot starve dashboard HTTP probes or shutdown handling.
 

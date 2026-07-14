@@ -328,7 +328,12 @@ describe("DockerAssetPruneService", () => {
         return { ok: true, stdout: browserVolumes.join("\n"), stderr: "", code: 0 } as any;
       }
       if (args[0] === "volume" && args[1] === "inspect") {
-        return { ok: true, stdout: JSON.stringify([{ CreatedAt: dates[args[2]] }]), stderr: "", code: 0 } as any;
+        return {
+          ok: true,
+          stdout: JSON.stringify(args.slice(2).map((name) => ({ Name: name, CreatedAt: dates[name] }))),
+          stderr: "",
+          code: 0,
+        } as any;
       }
       return { ok: true, stdout: "", stderr: "", code: 0 } as any;
     });
@@ -343,5 +348,122 @@ describe("DockerAssetPruneService", () => {
       process.env,
       { timeout: 10_000 },
     );
+  });
+
+  it("batches volume inspections and bounds concurrent Docker control-plane calls", async () => {
+    const sessionTracking = {
+      listTrackedCliSessions: vi.fn(() => []),
+    } as unknown as SessionTrackingRepository;
+    const browserVolumes = Array.from({ length: 6 }, (_, index) => `browser-${index}`);
+    let activeInspections = 0;
+    let peakInspections = 0;
+
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "volume" && args[1] === "ls" && args.includes("label=ai.codeux.asset=playwright-browser")) {
+        return { ok: true, stdout: browserVolumes.join("\n"), stderr: "", code: 0 } as any;
+      }
+      if (args[0] === "volume" && args[1] === "inspect") {
+        activeInspections += 1;
+        peakInspections = Math.max(peakInspections, activeInspections);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        activeInspections -= 1;
+        return {
+          ok: true,
+          stdout: JSON.stringify(args.slice(2).map((name) => ({
+            Name: name,
+            CreatedAt: new Date().toISOString(),
+          }))),
+          stderr: "",
+          code: 0,
+        } as any;
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0 } as any;
+    });
+
+    await new DockerAssetPruneService(sessionTracking, undefined, {
+      dockerBatchSize: 2,
+      dockerConcurrency: 2,
+    }).cleanupOnStartup();
+
+    const inspectionCalls = vi.mocked(runCommandStrict).mock.calls
+      .map((call) => call[1])
+      .filter((args) => args[0] === "volume" && args[1] === "inspect");
+    expect(inspectionCalls).toHaveLength(3);
+    expect(inspectionCalls.every((args) => args.slice(2).length === 2)).toBe(true);
+    expect(peakInspections).toBe(2);
+  });
+
+  it("uses bounded per-volume inspection fallback when a batch races asset removal", async () => {
+    const sessionTracking = {
+      listTrackedCliSessions: vi.fn(() => []),
+    } as unknown as SessionTrackingRepository;
+    const browserVolumes = ["browser-newest", "browser-previous", "browser-stale", "browser-gone"];
+    const dates: Record<string, string> = {
+      "browser-newest": new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+      "browser-previous": new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      "browser-stale": new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(),
+    };
+    let activeIndividualInspections = 0;
+    let peakIndividualInspections = 0;
+
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "volume" && args[1] === "ls" && args.includes("label=ai.codeux.asset=playwright-browser")) {
+        return { ok: true, stdout: browserVolumes.join("\n"), stderr: "", code: 0 } as any;
+      }
+      if (args[0] === "volume" && args[1] === "inspect" && args.slice(2).length > 1) {
+        return { ok: false, stdout: "", stderr: "volume disappeared", code: 1 } as any;
+      }
+      if (args[0] === "volume" && args[1] === "inspect") {
+        activeIndividualInspections += 1;
+        peakIndividualInspections = Math.max(peakIndividualInspections, activeIndividualInspections);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        activeIndividualInspections -= 1;
+        const name = args[2];
+        if (name === "browser-gone") {
+          return { ok: false, stdout: "", stderr: "missing", code: 1 } as any;
+        }
+        return {
+          ok: true,
+          stdout: JSON.stringify([{ Name: name, CreatedAt: dates[name] }]),
+          stderr: "",
+          code: 0,
+        } as any;
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0 } as any;
+    });
+
+    const result = await new DockerAssetPruneService(sessionTracking, undefined, {
+      dockerBatchSize: 4,
+      dockerConcurrency: 2,
+    }).cleanupOnStartup();
+
+    expect(result.prunedPlaywrightBrowserVolumes).toEqual(["browser-stale"]);
+    expect(peakIndividualInspections).toBe(2);
+  });
+
+  it("joins overlapping startup cleanup requests into one sweep", async () => {
+    const listTrackedCliSessions = vi.fn(() => []);
+    const sessionTracking = { listTrackedCliSessions } as unknown as SessionTrackingRepository;
+    let releaseHelperScan: (() => void) | undefined;
+    const helperScanBlocked = new Promise<void>((resolve) => {
+      releaseHelperScan = resolve;
+    });
+
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "ps" && args.includes("label=code-ux.helper")) {
+        await helperScanBlocked;
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0 } as any;
+    });
+
+    const service = new DockerAssetPruneService(sessionTracking);
+    const firstCleanup = service.cleanupOnStartup();
+    const secondCleanup = service.cleanupOnStartup();
+
+    expect(secondCleanup).toBe(firstCleanup);
+    expect(listTrackedCliSessions).toHaveBeenCalledTimes(1);
+    releaseHelperScan?.();
+    await Promise.all([firstCleanup, secondCleanup]);
+    expect(listTrackedCliSessions).toHaveBeenCalledTimes(2);
   });
 });

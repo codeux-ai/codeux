@@ -14,6 +14,8 @@ import {
 export interface CodexLogResult extends ParsedProviderLogResult<ParsedUsageCounts> {
   /** The usage object the counts were read from, for raw telemetry storage. */
   rawUsageJson: Record<string, unknown> | null;
+  conversationRevision?: number;
+  conversationChangedFromIndex?: number;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -237,20 +239,21 @@ function upsertConversationGroup(
   groupIndexes: Map<string, number>,
   item: Record<string, unknown>,
   turns: ParsedConversationTurn[],
-): void {
+): number | null {
   if (turns.length === 0) {
-    return;
+    return null;
   }
   const key = conversationItemKey(item);
   if (key) {
     const existingIndex = groupIndexes.get(key);
     if (existingIndex !== undefined) {
       groups[existingIndex] = { key, turns };
-      return;
+      return existingIndex;
     }
     groupIndexes.set(key, groups.length);
   }
   groups.push({ key, turns });
+  return groups.length - 1;
 }
 
 function flattenConversationGroups(groups: ConversationTurnGroup[]): ParsedConversationTurn[] {
@@ -484,121 +487,246 @@ export function turnsFromCodexItem(item: Record<string, unknown>, timestampMs: n
  * When `sinceMs` is provided, only turns at/after that time are kept so a
  * resumed session contributes only the current run's turns.
  */
-export function parseCodexRolloutJsonl(jsonl: string, sinceMs?: number): CodexLogResult {
-  const lines = jsonl.split("\n");
-  let latestCumulativeUsage: Record<string, unknown> | null = null;
-  let baselineUsage: Record<string, unknown> | null = null;
-  let directUsage: ParsedUsageCounts | null = null;
-  let latestDirectUsageJson: Record<string, unknown> | null = null;
-  let hasCumulativeUsageInWindow = false;
-  let nativeSessionId: string | null = null;
-  const conversationGroups: ConversationTurnGroup[] = [];
-  const fallbackEventConversation: ParsedConversationTurn[] = [];
-  const conversationGroupIndexes = new Map<string, number>();
-  const minMs = typeof sinceMs === "number" ? sinceMs - 2000 : null;
-  const isInWindow = (timestampMs: number | null): boolean =>
-    minMs === null || (timestampMs !== null && timestampMs >= minMs);
+interface CodexRolloutParserState {
+  latestCumulativeUsage: Record<string, unknown> | null;
+  baselineUsage: Record<string, unknown> | null;
+  directUsage: ParsedUsageCounts | null;
+  latestDirectUsageJson: Record<string, unknown> | null;
+  hasCumulativeUsageInWindow: boolean;
+  nativeSessionId: string | null;
+  conversationGroups: ConversationTurnGroup[];
+  fallbackEventConversation: ParsedConversationTurn[];
+  conversationGroupIndexes: Map<string, number>;
+  minMs: number | null;
+  conversationRevision: number;
+  conversationChangedFromIndex: number | null;
+}
 
-  for (const rawLine of lines) {
-    const trimmed = rawLine.trim();
-    if (!trimmed.startsWith("{")) {
-      continue;
-    }
-    const line = parseJsonObject(trimmed);
-    if (!line) {
-      continue;
-    }
-    const type = typeof line.type === "string" ? line.type : null;
-    const payload = asRecord(line.payload);
-    const timestampMs = parseTimestampMs(line.timestamp);
+function createCodexRolloutParserState(sinceMs?: number): CodexRolloutParserState {
+  return {
+    latestCumulativeUsage: null,
+    baselineUsage: null,
+    directUsage: null,
+    latestDirectUsageJson: null,
+    hasCumulativeUsageInWindow: false,
+    nativeSessionId: null,
+    conversationGroups: [],
+    fallbackEventConversation: [],
+    conversationGroupIndexes: new Map<string, number>(),
+    minMs: typeof sinceMs === "number" ? sinceMs - 2000 : null,
+    conversationRevision: 0,
+    conversationChangedFromIndex: null,
+  };
+}
 
-    if (type === "session_meta" || type === "thread.started" || type === "session.created") {
-      nativeSessionId = extractSessionId(line, payload) ?? nativeSessionId;
-      continue;
-    }
+function processCodexRolloutLine(state: CodexRolloutParserState, rawLine: string): boolean {
+  const trimmed = rawLine.trim();
+  if (!trimmed.startsWith("{")) {
+    return false;
+  }
+  const line = parseJsonObject(trimmed);
+  if (!line) {
+    return false;
+  }
+  const type = typeof line.type === "string" ? line.type : null;
+  const payload = asRecord(line.payload);
+  const timestampMs = parseTimestampMs(line.timestamp);
+  const isInWindow = (value: number | null): boolean =>
+    state.minMs === null || (value !== null && value >= state.minMs);
 
-    if ((type === "event_msg" && payload && payload.type === "token_count") || type === "token_count") {
-      const totalUsage = getUsagePayload(line, payload);
-      if (totalUsage) {
-        if (minMs === null) {
-          latestCumulativeUsage = totalUsage;
-          hasCumulativeUsageInWindow = true;
-        } else if (timestampMs === null) {
-          // A cumulative snapshot with no timestamp cannot safely be assigned
-          // to either side of a resumed invocation boundary.
-          continue;
-        } else if (timestampMs < minMs) {
-          // Keep the latest snapshot seen strictly before this run's window as
-          // the baseline to subtract out below. Retain it as the latest value
-          // only until a later in-window snapshot is observed.
-          baselineUsage = totalUsage;
-          if (!hasCumulativeUsageInWindow) {
-            latestCumulativeUsage = totalUsage;
-          }
-        } else {
-          latestCumulativeUsage = totalUsage;
-          hasCumulativeUsageInWindow = true;
-        }
-      }
-      continue;
-    }
-
-    if (type === "turn.completed") {
-      const usagePayload = getUsagePayload(line, payload);
-      if (usagePayload && isInWindow(timestampMs)) {
-        directUsage = addUsageCounts(directUsage ?? emptyUsageCounts(), parseUsageObject(usagePayload));
-        latestDirectUsageJson = usagePayload;
-      }
-      continue;
-    }
-
-    if (type === "event_msg" && payload) {
-      const turns = eventMsgToTurns(payload, timestampMs);
-      if (turns.length > 0 && isInWindow(timestampMs)) {
-        fallbackEventConversation.push(...turns);
-      }
-      continue;
-    }
-
-    if (type !== "response_item" || !payload) {
-      continue;
-    }
-
-    // Beyond this point we build the conversation. Honour the run-isolation window.
-    if (!isInWindow(timestampMs)) {
-      continue;
-    }
-
-    upsertConversationGroup(
-      conversationGroups,
-      conversationGroupIndexes,
-      payload,
-      turnsFromCodexItem(payload, timestampMs),
-    );
+  if (type === "session_meta" || type === "thread.started" || type === "session.created") {
+    state.nativeSessionId = extractSessionId(line, payload) ?? state.nativeSessionId;
+    return true;
   }
 
+  if ((type === "event_msg" && payload && payload.type === "token_count") || type === "token_count") {
+    const totalUsage = getUsagePayload(line, payload);
+    if (totalUsage) {
+      if (state.minMs === null) {
+        state.latestCumulativeUsage = totalUsage;
+        state.hasCumulativeUsageInWindow = true;
+      } else if (timestampMs === null) {
+        return true;
+      } else if (timestampMs < state.minMs) {
+        state.baselineUsage = totalUsage;
+        if (!state.hasCumulativeUsageInWindow) {
+          state.latestCumulativeUsage = totalUsage;
+        }
+      } else {
+        state.latestCumulativeUsage = totalUsage;
+        state.hasCumulativeUsageInWindow = true;
+      }
+    }
+    return true;
+  }
+
+  if (type === "turn.completed") {
+    const usagePayload = getUsagePayload(line, payload);
+    if (usagePayload && isInWindow(timestampMs)) {
+      state.directUsage = addUsageCounts(state.directUsage ?? emptyUsageCounts(), parseUsageObject(usagePayload));
+      state.latestDirectUsageJson = usagePayload;
+    }
+    return true;
+  }
+
+  if (type === "event_msg" && payload) {
+    const turns = eventMsgToTurns(payload, timestampMs);
+    if (turns.length > 0 && isInWindow(timestampMs)) {
+      const changedFrom = state.conversationGroups.length > 0
+        ? state.conversationGroups.reduce((count, group) => count + group.turns.length, 0)
+        : state.fallbackEventConversation.length;
+      state.fallbackEventConversation.push(...turns);
+      state.conversationRevision += 1;
+      state.conversationChangedFromIndex = state.conversationChangedFromIndex === null
+        ? changedFrom
+        : Math.min(state.conversationChangedFromIndex, changedFrom);
+    }
+    return true;
+  }
+
+  if (type !== "response_item" || !payload || !isInWindow(timestampMs)) {
+    return true;
+  }
+  const changedGroupIndex = upsertConversationGroup(
+    state.conversationGroups,
+    state.conversationGroupIndexes,
+    payload,
+    turnsFromCodexItem(payload, timestampMs),
+  );
+  if (changedGroupIndex !== null) {
+    let changedFrom = 0;
+    for (let index = 0; index < changedGroupIndex; index += 1) {
+      changedFrom += state.conversationGroups[index]!.turns.length;
+    }
+    state.conversationRevision += 1;
+    state.conversationChangedFromIndex = state.conversationChangedFromIndex === null
+      ? changedFrom
+      : Math.min(state.conversationChangedFromIndex, changedFrom);
+  }
+  return true;
+}
+
+function buildCodexRolloutResult(state: CodexRolloutParserState): CodexLogResult {
   let usage: ParsedUsageCounts | null = null;
   let rawUsageJson: Record<string, unknown> | null = null;
-  if (latestCumulativeUsage && (hasCumulativeUsageInWindow || !directUsage)) {
-    usage = parseUsageObject(latestCumulativeUsage);
-    rawUsageJson = latestCumulativeUsage;
-  } else if (directUsage) {
-    usage = directUsage;
-    rawUsageJson = latestDirectUsageJson;
-  } else if (latestCumulativeUsage) {
-    usage = parseUsageObject(latestCumulativeUsage);
-    rawUsageJson = latestCumulativeUsage;
+  if (state.latestCumulativeUsage && (state.hasCumulativeUsageInWindow || !state.directUsage)) {
+    usage = parseUsageObject(state.latestCumulativeUsage);
+    rawUsageJson = state.latestCumulativeUsage;
+  } else if (state.directUsage) {
+    usage = state.directUsage;
+    rawUsageJson = state.latestDirectUsageJson;
+  } else if (state.latestCumulativeUsage) {
+    usage = parseUsageObject(state.latestCumulativeUsage);
+    rawUsageJson = state.latestCumulativeUsage;
   }
-  if (usage && rawUsageJson === latestCumulativeUsage && baselineUsage) {
-    usage = subtractUsageCounts(usage, parseUsageObject(baselineUsage));
+  if (usage && rawUsageJson === state.latestCumulativeUsage && state.baselineUsage) {
+    usage = subtractUsageCounts(usage, parseUsageObject(state.baselineUsage));
   }
-  const conversation = flattenConversationGroups(conversationGroups);
+  const conversation = flattenConversationGroups(state.conversationGroups);
   return {
     usage,
     rawUsageJson,
-    conversation: conversation.length > 0 ? conversation : fallbackEventConversation,
-    nativeSessionId,
+    conversation: conversation.length > 0 ? conversation : [...state.fallbackEventConversation],
+    nativeSessionId: state.nativeSessionId,
+    conversationRevision: state.conversationRevision,
+    ...(state.conversationChangedFromIndex !== null
+      ? { conversationChangedFromIndex: state.conversationChangedFromIndex }
+      : {}),
   };
+}
+
+function processCodexRolloutChunk(
+  state: CodexRolloutParserState,
+  chunk: string,
+  pendingLine: string,
+): string {
+  const lines = (pendingLine + chunk).split("\n");
+  const finalLine = lines.pop() ?? "";
+  for (const line of lines) {
+    processCodexRolloutLine(state, line);
+  }
+  if (!finalLine) {
+    return "";
+  }
+  return processCodexRolloutLine(state, finalLine) ? "" : finalLine;
+}
+
+/** Incremental parser for the append-only Codex rollout used by live telemetry. */
+export class CodexRolloutAccumulator {
+  private state: CodexRolloutParserState;
+  private previousLength = 0;
+  private previousHead = "";
+  private previousBoundary = "";
+  private pendingLine = "";
+  private sourceId: string | null = null;
+  private lastResult: CodexLogResult | null = null;
+
+  constructor(private readonly sinceMs?: number) {
+    this.state = createCodexRolloutParserState(sinceMs);
+  }
+
+  update(jsonl: string, sourceId?: string | null): CodexLogResult {
+    const normalizedSourceId = sourceId || null;
+    const canAppend = this.canAppend(jsonl, normalizedSourceId);
+    if (!canAppend) {
+      this.reset(normalizedSourceId);
+    } else if (jsonl.length === this.previousLength && this.lastResult) {
+      return this.lastResult;
+    }
+
+    const chunk = canAppend ? jsonl.slice(this.previousLength) : jsonl;
+    this.state.conversationChangedFromIndex = null;
+    this.pendingLine = processCodexRolloutChunk(this.state, chunk, this.pendingLine);
+    this.previousLength = jsonl.length;
+    this.previousHead = jsonl.slice(0, Math.min(4096, jsonl.length));
+    this.previousBoundary = jsonl.slice(Math.max(0, jsonl.length - 4096));
+    this.sourceId = normalizedSourceId;
+    this.lastResult = buildCodexRolloutResult(this.state);
+    return this.lastResult;
+  }
+
+  appendChunk(text: string, sourceId: string, reset = false): CodexLogResult {
+    if (reset || (this.sourceId !== null && this.sourceId !== sourceId)) {
+      this.reset(sourceId);
+    }
+    this.state.conversationChangedFromIndex = null;
+    this.pendingLine = processCodexRolloutChunk(this.state, text, this.pendingLine);
+    this.sourceId = sourceId;
+    // Full-snapshot prefix checks do not apply while consuming byte deltas.
+    this.previousLength = 0;
+    this.previousHead = "";
+    this.previousBoundary = "";
+    this.lastResult = buildCodexRolloutResult(this.state);
+    return this.lastResult;
+  }
+
+  private canAppend(jsonl: string, sourceId: string | null): boolean {
+    if (this.previousLength === 0 || jsonl.length < this.previousLength) {
+      return false;
+    }
+    if (this.sourceId && sourceId && this.sourceId !== sourceId) {
+      return false;
+    }
+    if (jsonl.slice(0, this.previousHead.length) !== this.previousHead) {
+      return false;
+    }
+    const boundaryStart = Math.max(0, this.previousLength - this.previousBoundary.length);
+    return jsonl.slice(boundaryStart, this.previousLength) === this.previousBoundary;
+  }
+
+  private reset(sourceId: string | null): void {
+    this.state = createCodexRolloutParserState(this.sinceMs);
+    this.previousLength = 0;
+    this.previousHead = "";
+    this.previousBoundary = "";
+    this.pendingLine = "";
+    this.sourceId = sourceId;
+    this.lastResult = null;
+  }
+}
+
+export function parseCodexRolloutJsonl(jsonl: string, sinceMs?: number): CodexLogResult {
+  return new CodexRolloutAccumulator(sinceMs).update(jsonl);
 }
 
 /**

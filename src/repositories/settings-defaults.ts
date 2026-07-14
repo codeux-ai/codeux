@@ -750,7 +750,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   consoleLogLevel: "info",
   debugLogFileLevel: "error",
   consoleLogMode: "standard",
-  dbAutoVacuumOnStartup: true,
+  dbAutoVacuumOnStartup: false,
   dbPruningEnabled: true,
   dbRetentionDays: 14,
   restartSprintPolicy: "continue",

@@ -104,13 +104,15 @@ Per-provider concurrency is controlled by `provider.maxConcurrentTasks`:
 | Provider | Default cap |
 | --- | --- |
 | Hosted Provider | `15` |
-| Gemini | `0` (unlimited) |
-| Codex | `0` (unlimited) |
-| Claude Code | `0` (unlimited) |
-| Qwen Code | `0` (unlimited) |
-| OpenCode | `0` (unlimited) |
+| Gemini | `0` (adaptive) |
+| Codex | `0` (adaptive) |
+| Claude Code | `0` (adaptive) |
+| Qwen Code | `0` (adaptive) |
+| OpenCode | `0` (adaptive) |
 
-`0` means no cap. Set explicit caps when running on shared infrastructure to avoid resource contention.
+For local providers, `0` derives a safe ceiling from CPU and memory and pauses background expansion
+under pressure. Positive values remain hard ceilings. The hosted provider does not consume local
+Docker capacity.
 
 For CLI/Docker providers, Code UX counts both running provider invocations and running task runs when enforcing provider capacity. A task run can reserve orchestration capacity before its provider invocation row starts, so this prevents wide DAGs from creating hidden running backlogs while provider calls appear idle.
 

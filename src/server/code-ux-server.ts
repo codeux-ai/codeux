@@ -226,6 +226,7 @@ export class CodeUxServer {
   private skillService: import("../services/skill-service.js").SkillService;
   private runtimeCleanupInterval: ReturnType<typeof setInterval> | null = null;
   private sprintPreviewInterval: ReturnType<typeof setInterval> | null = null;
+  private sprintPreviewReconcileInFlight = false;
   private liveSnapshotInterval: ReturnType<typeof setInterval> | null = null;
   private walCheckpointInterval: ReturnType<typeof setInterval> | null = null;
   private readonly startupTaskTimers = new Set<ReturnType<typeof setTimeout>>();
@@ -616,11 +617,9 @@ export class CodeUxServer {
     }
 
     const runCleanup = (): void => {
-      try {
-        this.runtimeCleanupService.cleanup();
-      } catch (error) {
+      void this.runtimeCleanupService.cleanup().catch((error) => {
         this.logger.error("Runtime cleanup sweep failed", { error });
-      }
+      });
     };
 
     const initialTimer = setTimeout(runCleanup, CodeUxServer.LOOP_INITIAL_DELAY_MS);
@@ -635,11 +634,23 @@ export class CodeUxServer {
     }
 
     const reconcile = (): void => {
-      void this.sprintPreviewService.reconcileSessions().catch((error) => {
-        this.logger.error("Sprint preview reconciliation failed", { error });
-      });
-      void this.sprintFileBrowserService.reconcileSessions().catch((error) => {
-        this.logger.error("File browser reconciliation failed", { error });
+      if (this.sprintPreviewReconcileInFlight) {
+        return;
+      }
+      this.sprintPreviewReconcileInFlight = true;
+      void Promise.allSettled([
+        this.sprintPreviewService.reconcileSessions(),
+        this.sprintFileBrowserService.reconcileSessions(),
+      ]).then((results) => {
+        const [previewResult, fileBrowserResult] = results;
+        if (previewResult.status === "rejected") {
+          this.logger.error("Sprint preview reconciliation failed", { error: previewResult.reason });
+        }
+        if (fileBrowserResult.status === "rejected") {
+          this.logger.error("File browser reconciliation failed", { error: fileBrowserResult.reason });
+        }
+      }).finally(() => {
+        this.sprintPreviewReconcileInFlight = false;
       });
     };
 
@@ -685,14 +696,43 @@ export class CodeUxServer {
 
     const checkpoint = (): void => {
       try {
-        maintenance.checkpointWalDatabases();
+        this.advanceDeferredDatabaseMigrations();
+        if (!this.appDbStorage.hasPendingMaintenanceCriticalIndexes()) {
+          maintenance.runPeriodicMaintenance();
+        }
       } catch (error) {
-        this.logger.error("WAL checkpoint sweep failed", { error });
+        this.logger.error("Periodic database maintenance sweep failed", { error });
       }
     };
 
     this.walCheckpointInterval = setInterval(checkpoint, CodeUxServer.WAL_CHECKPOINT_INTERVAL_MS);
     this.walCheckpointInterval.unref?.();
+  }
+
+  private advanceDeferredDatabaseMigrations(): void {
+    const bounded = this.appDbStorage.runBoundedDataMigrationsIfIdle();
+    if (!bounded.skipped) {
+      const changed = bounded.deletedNonReplayableEvents
+        + bounded.backfilledTaskRunEventProjects
+        + bounded.backfilledProviderInvocations
+        + bounded.backfilledAutomationCredentials
+        + bounded.migratedNodeFlowGraphs
+        + bounded.backfilledNodeFlowPublications;
+      if (changed > 0) {
+        this.logger.info("Advanced bounded database data migrations", { changed });
+      }
+    }
+    void this.appDbStorage.runNextDeferredIndexIfIdle().then((status) => {
+      if (status === "created") {
+        this.logger.info("Created one deferred database index", {
+          remaining: this.appDbStorage.getPendingDeferredIndexCount(),
+        });
+      }
+    }).catch((error) => {
+      this.logger.warn("Deferred database index build failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
 
   private createContext(): ServerContext {
@@ -1355,6 +1395,14 @@ export class CodeUxServer {
       }).reapOnStartup();
     } catch (error) {
       this.logger.error("Failed to reap merged branches on startup", { error });
+    }
+
+    this.advanceDeferredDatabaseMigrations();
+    if (this.appDbStorage.hasPendingMaintenanceCriticalIndexes()) {
+      this.logger.info("Deferring database retention until maintenance-critical indexes are ready", {
+        pendingIndexes: this.appDbStorage.getPendingDeferredIndexCount(),
+      });
+      return;
     }
 
     try {

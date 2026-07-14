@@ -213,18 +213,16 @@ describe("WorkspaceManager", () => {
     }
   });
 
-  it("reasserts recursive runtime-volume ownership when provider execution forces it", async () => {
+  it("uses a durable owner marker and skips repeated runtime-volume ownership helpers", async () => {
     vi.mocked(runCommandStrict).mockResolvedValue({ ok: true, stdout: "", stderr: "", code: 0, signal: null } as any);
 
     await manager.ensureRuntimeVolume("docker-volume://workspace-1", {
       initializeOwnership: true,
       ownerSpec: "1001:1002",
-      forceOwnershipInitialization: true,
     });
     await manager.ensureRuntimeVolume("docker-volume://workspace-1", {
       initializeOwnership: true,
       ownerSpec: "1001:1002",
-      forceOwnershipInitialization: true,
     });
 
     const ownershipCalls = vi.mocked(runCommandStrict).mock.calls.filter((call) => (
@@ -232,9 +230,49 @@ describe("WorkspaceManager", () => {
       && call[1].some((arg) => String(arg).includes("workspace-1-runtime"))
       && String(call[1].at(-1)).includes("chown -R")
     ));
-    expect(ownershipCalls).toHaveLength(2);
+    expect(ownershipCalls).toHaveLength(1);
     expect(ownershipCalls[0]?.[1].at(-1)).toContain("1001:1002");
     expect(ownershipCalls[0]?.[1].at(-1)).toContain("/code-ux-runtime-home");
+    expect(ownershipCalls[0]?.[1].at(-1)).toContain(".codeux-owner");
+    const volumeCreateCalls = vi.mocked(runCommandStrict).mock.calls.filter((call) => (
+      call[0] === "docker" && call[1][0] === "volume" && call[1][1] === "create"
+    ));
+    expect(volumeCreateCalls).toHaveLength(1);
+  });
+
+  it("recreates and relabels an externally removed runtime volume before repairing ownership", async () => {
+    vi.mocked(runCommandStrict).mockResolvedValue({ ok: true, stdout: "", stderr: "", code: 0, signal: null } as any);
+    await manager.ensureRuntimeVolume("docker-volume://workspace-1", {
+      initializeOwnership: true,
+      ownerSpec: "1001:1002",
+    });
+    vi.clearAllMocks();
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (command === "docker" && args[0] === "volume" && args[1] === "inspect") {
+        return { ok: true, stdout: "\n", stderr: "", code: 0, signal: null } as any;
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0, signal: null } as any;
+    });
+
+    await manager.repairRuntimeVolume("docker-volume://workspace-1", {
+      initializeOwnership: true,
+      ownerSpec: "1001:1002",
+    });
+
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      ["volume", "rm", "-f", "workspace-1-runtime"],
+      process.cwd(),
+    );
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      expect.arrayContaining(["volume", "create", "--label", "code-ux.workspace-runtime=true", "workspace-1-runtime"]),
+      process.cwd(),
+    );
+    const ownershipRepair = vi.mocked(runCommandStrict).mock.calls.find((call) => (
+      call[0] === "docker" && String(call[1].at(-1)).includes(".codeux-owner")
+    ));
+    expect(ownershipRepair?.[1].at(-1)).toContain("chown -R");
   });
 
   it("checks out the requested branch in a snapshot workspace", async () => {
@@ -266,15 +304,12 @@ describe("WorkspaceManager", () => {
     const checkoutCall = vi.mocked(runCommandStrict).mock.calls.find((call) =>
       call[0] === "docker"
       && call[1].includes("--entrypoint")
-      && call[1].includes("git")
-      && call[1].includes("checkout")
+      && call[1].includes("sh")
+      && String(call[1].at(-1)).includes("git -C /workspace checkout")
     );
-    expect(checkoutCall?.[1].slice(-4)).toEqual([
-      "checkout",
-      "-B",
-      "feature/task-1",
-      "origin/feature/task-1",
-    ]);
+    expect(String(checkoutCall?.[1].at(-1))).toContain(
+      "git -C /workspace checkout -B 'feature/task-1' 'refs/remotes/origin/feature/task-1'",
+    );
   });
 
   it("seeds only the requested branch refs instead of every ref", async () => {
@@ -329,9 +364,13 @@ describe("WorkspaceManager", () => {
       }
       // The in-volume checkout (docker run --entrypoint git ... checkout) fails the first time,
       // which should trigger a full re-seed + retry.
-      if (command === "docker" && args.includes("--entrypoint") && args.includes("checkout")) {
+      if (
+        command === "docker"
+        && args.includes("--entrypoint")
+        && (args.includes("checkout") || String(args.at(-1)).includes("git -C /workspace checkout"))
+      ) {
         checkoutAttempts += 1;
-        if (checkoutAttempts === 1) {
+        if (checkoutAttempts <= 2) {
           throw new Error("checkout failed: missing object");
         }
         return { ok: true, stdout: "", stderr: "" } as any;
@@ -353,7 +392,7 @@ describe("WorkspaceManager", () => {
       ["bundle", "create", bundlePath, "--all"],
       "/repo/project",
     );
-    expect(checkoutAttempts).toBe(2);
+    expect(checkoutAttempts).toBe(3);
   });
 
   it("falls back to the repository HEAD branch when no snapshot branch is requested", async () => {
@@ -384,10 +423,12 @@ describe("WorkspaceManager", () => {
     const checkoutCall = vi.mocked(runCommandStrict).mock.calls.find((call) =>
       call[0] === "docker"
       && call[1].includes("--entrypoint")
-      && call[1].includes("git")
-      && call[1].includes("checkout")
+      && call[1].includes("sh")
+      && String(call[1].at(-1)).includes("git -C /workspace checkout")
     );
-    expect(checkoutCall?.[1].slice(-4)).toEqual(["checkout", "-B", "main", "main"]);
+    expect(String(checkoutCall?.[1].at(-1))).toContain(
+      "git -C /workspace checkout -B 'main' 'refs/heads/main'",
+    );
   });
 
   it("does not fall back to a local branch for remote-only snapshot checkouts", async () => {
@@ -738,6 +779,42 @@ describe("WorkspaceManager", () => {
       path.join("/tmp/code-ux-bundle-123", "repo.bundle"),
       "refs/remotes/origin/feature/sprint-1",
     ]);
+  });
+
+  it("does not reuse a targeted bundle after its branch tip moves", async () => {
+    let branchTip = "a".repeat(40);
+    let bundleCreates = 0;
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo/project\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "show-ref") {
+        if (args.includes("refs/remotes/origin/feature/sprint-1")) return { ok: true, stdout: "", stderr: "" } as any;
+        throw new Error("missing ref");
+      }
+      if (command === "git" && args[0] === "rev-parse" && args[1] === "--verify") {
+        return { ok: true, stdout: `${branchTip}\n`, stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "bundle" && args[1] === "create") {
+        bundleCreates += 1;
+      }
+      if (command === "docker" && args[0] === "volume" && args[1] === "inspect") {
+        throw new Error("missing");
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0, signal: null } as any;
+    });
+
+    await manager.createSnapshotWorkspace("/repo/project", "session-1", {
+      branch: "feature/sprint-1",
+      remoteOnly: true,
+    });
+    branchTip = "b".repeat(40);
+    await manager.createSnapshotWorkspace("/repo/project", "session-2", {
+      branch: "feature/sprint-1",
+      remoteOnly: true,
+    });
+
+    expect(bundleCreates).toBe(2);
   });
 
   it("creates local branch aliases in Docker prepare worktrees for requested remote-only refs", async () => {

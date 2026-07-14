@@ -1,0 +1,88 @@
+# High-Concurrency Docker Orchestration
+
+Code UX treats concurrency as a throughput problem, not a count of containers. The runtime keeps
+provider and CI work parallel while reserving enough host capacity for Docker, SQLite, the dashboard,
+and interactive replies to remain responsive.
+
+## Admission and priority
+
+A positive `maxConcurrentTasks` is a hard provider ceiling. For local providers, `0` selects adaptive
+admission; for Jules, `0` still means unlimited hosted work.
+
+The automatic local ceiling is the smaller of half the logical CPUs and the memory budget after
+reserving the greater of 4 GiB or 15% of host memory, using 2.5 GiB as the planning estimate per
+active provider/CI container. One slot is reserved for worker, dashboard, or clarification replies.
+
+When one-minute load per CPU reaches 0.9 or free memory falls to 15%, background expansion freezes.
+One interactive reply may use the reserved slot. Extreme load alone does not consume that
+reservation because Linux load also counts I/O wait; critically low memory does. Existing work is
+not killed; admission resumes when pressure falls.
+
+## Docker control plane
+
+Availability and container discovery share one process-wide `docker ps` inventory, in-flight
+promise, and TTL. Failed probes are briefly cached, mutations invalidate the shared generation, and
+destructive stale recovery refuses old inventory. A successful claim does not reconcile Docker;
+recovery runs only after an atomic bounded claim reports that capacity is full.
+
+## Managed cache and workspace startup
+
+Automatic managed-image pulls and provider release lookups use a six-hour persisted freshness
+window. Restarts inside that window reuse immutable cache identities instead of creating a registry
+and Docker control-plane stampede; explicit preparation still forces an update check.
+
+Managed images, provider tools, and Playwright browser volumes are verified once per process. Warm
+invocations do not launch provider-version verification containers. One resolved runtime digest is
+shared by the launch, provider-tool, and browser preparation paths.
+
+Fresh snapshots reuse single-flight targeted fetches, ref-aware bundles, and a fused single-branch
+seed plus checkout. Runtime volume ownership uses a durable marker, so recursive ownership repair
+runs only for creation, mismatch, or external recreation. Provider containers receive a soft CPU
+weight, not a hard quota, and a speculative pre-launch `docker rm` is no longer required.
+
+## Telemetry and storage
+
+Telemetry checks metadata before reading content. Codex transcript transport and parsing retain a
+bounded byte cursor and reset safely for split records, truncation, or source rotation; Claude
+transport also reads appended bytes. Qwen mutable files and Antigravity SQLite are read coherently
+only after metadata changes. Bounded append-efficient stdout/stderr buffers avoid repeated full
+string copies. Invocation messages reconcile by stable
+ordinal in one transaction: unchanged prefixes stay untouched, appends insert a tail, lifecycle
+changes update affected rows, and truncation removes only an obsolete tail.
+Jules live activity uses the same atomic suffix reconciliation rather than clearing and reinserting
+the transcript on every poll.
+
+Provider activity is buffered and compacted into bounded 16 KiB rows. Terminal execution history
+uses configured retention; raw duplicated terminal-session activity is retained for one day. Every
+retention table advances through a row-id cursor and mutates at most 500 rows per idle pass. Child
+trees are cleaned before parents so foreign-key cascades cannot turn one parent delete into a large
+write. Normal WAL checkpoints are passive and run only while provider work is idle. Automatic
+maintenance never runs full `VACUUM` or `TRUNCATE`; the optional startup reclaim is capped at 256
+incremental-vacuum pages, and may safely no-op for older database files.
+
+## Cleanup control plane
+
+The periodic runtime sweep is single-flight and performs stale runtime-path traversal with bounded
+asynchronous filesystem operations. A later 15-second tick joins the active sweep instead of
+starting another database and filesystem pass.
+
+Startup Docker cleanup is also single-flight. It removes helper containers before their workspace
+volumes, then runs the independent workspace, provider-tool, and browser-volume pipelines in
+parallel. Volume inspection and removal are grouped into batches of at most 50, with at most four
+cleanup Docker commands active at once and a bounded per-item fallback when a batch races an asset
+removal. Active-session protection, the new-workspace grace window, and managed-cache retention are
+unchanged.
+
+## Invariants
+
+- Independent project dispatches fan out to worker and provider capacity.
+- SQLite remains the cross-process atomic claim boundary.
+- Positive provider caps are never exceeded.
+- Pressure does not kill existing work.
+- Interactive priority does not bypass a hard cap.
+- Attention and repair work stays ahead of ordinary coding.
+- Parallelism must never double-claim a task, dispatch, attention item, workspace, or branch.
+- Cleanup intervals cannot overlap themselves or create unbounded Docker control-plane work.
+
+See also [Managed Container Runtime](/docs/architecture-managed-container-runtime) and
+[Virtual workers](/docs/architecture-virtual-workers).

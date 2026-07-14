@@ -56,18 +56,29 @@ Virtual workers create `worker_endpoints.endpoint_type = virtual_cli` and do not
 
 ## Cycle Behavior
 
-Each virtual cycle is project-scoped and one-shot:
+Each virtual cycle is project-scoped and one-shot, but a project may run several independent coding
+cycles concurrently:
 
-1. Scheduler notices worker work for a project.
-2. Code UX creates an ephemeral virtual endpoint and project assignment.
-3. The cycle handles one worker-owned attention item or one pending dispatch.
-4. It executes that single unit of work.
-5. It releases the assignment and deletes the endpoint.
-6. If more worker work remains, it schedules another cycle.
+1. The scheduler resolves the effective worker and provider capacity before creating an endpoint.
+2. It reserves distinct pending dispatches in the process-local cycle registry and claims each
+   dispatch through its atomic SQLite lease.
+3. Each admitted dispatch receives its own ephemeral endpoint and assignment and runs independently.
+4. Fan-out is bounded by `workers.maxConcurrency` and the selected provider's current effective
+   capacity. A local batch consumes its provider budget as cycles launch; the atomic provider claim
+   remains the final cross-process authority.
+5. Each cycle releases its assignment and deletes its endpoint independently when it settles.
 
-This is intentionally not an endless watch loop.
+The same dispatch or task cannot receive two in-process reservations. Reconcile passes do not
+overlap, and deferred scheduling is coalesced per project. This is intentionally not an endless
+watch loop.
 
-The background reconcile loop stays conservative (`3s`) to avoid unnecessary sqlite write contention, while virtual worker session completion polling is tighter (`2s`) because it only checks local session and dispatch state. Initial scheduling operations use microtask queueing to consolidate rapid sync events while preventing simultaneous cycle overlap for the same project. If a cycle finishes and work still remains, follow-up scheduling is deferred on the reconcile timer cadence instead of recursively queueing more microtasks, so dashboard HTTP probes and shutdown signals stay responsive even when persisted worker state is temporarily unchanged.
+Worker-owned attention remains exclusive because repair or intervention work can change shared
+project state. Waiting attention prevents new coding cycles, waits for current project dispatches to
+settle, and then runs alone. Attention claims use a conditional SQLite update so a second worker
+cannot steal an already-claimed item. Attention that arrives after durable coding work started does
+not cancel that work.
+
+The background reconcile loop stays conservative (`3s`) to avoid unnecessary sqlite write contention, while virtual worker session completion polling is tighter (`2s`) because it only checks local session and dispatch state. Initial scheduling operations use microtask queueing to consolidate rapid sync events. If a cycle finishes and work still remains, follow-up scheduling is deferred on the reconcile timer cadence instead of recursively queueing more microtasks, so dashboard HTTP probes and shutdown signals stay responsive even when persisted worker state is temporarily unchanged.
 
 ## Planning Boundary
 
@@ -75,7 +86,8 @@ Virtual worker scheduling is split between pure domain policies and the stateful
 
 - `src/domain/workers/virtual-worker-scheduling-policy.ts` decides whether a project should schedule a cycle from plain inputs: worker execution mode, active-cycle state, queued-cycle state, next eligible attention item, and pending-dispatch presence.
 - The same policy module filters attention eligibility, defers orchestrator-managed clarification retries, chooses attention routing (`merge_conflict`, `ci_fix`, `action_required`, or human escalation), and formats virtual claim reasons for open versus reclaimable claimed items.
-- `src/domain/workers/virtual-worker-cycle-plan.ts` combines the next attention item, the next dispatch claim, resolved settings, and provider capacity into a typed `VirtualWorkerCycleAction`. Dispatches keep precedence over attention when both are available.
+- `src/services/virtual-worker-cycle-registry.ts` owns the minimal in-process reservation state needed
+  for parallel dispatches while durable dispatch and attention ownership remains in SQLite.
 
 The pure helpers receive repository/service state as values and do not mutate storage, call providers, start containers, or log. This makes idle worker selection, busy worker skipping, retry deferral, disabled worker mode, and attention escalation directly unit-testable.
 
@@ -211,4 +223,9 @@ When running inside isolated or containerized worker environments (e.g., Gemini 
 - **POSIX and Windows Path Matching**: CLI session queries in the tracking repository match using both Windows and POSIX-normalized host paths, falling back to `/workspace` when matching containerized sessions.
 
 ## Scheduling and Execution Split
-To enable pure unit testing of virtual worker scheduling rules, Code UX extracts cycle planning into a pure domain function (`planVirtualWorkerCycle`). The VirtualWorkerService gathers state (e.g. attention items, task dispatches, available provider concurrency) and passes it to the planner. The planner then returns an explicit `VirtualWorkerCycleAction` without producing side effects, and the service executes the requested routing decision.
+
+Pure eligibility and attention-routing rules remain in
+`virtual-worker-scheduling-policy.ts`. Parallel fan-out needs current per-dispatch settings, provider
+budgets, and durable claims, so `VirtualWorkerService` coordinates those side effects while
+`VirtualWorkerCycleRegistry` enforces only in-process duplicate/exclusivity rules. This removes the
+obsolete serial cycle-plan layer without moving cross-process ownership out of SQLite.

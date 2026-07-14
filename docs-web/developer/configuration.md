@@ -161,7 +161,7 @@ Detected hints surface in **Settings → AI providers** as **Use detected value*
 Docker-backed provider runs read persisted scoped settings from `cliWorkflow`.
 
 - `cliWorkflow.containerRunAsRoot` defaults to `false`. System settings provide the base value, project and sprint settings inherit it unless they override it, and local CLI agent presets can override the resolved value with nullable `containerRunAsRoot`: `null` inherits, `false` forces non-root, and `true` forces root for that agent's local Docker-backed task runs. Root mode is privileged and should be reserved for trusted repositories that require package-manager or OS-level writes inside the provider container.
-- `cliWorkflow.containerImageMode` defaults to `managed`. Code UX checks the managed base/browser channels on every startup, resolves immutable digests, and retains the previous verified runtime on failure.
+- `cliWorkflow.containerImageMode` defaults to `managed`. Code UX checks the managed base/browser channels when the persisted six-hour update watermark is due, resolves immutable digests, and retains the previous verified runtime on failure.
 - `cliWorkflow.containerCacheSetupScriptImage` defaults to `true` but applies only to an explicitly configured setup extension. The default managed path performs no local Docker build.
 - `cliWorkflow.containerInstallPlaywrightBrowsers` defaults to `true`, selects the managed Playwright/dependency image, and preloads its matched browser into a user-local Docker volume.
 

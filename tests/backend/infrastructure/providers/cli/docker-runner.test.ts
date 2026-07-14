@@ -44,8 +44,10 @@ const createRunner = (): DockerRunner => new DockerRunner(
   {
     resolveImage: vi.fn(async () => "node:24"),
     getCompatibilityKey: vi.fn(() => "test-runtime"),
+    invalidateImage: vi.fn(),
   } as any,
   {
+    invalidatePreparedVolume: vi.fn(),
     prepare: vi.fn(async (provider: string) => ({
       provider,
       volumeName: `code-ux-provider-tool-${provider}-test`,
@@ -55,6 +57,7 @@ const createRunner = (): DockerRunner => new DockerRunner(
     })),
   } as any,
   {
+    invalidatePreparedVolume: vi.fn(),
     prepare: vi.fn(async () => ({
       volumeName: "code-ux-playwright-browser-test",
       version: "1.61.1",
@@ -93,6 +96,43 @@ describe("DockerRunner", () => {
     });
 
     expect(result.cwd).toBe("docker-volume://existing");
+  });
+
+  it("reads only the requested latest transcript byte range and parses helper metadata", async () => {
+    const payload = Buffer.from("appended record\n").toString("base64");
+    const exec = vi.fn().mockResolvedValue({
+      ok: true,
+      code: 0,
+      stdout: `__CODEUX_CHUNK_V1__\t7:99\t120\t136\t200\t0\n${payload}\n`,
+      stderr: "",
+    });
+    (runner as any).volumeHelperPool = { exec };
+
+    const result = await runner.readLatestWorkspaceFileChunk(
+      "docker-volume://workspace-one",
+      "/code-ux-runtime-home/.codex/sessions/2026/07/14",
+      "*.jsonl",
+      { sourceId: "7:99", offset: 120 },
+      1024,
+    );
+
+    expect(result).toEqual({
+      sourceId: "7:99",
+      startOffset: 120,
+      nextOffset: 136,
+      totalBytes: 200,
+      contentBase64: payload,
+      reset: false,
+    });
+    expect(exec).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.arrayContaining(["sh", "-c", expect.stringContaining("start=120")]),
+      expect.any(String),
+    );
+    const helperScript = exec.mock.calls[0]?.[1]?.[2] as string;
+    expect(helperScript).toContain("ibs=64k obs=64k");
+    expect(helperScript).toContain("iflag=skip_bytes,count_bytes");
+    expect(helperScript).not.toMatch(/\bbs=1\b/);
   });
 
   it("creates and cleans up snapshot workspaces for repo paths", async () => {
@@ -192,13 +232,9 @@ describe("DockerRunner", () => {
       expect(ensureRuntimeVolume).toHaveBeenCalledWith("docker-volume://workspace-1", {
         initializeOwnership: true,
         ownerSpec: "1000:1000",
-        forceOwnershipInitialization: true,
       });
-      expect(ensureRuntimeVolume).toHaveBeenNthCalledWith(1, "docker-volume://workspace-1", {
-        initializeOwnership: false,
-      });
-      expect(ensureRuntimeVolume).toHaveBeenCalledTimes(2);
-      const ownershipRepairOrder = ensureRuntimeVolume.mock.invocationCallOrder[1];
+      expect(ensureRuntimeVolume).toHaveBeenCalledTimes(1);
+      const ownershipRepairOrder = ensureRuntimeVolume.mock.invocationCallOrder[0];
       const providerLaunchOrder = vi.mocked(runStreamingCommand).mock.invocationCallOrder[0];
       expect(ownershipRepairOrder).toBeLessThan(providerLaunchOrder);
     } finally {
@@ -241,6 +277,8 @@ describe("DockerRunner", () => {
       "code-ux.managed=true",
       "--user",
       "1000:1000",
+      "--pull",
+      "never",
     ]));
     expect(dockerArgs).not.toEqual(expect.arrayContaining(["--network", "host"]));
     expect(dockerArgs).not.toContain("-p");
@@ -250,12 +288,32 @@ describe("DockerRunner", () => {
       expect.stringContaining("target=/etc/passwd"),
     ]));
     expect(dockerArgs).not.toContain("HOME=/workspace/.code-ux-home");
+    const bootstrapScript = dockerArgs.at(-3) || "";
+    expect(bootstrapScript).toContain("CODE_UX_LAUNCH_ARTIFACT_INVALID:runtime-volume");
+    expect(bootstrapScript).toContain("stat -c '%u:%g'");
+    expect(bootstrapScript).toContain("CODE_UX_LAUNCH_ARTIFACT_INVALID:provider-tool");
+    expect(bootstrapScript).toContain("CODE_UX_LAUNCH_ARTIFACT_INVALID:playwright-browser");
     const cacheInstance = vi.mocked(DockerSetupImageCache).mock.results[0]?.value as any;
     expect(cacheInstance.resolveImage).toHaveBeenCalledWith(expect.objectContaining({
       installPlaywrightBrowsers: false,
       runtimeRoot: "/runtime-root",
       onProgress: onSetupImageProgress,
     }));
+    expect((runner as any).runtimeService.resolveImage).toHaveBeenCalledTimes(1);
+    expect((runner as any).toolManager.prepare).toHaveBeenCalledWith(
+      "gemini",
+      expect.any(Object),
+      { resolvedImage: "node:24" },
+    );
+    expect((runner as any).browserManager.prepare).toHaveBeenCalledWith(
+      expect.any(Object),
+      { resolvedImage: "node:24" },
+    );
+    expect(runCommandStrict).not.toHaveBeenCalledWith(
+      "docker",
+      ["rm", "-f", "-v", "code-ux-gemini-session-1"],
+      process.cwd(),
+    );
   });
 
   it("keeps loopback MCP endpoints reachable from Linux Docker provider runs without host networking", async () => {
@@ -648,6 +706,139 @@ describe("DockerRunner", () => {
     );
   });
 
+  it("invalidates and repairs a missing provider-tool volume after the first failed launch", async () => {
+    vi.mocked(runStreamingCommand)
+      .mockResolvedValueOnce({
+        ok: false,
+        stdout: "",
+        stderr: "CODE_UX_LAUNCH_ARTIFACT_INVALID:provider-tool",
+        code: 86,
+      } as any)
+      .mockResolvedValueOnce({ ok: true, stdout: "done", stderr: "", code: 0 } as any);
+
+    const result = await runner.runProviderInDocker({
+      command: "codex",
+      args: ["exec", "--help"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "codex",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    expect((runner as any).toolManager.invalidatePreparedVolume)
+      .toHaveBeenCalledWith("code-ux-provider-tool-codex-test");
+    expect((runner as any).toolManager.prepare).toHaveBeenCalledTimes(2);
+    expect(runStreamingCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it("invalidates and repairs a missing Playwright browser volume after the first failed launch", async () => {
+    vi.mocked(runStreamingCommand)
+      .mockResolvedValueOnce({
+        ok: false,
+        stdout: "",
+        stderr: "CODE_UX_LAUNCH_ARTIFACT_INVALID:playwright-browser",
+        code: 86,
+      } as any)
+      .mockResolvedValueOnce({ ok: true, stdout: "done", stderr: "", code: 0 } as any);
+
+    await runner.runProviderInDocker({
+      command: "codex",
+      args: ["exec", "--help"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "codex",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+    });
+
+    expect((runner as any).browserManager.invalidatePreparedVolume)
+      .toHaveBeenCalledWith("code-ux-playwright-browser-test");
+    expect((runner as any).browserManager.prepare).toHaveBeenCalledTimes(2);
+    expect(runStreamingCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it("repairs a missing or recreated runtime volume after bootstrap validation fails", async () => {
+    vi.mocked(runStreamingCommand)
+      .mockResolvedValueOnce({
+        ok: false,
+        stdout: "",
+        stderr: "CODE_UX_LAUNCH_ARTIFACT_INVALID:runtime-volume",
+        code: 86,
+      } as any)
+      .mockResolvedValueOnce({ ok: true, stdout: "done", stderr: "", code: 0 } as any);
+    const repairRuntimeVolume = vi.spyOn<any, any>(
+      Object.getPrototypeOf((runner as any).workspaceManager),
+      "repairRuntimeVolume",
+    ).mockResolvedValue(undefined);
+
+    await runner.runProviderInDocker({
+      command: "codex",
+      args: ["exec", "--help"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "codex",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+    });
+
+    expect(repairRuntimeVolume).toHaveBeenCalledWith("docker-volume://workspace-1", {
+      initializeOwnership: true,
+      ownerSpec: "1000:1000",
+    });
+    expect(runStreamingCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it("invalidates and restores a missing managed runtime image after launch failure", async () => {
+    vi.mocked(runStreamingCommand)
+      .mockResolvedValueOnce({ ok: false, stdout: "", stderr: "docker: No such image: node:24", code: 125 } as any)
+      .mockResolvedValueOnce({ ok: true, stdout: "done", stderr: "", code: 0 } as any);
+
+    await runner.runProviderInDocker({
+      command: "codex",
+      args: ["exec", "--help"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "codex",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImageMode: "managed",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+    });
+
+    expect((runner as any).runtimeService.invalidateImage).toHaveBeenCalledWith("node:24");
+    expect((runner as any).runtimeService.resolveImage).toHaveBeenCalledTimes(2);
+    expect(runStreamingCommand).toHaveBeenCalledTimes(2);
+  });
+
   it("mounts provider argv from a file so long prompts do not enter the host docker command line", async () => {
     const longPrompt = `plan ${"x".repeat(64_000)} with 'quotes'`;
 
@@ -711,6 +902,31 @@ describe("DockerRunner", () => {
       "--memory-swap",
       "6144m",
     ]));
+  });
+
+  it("uses a soft Docker CPU weight without imposing a hard CPU quota", async () => {
+    await runner.runProviderInDocker({
+      command: "codex",
+      args: ["exec", "--help"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "codex",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+    });
+
+    const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
+    expect(dockerArgs.slice(dockerArgs.indexOf("--cpu-shares"), dockerArgs.indexOf("--cpu-shares") + 2))
+      .toEqual(["--cpu-shares", "768"]);
+    expect(dockerArgs).not.toContain("--cpus");
+    expect(dockerArgs).not.toContain("--cpu-quota");
   });
 
   it("omits Docker memory flags when the configured limit is disabled", async () => {

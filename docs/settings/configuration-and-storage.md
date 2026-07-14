@@ -106,7 +106,7 @@ Runtime resolution:
 - Interactive provider login containers use readable names such as `code-ux-login-<provider>-<session>` and run on a small cached prerequisite image named like `code-ux-login-base-node-24-bookworm-slim:<hash>`.
 - Packaged Windows Electron uses an opaque BrowserWindow and Chromium GPU memory hints to mitigate tile-memory pressure. All animated backgrounds render at full fidelity; WebGL backgrounds use `powerPreference: "low-power"` and 0.5× render scale, and all background layers apply CSS `contain: strict` to limit compositor tile scope.
 - On startup, Code UX schedules Docker asset pruning in the background so dashboard boot is not blocked by Docker cleanup. The prune path uses label-filtered Docker queries for managed workspace/runtime volumes plus helper/login containers, removes containers and volumes in batches, and applies a short per-command timeout. Helper/login container cleanup uses `docker rm -f -v` so anonymous image-declared volumes are removed with the container. Cached setup-script images are content-addressed and are intentionally preserved across dashboard restarts so provider launches can reuse them until the base image, setup script content, or setup Dockerfile changes.
-- On startup, Code UX also performs automated database maintenance, pruning old completed task runs (and their cascaded child tables), VM activities, attention items, and realtime events according to the configured retention policy. Released virtual-worker assignment history is purged during the same maintenance pass because virtual workers are ephemeral and live paths only depend on active assignments. Maintenance then runs `VACUUM` on database files to reclaim disk space. SQLite WAL auto-checkpointing is disabled on runtime connections so ordinary startup writes cannot synchronously checkpoint a large WAL on the dashboard thread; controlled maintenance checkpoints truncate WAL files on the maintenance cadence instead.
+- After startup, Code UX schedules automated database maintenance in the background. Each idle pass scans and mutates at most 500 rows per table while pruning old task runs, terminal execution/provider invocation trees, VM activities, attention items, realtime events, and released virtual-worker assignment history according to the configured retention policy. Parent records wait for their bounded child cleanup, and preserved invocation trees remain linked. Raw terminal provider activity has a one-day window because the durable execution transcript remains available. Automatic maintenance never issues full `VACUUM` or `TRUNCATE` operations; the optional startup reclaim requests at most 256 incremental-vacuum pages, and controlled WAL maintenance uses `PASSIVE` checkpoints only when no provider invocation is active.
 - restart recovery treats interrupted Docker sessions without a live backing container as cancelled/retryable, so app shutdowns and restarts do not inflate invocation failure statistics while abandoned runtime callbacks are still cleared.
 - restart behavior is controlled from `Settings -> General -> Restart Behavior`:
   - `restartSprintPolicy` defaults to `continue`, which resumes queued/running sprint runs in place after startup recovery.
@@ -140,8 +140,8 @@ Runtime resolution:
   - `consoleLogLevel` (`info` by default; one of `off`, `debug`, `info`, `warn`, `error`)
   - `debugLogFileLevel` (`error` by default for `.code-ux/debug.log`; `off` disables file logging)
   - `consoleLogMode` (`standard` by default; `full` also prints routine dashboard HTTP request logs)
-  - `dbAutoVacuumOnStartup` (default `true`; executes SQL `VACUUM` on startup to reclaim disk space)
-  - `dbPruningEnabled` (default `true`; enables automatic startup pruning of old data)
+  - `dbAutoVacuumOnStartup` (default `false`; legacy field name for an idle-startup incremental vacuum capped at 256 pages; automatic maintenance never executes full `VACUUM`)
+  - `dbPruningEnabled` (default `true`; enables bounded background pruning of old data during idle maintenance passes)
   - `dbRetentionDays` (default `14`; retention threshold in days for completed runs and logs)
   - `restartSprintPolicy` (default `continue`; one of `continue`, `pause`, `cancel`)
   - `restartInvocationPolicy` (default `continue`; one of `continue`, `cancel`, `restart`)
@@ -423,7 +423,7 @@ QA merge-gate notes:
   - `executionMode` (`HOST|DOCKER`)
 - Docker runtime config:
   - `containerImageMode` (`managed|custom`, default `managed`)
-    - managed mode checks the Code UX base/browser channels on every startup, verifies pulled images, and executes immutable digests
+    - managed mode checks the Code UX base/browser channels when the persisted six-hour update watermark is due, verifies pulled images, and executes immutable digests
     - custom mode preserves the explicit `containerImage`; legacy non-default image values migrate to custom mode
   - `containerImage` (default custom-image fallback `node:24-trixie-slim`; ignored in managed mode)
   - `containerSetupScriptPath` (optional; saved as a string and not required to exist when settings are saved)
@@ -493,7 +493,7 @@ Preview runtime notes:
 
 `workers` contains:
 - `executionMode` (default `VIRTUAL`)
-  - `VIRTUAL`: Code UX spins up an internal one-shot CLI worker when worker-owned attention exists, handles one cycle in an isolated container workspace, then tears it down
+  - `VIRTUAL`: Code UX spins up ephemeral one-shot CLI workers for queued dispatches and worker-owned attention; independent dispatch workers may run concurrently up to worker/provider capacity, while attention runs project-exclusively
 - `virtualWorkerProvider` (default `codex`)
   - allowed values: `gemini`, `codex`, `claude-code`
   - Jules is intentionally excluded from worker mode; virtual workers are CLI-only
@@ -572,7 +572,7 @@ Repository demo script:
   - patch export preserves raw `git diff --binary` output byte-for-byte so whitespace-only EOF hunks and `\ No newline at end of file` markers still apply cleanly on the host branch
   - patch export still excludes legacy `/workspace/.code-ux-home` paths and root `/workspace/.pnpm-store` package-cache paths as a defense-in-depth guard for older preserved volumes, and untracked export staging asks Git to discover paths internally so large file sets do not exceed Docker command-line limits; fresh Docker workspaces should not contain provider home/cache state
   - the remaining persistent Docker-side cache is the optional setup-image cache, not per-session provider home directories under `~/.code-ux/runtime/docker`
-- Provider CLIs are never installed by setup scripts or per-workspace fallback logic. Activated providers are prepared from fixed official sources into versioned Docker volumes, mounted read-only at `/opt/code-ux/provider-tool`, and checked for stable updates on every startup.
+- Provider CLIs are never installed by setup scripts or per-workspace fallback logic. Activated providers are prepared from fixed official sources into versioned Docker volumes, mounted read-only at `/opt/code-ux/provider-tool`, and checked for stable updates when the persisted six-hour watermark is due. Manual preparation forces an immediate check.
   - CLI model settings continue to flow into Docker-backed providers:
     - Gemini: `GEMINI_MODEL`
     - Codex: `CODEX_MODEL` plus `--model` when applicable
