@@ -10,7 +10,7 @@ Use this page as the main entrypoint.
 1. [Quickstart](./getting-started/quickstart.md)
 2. [System Overview](./architecture/system-overview.md)
 3. [Dashboard Guide](./dashboard/dashboard-guide.md)
-3a. [Dashboard Internationalization](./dashboard/internationalization.md)
+3a. [Dashboard Internationalization](./dashboard/internationalization.md) — language workflow, persistence, content boundaries, and contributor contracts
 4. [Dashboard Accessibility Patterns](./dashboard/dashboard-guide.md#accessibility-patterns)
 5. [Interaction Patterns](./dashboard/interaction-patterns.md)
 6. [Dashboard Interaction Contracts](./dashboard/interaction-patterns.md#implemented-surface-contracts)
@@ -189,7 +189,7 @@ Use this page as the main entrypoint.
 - [Sprint Rollbacks](./architecture/sprint-rollbacks.md)
 - [Instruction Template System](./instructions/markdown-template-system.md)
 - [Dashboard Guide](./dashboard/dashboard-guide.md)
-- [Dashboard Internationalization](./dashboard/internationalization.md)
+- [Dashboard Internationalization](./dashboard/internationalization.md) — English/German behavior, architecture, and test guardrails
 - [Dashboard Accessibility Patterns](./dashboard/dashboard-guide.md#accessibility-patterns)
 - [Dashboard Accessibility Quality Audit](./dashboard/accessibility-quality-audit.md)
 - [Interaction Patterns](./dashboard/interaction-patterns.md)

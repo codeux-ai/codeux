@@ -1,26 +1,53 @@
 # Dashboard Internationalization
 
-The v2 dashboard has a dependency-free internationalization runtime for English (`en`) and German (`de`). English remains the compatibility default. The runtime does not infer a language from the browser and does not change backend settings or API contracts.
+The v2 dashboard supports English (`en`) and German (`de`) interface copy. English is the default when no valid saved preference exists. Code UX does not automatically select a language from browser preferences, synchronize the choice to the backend, or expose additional dashboard locales.
 
-## Runtime boundary
+## User workflow
 
-The runtime lives in `dashboard/src/v2/i18n/`:
+Open **Settings → Appearance → Display Settings → Language**, then choose **English** or **Deutsch**. The dashboard applies the choice immediately in both System and Project views; the Language control is independent of Settings dirty tracking, **Save Changes**, and **Reset**.
+
+The preference is stored in the current browser profile under `codeux.dashboard.locale.v1`:
+
+- a refresh or browser restart restores the selected language;
+- another open Code UX tab in the same browser profile follows the change through the browser `storage` event;
+- clearing the preference resets open tabs to English; and
+- a missing, invalid, unavailable, or throwing storage implementation safely falls back to English. If storage is unavailable, an in-session change still applies but cannot persist across a restart.
+
+Each locale change also updates the root HTML `lang` attribute to `en` or `de`. This keeps browser and assistive-technology language metadata aligned with the visible dashboard chrome.
+
+## Localization boundary
+
+Internationalization is a presentation boundary. It translates dashboard-owned labels, controls, validation, status framing, accessibility text, and other interface chrome. Locale-aware number, date, time, relative-time, list, percentage, size, and plural presentation uses the active locale without changing the underlying values.
+
+The subsystem does not change backend, API, or MCP contracts. Locale is not sent as a runtime setting, persisted in the Code UX database, or applied to provider requests. Contract identifiers and serialized values remain locale-neutral.
+
+Provider output, runtime and API messages, diagnostics, project and sprint records, task prompts, chat messages, stored instructions, names, identifiers, paths, source code, and all other user-authored or externally supplied content are rendered verbatim. Localized labels may frame those values, but must not rewrite them or pass them through a message catalog.
+
+The internal Docs viewer follows the same rule. Its dashboard-owned chrome—navigation, search, pagination, counts, landmarks, and empty or error states—is localized. English documentation bodies, document titles, descriptions, section names, source paths, and source content remain English.
+
+## Runtime architecture
+
+The dependency-free runtime lives in `dashboard/src/v2/i18n/`:
 
 | Module | Responsibility |
 | --- | --- |
-| `locales.ts` | Closed locale contract, typed message bundles, interpolation, English fallback, and plural selection |
-| `storage.ts` | Safe browser-local persistence under `codeux.dashboard.locale.v1` |
-| `formatters.ts` | Locale-bound `Intl` number, date, time, relative-time, and list formatters |
-| `context.tsx` | Root provider, locale hook, document language synchronization, and cross-tab updates |
-| `messages/` | Feature-owned catalogs imported by their consumers |
+| `locales.ts` | Closed locale contract, typed message bundles, English fallback, interpolation, and plural selection |
+| `storage.ts` | Safe browser-local persistence under the versioned locale key |
+| `formatters.ts` | Locale-bound native `Intl` formatters |
+| `context.tsx` | Root provider, hooks, immediate switching, HTML `lang`, and cross-tab updates |
+| `messages/` | Feature-owned English and German catalogs |
 
-`DashboardI18nProvider` wraps the router at the application root. Its `setLocale` function updates context, persistence, and `document.documentElement.lang` immediately. Startup reads the stored locale and synchronizes the document before the first application render, preventing English shell content from rendering when German was already selected.
+`initializeDashboardLocale` restores the preference and synchronizes the document language before the application root renders. `DashboardI18nProvider` then owns the active locale. Its `setLocale` method updates context, the document language, browser storage, and the dashboard locale-change event in one operation.
 
-Missing, invalid, unavailable, or throwing `localStorage` falls back to English. A matching cross-tab `storage` event updates the mounted application without writing the value back. Clearing browser storage also resets the active locale to English.
+The root application catalog contains only shell copy, and route or feature catalogs stay with their owners. Dedicated route components declared with Preact `lazy(() => import(...))` load their feature catalogs on demand with the same route chunk instead of contributing those catalogs to the eager application graph.
 
-## Feature-owned messages
+This does not apply to every routed or conditional surface. `main.tsx` eagerly imports the Overview route component (`DashboardV2`), the Live route component (`LiveSessionPage`), and the onboarding surface (`OnboardingExperience`). Their `overview`, `live`, and `onboarding` catalogs are therefore eagerly imported too, although those surfaces can still lazy-load heavier child components such as Overview telemetry, the Live DAG and boat-race views, or onboarding backgrounds. Treat feature ownership and loading strategy as separate concerns, and verify the entrypoint import before describing a catalog as on-demand.
 
-Catalogs stay with their feature instead of being combined into an eagerly loaded application catalog. `defineDashboardMessages` requires the English and German catalogs to have the same keys at compile time and preserves those keys for typed translation calls.
+Pure presentation helpers accept an explicit locale and normally default to English for compatibility. Mounted components read the active provider locale. Optional hooks may supply the English compatibility context only when no root provider exists; they never override an active locale.
+
+## Typed messages, interpolation, and plurals
+
+`defineDashboardMessages` preserves message keys and requires the English and German catalogs in a bundle to have matching keys at compile time.
 
 ```ts
 const messages = defineDashboardMessages({
@@ -39,126 +66,40 @@ translate(messages, "greeting", { name: "Sam" });
 translatePlural(messages, "itemCount", 2);
 ```
 
-Interpolation replaces only named `{variable}` tokens through literal string substitution. Missing variables remain visible, and values are never evaluated or inserted as HTML. Plural selection uses the raw numeric count with `Intl.PluralRules` for the active locale and falls back to the required `other` form; the reserved `{count}` interpolation is formatted with that locale's `Intl.NumberFormat`, while callers may separately provide a locale-formatted `{count}` display value.
+Interpolation performs literal replacement of named `{variable}` tokens. Values are never evaluated or inserted as HTML, and a missing variable remains visible for diagnosis. Keep provider, runtime, and user-authored values outside translation templates unless a localized dashboard-owned sentence must frame one of those values.
 
-## Locale-aware formatting
+Plural selection uses the raw numeric count with `Intl.PluralRules` for the active locale. Every plural message requires an `other` form. The reserved `{count}` value is formatted with the locale's `Intl.NumberFormat`; a caller-supplied formatted `count` value is preserved.
 
-`useDashboardI18n` exposes `formatNumber`, `formatDate`, `formatTime`, `formatRelativeTime`, and `formatList`. Each function is rebound when the active locale changes and accepts the corresponding native `Intl` options. New localized UI should use these functions instead of adding fixed `en-US` formatters. Plural selection still receives the numeric count for threshold decisions, while an explicitly supplied formatted `count` variable is preserved for display (for example, German `1.000 Einträge`).
+`useDashboardI18n` also exposes `formatNumber`, `formatDate`, `formatTime`, `formatRelativeTime`, and `formatList`. New localized UI should use these functions or an explicit locale-aware presentation helper instead of a fixed English formatter.
 
-## Project management coverage
+## Adding a feature catalog
 
-The Projects route owns `i18n/messages/projects.ts`. Its catalog covers the gallery, project cards, status filters, setup and deletion dialogs, notifications, directory browser, and both shared project-creation modals. Because `AddProjectModal` reads the root locale directly, the same translated form is used when it opens from the top navigation, Tasks, Sprints, or the dashboard assistant; those callers do not pass translated labels or alter their project payloads.
+1. Create a focused module under `dashboard/src/v2/i18n/messages/` and define matching English and German keys with `defineDashboardMessages`.
+2. Import the catalog only from its owning shell, route, or feature. Do not add route copy to the eager root catalog.
+3. Translate dashboard-authored presentation only, and use the shared formatters for locale-sensitive values.
+4. Add the catalog to both the required manifest and imported bundle map in `tests/dashboard/v2/i18n-catalog-parity.test.ts`.
+5. Add focused English/German behavior tests, including accessible names and the verbatim-data boundary where the feature renders external content.
 
-Project card timestamps, counts, and completion percentages use locale-bound `Intl` formatting. Project names, local paths, repository URLs and slugs, branches, provider names, application-kind contract values, setup payloads, and API/provider diagnostics remain verbatim. The internal filter and creation-mode identifiers also remain stable English contract values while only their labels are localized.
+## Adding a locale
 
-Project deletion uses a localized confirmation dialog before invoking the existing deletion request. Creation, setup, selection, Settings navigation, invocation tracking, duplicate-submit protection, and stale project-selection handling retain their existing contracts.
+Adding a locale is an explicit product and code change; it is not automatic browser-language detection. A complete locale addition must:
 
-## Settings model and memory workflows
+1. extend the closed locale contract and default-resolution logic in `locales.ts` and `storage.ts`;
+2. add a complete catalog with matching keys, placeholders, and supported plural forms to every registered feature bundle;
+3. add the locale's user-facing choice and change announcement to the Appearance panel;
+4. verify the shared `Intl` formatters and HTML `lang` value for the locale; and
+5. extend foundation, catalog-parity, runtime-boundary, feature, and end-to-end tests.
 
-The AI Models and Memory settings surfaces use the feature-owned `messages/settings-models.ts` catalog. Routing diagrams, provider and model affordances, thinking modes, model pricing, speech configuration, catalog filters, license confirmations, and memory remediation controls switch with the active dashboard locale.
+Do not ship a partially translated locale or silently fall back route-by-route. English fallback exists as a runtime recovery path, not as a substitute for catalog completeness.
 
-Measurements are formatted through the same active locale. This includes model and provider counts, byte sizes, download percentages, token prices, and memory limit summaries. Currency remains USD with the existing per-million-token precision; only locale-specific number separators change.
+## Test and static-copy expectations
 
-Speech selection keeps contract values separate from presentation. Language tags, BCP-47 values, voice IDs, model IDs, license and attribution text, API endpoints, and provider diagnostics pass through unchanged. Dashboard-owned language choices such as automatic detection are translated, while language and model metadata returned by the catalog API is displayed verbatim. Selecting a recommended local model never starts a download; the localized license confirmation remains the only path that invokes the download API.
+The main guardrails are:
 
-Pure presentation helpers accept an explicit locale and default to English for compatibility. Components pass the provider's active locale, while unit tests and non-component consumers can request deterministic English or German formatting directly.
+- `tests/dashboard/v2/i18n-foundation.test.tsx` for defaults, persistence, live switching, storage recovery, cross-tab behavior, interpolation, plurals, formatters, and HTML `lang`;
+- `tests/dashboard/v2/i18n-catalog-parity.test.ts` for the required feature manifest, imported bundle parity, keys, shapes, placeholders, plural categories, non-empty copy, and accidental HTML;
+- `tests/dashboard/v2/i18n-runtime-boundary.test.tsx` for localized framing around unchanged provider, documentation, and user-authored content;
+- focused feature and accessibility suites for rendered English and German behavior; and
+- `tests/e2e/navigation/dashboard-i18n.spec.ts` for the Language selector, persistence, production-route fan-in, responsive and keyboard behavior, and verbatim fixture content.
 
-The Sprints route owns its catalog in `dashboard/src/v2/i18n/messages/sprints.ts`. The page header, gallery, ledger, menus, bulk actions, importers, rollback flow, status summaries, empty/error states, and ARIA announcements follow the active locale. Sprint and task records, linked issue keys/titles/content, provider names, Git/PR details, review output, runtime events, importer warnings, and API error messages are data rather than interface copy and remain verbatim. Dates, times, counts, percentages, and list summaries use the active locale without changing stored UTC timestamps or sort keys.
-
-## Translation scope
-
-The root bundle translates root-owned shell copy, while route-specific catalogs load with their features. The Settings shell owns `messages/settings-shell.ts`, which covers Settings navigation, Smart Find, scope and save feedback, shared field/status language, section help, and the Appearance controls.
-
-Users choose **English** or **Deutsch** under **Settings → Appearance → Display Settings → Language**. The selection applies immediately in System and Project views, persists in browser-local storage, updates the document `lang`, and does not participate in Settings dirty tracking or Save/Reset requests. It is intentionally dashboard-owned: runtime and API messages, stored instructions/configuration values, and the English documentation are not translated.
-
-Every Settings `SectionCard` uses the active dashboard locale for its visible title, purpose summary, controlled-functions guidance, recommended configuration, and risk notes. Subcategory ids, English lookup aliases, `/docs/settings-<subcategory>` destinations, related-document metadata, and backend-facing values stay locale-neutral; the linked long-form documentation remains English.
-
-Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged. Settings category ids and navigation persistence also remain language-neutral so changing locale never invalidates the current category.
-
-The root bundle owns shell copy, while route catalogs are imported with their features. Chat owns `messages/chat.ts`, which covers page and thread chrome, composers, quick actions, invocation metadata labels, rich-widget frames, cinematic activity, speech controls, empty/error/confirmation feedback, humor, and accessible announcements. Pure Chat presentation helpers accept an explicit locale so tests and non-component consumers use the same catalog as mounted components.
-The eager application bundle translates root-owned shell copy: the skip link, main landmark label, route loading announcement, and hidden footer. Localized routes import their own feature catalogs so route copy remains lazy-loaded. Browser Preview uses `messages/browser-preview.ts` for its page, browser chrome, session, environment, status, and accessibility copy.
-Global navigation, title-bar controls, search, notifications, documentation-viewer chrome, status presentations, and reusable control defaults use the `messages/shell.ts` catalog. Navigation labels are resolved from stable navigation item IDs for each surface, so the sidebar, dock, top navigation, search, tooltips, and experience-mode filters share translated labels without changing routes, feature flags, or persisted IDs.
-
-Reusable controls use the provider locale when mounted in the dashboard and retain an English compatibility fallback when rendered independently. Explicit caller-provided labels, placeholders, and helper text always take precedence over translated defaults. Locale changes update the mounted controls in place and do not reset their local interaction state.
-
-Localization applies only to dashboard-authored interface copy. Chat message bodies, prompts, quick-action request payloads, reasoning, tool names and arguments/output, provider transcripts and errors, provider-authored runtime status values, scheduled instructions, entity names, and speech transcripts remain byte-for-byte display data. Known dashboard-owned invocation status enums are rendered through the Chat catalog in visible and accessible card text without changing their stored values; unknown statuses remain unchanged. Invocation transcript headers likewise localize structural role labels while preserving configured agent names. Localized labels may surround verbatim provider values, but must never rewrite them.
-
-Chat uses the locale-bound `Intl` formatters for timestamps, relative time, counts, percentages, token estimates, durations, and retry timestamps. Deterministic humor keeps the same seed, deck, and cadence across locales; locale only selects the message catalog.
-Notification panels translate their chrome, severity labels, relative times, and dashboard-generated recovery labels. Server-authored notification titles, summaries, reasons, instructions, context values, recommended actions, and error text are rendered verbatim. The documentation viewer similarly translates route headings, search, navigation, pagination, landmarks, and counts while keeping fetched document titles, descriptions, section names, source paths, and Markdown bodies in English.
-
-The application shell and Memory route have feature-owned English and German catalogs. The Memory catalog covers the map, tier and scope filters, search, cards, inspector, add and delete flows, batch actions, empty/loading/error states, accessible announcements, and the embedding-model catalog and custom-model form. Counts, percentages, dates, strengths, file sizes, and plural forms use the active locale without changing their underlying numeric values or sort/filter behavior.
-The eager application bundle translates root-owned shell copy: the skip link, main landmark label, route loading announcement, and hidden footer. Localized routes import their own feature catalogs so route copy remains lazy-loaded. Browser Preview uses `messages/browser-preview.ts` for its page, browser chrome, session, environment, status, and accessibility copy.
-
-The root catalog owns shell copy, while `messages/sprint-authoring.ts` owns Sprint Composer, task and sprint modals, Quicksprint browsing/editing/execution, planning progress, Markdown transfer, and sprint settings-override chrome. Presentation helpers accept an explicit locale where they are also used outside components, keeping their output deterministic in tests and non-component consumers.
-The Integrations and MCP settings surfaces have an English and German catalog. It covers provider and chat-bridge setup, authentication and connection state, terminal login chrome, automation credentials, MCP tool categories, local CLI installation, clipboard feedback, and custom-server validation.
-
-The application shell and File Browser are localized. The File Browser owns `messages/file-browser.ts` and translates page, session, file tree, changes, viewer, diff, loading, recovery, Monaco loading, and accessibility chrome. Counts and the displayed snapshot timestamp use the active locale's `Intl` formatters.
-
-Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged.
-
-The Knowledge route follows this boundary with its feature-owned `messages/knowledge.ts` catalog. Headers, controls, document states, ingestion dialogs, search feedback, confirmations, and accessibility announcements switch between English and German. Document titles and contents, paths, agent and model names, identifiers, search excerpts, ingestion diagnostics, and API errors remain verbatim. Counts, file sizes, update dates, and search-match percentages use the active locale's `Intl` formatting.
-
-Operational Settings categories use a feature-owned catalog for General, Sprint, QA, Automation, Worker, Browser, and Danger controls plus their branch, PR-template, file-picker, and open-source dialogs. Translated captions map back to the existing serialized enum values; branch tokens, paths, command examples, default instruction templates, dependency metadata, API errors, and runtime diagnostics remain verbatim.
-Memory category labels participate in localized text search, but their stored category keys remain unchanged. The route imports its catalog with the feature rather than adding it to the eager shell bundle.
-
-Localization applies only to dashboard-authored interface copy. Memory titles and content, claims, evidence, tags, agent names, model IDs, catalog descriptions, languages, licenses, URLs, filenames, server errors, API responses, provider output, stored instructions, and project or sprint data remain unchanged.
-
-### Agents route
-
-The `/agents` route owns `messages/agents.ts`. Its English and German catalog covers roster controls, preset details and editing, validation, avatar controls, instruction files, memory filters, MCP access, repository push feedback, compatibility-update notices, empty/loading/error states, and accessible labels. Dates, counts, token estimates, file sizes, and plurals use the active locale's native formatters.
-
-The localization boundary is intentionally strict. Preset names and labels, system instructions, memory templates, Markdown file contents, MCP server and tool names, storage names, provider/model names, invocation and repository output, and API error messages pass through verbatim. Stable configuration identifiers—such as avatar part values, memory tiers, MCP tool IDs, and sync states—also remain unchanged; only their dashboard presentation is localized.
-
-## Overview route coverage
-
-### Tasks route
-
-The Tasks route owns its catalog in `dashboard/src/v2/i18n/messages/tasks.ts`. The page, board columns and filters, cards, dependency indicators, composer validation, rerun and delete flows, review surfaces, controller announcements, and task-specific accessibility copy all consume this feature catalog. Pure task view-model helpers accept an explicit locale so they remain deterministic outside component rendering, while components use the active provider locale.
-
-Task counts, dates, relative times, live durations, self-reflection scores, and other numeric presentation use the active locale. Locale is presentation input only: task keys, titles, descriptions, Markdown prompts, sprint and project names, branch and pull-request data, provider and agent names, review and QA text, execution messages, API errors, dependency order, optimistic ids, and runtime projections remain byte-for-byte application data rather than translation input.
-
-Task sprint dates are formatted from the sprint record's raw `startDate` and `endDate`; the compatibility `Sprint.date` projection is not a presentation source. Missing or invalid raw dates use the localized undated fallback. Likewise, only the closed set of dashboard-derived task-time sentinels (`Done`, `Review`, `Active`, `--`, and the optimistic `...`) is localized. Any other task-time or runtime value is shown verbatim.
-
-Task surfaces that are rendered independently in component tests or embedded legacy call sites use `useOptionalDashboardI18n`. It has the same typed formatter and translator contract as the required hook and resolves to English only when no provider is mounted; it never replaces an active provider locale.
-
-The feature-gated custom-dashboard workspace owns its catalog in `messages/custom-dashboards.ts`. It localizes management, editor, viewer, validation, publication, and accessibility chrome. Persisted dashboard bundles and user-authored fields remain locale-neutral; known validation issue codes may select a localized explanation, while API, build, log, preview, and iframe diagnostics remain verbatim.
-
-The feature-gated Nodes route owns `messages/nodes.ts`. Its page shell, flow library, palettes, both canvas presentations, inspectors, governance review, debugger, scheduling entry point, generated validation explanations, and accessible names switch with the dashboard locale. Pure node view models and dashboard-owned canvas/agent validators accept an explicit locale and default to English for compatibility.
-
-Node localization is presentation-only. Graph JSON, node and edge identities, node types, schema and widget keys, command names, configuration values, migration markers, skill names, API errors, policy/provider diagnostics, run logs, and provider input/output are never rewritten. Known runtime states are translated only while rendering; their contract values remain unchanged.
-
-Sprint authoring treats this as a strict data boundary: sprint goals, task prompts, template Markdown, combined planning prompts, provider/model identifiers, agent names, schedule targets, and settings keys and values are never passed through the translator. Only the labels, descriptions, validation, progress text, and accessible announcements surrounding those values are localized. The sprint settings editor translates its dashboard-authored card and row descriptions plus control ARIA descriptions. Generated descriptions may resolve a known settings label case-insensitively after presentation code lowercases it; standalone values and user-authored skill names remain exact.
-Integration values stay outside translation interpolation: provider and product names, credentials, redacted secret placeholders, detected paths, endpoints, repository identifiers, tool and server names, scopes, transport values, terminal streams, and server-returned failures render verbatim. This keeps locale switching presentational and preserves the credential redaction, secure-storage capability, and API/MCP contract boundaries.
-
-### Live route
-
-The lazy-loaded Live route owns `dashboard/src/v2/i18n/messages/live.ts`. It translates route headers, transport and stale-state notices, filters, task controls, runtime panels, attention actions, timeline and DAG legends, boat-race labels, statistics, empty states, confirmations, and screen-reader summaries. Live presentation helpers accept an explicit locale when they run outside a component; component consumers bind the same catalog to the provider locale.
-
-Numbers, timestamps, durations, percentages, token totals, and plural counts use locale-aware formatters. Known sprint-run, dispatch, and task-run status enums are dashboard presentation labels and resolve through the Live catalog; unrecognized technical status values remain raw. This is a presentation-only boundary: sprint, task, and project names; event messages; provider or agent output; Git branches; pull request and CI details; attention descriptions; runtime diagnostics; intervention titles, reasons, and instructions; and API error text are always rendered verbatim. Locale changes do not affect realtime subscriptions, runtime projection, event ordering, status precedence, or action endpoints.
-
-## Verification
-
-Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization.
-
-Model and memory coverage exercises German catalog and remediation controls, locale-aware sizes and prices, language compatibility and recommendations, selected/install/enabled distinctions, explicit download confirmation, invalid license metadata, provider failures, and unchanged provider/model payload values.
-Task-focused component, view-model, controller, dependency, review, rerun, and page tests additionally verify German CRUD presentation while persisted and runtime content remains unchanged.
-Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. Memory route coverage lives with the page, filter, search, list, inspector, batch-delete, model-browser, and model-card tests. Together they exercise German controls and announcements while asserting persisted knowledge, catalog metadata, identifiers, and API diagnostics remain verbatim.
-Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization. Agents coverage additionally verifies German route chrome and validation while asserting that authored instructions, imported Markdown, server labels, and persisted configuration values are not translated.
-Feature coverage additionally exercises German sprint validation and planning modes, Quicksprint execution and cancellation, provider failures, Markdown round-trips, settings override save/reset, and keyboard/focus behavior. These tests assert both localized chrome and verbatim authoring payloads.
-Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization. Agents coverage additionally verifies German route chrome and validation while asserting that authored instructions, imported Markdown, server labels, and persisted configuration values are not translated. Overview, project, sprint, browser preview, custom dashboard, Nodes, onboarding, and Settings coverage verifies localized dashboard copy while preserving runtime data and backend-facing values.
-Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. Chat boundary coverage is in `tests/dashboard/v2/chat-i18n.test.tsx` and the focused Chat, widget, cinematic, speech, thread, and accessibility suites. These tests verify German controls and announcements while asserting that provider/runtime payloads and fixed quick-action prompts are unchanged.
-Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization. Task-focused component, view-model, controller, dependency, review, rerun, and page tests additionally verify German CRUD presentation while persisted and runtime content remains unchanged.
-Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. File Browser coverage lives in `tests/dashboard/v2/file-browser-page.test.tsx`, `tests/dashboard/v2/components/file-browser.test.tsx`, the colocated File Browser regression suite, and `tests/e2e/projects/file-browser.spec.ts`. Together they cover German sessions and controls, locale-aware summaries, repository-data preservation, keyboard/accessibility behavior, stale data, failures, binary files, diffs, long paths, and responsive containment.
-Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. Memory route coverage lives with the page, filter, search, list, inspector, batch-delete, model-browser, and model-card tests. Together they exercise German controls and announcements while asserting persisted knowledge, catalog metadata, identifiers, and API diagnostics remain verbatim.
-Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization. Agents coverage additionally verifies German route chrome and validation while asserting that authored instructions, imported Markdown, server labels, and persisted configuration values are not translated.
-Integration-focused dashboard suites additionally exercise German provider, chat, terminal, automation-credential, and MCP success and failure states while asserting that diagnostics and protected values remain unchanged.
-Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization. Agents coverage additionally verifies German route chrome and validation while asserting that authored instructions, imported Markdown, server labels, and persisted configuration values are not translated. Live-route regressions additionally exercise German reconnecting, recovery, stale, action-failure, cancellation, role-label, duration, percentage, and error presentation while verifying that runtime-authored payload text remains unchanged. The Live action hook binds callbacks to the active locale, so confirmations and retry controls also update immediately after a locale change. Existing Live suites continue to cover replay, duplicate suppression, selected-sprint scoping, reduced motion, keyboard interaction, and responsive surfaces.
-Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching without control remounts, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization. Focused navigation, notification, title-bar, documentation-viewer, shared-control, Memory, and Agents tests cover the shell boundaries, German route chrome, and English-content exceptions. Agents coverage additionally verifies that authored instructions, imported Markdown, server labels, and persisted configuration values are not translated.
-
-## Automated completeness checks
-
-`pnpm run check:dashboard-i18n` parses production TypeScript and TSX across the entire `dashboard/src` tree with the TypeScript compiler API; only test and fixture directories and the feature message bundles themselves are excluded from candidate discovery. It reports literal JSX text, including single-word labels, user-facing attributes, and presentation metadata outside feature message bundles. `scripts/dashboard-i18n-allowlist.json` permits only an exact path, source line, candidate kind, and literal text with a rationale; line movement or copy changes force a fresh review. Exemptions are limited to verbatim documentation or license content, protocol and technical values, code/configuration examples, and runtime or user data.
-
-`tests/dashboard/v2/i18n-catalog-parity.test.ts` maintains the required feature-catalog manifest, enumerates the message directory, and fails when a required catalog is missing or a discovered catalog is not imported. Every registered bundle is checked for English/German keys, message shapes, placeholders, supported plural categories, non-empty composed messages, and accidental HTML. `tests/dashboard/v2/i18n-runtime-boundary.test.tsx` verifies that translated framing and locale formatting do not rewrite provider messages, English docs Markdown, or project, sprint, task, and chat content.
-
-The Playwright fan-in at `tests/e2e/navigation/dashboard-i18n.spec.ts` selects Deutsch through Settings → Appearance, verifies immediate and persisted `<html lang="de">`, visits every registered production route and the not-found route, and checks German shell landmarks, keyboard interaction, dialogs, listboxes, focus restoration, live announcements, responsive containment, locale-formatted values, browser errors, and unchanged fixture content. Nodes and Custom Dashboards remain covered by their deterministic German component and route tests when their production feature flags are disabled.
+`pnpm run check:dashboard-i18n` is the static-copy guardrail. It scans production dashboard TypeScript and TSX for user-facing literals outside feature catalogs. `scripts/dashboard-i18n-allowlist.json` allows only reviewed exact-path, exact-line, exact-copy exceptions with a rationale, such as protocol values, code examples, license text, or content intentionally rendered verbatim. New dashboard-authored copy belongs in a typed catalog rather than in the allowlist.
