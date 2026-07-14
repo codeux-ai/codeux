@@ -45,6 +45,16 @@ Interpolation replaces only named `{variable}` tokens through literal string sub
 
 `useDashboardI18n` exposes `formatNumber`, `formatDate`, `formatTime`, `formatRelativeTime`, and `formatList`. Each function is rebound when the active locale changes and accepts the corresponding native `Intl` options. New localized UI should use these functions instead of adding fixed `en-US` formatters.
 
+## Settings model and memory workflows
+
+The AI Models and Memory settings surfaces use the feature-owned `messages/settings-models.ts` catalog. Routing diagrams, provider and model affordances, thinking modes, model pricing, speech configuration, catalog filters, license confirmations, and memory remediation controls switch with the active dashboard locale.
+
+Measurements are formatted through the same active locale. This includes model and provider counts, byte sizes, download percentages, token prices, and memory limit summaries. Currency remains USD with the existing per-million-token precision; only locale-specific number separators change.
+
+Speech selection keeps contract values separate from presentation. Language tags, BCP-47 values, voice IDs, model IDs, license and attribution text, API endpoints, and provider diagnostics pass through unchanged. Dashboard-owned language choices such as automatic detection are translated, while language and model metadata returned by the catalog API is displayed verbatim. Selecting a recommended local model never starts a download; the localized license confirmation remains the only path that invokes the download API.
+
+Pure presentation helpers accept an explicit locale and default to English for compatibility. Components pass the provider's active locale, while unit tests and non-component consumers can request deterministic English or German formatting directly.
+
 ## Translation scope
 
 The initial application bundle translates only root-owned shell copy: the skip link, main landmark label, route loading announcement, and hidden footer. Route catalogs should be imported with their route when those features are localized.
@@ -54,3 +64,5 @@ Localization applies only to dashboard-authored interface copy. API responses, p
 ## Verification
 
 Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization.
+
+Model and memory coverage exercises German catalog and remediation controls, locale-aware sizes and prices, language compatibility and recommendations, selected/install/enabled distinctions, explicit download confirmation, invalid license metadata, provider failures, and unchanged provider/model payload values.

@@ -7,6 +7,8 @@ import { useInteractionTokens } from "../../lib/motion/index.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 import { ModelCard } from "./ModelCard.js";
+import { useDashboardI18n, type DashboardTranslate } from "../../i18n/index.js";
+import { settingsModelsMessages } from "../../i18n/messages/settings-models.js";
 
 interface ModelBrowserProps {
   models: EmbeddingModelWithStatus[];
@@ -52,8 +54,8 @@ const DEFAULT_CUSTOM_FORM: CustomModelForm = {
 
 const HUGGING_FACE_REPO_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-function normalizeCatalogText(value: string): string {
-  return value.trim().toLowerCase();
+function normalizeCatalogText(value: string, locale: string): string {
+  return value.trim().toLocaleLowerCase(locale);
 }
 
 function matchesInstallFilter(model: EmbeddingModelWithStatus, filter: InstallFilter): boolean {
@@ -64,44 +66,44 @@ function matchesInstallFilter(model: EmbeddingModelWithStatus, filter: InstallFi
   return !model.downloaded && !model.downloading && !model.error;
 }
 
-function formatModelSize(bytes: number): string {
-  if (!bytes) return "The model bundle";
-  if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
-  return `${Math.round(bytes / 1_000_000)} MB`;
+function formatModelSize(bytes: number, formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string, t: DashboardTranslate): string {
+  if (!bytes) return t(settingsModelsMessages, "sizeVaries");
+  if (bytes >= 1_000_000_000) return t(settingsModelsMessages, "gigabytes", { size: formatNumber(bytes / 1_000_000_000, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) });
+  return t(settingsModelsMessages, "megabytes", { size: formatNumber(Math.round(bytes / 1_000_000)) });
 }
 
-function validateHuggingFaceSource(value: string): string | null {
+function validateHuggingFaceSource(value: string, t: DashboardTranslate): string | null {
   const trimmed = value.trim();
-  if (!trimmed) return "Hugging Face repo or URL is required.";
+  if (!trimmed) return t(settingsModelsMessages, "validationRepositoryRequired");
 
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
     try {
       const url = new URL(trimmed);
       if (url.protocol !== "https:" || url.hostname !== "huggingface.co") {
-        return "Use an https://huggingface.co model URL.";
+        return t(settingsModelsMessages, "validationRepositoryHttps");
       }
       const segments = url.pathname.split("/").filter(Boolean);
-      return segments.length >= 2 ? null : "Hugging Face URL must include owner and repository.";
+      return segments.length >= 2 ? null : t(settingsModelsMessages, "validationRepositoryPath");
     } catch {
-      return "Enter a valid Hugging Face URL.";
+      return t(settingsModelsMessages, "validationRepositoryUrl");
     }
   }
 
   if (trimmed.includes("://")) {
-    return "Only Hugging Face repositories or URLs are supported.";
+    return t(settingsModelsMessages, "validationRepositoryOnly");
   }
 
-  return HUGGING_FACE_REPO_PATTERN.test(trimmed) ? null : "Use owner/repo format for Hugging Face repositories.";
+  return HUGGING_FACE_REPO_PATTERN.test(trimmed) ? null : t(settingsModelsMessages, "validationRepositoryFormat");
 }
 
-function validateRepositoryPath(value: string, field: string): string | null {
+function validateRepositoryPath(value: string, field: string, t: DashboardTranslate): string | null {
   const trimmed = value.trim();
-  if (!trimmed) return `${field} is required.`;
+  if (!trimmed) return t(settingsModelsMessages, "validationFieldRequired", { field });
   if (trimmed.includes("\\") || trimmed.startsWith("/") || trimmed.includes("?") || trimmed.includes("#")) {
-    return `${field} must be a relative repository path.`;
+    return t(settingsModelsMessages, "validationRelativePath", { field });
   }
   if (trimmed.split("/").some((segment) => !segment || segment === "." || segment === "..")) {
-    return `${field} must not contain empty, current, or parent path segments.`;
+    return t(settingsModelsMessages, "validationPathSegments", { field });
   }
   return null;
 }
@@ -113,7 +115,7 @@ function parseTokenizerFiles(value: string): string[] {
     .filter(Boolean);
 }
 
-function validateCustomForm(form: CustomModelForm): { ok: true; input: {
+function validateCustomForm(form: CustomModelForm, t: DashboardTranslate): { ok: true; input: {
   displayName: string;
   huggingFaceRepoOrUrl: string;
   onnxModelFile: string;
@@ -125,44 +127,45 @@ function validateCustomForm(form: CustomModelForm): { ok: true; input: {
   licenseUrl: string;
   commercialUseAllowed: true;
 } } | { ok: false; message: string } {
-  if (!form.displayName.trim()) return { ok: false, message: "Display name is required." };
-  const sourceError = validateHuggingFaceSource(form.huggingFaceRepoOrUrl);
+  if (!form.displayName.trim()) return { ok: false, message: t(settingsModelsMessages, "validationDisplayNameRequired") };
+  const sourceError = validateHuggingFaceSource(form.huggingFaceRepoOrUrl, t);
   if (sourceError) return { ok: false, message: sourceError };
 
   const onnxModelFile = form.onnxModelFile.trim();
-  const onnxError = validateRepositoryPath(onnxModelFile, "ONNX model file");
+  const onnxField = t(settingsModelsMessages, "onnxModelFile");
+  const onnxError = validateRepositoryPath(onnxModelFile, onnxField, t);
   if (onnxError) return { ok: false, message: onnxError };
-  if (!onnxModelFile.endsWith(".onnx")) return { ok: false, message: "ONNX model file must end with .onnx." };
+  if (!onnxModelFile.endsWith(".onnx")) return { ok: false, message: t(settingsModelsMessages, "validationOnnxExtension") };
 
   const tokenizerFiles = parseTokenizerFiles(form.tokenizerFiles);
-  if (tokenizerFiles.length === 0) return { ok: false, message: "Tokenizer files are required." };
+  if (tokenizerFiles.length === 0) return { ok: false, message: t(settingsModelsMessages, "validationTokenizerRequired") };
   for (const file of tokenizerFiles) {
-    const pathError = validateRepositoryPath(file, "Tokenizer file");
+    const pathError = validateRepositoryPath(file, t(settingsModelsMessages, "tokenizerFiles"), t);
     if (pathError) return { ok: false, message: pathError };
   }
   if (!tokenizerFiles.some((file) => file.split("/").at(-1) === "tokenizer.json")) {
-    return { ok: false, message: "Tokenizer files must include tokenizer.json." };
+    return { ok: false, message: t(settingsModelsMessages, "validationTokenizerJson") };
   }
 
   const dimension = Number(form.dimension);
   if (!Number.isInteger(dimension) || dimension <= 0) {
-    return { ok: false, message: "Dimension must be a positive integer." };
+    return { ok: false, message: t(settingsModelsMessages, "validationDimension") };
   }
 
   const approximateSizeBytes = Number(form.approximateSizeBytes);
   if (!Number.isInteger(approximateSizeBytes) || approximateSizeBytes < 0) {
-    return { ok: false, message: "Approximate size must be a non-negative integer." };
+    return { ok: false, message: t(settingsModelsMessages, "validationSize") };
   }
 
-  if (!form.language.trim()) return { ok: false, message: "Language is required." };
-  if (!form.licenseName.trim()) return { ok: false, message: "Upstream license name is required." };
+  if (!form.language.trim()) return { ok: false, message: t(settingsModelsMessages, "validationLanguage") };
+  if (!form.licenseName.trim()) return { ok: false, message: t(settingsModelsMessages, "validationLicenseName") };
   try {
     const licenseUrl = new URL(form.licenseUrl.trim());
-    if (licenseUrl.protocol !== "https:") return { ok: false, message: "License URL must use HTTPS." };
+    if (licenseUrl.protocol !== "https:") return { ok: false, message: t(settingsModelsMessages, "validationLicenseHttps") };
   } catch {
-    return { ok: false, message: "Enter a valid upstream license URL." };
+    return { ok: false, message: t(settingsModelsMessages, "validationLicenseUrl") };
   }
-  if (!form.commercialUseAllowed) return { ok: false, message: "Confirm that the upstream model permits commercial use." };
+  if (!form.commercialUseAllowed) return { ok: false, message: t(settingsModelsMessages, "validationCommercialUse") };
 
   return {
     ok: true,
@@ -200,6 +203,7 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
   onReembed,
   onConfirmationOpenChange,
 }) => {
+  const { locale, formatNumber, translate: t, translatePlural: tp } = useDashboardI18n();
   const [actionStatus, setActionStatus] = useState<ActionStatus>({ status: "idle", message: null });
   const [formStatus, setFormStatus] = useState<ActionStatus>({ status: "idle", message: null });
   const [pendingModelAction, setPendingModelAction] = useState<{ modelId: string; action: ModelAction } | null>(null);
@@ -222,13 +226,18 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
   const downloadingCount = models.filter((model) => model.downloading).length;
   const customCount = models.filter((model) => model.source === "custom").length;
   const activeModel = models.find((model) => model.active);
-  const catalogStatus = `${models.length} embedding models available. ${downloadedCount} downloaded. ${downloadingCount} downloading. ${activeModel ? `${activeModel.displayName} active.` : "No active embedding model."}`;
+  const catalogStatus = t(settingsModelsMessages, "embeddingCatalogStatus", {
+    models: tp(settingsModelsMessages, "models", models.length, { count: formatNumber(models.length) }),
+    downloaded: `${formatNumber(downloadedCount)} ${t(settingsModelsMessages, "downloaded").toLocaleLowerCase(locale)}.`,
+    downloading: `${formatNumber(downloadingCount)} ${t(settingsModelsMessages, "downloading").toLocaleLowerCase(locale)}.`,
+    active: activeModel ? t(settingsModelsMessages, "activeModelStatus", { model: activeModel.displayName }) : t(settingsModelsMessages, "noActiveEmbeddingModel"),
+  });
   const languageOptions = useMemo(() => (
     Array.from(new Set(models.map((model) => model.language.trim()).filter(Boolean)))
-      .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }))
-  ), [models]);
+      .sort((left, right) => left.localeCompare(right, locale, { sensitivity: "base" }))
+  ), [locale, models]);
   const filteredModels = useMemo(() => {
-    const query = normalizeCatalogText(catalogQuery);
+    const query = normalizeCatalogText(catalogQuery, locale);
     return models.filter((model) => {
       const searchableText = normalizeCatalogText([
         model.displayName,
@@ -237,13 +246,13 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
         model.language,
         model.license.name,
         model.license.notice,
-      ].join(" "));
+      ].join(" "), locale);
       return (!query || searchableText.includes(query))
         && matchesInstallFilter(model, installFilter)
         && (languageFilter === "all" || model.language === languageFilter)
         && (sourceFilter === "all" || model.source === sourceFilter);
     });
-  }, [catalogQuery, installFilter, languageFilter, models, sourceFilter]);
+  }, [catalogQuery, installFilter, languageFilter, locale, models, sourceFilter]);
   const filtersActive = Boolean(catalogQuery.trim())
     || installFilter !== "all"
     || languageFilter !== "all"
@@ -302,7 +311,7 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
     } catch (error) {
       setActionStatus({
         status: "error",
-        message: error instanceof Error ? error.message : "Model action failed. Try again.",
+        message: error instanceof Error ? error.message : t(settingsModelsMessages, "modelActionFailedRetry"),
       });
     } finally {
       setPendingModelAction(null);
@@ -320,10 +329,10 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
     actionLockRef.current = true;
     setPendingModelAction({ modelId: model.id, action: "delete" });
     const confirmed = await requestConfirm({
-      title: "Delete Embedding Model",
-      body: `Delete ${model.displayName} from local storage? Memories remain stored, but this model must be downloaded again before it can be activated.`,
-      confirmLabel: "Delete Model",
-      cancelLabel: "Cancel",
+      title: t(settingsModelsMessages, "deleteEmbeddingModel"),
+      body: t(settingsModelsMessages, "deleteEmbeddingConfirmation", { model: model.displayName }),
+      confirmLabel: t(settingsModelsMessages, "deleteModel", { model: model.displayName }),
+      cancelLabel: t(settingsModelsMessages, "cancel"),
       destructive: true,
     });
 
@@ -333,19 +342,19 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
         actionLockRef.current = false;
       }, 0);
       requestAnimationFrame(() => {
-        browserRef.current?.querySelector<HTMLElement>(`[aria-label="Delete ${model.displayName}"]`)?.focus();
+        browserRef.current?.querySelector<HTMLElement>("[data-model-delete]")?.focus();
       });
       return;
     }
 
-    setActionStatus({ status: "pending", message: `Deleting ${model.displayName}...` });
+    setActionStatus({ status: "pending", message: t(settingsModelsMessages, "deletingModel", { model: model.displayName }) });
     try {
       await onDelete(model.id);
-      setActionStatus({ status: "success", message: `${model.displayName} deleted.` });
+      setActionStatus({ status: "success", message: t(settingsModelsMessages, "modelDeleted", { model: model.displayName }) });
     } catch (error) {
       setActionStatus({
         status: "error",
-        message: error instanceof Error ? error.message : "Model action failed. Try again.",
+        message: error instanceof Error ? error.message : t(settingsModelsMessages, "modelActionFailedRetry"),
       });
     } finally {
       setPendingModelAction(null);
@@ -360,7 +369,7 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
 
   const handleCustomSubmit = async (event: JSX.TargetedSubmitEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    const validated = validateCustomForm(customForm);
+    const validated = validateCustomForm(customForm, t);
     if (!validated.ok) {
       setCustomFormError(validated.message);
       setFormStatus({ status: "error", message: validated.message });
@@ -368,19 +377,19 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
     }
 
     setCustomFormError(null);
-    setFormStatus({ status: "pending", message: "Adding custom Hugging Face model..." });
+    setFormStatus({ status: "pending", message: t(settingsModelsMessages, "customModelAdding") });
     try {
       const created = await createCustomEmbeddingModel(validated.input);
       const refreshed = await listEmbeddingModels();
       onModelsChanged(refreshed);
       setCustomForm(DEFAULT_CUSTOM_FORM);
-      setFormStatus({ status: "success", message: `${created.displayName} added to embedding models.` });
+      setFormStatus({ status: "success", message: t(settingsModelsMessages, "customModelAdded", { model: created.displayName }) });
       setCustomFormOpen(false);
       window.setTimeout(() => customFormToggleRef.current?.focus(), 0);
     } catch (error) {
       setFormStatus({
         status: "error",
-        message: error instanceof Error ? error.message : "Custom Hugging Face model could not be added.",
+        message: error instanceof Error ? error.message : t(settingsModelsMessages, "customModelAddFailed"),
       });
     }
   };
@@ -399,33 +408,33 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
             </div>
             <div className="min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">
-                Local model browser
+                {t(settingsModelsMessages, "localModelBrowser")}
               </p>
               <h2 id="model-browser-title" className="mt-1 text-base font-semibold tracking-tight text-slate-900 dark:text-white">
-                Memory embedding models
+                {t(settingsModelsMessages, "memoryEmbeddingModels")}
               </h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
-                Find, install, and activate local embedding models without expanding every advanced control.
+                {t(settingsModelsMessages, "memoryEmbeddingModelsDescription")}
               </p>
             </div>
           </div>
 
           <dl className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
             <div className="rounded-lg border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.06] dark:bg-white/[0.03]">
-              <dt className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Embedding</dt>
-              <dd className="mt-1 font-mono text-sm font-semibold text-slate-800 dark:text-slate-100">{models.length}</dd>
+              <dt className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">{t(settingsModelsMessages, "embedding")}</dt>
+              <dd className="mt-1 font-mono text-sm font-semibold text-slate-800 dark:text-slate-100">{formatNumber(models.length)}</dd>
             </div>
             <div className="rounded-lg border border-signal-500/15 bg-signal-500/[0.07] px-3 py-2">
-              <dt className="text-[9px] font-bold uppercase tracking-[0.16em] text-signal-700/70 dark:text-signal-300/70">Downloaded</dt>
-              <dd className="mt-1 font-mono text-sm font-semibold text-signal-700 dark:text-signal-300">{downloadedCount}</dd>
+              <dt className="text-[9px] font-bold uppercase tracking-[0.16em] text-signal-700/70 dark:text-signal-300/70">{t(settingsModelsMessages, "downloaded")}</dt>
+              <dd className="mt-1 font-mono text-sm font-semibold text-signal-700 dark:text-signal-300">{formatNumber(downloadedCount)}</dd>
             </div>
             <div className="rounded-lg border border-ember-500/20 bg-ember-500/[0.07] px-3 py-2">
-              <dt className="text-[9px] font-bold uppercase tracking-[0.16em] text-ember-600/75 dark:text-ember-400/75">Stale</dt>
-              <dd className="mt-1 font-mono text-sm font-semibold text-ember-600 dark:text-ember-400">{stats.staleEmbeddings}</dd>
+              <dt className="text-[9px] font-bold uppercase tracking-[0.16em] text-ember-600/75 dark:text-ember-400/75">{t(settingsModelsMessages, "stale")}</dt>
+              <dd className="mt-1 font-mono text-sm font-semibold text-ember-600 dark:text-ember-400">{formatNumber(stats.staleEmbeddings)}</dd>
             </div>
             <div className="rounded-lg border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.06] dark:bg-white/[0.03]">
-              <dt className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Custom</dt>
-              <dd className="mt-1 font-mono text-sm font-semibold text-slate-800 dark:text-slate-100">{customCount}</dd>
+              <dt className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">{t(settingsModelsMessages, "custom")}</dt>
+              <dd className="mt-1 font-mono text-sm font-semibold text-slate-800 dark:text-slate-100">{formatNumber(customCount)}</dd>
             </div>
           </dl>
         </div>
@@ -434,7 +443,7 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
           <div className="flex items-center gap-3 rounded-lg border border-signal-500/18 bg-signal-500/[0.07] px-4 py-3 text-signal-700 transition-[background-color,border-color,color] dark:text-signal-300" role="status" aria-live="polite" style={asyncTransitionStyle}>
             <Loader2 className="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" strokeWidth={2.4} />
             <p className="text-xs font-bold">
-              {downloadingCount} {downloadingCount === 1 ? "model is" : "models are"} downloading.
+              {tp(settingsModelsMessages, "downloadingModels", downloadingCount, { count: formatNumber(downloadingCount) })}
             </p>
           </div>
         )}
@@ -468,14 +477,14 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
             <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={2.4} />
             <div className="min-w-0 flex-1">
               <p className="text-xs font-bold">
-                {stats.staleEmbeddings} {stats.staleEmbeddings === 1 ? "memory needs" : "memories need"} re-embedding.
+                {tp(settingsModelsMessages, "staleMemoriesNeedReembedding", stats.staleEmbeddings, { count: formatNumber(stats.staleEmbeddings) })}
               </p>
               <p className="mt-1 text-[11px] leading-4 text-ember-600/75 dark:text-ember-400/70">
-                These memories were embedded with a different model and stay out of semantic search until vectors are rebuilt.
+                {t(settingsModelsMessages, "staleMemoriesDescription")}
               </p>
             </div>
             <button type="button" onClick={() => {
-              void runModelAction(activeModel?.id ?? "catalog", "reembed", "Starting memory re-embedding...", "Memory re-embedding started.", onReembed);
+              void runModelAction(activeModel?.id ?? "catalog", "reembed", t(settingsModelsMessages, "startReembedding"), t(settingsModelsMessages, "reembeddingStarted"), onReembed);
             }}
               data-model-action="reembed-all"
               disabled={Boolean(pendingModelAction)}
@@ -483,7 +492,7 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
               style={controlTransitionStyle}
               className="inline-flex min-h-9 shrink-0 items-center justify-center gap-2 rounded-lg border border-ember-500/25 bg-ember-500/[0.12] px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-ember-600 transition-all hover:-translate-y-px hover:bg-ember-500/[0.18] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F9F8F4] disabled:cursor-wait disabled:opacity-70 dark:text-ember-400 dark:focus-visible:ring-offset-void-900">
               <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.5} />
-              Re-embed All
+              {t(settingsModelsMessages, "reembedAll")}
             </button>
           </div>
         )}
@@ -492,9 +501,9 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
           <div className="flex items-center gap-3 rounded-lg border border-signal-500/18 bg-signal-500/[0.07] px-4 py-3 text-signal-700 dark:text-signal-300" role="status" aria-live="polite" style={asyncTransitionStyle}>
             <Loader2 className="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" strokeWidth={2.4} />
             <p className="text-xs font-bold">
-              Re-embedding memories: {reembed.completed}/{reembed.total}
+              {t(settingsModelsMessages, "reembeddingMemories", { completed: formatNumber(reembed.completed), total: formatNumber(reembed.total) })}
             </p>
-            <div className="h-2 min-w-[8rem] flex-1 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.08]" role="progressbar" aria-label="Memory re-embedding progress" aria-valuemin={0} aria-valuemax={reembed.total || 0} aria-valuenow={reembed.completed}>
+            <div className="h-2 min-w-[8rem] flex-1 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.08]" role="progressbar" aria-label={t(settingsModelsMessages, "reembeddingProgress")} aria-valuemin={0} aria-valuemax={reembed.total || 0} aria-valuenow={reembed.completed}>
               <div className="h-full rounded-full bg-signal-500 transition-[width]" style={{ ...asyncTransitionStyle, width: `${reembed.total > 0 ? Math.round((reembed.completed / reembed.total) * 100) : 0}%` }} />
             </div>
           </div>
@@ -504,7 +513,7 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
           <div className="flex items-center gap-3 rounded-lg border border-signal-500/18 bg-signal-500/[0.07] px-4 py-3 text-signal-700 dark:text-signal-300" role="status" aria-live="polite">
             <CheckCircle2 className="h-4 w-4 shrink-0" strokeWidth={2.4} />
             <p className="text-xs font-bold">
-              Re-embedding complete: {reembed.completed} {reembed.completed === 1 ? "memory" : "memories"} updated.
+              {tp(settingsModelsMessages, "reembeddingComplete", reembed.completed, { count: formatNumber(reembed.completed) })}
             </p>
           </div>
         )}
@@ -513,14 +522,14 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
           <div className="flex flex-wrap items-end justify-between gap-2">
             <div>
               <h3 id="embedding-models-heading" className="text-sm font-semibold tracking-tight text-slate-900 dark:text-white">
-                Embedding Models
+                {t(settingsModelsMessages, "embeddingModelsHeading")}
               </h3>
               <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
-                Download, activate, delete, and re-embed memory vectors from this group only.
+                {t(settingsModelsMessages, "embeddingCatalogDescription")}
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">{activeModel?.displayName ?? "No active model"}</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">{activeModel?.displayName ?? t(settingsModelsMessages, "noActiveModel")}</p>
               <button
                 ref={customFormToggleRef}
                 type="button"
@@ -531,7 +540,7 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
                 className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-signal-500/20 bg-signal-500/[0.08] px-3 py-2 text-[11px] font-bold text-signal-700 transition-colors hover:bg-signal-500/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F9F8F4] dark:text-signal-300 dark:focus-visible:ring-offset-void-900"
               >
                 <Plus className="h-3.5 w-3.5" strokeWidth={2.4} />
-                {customFormOpen ? "Close custom form" : "Add custom model"}
+                {t(settingsModelsMessages, customFormOpen ? "closeCustomForm" : "addCustomModel")}
                 <ChevronDown className={`h-3.5 w-3.5 transition-transform ${customFormOpen ? "rotate-180" : ""}`} aria-hidden="true" />
               </button>
             </div>
@@ -539,7 +548,7 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
 
           <div className="grid gap-3 rounded-xl border border-black/[0.06] bg-black/[0.02] p-3 dark:border-white/[0.06] dark:bg-white/[0.025] lg:grid-cols-[minmax(15rem,1fr)_repeat(3,minmax(8rem,auto))]">
             <div className="min-w-0">
-              <label htmlFor="embedding-model-search" className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Search models</label>
+              <label htmlFor="embedding-model-search" className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{t(settingsModelsMessages, "searchModels")}</label>
               <div className="mt-1.5 flex min-h-10 items-center gap-2 rounded-lg border border-black/[0.08] bg-white/72 px-3 dark:border-white/[0.08] dark:bg-void-900/60">
                 <Search className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
                 <input
@@ -547,46 +556,46 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
                   type="search"
                   value={catalogQuery}
                   onInput={(event) => setCatalogQuery(event.currentTarget.value)}
-                  placeholder="Name, ID, language, license"
+                  placeholder={t(settingsModelsMessages, "embeddingSearchPlaceholder")}
                   className="min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400 dark:text-white"
                 />
                 {catalogQuery ? (
-                  <button type="button" onClick={() => setCatalogQuery("")} aria-label="Clear model search" className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-black/[0.04] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/45 dark:hover:bg-white/[0.06] dark:hover:text-white">
+                  <button type="button" onClick={() => setCatalogQuery("")} aria-label={t(settingsModelsMessages, "clearEmbeddingModelSearch")} className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-black/[0.04] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/45 dark:hover:bg-white/[0.06] dark:hover:text-white">
                     <X className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
                 ) : null}
               </div>
             </div>
             <label className="min-w-0 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-              Install state
+              {t(settingsModelsMessages, "installState")}
               <select value={installFilter} onChange={(event) => setInstallFilter(event.currentTarget.value as InstallFilter)} className={`${formFieldClass(false)} mt-1.5 w-full min-w-0 normal-case tracking-normal`}>
-                <option value="all">All states</option>
-                <option value="available">Available</option>
-                <option value="downloaded">Downloaded</option>
-                <option value="downloading">Downloading</option>
-                <option value="unavailable">Unavailable</option>
+                <option value="all">{t(settingsModelsMessages, "allStates")}</option>
+                <option value="available">{t(settingsModelsMessages, "available")}</option>
+                <option value="downloaded">{t(settingsModelsMessages, "downloaded")}</option>
+                <option value="downloading">{t(settingsModelsMessages, "downloading")}</option>
+                <option value="unavailable">{t(settingsModelsMessages, "unavailable")}</option>
               </select>
             </label>
             <label className="min-w-0 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-              Language
+              {t(settingsModelsMessages, "language")}
               <select value={languageFilter} onChange={(event) => setLanguageFilter(event.currentTarget.value)} className={`${formFieldClass(false)} mt-1.5 w-full min-w-0 normal-case tracking-normal`}>
-                <option value="all">All languages</option>
+                <option value="all">{t(settingsModelsMessages, "allLanguages")}</option>
                 {languageOptions.map((language) => <option key={language} value={language}>{language}</option>)}
               </select>
             </label>
             <label className="min-w-0 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-              Source
+              {t(settingsModelsMessages, "source")}
               <select value={sourceFilter} onChange={(event) => setSourceFilter(event.currentTarget.value as SourceFilter)} className={`${formFieldClass(false)} mt-1.5 w-full min-w-0 normal-case tracking-normal`}>
-                <option value="all">All sources</option>
-                <option value="built_in">Built-in</option>
-                <option value="custom">Custom</option>
+                <option value="all">{t(settingsModelsMessages, "allSources")}</option>
+                <option value="built_in">{t(settingsModelsMessages, "builtIn")}</option>
+                <option value="custom">{t(settingsModelsMessages, "custom")}</option>
               </select>
             </label>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-            <span role="status" aria-label="Model catalog results" aria-live="polite">Showing <strong className="text-slate-700 dark:text-slate-200">{filteredModels.length}</strong> of {models.length} models</span>
-            {filtersActive ? <button type="button" onClick={clearCatalogFilters} className="font-bold text-signal-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/45 dark:text-signal-300">Clear search and filters</button> : null}
+            <span role="status" aria-label={t(settingsModelsMessages, "modelCatalogResults")} aria-live="polite">{t(settingsModelsMessages, "showingModels", { shown: formatNumber(filteredModels.length), total: formatNumber(models.length) })}</span>
+            {filtersActive ? <button type="button" onClick={clearCatalogFilters} className="font-bold text-signal-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/45 dark:text-signal-300">{t(settingsModelsMessages, "clearSearchAndFilters")}</button> : null}
           </div>
 
           <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
@@ -597,19 +606,20 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
                   if (!selected) return;
                   void (async () => {
                     const accepted = await requestConfirm({
-                      title: `Download ${selected.displayName}`,
-                      body: `${formatModelSize(selected.sizeBytes)} will be downloaded directly from Hugging Face. By continuing, you accept ${selected.license.name}. ${selected.license.notice}`,
-                      confirmLabel: "Accept & Download",
-                      cancelLabel: "Cancel",
+                      title: t(settingsModelsMessages, "downloadConfirmationTitle", { model: selected.displayName }),
+                      body: t(settingsModelsMessages, "embeddingDownloadConfirmation", { size: formatModelSize(selected.sizeBytes, formatNumber, t), license: selected.license.name, notice: selected.license.notice }),
+                      confirmLabel: t(settingsModelsMessages, "acceptAndDownload"),
+                      cancelLabel: t(settingsModelsMessages, "cancel"),
                       tone: "neutral",
                     });
                     if (!accepted) return;
-                    await runModelAction(id, "download", `Downloading ${selected.displayName}...`, `${selected.displayName} download started.`, () => onDownload(id));
+                    await runModelAction(id, "download", t(settingsModelsMessages, "downloadingModel", { model: selected.displayName }), t(settingsModelsMessages, "modelDownloadStarted", { model: selected.displayName }), () => onDownload(id));
                   })();
                 }}
                 onSelect={(id) => {
                   const selected = models.find((item) => item.id === id);
-                  void runModelAction(id, "select", `Activating ${selected?.displayName ?? "embedding model"}...`, `${selected?.displayName ?? "Embedding model"} is active.`, () => onSelect(id));
+                  const displayName = selected?.displayName ?? t(settingsModelsMessages, "embeddingModelFallback");
+                  void runModelAction(id, "select", t(settingsModelsMessages, "activatingModel", { model: displayName }), t(settingsModelsMessages, "modelIsActive", { model: displayName }), () => onSelect(id));
                 }}
                 onDelete={(id) => {
                   const selected = models.find((item) => item.id === id);
@@ -618,7 +628,7 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
                   }
                 }}
                 onReembed={() => {
-                  void runModelAction(model.id, "reembed", "Starting memory re-embedding...", "Memory re-embedding started.", onReembed);
+                  void runModelAction(model.id, "reembed", t(settingsModelsMessages, "startReembedding"), t(settingsModelsMessages, "reembeddingStarted"), onReembed);
                 }}
                 reembedding={!!reembed?.active}
                 staleCount={stats.staleEmbeddings}
@@ -627,15 +637,15 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
             ))}
             {models.length === 0 && (
               <div className="rounded-lg border border-dashed border-black/[0.08] bg-black/[0.02] px-6 py-10 text-center text-sm font-medium text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.02] lg:col-span-2" role="status" aria-live="polite">
-                <p>Embedding models are not available yet.</p>
-                <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">Refresh the catalog or check the local embedding runtime if this panel stays empty.</p>
+                <p>{t(settingsModelsMessages, "embeddingModelsUnavailable")}</p>
+                <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">{t(settingsModelsMessages, "embeddingModelsUnavailableDescription")}</p>
               </div>
             )}
             {models.length > 0 && filteredModels.length === 0 ? (
               <div className="rounded-lg border border-dashed border-black/[0.08] bg-black/[0.02] px-6 py-10 text-center dark:border-white/[0.08] dark:bg-white/[0.02] xl:col-span-2">
-                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">No embedding models match this view.</p>
-                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Try a broader search or reset the install, language, and source filters.</p>
-                <button type="button" onClick={clearCatalogFilters} className="mt-4 inline-flex min-h-9 items-center justify-center rounded-lg bg-signal-500 px-3 py-2 text-[11px] font-bold text-white hover:bg-signal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/45 focus-visible:ring-offset-2 dark:text-void-950">Show all models</button>
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{t(settingsModelsMessages, "noEmbeddingMatches")}</p>
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{t(settingsModelsMessages, "broadenEmbeddingSearch")}</p>
+                <button type="button" onClick={clearCatalogFilters} className="mt-4 inline-flex min-h-9 items-center justify-center rounded-lg bg-signal-500 px-3 py-2 text-[11px] font-bold text-white hover:bg-signal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/45 focus-visible:ring-offset-2 dark:text-void-950">{t(settingsModelsMessages, "showAllModels")}</button>
               </div>
             ) : null}
           </div>
@@ -644,64 +654,64 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
         {customFormOpen ? <section id="custom-hf-model-panel" aria-labelledby="custom-hf-model-heading" className="rounded-lg border border-black/[0.06] bg-black/[0.02] p-3 dark:border-white/[0.06] dark:bg-white/[0.025]">
           <div className="flex flex-col gap-1">
             <h3 id="custom-hf-model-heading" className="text-sm font-semibold tracking-tight text-slate-900 dark:text-white">
-              Add Custom Hugging Face Embedding Model
+              {t(settingsModelsMessages, "addCustomEmbeddingModel")}
             </h3>
             <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">
-              Add an ONNX embedding model with its tokenizer files. License metadata is operator-asserted: Code UX does not review or approve custom model terms.
+              {t(settingsModelsMessages, "customEmbeddingDescription")}
             </p>
           </div>
           <form className="mt-3 grid gap-3 lg:grid-cols-6" onSubmit={(event) => { void handleCustomSubmit(event); }} noValidate>
             <label className="flex min-w-0 flex-col gap-1.5 lg:col-span-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Display name</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{t(settingsModelsMessages, "displayName")}</span>
               <input value={customForm.displayName} onInput={setField("displayName")} className={formFieldClass(Boolean(customFormError))} aria-invalid={Boolean(customFormError)} />
             </label>
             <label className="flex min-w-0 flex-col gap-1.5 lg:col-span-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Repo or URL</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{t(settingsModelsMessages, "repositoryOrUrl")}</span>
               <input value={customForm.huggingFaceRepoOrUrl} onInput={setField("huggingFaceRepoOrUrl")} placeholder="owner/repo or https://huggingface.co/owner/repo" className={formFieldClass(Boolean(customFormError))} aria-invalid={Boolean(customFormError)} />
             </label>
             <label className="flex min-w-0 flex-col gap-1.5 lg:col-span-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">ONNX model file</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{t(settingsModelsMessages, "onnxModelFile")}</span>
               <input value={customForm.onnxModelFile} onInput={setField("onnxModelFile")} className={formFieldClass(Boolean(customFormError))} aria-invalid={Boolean(customFormError)} />
             </label>
             <label className="flex min-w-0 flex-col gap-1.5 lg:col-span-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Tokenizer files</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{t(settingsModelsMessages, "tokenizerFiles")}</span>
               <textarea value={customForm.tokenizerFiles} onInput={setField("tokenizerFiles")} rows={3} className={`${formFieldClass(Boolean(customFormError))} resize-y`} aria-invalid={Boolean(customFormError)} />
             </label>
             <label className="flex min-w-0 flex-col gap-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Dimension</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{t(settingsModelsMessages, "dimension")}</span>
               <input value={customForm.dimension} onInput={setField("dimension")} inputMode="numeric" className={formFieldClass(Boolean(customFormError))} aria-invalid={Boolean(customFormError)} />
             </label>
             <label className="flex min-w-0 flex-col gap-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Size bytes</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{t(settingsModelsMessages, "sizeBytes")}</span>
               <input value={customForm.approximateSizeBytes} onInput={setField("approximateSizeBytes")} inputMode="numeric" className={formFieldClass(Boolean(customFormError))} aria-invalid={Boolean(customFormError)} />
             </label>
             <label className="flex min-w-0 flex-col gap-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Language</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{t(settingsModelsMessages, "language")}</span>
               <input value={customForm.language} onInput={setField("language")} className={formFieldClass(Boolean(customFormError))} aria-invalid={Boolean(customFormError)} />
             </label>
             <label className="flex min-w-0 flex-col gap-1.5 lg:col-span-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Upstream license</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{t(settingsModelsMessages, "upstreamLicense")}</span>
               <input value={customForm.licenseName} onInput={setField("licenseName")} placeholder="MIT or Apache-2.0" className={formFieldClass(Boolean(customFormError))} aria-invalid={Boolean(customFormError)} />
             </label>
             <label className="flex min-w-0 flex-col gap-1.5 lg:col-span-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">License URL</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{t(settingsModelsMessages, "licenseUrl")}</span>
               <input value={customForm.licenseUrl} onInput={setField("licenseUrl")} placeholder="https://..." className={formFieldClass(Boolean(customFormError))} aria-invalid={Boolean(customFormError)} />
             </label>
             <label className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300 lg:col-span-2">
               <input type="checkbox" checked={customForm.commercialUseAllowed} onChange={setField("commercialUseAllowed")} className="h-4 w-4 accent-signal-500" />
-              I verified the upstream terms myself and confirm that they permit commercial use.
+              {t(settingsModelsMessages, "commercialTermsConfirmation")}
             </label>
             <div className="flex items-end">
               <button type="submit" disabled={formStatus.status === "pending"} aria-busy={formStatus.status === "pending"} className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-signal-500 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:-translate-y-px hover:bg-signal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F9F8F4] disabled:cursor-wait disabled:opacity-65 disabled:hover:translate-y-0 dark:text-void-950 dark:focus-visible:ring-offset-void-900">
                 {formStatus.status === "pending" ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" strokeWidth={2.4} /> : <Plus className="h-4 w-4" strokeWidth={2.4} />}
-                Add
+                {t(settingsModelsMessages, "add")}
               </button>
             </div>
           </form>
         </section> : null}
 
         {(customFormError || formStatus.message) && (
-          <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${formStatus.status === "error" || customFormError ? "border-status-red/20 bg-status-red/[0.08] text-status-red" : "border-signal-500/18 bg-signal-500/[0.07] text-signal-700 dark:text-signal-300"}`} role={formStatus.status === "error" || customFormError ? "alert" : "status"} aria-label="Custom model status" aria-live={formStatus.status === "error" || customFormError ? "assertive" : "polite"} aria-atomic="true">
+          <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${formStatus.status === "error" || customFormError ? "border-status-red/20 bg-status-red/[0.08] text-status-red" : "border-signal-500/18 bg-signal-500/[0.07] text-signal-700 dark:text-signal-300"}`} role={formStatus.status === "error" || customFormError ? "alert" : "status"} aria-label={t(settingsModelsMessages, "customModelStatus")} aria-live={formStatus.status === "error" || customFormError ? "assertive" : "polite"} aria-atomic="true">
             {formStatus.status === "pending" ? <Loader2 className="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" strokeWidth={2.4} /> : formStatus.status === "success" ? <CheckCircle2 className="h-4 w-4 shrink-0" strokeWidth={2.4} /> : <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={2.4} />}
             <p className="text-xs font-bold">{customFormError ?? formStatus.message}</p>
           </div>

@@ -7,8 +7,11 @@ import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadge
 import { BookOpen, Brain, CalendarClock, Gauge } from "lucide-preact";
 import { fetchMemoryRemediationSchedule, saveMemoryRemediationSchedule } from "../../../lib/scheduler-api.js";
 import type { MemoryRemediationScheduleCadence } from "../../../types.js";
+import { useDashboardI18n } from "../../../i18n/index.js";
+import { settingsModelsMessages } from "../../../i18n/messages/settings-models.js";
 
-  export const SettingsMemoryPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
+export const SettingsMemoryPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
+  const { formatNumber, translate: t, translatePlural: tp } = useDashboardI18n();
   const {
     activeScope,
     selectedProject,
@@ -76,7 +79,7 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
       if (response.entry) {
         setScheduleTime(toTimeInputValue(response.entry.scheduledFor));
       }
-      setScheduleMessage(response.cadence === "off" ? "Long-term remediation schedule paused." : "Long-term remediation schedule saved.");
+      setScheduleMessage(t(settingsModelsMessages, response.cadence === "off" ? "schedulePaused" : "scheduleSaved"));
       setScheduleError(null);
     } catch (error) {
       setScheduleError(error instanceof Error ? error.message : String(error));
@@ -93,26 +96,29 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
     return (
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         <SectionCard
-          title="Memory System"
+          title={t(settingsModelsMessages, "memorySystem")}
+          helpId="memory-system"
+          summary={t(settingsModelsMessages, "memorySystemSummary")}
+          configureLabel={t(settingsModelsMessages, "configure")}
           watermark="MEM"
           badge={getBadge("memory")}
           icon={<Brain strokeWidth={2.4} />}
           highlights={[
-            { label: "Memory", value: editableSettings.memory.enabled ? "Enabled" : "Off", tone: editableSettings.memory.enabled ? "active" : "warning" },
-            { label: "Capture", value: editableSettings.memory.autoCaptureSprint || editableSettings.memory.autoCaptureAgent ? "Automatic" : "Manual" },
-            { label: "Remediation", value: editableSettings.memory.remediationMode === "ai" ? "AI" : editableSettings.memory.remediationMode === "deterministic" ? "Deterministic" : "Off" },
+            { label: t(settingsModelsMessages, "memory"), value: editableSettings.memory.enabled ? t(settingsModelsMessages, "enabled") : t(settingsModelsMessages, "off"), tone: editableSettings.memory.enabled ? "active" : "warning" },
+            { label: t(settingsModelsMessages, "capture"), value: editableSettings.memory.autoCaptureSprint || editableSettings.memory.autoCaptureAgent ? t(settingsModelsMessages, "automatic") : t(settingsModelsMessages, "manual") },
+            { label: t(settingsModelsMessages, "remediation"), value: editableSettings.memory.remediationMode === "ai" ? "AI" : editableSettings.memory.remediationMode === "deterministic" ? t(settingsModelsMessages, "deterministic") : t(settingsModelsMessages, "off") },
           ]}
         >
-          <Row label="Enable memory" description="Turn on the memory system for automatic capture, storage, and semantic search of sprint knowledge." badge={getFieldBadge("memory.enabled")}>
-            <Toggle aria-label="Toggle setting"               value={editableSettings.memory.enabled}
+          <Row label={t(settingsModelsMessages, "enableMemory")} description={t(settingsModelsMessages, "enableMemoryDescription")} badge={getFieldBadge("memory.enabled")}>
+            <Toggle aria-label={t(settingsModelsMessages, "toggleSetting")} value={editableSettings.memory.enabled}
               onChange={() => updateEditableSettings((current) => ({
                 ...current,
                 memory: { ...current.memory, enabled: !current.memory.enabled },
               }))}
             />
           </Row>
-          <Row label="Auto-capture sprint events" description="Automatically create memories when tasks complete, fail, or encounter CI issues during sprint execution." badge={getFieldBadge("memory.autoCaptureSprint")}>
-            <Toggle aria-label="Toggle setting"               value={editableSettings.memory.autoCaptureSprint}
+          <Row label={t(settingsModelsMessages, "autoCaptureSprint")} description={t(settingsModelsMessages, "autoCaptureSprintDescription")} badge={getFieldBadge("memory.autoCaptureSprint")}>
+            <Toggle aria-label={t(settingsModelsMessages, "toggleSetting")} value={editableSettings.memory.autoCaptureSprint}
               disabled={!editableSettings.memory.enabled}
               onChange={() => updateEditableSettings((current) => ({
                 ...current,
@@ -120,8 +126,8 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
               }))}
             />
           </Row>
-          <Row label="Auto-capture agent events" description="Capture memories from notable agent interactions such as retries and clarifications." badge={getFieldBadge("memory.autoCaptureAgent")}>
-            <Toggle aria-label="Toggle setting"               value={editableSettings.memory.autoCaptureAgent}
+          <Row label={t(settingsModelsMessages, "autoCaptureAgent")} description={t(settingsModelsMessages, "autoCaptureAgentDescription")} badge={getFieldBadge("memory.autoCaptureAgent")}>
+            <Toggle aria-label={t(settingsModelsMessages, "toggleSetting")} value={editableSettings.memory.autoCaptureAgent}
               disabled={!editableSettings.memory.enabled}
               onChange={() => updateEditableSettings((current) => ({
                 ...current,
@@ -129,8 +135,8 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
               }))}
             />
           </Row>
-          <Row label="Auto-promote to project scope" description="Automatically promote recurring or high-strength sprint memories to long-term project knowledge when a sprint completes." badge={getFieldBadge("memory.autoPromote")}>
-            <Toggle aria-label="Toggle setting"               value={editableSettings.memory.autoPromote}
+          <Row label={t(settingsModelsMessages, "autoPromote")} description={t(settingsModelsMessages, "autoPromoteDescription")} badge={getFieldBadge("memory.autoPromote")}>
+            <Toggle aria-label={t(settingsModelsMessages, "toggleSetting")} value={editableSettings.memory.autoPromote}
               disabled={!editableSettings.memory.enabled}
               onChange={() => updateEditableSettings((current) => ({
                 ...current,
@@ -138,7 +144,7 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
               }))}
             />
           </Row>
-          <Row label="Post-sprint remediation" description="Curate sprint memories after completion. AI mode uses the Remediation route and guardrail." badge={getFieldBadge("memory.remediationMode")} last>
+          <Row label={t(settingsModelsMessages, "postSprintRemediation")} description={t(settingsModelsMessages, "postSprintRemediationDescription")} badge={getFieldBadge("memory.remediationMode")} last>
             <select
               value={editableSettings.memory.remediationMode}
               disabled={!editableSettings.memory.enabled}
@@ -151,54 +157,57 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
               }}
               className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 dark:border-white/10 dark:bg-void-900 dark:text-slate-100"
             >
-              <option value="off">Off</option>
-              <option value="deterministic">Deterministic</option>
-              <option value="ai">AI remediation</option>
+              <option value="off">{t(settingsModelsMessages, "off")}</option>
+              <option value="deterministic">{t(settingsModelsMessages, "deterministic")}</option>
+              <option value="ai">{t(settingsModelsMessages, "aiRemediation")}</option>
             </select>
           </Row>
         </SectionCard>
 
         <SectionCard
-          title="Long-Term Remediation Schedule"
+          title={t(settingsModelsMessages, "longTermSchedule")}
+          helpId="long-term-remediation-schedule"
+          summary={t(settingsModelsMessages, "longTermScheduleSummary")}
+          configureLabel={t(settingsModelsMessages, "configure")}
           watermark="SCH"
           badge={getBadge("memory")}
           icon={<CalendarClock strokeWidth={2.4} />}
           highlights={[
-            { label: "Cadence", value: activeScope === "project" ? scheduleCadence : "Project only", tone: scheduleCadence !== "off" ? "active" : "neutral" },
-            { label: "Mode", value: scheduleMode === "ai" ? "AI" : "Deterministic" },
-            { label: "Local time", value: scheduleTime },
+            { label: t(settingsModelsMessages, "cadence"), value: activeScope === "project" ? (scheduleCadence === "daily" ? t(settingsModelsMessages, "everyDay") : scheduleCadence === "weekly" ? t(settingsModelsMessages, "everyWeek") : t(settingsModelsMessages, "off")) : t(settingsModelsMessages, "projectOnly"), tone: scheduleCadence !== "off" ? "active" : "neutral" },
+            { label: t(settingsModelsMessages, "mode"), value: scheduleMode === "ai" ? "AI" : t(settingsModelsMessages, "deterministic") },
+            { label: t(settingsModelsMessages, "localTime"), value: scheduleTime },
           ]}
         >
           {activeScope !== "project" || !selectedProject ? (
-            <NoticePanel title="Project schedule" tone="neutral">
-              Long-term memory remediation schedules are project-specific. Select a project scope to create a recurring cleanup and claim-maintenance job.
+            <NoticePanel title={t(settingsModelsMessages, "projectSchedule")} tone="neutral">
+              {t(settingsModelsMessages, "projectScheduleDescription")}
             </NoticePanel>
           ) : (
             <>
-              <Row label="Schedule cadence" description="Create or update the scheduler entry that runs project-scoped long-term memory remediation." badge={getFieldBadge("memory.remediationMode")}>
+              <Row label={t(settingsModelsMessages, "scheduleCadence")} description={t(settingsModelsMessages, "scheduleCadenceDescription")} badge={getFieldBadge("memory.remediationMode")}>
                 <select
                   value={scheduleCadence}
                   disabled={scheduleLoading || scheduleSaving || !editableSettings.memory.enabled}
                   onChange={(event) => setScheduleCadence((event.currentTarget as HTMLSelectElement).value as MemoryRemediationScheduleCadence)}
                   className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 dark:border-white/10 dark:bg-void-900 dark:text-slate-100"
                 >
-                  <option value="off">Off</option>
-                  <option value="daily">Every day</option>
-                  <option value="weekly">Every week</option>
+                  <option value="off">{t(settingsModelsMessages, "off")}</option>
+                  <option value="daily">{t(settingsModelsMessages, "everyDay")}</option>
+                  <option value="weekly">{t(settingsModelsMessages, "everyWeek")}</option>
                 </select>
               </Row>
-              <Row label="Remediation mode" description="Deterministic mode applies safe cleanup heuristics. AI mode routes candidates through the Remediation provider route." badge={getFieldBadge("memory.remediationMode")}>
+              <Row label={t(settingsModelsMessages, "remediationMode")} description={t(settingsModelsMessages, "remediationModeDescription")} badge={getFieldBadge("memory.remediationMode")}>
                 <select
                   value={scheduleMode}
                   disabled={scheduleLoading || scheduleSaving || !editableSettings.memory.enabled || scheduleCadence === "off"}
                   onChange={(event) => setScheduleMode((event.currentTarget as HTMLSelectElement).value as "deterministic" | "ai")}
                   className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 dark:border-white/10 dark:bg-void-900 dark:text-slate-100"
                 >
-                  <option value="deterministic">Deterministic</option>
-                  <option value="ai">AI remediation</option>
+                  <option value="deterministic">{t(settingsModelsMessages, "deterministic")}</option>
+                  <option value="ai">{t(settingsModelsMessages, "aiRemediation")}</option>
                 </select>
               </Row>
-              <Row label="Run time" description="The next scheduler occurrence is calculated in your local timezone." badge={getFieldBadge("memory.remediationMode")} last>
+              <Row label={t(settingsModelsMessages, "runTime")} description={t(settingsModelsMessages, "runTimeDescription")} badge={getFieldBadge("memory.remediationMode")} last>
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <input
                     type="time"
@@ -213,7 +222,7 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
                     disabled={scheduleLoading || scheduleSaving || !editableSettings.memory.enabled}
                     className="rounded-lg bg-signal-500 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-signal-600 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {scheduleSaving ? "Saving..." : "Save schedule"}
+                    {scheduleSaving ? t(settingsModelsMessages, "saving") : t(settingsModelsMessages, "saveSchedule")}
                   </button>
                 </div>
               </Row>
@@ -227,17 +236,20 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
         </SectionCard>
 
         <SectionCard
-          title="Limits"
+          title={t(settingsModelsMessages, "limits")}
+          helpId="limits"
+          summary={t(settingsModelsMessages, "limitsSummary")}
+          configureLabel={t(settingsModelsMessages, "configure")}
           watermark="CAP"
           badge={getBadge("memory")}
           icon={<Gauge strokeWidth={2.4} />}
           highlights={[
-            { label: "Sprint memories", value: `${editableSettings.memory.maxSprintMemories} max` },
-            { label: "Project memories", value: `${editableSettings.memory.maxProjectMemories} max`, tone: "active" },
-            { label: "Promotion score", value: editableSettings.memory.promotionThreshold },
+            { label: t(settingsModelsMessages, "sprintMemories"), value: t(settingsModelsMessages, "maximumValue", { count: formatNumber(editableSettings.memory.maxSprintMemories) }) },
+            { label: t(settingsModelsMessages, "projectMemories"), value: t(settingsModelsMessages, "maximumValue", { count: formatNumber(editableSettings.memory.maxProjectMemories) }), tone: "active" },
+            { label: t(settingsModelsMessages, "promotionScore"), value: formatNumber(editableSettings.memory.promotionThreshold, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) },
           ]}
         >
-          <Row label="Promotion threshold" description="Minimum score (0.0-1.0) for deterministic promotion. AI remediation may review lower-scored candidates before selecting durable memories." badge={getFieldBadge("memory.promotionThreshold")}>
+          <Row label={t(settingsModelsMessages, "promotionThreshold")} description={t(settingsModelsMessages, "promotionThresholdDescription")} badge={getFieldBadge("memory.promotionThreshold")}>
             <NumberInput
               value={editableSettings.memory.promotionThreshold}
               min={0}
@@ -250,7 +262,7 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
               }))}
             />
           </Row>
-          <Row label="Max sprint memories" description="Maximum number of memories retained per sprint. Lowest-strength memories are evicted when exceeded." badge={getFieldBadge("memory.maxSprintMemories")}>
+          <Row label={t(settingsModelsMessages, "maxSprintMemories")} description={t(settingsModelsMessages, "maxSprintMemoriesDescription")} badge={getFieldBadge("memory.maxSprintMemories")}>
             <NumberInput
               value={editableSettings.memory.maxSprintMemories}
               min={10}
@@ -263,7 +275,7 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
               }))}
             />
           </Row>
-          <Row label="Max project memories" description="Maximum number of long-term project-scoped memories. Oldest low-strength memories are evicted when exceeded." badge={getFieldBadge("memory.maxProjectMemories")}>
+          <Row label={t(settingsModelsMessages, "maxProjectMemories")} description={t(settingsModelsMessages, "maxProjectMemoriesDescription")} badge={getFieldBadge("memory.maxProjectMemories")}>
             <NumberInput
               value={editableSettings.memory.maxProjectMemories}
               min={10}
@@ -276,7 +288,7 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
               }))}
             />
           </Row>
-          <Row label="Map edges per node" description="Maximum number of similarity connections per memory node on the neural map. Lower values produce a cleaner graph, higher values reveal more relationships." badge={getFieldBadge("memory.mapMaxEdgesPerNode")}>
+          <Row label={t(settingsModelsMessages, "mapEdges")} description={t(settingsModelsMessages, "mapEdgesDescription")} badge={getFieldBadge("memory.mapMaxEdgesPerNode")}>
             <NumberInput
               value={editableSettings.memory.mapMaxEdgesPerNode}
               min={1}
@@ -289,7 +301,7 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
               }))}
             />
           </Row>
-          <Row label="Max remediation promotions" description="Upper bound for memories promoted during one post-sprint remediation run." badge={getFieldBadge("memory.remediationMaxPromotions")} last>
+          <Row label={t(settingsModelsMessages, "maxRemediationPromotions")} description={t(settingsModelsMessages, "maxRemediationPromotionsDescription")} badge={getFieldBadge("memory.remediationMaxPromotions")} last>
             <NumberInput
               value={editableSettings.memory.remediationMaxPromotions}
               min={1}
@@ -305,17 +317,20 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
         </SectionCard>
 
         <SectionCard
-          title="Embedding Provider"
+          title={t(settingsModelsMessages, "embeddingProvider")}
+          helpId="embedding-provider"
+          summary={t(settingsModelsMessages, "embeddingProviderSummary")}
+          configureLabel={t(settingsModelsMessages, "configure")}
           watermark="EMB"
           badge={getBadge("memory")}
           icon={<Brain strokeWidth={2.4} />}
           highlights={[
-            { label: "Backend", value: editableSettings.memory.embeddingProvider === "in_app" ? "Local model" : "External API", tone: "active" },
-            { label: "Model", value: editableSettings.memory.embeddingModel || "Catalog default" },
-            { label: "Privacy", value: editableSettings.memory.embeddingProvider === "in_app" ? "On device" : "External" },
+            { label: t(settingsModelsMessages, "backend"), value: editableSettings.memory.embeddingProvider === "in_app" ? t(settingsModelsMessages, "localModel") : t(settingsModelsMessages, "externalApi"), tone: "active" },
+            { label: t(settingsModelsMessages, "model"), value: editableSettings.memory.embeddingModel || t(settingsModelsMessages, "catalogDefault") },
+            { label: t(settingsModelsMessages, "privacy"), value: editableSettings.memory.embeddingProvider === "in_app" ? t(settingsModelsMessages, "onDevice") : t(settingsModelsMessages, "external") },
           ]}
         >
-          <Row label="Embedding backend" description="Use downloaded in-app ONNX models or an external OpenAI-compatible embeddings API." badge={getFieldBadge("memory.embeddingProvider")}>
+          <Row label={t(settingsModelsMessages, "embeddingBackend")} description={t(settingsModelsMessages, "embeddingBackendDescription")} badge={getFieldBadge("memory.embeddingProvider")}>
             <select
               value={editableSettings.memory.embeddingProvider}
               disabled={!editableSettings.memory.enabled}
@@ -328,13 +343,13 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
               }}
               className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 dark:border-white/10 dark:bg-void-900 dark:text-slate-100"
             >
-              <option value="in_app">In-app models</option>
-              <option value="external_api">External API</option>
+              <option value="in_app">{t(settingsModelsMessages, "inAppModels")}</option>
+              <option value="external_api">{t(settingsModelsMessages, "externalApi")}</option>
             </select>
           </Row>
           {editableSettings.memory.embeddingProvider === "external_api" && (
             <>
-              <Row label="Embedding API URL" description="OpenAI-compatible embeddings endpoint." badge={getFieldBadge("memory.externalEmbedding.baseUrl")}>
+              <Row label={t(settingsModelsMessages, "embeddingApiUrl")} description={t(settingsModelsMessages, "embeddingApiUrlDescription")} badge={getFieldBadge("memory.externalEmbedding.baseUrl")}>
                 <TextInput
                   value={editableSettings.memory.externalEmbedding.baseUrl}
                   disabled={!editableSettings.memory.enabled}
@@ -347,7 +362,7 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
                   }))}
                 />
               </Row>
-              <Row label="Embedding model" description="Model id sent to the external embeddings endpoint." badge={getFieldBadge("memory.externalEmbedding.model")}>
+              <Row label={t(settingsModelsMessages, "embeddingModel")} description={t(settingsModelsMessages, "embeddingModelDescription")} badge={getFieldBadge("memory.externalEmbedding.model")}>
                 <TextInput
                   value={editableSettings.memory.externalEmbedding.model}
                   disabled={!editableSettings.memory.enabled}
@@ -361,7 +376,7 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
                   }))}
                 />
               </Row>
-              <Row label="Embedding API key" description="Bearer token for the external embedding provider." badge={getFieldBadge("memory.externalEmbedding.apiKey")} last>
+              <Row label={t(settingsModelsMessages, "embeddingApiKey")} description={t(settingsModelsMessages, "embeddingApiKeyDescription")} badge={getFieldBadge("memory.externalEmbedding.apiKey")} last>
                 <SecretInput
                   value={editableSettings.memory.externalEmbedding.apiKey}
                   disabled={!editableSettings.memory.enabled}
@@ -372,7 +387,7 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
                       externalEmbedding: { ...current.memory.externalEmbedding, apiKey: value },
                     },
                   }))}
-                  aria-label="Embedding API key"
+                  aria-label={t(settingsModelsMessages, "embeddingApiKey")}
                   mono
                 />
               </Row>
@@ -381,24 +396,27 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
         </SectionCard>
 
         <SectionCard
-          title="Worker Learnings Instruction"
+          title={t(settingsModelsMessages, "workerLearnings")}
+          helpId="worker-learnings-instruction"
+          summary={t(settingsModelsMessages, "workerLearningsSummary")}
+          configureLabel={t(settingsModelsMessages, "configure")}
           watermark="LRN"
           badge={getBadge("memory")}
           icon={<BookOpen strokeWidth={2.4} />}
           highlights={[
-            { label: "Instruction", value: editableSettings.memory.workerLearningsInstruction.trim() ? "Customized" : "Empty", tone: editableSettings.memory.workerLearningsInstruction.trim() ? "active" : "warning" },
-            { label: "Length", value: `${editableSettings.memory.workerLearningsInstruction.length} chars` },
-            { label: "Used when", value: "Auto-capture" },
+            { label: t(settingsModelsMessages, "instruction"), value: editableSettings.memory.workerLearningsInstruction.trim() ? t(settingsModelsMessages, "customized") : t(settingsModelsMessages, "empty"), tone: editableSettings.memory.workerLearningsInstruction.trim() ? "active" : "warning" },
+            { label: t(settingsModelsMessages, "length"), value: tp(settingsModelsMessages, "characters", editableSettings.memory.workerLearningsInstruction.length, { count: formatNumber(editableSettings.memory.workerLearningsInstruction.length) }) },
+            { label: t(settingsModelsMessages, "usedWhen"), value: t(settingsModelsMessages, "autoCapture") },
           ]}
         >
           <div className="pt-2 pb-1">
             <div className="text-xs font-medium leading-relaxed text-slate-400 mb-3">
-              This instruction is appended to every worker task prompt when auto-capture is enabled. It tells the AI provider what to observe and record in a temporary learnings file that gets processed into sprint memories.
+              {t(settingsModelsMessages, "workerLearningsDescription")}
             </div>
             <TextAreaInput
               value={editableSettings.memory.workerLearningsInstruction}
               rows={16}
-              placeholder="Enter the instruction that tells workers what to capture..."
+              placeholder={t(settingsModelsMessages, "workerLearningsPlaceholder")}
               onChange={(value) => updateEditableSettings((current) => ({
                 ...current,
                 memory: { ...current.memory, workerLearningsInstruction: value },
@@ -407,8 +425,8 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
           </div>
         </SectionCard>
 
-        <NoticePanel title="Embedding models" tone="success">
-          Download and manage embedding models from Settings → AI Models. Once a model is active, new memories are automatically embedded for semantic search. The memory system works without a model — search falls back to text matching.
+        <NoticePanel title={t(settingsModelsMessages, "embeddingModels")} tone="success">
+          {t(settingsModelsMessages, "embeddingModelsDescription")}
         </NoticePanel>
       </div>
     );

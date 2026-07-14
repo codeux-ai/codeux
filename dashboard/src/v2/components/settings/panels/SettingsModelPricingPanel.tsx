@@ -14,8 +14,11 @@ import {
   MAX_VISIBLE_MODEL_PRICING_RESULTS,
   normalizeModelPricingOverrides,
 } from "../../../lib/settings-view-models.js";
+import { useDashboardI18n } from "../../../i18n/index.js";
+import { settingsModelsMessages } from "../../../i18n/messages/settings-models.js";
 
 export const SettingsModelPricingPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
+  const { locale, formatNumber, translate: t, translatePlural: tp } = useDashboardI18n();
   const { systemSettings, updateSystem } = state;
   const catalog = useModelCatalog();
   const [search, setSearch] = useState("");
@@ -25,8 +28,8 @@ export const SettingsModelPricingPanel: FunctionComponent<{ state: SettingsPageS
   const normalizedOverrides = useMemo(() => normalizeModelPricingOverrides(overrides), [overrides]);
   const overrideAliases = useMemo(() => getModelPricingOverrideAliases(overrides), [overrides]);
   const relevantRefs = useMemo(
-    () => getRelevantModelPricingRefs(systemSettings, catalog, normalizedOverrides),
-    [systemSettings, normalizedOverrides, catalog],
+    () => getRelevantModelPricingRefs(systemSettings, catalog, normalizedOverrides, locale),
+    [systemSettings, normalizedOverrides, catalog, locale],
   );
   const visibleEntries = useMemo(
     () => getVisibleModelPricingRefs(catalog, search, relevantRefs),
@@ -42,14 +45,17 @@ export const SettingsModelPricingPanel: FunctionComponent<{ state: SettingsPageS
   return (
     <div className="flex flex-col gap-5">
       <SectionCard
-        title="Model Pricing"
+        title={t(settingsModelsMessages, "modelPricing")}
+        helpId="model-pricing"
+        summary={t(settingsModelsMessages, "modelPricingSummary")}
+        configureLabel={t(settingsModelsMessages, "configure")}
         watermark="USD"
         icon={<Banknote strokeWidth={2.4} />}
         accent="purple"
         highlights={[
-          { label: "Models in use", value: relevantRefs.size, tone: "active" },
-          { label: "Overrides", value: Object.keys(normalizedOverrides).length },
-          { label: "Catalog", value: `${catalog.length} models` },
+          { label: t(settingsModelsMessages, "modelsInUse"), value: formatNumber(relevantRefs.size), tone: "active" },
+          { label: t(settingsModelsMessages, "overrides"), value: formatNumber(Object.keys(normalizedOverrides).length) },
+          { label: t(settingsModelsMessages, "catalog"), value: tp(settingsModelsMessages, "models", catalog.length, { count: formatNumber(catalog.length) }) },
         ]}
       >
         <div className="mb-4 flex items-center gap-2 rounded-xl border border-black/[0.06] bg-black/[0.02] px-3.5 py-2.5 dark:border-white/[0.06] dark:bg-white/[0.02]">
@@ -58,21 +64,21 @@ export const SettingsModelPricingPanel: FunctionComponent<{ state: SettingsPageS
             type="text"
             value={search}
             onInput={(e) => setSearch(e.currentTarget.value)}
-            placeholder="Search the catalogue by provider or model name…"
+            placeholder={t(settingsModelsMessages, "searchPricingPlaceholder")}
             className="w-full bg-transparent text-sm text-slate-700 placeholder-slate-400 outline-none dark:text-slate-200"
           />
         </div>
 
         <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
           {search.trim()
-            ? `Showing up to ${MAX_VISIBLE_MODEL_PRICING_RESULTS} matches from the catalogue.`
-            : "Showing models referenced by your configured providers and any existing overrides — including self-hosted/custom models with no catalogue price. Search to browse the full catalogue."}
+            ? t(settingsModelsMessages, "showingCatalogMatches", { count: formatNumber(MAX_VISIBLE_MODEL_PRICING_RESULTS) })
+            : t(settingsModelsMessages, "showingConfiguredModels")}
         </p>
 
         <div className="flex flex-col divide-y divide-black/[0.06] dark:divide-white/[0.06]">
           {visibleEntries.length === 0 ? (
             <div className="py-6 text-center text-xs font-medium text-slate-400">
-              {search.trim() ? "No matching models." : "No models in use yet. Search to browse the catalogue."}
+              {search.trim() ? t(settingsModelsMessages, "noMatchingModels") : t(settingsModelsMessages, "noModelsInUse")}
             </div>
           ) : visibleEntries.map((ref) => {
             const override = normalizedOverrides[ref.id];
@@ -90,13 +96,13 @@ export const SettingsModelPricingPanel: FunctionComponent<{ state: SettingsPageS
                     {ref.providerName} — {ref.modelName}
                     {!ref.catalogEntry ? (
                       <span className="ml-1.5 rounded-full border border-black/[0.06] bg-black/[0.02] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.02]">
-                        custom
+                        {t(settingsModelsMessages, "custom")}
                       </span>
                     ) : null}
                   </div>
                   <div className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
-                    {formatModelPrice(override ?? ref.catalogEntry?.cost)}
-                    {override ? <span className="ml-1.5 font-semibold text-signal-600 dark:text-signal-400">(override)</span> : null}
+                    {formatModelPrice(override ?? ref.catalogEntry?.cost, locale)}
+                    {override ? <span className="ml-1.5 font-semibold text-signal-600 dark:text-signal-400">{t(settingsModelsMessages, "overrideSuffix")}</span> : null}
                   </div>
                   {ref.usedBy.length > 0 ? (
                     <div className="mt-1 flex flex-wrap gap-1.5">
@@ -124,7 +130,7 @@ export const SettingsModelPricingPanel: FunctionComponent<{ state: SettingsPageS
                   className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.02] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-slate-600 hover:bg-black/[0.04] dark:border-white/[0.06] dark:text-slate-300 dark:hover:bg-white/[0.06]"
                 >
                   <Banknote className="h-3.5 w-3.5" />
-                  {override ? "Edit override" : "Set override"}
+                  {override ? t(settingsModelsMessages, "editOverride") : t(settingsModelsMessages, "setOverride")}
                 </button>
               </div>
             );

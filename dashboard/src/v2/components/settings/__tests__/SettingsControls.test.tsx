@@ -32,6 +32,7 @@ import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../lib/settings";
 import { dashboardSettingsToProjectSettings } from "../../../lib/settings-view-models";
 import type { ProjectSettings, SystemSettings, TechstackCatalogEntrySettings } from "../../../../types";
 import { SettingsSmartFindSearch } from "../../../SettingsPage";
+import { DashboardI18nProvider } from "../../../i18n";
 
 const defaultInnerHeight = window.innerHeight;
 const interactionStyle = { transitionDuration: "200ms", transitionTimingFunction: "ease" };
@@ -984,8 +985,8 @@ describe("SettingsControls Accessibility", () => {
     const Harness = () => {
       const [settings, setSettings] = useState(() => createProjectSettings());
       return (
-        <SettingsModelsPanel
-          state={{
+        <DashboardI18nProvider initialLocale="en" storage={null}>
+          <SettingsModelsPanel state={{
             activeScope: "project",
             editableSettings: settings,
             projectSources: {},
@@ -1011,8 +1012,8 @@ describe("SettingsControls Accessibility", () => {
               { value: "WORKER", label: "Worker defaults" },
             ],
             updateEditableSettings: (recipe: (current: ProjectSettings) => ProjectSettings) => setSettings(recipe),
-          } as any}
-        />
+          } as any} />
+        </DashboardI18nProvider>
       );
     };
 

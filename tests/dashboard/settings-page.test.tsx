@@ -13,6 +13,7 @@ import { DEFAULT_DASHBOARD_SETTINGS } from "../../src/repositories/settings-defa
 import * as matchers from '@testing-library/jest-dom/matchers';
 import type { SettingsPageState } from "../../dashboard/src/v2/hooks/use-settings-page-state.js";
 import type { ProjectSettings, SystemSettings } from "../../dashboard/src/types.js";
+import { DashboardI18nProvider } from "../../dashboard/src/v2/i18n/context.js";
 expect.extend(matchers);
 
 vi.mock("../../dashboard/src/v2/lib/project-api.js", () => ({
@@ -218,7 +219,7 @@ describe("ProjectSettingsEditor", () => {
       updateSystem: vi.fn(),
     } as unknown as SettingsPageState;
 
-    render(<SettingsModelsPanel state={state} />);
+    render(<DashboardI18nProvider initialLocale="en" storage={null}><SettingsModelsPanel state={state} /></DashboardI18nProvider>);
 
     fireEvent.click(screen.getByRole("button", { name: "Expand Codex Primary settings" }));
     const codexThinking = screen.getByRole("button", { name: "Codex Primary base thinking" });
@@ -284,7 +285,7 @@ describe("ProjectSettingsEditor", () => {
       updateSystem: vi.fn(),
     } as unknown as SettingsPageState;
 
-    render(<SettingsModelsPanel state={state} />);
+    render(<DashboardI18nProvider initialLocale="en" storage={null}><SettingsModelsPanel state={state} /></DashboardI18nProvider>);
 
     fireEvent.click(screen.getByRole("button", { name: "Expand Codex Primary overrides" }));
     const routeThinking = screen.getByRole("button", { name: "Codex Primary thinking override for Task coding" });

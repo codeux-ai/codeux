@@ -1,13 +1,20 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { cleanup, fireEvent, render as renderTestingLibrary, screen, waitFor, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import userEvent from "@testing-library/user-event";
 import { useState } from "preact/hooks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../dashboard/src/lib/settings.js";
 import { AIModelCatalogPanel } from "../../../dashboard/src/v2/components/settings/panels/AIModelCatalogPanel.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
+import type { DashboardLocale } from "../../../dashboard/src/v2/i18n/locales.js";
+import type { ComponentChildren } from "preact";
 
 expect.extend(matchers);
+
+const render = (ui: ComponentChildren, locale: DashboardLocale = "en") => renderTestingLibrary(
+  <DashboardI18nProvider initialLocale={locale} storage={null}>{ui}</DashboardI18nProvider>,
+);
 
 const speechApi = vi.hoisted(() => ({
   listSpeechModels: vi.fn(),
@@ -398,5 +405,56 @@ describe("AIModelCatalogPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: downloadName }));
     await userEvent.click(screen.getByRole("button", { name: "Accept & Download" }));
     await waitFor(() => expect(speechApi.downloadSpeechModel).toHaveBeenCalledWith("piper-de-de-mls-medium", "german-license"));
+  });
+
+  it("filters the German catalog while keeping API language metadata and download states distinct", async () => {
+    const Harness = () => {
+      const [settings, setSettings] = useState(DEFAULT_DASHBOARD_SETTINGS);
+      return <AIModelCatalogPanel state={{
+        editableSettings: settings,
+        selectedProject: null,
+        updateEditableSettings: (recipe: (current: typeof settings) => typeof settings) => setSettings((current) => recipe(current)),
+      } as any} />;
+    };
+    render(<Harness />, "de");
+
+    await userEvent.click(screen.getByRole("button", { name: "Sprache konfigurieren" }));
+    await userEvent.click(screen.getByRole("button", { name: "Sprache für Text zu Sprache" }));
+    await userEvent.click(screen.getByRole("option", { name: "German (Germany)" }));
+
+    expect(screen.getByText("Ausgewählt")).toBeInTheDocument();
+    expect(screen.getAllByText("Download erforderlich").length).toBeGreaterThan(0);
+    expect(screen.getByText("Ausgabe aus")).toBeInTheDocument();
+    expect(screen.getAllByText("German (Germany)").length).toBeGreaterThan(0);
+    expect(speechApi.downloadSpeechModel).not.toHaveBeenCalled();
+  });
+
+  it("preserves provider diagnostics when the catalog request fails", async () => {
+    speechApi.listSpeechModels.mockRejectedValueOnce(new Error("Provider network unavailable"));
+    render(<AIModelCatalogPanel state={{
+      editableSettings: DEFAULT_DASHBOARD_SETTINGS,
+      selectedProject: null,
+      updateEditableSettings: vi.fn(),
+    } as any} />, "de");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Provider network unavailable");
+  });
+
+  it("blocks downloads whose API license metadata fails validation", async () => {
+    const models = await speechApi.listSpeechModels();
+    speechApi.listSpeechModels.mockResolvedValue(models.map((model: any) => model.id === "piper-de-de-mls-medium"
+      ? { ...model, license: { ...model.license, commercialUseAllowed: false } }
+      : model));
+    render(<AIModelCatalogPanel state={{
+      editableSettings: DEFAULT_DASHBOARD_SETTINGS,
+      selectedProject: null,
+      updateEditableSettings: vi.fn(),
+    } as any} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Manage local models" }));
+    const card = (await screen.findByText("Piper German MLS Medium")).closest("article");
+    expect(card).not.toBeNull();
+    expect(within(card as HTMLElement).getByRole("button", { name: "Download Piper German MLS Medium" })).toBeDisabled();
+    expect(speechApi.downloadSpeechModel).not.toHaveBeenCalled();
   });
 });

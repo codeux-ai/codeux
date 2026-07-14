@@ -6,6 +6,8 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ModelBrowser } from "../ModelBrowser.js";
 import type { EmbeddingModelWithStatus, MemoryStats, ReembedProgress } from "../../../lib/memory-api.js";
+import { DashboardI18nProvider } from "../../../i18n/context.js";
+import type { DashboardLocale } from "../../../i18n/locales.js";
 
 const memoryApiMock = vi.hoisted(() => ({
   createCustomEmbeddingModel: vi.fn(),
@@ -52,7 +54,7 @@ const model = (overrides: Partial<EmbeddingModelWithStatus> = {}): EmbeddingMode
   ...overrides,
 });
 
-const renderBrowser = (overrides: Partial<Parameters<typeof ModelBrowser>[0]> = {}) => {
+const renderBrowser = (overrides: Partial<Parameters<typeof ModelBrowser>[0]> = {}, locale: DashboardLocale = "en") => {
   const props = {
     models: [
       model({ downloaded: false }),
@@ -78,7 +80,7 @@ const renderBrowser = (overrides: Partial<Parameters<typeof ModelBrowser>[0]> = 
     ...overrides,
   };
 
-  render(<ModelBrowser {...props} />);
+  render(<DashboardI18nProvider initialLocale={locale} storage={null}><ModelBrowser {...props} /></DashboardI18nProvider>);
   return props;
 };
 
@@ -208,6 +210,18 @@ describe("ModelBrowser", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Hugging Face repo or URL is required.");
     expect(memoryApiMock.createCustomEmbeddingModel).not.toHaveBeenCalled();
+  });
+
+  it("localizes German filters, validation, measurements, and metadata-safe results", async () => {
+    const user = userEvent.setup();
+    renderBrowser({ models: [model({ sizeBytes: 1_500_000_000, language: "German (Germany)" })] }, "de");
+
+    expect(screen.getByRole("region", { name: "Einbettungsmodelle" })).toHaveTextContent("1,5 GB");
+    expect(screen.getAllByText("German (Germany)")).toHaveLength(2);
+    expect(screen.getByLabelText("Installationsstatus")).toHaveValue("all");
+    await user.click(screen.getByRole("button", { name: "Eigenes Modell hinzufügen" }));
+    await user.click(screen.getByRole("button", { name: "Hinzufügen" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Ein Anzeigename ist erforderlich.");
   });
 
   it("submits a custom Hugging Face model and refreshes the model list", async () => {
