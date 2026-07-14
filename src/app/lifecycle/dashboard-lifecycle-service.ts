@@ -122,7 +122,7 @@ export interface BootDashboardDeps {
   projectInitializationStateService: ProjectInitializationStateService;
   projectRuntimeRepository: ProjectRuntimeRepository;
   executionRepository: ExecutionRepository;
-  getDashboardNotifications?: () => ReturnType<ExecutionRepository["getDashboardNotifications"]>;
+  getDashboardNotifications?: (limit?: number) => ReturnType<ExecutionRepository["getDashboardNotifications"]>;
   connectionChatRepository: ConnectionChatRepository;
   chatProviderRepository: ChatProviderRepository;
   projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
@@ -558,7 +558,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     },
     getOverviewTelemetrySnapshot: cache.getOverviewTelemetrySnapshot,
     getDashboardNotifications: deps.getDashboardNotifications
-      ?? (() => deps.executionRepository.getDashboardNotifications()),
+      ?? ((limit) => deps.executionRepository.getDashboardNotifications({ limit })),
     // `/api/projects/:id/execution` is the public REST snapshot and includes
     // recent events/invocations; realtime execution pushes stay feed-less above.
     getProjectExecutionSnapshot: cache.getProjectExecutionSnapshot,
@@ -753,6 +753,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     importSprintFromMarkdown: (projectId, input) => deps.sprintMarkdownService.importSprint(projectId, input),
     exportSprintToMarkdown: (projectId, sprintId) => deps.sprintMarkdownService.exportSprint(projectId, sprintId),
     listTasks: (projectId, sprintId) => deps.projectManagementRepository.listTasks(projectId, sprintId),
+    listTaskOverviews: (projectId) => deps.projectManagementRepository.listTaskOverviews(projectId),
     getTask: (taskId) => deps.projectManagementRepository.getTask(taskId),
     createTask: (projectId, input) => deps.projectManagementRepository.createTask(projectId, input),
     createImportedTasks: (projectId, sprintId, inputs) => {

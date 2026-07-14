@@ -175,7 +175,7 @@ export type DashboardDependencies = Omit<
   getLocalMcpSetup: () => LocalMcpSetupInfo;
   regenerateLocalMcpAuthToken: () => LocalMcpSetupInfo;
   installLocalMcpProvider: (provider: LocalMcpCliProvider) => Promise<LocalMcpInstallResult> | LocalMcpInstallResult;
-  getDashboardNotifications: () => DashboardNotificationFeed;
+  getDashboardNotifications: (limit?: number) => DashboardNotificationFeed;
 };
 
 export interface DashboardServerOptions {
@@ -241,7 +241,7 @@ export interface DashboardServerOptions {
     input?: { status?: "resolved" | "dismissed"; reason?: string; resolutionSummaryMarkdown?: string },
   ) => ExecutionAttentionItemSummary;
   getOverviewTelemetrySnapshot: () => OverviewTelemetrySnapshot;
-  getDashboardNotifications?: () => DashboardNotificationFeed;
+  getDashboardNotifications?: (limit?: number) => DashboardNotificationFeed;
   getLiveActivities: () => Promise<Record<string, JulesActivity[]>>;
   getGitStatus: () => Promise<GitTrackingStatus>;
   getExternalSettingsHints: () => ExternalSettingsHints;
@@ -283,6 +283,7 @@ export interface DashboardServerOptions {
   importSprintFromMarkdown: (projectId: string, input: SprintMarkdownImportInput) => SprintRecord;
   exportSprintToMarkdown: (projectId: string, sprintId: string) => SprintMarkdownExportBundle;
   listTasks: (projectId: string, sprintId?: string) => TaskRecord[];
+  listTaskOverviews?: (projectId: string) => TaskRecord[];
   getTask: (taskId: string) => TaskRecord | null;
   createTask: (projectId: string, input: CreateTaskInput) => TaskRecord;
   createImportedTasks?: (projectId: string, sprintId: string, inputs: SprintImportedTaskInput[]) => TaskRecord[];

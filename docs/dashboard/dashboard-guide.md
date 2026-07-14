@@ -165,7 +165,7 @@ Legacy runtime:
 - `GET /api/telemetry/overview`
   - Cross-project overview telemetry snapshot for all currently active project runs
 - `GET /api/stats/header-throughput?projectId=<projectId>&window=20s|1h|24h|7d|30d|all`
-  - Compact app-wide token throughput for the top dashboard header. The header polls the `20s` live activity window once per second and shows the active-duration token rate for invocations updated in that window; detailed charts, ledgers, and model/provider analysis remain on the Stats page.
+  - Compact app-wide token throughput for the top dashboard header. The header listens for realtime invalidation and uses a five-second fallback poll for the `20s` live activity window; detailed charts, ledgers, and model/provider analysis remain on the Stats page.
 - `GET /api/live`
   - Unified Live runtime snapshot for the selected project, scoped to the selected sprint when the top-nav sprint selector has a persisted sprint
 - `PUT /api/projects/:projectId/preferred-worker`
@@ -321,7 +321,7 @@ Legacy runtime:
 - Critical notifications are rendered ahead of non-critical items so scroll overflow cannot push blocking startup issues behind lower-priority messages. They remain visible until the notification source clears or the user explicitly dismisses a dismissible critical item.
 - Action and dismiss clicks return focus to the notification panel after the row state changes, giving keyboard users a stable fallback when an item leaves the list.
 - Active agent-created task runs and wakeups are projected into the existing notification pipeline with stable IDs based on scheduler entry IDs. Read and dismissed state therefore survives notification refreshes while the entry remains scheduled.
-- Execution interventions and failures come from the global `GET /api/notifications` projection, so records from non-selected projects remain visible. Each record carries project/sprint/task context, structured detail fields, and a direct task, Live, sprint, or project target; timestamp-versioned local identity preserves read/dismiss state until the source record is updated.
+- Execution interventions and failures come from the newest 20 records in the global `GET /api/notifications?limit=20` projection, so recent records from non-selected projects remain visible without hydrating an unbounded feed. Each record carries project/sprint/task context, structured detail fields, and a direct task, Live, sprint, or project target; timestamp-versioned local identity preserves read/dismiss state until the source record is updated. Realtime notification refreshes do not rerun startup readiness probes.
 - Actionable intervention, execution-failure, automatic-stop, and system-error rows expose a Details dialog with the sanitized reason, recovery guidance, timestamp, and source context. Opening details or a supplied direct target marks the item read, and the shared modal focus trap restores focus to the originating Details control when it closes.
 - After the global notification feed completes its initial hydration, newly arrived or timestamp-updated actionable records produce one contextual navbar toast. Stable source identity plus `updatedAt` suppresses duplicates across unchanged refreshes and reconnects; system errors use persistent assertive error toasts, while other attention uses polite warning feedback.
 
@@ -989,9 +989,9 @@ The login modal renders ANSI cursor/erase behavior while removing non-display OS
 - Task cards use button semantics and ARIA expansion state for title/details/log toggles.
 - The v2 frontend is organized into page-scoped module boundaries (overview, sprints, tasks, stats, live), exclusively loading resources they need.
 - The Sprints page uses a data/action/view-model split: `useSprintsPageData` coordinates state, `useSprintsPageActions` manages side effects and API calls, `useSprintsPageModals` manages transient UI state, and deterministic derived state is extracted into pure view-model helpers (`sprints-page-view-models.ts`).
-- A shared dashboard resource layer manages resource keys, caching, and invalidation, deduplicating fetches and avoiding UI flashing during background updates.
+- A shared dashboard resource layer manages resource keys, caching, and invalidation, deduplicating fetches and avoiding UI flashing during background updates. Overview and header task counts share an active-sprint-only `tasks?view=overview` projection, and the telemetry rail reuses the page execution snapshot instead of issuing a second live request.
 - Heavy stats ledger views use a progressive list strategy (`useProgressiveList`) with an intersection observer to render items in batches and prevent main-thread blocking. The sprint ledger keeps full sprint data in memory for accurate filtering, sorting, selection, and task totals, then limits visible rows through its `Show` selector.
-- Backend read-model optimizations efficiently project data to support the resource layer while leaving API routes and backend contracts entirely unchanged.
+- Backend read-model optimizations efficiently project data to support the resource layer. Full task routes retain their existing records; the explicit Overview view omits large fields and joins that the landing page does not render.
 - Extensionless dashboard routes like `/sprints` are served by the SPA app shell on direct load or refresh. This routing behavior remains consistent even when Code UX itself is running inside a preview container.
 
 - A "Live Preview" CTA link appears in the Live view header when the relevant sprint has an active (`running`) preview session with a resolved primary `hostPort`. The main action opens the primary preview origin at the `lastKnownPath`; sessions with multiple configured port mappings add a compact adjacent port picker whose routed options open the selected `previewPort` URL and whose pending mappings remain visibly disabled with their routing reason.

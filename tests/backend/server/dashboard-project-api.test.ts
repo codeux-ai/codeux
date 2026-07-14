@@ -222,7 +222,7 @@ async function createServerHandle(): Promise<{
         };
     },
     getOverviewTelemetrySnapshot: () => executionRepository.getOverviewTelemetrySnapshot(),
-    getDashboardNotifications: () => executionRepository.getDashboardNotifications(),
+    getDashboardNotifications: (limit) => executionRepository.getDashboardNotifications({ limit }),
     getProjectExecutionSnapshot: (projectId) => ({
       ...executionRepository.getProjectExecutionSnapshot(projectId),
       connections: mapExecutionConnections(connectionRepository.listConnections(projectId)),
@@ -344,6 +344,7 @@ async function createServerHandle(): Promise<{
     importSprintFromMarkdown: (projectId, input) => markdownService.importSprint(projectId, input),
     exportSprintToMarkdown: (projectId, sprintId) => markdownService.exportSprint(projectId, sprintId),
     listTasks: (projectId, sprintId) => repository.listTasks(projectId, sprintId),
+    listTaskOverviews: (projectId) => repository.listTaskOverviews(projectId),
     getTask: (taskId) => repository.getTask(taskId),
     createTask: (projectId, input) => repository.createTask(projectId, input),
     updateTask: (taskId, input) => repository.updateTask(taskId, input),
@@ -774,6 +775,40 @@ describe("dashboard project management API", () => {
       lastRunAt: "2026-03-12T10:11:12.000Z",
       lastRunStatus: "in_progress",
     });
+  });
+
+  it("returns a compact task projection for the dashboard overview", async () => {
+    const { fetch, repository } = await createServerHandle();
+    const project = repository.createProject({
+      name: "Overview Projection Project",
+      sourceType: "local",
+      sourceRef: "/tmp/overview-projection",
+    });
+    const sprint = repository.createSprint(project.id, { name: "Overview Sprint", status: "running" });
+    const dependency = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Dependency",
+      promptMarkdown: "Large dependency instructions",
+    });
+    const task = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Projected task",
+      promptMarkdown: "Large task instructions that are not rendered on overview",
+      description: "Detailed implementation notes",
+      dependsOnTaskIds: [dependency.id],
+    });
+
+    const response = await fetch(`http://127.0.0.1/api/projects/${project.id}/tasks?view=overview`);
+    expect(response.status).toBe(200);
+    const tasks = await response.json() as Array<Record<string, unknown>>;
+
+    expect(tasks.find((entry) => entry.id === task.id)).toMatchObject({
+      title: "Projected task",
+      promptMarkdown: "",
+      description: "",
+      dependsOnTaskIds: [dependency.id],
+    });
+    expect(JSON.stringify(tasks)).not.toContain("Large task instructions");
   });
 
   it("serializes latest task self-reflection ratings in GET /api/projects/:projectId/tasks", async () => {

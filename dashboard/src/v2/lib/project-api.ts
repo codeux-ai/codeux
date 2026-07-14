@@ -478,10 +478,13 @@ export const exportSprintMarkdown = async (
   );
 };
 
-export const fetchTasks = async (projectId: string, sprintId?: string): Promise<TaskRecord[]> => {
+export const fetchTasks = async (projectId: string, sprintId?: string, view?: "overview"): Promise<TaskRecord[]> => {
   const url = new URL(`/api/projects/${encodeURIComponent(projectId)}/tasks`, window.location.origin);
   if (sprintId) {
     url.searchParams.set("sprintId", sprintId);
+  }
+  if (view) {
+    url.searchParams.set("view", view);
   }
   return fetchJson<TaskRecord[]>(`${url.pathname}${url.search}`);
 };

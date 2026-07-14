@@ -69,7 +69,7 @@ Notification panel and toast transitions honor reduced motion: reveal and reorde
 
 ## Overview telemetry
 
-The Overview telemetry rail combines cross-project runtime health with selected-project detail. The read-only `GET /api/notifications` feed refreshes with the existing `overview.telemetry.updated` realtime event.
+The Overview telemetry rail combines cross-project runtime health with selected-project detail. The read-only `GET /api/notifications?limit=20` feed refreshes with the existing `overview.telemetry.updated` realtime event without repeating startup readiness checks.
 
 - Cross-project intervention cards still show active projects that need human attention.
 - Active sprint cards and the runtime timeline continue to summarize work across active projects.
@@ -78,6 +78,14 @@ The Overview telemetry rail combines cross-project runtime health with selected-
 The Overview queue follows the same selected sprint scope as the Live page. If a sprint is selected in the top navigation, the queue shows only the active attention items returned by the selected-sprint live snapshot; unrelated sprint blockers are not reconstructed in the browser. Overview renders the queue read-only, so claim, resolve, and dismiss actions remain on the Live page.
 
 Overview active-stream task rows use the shared bright delivery workflow badge instead of a standalone QA badge. Open it to inspect Coding → Pull request → QA → CI → Merge → Completion. When a review exists, the animated chevron reveals the adjacent QA review card; requested edits stay blue, and reduced motion keeps every state visible while stopping connector and chevron animation.
+
+## Loading behavior
+
+Overview requests a compact active-sprint task feed instead of downloading historical task prompts, reviews, ratings, and CI evidence. The top-bar counters share that request, and the telemetry rail reuses the page's execution snapshot instead of issuing a duplicate Live request. Full task details still load when a workflow needs them, including the Tasks page and an opened global search.
+
+The wide seven-day analytics snapshot refreshes every 30 seconds on Overview rather than on each execution heartbeat. The dedicated Stats page remains realtime for operators actively inspecting telemetry.
+
+Creation dialogs, onboarding, the guided tour, and animated backgrounds load outside the first-content path. This keeps the shell interactive while those optional experiences prepare in the background.
 
 ## Real-time data
 

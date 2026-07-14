@@ -434,6 +434,7 @@ describe("ProjectManagementRepository", () => {
     const projects = repository.listProjects().projects;
     const sprints = repository.listSprints(project.id).sprints;
     const tasks = repository.listTasks(project.id, sprint.id);
+    const taskOverviews = repository.listTaskOverviews(project.id);
 
     expect(projects).toHaveLength(1);
     expect(projects[0]).toMatchObject({
@@ -462,6 +463,15 @@ describe("ProjectManagementRepository", () => {
       executorType: "mcp_worker",
       status: "in_progress",
     });
+    expect(taskOverviews[1]).toMatchObject({
+      taskKey: "T02",
+      promptMarkdown: "",
+      description: "",
+      dependsOnTaskIds: [taskA.id],
+      executorType: "mcp_worker",
+      status: "in_progress",
+    });
+    expect(tasks[1]?.promptMarkdown).toBe("Replace mocks");
   });
 
   it("creates imported special tasks with source metadata and prompt sections", async () => {
