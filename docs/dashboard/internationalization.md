@@ -39,7 +39,9 @@ The dependency-free runtime lives in `dashboard/src/v2/i18n/`:
 
 `initializeDashboardLocale` restores the preference and synchronizes the document language before the application root renders. `DashboardI18nProvider` then owns the active locale. Its `setLocale` method updates context, the document language, browser storage, and the dashboard locale-change event in one operation.
 
-The root application catalog contains only eager shell copy. Route and feature catalogs stay with their owners and are imported from the same modules as their consumers. Because dashboard routes use Preact `lazy()`, a route-specific catalog loads with that route instead of becoming part of one eager application-wide bundle.
+The root application catalog contains only shell copy, and route or feature catalogs stay with their owners. Dedicated route components declared with Preact `lazy(() => import(...))` load their feature catalogs on demand with the same route chunk instead of contributing those catalogs to the eager application graph.
+
+This does not apply to every routed or conditional surface. `main.tsx` eagerly imports the Overview route component (`DashboardV2`), the Live route component (`LiveSessionPage`), and the onboarding surface (`OnboardingExperience`). Their `overview`, `live`, and `onboarding` catalogs are therefore eagerly imported too, although those surfaces can still lazy-load heavier child components such as Overview telemetry, the Live DAG and boat-race views, or onboarding backgrounds. Treat feature ownership and loading strategy as separate concerns, and verify the entrypoint import before describing a catalog as on-demand.
 
 Pure presentation helpers accept an explicit locale and normally default to English for compatibility. Mounted components read the active provider locale. Optional hooks may supply the English compatibility context only when no root provider exists; they never override an active locale.
 

@@ -31,7 +31,9 @@ The internal Docs viewer localizes its own controls, navigation, search, paginat
 
 ## Implementation model for contributors
 
-The dependency-free runtime under `dashboard/src/v2/i18n/` uses a closed locale type, safe browser-local persistence, a root Preact provider, and native `Intl` formatters. Typed, feature-owned message bundles require matching English and German keys. Lazy-loaded routes import their catalogs with their feature, keeping route copy out of the eager shell bundle.
+The dependency-free runtime under `dashboard/src/v2/i18n/` uses a closed locale type, safe browser-local persistence, a root Preact provider, and native `Intl` formatters. Typed, feature-owned message bundles require matching English and German keys. Dedicated route components declared with Preact `lazy(() => import(...))` load their catalogs on demand with their route chunks.
+
+Overview (`DashboardV2`), Live (`LiveSessionPage`), and onboarding (`OnboardingExperience`) are explicit exceptions: `main.tsx` imports those surfaces eagerly, so their `overview`, `live`, and `onboarding` catalogs are part of the eager application graph. Some heavier child components inside those surfaces remain lazy-loaded. Catalog ownership therefore does not by itself determine whether a bundle is eager or on-demand.
 
 Interpolation replaces named `{variable}` tokens as literal text; it does not evaluate values or insert HTML. Plural messages require an `other` form and select a form from the raw count with `Intl.PluralRules`; the displayed count uses locale-aware number formatting.
 
