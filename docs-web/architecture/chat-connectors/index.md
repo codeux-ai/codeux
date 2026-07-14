@@ -4,7 +4,7 @@ Code UX registers one typed, independently editable profile for each external ch
 
 The registry is static and side-effect free. Network requests and native command execution remain in service-layer facades. Lookup fails closed when a provider or provider/mode combination is not registered.
 
-The additive `official_api` mode is implemented by WhatsApp, Telegram, Slack, Microsoft Teams, and Discord without changing the persisted meaning of `managed_bridge`, `webhook`, or `native_bridge`. Profiles advertise only implemented modes.
+The additive `official_api` mode is available to future profiles without changing the persisted meaning of `managed_bridge`, `webhook`, or `native_bridge`. Baseline profiles advertise only implemented modes.
 
 ## Provider Profiles
 

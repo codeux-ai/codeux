@@ -17,6 +17,8 @@ import {
   type ChatProviderOutboundBridgePayload,
 } from "./chat-provider-adapters.js";
 import { stripDashboardOnlyWidgets } from "./chat-reply-prompt.js";
+import type { ChatProviderSecretService } from "./chat-provider-secret-service.js";
+import { randomUUID } from "node:crypto";
 
 export interface DeliverChatProviderReplyInput {
   projectId: string;
@@ -27,6 +29,7 @@ export interface DeliverChatProviderReplyInput {
 
 interface ChatProviderOutboundServiceDependencies {
   chatProviderRepository: ChatProviderRepository;
+  chatProviderSecretService?: ChatProviderSecretService;
   adapter?: ChatProviderOutboundAdapter;
   logger?: Logger;
   pollIntervalMs?: number;
@@ -43,6 +46,7 @@ interface RetryMetadata {
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
 const DEFAULT_INITIAL_BACKOFF_MS = 30_000;
 const DEFAULT_MAX_ATTEMPTS = 3;
+const DEFAULT_LEASE_DURATION_MS = 60_000;
 
 export class ChatProviderOutboundService {
   private readonly adapter: ChatProviderOutboundAdapter;
@@ -52,6 +56,7 @@ export class ChatProviderOutboundService {
   private readonly now: () => Date;
   private timer: NodeJS.Timeout | null = null;
   private retryProcessingPromise: Promise<ChatProviderMessageDeliveryRecord[]> | null = null;
+  private readonly leaseOwner = `chat-provider-outbound:${randomUUID()}`;
 
   constructor(private readonly deps: ChatProviderOutboundServiceDependencies) {
     this.adapter = deps.adapter ?? createDefaultChatProviderOutboundAdapter();
@@ -114,6 +119,7 @@ export class ChatProviderOutboundService {
       status: "pending",
       attemptCount: 0,
       lastError: null,
+      nextAttemptAt: null,
       payload: {
         ...payload,
         delivery: {
@@ -149,27 +155,32 @@ export class ChatProviderOutboundService {
   }
 
   private async processDueRetriesOnce(limit: number): Promise<ChatProviderMessageDeliveryRecord[]> {
-    const now = this.now().toISOString();
-    const due = this.deps.chatProviderRepository.listPendingOutboundDeliveries(limit)
-      .filter((delivery) => delivery.status !== "retryable_failure" || getNextAttemptAt(delivery) <= now);
+    const due = this.deps.chatProviderRepository.claimOutboundDeliveries({
+      leaseOwner: this.leaseOwner,
+      leaseDurationMs: DEFAULT_LEASE_DURATION_MS,
+      limit,
+      now: this.now(),
+    });
     const results: ChatProviderMessageDeliveryRecord[] = [];
     for (const delivery of due) {
-      results.push(await this.attemptDelivery(delivery.id));
+      results.push(await this.attemptDelivery(delivery.id, this.leaseOwner));
     }
     return results;
   }
 
-  async attemptDelivery(deliveryId: string): Promise<ChatProviderMessageDeliveryRecord> {
+  async attemptDelivery(deliveryId: string, leaseOwner?: string): Promise<ChatProviderMessageDeliveryRecord> {
     const delivery = requireDelivery(this.deps.chatProviderRepository.getDelivery(deliveryId), deliveryId);
-    const connection = this.deps.chatProviderRepository.getConnectionInternal(delivery.providerConnectionId);
+    const connection = this.deps.chatProviderSecretService
+      ? await this.deps.chatProviderSecretService.resolveConnection(delivery.providerConnectionId).catch(() => null)
+      : this.deps.chatProviderRepository.getConnectionInternal(delivery.providerConnectionId);
     if (!connection || !connection.enabled || connection.status === "disabled") {
-      return this.markTerminalFailure(delivery, "Chat provider connection is disabled or missing.", getPayload(delivery));
+      return this.markTerminalFailure(delivery, "Chat provider connection is disabled or missing.", getPayload(delivery), leaseOwner);
     }
     const binding = delivery.channelBindingId
       ? this.deps.chatProviderRepository.getChannelBinding(delivery.channelBindingId)
       : null;
     if (!binding || !binding.enabled || !binding.outboundEnabled) {
-      return this.markTerminalFailure(delivery, "Outbound channel binding is disabled or missing.", getPayload(delivery));
+      return this.markTerminalFailure(delivery, "Outbound channel binding is disabled or missing.", getPayload(delivery), leaseOwner);
     }
     const payload = normalizePayload(delivery, binding);
     const attemptCount = delivery.attemptCount + 1;
@@ -191,6 +202,7 @@ export class ChatProviderOutboundService {
       status: "sending",
       attemptCount,
       lastError: null,
+      nextAttemptAt: null,
       payload: withDeliveryState(payload, {
         retryable: false,
         nextAttemptAt: null,
@@ -205,10 +217,11 @@ export class ChatProviderOutboundService {
         payload,
         correlationId,
       });
-      const delivered = this.deps.chatProviderRepository.updateDeliveryState(delivery.id, {
+      const completion = {
         status: "delivered",
         externalMessageId: result.externalMessageId ?? delivery.externalMessageId ?? null,
         lastError: null,
+        nextAttemptAt: null,
         payload: {
           ...payload,
           bridgeResponse: result.responseMetadata ?? null,
@@ -218,7 +231,10 @@ export class ChatProviderOutboundService {
             nextAttemptAt: null,
           },
         },
-      });
+      } as const;
+      const delivered = leaseOwner
+        ? this.deps.chatProviderRepository.completeOutboundDelivery(delivery.id, leaseOwner, completion)
+        : this.deps.chatProviderRepository.updateDeliveryState(delivery.id, completion);
       this.log("info", "Delivered chat provider outbound reply", {
         correlationId,
         providerConnectionId: connection.id,
@@ -236,12 +252,16 @@ export class ChatProviderOutboundService {
       const nextAttemptAt = retryable
         ? this.computeNextAttemptAt(attemptCount, adapterError.retryAfterMs).toISOString()
         : null;
-      const failed = this.deps.chatProviderRepository.updateDeliveryState(delivery.id, {
+      const completion = {
         status: retryable ? "retryable_failure" : "failed",
         attemptCount,
         lastError: adapterError.message,
+        nextAttemptAt,
         payload: withDeliveryState(payload, { retryable, nextAttemptAt }, retryable ? "retryable_failure" : "failed"),
-      });
+      } as const;
+      const failed = leaseOwner
+        ? this.deps.chatProviderRepository.completeOutboundDelivery(delivery.id, leaseOwner, completion)
+        : this.deps.chatProviderRepository.updateDeliveryState(delivery.id, completion);
       this.log(retryable ? "warn" : "error", retryable
         ? "Chat provider outbound delivery failed and will retry"
         : "Chat provider outbound delivery failed permanently", {
@@ -286,12 +306,17 @@ export class ChatProviderOutboundService {
     delivery: ChatProviderMessageDeliveryRecord,
     message: string,
     payload: ChatProviderOutboundBridgePayload,
+    leaseOwner?: string,
   ): ChatProviderMessageDeliveryRecord {
-    const failed = this.deps.chatProviderRepository.updateDeliveryState(delivery.id, {
+    const completion = {
       status: "failed",
       lastError: redactText(message),
+      nextAttemptAt: null,
       payload: withDeliveryState(payload, { retryable: false, nextAttemptAt: null }, "failed"),
-    });
+    } as const;
+    const failed = leaseOwner
+      ? this.deps.chatProviderRepository.completeOutboundDelivery(delivery.id, leaseOwner, completion)
+      : this.deps.chatProviderRepository.updateDeliveryState(delivery.id, completion);
     this.log("error", "Chat provider outbound delivery could not be attempted", {
       providerConnectionId: delivery.providerConnectionId,
       providerKind: delivery.providerKind,
@@ -373,14 +398,4 @@ function withDeliveryState(
       nextAttemptAt: retry.nextAttemptAt,
     },
   };
-}
-
-function getNextAttemptAt(delivery: ChatProviderMessageDeliveryRecord): string {
-  const nextAttemptAt = delivery.payload?.delivery
-    && typeof delivery.payload.delivery === "object"
-    && !Array.isArray(delivery.payload.delivery)
-    && typeof (delivery.payload.delivery as Record<string, unknown>).nextAttemptAt === "string"
-    ? (delivery.payload.delivery as Record<string, unknown>).nextAttemptAt as string
-    : "";
-  return nextAttemptAt || "0000-01-01T00:00:00.000Z";
 }

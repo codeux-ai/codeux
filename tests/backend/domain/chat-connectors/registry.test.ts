@@ -80,19 +80,12 @@ describe("chat connector registry", () => {
         modes: [
           { mode: "managed_bridge", integration: "managed_plugin", setup: ["pluginName", "tenantId"], secrets: ["bridgeApiKey"] },
           { mode: "webhook", integration: "webhook", setup: ["botEndpointUrl", "tenantId"], secrets: ["botAppPassword", "webhookSecret"] },
-          { mode: "official_api", integration: "official_api", setup: ["microsoftAppId", "applicationType", "tenantId"], secrets: ["clientSecret"] },
         ],
       },
       discord: {
         defaultMode: "webhook",
         modes: [
           { mode: "webhook", integration: "bot_gateway", setup: ["gatewayUrl", "applicationId"], secrets: ["botToken", "webhookSecret"] },
-          {
-            mode: "official_api",
-            integration: "official_api",
-            setup: ["applicationId", "publicKey", "intents"],
-            secrets: ["botToken"],
-          },
         ],
       },
     });
@@ -110,11 +103,7 @@ describe("chat connector registry", () => {
     expect(getChatConnectorProfileForMode("telegram", "official_api").kind).toBe("telegram");
     expect(getChatConnectorProfileForMode("whatsapp", "official_api").kind).toBe("whatsapp");
     expect(getChatConnectorProfileForMode("slack", "official_api").kind).toBe("slack");
-    expect(getChatConnectorProfileForMode("discord", "official_api").kind).toBe("discord");
-    expect(getChatConnectorProfileForMode("microsoft-teams", "official_api").kind).toBe("microsoft-teams");
-    for (const kind of CHAT_CONNECTOR_KINDS.filter(
-      (candidate) => !["telegram", "whatsapp", "slack", "discord", "microsoft-teams"].includes(candidate),
-    )) {
+    for (const kind of CHAT_CONNECTOR_KINDS.filter((candidate) => !["telegram", "whatsapp", "slack"].includes(candidate))) {
       expect(() => getChatConnectorProfileForMode(kind, "official_api" as ChatProviderBridgeMode)).toThrow(
         `Unsupported bridge mode for ${kind}: official_api`,
       );

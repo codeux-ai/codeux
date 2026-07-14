@@ -25,6 +25,8 @@ Authorization is rechecked after decryption. Concurrent revocation, rotation, re
 
 The SQLite secret store uses AES-256-GCM envelope encryption with a unique data key, payload nonce, and key-wrapping nonce for every write. Credential ownership and workspace context are authenticated. SQLite stores ciphertext, authentication tags, wrapped keys, nonces, and key identifiers/versions—not root keys.
 
+Chat connector credentials use the same key-provider and envelope-encryption boundary in `chat_provider_connection_secrets`. Dashboard and MCP writes seal before a single secret-version CAS transaction commits connection metadata and creates, replaces, or clears the envelope; provider profiles receive decrypted values only for the active ingress or outbound operation, and public/repository reads expose configured field names with redacted values. Startup performs an idempotent post-readiness migration of legacy `secret_json` rows one connection at a time; a failed seal leaves that row unchanged and a later startup safely resumes it.
+
 Headless mode requires `CODE_UX_CREDENTIAL_KEY_FILE` to point to a regular, owner-only mounted file containing an exact base64 or hexadecimal encoding of a 32-byte key. Electron serializes first-use key creation and atomically persists only the OS-protected blob. Vault and KMS adapters validate key material and report the active key id/version. If secure key material is unavailable, credential operations fail closed; there is no plaintext fallback.
 
 ## Recovery and rotation

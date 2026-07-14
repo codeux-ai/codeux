@@ -8,6 +8,8 @@ import { ChatProviderRepository } from "../../../src/repositories/chat-provider-
 import { ConnectionChatRepository } from "../../../src/repositories/connection-chat-repository.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import type { ManagementResponseEnvelope } from "../../../src/contracts/internal-management-types.js";
+import { createChatProviderSecretFixture } from "../helpers/chat-provider-secret-fixture.js";
+import type { ChatProviderSecretService } from "../../../src/services/chat-provider-secret-service.js";
 
 const tempDirs: string[] = [];
 const openStorages: AppDbStorage[] = [];
@@ -18,18 +20,21 @@ async function createHarness(): Promise<{
   providerRepository: ChatProviderRepository;
   conversationRepository: ConnectionChatRepository;
   actions: ChatProviderActions;
+  secretService: ChatProviderSecretService;
 }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-mcp-chat-providers-"));
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   openStorages.push(storage);
   const providerRepository = new ChatProviderRepository(storage);
+  const secretService = createChatProviderSecretFixture(providerRepository);
   return {
     storage,
     projectRepository: new ProjectManagementRepository(storage),
     providerRepository,
     conversationRepository: new ConnectionChatRepository(storage),
-    actions: new ChatProviderActions(providerRepository),
+    actions: new ChatProviderActions(providerRepository, secretService),
+    secretService,
   };
 }
 
@@ -77,7 +82,7 @@ describe("ChatProviderActions", () => {
   });
 
   it("creates, lists, gets, and updates redacted provider connections", async () => {
-    const { actions, providerRepository } = await createHarness();
+    const { actions, secretService } = await createHarness();
 
     const createdResult = expectResult(await actions.handleChatProviderAction({
       domain: "chat_providers",
@@ -112,7 +117,7 @@ describe("ChatProviderActions", () => {
     expect(JSON.stringify(createdResult)).not.toContain("must-not-be-saved-in-setup");
     expect(connection).not.toHaveProperty("secrets");
     expect(connection).toHaveProperty("credentials");
-    expect(providerRepository.getConnectionInternal(connection.id as string)?.secrets).toEqual({
+    expect((await secretService.resolveConnection(connection.id as string)).secrets).toEqual({
       botToken: "telegram-secret-value",
     });
 
@@ -146,7 +151,7 @@ describe("ChatProviderActions", () => {
       enabled: false,
       setup: { webhookUrl: "https://example.test/telegram-v2" },
     });
-    expect(providerRepository.getConnectionInternal(connection.id as string)?.secrets).toEqual({
+    expect((await secretService.resolveConnection(connection.id as string)).secrets).toEqual({
       botToken: "telegram-secret-value",
     });
   });
@@ -176,8 +181,8 @@ describe("ChatProviderActions", () => {
   });
 
   it("requires one-use approval before replacing non-empty secret payloads", async () => {
-    const { actions, providerRepository } = await createHarness();
-    const connection = providerRepository.createConnection({
+    const { actions, secretService } = await createHarness();
+    const connection = await secretService.createConnection({
       providerKind: "slack",
       displayName: "Slack bridge",
       bridgeMode: "webhook",
@@ -195,7 +200,7 @@ describe("ChatProviderActions", () => {
 
     expect(first.approvalRequired).toBe(true);
     expect(JSON.stringify(first)).not.toContain("new-secret");
-    expect(providerRepository.getConnectionInternal(connection.id)?.secrets).toEqual({ signingSecret: "old-secret" });
+    expect((await secretService.resolveConnection(connection.id)).secrets).toEqual({ signingSecret: "old-secret" });
 
     const approved = expectResult(await actions.handleChatProviderAction({
       domain: "chat_providers",
@@ -209,7 +214,7 @@ describe("ChatProviderActions", () => {
 
     expect(approved.connection).toMatchObject({ id: connection.id });
     expect(JSON.stringify(approved)).not.toContain("new-secret");
-    expect(providerRepository.getConnectionInternal(connection.id)?.secrets).toEqual({ signingSecret: "new-secret" });
+    expect((await secretService.resolveConnection(connection.id)).secrets).toEqual({ signingSecret: "new-secret" });
   });
 
   it("requires approval before deleting connections and channel bindings", async () => {

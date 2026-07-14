@@ -18,7 +18,6 @@ export interface PartialNormalizedChatConnectorInbound {
   externalMessageId?: string;
   conversationThreadId?: string;
   timestamp?: unknown;
-  externalThreadId?: string;
 }
 
 export interface ChatConnectorIgnoreResult {
@@ -30,32 +29,6 @@ export interface ChatConnectorAuthenticationInput {
   timestamp: string;
   rawBody: string;
 }
-
-export interface ChatConnectorProviderIngressRequest {
-  connection: ChatProviderConnectionInternalRecord;
-  headers: Readonly<Record<string, string | string[] | undefined>>;
-  rawBody: string | Uint8Array;
-  now: Date;
-}
-
-export interface ChatConnectorImmediateResponse {
-  statusCode: number;
-  headers: Readonly<Record<string, string>>;
-  body: unknown;
-}
-
-export type ChatConnectorProviderIngressResult =
-  | {
-    authenticated: true;
-    method: string;
-    immediateResponse?: ChatConnectorImmediateResponse;
-  }
-  | {
-    authenticated: false;
-    code: string;
-    message: string;
-    statusCode: number;
-  };
 
 export interface ChatConnectorBearerAuthentication {
   type: "bearer";
@@ -213,16 +186,6 @@ export interface ChatConnectorOutboundResponseContext {
   headers: Readonly<Record<string, string>>;
 }
 
-export interface ChatConnectorOutboundExecutor {
-  send(context: ChatConnectorOutboundContext): Promise<ChatConnectorOutboundResult>;
-}
-
-export interface ChatConnectorOutboundRuntime {
-  fetch: typeof fetch;
-  now?: () => number;
-  wait?: (delayMs: number, signal?: AbortSignal) => Promise<void>;
-}
-
 export class ChatConnectorOutboundResponseError extends Error {
   constructor(
     message: string,
@@ -232,17 +195,6 @@ export class ChatConnectorOutboundResponseError extends Error {
   ) {
     super(message);
     this.name = "ChatConnectorOutboundResponseError";
-  }
-}
-
-/**
- * Compatibility base for provider implementations that predate the
- * response-context error contract.
- */
-export class ChatConnectorOutboundExecutionError extends ChatConnectorOutboundResponseError {
-  constructor(message: string, retryable: boolean, statusCode?: number) {
-    super(message, retryable, statusCode);
-    this.name = "ChatConnectorOutboundExecutionError";
   }
 }
 
@@ -257,9 +209,6 @@ export interface ChatConnectorProfile {
   supportedTransportModes: readonly ChatProviderBridgeMode[];
   ingress: {
     authentication: Readonly<Partial<Record<ChatProviderBridgeMode, ChatConnectorIngressAuthentication>>>;
-    authenticateProviderRequest?(
-      request: ChatConnectorProviderIngressRequest,
-    ): ChatConnectorProviderIngressResult | null;
     handshake: ChatConnectorHandshake;
     acknowledgement: ChatConnectorAcknowledgement;
     classify?(payload: Record<string, unknown>): "message" | "ignored";
@@ -274,10 +223,6 @@ export interface ChatConnectorProfile {
     ): ChatConnectorExternalIdentity;
   };
   outbound: {
-    createExecutor?(
-      mode: ChatProviderBridgeMode,
-      runtime: ChatConnectorOutboundRuntime,
-    ): ChatConnectorOutboundExecutor | null;
     buildRequest(context: ChatConnectorOutboundContext): ChatConnectorOutboundRequest;
     parseResponse(
       responseBody: string,

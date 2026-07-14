@@ -39,7 +39,6 @@ describe("ChatProviderIngressService", () => {
       displayName: "Slack ingress",
       bridgeMode: "managed_bridge",
       status: "active",
-      secrets: { bridgeApiKey: "bridge-token" },
     });
     const bindingA = context.providerRepository.createChannelBinding({
       providerConnectionId: connection.id,
@@ -112,7 +111,6 @@ describe("ChatProviderIngressService", () => {
       displayName: "Discord ingress",
       bridgeMode: "webhook",
       status: "active",
-      secrets: { botToken: "bot-token" },
     });
     context.providerRepository.createChannelBinding({
       providerConnectionId: connection.id,
@@ -156,7 +154,6 @@ describe("ChatProviderIngressService", () => {
       displayName: "Telegram ingress",
       bridgeMode: "webhook",
       status: "active",
-      secrets: { botToken: "telegram-token" },
     });
     for (const project of [projectA, projectB]) {
       context.providerRepository.createChannelBinding({
@@ -220,7 +217,7 @@ describe("ChatProviderIngressService", () => {
     ["imessage", { chatGuid: "chat-guid", chatName: "Family", sender: { handle: "+15550000", name: "Lee" }, guid: "imsg-1", text: "iMessage body" }, "chat-guid", "+15550000", "iMessage body", "imsg-1"],
     ["telegram", { message: { message_id: 7, date: 1783430400, text: "Telegram body", chat: { id: 88, title: "Ops" }, from: { id: 99, username: "ops-user" } } }, "88", "99", "Telegram body", "7"],
     ["slack", { event_id: "event-1", event: { channel: "C1", user: "U1", text: "Slack body", ts: "1783430400.000100" } }, "C1", "U1", "Slack body", "event-1"],
-    ["microsoft-teams", { type: "message", id: "activity-1", text: "Teams body", conversation: { id: "teams-conv", name: "Ops" }, from: { id: "aad-1", name: "Morgan" }, timestamp: "2026-07-07T12:00:00.000Z" }, "teams-conv", "aad-1", "Teams body", "activity-1"],
+    ["microsoft-teams", { id: "activity-1", text: "Teams body", conversation: { id: "teams-conv", name: "Ops" }, from: { id: "aad-1", name: "Morgan" }, timestamp: "2026-07-07T12:00:00.000Z" }, "teams-conv", "aad-1", "Teams body", "activity-1"],
     ["discord", { id: "discord-1", content: "Discord body", channel_id: "discord-channel", author: { id: "discord-user", username: "Riley" }, timestamp: "2026-07-07T12:00:00.000Z" }, "discord-channel", "discord-user", "Discord body", "discord-1"],
   ] as Array<[ChatProviderKind, Record<string, unknown>, string, string, string, string]>)(
     "normalizes %s payloads into the internal inbound shape",

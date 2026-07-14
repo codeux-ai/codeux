@@ -1,6 +1,6 @@
 import type { Express, Request } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
-import { syncRoute } from "./route-utils.js";
+import { asyncRoute, syncRoute } from "./route-utils.js";
 import {
   parseChatProviderKind,
   parseCreateChatProviderChannelBindingInput,
@@ -59,18 +59,21 @@ export function registerChatProviderRoutes(router: Express, deps: DashboardDepen
     res.json(decorateConnection(req, connection));
   }));
 
-  router.post("/api/chat-providers/connections", syncRoute((req, res) => {
-    const created = repository.createConnection(parseCreateChatProviderConnectionInput(req.body));
+  router.post("/api/chat-providers/connections", asyncRoute(async (req, res) => {
+    const input = parseCreateChatProviderConnectionInput(req.body);
+    const created = deps.chatProviderSecretService
+      ? await deps.chatProviderSecretService.createConnection(input)
+      : repository.createConnection(input);
     res.status(201).json(decorateConnection(req, created));
   }));
 
-  router.patch("/api/chat-providers/connections/:connectionId", syncRoute((req, res) => {
+  router.patch("/api/chat-providers/connections/:connectionId", asyncRoute(async (req, res) => {
     const connectionId = requireTrimmedString(req.params.connectionId, "connectionId");
     const existing = requireConnection(repository.getConnection(connectionId));
-    const updated = repository.updateConnection(
-      connectionId,
-      parseUpdateChatProviderConnectionInput(req.body, existing),
-    );
+    const input = parseUpdateChatProviderConnectionInput(req.body, existing);
+    const updated = deps.chatProviderSecretService
+      ? await deps.chatProviderSecretService.updateConnection(connectionId, input)
+      : repository.updateConnection(connectionId, input);
     res.json(decorateConnection(req, updated));
   }));
 

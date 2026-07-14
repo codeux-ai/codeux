@@ -13,6 +13,7 @@ import type {
 } from "../../contracts/chat-provider-types.js";
 import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
 import type { ChatProviderRepository } from "../../repositories/chat-provider-repository.js";
+import type { ChatProviderSecretService } from "../../services/chat-provider-secret-service.js";
 import {
   buildMcpApprovalFingerprint,
   managementValidationError,
@@ -197,7 +198,10 @@ function success(action: string, data: Record<string, unknown>): ManagementRespo
 export class ChatProviderActions {
   private readonly pendingSecretApprovals = new Map<string, number>();
 
-  constructor(private readonly chatProviderRepository: ChatProviderRepository) {}
+  constructor(
+    private readonly chatProviderRepository: ChatProviderRepository,
+    private readonly chatProviderSecretService?: ChatProviderSecretService,
+  ) {}
 
   async handleChatProviderAction(args: ManageCodeUxArgs): Promise<ManagementResponseEnvelope> {
     const payload = args.payload || {};
@@ -299,10 +303,10 @@ export class ChatProviderActions {
     return success(action, { connection: withConnectionIngress(connection, normalizeBaseUrl(payload)) });
   }
 
-  private createConnection(action: string, payload: Record<string, unknown>): ManagementResponseEnvelope {
+  private async createConnection(action: string, payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
     const setup = parseOptionalObject<ChatProviderSetupConfig>(payload, "setup");
     const secrets = parseOptionalNullableObject<ChatProviderSecretConfig>(payload, "secrets");
-    const connection = this.chatProviderRepository.createConnection({
+    const input = {
       providerKind: parseRequiredProviderKind(payload),
       displayName: parseRequiredString(payload, "displayName"),
       bridgeMode: parseOptionalEnumStrict(payload, "bridgeMode", BRIDGE_MODES),
@@ -310,11 +314,14 @@ export class ChatProviderActions {
       enabled: parseOptionalBoolean(payload, "enabled"),
       ...(setup !== undefined ? { setup } : {}),
       ...(secrets !== undefined ? { secrets } : {}),
-    });
+    };
+    const connection = this.chatProviderSecretService
+      ? await this.chatProviderSecretService.createConnection(input)
+      : this.chatProviderRepository.createConnection(input);
     return success(action, { connection: withConnectionIngress(connection, normalizeBaseUrl(payload)) });
   }
 
-  private updateConnection(args: ManageCodeUxArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
+  private async updateConnection(args: ManageCodeUxArgs, payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
     const approval = this.requireSecretReplacementApproval(args, payload);
     if (approval) {
       return approval;
@@ -322,14 +329,18 @@ export class ChatProviderActions {
 
     const setup = parseOptionalObject<ChatProviderSetupConfig>(payload, "setup");
     const secrets = parseOptionalNullableObject<ChatProviderSecretConfig>(payload, "secrets");
-    const connection = this.chatProviderRepository.updateConnection(parseConnectionId(payload), {
+    const connectionId = parseConnectionId(payload);
+    const input = {
       displayName: parseOptionalString(payload, "displayName"),
       bridgeMode: parseOptionalEnumStrict(payload, "bridgeMode", BRIDGE_MODES),
       status: parseOptionalEnumStrict(payload, "status", CONNECTION_STATUSES),
       enabled: parseOptionalBoolean(payload, "enabled"),
       ...(setup !== undefined ? { setup } : {}),
       ...(secrets !== undefined ? { secrets } : {}),
-    });
+    };
+    const connection = this.chatProviderSecretService
+      ? await this.chatProviderSecretService.updateConnection(connectionId, input)
+      : this.chatProviderRepository.updateConnection(connectionId, input);
     return success(args.action, { connection: withConnectionIngress(connection, normalizeBaseUrl(payload)) });
   }
 

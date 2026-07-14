@@ -7,6 +7,8 @@ import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ChatProviderRepository } from "../../../src/repositories/chat-provider-repository.js";
 import { ConnectionChatRepository } from "../../../src/repositories/connection-chat-repository.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
+import { createChatProviderSecretFixture } from "../helpers/chat-provider-secret-fixture.js";
+import type { ChatProviderSecretService } from "../../../src/services/chat-provider-secret-service.js";
 import {
   ChatProviderOutboundAdapterError,
   type ChatProviderOutboundAdapter,
@@ -43,7 +45,7 @@ describe("ChatProviderOutboundService", () => {
       sourceType: "local",
       sourceRef: path.join(context.tempDir, "repo"),
     });
-    const connection = context.providerRepository.createConnection({
+    const connection = await context.secretService.createConnection({
       providerKind: "slack",
       displayName: "Slack webhook",
       bridgeMode: "webhook",
@@ -94,6 +96,7 @@ describe("ChatProviderOutboundService", () => {
 
     const service = new ChatProviderOutboundService({
       chatProviderRepository: context.providerRepository,
+      chatProviderSecretService: context.secretService,
     });
 
     const delivery = await service.deliverReply({
@@ -143,7 +146,10 @@ describe("ChatProviderOutboundService", () => {
       setup: { bridgeUrl: bridge.url },
       secrets: { bridgeApiKey: "managed_bridge-secret" },
     });
-    const service = new ChatProviderOutboundService({ chatProviderRepository: context.providerRepository });
+    const service = new ChatProviderOutboundService({
+      chatProviderRepository: context.providerRepository,
+      chatProviderSecretService: context.secretService,
+    });
 
     const delivery = await service.deliverReply(fixture);
 
@@ -170,7 +176,10 @@ describe("ChatProviderOutboundService", () => {
       setup: { command: `node ${JSON.stringify(scriptPath)}` },
       secrets: { bridgeToken: "native-secret" },
     });
-    const service = new ChatProviderOutboundService({ chatProviderRepository: context.providerRepository });
+    const service = new ChatProviderOutboundService({
+      chatProviderRepository: context.providerRepository,
+      chatProviderSecretService: context.secretService,
+    });
 
     const delivery = await service.deliverReply(fixture);
 
@@ -197,6 +206,7 @@ describe("ChatProviderOutboundService", () => {
     };
     const service = new ChatProviderOutboundService({
       chatProviderRepository: context.providerRepository,
+      chatProviderSecretService: context.secretService,
       adapter,
       initialBackoffMs: 1_000,
       now: () => now,
@@ -280,6 +290,7 @@ describe("ChatProviderOutboundService", () => {
     };
     const service = new ChatProviderOutboundService({
       chatProviderRepository: context.providerRepository,
+      chatProviderSecretService: context.secretService,
       adapter,
       initialBackoffMs: 1_000,
       now: () => now,
@@ -290,9 +301,7 @@ describe("ChatProviderOutboundService", () => {
 
     const first = service.processDueRetries();
     const second = service.processDueRetries();
-    await Promise.resolve();
-
-    expect(adapter.send).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(adapter.send).toHaveBeenCalledTimes(2));
     resolveRetry?.({ externalMessageId: "discord-single-flight" });
     const [firstResult, secondResult] = await Promise.all([first, second]);
 
@@ -314,17 +323,20 @@ async function createContext(): Promise<{
   projectRepository: ProjectManagementRepository;
   providerRepository: ChatProviderRepository;
   conversationRepository: ConnectionChatRepository;
+  secretService: ChatProviderSecretService;
 }> {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-chat-provider-outbound-"));
   tempDirs.push(tempDir);
   const storage = new AppDbStorage(path.join(tempDir, "app.db"));
   openStorages.push(storage);
+  const providerRepository = new ChatProviderRepository(storage);
   return {
     tempDir,
     storage,
     projectRepository: new ProjectManagementRepository(storage),
-    providerRepository: new ChatProviderRepository(storage),
+    providerRepository,
     conversationRepository: new ConnectionChatRepository(storage),
+    secretService: createChatProviderSecretFixture(providerRepository),
   };
 }
 
@@ -347,7 +359,7 @@ async function createOutboundFixture(
     sourceType: "local",
     sourceRef: path.join(context.tempDir, "fixture-repo"),
   });
-  const connection = context.providerRepository.createConnection({
+  const connection = await context.secretService.createConnection({
     providerKind: options.providerKind,
     displayName: "Fixture bridge",
     bridgeMode: options.bridgeMode,

@@ -7,25 +7,26 @@ import { ChatProviderIngressSecurity, ChatProviderIngressSecurityError } from ".
 import { getChatConnectorProfileForMode } from "../domain/chat-connectors/registry.js";
 import { redactText } from "../shared/security/redaction.js";
 
-const defaultSecurityVerifier = new ChatProviderIngressSecurity();
-
 export function registerChatProviderIngressRoutes(router: Express, deps: DashboardDependencies): void {
   if (!deps.chatProviderRepository || !deps.chatProviderIngressService) {
     return;
   }
+  const securityVerifier = new ChatProviderIngressSecurity(undefined, deps.chatProviderRepository);
 
   const handler = asyncRoute(async (req, res) => {
     const providerConnectionId = requireTrimmedString(
       req.params.providerConnectionId ?? req.params.connectionId,
       "providerConnectionId",
     );
-    const connection = deps.chatProviderRepository!.getConnectionInternal(providerConnectionId);
+    const connection = deps.chatProviderSecretService
+      ? await deps.chatProviderSecretService.resolveConnection(providerConnectionId).catch(() => null)
+      : deps.chatProviderRepository!.getConnectionInternal(providerConnectionId);
     if (!connection) {
       throw new HttpRouteError(404, "Chat provider connection not found.");
     }
 
     try {
-      defaultSecurityVerifier.verify(connection, {
+      securityVerifier.verify(connection, {
         headers: req.headers,
         rawBody: buildRequestBodyForSignature(req),
       });
@@ -91,7 +92,9 @@ export function registerChatProviderIngressRoutes(router: Express, deps: Dashboa
       req.params.providerConnectionId ?? req.params.connectionId,
       "providerConnectionId",
     );
-    const connection = deps.chatProviderRepository!.getConnectionInternal(providerConnectionId);
+    const connection = deps.chatProviderSecretService
+      ? await deps.chatProviderSecretService.resolveConnection(providerConnectionId).catch(() => null)
+      : deps.chatProviderRepository!.getConnectionInternal(providerConnectionId);
     if (!connection) {
       throw new HttpRouteError(404, "Chat provider connection not found.");
     }
