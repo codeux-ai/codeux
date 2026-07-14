@@ -62,13 +62,13 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
       statusLabel: t(sprintStatusPresentation.isManualPause ? "paused" : "stopped"),
       title: sprintStatusPresentation.isManualPause
         ? pausedIntervention?.title || t("manualPauseTitle")
-        : t("systemStoppedTitle"),
+        : pausedIntervention?.title || t("systemStoppedTitle"),
       reason: sprintStatusPresentation.isManualPause
         ? pausedIntervention?.reason || t("manualPauseReason")
-        : t("systemStoppedReason"),
+        : pausedIntervention?.reason || t("systemStoppedReason"),
       detail: sprintStatusPresentation.isManualPause
         ? pausedIntervention?.instructions || t("manualPauseDetail")
-        : t("systemStoppedDetail"),
+        : pausedIntervention?.instructions || t("systemStoppedDetail"),
     };
 
     useLayoutEffect(() => {

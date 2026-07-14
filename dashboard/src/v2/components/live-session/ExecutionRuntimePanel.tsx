@@ -58,6 +58,25 @@ function getExecutorLabel(value: string, t: (key: LiveMessageKey) => string): st
     return value === "mixed" ? t("mixed") : EXECUTOR_LABELS[value] || value;
 }
 
+const RUNTIME_STATUS_MESSAGE_KEYS: Readonly<Record<string, LiveMessageKey>> = {
+    queued: "queued",
+    claimed: "claimed",
+    running: "running",
+    paused: "paused",
+    cancel_requested: "cancelRequested",
+    completed: "completed",
+    failed: "failed",
+    cancelled: "cancelled",
+    blocked: "blocked",
+    quota: "quota",
+    pending: "pending",
+};
+
+function getRuntimeStatusLabel(value: string, t: (key: LiveMessageKey) => string): string {
+    const messageKey = RUNTIME_STATUS_MESSAGE_KEYS[value.toLowerCase()];
+    return messageKey ? t(messageKey) : value;
+}
+
 function getInterventionHeading(
     intervention: { attentionType: string | null; ownerType: string | null },
     t: (key: LiveMessageKey) => string,
@@ -644,7 +663,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                 </div>
                                                 <div className="text-right">
                                                     <div className={`text-[10px] font-bold uppercase tracking-[0.14em] ${statusTone(run.status)}`}>
-                                                        {run.status}
+                                                        {getRuntimeStatusLabel(run.status, t)}
                                                     </div>
                                                     {run.activeLeaseOwnerKey && (
                                                         <div className="mt-1 text-[10px] font-mono text-slate-400">
@@ -804,11 +823,11 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                     </div>
                                                     <div className="text-right">
                                                         <div className={`text-[10px] font-bold uppercase tracking-[0.14em] ${statusTone(activeCap ? "PENDING" : dispatch.status)}`}>
-                                                            {activeCap ? t("waitingForSlot", { current: formatNumber(activeCap.currentCount), limit: formatNumber(activeCap.limit) }) : dispatch.status}
+                                                            {activeCap ? t("waitingForSlot", { current: formatNumber(activeCap.currentCount), limit: formatNumber(activeCap.limit) }) : getRuntimeStatusLabel(dispatch.status, t)}
                                                         </div>
                                                         {dispatch.taskRunState && !activeCap && (
                                                             <div className={`mt-1 text-[10px] font-mono ${statusTone(dispatch.taskRunState)}`}>
-                                                                {dispatch.taskRunState}
+                                                                {getRuntimeStatusLabel(dispatch.taskRunState, t)}
                                                             </div>
                                                         )}
                                                         <TaskDuration

@@ -302,7 +302,7 @@ describe("LiveSessionPage Runtime Status", () => {
     });
 
     render(<LiveSessionPage />);
-    expect(screen.getByText("Paused")).toBeInTheDocument();
+    expect(screen.getAllByText("Paused").length).toBeGreaterThan(0);
     const runLog = screen.getByRole("log", { name: "Sprint run status rows" });
     expect(within(runLog).queryByText("Approve dependency and resume the sprint.")).not.toBeInTheDocument();
     fireEvent.click(within(runLog).getByRole("button", { name: /instructions/i }));
@@ -357,7 +357,8 @@ describe("LiveSessionPage Runtime Status", () => {
 
     render(<LiveSessionPage />);
     expect(screen.getByText("Stopped")).toBeInTheDocument();
-    expect(screen.getByText("Sprint Stopped By System")).toBeInTheDocument();
+    expect(screen.getAllByText("Worker pause").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("No executable work was available.").length).toBeGreaterThan(0);
     const runLog = screen.getByRole("log", { name: "Sprint run status rows" });
     expect(within(runLog).queryByText("Resolve the stop condition and restart when ready.")).not.toBeInTheDocument();
     fireEvent.click(within(runLog).getByRole("button", { name: /instructions/i }));
@@ -835,11 +836,11 @@ describe("LiveSessionPage Integration Isolation", () => {
 
     render(<LiveSessionPage />);
 
-    // Since we are looking at the older sprint, the task T1 should be shown as COMPLETED.
+    // Since we are looking at the older sprint, the task T1 should be shown as completed.
     // Even though there is a newer sprint running a task with the same key T1.
     // Stats should show 1 completed, 0 running.
     expect(screen.getAllByText("Task 1").length).toBeGreaterThan(0);
-    expect(screen.getByText("COMPLETED")).toBeInTheDocument();
+    expect(screen.getAllByText("Completed").length).toBeGreaterThan(0);
     expect(screen.queryByText("Task 1 (New)")).not.toBeInTheDocument();
   });
 

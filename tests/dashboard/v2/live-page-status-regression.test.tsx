@@ -512,12 +512,84 @@ describe("LiveSessionPage Status Regression", () => {
 
     // Assert system stop copy
     expect(screen.getAllByText("Stopped").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Sprint Stopped By System").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("The orchestrator stopped this sprint.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Worker pause").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("No executable work was available.").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Resolve the stop condition and restart when ready.").length).toBeGreaterThan(0);
 
     // Assert intervention badge is absent
     expect(screen.queryByText("Needs you")).not.toBeInTheDocument();
+  });
+
+  it("localizes German paused and system-stopped framing while preserving intervention content", () => {
+    const renderGermanPage = () => (
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <LiveSessionPage />
+      </DashboardI18nProvider>
+    );
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      execution: {
+        ...baseRuntimeData().execution,
+        sprintRuns: [createSprintRunFixture({
+          status: "paused",
+          humanIntervention: {
+            ...createManualPauseIntervention(),
+            title: "KEEP manual title verbatim",
+            reason: "KEEP manual reason verbatim",
+            instructions: "KEEP manual instructions verbatim",
+          },
+        })],
+      },
+    }));
+
+    const view = render(renderGermanPage());
+
+    expect(screen.getAllByText("Pausiert").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("KEEP manual title verbatim").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("KEEP manual reason verbatim").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("KEEP manual instructions verbatim").length).toBeGreaterThan(0);
+    expect(screen.getByText("Du wirst benötigt")).toBeInTheDocument();
+
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      execution: {
+        ...baseRuntimeData().execution,
+        sprintRuns: [createSprintRunFixture({
+          status: "paused",
+          humanIntervention: {
+            ...createSystemStopIntervention(),
+            title: "KEEP system title verbatim",
+            reason: "KEEP system reason verbatim",
+            instructions: "KEEP system instructions verbatim",
+          },
+        })],
+      },
+    }));
+    view.rerender(renderGermanPage());
+
+    expect(screen.getAllByText("Gestoppt").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("KEEP system title verbatim").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("KEEP system reason verbatim").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("KEEP system instructions verbatim").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Du wirst benötigt")).not.toBeInTheDocument();
+
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      execution: {
+        ...baseRuntimeData().execution,
+        sprintRuns: [createSprintRunFixture({
+          status: "paused",
+          humanIntervention: {
+            ...createSystemStopIntervention(),
+            title: "",
+            reason: "",
+            instructions: "",
+          },
+        })],
+      },
+    }));
+    view.rerender(renderGermanPage());
+
+    expect(screen.getByText("Sprint vom System gestoppt")).toBeInTheDocument();
+    expect(screen.getByText("Der Orchestrator hat diesen Sprint gestoppt.")).toBeInTheDocument();
+    expect(screen.getAllByText("Behebe die Stoppursache und starte erneut, sobald alles bereit ist.").length).toBeGreaterThan(0);
   });
 
   it("ensures duplicate intervention sections/badges are absent in the header", () => {
