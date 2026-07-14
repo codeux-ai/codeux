@@ -85,6 +85,7 @@ export const CustomDashboardCredentialSlotsPanel: FunctionComponent<CustomDashbo
 }) => {
   const [selectedCredentialBySlot, setSelectedCredentialBySlot] = useState<Record<string, string>>({});
   const actionRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const selectRefs = useRef<Record<string, HTMLSelectElement | null>>({});
 
   useEffect(() => {
     setSelectedCredentialBySlot({});
@@ -99,7 +100,11 @@ export const CustomDashboardCredentialSlotsPanel: FunctionComponent<CustomDashbo
   ), [credentials, health, projectId, reviewedSlots]);
 
   const restoreActionFocus = (slotId: string): void => {
-    window.requestAnimationFrame(() => actionRefs.current[slotId]?.focus({ preventScroll: true }));
+    window.requestAnimationFrame(() => {
+      const action = actionRefs.current[slotId];
+      const target = action && !action.disabled ? action : selectRefs.current[slotId];
+      target?.focus({ preventScroll: true });
+    });
   };
 
   const bind = async (slotId: string): Promise<void> => {
@@ -242,6 +247,7 @@ export const CustomDashboardCredentialSlotsPanel: FunctionComponent<CustomDashbo
                 <label className="min-w-0 text-xs font-bold text-slate-600 dark:text-slate-300">
                   Compatible credential
                   <select
+                    ref={(element) => { selectRefs.current[slot.slotId] = element; }}
                     aria-label={`Compatible credential for ${slot.label}`}
                     value={selectedCredentialId}
                     disabled={saving || options.length === 0 || !backendReady(health)}

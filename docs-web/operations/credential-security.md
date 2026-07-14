@@ -48,3 +48,11 @@ Legacy global records use their first valid allowlisted project as the migrated 
 Credential management uses project-scoped dashboard routes. The API includes create, bounded-name update, bind, metadata-only compatibility assessment, test, rotate, replace, revoke, confirmed promotion, and monotonic restriction. Compatibility checks backend readiness, configured/active state, project access, allowed kinds, and all required capabilities without reading plaintext. Backend readiness requires an available, secure backend with a non-empty key ID and a reported key version; missing identity metadata produces `backend_unavailable`. List, health, compatibility, and mutation responses never contain secret values; secrets are accepted only by create, rotate, and replace operations.
 
 Validation failures return `400`, project/management denials return `403`, concurrent-write conflicts return `409`, invalid encrypted state returns `422`, and unavailable key custody returns `503` with a safe recovery message.
+
+## Integrated verification contract
+
+Credential security is verified against an isolated normal local runtime. Automated coverage concurrently provisions local key custody, restarts with the same home and SQLite database, resolves the stored value only through an authorized runtime call, and confirms that metadata persists while public REST and MCP payloads remain value-free. It also covers lifecycle conflicts and mutations, typed validation failures, and explicit key-provider outages.
+
+Credentialed automation tests require missing, revoked, cross-project, wrong-kind, insufficient-capability, and unavailable-backend bindings to fail before provider or custom-node invocation. A distinctive disclosure canary is scanned across public responses, structured records, SQLite text columns, workspaces, Docker inputs, validation artifacts, graph/dashboard records, and browser or iframe state; only encrypted binary envelopes may contain it.
+
+Production-bundle browser coverage enables the documented Nodes and Custom Dashboards gates in an isolated Playwright runtime. It exercises Settings lifecycle feedback, node binding through publication and a local mock-provider run, custom-dashboard build/runtime slots and publication blocking, keyboard focus restoration, and narrow-viewport operation without external providers or network access.

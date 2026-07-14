@@ -344,7 +344,7 @@ describe("GitHub workflow health", () => {
   it("keeps Playwright config isolated, serialized, and failure-artifact friendly", async () => {
     const config = await readRepoFile(PLAYWRIGHT_CONFIG);
 
-    expect(config).toContain("command: 'node dist/index.js'");
+    expect(config).toContain("command: 'pnpm exec vite build && node dist/index.js'");
     expect(config).toContain("process.env.CODEUX_E2E_DASHBOARD_PORT || process.env.DASHBOARD_PORT || '4464'");
     expect(config).toContain("baseURL: dashboardBaseUrl");
     expect(config).toContain("url: `${dashboardBaseUrl}/health`");
@@ -354,6 +354,10 @@ describe("GitHub workflow health", () => {
     expect(config).toContain("MCP_HTTP_ENABLED: 'false'");
     expect(config).toContain("CODE_UX_CONTAINERIZED_GIT: '0'");
     expect(config).toContain("CODE_UX_GIT_CONTAINER_MODE: 'host'");
+    expect(config).toContain("VITE_CODEUX_FEATURE_NODES: 'true'");
+    expect(config).toContain("VITE_CODEUX_NODE_FLOW_BACKEND: 'true'");
+    expect(config).toContain("VITE_CODEUX_AUTOMATION_SECURITY: 'true'");
+    expect(config).toContain("VITE_CODEUX_FEATURE_CUSTOM_DASHBOARDS: 'true'");
     expect(config).toContain("reuseExistingServer: false");
     expect(config).toContain("workers: 1");
     expect(config).toContain("trace: 'retain-on-failure'");

@@ -111,7 +111,10 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: 'node dist/index.js',
+    // Rebuild the dashboard with gated workspaces enabled so navigation specs
+    // exercise the production route tree instead of depending on a caller's
+    // previously built dashboard assets.
+    command: 'pnpm exec vite build && node dist/index.js',
     // Poll the liveness probe (/health) rather than the readiness probe (/ready).
     // /ready only returns 200 once a project has a live-status timestamp, which
     // never happens in a clean CI checkout, so it would hang until timeout.
@@ -135,6 +138,10 @@ export default defineConfig({
       MCP_HTTP_ENABLED: 'false',
       CODE_UX_CONTAINERIZED_GIT: '0',
       CODE_UX_GIT_CONTAINER_MODE: 'host',
+      VITE_CODEUX_FEATURE_NODES: 'true',
+      VITE_CODEUX_NODE_FLOW_BACKEND: 'true',
+      VITE_CODEUX_AUTOMATION_SECURITY: 'true',
+      VITE_CODEUX_FEATURE_CUSTOM_DASHBOARDS: 'true',
     },
   },
 });

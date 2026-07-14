@@ -482,7 +482,7 @@ describe("CustomDashboardsPage", () => {
       expect.any(AbortSignal),
     ));
     await screen.findByText("Compatible binding");
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Replace binding for Deployment API" })));
+    await waitFor(() => expect(document.activeElement).toBe(select));
 
     fireEvent.input(select, { target: { value: replacementCredential.id } });
     await waitFor(() => expect(screen.getByRole("button", { name: "Replace binding for Deployment API" })).toBeEnabled());
