@@ -7,8 +7,9 @@ import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NODES_CANVAS_STORAGE_KEY, NodesPage } from "../../../dashboard/src/v2/NodesPage.js";
 import { ProjectDataContext } from "../../../dashboard/src/v2/context/project-data.js";
+import { DashboardI18nProvider, type DashboardLocale } from "../../../dashboard/src/v2/i18n/index.js";
 
-const api = vi.hoisted(() => ({ fetchNodeFlows: vi.fn(), fetchNodeFlowCatalog: vi.fn(), createNodeFlowDraft: vi.fn(), fetchNodeFlow: vi.fn(), fetchNodeFlowRuns: vi.fn(), fetchNodeFlowNodeRuns: vi.fn(), fetchNodeFlowAttempts: vi.fn(), fetchNodeFlowApprovals: vi.fn(), fetchNodeFlowAgentSkills: vi.fn(), attachNodeFlowToAgent: vi.fn(), detachNodeFlowFromAgent: vi.fn(), decideNodeFlowApproval: vi.fn(), patchNodeFlowDraft: vi.fn(), fetchNodeDefinition: vi.fn(), validateNodeFlowDraft: vi.fn(), deleteNodeFlow: vi.fn() }));
+const api = vi.hoisted(() => ({ fetchNodeFlows: vi.fn(), fetchNodeFlowCatalog: vi.fn(), createNodeFlowDraft: vi.fn(), fetchNodeFlow: vi.fn(), fetchNodeFlowRuns: vi.fn(), fetchNodeFlowNodeRuns: vi.fn(), fetchNodeFlowAttempts: vi.fn(), fetchNodeFlowApprovals: vi.fn(), fetchNodeFlowAgentSkills: vi.fn(), attachNodeFlowToAgent: vi.fn(), detachNodeFlowFromAgent: vi.fn(), decideNodeFlowApproval: vi.fn(), patchNodeFlowDraft: vi.fn(), fetchNodeDefinition: vi.fn(), validateNodeFlowDraft: vi.fn(), runNodeFlow: vi.fn(), deleteNodeFlow: vi.fn() }));
 const agentApi = vi.hoisted(() => ({ fetchAgentPresets: vi.fn() }));
 vi.mock("../../../dashboard/src/v2/lib/node-flow-api.js", async (original) => ({ ...(await original()), ...api }));
 vi.mock("../../../dashboard/src/v2/lib/agent-preset-api.js", async (original) => ({ ...(await original()), ...agentApi }));
@@ -19,14 +20,20 @@ const agent = { id: "agent-1", projectId: "project-1", name: "Release Agent", de
 const attachment = { flowId: "flow-1", projectId: "project-1", agentPresetId: "agent-1", skillName: "Release skill", description: "Governed", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" };
 const context = { projects: [{ id: "project-1", name: "Test project" }], selectedProjectId: "project-1", selectedProject: { id: "project-1", name: "Test project" }, loading: false, error: null, refreshProjects: async () => undefined, selectProject: async () => undefined, createProject: async () => { throw new Error("unused"); }, updateProject: async () => { throw new Error("unused"); }, deleteProject: async () => undefined };
 
+const renderPage = (value: typeof context = context, locale: DashboardLocale = "en") => render(
+  <DashboardI18nProvider initialLocale={locale} storage={null}>
+    <ProjectDataContext.Provider value={value as never}><NodesPage /></ProjectDataContext.Provider>
+  </DashboardI18nProvider>,
+);
+
 describe("NodesPage governed workspace", () => {
   const review = { flowId: "flow-1", projectId: "project-1", name: "Release automation", description: "Governed", draftRevision: 2, nodeCount: 1, edgeCount: 0, valid: true, validationIssues: [], policyFindings: [], requiredCredentials: [], requestedCapabilities: [], sideEffectDiffs: [], publishedVersion: 1 };
   beforeEach(() => { api.validateNodeFlowDraft.mockResolvedValue(review); });
-  beforeEach(() => { window.localStorage.clear(); api.fetchNodeFlows.mockResolvedValue({ flows: [flow] }); api.fetchNodeFlowCatalog.mockResolvedValue({ nodes: [{ type: "input", version: 1, executable: true, executionKind: "local", label: "Input", description: "Input", category: "Core", credentials: [], capabilities: [], sideEffect: "none", ports: [] }] }); api.fetchNodeFlowRuns.mockResolvedValue({ runs: [] }); api.fetchNodeFlowNodeRuns.mockResolvedValue({ nodeRuns: [] }); api.fetchNodeFlowAttempts.mockResolvedValue({ attempts: [] }); api.fetchNodeFlowApprovals.mockResolvedValue({ approvals: [] }); api.fetchNodeFlowAgentSkills.mockResolvedValue([]); api.attachNodeFlowToAgent.mockResolvedValue(attachment); api.detachNodeFlowFromAgent.mockResolvedValue(undefined); agentApi.fetchAgentPresets.mockResolvedValue([agent]); api.fetchNodeDefinition.mockResolvedValue({ type: "input", version: 1, executable: true, executionKind: "local", configurationSchema: { type: "object" }, ui: { label: "Input", description: "Input", category: "Core", widgetSchema: { fields: [] } }, ports: [], credentials: [], capabilities: [], sideEffect: "none", defaultPolicy: {}, documentation: "", deprecation: { deprecated: false } }); });
+  beforeEach(() => { window.localStorage.clear(); api.fetchNodeFlows.mockResolvedValue({ flows: [flow] }); api.fetchNodeFlowCatalog.mockResolvedValue({ nodes: [{ type: "input", version: 1, executable: true, executionKind: "local", label: "Input", description: "Input", category: "Core", credentials: [], capabilities: [], sideEffect: "none", ports: [] }] }); api.fetchNodeFlow.mockResolvedValue(flow); api.createNodeFlowDraft.mockResolvedValue(review); api.patchNodeFlowDraft.mockResolvedValue({ draft: review }); api.runNodeFlow.mockResolvedValue({ run: { id: "run-1", flowId: "flow-1", projectId: "project-1", version: 1, publicationId: "publication-1", status: "succeeded", policy: {}, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: null, cancelRequestedAt: null, executionInvocationId: null, triggerType: "manual", triggerPayload: null, input: {}, output: { providerMessage: "PROVIDER_OUTPUT_VERBATIM" }, errorMessage: null, startedAt: null, finishedAt: null, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" }, nodeRuns: [], attempts: [] }); api.fetchNodeFlowRuns.mockResolvedValue({ runs: [] }); api.fetchNodeFlowNodeRuns.mockResolvedValue({ nodeRuns: [] }); api.fetchNodeFlowAttempts.mockResolvedValue({ attempts: [] }); api.fetchNodeFlowApprovals.mockResolvedValue({ approvals: [] }); api.fetchNodeFlowAgentSkills.mockResolvedValue([]); api.attachNodeFlowToAgent.mockResolvedValue(attachment); api.detachNodeFlowFromAgent.mockResolvedValue(undefined); agentApi.fetchAgentPresets.mockResolvedValue([agent]); api.fetchNodeDefinition.mockResolvedValue({ type: "input", version: 1, executable: true, executionKind: "local", configurationSchema: { type: "object" }, ui: { label: "Input", description: "Input", category: "Core", widgetSchema: { fields: [] } }, ports: [], credentials: [], capabilities: [], sideEffect: "none", defaultPolicy: {}, documentation: "", deprecation: { deprecated: false } }); });
   afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
   it("loads a project flow library and registry-backed editor", async () => {
-    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+    renderPage();
     expect(await screen.findByRole("heading", { name: "Automation workspace" })).toBeInTheDocument();
     expect(await screen.findByText("Release automation")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Node catalog" })).toBeInTheDocument();
@@ -42,7 +49,7 @@ describe("NodesPage governed workspace", () => {
       description: "Input", category: "Core", ports: [], credentials: [], capabilities: [], sideEffect: "none",
     });
 
-    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+    renderPage();
 
     expect(await screen.findByRole("heading", { name: "Input" })).toBeInTheDocument();
     expect(screen.getByText("input · v1")).toBeInTheDocument();
@@ -50,7 +57,7 @@ describe("NodesPage governed workspace", () => {
 
   it("loads existing metadata-only flow attachments", async () => {
     api.fetchNodeFlowAgentSkills.mockResolvedValue([attachment]);
-    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+    renderPage();
 
     expect(await screen.findByText("Release skill")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Detach Release Agent" })).toBeInTheDocument();
@@ -62,7 +69,7 @@ describe("NodesPage governed workspace", () => {
     let isAttached = false;
     api.fetchNodeFlowAgentSkills.mockImplementation(async () => isAttached ? [attachment] : []);
     api.attachNodeFlowToAgent.mockImplementation(async () => { isAttached = true; return attachment; });
-    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+    renderPage();
 
     const select = await screen.findByRole("combobox", { name: "Agent preset" });
     await waitFor(() => expect(select).toBeEnabled());
@@ -81,7 +88,7 @@ describe("NodesPage governed workspace", () => {
     let isAttached = true;
     api.fetchNodeFlowAgentSkills.mockImplementation(async () => isAttached ? [attachment] : []);
     api.detachNodeFlowFromAgent.mockImplementation(async () => { isAttached = false; });
-    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+    renderPage();
 
     const detachButton = await screen.findByRole("button", { name: "Detach Release Agent" });
     await waitFor(() => expect(detachButton).toBeEnabled());
@@ -106,11 +113,11 @@ describe("NodesPage governed workspace", () => {
       if (flowId === "flow-1") firstAttachmentSignal = signal;
       return [flowId === "flow-1" ? attachment : secondAttachment];
     });
-    const rendered = render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+    const rendered = renderPage();
     expect(await screen.findByText("Release skill")).toBeInTheDocument();
 
     const secondContext = { ...context, projects: [{ id: "project-2", name: "Second project" }], selectedProjectId: "project-2", selectedProject: { id: "project-2", name: "Second project" } };
-    rendered.rerender(<ProjectDataContext.Provider value={secondContext as never}><NodesPage /></ProjectDataContext.Provider>);
+    rendered.rerender(<DashboardI18nProvider storage={null}><ProjectDataContext.Provider value={secondContext as never}><NodesPage /></ProjectDataContext.Provider></DashboardI18nProvider>);
 
     expect(await screen.findByText("Quality skill")).toBeInTheDocument();
     expect(screen.queryByText("Release skill")).not.toBeInTheDocument();
@@ -124,7 +131,7 @@ describe("NodesPage governed workspace", () => {
     let resolveAttachments: ((value: typeof attachment[]) => void) | undefined;
     api.fetchNodeFlowAgentSkills.mockReturnValueOnce(new Promise((resolve) => { resolveAttachments = resolve; }));
     agentApi.fetchAgentPresets.mockRejectedValueOnce(new Error("Agent service unavailable")).mockResolvedValueOnce([agent]);
-    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+    renderPage();
 
     expect(await screen.findByText("Loading agent attachments…")).toBeInTheDocument();
     resolveAttachments?.([]);
@@ -138,7 +145,7 @@ describe("NodesPage governed workspace", () => {
   it("keeps a failed mutation visible and preserves the selected agent for retry", async () => {
     const user = userEvent.setup();
     api.attachNodeFlowToAgent.mockRejectedValueOnce(new Error("Attachment denied"));
-    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+    renderPage();
 
     const select = await screen.findByRole("combobox", { name: "Agent preset" });
     await waitFor(() => expect(select).toBeEnabled());
@@ -153,23 +160,25 @@ describe("NodesPage governed workspace", () => {
     window.localStorage.setItem(NODES_CANVAS_STORAGE_KEY, JSON.stringify({ schemaVersion: 2, nodes: [{ id: "input-1", type: "input", title: "Input", position: { x: 1, y: 1 } }], edges: [] }));
     api.createNodeFlowDraft.mockResolvedValue({ flowId: "imported", draftRevision: 1 });
     api.fetchNodeFlows.mockResolvedValueOnce({ flows: [] }).mockResolvedValueOnce({ flows: [flow] });
-    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+    renderPage(context, "de");
     await waitFor(() => expect(api.createNodeFlowDraft).toHaveBeenCalledTimes(1));
     expect(api.createNodeFlowDraft.mock.calls[0]?.[1].graph.nodes.map((node: { type: string }) => node.type)).toEqual([
       "set_fields", "condition", "output", "provider_prompt", "input",
     ]);
     expect(window.localStorage.getItem(NODES_CANVAS_STORAGE_KEY)).toBeNull();
     expect(window.localStorage.getItem("codeux:nodes-canvas:imported:project-1")).toBe("imported");
+    expect(screen.getByText(/einmalig in die Backend-Flow-Bibliothek/)).toBeInTheDocument();
   });
 
   it("keeps backend flows usable when a legacy canvas import fails", async () => {
     window.localStorage.setItem(NODES_CANVAS_STORAGE_KEY, JSON.stringify({ nodes: [{ id: "trigger-1", kind: "trigger" }], edges: [] }));
     api.createNodeFlowDraft.mockRejectedValueOnce(new Error("Legacy import rejected"));
 
-    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+    renderPage(context, "de");
 
     expect(await screen.findByText("Release automation")).toBeInTheDocument();
-    expect(await screen.findByRole("alert")).toHaveTextContent("Existing backend flows remain available");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Vorhandene Backend-Flows bleiben verfügbar");
+    expect(screen.getByRole("alert")).toHaveTextContent("Legacy import rejected");
     expect(window.localStorage.getItem(NODES_CANVAS_STORAGE_KEY)).not.toBeNull();
   });
 
@@ -183,7 +192,7 @@ describe("NodesPage governed workspace", () => {
       .mockReturnValueOnce(new Promise((resolve) => { resolveSecondReview = resolve; }))
       .mockResolvedValueOnce({ ...review, draftRevision: 9 });
 
-    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+    renderPage();
     await user.click((await screen.findByText("Quality automation")).closest("button")!);
     await user.click(screen.getByText("Release automation").closest("button")!);
 
@@ -195,12 +204,95 @@ describe("NodesPage governed workspace", () => {
     expect(screen.getByText(/Draft r9/)).toBeInTheDocument();
   });
 
+  it("ignores stale run history after switching flows in German", async () => {
+    const user = userEvent.setup();
+    const secondFlow = { ...flow, id: "flow-2", title: "Quality automation", version: 7 };
+    let resolveFirstRuns: ((value: { runs: Array<Record<string, unknown>> }) => void) | undefined;
+    api.fetchNodeFlows.mockResolvedValue({ flows: [flow, secondFlow] });
+    api.fetchNodeFlowRuns.mockImplementation(async (flowId: string) => {
+      if (flowId === "flow-1") {
+        return new Promise((resolve) => { resolveFirstRuns = resolve; });
+      }
+      return { runs: [] };
+    });
+
+    renderPage(context, "de");
+    await user.click((await screen.findByText("Quality automation")).closest("button")!);
+    await waitFor(() => expect(api.fetchNodeFlowRuns).toHaveBeenCalledWith("flow-2"));
+
+    resolveFirstRuns?.({ runs: [{
+      id: "stale-run-id", flowId: "flow-1", projectId: "project-1", version: 1,
+      publicationId: null, status: "failed", policy: {}, leaseOwner: null, leaseExpiresAt: null,
+      heartbeatAt: null, cancelRequestedAt: null, executionInvocationId: null, triggerType: "manual",
+      triggerPayload: null, input: {}, output: {}, errorMessage: null, startedAt: null, finishedAt: null,
+      createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z",
+    }] });
+    await Promise.resolve();
+
+    expect(screen.queryByText("stale-run-id")).not.toBeInTheDocument();
+    expect(screen.getByText("Keine gespeicherten Ausführungen.")).toBeInTheDocument();
+  });
+
   it("surfaces optimistic save conflicts", async () => {
     const user = userEvent.setup(); api.patchNodeFlowDraft.mockResolvedValue({ conflict: { message: "The draft changed after it was read; reload the summary and reapply the patch.", actualDraftRevision: 3 } });
-    render(<ProjectDataContext.Provider value={context as never}><NodesPage /></ProjectDataContext.Provider>);
+    renderPage();
     await screen.findByText("Release automation");
     await user.type(screen.getAllByLabelText("Description")[0]!, " changed");
     await user.click(screen.getByRole("button", { name: "Save draft" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Current revision is 3");
+  });
+
+  it("supports the German edit, validate, run, debug, and schedule path without changing payload values", async () => {
+    const user = userEvent.setup();
+    renderPage(context, "de");
+
+    expect(await screen.findByRole("heading", { name: "Automatisierungsbereich" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Node-Katalog" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Planen" })).toHaveAttribute("href", "/scheduler");
+
+    const flowName = screen.getByLabelText("Flow-Name");
+    await user.clear(flowName);
+    await user.type(flowName, "German UI, stable graph");
+    await user.click(screen.getByRole("button", { name: "Entwurf speichern" }));
+
+    expect(api.patchNodeFlowDraft).toHaveBeenCalledWith("flow-1", expect.objectContaining({
+      projectId: "project-1",
+      title: "German UI, stable graph",
+      graph: flow.graph,
+    }));
+
+    await user.click(screen.getByRole("button", { name: "Validieren" }));
+    expect(api.validateNodeFlowDraft).toHaveBeenCalledWith("project-1", "flow-1");
+
+    await user.click(screen.getByRole("button", { name: "Veröffentlichung ausführen" }));
+    expect(api.runNodeFlow).toHaveBeenCalledWith("flow-1", { projectId: "project-1", input: {} });
+    expect(await screen.findByText(/PROVIDER_OUTPUT_VERBATIM/)).toBeInTheDocument();
+    expect(screen.getByText("Erfolgreich · v1")).toBeInTheDocument();
+  });
+
+  it("keeps stable English draft defaults when creating from the German interface", async () => {
+    const user = userEvent.setup();
+    renderPage(context, "de");
+
+    await user.click(await screen.findByRole("button", { name: "Neuer Entwurf" }));
+
+    expect(api.createNodeFlowDraft).toHaveBeenCalledWith("project-1", expect.objectContaining({
+      title: "Untitled automation",
+      description: "",
+      graph: expect.objectContaining({
+        nodes: [expect.objectContaining({ id: "trigger", type: "input", title: "Run Input", data: { label: "Manual run" } })],
+      }),
+    }));
+  });
+
+  it("shows provider diagnostics verbatim beside German recovery controls", async () => {
+    const user = userEvent.setup();
+    api.runNodeFlow.mockRejectedValueOnce(new Error("PROVIDER_NETWORK_DIAGNOSTIC_503"));
+    renderPage(context, "de");
+
+    await user.click(await screen.findByRole("button", { name: "Veröffentlichung ausführen" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("PROVIDER_NETWORK_DIAGNOSTIC_503");
+    expect(screen.getByRole("button", { name: "Erneut versuchen" })).toBeInTheDocument();
   });
 });

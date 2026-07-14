@@ -5,6 +5,7 @@ import { fireEvent, render } from "@testing-library/preact";
 import { describe, expect, it, vi } from "vitest";
 import { NodeFlowCanvas } from "../../../dashboard/src/v2/components/nodes/NodeFlowCanvas.js";
 import type { NodeFlowGraph } from "../../../dashboard/src/v2/types.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
 
 const graph: NodeFlowGraph = {
   schemaVersion: 2,
@@ -16,12 +17,12 @@ describe("NodeFlowCanvas", () => {
   it("keeps drag movement local and commits one graph update on pointer release", () => {
     const onMoveNode = vi.fn();
     const { getByRole } = render(
-      <NodeFlowCanvas
+      <DashboardI18nProvider storage={null}><NodeFlowCanvas
         graph={graph}
         selectedNodeId="input-1"
         onSelectNode={() => undefined}
         onMoveNode={onMoveNode}
-      />,
+      /></DashboardI18nProvider>,
     );
     const canvas = getByRole("region", { name: "Node flow canvas" });
     const node = getByRole("button", { name: "Select node Input" });

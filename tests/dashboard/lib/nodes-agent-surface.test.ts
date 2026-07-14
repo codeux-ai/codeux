@@ -183,4 +183,21 @@ describe("nodes agent surface", () => {
       ],
     });
   });
+
+  it("localizes German command explanations without changing command or validation identities", () => {
+    const result = applyNodeCanvasAgentCommands(createInitialNodeCanvasGraph(), [
+      { command: "rename_everything" },
+      { command: "add_node", kind: "unknown" },
+    ], "de");
+
+    expect(result.issues.map(({ code, entityId, field }) => ({ code, entityId, field }))).toEqual([
+      { code: "invalid_agent_command_payload", entityId: "command[1]", field: "kind" },
+      { code: "unknown_agent_command", entityId: "command[0]", field: "command" },
+    ]);
+    expect(result.issues.map((issue) => issue.message)).toEqual([
+      "Der Befehl zum Hinzufügen einer Node benötigt eine gültige Node-Art.",
+      "Unbekannter Agentenbefehl \"rename_everything\".",
+    ]);
+    expect(result.graph).toEqual(createInitialNodeCanvasGraph());
+  });
 });

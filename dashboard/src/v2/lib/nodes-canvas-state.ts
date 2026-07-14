@@ -1,4 +1,6 @@
 import type { NodeFlowGraph, NodeFlowJsonObject, NodeFlowJsonValue } from "../../../../src/contracts/node-flow-types.js";
+import type { DashboardLocale } from "../i18n/locales.js";
+import { translateNodesMessage } from "../i18n/messages/nodes.js";
 
 export type NodeCanvasNodeKind = "trigger" | "agent" | "task" | "condition" | "output";
 export type NodeCanvasPortDirection = "input" | "output";
@@ -417,7 +419,10 @@ export const nodesCanvasReducer = (
   }
 };
 
-export const validateNodeCanvasGraph = (graph: NodeCanvasGraph): NodeCanvasValidationIssue[] => {
+export const validateNodeCanvasGraph = (
+  graph: NodeCanvasGraph,
+  locale: DashboardLocale = "en",
+): NodeCanvasValidationIssue[] => {
   const issues: NodeCanvasValidationIssue[] = [];
   const seenNodeIds = new Set<string>();
   const duplicateNodeIds = new Set<string>();
@@ -426,29 +431,29 @@ export const validateNodeCanvasGraph = (graph: NodeCanvasGraph): NodeCanvasValid
   for (const node of graph.nodes) {
     if (seenNodeIds.has(node.id)) {
       duplicateNodeIds.add(node.id);
-      issues.push(issue("duplicate_node_id", node.id, "nodes", `Node id "${node.id}" is duplicated.`));
+      issues.push(issue("duplicate_node_id", node.id, "nodes", translateNodesMessage(locale, "duplicateNodeId", { id: node.id })));
     } else {
       seenNodeIds.add(node.id);
       nodeById.set(node.id, node);
     }
 
     if (!node.label.trim()) {
-      issues.push(issue("empty_required_label", node.id, "label", "Node label is required."));
+      issues.push(issue("empty_required_label", node.id, "label", translateNodesMessage(locale, "nodeLabelRequired")));
     }
 
     for (const field of node.config) {
       if (field.required && typeof field.value === "string" && !field.value.trim()) {
-        issues.push(issue("empty_required_label", node.id, `config.${field.id}`, `${field.label} is required.`));
+        issues.push(issue("empty_required_label", node.id, `config.${field.id}`, translateNodesMessage(locale, "fieldRequired", { label: field.label })));
       } else if (field.required && field.value === null) {
-        issues.push(issue("empty_required_label", node.id, `config.${field.id}`, `${field.label} is required.`));
+        issues.push(issue("empty_required_label", node.id, `config.${field.id}`, translateNodesMessage(locale, "fieldRequired", { label: field.label })));
       }
     }
 
     if (node.metadata.agentIntent !== undefined && !isAgentIntent(node.metadata.agentIntent)) {
-      issues.push(issue("invalid_agent_intent", node.id, "metadata.agentIntent", "Agent intent metadata is invalid."));
+      issues.push(issue("invalid_agent_intent", node.id, "metadata.agentIntent", translateNodesMessage(locale, "invalidAgentIntent")));
     }
     if (node.metadata.taskIntent !== undefined && !isTaskIntent(node.metadata.taskIntent)) {
-      issues.push(issue("invalid_task_intent", node.id, "metadata.taskIntent", "Task intent metadata is invalid."));
+      issues.push(issue("invalid_task_intent", node.id, "metadata.taskIntent", translateNodesMessage(locale, "invalidTaskIntent")));
     }
   }
 
@@ -457,33 +462,33 @@ export const validateNodeCanvasGraph = (graph: NodeCanvasGraph): NodeCanvasValid
     const targetNode = nodeById.get(edge.target.nodeId);
 
     if (!sourceNode || duplicateNodeIds.has(edge.source.nodeId)) {
-      issues.push(issue("missing_edge_source_node", edge.id, "source.nodeId", "Edge source node is missing."));
+      issues.push(issue("missing_edge_source_node", edge.id, "source.nodeId", translateNodesMessage(locale, "missingEdgeSourceNode")));
       continue;
     }
     if (!targetNode || duplicateNodeIds.has(edge.target.nodeId)) {
-      issues.push(issue("missing_edge_target_node", edge.id, "target.nodeId", "Edge target node is missing."));
+      issues.push(issue("missing_edge_target_node", edge.id, "target.nodeId", translateNodesMessage(locale, "missingEdgeTargetNode")));
       continue;
     }
     if (edge.source.nodeId === edge.target.nodeId) {
-      issues.push(issue("self_connection", edge.id, "target.nodeId", "Edge cannot connect a node to itself."));
+      issues.push(issue("self_connection", edge.id, "target.nodeId", translateNodesMessage(locale, "selfConnection")));
     }
 
     const sourcePort = [...sourceNode.inputPorts, ...sourceNode.outputPorts].find((port) => port.id === edge.source.portId);
     const targetPort = [...targetNode.inputPorts, ...targetNode.outputPorts].find((port) => port.id === edge.target.portId);
 
     if (!sourcePort) {
-      issues.push(issue("missing_edge_source_port", edge.id, "source.portId", "Edge source port is missing."));
+      issues.push(issue("missing_edge_source_port", edge.id, "source.portId", translateNodesMessage(locale, "missingEdgeSourcePort")));
       continue;
     }
     if (!targetPort) {
-      issues.push(issue("missing_edge_target_port", edge.id, "target.portId", "Edge target port is missing."));
+      issues.push(issue("missing_edge_target_port", edge.id, "target.portId", translateNodesMessage(locale, "missingEdgeTargetPort")));
       continue;
     }
     if (sourcePort.direction !== "output" || targetPort.direction !== "input") {
-      issues.push(issue("incompatible_port_direction", edge.id, "source.portId", "Edges must connect output ports to input ports."));
+      issues.push(issue("incompatible_port_direction", edge.id, "source.portId", translateNodesMessage(locale, "incompatiblePortDirection")));
     }
     if (!arePortTypesCompatible(sourcePort.type, targetPort.type)) {
-      issues.push(issue("incompatible_port_type", edge.id, "target.portId", "Connected ports are not compatible."));
+      issues.push(issue("incompatible_port_type", edge.id, "target.portId", translateNodesMessage(locale, "incompatiblePortType")));
     }
   }
 

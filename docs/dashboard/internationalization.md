@@ -51,6 +51,10 @@ The initial application bundle translates only root-owned shell copy: the skip l
 
 Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged.
 
+The feature-gated Nodes route owns `messages/nodes.ts`. Its page shell, flow library, palettes, both canvas presentations, inspectors, governance review, debugger, scheduling entry point, generated validation explanations, and accessible names switch with the dashboard locale. Pure node view models and dashboard-owned canvas/agent validators accept an explicit locale and default to English for compatibility.
+
+Node localization is presentation-only. Graph JSON, node and edge identities, node types, schema and widget keys, command names, configuration values, migration markers, skill names, API errors, policy/provider diagnostics, run logs, and provider input/output are never rewritten. Known runtime states are translated only while rendering; their contract values remain unchanged.
+
 ## Verification
 
 Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization.
