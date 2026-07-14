@@ -43,7 +43,7 @@ Interpolation replaces only named `{variable}` tokens through literal string sub
 
 ## Locale-aware formatting
 
-`useDashboardI18n` exposes `formatNumber`, `formatDate`, `formatTime`, `formatRelativeTime`, and `formatList`. Each function is rebound when the active locale changes and accepts the corresponding native `Intl` options. New localized UI should use these functions instead of adding fixed `en-US` formatters.
+`useDashboardI18n` exposes `formatNumber`, `formatDate`, `formatTime`, `formatRelativeTime`, and `formatList`. Each function is rebound when the active locale changes and accepts the corresponding native `Intl` options. New localized UI should use these functions instead of adding fixed `en-US` formatters. Plural selection still receives the numeric count for threshold decisions, while an explicitly supplied formatted `count` variable is preserved for display (for example, German `1.000 Einträge`).
 
 ## Translation scope
 

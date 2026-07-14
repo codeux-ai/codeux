@@ -117,6 +117,16 @@ describe("task-card-view-model", () => {
       ...overrides,
     });
 
+    it("formats large German dependency counts without changing dependency state", () => {
+      const dependencyIds = Array.from({ length: 1_234 }, (_, index) => `missing-${index}`);
+      const task = createMockTask({ dependsOnTaskIds: dependencyIds });
+      const viewModel = buildTaskCardViewModel(task, new Map(), undefined, { locale: "de" });
+
+      expect(viewModel.dependencyActionLabel).toBe("1.234 blockierende Abhängigkeiten");
+      expect(viewModel.dependencyIndicators).toHaveLength(1_234);
+      expect(viewModel.dependencyIndicators.every((dependency) => dependency.isBlocking)).toBe(true);
+    });
+
     it("builds a basic view model with empty dependencies", () => {
       const task = createMockTask();
       const lookup = new Map<string, Task>();

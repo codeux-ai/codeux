@@ -35,7 +35,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
     onClose,
     onConfirm,
 }) => {
-    const { translate, translatePlural } = useOptionalDashboardI18n();
+    const { translate, translatePlural, formatNumber } = useOptionalDashboardI18n();
     const [providerConfigId, setProviderConfigId] = useState("");
     const [clearWorktree, setClearWorktree] = useState(false);
     const [resetDependents, setResetDependents] = useState(false);
@@ -321,11 +321,11 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                                     </span>
                                 </div>
                                 <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                                    {translatePlural(taskMessages, "resetDependentTasks", downstreamTasks.length)}
+                                    {translatePlural(taskMessages, "resetDependentTasks", downstreamTasks.length, { count: formatNumber(downstreamTasks.length) })}
                                 </p>
                                 {downstreamPromptTasks.length > 0 && (
                                     <p className="text-[11px] text-status-amber mt-1 leading-snug">
-                                        {translatePlural(taskMessages, "downstreamStarted", downstreamPromptTasks.length)}
+                                        {translatePlural(taskMessages, "downstreamStarted", downstreamPromptTasks.length, { count: formatNumber(downstreamPromptTasks.length) })}
                                     </p>
                                 )}
                                 {mergedTaskCount > 1 && resetDependents && (

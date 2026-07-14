@@ -6,7 +6,7 @@ Use it when you want to review planned work, create or edit a task, check depend
 
 ## Language and task content
 
-The Tasks page follows the dashboard language setting and is fully available in English and German. This includes board headings, filters, lanes, task actions, dependency and review labels, editor validation, confirmations, loading and empty states, and screen-reader announcements. Counts, dates, elapsed durations, and rating values use the conventions of the selected language.
+The Tasks page follows the dashboard language setting and is fully available in English and German. This includes board headings, filters, lanes, task actions, dependency and review labels, editor validation, confirmations, loading and empty states, and screen-reader announcements. Counts (including thousands separators), dates, elapsed durations, and rating values use the conventions of the selected language.
 
 Localization never rewrites task data or worker output. Task keys, titles, descriptions, Markdown prompts, project and sprint names, branch and pull-request details, provider and agent names, QA and review text, execution messages, and backend error details remain exactly as stored or received. Switching the dashboard language therefore changes only the surrounding interface, not the content sent to a worker or persisted through create, edit, rerun, dependency, and delete operations.
 

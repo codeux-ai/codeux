@@ -12,7 +12,7 @@ import { useOptionalDashboardI18n } from "../../i18n/context.js";
 import { taskMessages } from "../../i18n/messages/tasks.js";
 
 const ColumnHeader: FunctionComponent<{ status: TaskStatus; count: number }> = memo(({ status, count }) => {
-  const { locale, formatNumber } = useOptionalDashboardI18n();
+  const { locale, translatePlural, formatNumber } = useOptionalDashboardI18n();
   const cfg = STATUS_CFG[status];
   const Icon = cfg.icon;
   const headingId = `task-lane-heading-${status}`;
@@ -25,7 +25,7 @@ const ColumnHeader: FunctionComponent<{ status: TaskStatus; count: number }> = m
       </div>
       <span className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg bg-black/[0.03] dark:bg-white/[0.03] ${cfg.color}`}>
         <span aria-hidden="true">{formatNumber(count)}</span>
-        <span className="sr-only">{formatNumber(count)} {locale === "de" ? (count === 1 ? "Aufgabe" : "Aufgaben") : (count === 1 ? "task" : "tasks")}</span>
+        <span className="sr-only">{translatePlural(taskMessages, "taskCount", count, { count: formatNumber(count) })}</span>
       </span>
     </div>
   );
@@ -156,7 +156,7 @@ const TaskBoardColumnsComponent: FunctionComponent<TaskBoardColumnsProps> = ({
   onEditTask,
   onDeleteTask,
 }) => {
-  const { locale, translate, formatNumber } = useOptionalDashboardI18n();
+  const { locale, translate, translatePlural, formatNumber } = useOptionalDashboardI18n();
   return (
   <div
     ref={boardRef}
@@ -183,7 +183,7 @@ const TaskBoardColumnsComponent: FunctionComponent<TaskBoardColumnsProps> = ({
         <p id={`task-lane-summary-${status}`} className="sr-only" aria-live="polite" aria-atomic="true">
           {translate(taskMessages, "laneSummary", {
             status: getTaskStatusLabel(status, locale),
-            tasks: `${formatNumber(count)} ${locale === "de" ? (count === 1 ? "Aufgabe" : "Aufgaben") : (count === 1 ? "task" : "tasks")}`,
+            tasks: translatePlural(taskMessages, "taskCount", count, { count: formatNumber(count) }),
           })}
         </p>
         <div

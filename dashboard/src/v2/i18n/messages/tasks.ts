@@ -28,6 +28,7 @@ export const taskMessages = defineDashboardMessages({
     project: "Project",
     sprint: "Sprint",
     tasks: "Tasks",
+    taskCount: { one: "{count} task", other: "{count} tasks" },
     required: "required",
     ready: "ready",
     waiting: "waiting",
@@ -132,6 +133,7 @@ export const taskMessages = defineDashboardMessages({
     dependencyFailedQa: "Dependency failed QA review",
     dependencyWaiting: "Dependency is waiting to start",
     dependenciesClear: "Dependencies clear",
+    dependencyCount: { one: "{count} dependency", other: "{count} dependencies" },
     dependencyBlockers: { one: "{count} dependency blocker", other: "{count} dependency blockers" },
     dependenciesClearCount: "{count} dependencies clear",
     dependenciesResolved: "Dependencies resolved: {count} clear",
@@ -321,6 +323,8 @@ export const taskMessages = defineDashboardMessages({
     rerunFailed: "Failed to rerun task.",
   },
   de: {
+    taskCount: { one: "{count} Aufgabe", other: "{count} Aufgaben" },
+    dependencyCount: { one: "{count} Abhängigkeit", other: "{count} Abhängigkeiten" },
     review: "Prüfung",
     active: "Aktiv",
     taskTimeNotStarted: "Nicht gestartet",
@@ -348,4 +352,7 @@ export const translateTaskPlural = (
   key: TaskPluralKey,
   count: number,
   variables?: DashboardMessageVariables,
-): string => translateDashboardPlural(taskMessages, locale, key, count, variables);
+): string => translateDashboardPlural(taskMessages, locale, key, count, {
+  count: new Intl.NumberFormat(locale).format(count),
+  ...variables,
+});

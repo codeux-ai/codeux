@@ -46,7 +46,9 @@ export const KanbanTaskCard: FunctionComponent<{
   const taskTimeLabel = formatTaskTimeState(task.time, locale);
   const interactionTokens = useInteractionTokens();
   const blockerCount = dependencyIndicators.filter((dep) => dep.isBlocking ?? dep.status !== "completed").length;
-  const dependencyActionLabel = viewModel.dependencyActionLabel ?? (blockerCount > 0 ? translatePlural(taskMessages, "dependencyBlockers", blockerCount) : translate(taskMessages, "dependenciesClear"));
+  const dependencyActionLabel = viewModel.dependencyActionLabel ?? (blockerCount > 0
+    ? translatePlural(taskMessages, "dependencyBlockers", blockerCount, { count: formatNumber(blockerCount) })
+    : translate(taskMessages, "dependenciesClear"));
   const qaNoReviewLabel = viewModel.qaReviewLabel ?? translate(taskMessages, "qaNoReview");
   const dragStateLabel = viewModel.dragStateLabel ?? translate(taskMessages, "dragPointerOnly");
   const shouldShowExecutorLabel = viewModel.executorLabel !== "Auto";
@@ -55,8 +57,10 @@ export const KanbanTaskCard: FunctionComponent<{
   const dependencySummary = dependencyIndicators.length === 0
     ? translate(taskMessages, "noDependencyBlockers")
     : translate(taskMessages, "dependencySummary", {
-      dependencies: `${formatNumber(dependencyIndicators.length)} ${locale === "de" ? (dependencyIndicators.length === 1 ? "Abhängigkeit" : "Abhängigkeiten") : (dependencyIndicators.length === 1 ? "dependency" : "dependencies")}`,
-      blockers: blockerCount === 0 ? translate(taskMessages, "noBlockers") : translatePlural(taskMessages, "dependencyBlockers", blockerCount),
+      dependencies: translatePlural(taskMessages, "dependencyCount", dependencyIndicators.length, { count: formatNumber(dependencyIndicators.length) }),
+      blockers: blockerCount === 0
+        ? translate(taskMessages, "noBlockers")
+        : translatePlural(taskMessages, "dependencyBlockers", blockerCount, { count: formatNumber(blockerCount) }),
       details: formatList(dependencyIndicators.map((dep) => `${dep.id} ${dep.stateLabel ?? getTaskStatusLabel(dep.status, locale)}`)),
     });
   const reviewDetails = task.latestReview?.summary?.trim();

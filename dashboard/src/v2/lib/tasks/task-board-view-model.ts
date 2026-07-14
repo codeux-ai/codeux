@@ -18,7 +18,7 @@ import { buildLiveTaskEnrichmentMap, type LiveTaskEnrichment } from "./live-task
 import { buildTaskCardViewModel, formatTaskDuration, type TaskCardViewModel } from "./task-card-view-model.js";
 import { getTaskPriorityLabel, getTaskStatusLabel } from "../tasks-constants.js";
 import type { DashboardLocale } from "../../i18n/locales.js";
-import { translateTask } from "../../i18n/messages/tasks.js";
+import { translateTask, translateTaskPlural } from "../../i18n/messages/tasks.js";
 
 export interface TaskBoardViewModelOptions {
   tasks: Task[];
@@ -335,9 +335,9 @@ export function buildTaskFilterAnnouncement(args: {
 }): string {
   const locale = args.locale ?? "en";
   const number = new Intl.NumberFormat(locale);
-  const tasks = locale === "de"
-    ? `${number.format(args.totalCount)} ${args.totalCount === 1 ? "Aufgabe" : "Aufgaben"}`
-    : `${number.format(args.totalCount)} ${args.totalCount === 1 ? "task" : "tasks"}`;
+  const tasks = translateTaskPlural(locale, "taskCount", args.totalCount, {
+    count: number.format(args.totalCount),
+  });
   const visibleSuffix = args.visibleCount < args.totalCount
     ? translateTask(locale, "visibleCount", { count: number.format(args.visibleCount) })
     : "";

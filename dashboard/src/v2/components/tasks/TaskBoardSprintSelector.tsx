@@ -32,7 +32,7 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
   const triggerRef = useRef<HTMLButtonElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const interactionTokens = useInteractionTokens();
-  const { locale, translate, formatNumber } = useOptionalDashboardI18n();
+  const { locale, translate, translatePlural, formatNumber } = useOptionalDashboardI18n();
   const listboxId = "tasks-sprint-selector-listbox";
   const statusId = "tasks-sprint-selector-status";
   const selected = selectedId ? sprints.find((sprint: Sprint) => sprint.id === selectedId) : null;
@@ -62,14 +62,14 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
         label: formatSprintDisplay(sprint, sprintKeyPrefix),
         description: translate(taskMessages, "sprintOptionDescription", {
           date: formatTaskSprintDateRange(sprint.startDate, sprint.endDate, locale),
-          tasks: `${formatNumber(sprint.tasksCount)} ${locale === "de" ? (sprint.tasksCount === 1 ? "Aufgabe" : "Aufgaben") : (sprint.tasksCount === 1 ? "task" : "tasks")}`,
+          tasks: translatePlural(taskMessages, "taskCount", sprint.tasksCount, { count: formatNumber(sprint.tasksCount) }),
           percent: formatNumber(completion),
         }),
         sprint,
         completion,
       };
     }),
-  ], [formatNumber, locale, sprints, sprintKeyPrefix, translate]);
+  ], [formatNumber, locale, sprints, sprintKeyPrefix, translate, translatePlural]);
 
   const selectedIndex = Math.max(0, options.findIndex((option) => option.id === selectedId));
 
