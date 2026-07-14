@@ -77,12 +77,15 @@ export function queryProjectStatsSnapshot(
   const usage = createEmptyUsageTotals();
   const taskUsage = new Map<string, ExecutionUsageTotals>();
   const sprintUsage = new Map<string, ExecutionUsageTotals>();
+  const canonicalSprintUsage = new Map<string, ExecutionUsageTotals>();
   const providerUsage = new Map<string, ExecutionUsageTotals>();
   const purposeUsage = new Map<string, ExecutionUsageTotals>();
   const tokenSourceCounts = new Map<string, number>();
   const pricingResolver = createSnapshotPricingResolver(deps.getModelPricing);
   const taskLastActivity = new Map<string, string>();
   const sprintLastActivity = new Map<string, string>();
+  const canonicalSprintLastActivity = new Map<string, string>();
+  const sprintIdBySprintKey = new Map<string, string>();
   const providerLastActivity = new Map<string, string>();
   const purposeLastActivity = new Map<string, string>();
   const modelUsage = new Map<string, ExecutionUsageTotals>();
@@ -101,6 +104,7 @@ export function queryProjectStatsSnapshot(
     SELECT
       ${bucketQuery}
       task_id,
+      sprint_id,
       COALESCE(sprint_run_id, sprint_id) as sprint_key,
       provider,
       purpose,
@@ -111,7 +115,7 @@ export function queryProjectStatsSnapshot(
       ${usageFields}
     FROM provider_invocations
     WHERE project_id = ? AND started_at >= ? AND started_at < ?
-    GROUP BY bucketIndex, task_id, sprint_key, provider, purpose, usage_source, model, status
+    GROUP BY bucketIndex, task_id, sprint_id, sprint_key, provider, purpose, usage_source, model, status
   `).all(...bucketParams, projectId, rangeStartIso, rangeEndIso) as any[];
 
   for (const row of mainAggs) {
@@ -132,6 +136,18 @@ export function queryProjectStatsSnapshot(
       mergeAggregatedUsage(sU, u);
       sprintUsage.set(row.sprint_key, sU);
       deps.updateLastActivity(sprintLastActivity, row.sprint_key, row.lastActivityAt);
+    }
+
+    // Cost analytics use the conceptual sprint id so retries and resumed runs
+    // produce one row without changing the existing sprint-run ledger above.
+    if (row.sprint_id) {
+      const canonicalUsage = canonicalSprintUsage.get(row.sprint_id) || createEmptyUsageTotals();
+      mergeAggregatedUsage(canonicalUsage, u);
+      canonicalSprintUsage.set(row.sprint_id, canonicalUsage);
+      deps.updateLastActivity(canonicalSprintLastActivity, row.sprint_id, row.lastActivityAt);
+      if (row.sprint_key) {
+        sprintIdBySprintKey.set(row.sprint_key, row.sprint_id);
+      }
     }
 
     // Provider usage
@@ -309,11 +325,21 @@ export function queryProjectStatsSnapshot(
     const total = sprintUsage.get(sprintKey) || createEmptyUsageTotals();
     total.wallTimeMs = wallTime;
     sprintUsage.set(sprintKey, total);
+    const canonicalSprintId = sprintIdBySprintKey.get(sprintKey);
+    if (canonicalSprintId) {
+      const canonicalTotal = canonicalSprintUsage.get(canonicalSprintId) || createEmptyUsageTotals();
+      canonicalTotal.wallTimeMs += wallTime;
+      canonicalSprintUsage.set(canonicalSprintId, canonicalTotal);
+    }
   }
   usage.wallTimeMs = Array.from(wallTimeByTaskId.values()).reduce((sum, value) => sum + value, 0);
 
   const taskIds = Array.from(new Set([...taskUsage.keys(), ...gitTaskUsage.keys()]));
-  const sprintIds = Array.from(new Set([...sprintUsage.keys(), ...gitSprintUsage.keys()]));
+  const sprintIds = Array.from(new Set([
+    ...sprintUsage.keys(),
+    ...canonicalSprintUsage.keys(),
+    ...gitSprintUsage.keys(),
+  ]));
 
   const taskMeta = deps.getTaskMetadata(projectId, taskIds);
   const sprintMeta = deps.getSprintMetadata(projectId, sprintIds);
@@ -398,6 +424,13 @@ export function queryProjectStatsSnapshot(
     range: normalized.range,
     generatedAt: nowIso,
     usage,
+    costAnalytics: {
+      sprints: mapEntityUsage(
+        canonicalSprintUsage,
+        canonicalSprintLastActivity,
+        (id) => sprintMeta.get(id),
+      ).sort((a, b) => b.usage.totalCostUsd - a.usage.totalCostUsd),
+    },
     mergeConflictCount: gitTotals.mergeConflictCount,
     git: {
       totals: gitTotals,
