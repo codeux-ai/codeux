@@ -270,10 +270,14 @@ test.describe('file browser page', () => {
 
     await expect(page.getByRole('heading', { name: 'Sprint-Branch durchsuchen und vergleichen' })).toBeVisible();
     await expect(page.getByRole('tree', { name: 'Sprint-Dateibaum' })).toBeVisible();
-    await page.getByRole('treeitem', { name: /Datei src\/a\/very\/long\/path\/example\.ts/ }).click();
+    const longPathFile = page.locator('[id="file-tree-node-src/a/very/long/path/example.ts"]');
+    await expect(longPathFile).toHaveAccessibleName('Datei src/a/very/long/path/example.ts');
+    await longPathFile.click();
     await expect(page.getByText("export const repositoryText = 'unverändert';")).toBeVisible();
 
-    await page.getByRole('treeitem', { name: /Datei assets\/logo\.bin/ }).click();
+    const binaryFile = page.locator('[id="file-tree-node-assets/logo.bin"]');
+    await expect(binaryFile).toHaveAccessibleName('Datei assets/logo.bin');
+    await binaryFile.click();
     await expect(page.getByText('Binärdatei erkannt')).toBeVisible();
 
     await page.getByRole('tab', { name: /Änderungen/ }).click();
@@ -282,7 +286,7 @@ test.describe('file browser page', () => {
     await expect(changedFiles.getByRole('option', { name: /Hinzugefügt: Datei src\/added\.ts/ })).toBeVisible();
     await expect(changedFiles.getByRole('option', { name: /Gelöscht: Datei src\/deleted\.ts/ })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Vergleich für src/modified.ts' })).toBeVisible();
-    await expect(page.getByText('e2e/file-browser')).toBeVisible();
+    await expect(page.getByText('e2e/file-browser', { exact: true })).toBeVisible();
     expect(routes.startRequests()).toBe(0);
   });
 });
