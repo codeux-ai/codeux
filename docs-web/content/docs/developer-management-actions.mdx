@@ -45,9 +45,10 @@ Domain for project CRUD and selection.
 | `list` | – | `projectId` | List sprints for a project. |
 | `get` | – | `sprintId` | Get a sprint. |
 | `create` | – | `projectId`, `name \| title` | Create a sprint. Accepts `goal` or `goalMarkdown`, plus optional sprint metadata. |
+| `followup` | – | `projectId` | Save an idle, unplanned follow-up draft. Accepts the same title and goal aliases as `create` and never starts planning. |
 | `update` | – | `sprintId`, update fields | Update a sprint. Accepts `name` or `title`, and `goal` or `goalMarkdown`. |
 | `delete` | ✅ | `sprintId` | Delete a sprint. |
-| `start` | – | `projectId`, `sprintId` | Begin a sprint run (orchestrate). |
+| `start` | – | `projectId`, `sprintId` | Begin a sprint run. If the sprint has no tasks, plan it with auto-start first. |
 | `pause` | – | `sprintRunId` | Pause an active run. |
 | `cancel` | – | `sprintRunId` | Cancel gracefully. |
 | `force_cancel` | – | `sprintRunId` | Force-cancel (immediate). |
@@ -56,6 +57,8 @@ Domain for project CRUD and selection.
 | `plan` | – | `projectId`, `sprintId` | Start the planning agent server-side and return a started acknowledgement immediately after synchronous precondition validation. Optional `autoStart`, `replan`, `planningAgentPresetId`, and `overrides` are preserved. |
 
 `title` and `goalMarkdown` are MCP-friendly aliases. The repository stores sprint `name` and `goal`.
+
+For follow-up work that must wait for another sprint, call `followup` first, then schedule the returned sprint through `manage_scheduler` with `schedule_sprint`, `scheduleMode: "after_sprint_end"`, and the source sprint id. The draft stays idle and unplanned until that schedule starts it. Do not call `plan` before scheduling: the scheduled `start` performs planning with auto-start only after the source sprint has completed.
 
 The stable immediate response is:
 

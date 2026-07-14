@@ -12,6 +12,40 @@ function createApp(deps: Partial<DashboardDependencies>): express.Express {
 }
 
 describe("sprint manual action routes", () => {
+  it("updates an idle sprint branch through the scoped branch service", async () => {
+    const updateSprintBranch = vi.fn().mockResolvedValue({
+      status: "advanced",
+      featureBranch: "feature/sprint-one",
+      defaultBranch: "dev",
+      commitSha: "commit-2",
+    });
+
+    const response = await request(createApp({ updateSprintBranch }))
+      .post("/api/projects/project-1/sprints/sprint-1/update-branch");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ status: "advanced", commitSha: "commit-2" });
+    expect(updateSprintBranch).toHaveBeenCalledWith("project-1", "sprint-1");
+  });
+
+  it("returns a conflict when a sprint branch cannot be fast-forwarded safely", async () => {
+    const updateSprintBranch = vi.fn().mockRejectedValue(new Error("The sprint branch has diverged."));
+
+    const response = await request(createApp({ updateSprintBranch }))
+      .post("/api/projects/project-1/sprints/sprint-1/update-branch");
+
+    expect(response.status).toBe(409);
+    expect(response.body.error).toContain("has diverged");
+  });
+
+  it("fails closed when sprint branch updates are not configured", async () => {
+    const response = await request(createApp({}))
+      .post("/api/projects/project-1/sprints/sprint-1/update-branch");
+
+    expect(response.status).toBe(501);
+    expect(response.body.error).toContain("not available");
+  });
+
   it("marks a sprint completed through the runtime-aware action", async () => {
     const markSprintCompleted = vi.fn().mockResolvedValue({ id: "sprint-1", status: "completed" });
 

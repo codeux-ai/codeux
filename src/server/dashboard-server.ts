@@ -272,6 +272,7 @@ export interface DashboardServerOptions {
   getSprint: (sprintId: string) => SprintRecord | null;
   createSprint: (projectId: string, input: CreateSprintInput) => SprintRecord;
   updateSprint: (sprintId: string, input: UpdateSprintInput) => SprintRecord;
+  updateSprintBranch?: (projectId: string, sprintId: string) => Promise<import("../contracts/project-management-types.js").SprintBranchUpdateResult>;
   markSprintCompleted?: (sprintId: string) => Promise<SprintRecord>;
   markSprintQaPassed?: (sprintId: string) => Promise<SprintRecord> | SprintRecord;
   deleteSprint: (sprintId: string) => void;

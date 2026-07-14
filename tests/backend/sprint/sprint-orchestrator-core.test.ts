@@ -8,6 +8,113 @@ import { buildDeps } from "./sprint-orchestrator.setup.js";
 import { SprintActionRunner } from "../../../src/domain/sprint/orchestrator/sprint-action-runner.js";
 
 describe("SprintOrchestrator core execution", () => {
+  it("automatically plans an unplanned sprint once and deduplicates repeated starts", async () => {
+    const { deps } = buildDeps();
+    deps.getDashboardSettings = () => ({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      sprintLoopSteps: {
+        ...DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps,
+        branchPreflight: false,
+        planningPreflight: true,
+      },
+    });
+    deps.sprintExecutionStateService.hasPlannedTasks.mockReturnValue(false);
+
+    let finishPlanning!: () => void;
+    const planningPromise = new Promise<void>((resolve) => {
+      finishPlanning = resolve;
+    });
+    const planner = vi.fn(() => planningPromise);
+    const orchestrator = new SprintOrchestrator(deps as any);
+    orchestrator.setUnplannedSprintPlanner(planner);
+
+    const first = await orchestrator.execute({
+      project_id: "project-1",
+      sprint_id: "sprint-1",
+      action: "orchestrate",
+      wait: true,
+    });
+    const repeated = await orchestrator.execute({
+      project_id: "project-1",
+      sprint_id: "sprint-1",
+      action: "orchestrate",
+      wait: true,
+    });
+
+    expect(planner).toHaveBeenCalledOnce();
+    expect(planner).toHaveBeenCalledWith("project-1", "sprint-1");
+    expect(first.content[0].text).toContain("planning started automatically");
+    expect(repeated.content[0].text).toContain("planning is already in progress");
+    expect(deps.sprintRunLifecycleService.createRun).not.toHaveBeenCalled();
+    expect(deps.startTask).not.toHaveBeenCalled();
+
+    finishPlanning();
+    await planningPromise;
+  });
+
+  it("keeps status read-only when a sprint has not been planned", async () => {
+    const { deps } = buildDeps();
+    deps.getDashboardSettings = () => ({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      sprintLoopSteps: {
+        ...DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps,
+        branchPreflight: false,
+        planningPreflight: true,
+      },
+    });
+    deps.sprintExecutionStateService.hasPlannedTasks.mockReturnValue(false);
+    deps.renderInstruction = vi.fn(async (templateId: string) => (
+      templateId === "planningMissing" ? "Sprint planning is required." : ""
+    ));
+    const planner = vi.fn().mockResolvedValue({ ok: true });
+    const orchestrator = new SprintOrchestrator(deps as any);
+    orchestrator.setUnplannedSprintPlanner(planner);
+
+    const result = await orchestrator.execute({
+      project_id: "project-1",
+      sprint_id: "sprint-1",
+      action: "status",
+      wait: false,
+    });
+
+    expect(result.content[0].text).toBe("Sprint planning is required.");
+    expect(planner).not.toHaveBeenCalled();
+    expect(deps.sprintRunLifecycleService.createRun).not.toHaveBeenCalled();
+  });
+
+  it("starts planned sprints without invoking automatic planning", async () => {
+    const { deps } = buildDeps();
+    deps.getDashboardSettings = () => ({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      sprintLoopSteps: {
+        ...DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps,
+        branchPreflight: false,
+        planningPreflight: true,
+        watchLoop: false,
+      },
+    });
+    deps.sprintExecutionStateService.hasPlannedTasks.mockReturnValue(true);
+    const planner = vi.fn().mockResolvedValue({ ok: true });
+    const orchestrator = new SprintOrchestrator(deps as any);
+    orchestrator.setUnplannedSprintPlanner(planner);
+    const runOrchestrate = vi.spyOn(
+      (orchestrator as any).actionRunner as SprintActionRunner,
+      "runOrchestrate",
+    ).mockResolvedValue({ content: [{ type: "text", text: "started" }] });
+
+    const result = await orchestrator.execute({
+      project_id: "project-1",
+      sprint_id: "sprint-1",
+      action: "orchestrate",
+      wait: false,
+    });
+
+    expect(result.content[0].text).toBe("started");
+    expect(planner).not.toHaveBeenCalled();
+    expect(runOrchestrate).toHaveBeenCalledOnce();
+    expect(deps.sprintRunLifecycleService.createRun).toHaveBeenCalledOnce();
+  });
+
   it("routes actions via SprintActionRunner correctly", async () => {
     const { deps } = buildDeps();
     const orchestrator = new SprintOrchestrator(deps as any);

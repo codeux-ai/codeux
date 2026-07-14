@@ -12,7 +12,7 @@ A sprint can be acted on in three modes:
 | --- | --- | --- |
 | **plan** | Generate or regenerate subtasks via the planning agent | Writes subtask markdown files; creates DB rows |
 | **status** | Render the current state | None (refreshes dashboard snapshot only) |
-| **orchestrate** | Execute — start tasks, gate merges, advance dependencies | Many: provider calls, Git pushes, PRs, merges |
+| **orchestrate** | Execute — automatically plan when needed, then start tasks, gate merges, and advance dependencies | Many: provider calls, Git pushes, PRs, merges |
 
 The MCP API exposes all three under the `sprints` and `tasks` management domains. The dashboard buttons map 1:1.
 
@@ -20,8 +20,8 @@ The MCP API exposes all three under the `sprints` and `tasks` management domains
 
 A single orchestration *cycle* runs the following pipeline (each step is independently toggleable in `sprintLoopSteps`):
 
-1. **branchPreflight** — Ensure the feature branch exists; create it from default branch if not.
-2. **planningPreflight** — Validate the subtask graph: detect cycles, ensure required fields, sanity-check dependencies.
+1. **branchPreflight** — Ensure the feature branch exists; create it from the default branch if needed. Before the first task starts, safely fast-forward an unchanged feature branch to the latest default commit. Once task execution has begun, or when the feature branch has commits not present on default, preserve it without merging, rebasing, resetting, or rewriting history.
+2. **planningPreflight** — If the sprint has no tasks, Start launches planning automatically after branch refresh and continues orchestration after the tasks are saved. Repeated starts reuse the in-progress planning request. Status checks remain read-only and report that planning is required.
 3. **loadSubtasks** — Read subtask markdown files and reconcile with DB state.
 4. **sessionSync** — Synchronize the latest state of every active provider invocation (hosted and CLI providers).
 5. **statusDerivation** — Apply state rules to derive each subtask's effective status (`PENDING`, `RUNNING`, `CODING_COMPLETED`, `COMPLETED`, etc.).
@@ -30,6 +30,10 @@ A single orchestration *cycle* runs the following pipeline (each step is indepen
 8. **statusTable** — Render the cycle report.
 
 Each step is independently catchable; a failure in one step does not crash the cycle. Errors are logged and surface as attention items.
+
+For an idle sprint, **Update Branch** in its Sprints action menu runs the same true fast-forward on demand. The action refuses to run after task work has started or when the feature branch has diverged, so manual refresh cannot overwrite sprint work.
+
+This ordering also applies to scheduled follow-up sprints. A follow-up draft anchored after another sprint remains unplanned while its source is running. Once the source completes, the scheduler submits the draft through the normal Start path, so branch refresh and planning both happen against the completed source sprint's latest default-branch state before task execution begins.
 
 ## The watch loop
 

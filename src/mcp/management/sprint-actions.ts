@@ -329,6 +329,13 @@ export class SprintActions {
         const result = this.deps.projectManagementRepository.createSprint(projectId, input);
         return { result };
       }
+      case "followup": {
+        const projectId = readRequiredString(payload, "projectId");
+        const input = normalizeCreateSprintInput(payload);
+        input.status = "idle";
+        const result = this.deps.projectManagementRepository.createSprint(projectId, input);
+        return { result };
+      }
       case "update": {
         const sprintId = readRequiredString(payload, "sprintId");
         const input = normalizeUpdateSprintInput(payload);

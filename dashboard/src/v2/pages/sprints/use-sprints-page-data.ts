@@ -160,7 +160,7 @@ export function useSprintsPageData() {
 
   const inFlightStartIds = useRef<Set<string>>(new Set());
 
-  const { feedback, setError, clearFeedback, clearError } = useActionFeedback();
+  const { feedback, setSuccess, setError, clearFeedback, clearError } = useActionFeedback();
 
   const { projects, selectedProject, selectProject, createProject } = useProjectData();
   const {
@@ -447,6 +447,7 @@ export function useSprintsPageData() {
     reserveNextSprintNumber,
     releaseSprintNumberReservation,
     setError,
+    setSuccess,
     setExportState,
     addTaskForSprint,
     setAddTaskSprintTasks,

@@ -243,6 +243,35 @@ describe("SprintActions", () => {
     expect(result.result).toEqual(mockSprint);
   });
 
+  it("saves follow-up work as an idle unplanned draft without starting planning", async () => {
+    const mockSprint = {
+      id: "s-followup",
+      projectId: "p1",
+      name: "Deferred follow-up",
+      goal: "Apply the findings after the current sprint.",
+      status: "idle",
+    };
+    vi.mocked(projectRepo.createSprint).mockReturnValue(mockSprint as any);
+
+    const result = await sprintActions.handleSprintAction(makeArgs("followup", {
+      projectId: "p1",
+      title: "Deferred follow-up",
+      goalMarkdown: "Apply the findings after the current sprint.",
+      status: "running",
+    }));
+
+    expect(projectRepo.createSprint).toHaveBeenCalledWith("p1", {
+      name: "Deferred follow-up",
+      goal: "Apply the findings after the current sprint.",
+      status: "idle",
+    });
+    expect(planningAgentService.planSprint).not.toHaveBeenCalled();
+    expect(planningAgentService.startPlanSprint).not.toHaveBeenCalled();
+    expect(execControl.orchestrateSprint).not.toHaveBeenCalled();
+    expect(schedulerService.createEntry).not.toHaveBeenCalled();
+    expect(result.result).toEqual(mockSprint);
+  });
+
   it("rejects blank required strings before repository calls", async () => {
     await expect(sprintActions.handleSprintAction(makeArgs("list", { projectId: "   " })))
       .rejects.toThrow("projectId is required");
@@ -1096,6 +1125,15 @@ describe("SprintActions", () => {
       action: "import_issues",
       provider: "bitbucket",
     })).toThrow("Invalid arguments for tool manage_sprints");
+  });
+
+  it("validates the followup MCP action and its public sprint aliases", () => {
+    expect(() => validateToolArguments("manage_sprints", {
+      action: "followup",
+      projectId: "p1",
+      title: "Deferred follow-up",
+      goalMarkdown: "Plan this only when the scheduled sprint starts.",
+    })).not.toThrow();
   });
 
   it("returns before background planning settles and queues a success wakeup", async () => {
