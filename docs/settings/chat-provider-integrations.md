@@ -22,7 +22,7 @@ Bridge modes:
 - `managed_bridge`: HTTP delivery to a configured managed bridge URL, with bridge credentials used as transport credentials.
 - `webhook`: HTTP delivery to a configured generic gateway URL such as `webhookUrl`, `eventsUrl`, `botEndpointUrl`, or `gatewayUrl`.
 - `native_bridge`: local command execution for native bridge scripts. Code UX writes JSON to stdin, parses the configured command into executable and arguments without shell interpretation, and passes an optional bridge token through the environment.
-- `official_api`: profile-specific authenticated ingress, outbound mapping, provider error classification, and bounded live verification where advertised.
+- `official_api`: profile-specific authenticated ingress, outbound mapping, provider error classification, and bounded read-only provider verification where advertised. Verification availability is separate from any opt-in test-send capability.
 
 ## Setup Model
 
@@ -142,7 +142,7 @@ Supported actions:
 Approval behavior:
 
 - `delete_connection` and `delete_channel_binding` require destructive-action approval.
-- `update_connection` requires one-use approval before replacing secrets or changing executable/endpoint setup.
+- `update_connection` requires one-use approval before replacing secrets or removing/modifying persisted executable/endpoint setup. Omitted URL or command fields count as removal because setup replacements are compared with the stored connection.
 - `retry_delivery` requires one-use approval because it can cause another provider send.
 - Approval fingerprints use an exact redacted payload hash; raw sensitive values are not returned.
 

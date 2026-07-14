@@ -26,7 +26,7 @@ The bridge-mode type includes `managed_bridge`, `webhook`, `native_bridge`, and 
 
 Public records expose redacted credential metadata only. Runtime code that needs secrets resolves an ephemeral connection profile through `ChatProviderSecretService`; repository reads never decrypt connector credentials.
 
-Profiles also declare authentication and handshake behavior, normalization, external identity, outbound construction and parsing, verification and session requirements, official references, live-test availability, and lifecycle metadata. Registry construction is side-effect free; shared service facades retain HTTP, command execution, redaction, replay, and timing-safe comparison responsibilities.
+Profiles also declare authentication and handshake behavior, normalization, external identity, outbound construction and parsing, verification and session requirements, official references, live-test availability, and lifecycle metadata. Read-only provider verification modes are declared separately from opt-in live-test/send modes, so a connector can validate credentials and provider resources without enabling a test message. Registry construction is side-effect free; shared service facades retain HTTP, command execution, redaction, replay, and timing-safe comparison responsibilities.
 
 See [Chat Connector Profiles](../settings/chat-connectors/index.md) for provider-specific baselines.
 
@@ -47,7 +47,7 @@ Connection and binding responses include stable IDs plus generated ingress URL g
 Approval rules:
 
 - `delete_connection` and `delete_channel_binding` require the standard destructive-action approval handshake.
-- `update_connection` requires a one-use approval handshake before replacing secrets or changing executable/endpoint setup. The approval is bound to an exact redacted payload hash and does not echo sensitive values.
+- `update_connection` requires a one-use approval handshake before replacing secrets or removing/modifying existing executable/endpoint setup. Detection compares the replacement setup with the persisted connection, including omitted URL or command fields. The approval is bound to an exact redacted payload hash and does not echo sensitive values.
 - `retry_delivery` requires the same one-use, exact-payload approval because a provider may receive the message again.
 
 MCP ingress guidance always uses the implemented canonical route `/api/chat-providers/ingress/:providerConnectionId`. Project authorization for bindings and deliveries is resolved from the persisted binding; a caller-supplied project filter cannot grant access to a delivery owned by another project.
@@ -126,7 +126,7 @@ Dashboard settings use `src/server/chat-provider-routes.ts` to manage chat provi
 | `POST /api/chat-providers/connections` | Creates a provider connection after validating provider kind, bridge mode, setup fields, display name, booleans, and secret shape. |
 | `PATCH /api/chat-providers/connections/:connectionId` | Updates connection metadata, setup, status, enabled state, bridge mode, or secrets without echoing raw secret values. |
 | `DELETE /api/chat-providers/connections/:connectionId` | Deletes a provider connection and cascades bindings and delivery rows. |
-| `POST /api/chat-providers/connections/:connectionId/verify` | Runs profile configuration validation and any supported live verification, then persists a sanitized outcome. |
+| `POST /api/chat-providers/connections/:connectionId/verify` | Runs profile configuration validation and any supported read-only provider verification, independently of opt-in send testing, then persists a sanitized outcome. |
 | `GET /api/chat-providers/health` | Returns configured, active, verified, and error counts plus sanitized last outcomes without provider network calls. |
 | `GET /api/chat-providers/diagnostics` | Compatibility alias for the local connector health summary. |
 | `GET /api/chat-providers/channel-bindings` | Lists channel bindings, including same external channel bindings across multiple projects. |

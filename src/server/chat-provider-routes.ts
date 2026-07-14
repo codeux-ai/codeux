@@ -25,6 +25,7 @@ import type {
 } from "../contracts/chat-provider-types.js";
 import { getChatProviderSetupSchema } from "../contracts/chat-provider-types.js";
 import { CHAT_CONNECTOR_REGISTRY } from "../domain/chat-connectors/registry.js";
+import { supportsLiveConnectorVerification } from "../domain/chat-connectors/types.js";
 import { redactText } from "../shared/security/redaction.js";
 
 interface ChatProviderSetupHints {
@@ -74,7 +75,7 @@ export function registerChatProviderRoutes(router: Express, deps: DashboardDepen
       const profile = registry.getForMode(input.providerKind, mode);
       const verification = profile.verification.verifyConfiguration(mode, input.setup ?? {}, input.secrets ?? null);
       if (!verification.valid) throw new HttpRouteError(400, verification.issues.join(" "));
-      if (profile.liveTest.available && profile.liveTest.modes.includes(mode)) {
+      if (supportsLiveConnectorVerification(profile, mode)) {
         throw new HttpRouteError(409, "Run connection verification before activating this provider mode.");
       }
       configurationVerified = true;

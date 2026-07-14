@@ -26,7 +26,7 @@ The bridge-mode type includes `managed_bridge`, `webhook`, `native_bridge`, and 
 
 Public records expose redacted credential metadata only. Runtime code that needs secrets resolves an ephemeral connection profile through `ChatProviderSecretService`; repository reads never decrypt connector credentials.
 
-Profiles declare setup, authentication and handshake behavior, normalization, external identity, outbound mapping and parsing, verification, session requirements, official references, live-test availability, and lifecycle metadata. The registry itself is side-effect free; network and process execution stay in shared runtime services. See the [Chat Connector Registry](./chat-connectors/index.md) and its provider pages.
+Profiles declare setup, authentication and handshake behavior, normalization, external identity, outbound mapping and parsing, verification, session requirements, official references, live-test availability, and lifecycle metadata. Read-only provider verification modes are separate from opt-in live-test/send modes, so connectors can validate credentials and provider resources without enabling a test message. The registry itself is side-effect free; network and process execution stay in shared runtime services. See the [Chat Connector Registry](./chat-connectors/index.md) and its provider pages.
 
 ## MCP management
 
@@ -45,7 +45,7 @@ Connection and binding responses include stable IDs plus generated ingress URL g
 Approval rules:
 
 - `delete_connection` and `delete_channel_binding` require the standard destructive-action approval handshake.
-- `update_connection` requires one-use approval before replacing secrets or changing executable/endpoint setup; `retry_delivery` requires the same exact-redacted-payload approval.
+- `update_connection` requires one-use approval before replacing secrets or removing/modifying persisted executable/endpoint setup, including omission-based URL or command removal; `retry_delivery` requires the same exact-redacted-payload approval.
 
 Ingress guidance uses `/api/chat-providers/ingress/:providerConnectionId`. Project scope for binding and delivery operations comes from persisted ownership, not caller-supplied project filters.
 
@@ -123,7 +123,7 @@ Dashboard settings use `src/server/chat-provider-routes.ts` to manage chat provi
 | `POST /api/chat-providers/connections` | Creates a provider connection after validating provider kind, bridge mode, setup fields, display name, booleans, and secret shape. |
 | `PATCH /api/chat-providers/connections/:connectionId` | Updates connection metadata, setup, status, enabled state, bridge mode, or secrets without echoing raw secret values. |
 | `DELETE /api/chat-providers/connections/:connectionId` | Deletes a provider connection and cascades bindings and delivery rows. |
-| `POST /api/chat-providers/connections/:connectionId/verify` | Runs bounded profile verification and persists a sanitized outcome. |
+| `POST /api/chat-providers/connections/:connectionId/verify` | Runs bounded read-only provider verification independently of opt-in send testing and persists a sanitized outcome. |
 | `GET /api/chat-providers/health` | Returns local configured/active/verified/error counts and last outcomes without network calls. |
 | `GET /api/chat-providers/channel-bindings` | Lists channel bindings, including same external channel bindings across multiple projects. |
 | `GET /api/chat-providers/connections/:connectionId/channel-bindings` | Lists bindings for one provider connection. |

@@ -523,6 +523,59 @@ describe("ChatProviderActions", () => {
     expect(JSON.stringify({ verified, health })).not.toContain("discord-secret-token");
   });
 
+  it("runs the read-only WhatsApp provider request through MCP and redacts failures", async () => {
+    const accessToken = "mcp-meta-access-token-that-must-stay-private";
+    const phoneNumberId = "109876543210987";
+    const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(new Error(
+      `Meta request failed for ${accessToken} at https://graph.facebook.com/private?token=${accessToken}`,
+    ));
+    const { providerRepository, secretService } = await createHarness();
+    const verificationService = new ChatProviderVerificationService({
+      chatProviderRepository: providerRepository,
+      chatProviderSecretService: secretService,
+      fetchImplementation: fetchMock,
+    });
+    const actions = new ChatProviderActions(providerRepository, secretService, {
+      chatProviderVerificationService: verificationService,
+    });
+    const connection = await secretService.createConnection({
+      providerKind: "whatsapp",
+      displayName: "WhatsApp MCP verification",
+      bridgeMode: "official_api",
+      setup: { graphApiVersion: "v23.0", phoneNumberId },
+      secrets: {
+        accessToken,
+        appSecret: "mcp-meta-app-secret",
+        webhookVerifyToken: "mcp-meta-webhook-token",
+      },
+    });
+
+    const result = expectResult(await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "verify_connection",
+      payload: { providerConnectionId: connection.id },
+    }));
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(
+      `https://graph.facebook.com/v23.0/${phoneNumberId}?fields=id,display_phone_number,verified_name,quality_rating`,
+    );
+    expect(init).toMatchObject({ method: "GET", headers: { authorization: `Bearer ${accessToken}` } });
+    expect(init).not.toHaveProperty("body");
+    expect(result.verification).toMatchObject({
+      providerKind: "whatsapp",
+      status: "failed",
+      providerErrorCode: "provider_verification_failed",
+      retryable: true,
+      setupGuidance: { liveVerificationAvailable: true },
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain(accessToken);
+    expect(serialized).not.toContain("graph.facebook.com/private");
+    expect(serialized).not.toContain("authorization");
+  });
+
   it("reports verification timeouts without serializing credentials", async () => {
     const { providerRepository, secretService } = await createHarness();
     const discord = CHAT_CONNECTOR_REGISTRY.get("discord");
@@ -680,6 +733,104 @@ describe("ChatProviderActions", () => {
       action: "verify_connection",
       payload: { providerConnectionId: connection.id },
     })).rejects.toThrow(/credential administration is disabled/i);
+  });
+
+  it("compares persisted URL and command setup before requiring exact one-use approval", async () => {
+    const { providerRepository, secretService, verificationService } = await createHarness();
+    const endpointConnection = providerRepository.createConnection({
+      providerKind: "slack",
+      displayName: "Endpoint mutation",
+      bridgeMode: "webhook",
+      setup: { eventsUrl: "https://provider.example.test/events" },
+    });
+    const commandConnection = providerRepository.createConnection({
+      providerKind: "imessage",
+      displayName: "Command mutation",
+      bridgeMode: "native_bridge",
+      setup: { command: "/usr/local/bin/existing-bridge" },
+    });
+    const deniedActions = new ChatProviderActions(providerRepository, secretService, {
+      chatProviderVerificationService: verificationService,
+      allowCredentialMutation: () => false,
+    });
+
+    for (const [providerConnectionId, setup] of [
+      [endpointConnection.id, {}],
+      [endpointConnection.id, { eventsUrl: "https://provider.example.test/replacement" }],
+      [commandConnection.id, {}],
+      [commandConnection.id, { command: "/usr/local/bin/replacement-bridge" }],
+    ] as const) {
+      await expect(deniedActions.handleChatProviderAction({
+        domain: "chat_providers",
+        action: "update_connection",
+        payload: { providerConnectionId, setup },
+      })).rejects.toThrow(/credential administration is disabled/i);
+    }
+
+    const actions = new ChatProviderActions(providerRepository, secretService, {
+      chatProviderVerificationService: verificationService,
+    });
+    const clearPayload = { providerConnectionId: endpointConnection.id, setup: {} };
+    const clearPreflight = await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: clearPayload,
+    });
+    expect(clearPreflight.approvalRequired).toBe(true);
+    expectResult(await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: clearPayload,
+      approval: { confirmed: true },
+    }));
+    expect(providerRepository.getConnection(endpointConnection.id)?.setup).toEqual({});
+
+    const replacementPayload = {
+      providerConnectionId: commandConnection.id,
+      setup: { command: "/usr/local/bin/replacement-bridge" },
+    };
+    const replacementPreflight = await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: replacementPayload,
+    });
+    expect(replacementPreflight.approvalRequired).toBe(true);
+    const mismatched = await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: {
+        providerConnectionId: commandConnection.id,
+        setup: { command: "/usr/local/bin/different-bridge" },
+      },
+      approval: { confirmed: true },
+    });
+    expect(mismatched.approvalRequired).toBe(true);
+    expect(providerRepository.getConnection(commandConnection.id)?.setup).toEqual({
+      command: "/usr/local/bin/existing-bridge",
+    });
+    expectResult(await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: replacementPayload,
+      approval: { confirmed: true },
+    }));
+    expect(providerRepository.getConnection(commandConnection.id)?.setup).toEqual({
+      command: "/usr/local/bin/replacement-bridge",
+    });
+
+    providerRepository.updateConnection(commandConnection.id, {
+      setup: { command: "/usr/local/bin/existing-bridge" },
+    });
+    const reused = await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: replacementPayload,
+      approval: { confirmed: true },
+    });
+    expect(reused.approvalRequired).toBe(true);
+    expect(providerRepository.getConnection(commandConnection.id)?.setup).toEqual({
+      command: "/usr/local/bin/existing-bridge",
+    });
   });
 
   it("enforces persisted project ownership and one-use delivery retry approval", async () => {

@@ -19,6 +19,7 @@ import type { ChatProviderSecretService } from "../../services/chat-provider-sec
 import type { ChatProviderVerificationService } from "../../services/chat-provider-verification-service.js";
 import type { ChatProviderOutboundService } from "../../services/chat-provider-outbound-service.js";
 import { CHAT_CONNECTOR_REGISTRY, type ChatConnectorRegistry } from "../../domain/chat-connectors/registry.js";
+import { supportsLiveConnectorVerification } from "../../domain/chat-connectors/types.js";
 import { redactText } from "../../shared/security/redaction.js";
 import {
   buildMcpApprovalFingerprint,
@@ -401,7 +402,7 @@ export class ChatProviderActions {
       const profile = this.registry.getForMode(providerKind, bridgeMode);
       const verification = profile.verification.verifyConfiguration(bridgeMode, setup ?? {}, secrets ?? null);
       if (!verification.valid) throw new Error(verification.issues.join(" "));
-      if (profile.liveTest.available && profile.liveTest.modes.includes(bridgeMode)) {
+      if (supportsLiveConnectorVerification(profile, bridgeMode)) {
         throw new Error("Run verify_connection before activating a connection that requires live verification.");
       }
       configurationVerified = true;
@@ -438,7 +439,14 @@ export class ChatProviderActions {
     const transportChanged = payload.bridgeMode !== undefined || setup !== undefined || secrets !== undefined;
     const requestedBridgeMode = parseOptionalEnumStrict(payload, "bridgeMode", BRIDGE_MODES);
     const sensitiveTransportChanged = secrets !== undefined
-      || setupContainsSensitiveTransport(existing.providerKind, requestedBridgeMode ?? existing.bridgeMode, setup, this.registry)
+      || sensitiveSetupTransportChanged(
+        existing.providerKind,
+        existing.bridgeMode,
+        existing.setup,
+        requestedBridgeMode ?? existing.bridgeMode,
+        setup,
+        this.registry,
+      )
       || (requestedBridgeMode !== undefined && (
         bridgeUsesSensitiveTransport(existing.providerKind, existing.bridgeMode, this.registry)
         || bridgeUsesSensitiveTransport(existing.providerKind, requestedBridgeMode, this.registry)
@@ -660,6 +668,26 @@ function setupContainsSensitiveTransport(
   const resolvedMode = bridgeMode ?? profile.setupSchema.defaultBridgeMode;
   const schema = profile.setupSchema.bridgeModes.find((candidate) => candidate.mode === resolvedMode);
   return schema?.setupFields.some((field) => (field.type === "command" || field.type === "url") && field.key in setup) === true;
+}
+
+function sensitiveSetupTransportChanged(
+  providerKind: ChatProviderKind,
+  existingMode: ChatProviderBridgeMode,
+  existingSetup: ChatProviderSetupConfig,
+  requestedMode: ChatProviderBridgeMode,
+  replacementSetup: ChatProviderSetupConfig | undefined,
+  registry: ChatConnectorRegistry,
+): boolean {
+  if (replacementSetup === undefined) return false;
+  const profile = registry.get(providerKind);
+  const sensitiveKeys = new Set(
+    profile.setupSchema.bridgeModes
+      .filter((schema) => schema.mode === existingMode || schema.mode === requestedMode)
+      .flatMap((schema) => schema.setupFields
+        .filter((field) => field.type === "command" || field.type === "url")
+        .map((field) => field.key)),
+  );
+  return [...sensitiveKeys].some((key) => stableStringify(existingSetup[key]) !== stableStringify(replacementSetup[key]));
 }
 
 function bridgeUsesSensitiveTransport(

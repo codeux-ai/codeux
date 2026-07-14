@@ -30,7 +30,7 @@ https://graph.facebook.com/{graphApiVersion}/{phoneNumberId}/messages
 
 Requests include `messaging_product: whatsapp`; replies also include `context.message_id`. The recipient is the original sender WhatsApp ID, never the business phone-number channel ID. Successful `messages[].id` values are retained as outbound `wamid` delivery IDs. Official responses are classified through sanitized status, error-code, subcode, and transient metadata before generic HTTP handling, including Graph error envelopes returned with HTTP 200. This preserves typed retryability without echoing tokens or recipient data.
 
-Connection verification is read-only. It performs a GET for the configured test or registered phone-number resource and checks that Meta returns the same ID. It never sends a WhatsApp message. Send-based testing remains reserved for the separately opted-in Meta test-number workflow.
+Connection verification is read-only. It performs a GET for the configured test or registered phone-number resource and checks that Meta returns the same ID. This verification remains available even when the separate live-test/send capability is disabled; it never sends a WhatsApp message. Send-based testing remains reserved for the separately opted-in Meta test-number workflow.
 
 ## Legacy compatibility
 

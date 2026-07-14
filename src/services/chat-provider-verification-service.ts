@@ -1,4 +1,5 @@
 import type {
+  ChatProviderBridgeMode,
   ChatProviderConnectionRecord,
   ChatProviderKind,
   ChatProviderVerificationStatus,
@@ -13,6 +14,7 @@ import type {
   ChatConnectorProfile,
   ChatConnectorVerificationResult,
 } from "../domain/chat-connectors/types.js";
+import { supportsLiveConnectorVerification } from "../domain/chat-connectors/types.js";
 import type { ChatProviderRepository } from "../repositories/chat-provider-repository.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { getCorrelationId } from "../shared/logging/correlation-id.js";
@@ -199,9 +201,9 @@ export class ChatProviderVerificationService {
     secrets: Record<string, unknown> | null,
     configured: ChatConnectorVerificationResult,
   ): Promise<ChatConnectorLiveVerificationResult> {
-    if (!profile.liveTest.available || !profile.liveTest.modes.includes(mode)) return configured;
+    if (!supportsLiveConnectorVerification(profile, mode)) return configured;
     if (profile.verification.verifyLive) {
-      return profile.verification.verifyLive(mode, setup, secrets);
+      return profile.verification.verifyLive(mode, setup, secrets, this.fetchImplementation);
     }
     if (!profile.verification.live) return configured;
     const request = profile.verification.live.buildRequest({
@@ -258,7 +260,7 @@ class ChatProviderVerificationTimeoutError extends Error {
   }
 }
 
-function buildSetupGuidance(profile: ChatConnectorProfile, bridgeMode: string): ChatProviderSetupGuidance {
+function buildSetupGuidance(profile: ChatConnectorProfile, bridgeMode: ChatProviderBridgeMode): ChatProviderSetupGuidance {
   const bridge = profile.setupSchema.bridgeModes.find((candidate) => candidate.mode === bridgeMode);
   return {
     providerKind: profile.kind,
@@ -266,8 +268,7 @@ function buildSetupGuidance(profile: ChatConnectorProfile, bridgeMode: string): 
     requiredSetupFields: bridge?.setupFields.filter((field) => field.required).map((field) => field.key) ?? [],
     requiredSecretFields: bridge?.secretFields.filter((field) => field.required).map((field) => field.key) ?? [],
     capabilities: [...profile.verification.capabilities],
-    liveVerificationAvailable: profile.liveTest.available
-      && profile.liveTest.modes.some((mode) => mode === bridgeMode),
+    liveVerificationAvailable: supportsLiveConnectorVerification(profile, bridgeMode),
   };
 }
 

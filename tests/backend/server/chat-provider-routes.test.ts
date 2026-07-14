@@ -379,6 +379,57 @@ describe("chat provider dashboard routes", () => {
     });
   });
 
+  it("runs read-only WhatsApp verification without enabling live sends and redacts provider failures", async () => {
+    const accessToken = "rest-meta-access-token-that-must-stay-private";
+    const phoneNumberId = "109876543210987";
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      error: {
+        message: `Invalid ${accessToken} at https://graph.facebook.com/private?token=${accessToken}`,
+        type: "OAuthException",
+        code: 190,
+      },
+    }), { status: 400 }));
+    const context = await startTestServer({ verificationFetch: fetchMock });
+    const connection = await createChatProviderSecretFixture(context.chatProviderRepository).createConnection({
+      providerKind: "whatsapp",
+      displayName: "WhatsApp REST verification",
+      bridgeMode: "official_api",
+      setup: { graphApiVersion: "v23.0", phoneNumberId },
+      secrets: {
+        accessToken,
+        appSecret: "rest-meta-app-secret",
+        webhookVerifyToken: "rest-meta-webhook-token",
+      },
+    });
+
+    const response = await fetch(`${context.baseUrl}/api/chat-providers/connections/${connection.id}/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(
+      `https://graph.facebook.com/v23.0/${phoneNumberId}?fields=id,display_phone_number,verified_name,quality_rating`,
+    );
+    expect(init).toMatchObject({ method: "GET", headers: { authorization: `Bearer ${accessToken}` } });
+    expect(init).not.toHaveProperty("body");
+    const verification = await response.json() as any;
+    expect(verification).toMatchObject({
+      providerKind: "whatsapp",
+      status: "failed",
+      providerErrorCode: "provider_verification_failed",
+      retryable: false,
+      setupGuidance: { liveVerificationAvailable: true },
+    });
+    const serialized = JSON.stringify(verification);
+    expect(serialized).not.toContain(accessToken);
+    expect(serialized).not.toContain("graph.facebook.com/private");
+    expect(serialized).not.toContain("authorization");
+  });
+
   it("lists both delivery directions, requires retry approval, and redacts payload text", async () => {
     const context = await startTestServer();
     const project = createProject(context, "delivery-control");
@@ -496,7 +547,7 @@ async function expectValidationFailure(
   });
 }
 
-async function startTestServer(): Promise<TestServerContext> {
+async function startTestServer(options: { verificationFetch?: typeof fetch } = {}): Promise<TestServerContext> {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-chat-provider-routes-"));
   tempDirs.push(tempDir);
   const storage = new AppDbStorage(path.join(tempDir, "app.db"));
@@ -505,6 +556,7 @@ async function startTestServer(): Promise<TestServerContext> {
   const chatProviderVerificationService = new ChatProviderVerificationService({
     chatProviderRepository,
     chatProviderSecretService,
+    fetchImplementation: options.verificationFetch,
   });
   const chatProviderOutboundService = new ChatProviderOutboundService({
     chatProviderRepository,
