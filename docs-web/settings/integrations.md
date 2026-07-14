@@ -33,6 +33,10 @@ A practical review flow is:
 2. Save the smallest scope that should own the change. Use System for defaults that every project should inherit, and Project for repository-specific behavior.
 3. Reopen the Settings page after saving when the value controls startup behavior, provider routing, preview runtime, or destructive maintenance.
 
+## Localization And Protected Values
+
+The Integrations interface follows the dashboard language for setup guidance, authentication labels, connection states, importer controls, validation, and accessible feedback. Provider and product names remain unchanged. Credential values, secret placeholders, detected paths, endpoints, repository identifiers, scopes, and diagnostics returned by a provider or API are always shown verbatim and are never passed through translation messages.
+
 ## Risks And Gotchas
 
 Imported hints can reveal local auth paths; broad importer tokens can expose external workspaces to search.

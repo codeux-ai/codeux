@@ -32,7 +32,7 @@ import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js
 import type { DashboardLocale } from "../../../dashboard/src/v2/i18n/locales.js";
 
 const render = (ui: ComponentChild, locale: DashboardLocale = "en") => testingRender(
-  <DashboardI18nProvider initialLocale={locale}>{ui}</DashboardI18nProvider>,
+  <DashboardI18nProvider initialLocale={locale} storage={null}>{ui}</DashboardI18nProvider>,
 );
 
 const { navigateMock } = vi.hoisted(() => ({

@@ -1,11 +1,18 @@
 /** @vitest-environment happy-dom */
 import { h } from "preact";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, fireEvent, screen, cleanup, waitFor, within } from "@testing-library/preact";
+import { render as testingLibraryRender, fireEvent, screen, cleanup, waitFor, within } from "@testing-library/preact";
+import type { ComponentChildren } from "preact";
 import { ProviderInstanceCard } from "../../../../../../dashboard/src/v2/components/settings/ProviderInstanceCard";
 import type { SystemProviderConfig } from "../../../../../../dashboard/src/v2/lib/provider-runtime-preview";
 import { resetModelCatalogCache } from "../../../../../../dashboard/src/v2/components/ui/ModelCombobox";
 import { resetProviderCatalogCache } from "../../../../../../dashboard/src/v2/components/ui/ProviderCombobox";
+import { DashboardI18nProvider } from "../../../../../../dashboard/src/v2/i18n/context";
+import type { DashboardLocale } from "../../../../../../dashboard/src/v2/i18n/locales";
+
+const render = (children: ComponentChildren, locale: DashboardLocale = "en") => testingLibraryRender(children, {
+  wrapper: ({ children: wrappedChildren }) => <DashboardI18nProvider initialLocale={locale} storage={null}>{wrappedChildren}</DashboardI18nProvider>,
+});
 
 const PROVIDER_CATALOG = [
   { id: "openrouter", name: "OpenRouter", apiBaseUrl: "https://openrouter.ai/api/v1" },
@@ -292,6 +299,21 @@ describe("ProviderInstanceCard", () => {
     expect(screen.getByRole("status").textContent).toContain("OpenCode Auth authentication mode changed locally");
   });
 
+  it("announces German two-step removal without changing the provider name", () => {
+    const provider: SystemProviderConfig = { provider: "codex", name: "Codex Berlin", apiKey: "", mountAuth: false, authPath: "", authType: "apiKey" };
+    const onRemove = vi.fn();
+    render(<ProviderInstanceCard providerConfigId="codex-berlin" provider={provider} providerModel="gpt-5.5" dockerExecutionEnabled={false} onUpdate={vi.fn()} onRemove={onRemove} />, "de");
+
+    expect(screen.getByRole("button", { name: "Anzeigen: Codex Berlin API-Schlüssel" })).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Entfernen: Codex Berlin" }));
+    expect(screen.getByRole("group", { name: "Entfernen bestätigen: Codex Berlin" })).toBeDefined();
+    expect(screen.getByRole("status").textContent).toContain("Entfernen wurde vorbereitet für Codex Berlin");
+    expect(screen.getByRole("radiogroup", { name: "Codex Berlin Anbieterkonfiguration" })).toBeDefined();
+    expect(screen.getByText("~/.codex/config.toml")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Entfernen bestätigen: Codex Berlin" }));
+    expect(onRemove).toHaveBeenCalledTimes(1);
+  });
+
   it("renders provider config choices for CLI providers and updates all three modes", () => {
     const provider: SystemProviderConfig = {
       provider: "codex",
@@ -315,7 +337,7 @@ describe("ProviderInstanceCard", () => {
       />
     );
 
-    const configModeGroup = screen.getByRole("radiogroup", { name: "Codex Config provider config mode" });
+    const configModeGroup = screen.getByRole("radiogroup", { name: "Codex Config Provider Config" });
     expect(configModeGroup).toBeDefined();
     expect(within(configModeGroup).getByRole("radio", { name: /Copy Host/i }).getAttribute("aria-checked")).toBe("true");
     expect(screen.getByText("~/.codex/config.toml")).toBeDefined();
@@ -369,7 +391,7 @@ describe("ProviderInstanceCard", () => {
       />
     );
 
-    const input = screen.getByLabelText("Codex File Config provider config file");
+    const input = screen.getByLabelText("Codex File Config Config file");
     expect(input.getAttribute("placeholder")).toBe("~/.codex/config.toml");
     expect(screen.getByText("Select the Codex config.toml file to copy into the provider runtime.")).toBeDefined();
 
@@ -486,7 +508,7 @@ describe("ProviderInstanceCard", () => {
       />
     );
 
-    expect(screen.getByRole("region", { name: "OpenCode Preview generated OpenCode config preview" })).toBeDefined();
+    expect(screen.getByRole("region", { name: "OpenCode Preview OpenCode Generated config preview" })).toBeDefined();
   });
 
   it("lets the user type a custom model slug into the models.dev-backed combobox for a gateway model field", async () => {
