@@ -51,6 +51,14 @@ export interface DashboardI18nProviderProps {
 
 const DashboardI18nContext = createContext<DashboardI18nContextValue | null>(null);
 
+export const DASHBOARD_LOCALE_CHANGE_EVENT = "codeux:dashboard-locale-change";
+
+const announceDashboardLocaleChange = (locale: DashboardLocale): void => {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent<DashboardLocale>(DASHBOARD_LOCALE_CHANGE_EVENT, { detail: locale }));
+  }
+};
+
 export const syncDashboardDocumentLocale = (locale: DashboardLocale): void => {
   if (typeof document !== "undefined") {
     document.documentElement.lang = locale;
@@ -81,6 +89,7 @@ export const DashboardI18nProvider: FunctionComponent<DashboardI18nProviderProps
     syncDashboardDocumentLocale(resolvedLocale);
     setLocaleState(resolvedLocale);
     writeDashboardLocale(resolvedLocale, storage);
+    announceDashboardLocaleChange(resolvedLocale);
   }, [storage]);
 
   useLayoutEffect(() => {
@@ -98,6 +107,7 @@ export const DashboardI18nProvider: FunctionComponent<DashboardI18nProviderProps
       const nextLocale = resolveDashboardLocale(event.newValue);
       syncDashboardDocumentLocale(nextLocale);
       setLocaleState(nextLocale);
+      announceDashboardLocaleChange(nextLocale);
     };
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);

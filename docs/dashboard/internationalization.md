@@ -47,9 +47,11 @@ Interpolation replaces only named `{variable}` tokens through literal string sub
 
 ## Translation scope
 
-The initial application bundle translates only root-owned shell copy: the skip link, main landmark label, route loading announcement, and hidden footer. Route catalogs should be imported with their route when those features are localized.
+The root bundle translates root-owned shell copy, while route-specific catalogs load with their features. The Settings shell owns `messages/settings-shell.ts`, which covers Settings navigation, Smart Find, scope and save feedback, shared field/status language, section help, and the Appearance controls.
 
-Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged.
+Users choose **English** or **Deutsch** under **Settings → Appearance → Display Settings → Language**. The selection applies immediately in System and Project views, persists in browser-local storage, updates the document `lang`, and does not participate in Settings dirty tracking or Save/Reset requests. It is intentionally dashboard-owned: runtime and API messages, stored instructions/configuration values, and the English documentation are not translated.
+
+Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged. Settings category ids and navigation persistence also remain language-neutral so changing locale never invalidates the current category.
 
 ## Verification
 

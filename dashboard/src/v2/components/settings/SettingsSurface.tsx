@@ -7,6 +7,7 @@ import { useId, useLayoutEffect, useRef } from "preact/hooks";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useGsapDurations } from "../../lib/motion/constants.js";
 import { ActionFeedbackRegion } from "../ui/ActionFeedbackRegion.js";
+import { settingsShellText } from "../../i18n/messages/settings-shell.js";
 
 export const NoticePanel: FunctionComponent<{
   tone?: "neutral" | "warning" | "success" | "error" | "pending";
@@ -108,7 +109,7 @@ export const ActionButton: FunctionComponent<{
       {busy && (
         <div className="absolute inset-0 flex items-center justify-center">
           <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.2} />
-          <span className="sr-only">{label} in progress</span>
+          <span className="sr-only">{settingsShellText("actionInProgress", { label })}</span>
         </div>
       )}
       {describedBy ? <span id={disabledReasonId} className="sr-only">{disabledReason}</span> : null}
@@ -152,12 +153,12 @@ export const SettingsBody: FunctionComponent<{
   dirtyLabel?: string;
   successLabel?: string;
   children: ComponentChildren;
-}> = ({ error, message, loading, loadingLabel = "Loading\u2026", saving, savingLabel, dirty, dirtyLabel, successLabel, children }) => (
+}> = ({ error, message, loading, loadingLabel, saving, savingLabel, dirty, dirtyLabel, successLabel, children }) => (
   <div className="px-7 py-6 flex flex-col gap-4">
     {(error || message || loading || saving || dirty) && (
       <ActionFeedbackRegion
         status={error ? "error" : loading || saving ? "pending" : message ? "success" : dirty ? "warning" : "idle"}
-        message={error || (loading ? loadingLabel : saving ? (savingLabel || "Saving...") : message ? (successLabel || message) : dirty ? (dirtyLabel || "You have unsaved changes.") : null)}
+        message={error || (loading ? (loadingLabel || settingsShellText("loading")) : saving ? (savingLabel || settingsShellText("savingChangesProgress")) : message ? (successLabel || message) : dirty ? (dirtyLabel || settingsShellText("dirtyWarning")) : null)}
         autoDismiss={false}
       />
     )}

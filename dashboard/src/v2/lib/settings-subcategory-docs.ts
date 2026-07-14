@@ -506,21 +506,107 @@ const TITLE_TO_ID = new Map<string, SettingsSubcategoryId>(
   }),
 );
 
+const GERMAN_SUBCATEGORY_TITLES: Partial<Record<SettingsSubcategoryId, string>> = {
+  "project-context": "Projektkontext",
+  automation: "Automatisierung",
+  "docker-runtime": "Docker-Laufzeit",
+  "system-runtime": "Systemlaufzeit",
+  "restart-behavior": "Neustartverhalten",
+  "database-settings": "Datenbankeinstellungen",
+  onboarding: "Einrichtung",
+  "display-settings": "Anzeigeeinstellungen",
+  background: "Hintergrund",
+  "default-routing-anchors": "Standard-Routing-Anker",
+  "base-provider-configuration": "Anbieter-Grundkonfiguration",
+  "route-mapping": "Routenzuordnung",
+  "model-pricing": "Modellpreise",
+  "git-flow": "Git-Ablauf",
+  "merge-gates-autofix": "Merge-Prüfungen & automatische Reparatur",
+  "quality-assurance": "Qualitätssicherung",
+  guardrails: "Leitplanken",
+  "rate-limit": "Ratenbegrenzung",
+  "watch-loop": "Überwachungsschleife",
+  "workspace-hygiene": "Arbeitsbereichsbereinigung",
+  "workspace-visibility": "Sichtbarkeit des Arbeitsbereichs",
+  "runtime-limits": "Laufzeitgrenzen",
+  techstacks: "Technologie-Stacks",
+  guidance: "Vorgaben",
+  "project-markdown-mirror": "Projekt-Markdown-Spiegelung",
+  "agent-routing": "Agenten-Routing",
+  "memory-system": "Speichersystem",
+  "long-term-remediation-schedule": "Zeitplan für langfristige Bereinigung",
+  limits: "Grenzwerte",
+  "embedding-provider": "Einbettungsanbieter",
+  "worker-learnings-instruction": "Anweisung für Worker-Lernerfahrungen",
+  integrations: "Integrationen",
+  "jules-automation": "Jules-Automatisierung",
+  "git-host-configuration": "Git-Host-Konfiguration",
+  "jira-configuration": "Jira-Konfiguration",
+  "importer-configuration": "Importer-Konfiguration",
+  "provider-integration": "Anbieterintegration",
+  "provider-credentials": "Anbieterzugangsdaten",
+  "mcp-servers": "MCP-Server",
+  "built-in-mcp": "Integriertes MCP",
+  "mcp-tool-category": "MCP-Werkzeugkategorie",
+  "custom-mcp-server": "Benutzerdefinierter MCP-Server",
+  "danger-zone": "Gefahrenbereich",
+  "project-memory": "Projektspeicher",
+  "system-memory": "Systemspeicher",
+  "system-database": "Systemdatenbank",
+};
+
+const localizeSettingsSubcategoryDoc = (
+  doc: SettingsSubcategoryDoc,
+  locale: DashboardLocale,
+): SettingsSubcategoryDoc => {
+  if (locale !== "de") {
+    return doc;
+  }
+  const localizedTitle = GERMAN_SUBCATEGORY_TITLES[doc.id as SettingsSubcategoryId] ?? doc.title;
+  if (doc.id === "display-settings") {
+    return {
+      ...doc,
+      title: localizedTitle,
+      summary: "Steuert Layout, Design, Akzentfarbe, Bewegung, Sprache und – sofern verfügbar – den Desktop-Zoom der Dashboard-Oberfläche.",
+      controls: "Navigationsmodus, Farbschema, Akzent, Bewegungsreduktion, Sprache und Zoom verändern ausschließlich die Darstellung des Dashboards.",
+      recommended: "Verwende das Systemdesign und automatische Bewegungsreduktion, sofern du keine feste barrierefreie Einstellung benötigst.",
+      risks: "Ein hoher Zoom oder eine dichte Seitenleiste kann auf kleinen Bildschirmen den sichtbaren Arbeitsbereich verkleinern.",
+    };
+  }
+  if (doc.id === "background") {
+    return {
+      ...doc,
+      title: localizedTitle,
+      summary: "Passt Hintergrundbild, Animationsmodus, statische Farbe und Musterüberlagerung des Dashboards an.",
+      controls: "Bildupload, animierter oder statischer Modus, Animationsstil, Farbauswahl und Muster gestalten die visuelle Ebene hinter den Bereichen.",
+      recommended: "Bevorzuge kleine Bilder mit gutem Kontrast und verwende den statischen Modus, wenn Bewegung ablenkt.",
+      risks: "Große Bilder und unruhige Muster können die Leistung oder Lesbarkeit beeinträchtigen.",
+    };
+  }
+  return { ...doc, title: localizedTitle };
+};
+
 export const getSettingsSubcategoryDoc = (
   idOrTitle: SettingsSubcategoryId | string | undefined,
+  locale: DashboardLocale = getDocumentDashboardLocale(),
 ): SettingsSubcategoryDoc | undefined => {
   if (!idOrTitle) {
     return undefined;
   }
   if (idOrTitle in SETTINGS_SUBCATEGORY_DOCS) {
-    return SETTINGS_SUBCATEGORY_DOCS[idOrTitle as SettingsSubcategoryId];
+    return localizeSettingsSubcategoryDoc(SETTINGS_SUBCATEGORY_DOCS[idOrTitle as SettingsSubcategoryId], locale);
   }
   const resolvedId = TITLE_TO_ID.get(normalizeTitle(idOrTitle));
-  return resolvedId ? SETTINGS_SUBCATEGORY_DOCS[resolvedId] : undefined;
+  return resolvedId ? localizeSettingsSubcategoryDoc(SETTINGS_SUBCATEGORY_DOCS[resolvedId], locale) : undefined;
 };
 
-export const toHelpSections = (doc: SettingsSubcategoryDoc): SettingsSubcategoryHelpSection[] => [
-  { heading: "Controls", body: doc.controls },
-  { heading: "Recommended default", body: doc.recommended },
-  { heading: "Risks and gotchas", body: doc.risks },
+export const toHelpSections = (
+  doc: SettingsSubcategoryDoc,
+  locale: DashboardLocale = getDocumentDashboardLocale(),
+): SettingsSubcategoryHelpSection[] => [
+  { heading: getSettingsShellMessage(locale, "helpControls"), body: doc.controls },
+  { heading: getSettingsShellMessage(locale, "helpRecommended"), body: doc.recommended },
+  { heading: getSettingsShellMessage(locale, "helpRisks"), body: doc.risks },
 ];
+import type { DashboardLocale } from "../i18n/locales.js";
+import { getDocumentDashboardLocale, getSettingsShellMessage } from "../i18n/messages/settings-shell.js";

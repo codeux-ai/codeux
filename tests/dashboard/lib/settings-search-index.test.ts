@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CATEGORIES } from "../../../dashboard/src/v2/components/settings/SettingsCategoryRail.js";
+import { CATEGORIES, getLocalizedSettingsCategories } from "../../../dashboard/src/v2/components/settings/SettingsCategoryRail.js";
 import {
   buildSettingsSearchIndex,
   getSettingsSearchMatchPreview,
@@ -51,6 +51,26 @@ const index = buildSettingsSearchIndex({
 });
 
 describe("settings search index", () => {
+  it("indexes localized category metadata and German operational synonyms without changing category ids", () => {
+    const germanCategories = getLocalizedSettingsCategories("de");
+    const germanIndex = buildSettingsSearchIndex({
+      categories: germanCategories,
+      locale: "de",
+      providerLabels,
+      integrations,
+      invocationRouteDefinitions: [],
+      agentInstructionTemplateOptions: [],
+      thinkingModeOptions: [],
+    });
+
+    expect(germanCategories.map((category) => category.id)).toEqual(CATEGORIES.map((category) => category.id));
+    expect(searchSettingsCategories(germanIndex, "sprache").appearance).toBeDefined();
+    expect(searchSettingsCategories(germanIndex, "zurücksetzen").danger).toBeDefined();
+    expect(searchSettingsCategories(germanIndex, "CI").sprint).toBeDefined();
+    expect(searchSettingsCategories(germanIndex, "MCP").mcp).toBeDefined();
+    expect(searchSettingsCategories(germanIndex, "Claude Code").models).toBeDefined();
+  });
+
   it("finds the Claude Code provider in model and integration settings", () => {
     const matches = searchSettingsCategories(index, "claude");
 
