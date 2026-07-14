@@ -1,3 +1,6 @@
+import type { DashboardLocale } from "../i18n/locales.js";
+import { getDocumentDashboardLocale, getSettingsShellMessage } from "../i18n/messages/settings-shell.js";
+
 export interface SettingsSubcategoryHelpSection {
   heading: string;
   body: string;
@@ -555,6 +558,287 @@ const GERMAN_SUBCATEGORY_TITLES: Partial<Record<SettingsSubcategoryId, string>> 
   "system-database": "Systemdatenbank",
 };
 
+type SettingsSubcategoryHelpCopy = Pick<SettingsSubcategoryDoc, "summary" | "controls" | "recommended" | "risks">;
+
+const GERMAN_SUBCATEGORY_HELP = {
+  "project-context": {
+    summary: "Benennt und kennzeichnet das aktive Projekt, ohne die gespeicherte Projekt-ID oder den Ausführungsverlauf zu ändern.",
+    controls: "Der Projektname ist bearbeitbar; Projekt-ID, Quelltyp und Basisverzeichnis zeigen, wie Code UX den Arbeitsbereich adressiert und öffnet.",
+    recommended: "Verwende einen eindeutigen Projektnamen und richte das Basisverzeichnis am Repository-Stamm aus, den Worker verwenden sollen.",
+    risks: "Eine Umbenennung ist rein optisch; ein unerwartetes Basisverzeichnis deutet meist darauf hin, dass das Projekt aus dem falschen Pfad erstellt wurde.",
+  },
+  automation: {
+    summary: "Steuert, wie weit Code UX ohne Unterbrechung für Entscheidungen der Bedienperson fortfahren darf.",
+    controls: "Die Automatisierungsstufe legt die allgemeine Freigabestrategie fest; automatische Planfreigabe und Fortsetzung pausierter Läufe behandeln routinemäßige Fortsetzungspunkte.",
+    recommended: "Verwende Halbautomatisch für normale Arbeit, Vollautomatisch nur für vertrauenswürdige Projekte und Immer fragen für sensible Repositories.",
+    risks: "Mehr Automatisierung kann schneller sein, aber auch mit einem fehlerhaften Plan oder veraltetem Kontext fortfahren, bevor du eingreifst.",
+  },
+  "docker-runtime": {
+    summary: "Definiert die Standard-Containerumgebung für Docker-basierte Anbieter-CLIs.",
+    controls: "Image, Einrichtungsskript, Speichergrenze, Zwischenspeicherung des Setup-Images und die Playwright-Browserinstallation gestalten jeden Worker-Container.",
+    recommended: "Behalte das Standard-Image bei, sofern dein Repository keine eigene Toolchain benötigt; aktiviere vorinstallierte Playwright-Browser für browserintensive QA.",
+    risks: "Fehlerhafte Einrichtungsskripte oder zu knappe Speichergrenzen können jeden Anbieteraufruf im Bereich scheitern lassen.",
+  },
+  "system-runtime": {
+    summary: "Konfiguriert Dashboard-Port und Laufzeitprotokollierung des lokalen Code-UX-Prozesses.",
+    controls: "Der Dashboard-Port steuert den HTTP-Listener; Konsolen- und Debugdatei-Stufen bestimmen die Protokollausführlichkeit.",
+    recommended: "Behalte Port 4444 sowie Info-/Fehlerprotokollierung im Alltag bei und erhöhe die Ausführlichkeit nur zur Fehlersuche.",
+    risks: "Nach einer Portänderung müssen Clients neu verbunden werden; Debugprotokollierung kann große lokale Dateien erzeugen.",
+  },
+  "restart-behavior": {
+    summary: "Legt fest, wie aktive Sprints und unterbrochene Anbieteraufrufe nach einem App-Neustart abgeglichen werden.",
+    controls: "Die Sprint-Richtlinie setzt aktive Sprints fort, pausiert oder bricht sie ab; die Aufrufrichtlinie setzt unterbrochene Arbeit fort, bricht sie ab oder startet sie neu.",
+    recommended: "Setze Sprints und Aufrufe bei lokaler Entwicklung fort; pausiere sie, wenn nach einer Unterbrechung eine manuelle Prüfung erfolgen soll.",
+    risks: "Ein Neustart unterbrochener Arbeit kann Anbieteraufwand duplizieren, falls der vorherige CLI-Lauf extern noch aktiv war.",
+  },
+  "database-settings": {
+    summary: "Verwaltet Aufbewahrung und Wartung lokaler SQLite-Laufzeitaktivitäten.",
+    controls: "Bereinigung entfernt alte abgeschlossene Aktivitäten, die Aufbewahrung bestimmt das Zeitfenster und Vacuum komprimiert den Speicher beim Start.",
+    recommended: "Lasse Bereinigung und Vacuum aktiviert, sofern du keinen lokalen forensischen Verlauf aufbewahren musst.",
+    risks: "Kurze Aufbewahrung kann nützliche Diagnosedetails entfernen; ohne Bereinigung kann die lokale Datenbank schnell wachsen.",
+  },
+  onboarding: {
+    summary: "Öffnet die geführte Einrichtung erneut, ohne allein dadurch gespeicherte Einstellungen zu ändern.",
+    controls: "Die Aktionsschaltfläche startet die Einrichtung, damit Anbieter-, Projekt- und Einrichtungsfragen erneut bearbeitet werden können.",
+    recommended: "Nutze sie beim Einrichten eines neuen Rechners oder nach dem Hinzufügen von Anbieterzugangsdaten.",
+    risks: "Das Speichern neuer Einrichtungsoptionen kann die aktuellen Systemvorgaben überschreiben.",
+  },
+  "display-settings": {
+    summary: "Steuert Layout, Design, Akzentfarbe, Bewegung, Sprache und – sofern verfügbar – den Desktop-Zoom der Dashboard-Oberfläche.",
+    controls: "Navigationsmodus, Farbschema, Akzent, Bewegungsreduktion, Sprache und Zoom verändern ausschließlich die Darstellung des Dashboards.",
+    recommended: "Verwende das Systemdesign und automatische Bewegungsreduktion, sofern du keine feste barrierefreie Einstellung benötigst.",
+    risks: "Ein hoher Zoom oder eine dichte Seitenleiste kann auf kleinen Bildschirmen den sichtbaren Arbeitsbereich verkleinern.",
+  },
+  background: {
+    summary: "Passt Hintergrundbild, Animationsmodus, statische Farbe und Musterüberlagerung des Dashboards an.",
+    controls: "Bildupload, animierter oder statischer Modus, Animationsstil, Farbauswahl und Muster gestalten die visuelle Ebene hinter den Bereichen.",
+    recommended: "Bevorzuge kleine Bilder mit gutem Kontrast und verwende den statischen Modus, wenn Bewegung ablenkt.",
+    risks: "Große Bilder und unruhige Muster können die Leistung oder Lesbarkeit beeinträchtigen.",
+  },
+  "default-routing-anchors": {
+    summary: "Legt die globalen und Worker-Anbieterinstanzen fest, die Aufrufrouten beim Erben von Vorgaben verwenden.",
+    controls: "Globale und Worker-Vorgaben wählen benannte Anbieterinstanzen und Basismodelle; Parallelität und Zeitlimit begrenzen die Worker-Zuweisung.",
+    recommended: "Wähle für beide Anker stabile, authentifizierte Instanzen, bevor du Routenüberschreibungen verfeinerst.",
+    risks: "Nicht konfigurierte Anker lassen geerbte Routen ohne nutzbaren Anbieter zurück.",
+  },
+  "base-provider-configuration": {
+    summary: "Definiert für jede benannte Anbieterinstanz standardmäßige Eignung, Modell, Denktiefe, Gewichtung und Parallelität.",
+    controls: "Anbieterkarten bestimmen Standard-Routenteilnahme, Modell, Denkmodus, Routing-Gewicht und maximale parallele Aufgaben.",
+    recommended: "Lasse nur funktionsfähige Instanzen zu und drücke Präferenzen durch Gewichtungen aus, statt jede Route fest zu binden.",
+    risks: "Inkompatible Modelle oder hohe Parallelität können wiederholte Anbieterfehler oder Kontingentdruck verursachen.",
+  },
+  "route-mapping": {
+    summary: "Leitet jeden Aufruftyp an geerbte, manuelle, gewichtete oder vom Agenten ausgewählte Anbieterpools weiter.",
+    controls: "Jede Route wählt Profil, Strategie, primäre Instanz, zulässigen gewichteten Pool und anbieterspezifische Überschreibungen.",
+    recommended: "Nutze zuerst geerbte Vorgaben und überschreibe danach risikoreiche Routen wie Planung, QA, CI-Reparatur und Bereinigung.",
+    risks: "Gewichtete Pools mit nicht verfügbaren Anbietern können Fehler auf mehrere Aufgabentypen verteilen.",
+  },
+  "model-pricing": {
+    summary: "Speichert Token-Preisdaten für Modellkostenschätzungen in Dashboard-Ansichten.",
+    controls: "Preiszeilen definieren Eingabe- und Ausgabe-Tokenkosten pro Modell, sofern das Dashboard die Nutzung schätzen kann.",
+    recommended: "Halte Preise aktiv gerouteter Anbieter aktuell und lasse unbekannte Modelle ohne Wert.",
+    risks: "Veraltete Preise beeinflussen nur Schätzungen und ändern nicht die Abrechnung des Anbieters.",
+  },
+  "git-flow": {
+    summary: "Steuert Branch-Benennung, PR-Erstellung, Ticketabschluss und Bereinigung für Sprint-Arbeit.",
+    controls: "Git-Modus, Standard-Branch, Präfixe, Sprint-Schlüssel, Branch-Vorlage, PR-Schalter, Ticketabschluss und Branch-Löschung definieren den Ablauf.",
+    recommended: "Nutze den Remote-Modus für PR-/CI-Automatisierung und den lokalen Modus, wenn Code UX keine Remotes verändern darf.",
+    risks: "Falsche Standard-Branches oder aggressive Bereinigung können den erwarteten Repository-Ablauf stören.",
+  },
+  "merge-gates-autofix": {
+    summary: "Konfiguriert Review-, Konflikt-, CI- und Auto-Merge-Prüfungen für Feature- und Haupt-Branch-Merges.",
+    controls: "Kommentarauflösung, Konflikt- und CI-Reparatur sowie automatische Feature- und Haupt-PR-Merges bestimmen die Merge-Bereitschaft.",
+    recommended: "Verlange erfolgreiche Prüfungen und gelöste Kommentare für gemeinsame Branches; nutze sofortiges Auto-Merge nur in risikoarmen Repositories.",
+    risks: "Gelockerte Merge-Prüfungen können unvollständige Arbeit übernehmen; der lokale Modus deaktiviert Remote-PR-Prüfungen bewusst.",
+  },
+  "quality-assurance": {
+    summary: "Steuert die QA-Abschlussprüfung, das QA-Routing und die auslöserspezifische Agentenzuweisung.",
+    controls: "QA-Schalter, Routenauswahl und Auslöser bestimmen, wann und wie Abschlussprüfungen ausgeführt werden.",
+    recommended: "Lasse QA für Sprints mit mehreren Aufgaben aktiviert und leite sie an einen Anbieter mit starkem Review-Verhalten weiter.",
+    risks: "Ohne QA entfällt eine wichtige letzte Prüfung, bevor die Merge-Automatisierung fortfährt.",
+  },
+  guardrails: {
+    summary: "Begrenzt wiederholte Agentenjobs, damit außer Kontrolle geratene Planungs-, Coding-, CI-, Merge-, Klärungs- oder Bereinigungsschleifen vorhersehbar stoppen.",
+    controls: "Grenzen pro Job und Aktionen beim Erreichen bestimmen, ob Code UX blockiert, wartet, warnt oder fortfährt.",
+    recommended: "Lasse Leitplanken aktiviert und verwende Blockieren und eskalieren für teure oder destruktive Jobtypen.",
+    risks: "Sehr hohe Grenzen können Anbieterkontingent verbrauchen; sehr niedrige Grenzen können behebbares Arbeiten zu früh stoppen.",
+  },
+  "rate-limit": {
+    summary: "Steuert Wiederholungen nach Kontingent- oder Ratenbegrenzungsantworten eines Anbieters.",
+    controls: "Wartezeiten bis zur Kontingentrücksetzung, feste Verzögerungen, Wiederholungszahlen und Grenzen ohne Zeitangabe definieren das Wiederholungsverhalten.",
+    recommended: "Wiederhole bei konkreten Rücksetzungszeitpunkten und halte feste Wiederholungszahlen niedrig.",
+    risks: "Aggressive Wiederholungen können fehlschlagende Aufgaben belegen und die Eskalation verzögern.",
+  },
+  "watch-loop": {
+    summary: "Steuert, ob die aktive Sprint-Orchestrierung weiter prüft und wie häufig sie Arbeit ausgibt.",
+    controls: "Schalter, Auswertungsintervall und Ausgabeintervall der Überwachungsschleife treiben wiederkehrende Orchestrierungsprüfungen an.",
+    recommended: "Lasse die Schleife für aktive Sprints mit moderaten Intervallen aktiviert.",
+    risks: "Sehr kurze Intervalle können Rauschen erzeugen; ohne Schleife hängt der Fortschritt von manuellen oder externen Auslösern ab.",
+  },
+  "workspace-hygiene": {
+    summary: "Steuert die Bereinigung temporärer Worktree-Zustände nach Anbieter-CLI-Läufen.",
+    controls: "Bereinigungsschalter für Erfolg und Fehler bestimmen, ob Code UX temporäre Ausführungszustände entfernt.",
+    recommended: "Bereinige erfolgreiche Worktrees und behalte fehlgeschlagene nur während aktiver Fehlersuche.",
+    risks: "Behaltene Worktrees verbrauchen Speicherplatz; entfernte Worktrees können nützliche Reproduktionsartefakte löschen.",
+  },
+  "workspace-visibility": {
+    summary: "Steuert den automatischen Vorschaulebenszyklus und ob Browser-Einstiege in den Arbeitsbereich im Dashboard erscheinen.",
+    controls: "Vorschauaktivierung, Sichtbarkeit im App-Browser, automatischer Start, Neuaufbau-Auslöser und automatisches Stoppen definieren den Lebenszyklus.",
+    recommended: "Aktiviere Vorschauen für UI-Projekte und stoppe Terminalvorschauen automatisch, um lokale Ressourcen zu sparen.",
+    risks: "Automatische Neuaufbauten können bei langsamen Projekten oder großen Docker-Images störend sein.",
+  },
+  "runtime-limits": {
+    summary: "Legt Parallelität, Ports, Startbefehle und optionalen Docker-Zugriff für Vorschaucontainer fest.",
+    controls: "Containergrenze, Host-Portbereich, interner App-Port und Pfad zur Startüberschreibung bestimmen den Vorschau-Start.",
+    recommended: "Beschränke Vorschauports auf lokale Bereiche und setze den App-Port auf den Port des Projektentwicklungsservers.",
+    risks: "Portkonflikte oder falsche Startskripte verhindern erreichbare Vorschauen.",
+  },
+  techstacks: {
+    summary: "Verwaltet den systemweiten Technologie-Stack-Katalog sowie die Stack- und Anwendungstypzuweisung pro Projekt.",
+    controls: "Der Systembereich verwaltet Einträge, Standardauswahl und Technologien; der Projektbereich wählt einen Stack, setzt auf Nicht zugewiesen zurück und bestimmt Web- oder Desktop-Typ.",
+    recommended: "Lasse importierte Projekte bis zur Einrichtung oder eindeutigen Zuordnung unzugewiesen; nutze den integrierten Code-UX-Stack nur für entsprechende Preact-Dashboards.",
+    risks: "Das Löschen eigener Stacks entfernt ihre Verweise; der integrierte Code-UX-Stack ist geschützt und wird durch Normalisierung wiederhergestellt.",
+  },
+  guidance: {
+    summary: "Verwaltet ausgewählte Technologie- und Styleguide-Vorgaben sowie eigene Anweisungseinträge für den aktiven Einstellungsbereich.",
+    controls: "Jeder Abschnitt bietet eine Auswahl mit Ohne-Option, Aktionen zum Hinzufügen, Bearbeiten und Löschen sowie Sichtbarkeitsschalter für integrierte Styleguides.",
+    recommended: "Verwende Ohne, bis ein Bereich ausdrückliche Designvorgaben benötigt, und halte eigene IDs stabil, sobald Projekte oder Sprints darauf verweisen.",
+    risks: "Integrierte Vorgaben sind geschützt. Das Löschen eines ausgewählten eigenen Eintrags setzt die Auswahl im bearbeiteten Bereich auf Ohne zurück.",
+  },
+  "project-markdown-mirror": {
+    summary: "Steuert, ob im Dashboard erstellte Agentenvorlagen in projektlokale Markdown-Dateien gespiegelt werden.",
+    controls: "Der Spiegelungsschalter schreibt Begleitdateien für ausgewählte Projektagenten unter `.code-ux/agents`.",
+    recommended: "Aktiviere ihn, wenn Agentenanweisungen gemeinsam mit Projektänderungen geprüft werden sollen.",
+    risks: "Gespiegelte Dateien können in Repository-Diffs erscheinen, wenn `.code-ux/agents` versioniert wird.",
+  },
+  "agent-routing": {
+    summary: "Weist integrierte oder projektbezogene Agentenvorlagen der Planung, Entwicklung, CI, Konfliktlösung, Dashboard-Antwort und Klärung zu.",
+    controls: "Coding kann manuell oder durch den Orchestrator gewählt werden; jede Route kann eine Projektvorlage oder den integrierten Fallback nutzen.",
+    recommended: "Beginne mit integrierten Agenten und weise Spezialisten zu, wenn projektspezifische Anweisungen die Ergebnisse wesentlich verbessern.",
+    risks: "Fehlende oder zu eng gefasste Projektagenten können die Aufgabenqualität senken oder Routingoptionen blockieren.",
+  },
+  "memory-system": {
+    summary: "Steuert Erfassung, Übernahme und Bereinigung von Sprint- und Projektspeicher.",
+    controls: "Aktivierung, Sprint- und Agentenerfassung, automatische Übernahme und Bereinigungsmodus bestimmen, welches Wissen gespeichert und gepflegt wird.",
+    recommended: "Aktiviere den Speicher mit deterministischer Bereinigung, sofern du keine KI-gestützte Pflege benötigst.",
+    risks: "Deaktivierter Speicher verringert langfristiges Lernen; KI-Bereinigung beansprucht geroutete Anbieterkapazität.",
+  },
+  "long-term-remediation-schedule": {
+    summary: "Plant wiederkehrende Bereinigung des Projektspeichers und Pflege von Wissensaussagen.",
+    controls: "Takt, Bereinigungsmodus und lokale Ausführungszeit erstellen oder pausieren einen projektspezifischen Zeitplaneintrag.",
+    recommended: "Nutze wöchentliche deterministische Bereinigung für aktive Projekte mit regelmäßigem Sprint-Aufkommen.",
+    risks: "Zeitpläne mit KI-Bereinigung können Anbieterbudgets unerwartet belasten, wenn teure Modelle geroutet sind.",
+  },
+  limits: {
+    summary: "Begrenzt Übernahmeschwellen, gespeicherte Erinnerungen, Graphdichte und Bereinigungsübernahmen.",
+    controls: "Schwellenwerte und Höchstzahlen begrenzen Sprint-/Projektspeicher sowie die Kantendichte der neuronalen Karte.",
+    recommended: "Behalte die Vorgaben bei, bis die Speichersuche unübersichtlich wird oder der Speicher zu schnell wächst.",
+    risks: "Niedrige Grenzen können nützliches Wissen verdrängen; hohe Graphdichte kann Karten schwerer prüfbar machen.",
+  },
+  "embedding-provider": {
+    summary: "Wählt integrierte Einbettungen oder eine externe OpenAI-kompatible Einbettungs-API.",
+    controls: "Backend, externe URL, Modell-ID und API-Schlüssel steuern die semantische Einbettung des Speichers.",
+    recommended: "Nutze integrierte Modelle für lokalen Betrieb und externe APIs nur, wenn ein verwaltetes Einbettungsmodell benötigt wird.",
+    risks: "Externe APIs senden Speichertexte an den konfigurierten Endpunkt und erfordern sorgfältigen Umgang mit Schlüsseln.",
+  },
+  "worker-learnings-instruction": {
+    summary: "Definiert den an Worker-Aufgaben angehängten Prompt, damit nützliche Erkenntnisse für die Speicherverarbeitung erfasst werden.",
+    controls: "Das Textfeld bestimmt genau, welche Beobachtungen Worker in die temporäre Lerndatei schreiben sollen.",
+    recommended: "Beschränke die Anweisung auf wiederverwendbare technische Erkenntnisse und fordere niemals die Aufzeichnung von Geheimnissen an.",
+    risks: "Zu weit gefasste Anweisungen können irrelevante oder sensible Details erfassen.",
+  },
+  integrations: {
+    summary: "Listet Anbieter-, Git-Host-, Ticket-, Speichereinbindungs- und schreibgeschützte Importer-Integrationen mit Verwaltungsaktionen auf.",
+    controls: "Karten zeigen Verbindung, Authentifizierungshinweise und Aktiv-/Konfiguriert-Status. Google Drive verknüpft ein Host-Verzeichnis, aktiviert die reine Docker-Einbindung und wählt Lese- oder Schreibzugriff.",
+    recommended: "Lasse Google Drive schreibgeschützt, sofern Container-Agenten keine synchronisierten Dateien ändern müssen. Konfiguriere gemeinsame Anbieter- und Speichervorgaben im Systembereich und überschreibe sie nur bei Bedarf pro Projekt.",
+    risks: "Schreibzugriff erlaubt Container-Agenten, synchronisierte Drive-Dateien zu ändern oder zu löschen. Importhinweise können lokale Authentifizierungspfade offenlegen; weitreichende Tokens können externe Arbeitsbereiche für Suchen freigeben.",
+  },
+  "jules-automation": {
+    summary: "Konfiguriert automatische Jules-Klärungen und die Übergabe an automatische CI-Reparatur.",
+    controls: "Automatische Klärungsantwort, Antwortmodus und -vorlage, Jules-CI-Reparatur und Wiederholungsgrenze bestimmen, wann gehostete Jules-Automatisierung läuft.",
+    recommended: "Nutze Vorlagen für routinemäßige Klärungen und halte Wiederholungsgrenzen niedrig.",
+    risks: "Automatische Klärungsantworten können mit veralteten Annahmen reagieren, wenn die Vorlage zu allgemein ist.",
+  },
+  "git-host-configuration": {
+    summary: "Speichert GitHub- oder GitLab-Tokens und das Docker-Verhalten für Git-Authentifizierung bei Repository-Automatisierung.",
+    controls: "Tokens, Einbindung der GitHub-Authentifizierung, Authentifizierungspfade, Kopie der lokalen Git-Konfiguration und Containeridentität steuern den Remote-Zugriff.",
+    recommended: "Bevorzuge Tokens mit minimalen Rechten und kopiere lokale Authentifizierung nur auf vertrauenswürdigen Rechnern.",
+    risks: "Tokens und kopierte Authentifizierungsverzeichnisse können Anbietercontainern Schreibzugriff auf Repositories geben.",
+  },
+  "jira-configuration": {
+    summary: "Verbindet Jira-Ticketsuche, Importübergänge und Abschlussübergänge.",
+    controls: "Site-URL, Konto-E-Mail, API-Token, Projektschlüssel, Übergangsnamen sowie Verschieben-/Schließen-Schalter steuern die Jira-Automatisierung.",
+    recommended: "Nutze ein eigenes API-Token und prüfe Übergangsnamen am Zielworkflow in Jira.",
+    risks: "Falsche Übergangsnamen verhindern Ticketbewegungen; weitreichende Tokens geben mehr Jira-Bereiche als nötig frei.",
+  },
+  "importer-configuration": {
+    summary: "Konfiguriert schreibgeschützte externe Arbeitsimporte aus Projektmanagement-, Whiteboard-, Diagramm- und Designanbietern.",
+    controls: "Aktivierung, API-Token, optionales Geheimnis, Basis-URL, Standard-IDs und Suchgrenze bestimmen, wann ein Importer aktiv ist.",
+    recommended: "Speichere gemeinsame Zugangsdaten im Systembereich und ergänze Projektüberschreibungen nur für abweichende Vorgaben.",
+    risks: "Weitreichende Tokens können externe Arbeitsbereiche für Importsuchen freigeben; nutze schreibgeschützte oder minimal berechtigte Zugangsdaten, sofern unterstützt.",
+  },
+  "provider-integration": {
+    summary: "Erklärt, dass Anbieterzugangsdaten dem System gehören, während Projektbereiche weiterhin Routing und das Kopieren von Authentifizierung steuern.",
+    controls: "Die Hinweise erklären, wo Anbieterinstanzen verwaltet werden und welche Einstellungen projektbezogen bleiben.",
+    recommended: "Wechsle zum Systembereich, um Zugangsdaten hinzuzufügen, und route sie anschließend unter KI-Modelle.",
+    risks: "Werden Zugangsdaten fälschlich im Projektbereich erwartet, können Routen ohne Anbieterinstanz bleiben.",
+  },
+  "provider-credentials": {
+    summary: "Verwaltet benannte Anbieterinstanzen, Authentifizierungsmodus, lokale Authentifizierungskopie, Dashboard-Anmeldung, Konfigurationsdateien und Basismodellvorgaben.",
+    controls: "Jede Instanz besitzt API-Schlüssel, Authentifizierungspfad, Anmeldung oder Konfigurationsdateimodus sowie Routing-sichtbare Identität und Verfügbarkeit.",
+    recommended: "Nutze benannte Instanzen pro Konto oder Kontingentpool; verwende Anbieter-Konfigurationsdateien nur, wenn eine CLI eine bestimmte kopierte Konfiguration benötigt.",
+    risks: "Lokale Authentifizierungskopien und Konfigurationsdatei-Einbindungen geben Docker-basierten Anbieterläufen Zugriff auf Host-Zugangsdaten.",
+  },
+  "mcp-servers": {
+    summary: "Listet integrierte und benutzerdefinierte MCP-Server auf, die in Anbieter-CLI-Laufzeiten eingebunden werden.",
+    controls: "Die Liste konfiguriert integrierten Werkzeugzugriff, Aktivierung eigener Server, Transport, Anbieterbeschränkungen und Servererstellung.",
+    recommended: "Lasse integrierte Werkzeuge aktiviert und beschränke eigene Server auf die CLIs, die sie benötigen.",
+    risks: "Weitreichender Zugriff auf eigene MCP-Server kann externen Werkzeugzugriff für mehr Anbieter als beabsichtigt freigeben.",
+  },
+  "built-in-mcp": {
+    summary: "Steuert, welche integrierten Code-UX-MCP-Werkzeugkategorien Container-CLIs verwenden dürfen.",
+    controls: "Schalter für Werkzeugkategorien und einzelne Werkzeuge bestimmen, was Anbieter beim nächsten Lauf aufrufen dürfen.",
+    recommended: "Deaktiviere nur Kategorien, auf die ein Anbieter nachweislich nicht zugreifen soll.",
+    risks: "Fehlende benötigte Werkzeuge können Anbieterabläufe scheitern lassen; breite Freigaben erhöhen den Funktionszugriff.",
+  },
+  "mcp-tool-category": {
+    summary: "Aktiviert oder deaktiviert eine integrierte MCP-Werkzeugkategorie und ihre einzelnen Werkzeuge.",
+    controls: "Der Kategorieschalter setzt alle Werkzeuge der Gruppe; jede Zeile kann ein bestimmtes Werkzeug abweichend steuern.",
+    recommended: "Halte Änderungen auf Kategorieebene grob und dokumentiere, warum einzelne Werkzeuge deaktiviert sind.",
+    risks: "Feingranulare Deaktivierung kann schwer zu diagnostizieren sein, wenn ein Anbieter ein fehlendes Werkzeug erwartet.",
+  },
+  "custom-mcp-server": {
+    summary: "Konfiguriert einen eigenen MCP-Server, der in kompatible Anbieter-CLIs eingebunden wird.",
+    controls: "Anzeigename, Serverschlüssel, Transport, URL oder Befehl, Argumente, Umgebung, Header, Beschreibung, CLI-Beschränkungen und Vorschau definieren den Server.",
+    recommended: "Bevorzuge HTTP/SSE für verwaltete Remote-Server und beschränke sensible Server auf bestimmte CLIs.",
+    risks: "Ungültiges JSON, nicht verfügbare Befehle oder offengelegte Authentifizierungsheader können Anbieterstarts stören oder Geheimnisse preisgeben.",
+  },
+  "danger-zone": {
+    summary: "Gruppiert die unumkehrbare Projektlöschung und das Zurücksetzen von Projektüberschreibungen.",
+    controls: "Projekt zurücksetzen entfernt gespeicherte Überschreibungen; Projekt löschen entfernt das Projekt und zugehörige lokale Laufzeitdaten.",
+    recommended: "Setze Überschreibungen zurück, bevor du ein Projekt löschst, wenn nur wieder Systemvorgaben geerbt werden sollen.",
+    risks: "Löschaktionen können nach der Bestätigung nicht rückgängig gemacht werden.",
+  },
+  "project-memory": {
+    summary: "Löscht ausgewählte Speicherstufen ausschließlich für das aktive Projekt.",
+    controls: "Aktionen für Kurzzeit-, Langzeit- und gesamten Speicher entfernen zunehmend umfassendere Speicherdatensätze.",
+    recommended: "Lösche bei störendem Sprint-Speicher zuerst den Kurzzeitspeicher und verwende Gesamter Speicher nur für eine vollständige Projektbereinigung.",
+    risks: "Das Löschen von Langzeit- oder Gesamtspeicher entfernt Aussagen, Belege und Vektoren dauerhaft.",
+  },
+  "system-memory": {
+    summary: "Löscht Speicherstufen über alle Projekte in der lokalen Datenbank hinweg.",
+    controls: "Aktionen für Kurzzeit-, Langzeit- und gesamten Speicher gelten systemweit.",
+    recommended: "Nutze sie nur für lokale Wartung oder nachdem bestätigt wurde, dass kein Projekt das gespeicherte Wissen benötigt.",
+    risks: "Systemweite Speicherlöschungen sind umfassend und unumkehrbar.",
+  },
+  "system-database": {
+    summary: "Löscht die lokale Code-UX-Datenbank, sodass die App nach dem Neuladen in einen sauberen Zustand zurückkehrt.",
+    controls: "Das vollständige Zurücksetzen entfernt Projekte, Sprints, Aufgaben, Verläufe und Systemzustand.",
+    recommended: "Nutze es nur für einen lokalen Neustart oder bei nicht behebbarer Datenbankbeschädigung, nachdem benötigte Daten exportiert wurden.",
+    risks: "Dadurch wird der gesamte lokale Laufzeitzustand gelöscht; die Aktion kann im Dashboard nicht rückgängig gemacht werden.",
+  },
+} as const satisfies Record<SettingsSubcategoryId, SettingsSubcategoryHelpCopy>;
+
 const localizeSettingsSubcategoryDoc = (
   doc: SettingsSubcategoryDoc,
   locale: DashboardLocale,
@@ -563,27 +847,11 @@ const localizeSettingsSubcategoryDoc = (
     return doc;
   }
   const localizedTitle = GERMAN_SUBCATEGORY_TITLES[doc.id as SettingsSubcategoryId] ?? doc.title;
-  if (doc.id === "display-settings") {
-    return {
-      ...doc,
-      title: localizedTitle,
-      summary: "Steuert Layout, Design, Akzentfarbe, Bewegung, Sprache und – sofern verfügbar – den Desktop-Zoom der Dashboard-Oberfläche.",
-      controls: "Navigationsmodus, Farbschema, Akzent, Bewegungsreduktion, Sprache und Zoom verändern ausschließlich die Darstellung des Dashboards.",
-      recommended: "Verwende das Systemdesign und automatische Bewegungsreduktion, sofern du keine feste barrierefreie Einstellung benötigst.",
-      risks: "Ein hoher Zoom oder eine dichte Seitenleiste kann auf kleinen Bildschirmen den sichtbaren Arbeitsbereich verkleinern.",
-    };
-  }
-  if (doc.id === "background") {
-    return {
-      ...doc,
-      title: localizedTitle,
-      summary: "Passt Hintergrundbild, Animationsmodus, statische Farbe und Musterüberlagerung des Dashboards an.",
-      controls: "Bildupload, animierter oder statischer Modus, Animationsstil, Farbauswahl und Muster gestalten die visuelle Ebene hinter den Bereichen.",
-      recommended: "Bevorzuge kleine Bilder mit gutem Kontrast und verwende den statischen Modus, wenn Bewegung ablenkt.",
-      risks: "Große Bilder und unruhige Muster können die Leistung oder Lesbarkeit beeinträchtigen.",
-    };
-  }
-  return { ...doc, title: localizedTitle };
+  return {
+    ...doc,
+    title: localizedTitle,
+    ...GERMAN_SUBCATEGORY_HELP[doc.id as SettingsSubcategoryId],
+  };
 };
 
 export const getSettingsSubcategoryDoc = (
@@ -608,5 +876,3 @@ export const toHelpSections = (
   { heading: getSettingsShellMessage(locale, "helpRecommended"), body: doc.recommended },
   { heading: getSettingsShellMessage(locale, "helpRisks"), body: doc.risks },
 ];
-import type { DashboardLocale } from "../i18n/locales.js";
-import { getDocumentDashboardLocale, getSettingsShellMessage } from "../i18n/messages/settings-shell.js";

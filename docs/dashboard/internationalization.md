@@ -51,6 +51,8 @@ The root bundle translates root-owned shell copy, while route-specific catalogs 
 
 Users choose **English** or **Deutsch** under **Settings → Appearance → Display Settings → Language**. The selection applies immediately in System and Project views, persists in browser-local storage, updates the document `lang`, and does not participate in Settings dirty tracking or Save/Reset requests. It is intentionally dashboard-owned: runtime and API messages, stored instructions/configuration values, and the English documentation are not translated.
 
+Every Settings `SectionCard` uses the active dashboard locale for its visible title, purpose summary, controlled-functions guidance, recommended configuration, and risk notes. Subcategory ids, English lookup aliases, `/docs/settings-<subcategory>` destinations, related-document metadata, and backend-facing values stay locale-neutral; the linked long-form documentation remains English.
+
 Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged. Settings category ids and navigation persistence also remain language-neutral so changing locale never invalidates the current category.
 
 ## Verification
