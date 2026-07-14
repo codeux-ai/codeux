@@ -1,11 +1,14 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
+import type { ComponentChildren } from "preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Source } from "../../../types.js";
 import { AddProjectCard } from "../AddProjectCard.js";
 import { ProjectCard, type ProjectCardProps } from "../ProjectCard.js";
+import { DashboardI18nProvider } from "../../../i18n/context.js";
+import type { DashboardLocale } from "../../../i18n/locales.js";
 
 expect.extend(matchers);
 
@@ -52,6 +55,12 @@ function createProps(overrides: Partial<ProjectCardProps> = {}): ProjectCardProp
   };
 }
 
+const withLocale = (children: ComponentChildren, locale: DashboardLocale = "en") => (
+  <DashboardI18nProvider initialLocale={locale} storage={null}>
+    {children}
+  </DashboardI18nProvider>
+);
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -60,7 +69,7 @@ afterEach(() => {
 describe("ProjectCard", () => {
   it("selects the project from the card selection surface", () => {
     const props = createProps();
-    render(<ProjectCard {...props} />);
+    render(withLocale(<ProjectCard {...props} />));
 
     fireEvent.click(screen.getByRole("button", { name: "Select project: Project One" }));
 
@@ -70,7 +79,7 @@ describe("ProjectCard", () => {
   it("supports native keyboard activation", async () => {
     const user = userEvent.setup();
     const props = createProps();
-    render(<ProjectCard {...props} />);
+    render(withLocale(<ProjectCard {...props} />));
 
     const selectSurface = screen.getByRole("button", { name: "Select project: Project One" });
     selectSurface.focus();
@@ -82,7 +91,7 @@ describe("ProjectCard", () => {
 
   it("isolates setup, settings, and delete actions from selection", () => {
     const props = createProps();
-    render(<ProjectCard {...props} />);
+    render(withLocale(<ProjectCard {...props} />));
 
     fireEvent.click(screen.getByRole("button", { name: "Setup project" }));
     fireEvent.click(screen.getByRole("button", { name: "Project settings" }));
@@ -96,7 +105,7 @@ describe("ProjectCard", () => {
 
   it("opens an available setup invocation without selecting the project", () => {
     const props = createProps({ isSettingUp: true, setupInvocationId: "invocation-123" });
-    render(<ProjectCard {...props} />);
+    render(withLocale(<ProjectCard {...props} />));
 
     fireEvent.click(screen.getByRole("button", { name: "Open setup invocation" }));
 
@@ -109,13 +118,13 @@ describe("ProjectCard", () => {
     const longName = "A project name long enough to overflow a narrow mobile project card surface";
     const longRepository = "https://example.com/organization/with-a-very-long-name/repository-with-a-very-long-name.git";
     const longBranch = "feature/a-branch-name-that-must-never-force-horizontal-page-overflow";
-    const { rerender } = render(
+    const { rerender } = render(withLocale(
       <ProjectCard
         {...createProps({
           source: createSource({ name: longName, sourceType: "git", repoUrl: longRepository, sourceRef: longRepository, defaultBranch: longBranch }),
         })}
       />,
-    );
+    ));
 
     expect(screen.getByTestId("project-name")).toHaveClass("truncate");
     expect(screen.getByTestId("project-name")).toHaveAttribute("title", longName);
@@ -125,12 +134,12 @@ describe("ProjectCard", () => {
     expect(screen.getByTestId("project-branch")).toHaveAttribute("title", longBranch);
 
     const longPath = "/workspace/a/local/path/with/many/nested/directories/that-must-remain-inside-the-card";
-    rerender(<ProjectCard {...createProps({ source: createSource({ name: longName, baseDir: longPath, sourceRef: longPath }) })} />);
+    rerender(withLocale(<ProjectCard {...createProps({ source: createSource({ name: longName, baseDir: longPath, sourceRef: longPath }) })} />));
     expect(screen.getByTestId("project-location")).toHaveAttribute("title", longPath);
   });
 
   it("exposes stable selected and running states with static visual cues", () => {
-    render(<ProjectCard {...createProps({ source: createSource({ status: "running", isRunning: true }), isSelected: true })} />);
+    render(withLocale(<ProjectCard {...createProps({ source: createSource({ status: "running", isRunning: true }), isSelected: true })} />));
 
     const card = screen.getByRole("article", { name: "Project: Project One" });
     expect(card).toHaveAttribute("data-selected", "true");
@@ -138,17 +147,28 @@ describe("ProjectCard", () => {
     expect(card).toHaveClass("border-signal-500/55");
     expect(screen.getByRole("button", { name: "Selected project: Project One" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("status", { name: "Project One is selected" })).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "Status: running" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Status: Running")).toBeInTheDocument();
     expect(screen.getByText("Running")).toBeInTheDocument();
   });
 
   it("renders view-model task counts and completion", () => {
-    render(<ProjectCard {...createProps()} />);
+    render(withLocale(<ProjectCard {...createProps()} />));
 
     expect(screen.getByText("75%")).toBeInTheDocument();
     expect(screen.getByRole("progressbar", { name: "Project One task completion" })).toHaveAttribute("aria-valuenow", "75");
     expect(screen.getByText("Open").previousElementSibling).toHaveTextContent("2");
     expect(screen.getByText("Done").previousElementSibling).toHaveTextContent("6");
+  });
+
+  it("localizes card chrome and metadata while preserving project values", () => {
+    render(withLocale(<ProjectCard {...createProps()} />, "de"));
+
+    expect(screen.getByRole("article", { name: "Projekt: Project One" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Projekt auswählen: Project One" })).toBeInTheDocument();
+    expect(screen.getByText("Inaktiv")).toBeInTheDocument();
+    expect(screen.getByText("4. Jan. 2026, 5:06")).toBeInTheDocument();
+    expect(screen.getByText("/workspace/project-one")).toBeInTheDocument();
+    expect(screen.getByText("completed")).toBeInTheDocument();
   });
 });
 
@@ -156,7 +176,7 @@ describe("AddProjectCard", () => {
   it("provides a full-height keyboard-reachable Add Project entry point", async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();
-    render(<AddProjectCard onClick={onClick} />);
+    render(withLocale(<AddProjectCard onClick={onClick} />));
 
     const addProject = screen.getByRole("button", { name: "Add Project" });
     expect(addProject).toHaveClass("h-full", "min-h-[390px]");

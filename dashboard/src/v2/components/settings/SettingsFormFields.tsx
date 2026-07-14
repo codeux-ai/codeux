@@ -9,6 +9,7 @@ import type { ProviderId } from "../../../types.js";
 import { Toggle as UiToggle } from "../ui/Toggle.js";
 import { Input as UiInput } from "../ui/Input.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { settingsShellText } from "../../i18n/messages/settings-shell.js";
 
 export const Toggle = UiToggle;
 
@@ -91,7 +92,7 @@ export const PillChoiceGroup: FunctionComponent<{
   "aria-label"?: string;
   "aria-labelledby"?: string;
   "aria-describedby"?: string;
-}> = ({ value, onChange, options, disabled, invalid, valid, busy, helperText, errorText, forceValidation, "aria-label": ariaLabel = "Setting choices", "aria-labelledby": ariaLabelledby, "aria-describedby": ariaDescribedby }) => {
+}> = ({ value, onChange, options, disabled, invalid, valid, busy, helperText, errorText, forceValidation, "aria-label": ariaLabel, "aria-labelledby": ariaLabelledby, "aria-describedby": ariaDescribedby }) => {
   const generatedId = useId();
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const tokens = useInteractionTokens();
@@ -114,7 +115,7 @@ export const PillChoiceGroup: FunctionComponent<{
     <div className="flex min-w-0 flex-col gap-1.5">
       <div
         role="radiogroup"
-        aria-label={ariaLabelledby ? undefined : ariaLabel}
+        aria-label={ariaLabelledby ? undefined : ariaLabel || settingsShellText("settingChoices")}
         aria-labelledby={ariaLabelledby}
         aria-invalid={showError || invalid ? "true" : undefined}
         aria-errormessage={showError ? errorId : undefined}
@@ -177,7 +178,7 @@ export const PillChoiceGroup: FunctionComponent<{
         <span id={helperId} className="text-xs font-medium text-slate-500 dark:text-slate-400">{helperText}</span>
       ) : null}
       {valid && !showError ? (
-        <span id={validId} className="text-xs font-semibold text-signal-700 dark:text-signal-300">Ready to save.</span>
+        <span id={validId} className="text-xs font-semibold text-signal-700 dark:text-signal-300">{settingsShellText("readyToSave")}</span>
       ) : null}
     </div>
   );
@@ -195,8 +196,8 @@ export const OptionCardChoiceGroup: FunctionComponent<OptionCardChoiceGroupProps
   const describedBy = [summaryId, helperId, props["aria-describedby"]].filter(Boolean).join(" ") || undefined;
   const selectedSummary = props.selectedSummaryLabel
     ?? (multiple
-      ? `${selectedOptions.length} selected`
-      : `Selected: ${selectedOptions[0]?.label ?? "None"}`);
+      ? settingsShellText("selectedCount", { count: selectedOptions.length })
+      : settingsShellText("selectedOption", { option: selectedOptions[0]?.label ?? settingsShellText("none") }));
 
   const isOptionDisabled = (option: SettingsOptionCard): boolean => Boolean(props.disabled || option.disabled);
 
@@ -277,7 +278,7 @@ export const OptionCardChoiceGroup: FunctionComponent<OptionCardChoiceGroupProps
       </div>
       <div
         role={multiple ? "group" : "radiogroup"}
-        aria-label={props["aria-labelledby"] ? undefined : props["aria-label"] ?? "Setting options"}
+        aria-label={props["aria-labelledby"] ? undefined : props["aria-label"] ?? settingsShellText("settingOptions")}
         aria-labelledby={props["aria-labelledby"]}
         aria-describedby={describedBy}
         className="grid min-w-0 w-full grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-2"
@@ -456,8 +457,10 @@ export const SecretInput: FunctionComponent<{
   const errorId = errorText ? `${generatedId}-error` : undefined;
   const validId = valid && !showError ? `${generatedId}-valid` : undefined;
   const describedBy = [showError ? errorId : helperId, validId, ariaDescribedby].filter(Boolean).join(" ") || undefined;
-  const secretLabel = ariaLabel || "secret";
-  const revealLabel = revealed ? (hideLabel ?? `Hide ${secretLabel}`) : (showLabel ?? `Show ${secretLabel}`);
+  const secretLabel = ariaLabel || settingsShellText("secret");
+  const revealLabel = revealed
+    ? (hideLabel ?? settingsShellText("hideSecret", { label: secretLabel }))
+    : (showLabel ?? settingsShellText("showSecret", { label: secretLabel }));
 
   return (
     <div className="relative flex min-w-0 flex-col gap-1.5">
@@ -495,7 +498,7 @@ export const SecretInput: FunctionComponent<{
         <span id={helperId} className="text-xs font-medium text-slate-500 dark:text-slate-400">{helperText}</span>
       ) : null}
       {valid && !showError ? (
-        <span id={validId} className="text-xs font-semibold text-signal-700 dark:text-signal-300">Ready to save.</span>
+        <span id={validId} className="text-xs font-semibold text-signal-700 dark:text-signal-300">{settingsShellText("readyToSave")}</span>
       ) : null}
     </div>
   );
@@ -545,7 +548,7 @@ export const TextAreaInput: FunctionComponent<{
         <span id={helperId} className="text-xs font-medium text-slate-500 dark:text-slate-400">{helperText}</span>
       ) : null}
       {valid && !showError ? (
-        <span id={validId} className="text-xs font-semibold text-signal-700 dark:text-signal-300">Ready to save.</span>
+        <span id={validId} className="text-xs font-semibold text-signal-700 dark:text-signal-300">{settingsShellText("readyToSave")}</span>
       ) : null}
     </div>
   );
@@ -570,9 +573,9 @@ export const NumberInput: FunctionComponent<{
   const generatedId = useId();
   const [touched, setTouched] = useState(false);
   const derivedErrorText = Number.isFinite(value) && min !== undefined && value < min
-    ? `Use a value of at least ${min}.`
+    ? settingsShellText("minimumValue", { min })
     : Number.isFinite(value) && max !== undefined && value > max
-      ? `Use a value no greater than ${max}.`
+      ? settingsShellText("maximumValue", { max })
       : undefined;
   const resolvedErrorText = errorText || derivedErrorText;
   const showError = Boolean(resolvedErrorText && (invalid || forceValidation || (derivedErrorText && touched)));
@@ -610,7 +613,7 @@ export const NumberInput: FunctionComponent<{
         <span id={helperId} className="text-xs font-medium text-slate-500 dark:text-slate-400">{helperText}</span>
       ) : null}
       {valid && !showError ? (
-        <span id={validId} className="text-xs font-semibold text-signal-700 dark:text-signal-300">Ready to save.</span>
+        <span id={validId} className="text-xs font-semibold text-signal-700 dark:text-signal-300">{settingsShellText("readyToSave")}</span>
       ) : null}
     </div>
   );
@@ -662,12 +665,12 @@ export const Row: FunctionComponent<{
             {onReset && badge === "Project override" ? (
               <button
                 type="button"
-                aria-label="Reset to default"
+                aria-label={settingsShellText("resetToDefault")}
                 onClick={(e) => {
                   e.stopPropagation();
                   onReset();
                 }}
-                title="Delete project override (revert to system default)"
+                title={settingsShellText("deleteProjectOverride")}
                 className="ml-1 rounded-full p-1 text-amber-600 hover:bg-amber-500/20 hover:text-amber-800 dark:text-amber-300 dark:hover:bg-amber-300/25 dark:hover:text-amber-100 transition-colors duration-150 cursor-pointer"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" className="h-2.5 w-2.5">

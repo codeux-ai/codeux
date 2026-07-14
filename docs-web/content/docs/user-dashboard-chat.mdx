@@ -2,6 +2,8 @@
 
 The **Chat** page (`/chat`) is a thread-based conversation surface that lets you talk to agents for project-backed Q&A, inspect execution invocation transcripts and MCP tool invocations, and get local onboarding help before any project exists.
 
+When the dashboard language is German, all Chat-owned controls, empty states, confirmations, known invocation status labels, transcript role labels, widgets, speech controls, and accessible announcements use German. Times, counts, percentages, token estimates, durations, and retry timestamps follow German number and date conventions. Your messages, agent replies, prompts sent by quick actions, reasoning, tool traces, invocation logs, scheduled instructions, provider-authored errors and status values, unknown invocation statuses, entity names, configured agent names, and speech transcripts remain exactly as received.
+
 ## Layout
 
 - **No-project assistant** — When no project is selected, `/chat` shows a local onboarding assistant instead of a project-required empty state. It presents the Code UX assistant avatar, five quick bubbles, local replies, and explicit buttons for Add Project, Projects, Settings, onboarding, and docs. It does not create conversation threads, persist messages, or call project-scoped chat APIs.
@@ -91,7 +93,7 @@ Each action has a fixed template and request-scoped guidance mapping:
 
 The quickaction also carries the active project's effective techstack into planning: the selected catalog entry when assigned, or the catalog default when the project is unassigned. Stack item labels become suggestion tags, so the progress widget and planner begin from the same stack context visible in the dashboard. Catalog guidance is applied only to this planning request, reconciled with stronger repository instructions, and never saved as a project setting.
 
-The transcript then shows an app progress widget instead of raw status data. The widget reports:
+The transcript then shows an app progress widget instead of raw status data. Known unlabeled planning-stage IDs use the dashboard language, while provider-supplied labels and unknown custom stage values remain unchanged. The widget reports:
 
 - whether the sprint is for a web app, desktop app, online shop, portfolio, or game
 - the app sprint name

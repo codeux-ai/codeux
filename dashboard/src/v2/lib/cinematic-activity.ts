@@ -4,6 +4,8 @@ import {
   selectAgentHumorMessage,
   type AgentHumorCategory,
 } from "./agent-humor-messages.js";
+import type { DashboardLocale } from "../i18n/locales.js";
+import { translateChatMessage } from "../i18n/messages/chat.js";
 
 export type CinematicActivityPhase =
   | "container_startup"
@@ -51,6 +53,7 @@ export interface ResolveCinematicActivityOptions {
   nowMs: number;
   projectManagerAgentPresetId: string | null | undefined;
   selectedThread: CinematicActivityThread | null;
+  locale?: DashboardLocale;
 }
 
 const PHASE_CATEGORY: Record<CinematicActivityPhase, AgentHumorCategory> = {
@@ -62,13 +65,13 @@ const PHASE_CATEGORY: Record<CinematicActivityPhase, AgentHumorCategory> = {
   error: "error",
 };
 
-const PHASE_LABEL: Record<CinematicActivityPhase, string> = {
-  container_startup: "Container starting",
-  provider_work: "Provider running",
-  planning: "Planning in progress",
-  qa_handoff: "QA review in progress",
-  completion: "Runtime step completed",
-  error: "Runtime needs attention",
+const PHASE_MESSAGE_KEY: Record<CinematicActivityPhase, Parameters<typeof translateChatMessage>[1]> = {
+  container_startup: "phaseContainerStartup",
+  provider_work: "phaseProviderWork",
+  planning: "phasePlanning",
+  qa_handoff: "phaseQaHandoff",
+  completion: "phaseCompletion",
+  error: "phaseError",
 };
 
 const isQaInvocation = (type: string): boolean => /(^|_)(qa|quality)(_|$)|review/.test(type.toLowerCase());
@@ -121,11 +124,12 @@ const buildCue = (options: {
   nowMs: number;
   phase: CinematicActivityPhase;
   provider: string | null | undefined;
+  locale?: DashboardLocale;
 }): CinematicActivityCue => {
   const providerLabel = normalizeProviderLabel(options.provider);
   return {
     id: options.id,
-    label: PHASE_LABEL[options.phase],
+    label: translateChatMessage(options.locale ?? "en", PHASE_MESSAGE_KEY[options.phase]),
     phase: options.phase,
     providerLabel,
     quote: selectAgentHumorMessage({
@@ -133,6 +137,7 @@ const buildCue = (options: {
       cycleDurationMs: STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS,
       seed: [options.agentId ?? "unassigned", options.provider ?? "local", options.phase, options.id].join("|"),
       nowMs: options.nowMs,
+      locale: options.locale,
     }),
     tone: options.phase === "error" ? "error" : options.phase === "completion" ? "complete" : "active",
   };
@@ -178,6 +183,7 @@ export const resolveCinematicActivityDisplayState = (
       nowMs: options.nowMs,
       phase: "error",
       provider: options.selectedThread?.runtimeState?.providerLabel ?? options.selectedThread?.runtimeState?.virtualProvider,
+      locale: options.locale,
     });
   } else if (projectManagerInvocation) {
     const phase = classifyCinematicActivityPhase(projectManagerInvocation);
@@ -188,6 +194,7 @@ export const resolveCinematicActivityDisplayState = (
         nowMs: options.nowMs,
         phase,
         provider: projectManagerInvocation.provider,
+        locale: options.locale,
       });
     }
   } else if (projectManagerActive) {
@@ -199,6 +206,7 @@ export const resolveCinematicActivityDisplayState = (
         nowMs: options.nowMs,
         phase,
         provider: options.selectedThread?.runtimeState?.providerLabel ?? options.selectedThread?.runtimeState?.virtualProvider,
+        locale: options.locale,
       });
     }
   }
@@ -216,6 +224,7 @@ export const resolveCinematicActivityDisplayState = (
       nowMs: options.nowMs,
       phase: backgroundPhase,
       provider: backgroundInvocation.provider,
+      locale: options.locale,
     })
     : null;
 

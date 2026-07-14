@@ -2,36 +2,38 @@ import type { FunctionComponent } from "preact";
 import { Link } from "@tanstack/react-router";
 import { Bot, MessageCircle, Plus, Radio, Sparkles } from "lucide-preact";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { chatMessages, type ChatTextMessageKey } from "../../i18n/messages/chat.js";
 
 type EmptyChatTone = "project" | "thread" | "messages" | "invocations";
 
 const emptyChatTone: Record<EmptyChatTone, {
-  eyebrow: string;
-  title: string;
+  eyebrow: ChatTextMessageKey;
+  title: ChatTextMessageKey;
   icon: typeof MessageCircle;
   accentClass: string;
 }> = {
   project: {
-    eyebrow: "Project Required",
-    title: "Ready When a Project Exists",
+    eyebrow: "projectRequired",
+    title: "readyWhenProjectExists",
     icon: Plus,
     accentClass: "text-ember-500",
   },
   thread: {
-    eyebrow: "Waiting for First Thread",
-    title: "Project Chat Is Standing By",
+    eyebrow: "waitingForFirstThread",
+    title: "projectChatStandingBy",
     icon: MessageCircle,
     accentClass: "text-signal-500",
   },
   messages: {
-    eyebrow: "Thread Armed",
-    title: "No Messages Yet",
+    eyebrow: "threadArmed",
+    title: "noMessagesYet",
     icon: Bot,
     accentClass: "text-signal-500",
   },
   invocations: {
-    eyebrow: "No Invocation Selected",
-    title: "Runtime Transcript Standby",
+    eyebrow: "noInvocationSelected",
+    title: "runtimeTranscriptStandby",
     icon: Radio,
     accentClass: "text-ember-500",
   },
@@ -43,6 +45,7 @@ export const EmptyChat: FunctionComponent<{
   eyebrow?: string;
   tone?: EmptyChatTone;
 }> = ({ message, title, eyebrow, tone = "thread" }) => {
+  const { translate } = useDashboardI18n();
   const config = emptyChatTone[tone];
   const Icon = config.icon;
 
@@ -55,7 +58,7 @@ export const EmptyChat: FunctionComponent<{
         <div className="absolute h-[26rem] w-[26rem] rounded-full border border-ember-500/10 animate-[ping_9.6s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
       </div>
       <div className="pointer-events-none absolute left-8 top-8 hidden rounded-full border border-black/[0.06] bg-white/65 px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.04] sm:flex">
-        Queue idle
+        {translate(chatMessages, "queueIdle")}
       </div>
 
       <div className="relative z-10 w-full max-w-xl">
@@ -66,10 +69,10 @@ export const EmptyChat: FunctionComponent<{
         </div>
 
         <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-signal-500">
-          {eyebrow || config.eyebrow}
+          {eyebrow || translate(chatMessages, config.eyebrow)}
         </div>
         <h3 className="mt-3 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white md:text-4xl">
-          {title || config.title}
+          {title || translate(chatMessages, config.title)}
         </h3>
         <p className="mx-auto mt-4 max-w-md text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">
           {message}
@@ -77,9 +80,9 @@ export const EmptyChat: FunctionComponent<{
 
         <div className="mx-auto mt-8 grid max-w-md gap-2 sm:grid-cols-3">
           {[
-            { label: "Thread", value: "ready" },
-            { label: "Routing", value: "queued" },
-            { label: "History", value: "clean" },
+            { label: translate(chatMessages, "thread"), value: translate(chatMessages, "ready") },
+            { label: translate(chatMessages, "routing"), value: translate(chatMessages, "queued") },
+            { label: translate(chatMessages, "history"), value: translate(chatMessages, "clean") },
           ].map((item) => (
             <div key={item.label} className="rounded-2xl border border-black/[0.06] bg-black/[0.025] px-4 py-3 text-left dark:border-white/[0.06] dark:bg-white/[0.035]">
               <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">{item.label}</div>
@@ -97,8 +100,11 @@ export const ChatRailPlaceholder: FunctionComponent<{
   message: string;
   actionLabel?: string;
   actionTo?: string;
-}> = ({ title = "Thread Rail Ready", message, actionLabel = "New Thread", actionTo }) => {
+}> = ({ title, message, actionLabel, actionTo }) => {
   const interactionTokens = useInteractionTokens();
+  const { translate } = useDashboardI18n();
+  const resolvedTitle = title ?? translate(chatMessages, "threadRailReady");
+  const resolvedActionLabel = actionLabel ?? translate(chatMessages, "newThread");
 
   return (
   <div className="relative flex min-h-[22rem] flex-col justify-between overflow-hidden rounded-[1.5rem] border border-dashed border-signal-500/20 bg-black/[0.025] p-5 dark:bg-white/[0.03]">
@@ -125,7 +131,7 @@ export const ChatRailPlaceholder: FunctionComponent<{
       <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-signal-500/20 bg-signal-500/10 text-signal-500 shadow-[0_0_28px_rgba(0,224,160,0.14)]">
         <Sparkles className="h-5 w-5" strokeWidth={1.7} />
       </div>
-      <div className="font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">{title}</div>
+      <div className="font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">{resolvedTitle}</div>
       <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">{message}</p>
       {actionTo ? (
         <Link
@@ -138,12 +144,12 @@ export const ChatRailPlaceholder: FunctionComponent<{
           className="mt-5 inline-flex min-h-[36px] items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 hover:border-signal-500/35 hover:bg-signal-500/15 hover:text-signal-700 focus-visible:ring-2 focus-visible:ring-signal-500/40 dark:text-signal-300"
         >
           <Plus className="h-3.5 w-3.5" strokeWidth={2.3} />
-          {actionLabel}
+          {resolvedActionLabel}
         </Link>
       ) : (
         <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-300">
           <Plus className="h-3.5 w-3.5" strokeWidth={2.3} />
-          {actionLabel}
+          {resolvedActionLabel}
         </div>
       )}
     </div>
@@ -152,7 +158,8 @@ export const ChatRailPlaceholder: FunctionComponent<{
 };
 
 export const LoadingChat: FunctionComponent<{ label: string }> = ({ label }) => {
-  const isInvocationTranscript = label.toLowerCase().includes("invocation transcript");
+  const { translate } = useDashboardI18n();
+  const isInvocationTranscript = label === translate(chatMessages, "loadingInvocationTranscript");
 
   return (
     <div className="flex h-full min-h-0 items-center justify-center rounded-3xl border border-dashed border-black/[0.06] bg-white/70 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
@@ -165,8 +172,8 @@ export const LoadingChat: FunctionComponent<{ label: string }> = ({ label }) => 
         <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-signal-500">{label}</div>
         <p className="max-w-md text-sm leading-relaxed text-slate-500 dark:text-slate-400">
           {isInvocationTranscript
-            ? "Code UX is loading the stored read-only provider transcript for this invocation."
-            : "Code UX is loading the latest stored conversation state."}
+            ? translate(chatMessages, "loadingInvocationTranscriptDescription")
+            : translate(chatMessages, "loadingConversation")}
         </p>
       </div>
     </div>

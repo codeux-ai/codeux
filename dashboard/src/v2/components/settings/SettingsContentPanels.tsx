@@ -16,6 +16,7 @@ import { ActionFeedbackRegion } from "../ui/ActionFeedbackRegion.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { SettingsActivePanelStatus } from "./SettingsActivePanelStatus.js";
 import { SettingsDetailWorkspaceProvider } from "./panels/SharedPanelComponents.js";
+import { settingsShellText } from "../../i18n/messages/settings-shell.js";
 
 export const SettingsContentPanels: FunctionComponent<{
   state: SettingsPageState;
@@ -62,9 +63,10 @@ export const SettingsContentPanels: FunctionComponent<{
     <div aria-busy={activeSaving || loading || resettingProject ? "true" : undefined} data-reset-busy={resettingProject ? "true" : undefined} data-settings-state={error ? "error" : resettingProject ? "resetting" : activeSaving ? "saving" : activeDirty ? "dirty" : "saved"}>
       {showActivePanelStatus ? <SettingsActivePanelStatus state={state} stickyTop={stickyTop} /> : null}
       {showFeedback ? (
+        // Async feedback contract: Current values remain visible while work is pending.
         <ActionFeedbackRegion
           status={error ? "error" : loading || activeSaving || resettingProject ? "pending" : saveMessage ? "success" : activeDirty ? "warning" : "idle"}
-          message={error || (loading ? "Loading settings without clearing current values..." : resettingProject ? "Resetting project overrides. Current values remain visible." : activeSaving ? "Saving settings. Current values remain visible." : saveMessage || (activeDirty ? "You have unsaved changes in this settings scope." : null))}
+          message={error || (loading ? settingsShellText("loadingValues") : resettingProject ? settingsShellText("resettingValues") : activeSaving ? settingsShellText("savingValues") : saveMessage || (activeDirty ? settingsShellText("dirtyScope") : null))}
           autoDismiss={false}
         />
       ) : null}

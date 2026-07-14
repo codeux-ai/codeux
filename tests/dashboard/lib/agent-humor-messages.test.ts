@@ -5,6 +5,7 @@ import {
   STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS,
   STATUS_MESSAGE_MIN_INTERVAL_MS,
   classifyToolHumorCategory,
+  getAgentHumorMessages,
   getAgentHumorCycle,
   selectAgentHumorMessage,
 } from "../../../dashboard/src/v2/lib/agent-humor-messages.js";
@@ -59,6 +60,15 @@ describe("agent humor messages", () => {
     for (let offsetMs = 0; offsetMs < STATUS_MESSAGE_MIN_INTERVAL_MS; offsetMs += 1) {
       expect(selectAgentHumorMessage({ category, seed, nowMs: cycleStartMs + offsetMs })).toBe(expected);
     }
+  });
+
+  it("uses the German catalog without changing cadence or seeded deck selection", () => {
+    const options = { category: "thinking" as const, seed: "thread-1:message-1", nowMs: 35_000 };
+    const selected = selectAgentHumorMessage({ ...options, locale: "de" });
+
+    expect(getAgentHumorMessages("thinking", "de")).toContain(selected);
+    expect(selectAgentHumorMessage({ ...options, nowMs: 39_999, locale: "de" })).toBe(selected);
+    expect(getAgentHumorCycle(options.nowMs)).toEqual(getAgentHumorCycle(options.nowMs, STATUS_MESSAGE_MIN_INTERVAL_MS));
   });
 
   it("changes the cycle bucket at five-second boundaries", () => {

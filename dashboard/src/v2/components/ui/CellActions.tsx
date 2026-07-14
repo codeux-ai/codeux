@@ -6,6 +6,8 @@ import { useCallback } from "preact/hooks";
 import { Link } from "@tanstack/react-router";
 import { SHARED_INTERACTION_CLASSES } from "./Button.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 interface CellActionsProps {
     isRunning: boolean;
@@ -25,15 +27,17 @@ interface CellActionsProps {
  */
 export const CellActions: FunctionComponent<CellActionsProps> = ({
     isRunning,
-    label = "Sprints",
+    label,
     to = "#",
     primaryBusy = false,
     onPrimaryAction,
     onSprintsClick,
     onSettingsClick,
     primaryLabel,
-    settingsLabel = "Settings",
+    settingsLabel,
 }) => {
+    const { translate } = useOptionalDashboardI18n();
+    const resolvedLabel = label ?? translate(shellMessages, "navSprints");
     const { feedback: primaryFeedback, setPending: setPrimaryPending, setSuccess: setPrimarySuccess, setError: setPrimaryError } = useActionFeedback(1500);
     const tokens = useInteractionTokens();
     const reducedMotion = useReducedMotion();
@@ -64,7 +68,7 @@ export const CellActions: FunctionComponent<CellActionsProps> = ({
             <button
                 style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
                 className={`flex items-center justify-center w-9 h-9 rounded-full text-slate-800 dark:text-white bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 relative overflow-hidden ${SHARED_INTERACTION_CLASSES}`}
-                aria-label={primaryLabel ?? (isRunning ? "Stop" : "Play")}
+                aria-label={primaryLabel ?? translate(shellMessages, isRunning ? "stop" : "play")}
                 aria-busy={isPrimaryPending}
                 disabled={!onPrimaryAction || isPrimaryPending}
                 onClick={handlePrimaryClick as any}
@@ -98,7 +102,7 @@ export const CellActions: FunctionComponent<CellActionsProps> = ({
                 }}
                 className={`flex items-center gap-1.5 px-5 h-9 bg-transparent text-slate-800 dark:text-white hover:bg-slate-900 hover:text-white dark:hover:bg-white dark:hover:text-void-900 rounded-full font-bold text-[10px] uppercase tracking-[0.1em] shadow-[0_4px_12px_rgba(0,0,0,0.15)] ${SHARED_INTERACTION_CLASSES}`}
             >
-                {label} <Maximize2 className="w-2.5 h-2.5" aria-hidden="true" />
+                {resolvedLabel} <Maximize2 className="w-2.5 h-2.5" aria-hidden="true" />
             </Link>
             <Link
                 to="/config"
@@ -108,7 +112,7 @@ export const CellActions: FunctionComponent<CellActionsProps> = ({
                     void onSettingsClick?.();
                 }}
                 className={`flex items-center justify-center w-11 h-11 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 rounded-full text-slate-800 dark:text-white ${SHARED_INTERACTION_CLASSES}`}
-                aria-label={settingsLabel}
+                aria-label={settingsLabel ?? translate(shellMessages, "settings")}
             >
                 <button
                     type="button"

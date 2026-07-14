@@ -6,8 +6,7 @@ import { ChevronRight, File as FileIcon, Folder, FolderOpen, Loader2 } from "luc
 import { useMemo } from "preact/hooks";
 import type { FileBrowserTreeNode } from "../../../types.js";
 import { buildInteractionTransition } from "../../lib/motion/tokens.js";
-import { useDashboardI18n } from "../../i18n/context.js";
-import { fileBrowserMessages } from "../../i18n/messages/file-browser.js";
+
 
 const countMatchingNodes = (nodes: FileBrowserTreeNode[], searchTerm?: string): number => {
   const normalizedTerm = searchTerm?.trim().toLowerCase() ?? "";
@@ -52,7 +51,6 @@ const expansionTransition = buildInteractionTransition("expansionCollapse", "tra
 const selectionTransition = buildInteractionTransition("selectionMovement", "background-color, border-color, color, box-shadow");
 
 const TreeNodeRow: FunctionComponent<NodeRendererProps<FileBrowserTreeNode> & { loadingPath?: string | null }> = ({ node, style, dragHandle, tree, loadingPath }) => {
-  const { translate } = useDashboardI18n();
   const isDirectory = node.data.type === "directory";
   const searchTerm = tree.props.searchTerm;
   const isSelected = node.isSelected && !isDirectory;
@@ -68,7 +66,7 @@ const TreeNodeRow: FunctionComponent<NodeRendererProps<FileBrowserTreeNode> & { 
       aria-expanded={isDirectory ? node.isOpen : undefined}
       aria-busy={isLoading}
       aria-describedby={isLoading ? loadingDescriptionId : undefined}
-      aria-label={`${translate(fileBrowserMessages, isDirectory ? "folderPath" : "filePath", { path: node.data.path })}${isLoading ? translate(fileBrowserMessages, "loadingContentsSuffix") : ""}`}
+      aria-label={`${isDirectory ? "Folder" : "File"} ${node.data.path}${isLoading ? ", loading contents" : ""}`}
       onClick={() => {
         if (isDirectory) {
           node.toggle();
@@ -89,7 +87,7 @@ const TreeNodeRow: FunctionComponent<NodeRendererProps<FileBrowserTreeNode> & { 
           ? "bg-signal-500/[0.14] text-slate-900 ring-1 ring-inset ring-signal-500/25 dark:text-white"
           : "text-slate-600 hover:bg-black/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.05]"
       }`}
-      title={isLoading ? translate(fileBrowserMessages, "loadingPath", { path: node.data.path }) : node.data.path}
+      title={isLoading ? `Loading ${node.data.path}` : node.data.path}
       style={{ ...style, transition: selectionTransition }}
     >
       <span class="flex h-4 w-4 shrink-0 items-center justify-center text-slate-400">
@@ -112,7 +110,7 @@ const TreeNodeRow: FunctionComponent<NodeRendererProps<FileBrowserTreeNode> & { 
       {isLoading && (
         <span id={loadingDescriptionId} class="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-1.5 py-0.5 text-[10px] font-semibold text-signal-700 dark:text-signal-300">
           <Loader2 aria-hidden="true" class="h-3 w-3 animate-spin motion-reduce:animate-none" strokeWidth={2} />
-          {translate(fileBrowserMessages, "loading")}
+          Loading
         </span>
       )}
     </div>
@@ -120,7 +118,6 @@ const TreeNodeRow: FunctionComponent<NodeRendererProps<FileBrowserTreeNode> & { 
 };
 
 export const FileTree: FunctionComponent<FileTreeProps> = ({ nodes, selectedPath, onSelectFile, searchTerm, loadingPath = null }) => {
-  const { formatNumber, translate, translatePlural } = useDashboardI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 320, height: 480 });
   const resultCount = useMemo(() => countMatchingNodes(nodes, searchTerm), [nodes, searchTerm]);
@@ -146,17 +143,15 @@ export const FileTree: FunctionComponent<FileTreeProps> = ({ nodes, selectedPath
     <div
       ref={containerRef}
       role="tree"
-      aria-label={translate(fileBrowserMessages, "sprintFileTree")}
+      aria-label="Sprint file tree"
       class="h-full w-full overflow-hidden"
     >
       <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {searchTerm?.trim()
-          ? translatePlural(fileBrowserMessages, "treeResultsMatch", resultCount, { formattedCount: formatNumber(resultCount), term: searchTerm })
-          : translatePlural(fileBrowserMessages, "treeEntriesAvailable", resultCount, { formattedCount: formatNumber(resultCount) })}
+          ? `${resultCount} file tree ${resultCount === 1 ? "result" : "results"} match ${searchTerm}.`
+          : `${resultCount} file tree ${resultCount === 1 ? "entry" : "entries"} available.`}
         {" "}
-        {selectedPath
-          ? translate(fileBrowserMessages, "selectedFileAnnouncement", { path: selectedPath })
-          : translate(fileBrowserMessages, "noFileSelectedAnnouncement")}
+        {selectedPath ? `Selected file ${selectedPath}.` : "No file selected."}
       </div>
       <Tree<FileBrowserTreeNode>
         data={nodes}

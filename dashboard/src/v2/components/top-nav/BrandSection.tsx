@@ -3,6 +3,8 @@ import { useState } from "preact/hooks";
 import { Link } from "@tanstack/react-router";
 import { Menu } from "lucide-preact";
 import { RobotLogo } from "../brand/RobotLogo.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 interface BrandSectionProps {
     isMobile?: boolean;
@@ -12,6 +14,7 @@ interface BrandSectionProps {
 }
 
 export const BrandSection: FunctionComponent<BrandSectionProps> = ({ isMobile, onMenuToggle, hideLogo, isMobileMenuOpen }) => {
+    const { translate } = useOptionalDashboardI18n();
     const [brandActive, setBrandActive] = useState(false);
 
     if (hideLogo && !isMobile) {
@@ -24,7 +27,7 @@ export const BrandSection: FunctionComponent<BrandSectionProps> = ({ isMobile, o
                 <button
                     type="button"
                     onClick={onMenuToggle}
-                    aria-label={isMobileMenuOpen ? "Close mobile menu" : "Open mobile menu"}
+                    aria-label={translate(shellMessages, isMobileMenuOpen ? "closeMobileMenu" : "openMobileMenu")}
                     aria-expanded={!!isMobileMenuOpen}
                     aria-haspopup="menu"
                     aria-controls="primary-navigation"
