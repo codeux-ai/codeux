@@ -9,8 +9,10 @@ import { ConnectionChatRepository } from "../../../src/repositories/connection-c
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import {
   ChatProviderOutboundAdapterError,
+  ConfiguredChatProviderOutboundAdapter,
   type ChatProviderOutboundAdapter,
 } from "../../../src/services/chat-provider-adapters.js";
+import { DISCORD_API_BASE_URL, stableDiscordNonce } from "../../../src/domain/chat-connectors/providers/discord.js";
 import { ChatProviderOutboundService } from "../../../src/services/chat-provider-outbound-service.js";
 import type { ConversationMessageRecord, ConversationThreadRecord } from "../../../src/contracts/connection-chat-types.js";
 
@@ -180,6 +182,80 @@ describe("ChatProviderOutboundService", () => {
     });
   });
 
+  it("uses the provider-native Discord client for official replies and bounded rate-limit recovery", async () => {
+    const context = await createContext();
+    const fixture = await createOutboundFixture(context, {
+      bridgeMode: "official_api",
+      providerKind: "discord",
+      setup: { applicationId: "999999999999999999", publicKey: "a".repeat(64), intents: "37377" },
+      secrets: { botToken: "official-bot-token" },
+      externalChannelId: "222222222222222222",
+      externalMessageId: "111111111111111111",
+    });
+    const wait = vi.fn(async () => undefined);
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response("rate limited", {
+        status: 429,
+        headers: { "retry-after": "0.75", "x-ratelimit-remaining": "0" },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "444444444444444444" }), { status: 200 }));
+    const adapter = new ConfiguredChatProviderOutboundAdapter({ fetch: fetchImpl, wait, now: () => 1_000 });
+    const service = new ChatProviderOutboundService({ chatProviderRepository: context.providerRepository, adapter });
+
+    const delivery = await service.deliverReply(fixture);
+
+    expect(delivery).toMatchObject({
+      status: "delivered",
+      attemptCount: 1,
+      externalMessageId: "444444444444444444",
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
+      `${DISCORD_API_BASE_URL}/channels/222222222222222222/messages`,
+      `${DISCORD_API_BASE_URL}/channels/222222222222222222/messages`,
+    ]);
+    expect(wait).toHaveBeenCalledWith(750, undefined);
+    const request = fetchImpl.mock.calls[0]?.[1];
+    expect(request).toEqual(expect.objectContaining({
+      method: "POST",
+      headers: expect.objectContaining({ authorization: "Bot official-bot-token" }),
+      redirect: "error",
+    }));
+    expect(JSON.parse(String(request?.body))).toEqual({
+      content: "Bridge reply",
+      allowed_mentions: { parse: [] },
+      nonce: stableDiscordNonce(delivery!.id),
+      enforce_nonce: true,
+      message_reference: { message_id: "111111111111111111", fail_if_not_exists: false },
+    });
+    expect(JSON.stringify(delivery?.payload)).not.toContain("official-bot-token");
+  });
+
+  it("maps provider-native Discord permission failures into terminal delivery state without token leakage", async () => {
+    const context = await createContext();
+    const fixture = await createOutboundFixture(context, {
+      bridgeMode: "official_api",
+      providerKind: "discord",
+      setup: { applicationId: "999999999999999999", publicKey: "a".repeat(64), intents: "37377" },
+      secrets: { botToken: "official-bot-token" },
+      externalChannelId: "222222222222222222",
+      externalMessageId: "111111111111111111",
+    });
+    const adapter = new ConfiguredChatProviderOutboundAdapter({
+      fetch: vi.fn(async () => new Response("server echoed official-bot-token", { status: 403 })),
+    });
+    const service = new ChatProviderOutboundService({ chatProviderRepository: context.providerRepository, adapter });
+
+    const delivery = await service.deliverReply(fixture);
+
+    expect(delivery).toMatchObject({
+      status: "failed",
+      attemptCount: 1,
+      lastError: "Discord bot permissions are insufficient.",
+    });
+    expect(JSON.stringify(delivery)).not.toContain("official-bot-token");
+  });
+
   it("records retryable failures with backoff and retries due deliveries", async () => {
     vi.useFakeTimers();
     let now = new Date("2026-07-07T00:00:00.000Z");
@@ -224,6 +300,39 @@ describe("ChatProviderOutboundService", () => {
       status: "delivered",
       attemptCount: 2,
       externalMessageId: "discord-out-1",
+    });
+  });
+
+  it("uses a provider Retry-After delay when it exceeds exponential backoff", async () => {
+    const now = new Date("2026-07-07T00:00:00.000Z");
+    const context = await createContext();
+    const fixture = await createOutboundFixture(context, {
+      bridgeMode: "official_api",
+      providerKind: "slack",
+      setup: { appId: "A-test", workspaceId: "T-test" },
+      secrets: { botToken: "xoxb-test-token-value", signingSecret: "signing-secret" },
+    });
+    const adapter: ChatProviderOutboundAdapter = {
+      send: vi.fn().mockRejectedValue(new ChatProviderOutboundAdapterError(
+        "Slack rate limited the request.",
+        true,
+        429,
+        42_000,
+      )),
+    };
+    const service = new ChatProviderOutboundService({
+      chatProviderRepository: context.providerRepository,
+      adapter,
+      initialBackoffMs: 1_000,
+      now: () => now,
+    });
+
+    const retryable = await service.deliverReply(fixture);
+
+    expect(retryable).toMatchObject({ status: "retryable_failure" });
+    expect(retryable?.payload?.delivery).toMatchObject({
+      retryable: true,
+      nextAttemptAt: "2026-07-07T00:00:42.000Z",
     });
   });
 
@@ -298,10 +407,12 @@ async function createContext(): Promise<{
 async function createOutboundFixture(
   context: Awaited<ReturnType<typeof createContext>>,
   options: {
-    bridgeMode: "managed_bridge" | "webhook" | "native_bridge";
-    providerKind: "telegram" | "discord" | "imessage";
+    bridgeMode: "managed_bridge" | "webhook" | "native_bridge" | "official_api";
+    providerKind: "telegram" | "discord" | "imessage" | "slack";
     setup: Record<string, unknown>;
     secrets: Record<string, unknown>;
+    externalChannelId?: string;
+    externalMessageId?: string;
   },
 ): Promise<{
   projectId: string;
@@ -324,7 +435,7 @@ async function createOutboundFixture(
   });
   const binding = context.providerRepository.createChannelBinding({
     providerConnectionId: connection.id,
-    externalChannelId: "external-channel",
+    externalChannelId: options.externalChannelId ?? "external-channel",
     externalChannelName: "external",
     projectId: project.id,
   });
@@ -332,7 +443,7 @@ async function createOutboundFixture(
     providerConnectionId: connection.id,
     channelBindingId: binding.id,
     externalChannelId: binding.externalChannelId,
-    externalMessageId: "external-in-1",
+    externalMessageId: options.externalMessageId ?? "external-in-1",
   }).delivery;
   const triggeringMessage = context.conversationRepository.postDashboardMessage(project.id, {
     title: "External fixture",

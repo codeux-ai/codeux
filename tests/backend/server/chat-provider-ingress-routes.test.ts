@@ -1,4 +1,4 @@
-import { createHmac } from "crypto";
+import { createHmac, createPrivateKey, createPublicKey, sign } from "crypto";
 import express from "express";
 import type { Server } from "http";
 import * as fs from "fs/promises";
@@ -28,6 +28,15 @@ interface TestServerContext {
 const serversToClose: Server[] = [];
 const tempDirs: string[] = [];
 const openStorages: AppDbStorage[] = [];
+const discordPrivateKey = createPrivateKey({
+  key: Buffer.from("302e020100300506032b6570042204209d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60", "hex"),
+  format: "der",
+  type: "pkcs8",
+});
+const discordPublicKey = createPublicKey(discordPrivateKey)
+  .export({ format: "der", type: "spki" })
+  .subarray(-32)
+  .toString("hex");
 
 afterEach(async () => {
   for (const server of serversToClose.splice(0)) {
@@ -142,6 +151,70 @@ describe("chat provider ingress routes", () => {
     });
   });
 
+  it("authenticates official Discord interactions and returns PONG through the production ingress boundary", async () => {
+    const context = await startTestServer();
+    const project = createProject(context, "discord-official-ingress");
+    const connection = context.chatProviderRepository.createConnection({
+      providerKind: "discord",
+      displayName: "Discord official API",
+      bridgeMode: "official_api",
+      status: "active",
+      setup: {
+        applicationId: "999999999999999999",
+        publicKey: discordPublicKey,
+        intents: "37377",
+      },
+      secrets: { botToken: "write-only-bot-token" },
+    });
+    context.chatProviderRepository.createChannelBinding({
+      providerConnectionId: connection.id,
+      externalChannelId: "222222222222222222",
+      externalChannelName: "triage",
+      projectId: project.id,
+    });
+    const timestamp = String(Math.floor(Date.now() / 1_000));
+    const pingBody = '{ "type": 1 }';
+    const ping = await postRawIngress(context, connection.id, pingBody, discordHeaders(timestamp, pingBody));
+
+    expect(ping.status).toBe(200);
+    expect(await ping.json()).toEqual({ type: 1 });
+    expect(context.postMessage).not.toHaveBeenCalled();
+
+    const invalid = await postRawIngress(context, connection.id, pingBody, {
+      "X-Signature-Ed25519": "0".repeat(128),
+      "X-Signature-Timestamp": timestamp,
+    });
+    expect(invalid.status).toBe(401);
+
+    const interactionBody = JSON.stringify({
+      id: "111111111111111111",
+      type: 2,
+      channel_id: "222222222222222222",
+      channel: { id: "222222222222222222", name: "triage", type: 0 },
+      member: { user: { id: "333333333333333333", username: "alex" } },
+      data: { name: "ask", options: [{ name: "prompt", value: "repair production ingress" }] },
+    });
+    const accepted = await postRawIngress(
+      context,
+      connection.id,
+      interactionBody,
+      discordHeaders(timestamp, interactionBody),
+    );
+
+    const acceptedBody = await accepted.json();
+    expect({ status: accepted.status, body: acceptedBody }).toEqual({
+      status: 202,
+      body: expect.objectContaining({
+        status: "accepted",
+        providerKind: "discord",
+        delivery: expect.objectContaining({ externalMessageId: "111111111111111111", status: "processed" }),
+      }),
+    });
+    expect(context.postMessage).toHaveBeenCalledWith(project.id, expect.objectContaining({
+      bodyMarkdown: "repair production ingress",
+    }));
+  });
+
   it("rejects unauthenticated and stale bridge requests without creating messages", async () => {
     const context = await startTestServer();
     const project = createProject(context, "rejected-ingress");
@@ -242,7 +315,7 @@ async function startTestServer(): Promise<TestServerContext> {
   const app = express();
   app.use(express.json({
     verify: (req, _res, buf) => {
-      (req as typeof req & { rawBody?: string }).rawBody = buf.toString("utf8");
+      (req as typeof req & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
     },
   }));
   registerChatProviderIngressRoutes(app, {
@@ -291,4 +364,28 @@ function postIngress(
     },
     body: JSON.stringify(body),
   });
+}
+
+function postRawIngress(
+  context: TestServerContext,
+  providerConnectionId: string,
+  rawBody: string,
+  headers: Record<string, string>,
+): Promise<Response> {
+  return fetch(`${context.baseUrl}/api/chat-providers/ingress/${providerConnectionId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: rawBody,
+  });
+}
+
+function discordHeaders(timestamp: string, rawBody: string): Record<string, string> {
+  return {
+    "X-Signature-Ed25519": sign(
+      null,
+      Buffer.from(`${timestamp}${rawBody}`),
+      discordPrivateKey,
+    ).toString("hex"),
+    "X-Signature-Timestamp": timestamp,
+  };
 }
