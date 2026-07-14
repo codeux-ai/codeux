@@ -37,6 +37,12 @@ English and German must declare exactly the same top-level keys. Interpolation t
 
 Keep each catalog with its owning feature and import it only where the feature is loaded. Translate dashboard-authored interface copy only. Never translate provider output, API responses, stored instructions, project data, runtime diagnostics, or user-authored content.
 
+## File Browser boundary
+
+The File Browser has a route-owned catalog for page and session controls, tree and change summaries, file and diff viewer chrome, Monaco loading states, recovery actions, and accessible names. Counts and the snapshot timestamp use the locale-bound `Intl` helpers.
+
+Repository and runtime values remain exact: paths, filenames, source and diff content, syntax language IDs, Git refs, project and sprint names, binary metadata, response reasons, and backend error details are never translated. Localized sentences can frame those values, but interpolation inserts them verbatim and does not alter Git status ordering or diff line calculations.
+
 ## Nodes route
 
 The feature-gated Nodes route imports its own `messages/nodes.ts` catalog. English and German cover its library, palettes, canvas and minimap controls, inspectors, governance review, validation summaries, run debugger, scheduling entry point, empty/error states, and accessible names. Locale-explicit helpers serve the pure node view models and dashboard-generated canvas and agent-command validation explanations.
