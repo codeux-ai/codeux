@@ -602,7 +602,7 @@ describe("dashboard accessibility quality regressions", () => {
     expect(screen.getByRole("radiogroup", { name: `${provider.name} Authentifizierungsmodus` })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: `${provider.name} Anbieter-ID` })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: `Entfernen: ${provider.name}` })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Open task actions for task TASK-LONG:/ })).toHaveAccessibleName(/Very long task title/);
+    expect(screen.getByRole("button", { name: /Aufgabenaktionen für Aufgabe TASK-LONG öffnen:/ })).toHaveAccessibleName(/Very long task title/);
     expect(container.querySelector(".kanban-card h4")).toHaveClass("break-words");
     expect(screen.getByRole("list", { name: "1 Vorschau-Sitzung" })).toHaveClass("overflow-x-auto");
     expect(screen.getByRole("button", { name: `Vorschau-Sitzung ${previewSession.sprintName} auswählen` })).toHaveAccessibleName(
@@ -755,9 +755,9 @@ describe("dashboard accessibility quality regressions", () => {
 
     const taskCard = readSource("dashboard/src/v2/components/tasks/KanbanTaskCard.tsx");
     const taskActionMenu = readSource("dashboard/src/v2/components/tasks/TaskCardActionMenu.tsx");
-    expect(taskActionMenu).toMatch(/Open task actions for task \$\{task\.id\}/);
-    expect(taskActionMenu).toMatch(/Edit task \$\{task\.id\}/);
-    expect(taskActionMenu).toMatch(/Delete task \$\{task\.id\}/);
+    expect(taskActionMenu).toMatch(/openTaskActionsTarget/);
+    expect(taskActionMenu).toMatch(/editTaskTarget/);
+    expect(taskActionMenu).toMatch(/deleteTaskTarget/);
     expect(taskActionMenu).toMatch(/aria-describedby=\{task\.isOptimistic \? editReasonId : undefined\}/);
     expect(taskActionMenu).toMatch(/aria-describedby=\{task\.isOptimistic \? deleteReasonId : undefined\}/);
     expect(taskCard).not.toMatch(/group-hover:opacity-100/);

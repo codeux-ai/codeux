@@ -158,8 +158,8 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
       </section>
 
       <section className="flex flex-col gap-3 border-t border-black/[0.06] pt-4 dark:border-white/[0.06]" aria-labelledby="node-credentials-heading">
-        <h3 id="node-credentials-heading" className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Credential bindings</h3>
-        {credentialRequirements.length === 0 ? <p className="text-xs text-slate-500">This node does not request credentials.</p> : credentialRequirements.map((requirement) => {
+        <h3 id="node-credentials-heading" className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t("credentialBindings")}</h3>
+        {credentialRequirements.length === 0 ? <p className="text-xs text-slate-500">{t("noCredentialRequest")}</p> : credentialRequirements.map((requirement) => {
           const reviewCredential = requiredCredentials.find((credential) => credential.slot === requirement.slot);
           const binding = selectedNode.credentialBindings?.find((entry) => entry.slot === requirement.slot) ?? null;
           const feedback = credentialFeedback?.nodeId === selectedNode.id && credentialFeedback.slot === requirement.slot
@@ -174,7 +174,7 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
                 <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{requirement.label}</span>
                 <span className={`text-[10px] font-bold uppercase ${status === "bound" ? "text-status-green" : status === "denied" ? "text-status-red" : "text-amber-600"}`}>{status}</span>
               </div>
-              <p className="mt-1 text-xs text-slate-500">{requirement.allowedKinds.join(", ")} · {requirement.requiredCapabilities.join(", ") || "declared"} access · secret value never displayed</p>
+              <p className="mt-1 text-xs text-slate-500">{t("credentialRequirementSummary", { kinds: requirement.allowedKinds.join(", "), capabilities: requirement.requiredCapabilities.join(", ") || t("declaredAccess") })}</p>
               <NodeCredentialPicker
                 projectId={projectId}
                 identity={`${projectId}:${flowId}:${selectedNode.id}:${requirement.slot}`}

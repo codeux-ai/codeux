@@ -425,9 +425,9 @@ describe("AIModelCatalogPanel", () => {
     const catalog = screen.getByRole("region", { name: "Modellkatalog" });
     const languageFilter = within(catalog).getByRole("button", { name: "Sprachmodelle nach Sprache filtern" });
     expect(languageFilter).toHaveValue("de-DE");
-    expect(languageFilter).toHaveTextContent("German (Germany)");
     expect(within(catalog).getByText("Piper German MLS Medium")).toBeInTheDocument();
     expect(within(catalog).queryByText("Kokoro 82M v1.0 Q8")).not.toBeInTheDocument();
+    expect(languageFilter).toHaveTextContent("German (Germany)");
     expect(speechApi.downloadSpeechModel).not.toHaveBeenCalled();
   });
 

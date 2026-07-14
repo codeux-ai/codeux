@@ -25,6 +25,8 @@ Provider output, runtime and API messages, diagnostics, project and sprint recor
 
 The internal Docs viewer follows the same rule. Its dashboard-owned chrome—navigation, search, pagination, counts, landmarks, and empty or error states—is localized. English documentation bodies, document titles, descriptions, section names, source paths, and source content remain English.
 
+Feature-owned catalogs cover the task board and workflow-status presentation, Custom Dashboards, Nodes, Settings integrations and chat connectors, and Stats cost analysis. Known dashboard-generated state labels are localized, while unknown status text, provider and runtime messages, connection diagnostics, logs, paths, persisted identifiers, and authored dashboard or task content remain unchanged. Cost, count, percentage, and date presentation uses the active locale without changing analytics values or backend payloads.
+
 ## Runtime architecture
 
 The dependency-free runtime lives in `dashboard/src/v2/i18n/`:
@@ -102,4 +104,4 @@ The main guardrails are:
 - focused feature and accessibility suites for rendered English and German behavior; and
 - `tests/e2e/navigation/dashboard-i18n.spec.ts` for the Language selector, persistence, production-route fan-in, responsive and keyboard behavior, and verbatim fixture content.
 
-`pnpm run check:dashboard-i18n` is the static-copy guardrail. It scans production dashboard TypeScript and TSX for user-facing literals outside feature catalogs. `scripts/dashboard-i18n-allowlist.json` allows only reviewed exact-path, exact-line, exact-copy exceptions with a rationale, such as protocol values, code examples, license text, content intentionally rendered verbatim, or explicitly temporary carry-over of pre-existing English copy from separately merged work awaiting its localization pass. New dashboard-authored copy belongs in a typed catalog rather than in the allowlist.
+`pnpm run check:dashboard-i18n` is the static-copy guardrail. It scans production dashboard TypeScript and TSX for user-facing literals outside feature catalogs. `scripts/dashboard-i18n-allowlist.json` allows only reviewed exact-path, exact-line, exact-copy exceptions with a rationale, such as protocol values, code examples, license text, or content intentionally rendered verbatim. Dashboard-authored copy belongs in a typed catalog and cannot be deferred through the allowlist.

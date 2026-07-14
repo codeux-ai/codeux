@@ -5,6 +5,8 @@ import { FilterStrip } from "../ui/FilterStrip.js";
 import { ListWindowSelector } from "../ui/ListWindowSelector.js";
 import { TaskBoardSprintSelector } from "./TaskBoardSprintSelector.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { taskMessages } from "../../i18n/messages/tasks.js";
 
 export type TaskBoardStatusFilter = "all" | TaskStatus;
 export type TaskBoardPriorityFilter = "all" | TaskPriority;
@@ -23,27 +25,6 @@ export interface TaskBoardFiltersProps {
   onListWindowChange: (value: ListWindowOption) => void;
 }
 
-function getStatusFilterLabel(filter: TaskBoardStatusFilter): string {
-  switch (filter) {
-    case "in_progress": return "Running";
-    case "pending": return "Queued";
-    case "completed": return "Done";
-    case "all":
-    default: return "All";
-  }
-}
-
-function getPriorityFilterLabel(filter: TaskBoardPriorityFilter): string {
-  switch (filter) {
-    case "critical": return "Critical";
-    case "high": return "High";
-    case "medium": return "Medium";
-    case "low": return "Low";
-    case "all":
-    default: return "Any Priority";
-  }
-}
-
 export const TaskBoardFilters: FunctionComponent<TaskBoardFiltersProps> = ({
   sprints,
   selectedSprintId,
@@ -57,8 +38,15 @@ export const TaskBoardFilters: FunctionComponent<TaskBoardFiltersProps> = ({
   listWindow,
   onListWindowChange,
 }) => {
+  const { translate } = useDashboardI18n();
   const interactionTokens = useInteractionTokens();
-  const filterAnnouncement = `Task filters changed. Status ${getStatusFilterLabel(statusFilter)}. Priority ${getPriorityFilterLabel(priorityFilter)}. Showing ${listWindow === "All" ? "all tasks" : `${listWindow} tasks per lane`}.`;
+  const statusLabel = translate(taskMessages, statusFilter === "all" ? "all" : statusFilter === "pending" ? "queued" : statusFilter === "completed" ? "done" : "running");
+  const priorityLabel = translate(taskMessages, priorityFilter === "all" ? "anyPriority" : priorityFilter);
+  const filterAnnouncement = translate(taskMessages, "filterAnnouncement", {
+    status: statusLabel,
+    priority: priorityLabel,
+    window: listWindow === "All" ? translate(taskMessages, "allTasksWindow") : translate(taskMessages, "tasksPerLaneWindow", { count: listWindow }),
+  });
 
   return (
     <section
@@ -77,13 +65,13 @@ export const TaskBoardFilters: FunctionComponent<TaskBoardFiltersProps> = ({
       data-motion-list-reveal="listReveal"
       data-task-control-rail="responsive"
     >
-      <h3 id="task-board-controls-heading" className="sr-only">Task board controls</h3>
+      <h3 id="task-board-controls-heading" className="sr-only">{translate(taskMessages, "taskBoardControls")}</h3>
       <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {filterAnnouncement}
       </span>
       <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(14rem,1.35fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(9rem,auto)] xl:items-end">
         <div className="min-w-0 transition-colors duration-[var(--task-filter-control-duration)] ease-[var(--task-filter-control-ease)] motion-reduce:transition-none md:col-span-2 xl:col-span-1">
-          <span className="mb-1.5 block px-1 font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Sprint scope</span>
+          <span className="mb-1.5 block px-1 font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">{translate(taskMessages, "sprintScope")}</span>
           <TaskBoardSprintSelector
             sprints={sprints}
             selectedId={selectedSprintId}
@@ -94,14 +82,14 @@ export const TaskBoardFilters: FunctionComponent<TaskBoardFiltersProps> = ({
         </div>
 
         <div className="min-w-0">
-          <span className="mb-1.5 block px-1 font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Status</span>
+          <span className="mb-1.5 block px-1 font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">{translate(taskMessages, "status")}</span>
           <FilterStrip
-            ariaLabel="Task status filter"
+            ariaLabel={translate(taskMessages, "taskStatusFilter")}
             options={[
-              { value: "all", label: "All", ariaLabel: "Show all task statuses" },
-              { value: "in_progress", label: "Running", ariaLabel: "Show running tasks" },
-              { value: "pending", label: "Queued", ariaLabel: "Show queued tasks" },
-              { value: "completed", label: "Done", ariaLabel: "Show completed tasks" },
+              { value: "all", label: translate(taskMessages, "all"), ariaLabel: translate(taskMessages, "showAllStatuses") },
+              { value: "in_progress", label: translate(taskMessages, "running"), ariaLabel: translate(taskMessages, "showRunningTasks") },
+              { value: "pending", label: translate(taskMessages, "queued"), ariaLabel: translate(taskMessages, "showQueuedTasks") },
+              { value: "completed", label: translate(taskMessages, "done"), ariaLabel: translate(taskMessages, "showCompletedTasks") },
             ]}
             active={statusFilter}
             onChange={onStatusFilterChange}
@@ -109,15 +97,15 @@ export const TaskBoardFilters: FunctionComponent<TaskBoardFiltersProps> = ({
         </div>
 
         <div className="min-w-0">
-          <span className="mb-1.5 block px-1 font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Priority</span>
+          <span className="mb-1.5 block px-1 font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">{translate(taskMessages, "priority")}</span>
           <FilterStrip
-            ariaLabel="Task priority filter"
+            ariaLabel={translate(taskMessages, "taskPriorityFilter")}
             options={[
-              { value: "all", label: "Any Priority", ariaLabel: "Show any task priority" },
-              { value: "critical", label: "Critical", ariaLabel: "Show critical priority tasks" },
-              { value: "high", label: "High", ariaLabel: "Show high priority tasks" },
-              { value: "medium", label: "Medium", ariaLabel: "Show medium priority tasks" },
-              { value: "low", label: "Low", ariaLabel: "Show low priority tasks" },
+              { value: "all", label: translate(taskMessages, "anyPriority"), ariaLabel: translate(taskMessages, "showAnyPriority") },
+              { value: "critical", label: translate(taskMessages, "critical"), ariaLabel: translate(taskMessages, "showCriticalTasks") },
+              { value: "high", label: translate(taskMessages, "high"), ariaLabel: translate(taskMessages, "showHighTasks") },
+              { value: "medium", label: translate(taskMessages, "medium"), ariaLabel: translate(taskMessages, "showMediumTasks") },
+              { value: "low", label: translate(taskMessages, "low"), ariaLabel: translate(taskMessages, "showLowTasks") },
             ]}
             active={priorityFilter}
             onChange={onPriorityFilterChange}
@@ -125,13 +113,13 @@ export const TaskBoardFilters: FunctionComponent<TaskBoardFiltersProps> = ({
         </div>
 
         <div className="min-w-0 transition-opacity duration-[var(--task-filter-list-reveal-duration)] ease-[var(--task-filter-list-reveal-ease)] motion-reduce:transition-none">
-          <span className="mb-1.5 block px-1 font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Visible cards</span>
+          <span className="mb-1.5 block px-1 font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">{translate(taskMessages, "visibleCards")}</span>
           <ListWindowSelector
             value={listWindow}
             onChange={onListWindowChange}
-            label="Show"
-            ariaLabel="Select number of task cards per lane"
-            itemLabel="task cards"
+            label={translate(taskMessages, "show")}
+            ariaLabel={translate(taskMessages, "selectCardsPerLane")}
+            itemLabel={translate(taskMessages, "taskCards")}
           />
         </div>
       </div>

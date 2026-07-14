@@ -11,6 +11,8 @@ import type {
 } from "../../lib/custom-dashboard-api.js";
 import { writeSettingsNavigationState } from "../../lib/settings-navigation-state.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { customDashboardMessages } from "../../i18n/messages/custom-dashboards.js";
 
 interface CustomDashboardCredentialSlotsPanelProps {
   projectId: string;
@@ -84,6 +86,7 @@ export const CustomDashboardCredentialSlotsPanel: FunctionComponent<CustomDashbo
   onUnbind,
   onRefresh,
 }) => {
+  const { translate } = useDashboardI18n();
   const [selectedCredentialBySlot, setSelectedCredentialBySlot] = useState<Record<string, string>>({});
   const actionRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const selectRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -132,20 +135,20 @@ export const CustomDashboardCredentialSlotsPanel: FunctionComponent<CustomDashbo
       className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-1 font-bold text-signal-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/60 dark:text-signal-300"
       onClick={() => writeSettingsNavigationState({ activeCategory: "integrations", activeInvocationRoute: "task_coding", focusedSections: {} })}
     >
-      <Settings className="h-3.5 w-3.5" aria-hidden="true" />Manage credentials in Settings
+      <Settings className="h-3.5 w-3.5" aria-hidden="true" />{translate(customDashboardMessages, "manageCredentialsInSettings")}
     </a>
   );
 
   return (
-    <section aria-label="Dashboard credential slots" className="min-w-0">
+    <section aria-label={translate(customDashboardMessages, "dashboardCredentialSlots")} className="min-w-0">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <KeyRound className="h-4 w-4 text-signal-600" aria-hidden="true" />
-            <h2 className="font-display text-sm font-bold text-slate-900 dark:text-white">Declared credential slots</h2>
+            <h2 className="font-display text-sm font-bold text-slate-900 dark:text-white">{translate(customDashboardMessages, "declaredCredentialSlots")}</h2>
           </div>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-            Bind only project-visible metadata that satisfies each declaration. Secret values never enter this editor, generated files, or runtime text.
+            {translate(customDashboardMessages, "credentialSlotsDescription")}
           </p>
         </div>
         <button
@@ -155,19 +158,19 @@ export const CustomDashboardCredentialSlotsPanel: FunctionComponent<CustomDashbo
           className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-black/[0.08] px-2.5 text-xs font-bold text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/60 disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin motion-reduce:animate-none" : ""}`} aria-hidden="true" />
-          Refresh
+          {translate(customDashboardMessages, "refresh")}
         </button>
       </div>
 
       <div className="mt-4" aria-live="polite" aria-atomic="true">
-        {loading ? <p role="status" className="rounded-xl bg-black/[0.03] p-3 text-xs text-slate-500 dark:bg-white/[0.04]">Loading credential metadata and custody health…</p> : null}
+        {loading ? <p role="status" className="rounded-xl bg-black/[0.03] p-3 text-xs text-slate-500 dark:bg-white/[0.04]">{translate(customDashboardMessages, "loadingCredentialMetadata")}</p> : null}
         {!loading && health && !backendReady(health) ? (
           <div role="alert" className="rounded-xl border border-status-amber/25 bg-status-amber/[0.07] p-3 text-xs leading-relaxed text-status-amber">
             <div className="flex gap-2">
               <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
               <div>
-                <p className="font-bold">Secure credential custody is unavailable.</p>
-                <p className="mt-1">{health.reason ?? "Restore a secure credential backend before changing bindings."}</p>
+                <p className="font-bold">{translate(customDashboardMessages, "secureCredentialCustodyUnavailable")}</p>
+                <p className="mt-1">{health.reason ?? translate(customDashboardMessages, "restoreCredentialBackend")}</p>
                 {renderSettingsLink()}
               </div>
             </div>
@@ -186,8 +189,8 @@ export const CustomDashboardCredentialSlotsPanel: FunctionComponent<CustomDashbo
               : "border-status-amber/25 bg-status-amber/[0.07] text-status-amber"
           }`}>
             {review.valid
-              ? "Credential declarations are ready to be included in the next revision."
-              : "Credential declarations need attention before the next revision is publication-ready."}
+              ? translate(customDashboardMessages, "credentialDeclarationsReady")
+              : translate(customDashboardMessages, "credentialDeclarationsNeedAttention")}
           </div>
         ) : null}
       </div>
@@ -208,31 +211,31 @@ export const CustomDashboardCredentialSlotsPanel: FunctionComponent<CustomDashbo
               <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
                   <h3 className="break-words text-sm font-bold text-slate-900 dark:text-white">{slot.label}</h3>
-                  <p className="mt-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400">Slot {slot.slotId}</p>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400">{translate(customDashboardMessages, "slotId", { id: slot.slotId })}</p>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  <MetadataPill>{slot.phase === "build" ? "Build phase" : "Runtime phase"}</MetadataPill>
-                  <MetadataPill>{slot.required ? "Required" : "Optional"}</MetadataPill>
+                  <MetadataPill>{translate(customDashboardMessages, slot.phase === "build" ? "buildPhase" : "runtimePhase")}</MetadataPill>
+                  <MetadataPill>{translate(customDashboardMessages, slot.required ? "required" : "optional")}</MetadataPill>
                 </div>
               </div>
 
               <dl className="mt-3 grid min-w-0 gap-2 text-xs sm:grid-cols-2">
-                <div className="min-w-0"><dt className="font-bold text-slate-500">Allowed kinds</dt><dd className="mt-1 break-words text-slate-700 dark:text-slate-200">{slot.allowedKinds.join(", ")}</dd></div>
-                <div className="min-w-0"><dt className="font-bold text-slate-500">Required capabilities</dt><dd className="mt-1 break-words text-slate-700 dark:text-slate-200">{slot.requiredCapabilities.join(", ") || "None"}</dd></div>
+                <div className="min-w-0"><dt className="font-bold text-slate-500">{translate(customDashboardMessages, "allowedKinds")}</dt><dd className="mt-1 break-words text-slate-700 dark:text-slate-200">{slot.allowedKinds.join(", ")}</dd></div>
+                <div className="min-w-0"><dt className="font-bold text-slate-500">{translate(customDashboardMessages, "requiredCapabilities")}</dt><dd className="mt-1 break-words text-slate-700 dark:text-slate-200">{slot.requiredCapabilities.join(", ") || translate(customDashboardMessages, "none")}</dd></div>
               </dl>
 
               <div className="mt-3 rounded-xl border border-black/[0.06] bg-black/[0.025] p-3 dark:border-white/[0.06] dark:bg-white/[0.025]">
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Current credential metadata</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(customDashboardMessages, "currentCredentialMetadata")}</p>
                 {current ? (
                   <div className="mt-2 min-w-0">
                     <p className="break-words text-sm font-bold text-slate-800 dark:text-slate-100">{current.name}</p>
                     <p className="mt-1 break-words text-xs text-slate-500 dark:text-slate-400">
-                      {current.kind} · {current.status} · {current.configured ? "configured" : "not configured"}
+                      {current.kind} · {current.status} · {translate(customDashboardMessages, current.configured ? "configured" : "notConfigured")}
                     </p>
-                    <p className="mt-1 break-words text-xs text-slate-500 dark:text-slate-400">Capabilities: {current.capabilities.join(", ") || "none"}</p>
+                    <p className="mt-1 break-words text-xs text-slate-500 dark:text-slate-400">{translate(customDashboardMessages, "capabilitiesPrefix")} {current.capabilities.join(", ") || translate(customDashboardMessages, "noneLower")}</p>
                   </div>
                 ) : (
-                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">No credential is bound.</p>
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{translate(customDashboardMessages, "noCredentialBound")}</p>
                 )}
               </div>
 
@@ -242,14 +245,14 @@ export const CustomDashboardCredentialSlotsPanel: FunctionComponent<CustomDashbo
                 </div>
               ) : null}
               {error ? <div role="alert" className="mt-3 rounded-xl border border-status-red/25 bg-status-red/[0.06] p-3 text-xs leading-relaxed text-status-red">{error}</div> : null}
-              <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{saving ? `Saving ${slot.label} binding.` : announcement ?? ""}</p>
+              <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{saving ? translate(customDashboardMessages, "savingSlotBinding", { slot: slot.label }) : announcement ?? ""}</p>
 
               <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                 <label className="min-w-0 text-xs font-bold text-slate-600 dark:text-slate-300">
-                  Compatible credential
+                  {translate(customDashboardMessages, "compatibleCredential")}
                   <AvantgardeSelect
                     triggerRef={(element) => { selectRefs.current[slot.slotId] = element; }}
-                    aria-label={`Compatible credential for ${slot.label}`}
+                    aria-label={translate(customDashboardMessages, "compatibleCredentialFor", { slot: slot.label })}
                     value={selectedCredentialId}
                     disabled={saving || options.length === 0 || !backendReady(health)}
                     onChange={(value) => setSelectedCredentialBySlot((currentSelections) => ({
@@ -257,9 +260,9 @@ export const CustomDashboardCredentialSlotsPanel: FunctionComponent<CustomDashbo
                       [slot.slotId]: value,
                     }))}
                     className="mt-1 w-full min-w-0"
-                    placeholder="Choose compatible metadata…"
+                    placeholder={translate(customDashboardMessages, "chooseCompatibleMetadata")}
                     options={[
-                      { value: "", label: "Choose compatible metadata…" },
+                      { value: "", label: translate(customDashboardMessages, "chooseCompatibleMetadata") },
                       ...options.map((credential) => ({ value: credential.id, label: `${credential.name} · ${credential.kind}` })),
                     ]}
                   />
@@ -267,19 +270,19 @@ export const CustomDashboardCredentialSlotsPanel: FunctionComponent<CustomDashbo
                 <button
                   ref={(element) => { actionRefs.current[slot.slotId] = element; }}
                   type="button"
-                  aria-label={`${slotReview.binding ? "Replace binding" : "Bind credential"} for ${slot.label}`}
+                  aria-label={translate(customDashboardMessages, slotReview.binding ? "replaceBindingFor" : "bindCredentialFor", { slot: slot.label })}
                   disabled={saving || !selectedCredentialId || selectedCredentialId === slotReview.binding?.credentialId}
                   onClick={() => void bind(slot.slotId)}
                   className="self-end inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-signal-500 px-3 text-xs font-bold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/60 focus-visible:ring-offset-2 disabled:opacity-50 dark:text-void-900"
                 >
                   <KeyRound className="h-3.5 w-3.5" aria-hidden="true" />
-                  {saving ? "Saving…" : slotReview.binding ? "Replace binding" : "Bind credential"}
+                  {translate(customDashboardMessages, saving ? "saving" : slotReview.binding ? "replaceBinding" : "bindCredential")}
                 </button>
               </div>
 
               {!loading && !hasReplacement ? (
                 <div className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                  <p>No {slotReview.binding ? "other " : ""}active, configured, project-authorized credential matches this slot.</p>
+                  <p>{translate(customDashboardMessages, slotReview.binding ? "noOtherCredentialMatches" : "noCredentialMatches")}</p>
                   {renderSettingsLink()}
                 </div>
               ) : null}
@@ -287,24 +290,24 @@ export const CustomDashboardCredentialSlotsPanel: FunctionComponent<CustomDashbo
               {slotReview.binding ? (
                 <button
                   type="button"
-                  aria-label={`Unbind credential for ${slot.label}`}
+                  aria-label={translate(customDashboardMessages, "unbindCredentialFor", { slot: slot.label })}
                   disabled={saving}
                   onClick={() => void unbind(slot.slotId)}
                   className="mt-3 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-status-red/25 px-2.5 text-xs font-bold text-status-red focus:outline-none focus-visible:ring-2 focus-visible:ring-status-red/40 disabled:opacity-50"
                 >
                   <Unlink className="h-3.5 w-3.5" aria-hidden="true" />
-                  Unbind credential
+                  {translate(customDashboardMessages, "unbindCredential")}
                 </button>
               ) : null}
               {slotReview.binding && slot.required ? (
                 <p className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-status-amber">
                   <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  Unbinding this required slot will block readiness until another compatible credential is bound.
+                  {translate(customDashboardMessages, "unbindRequiredWarning")}
                 </p>
               ) : null}
               {slotReview.compatible && slotReview.binding ? (
                 <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-status-green">
-                  <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />Compatible binding
+                  <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />{translate(customDashboardMessages, "compatibleBinding")}
                 </p>
               ) : null}
             </article>

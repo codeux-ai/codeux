@@ -61,7 +61,7 @@ export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditor
   const files = parsedBundle.ok && Array.isArray(parsedBundle.value.files) ? parsedBundle.value.files : [];
   const selectedFile = files.find((file) => file.path === selectedFilePath) ?? files[0] ?? null;
   const visibleTabs = credentialPanel
-    ? [...tabs, { id: "credentials" as const, label: "Credentials", icon: KeyRound }]
+    ? [...tabs, { id: "credentials" as const, label: translate(customDashboardMessages, "credentialsTab"), icon: KeyRound }]
     : tabs;
   const effectiveActiveTab = activeTab === "credentials" && !credentialPanel ? "manifest" : activeTab;
 

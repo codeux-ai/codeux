@@ -6,6 +6,8 @@ import type {
   ProjectCostAnalyticsSummary,
   ProjectExecutionStatsSnapshot,
 } from "../../../types.js";
+import { translateDashboardMessage, type DashboardLocale } from "../../i18n/index.js";
+import { statsMessages } from "../../i18n/messages/stats.js";
 import { formatDateTime } from "./stats-utils.js";
 
 export type CostCoverageState = "complete" | "partial" | "unpriced" | "unknown" | "unavailable";
@@ -439,11 +441,11 @@ export function deriveCostAnalyticsViewModel(stats: ProjectExecutionStatsSnapsho
   };
 }
 
-function formatProvenCurrency(usd: number): string {
-  if (usd === 0) return "$0.00";
-  if (usd < 0.000001) return "<$0.000001";
+function formatProvenCurrency(usd: number, locale: DashboardLocale): string {
+  if (usd === 0) return new Intl.NumberFormat(locale, { style: "currency", currency: "USD", minimumFractionDigits: 2 }).format(0);
+  if (usd < 0.000001) return `<${new Intl.NumberFormat(locale, { style: "currency", currency: "USD", minimumFractionDigits: 6 }).format(0.000001)}`;
   const fractionDigits = usd < 0.001 ? 6 : usd < 0.01 ? 4 : 2;
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat(locale, {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: fractionDigits,
@@ -451,15 +453,15 @@ function formatProvenCurrency(usd: number): string {
   }).format(usd);
 }
 
-export function formatAdaptiveCurrency(amount: CostAmount): string {
+export function formatAdaptiveCurrency(amount: CostAmount, locale: DashboardLocale = "en"): string {
   if (amount.usd === null || !Number.isFinite(amount.usd) || amount.provenance.state === "unavailable") {
-    return "Unavailable";
+    return translateDashboardMessage(statsMessages, locale, "unavailable");
   }
-  if (amount.provenance.state === "unpriced") return "Unpriced";
-  if (amount.provenance.state === "unknown" && amount.usd === 0) return "Coverage unknown";
+  if (amount.provenance.state === "unpriced") return translateDashboardMessage(statsMessages, locale, "unpriced");
+  if (amount.provenance.state === "unknown" && amount.usd === 0) return translateDashboardMessage(statsMessages, locale, "coverageUnknown");
 
-  const formatted = formatProvenCurrency(Math.max(0, amount.usd));
+  const formatted = formatProvenCurrency(Math.max(0, amount.usd), locale);
   if (amount.provenance.state === "partial") return `${formatted}+`;
-  if (amount.provenance.state === "unknown") return `${formatted} · coverage unknown`;
+  if (amount.provenance.state === "unknown") return `${formatted} · ${translateDashboardMessage(statsMessages, locale, "coverageUnknown").toLocaleLowerCase(locale)}`;
   return formatted;
 }

@@ -43,6 +43,9 @@ import {
 } from "../../../lib/settings-view-models.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
 import { sanitizeSystemProviderConfig } from "../../../lib/provider-runtime-preview.js";
+import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
+import { ChatConnectorCatalogCard } from "../chat-connectors/ChatConnectorCatalogCard.js";
+import { ChatConnectorConnectionEditor } from "../chat-connectors/ChatConnectorConnectionEditor.js";
 import {
   buildChatProviderCatalogViewModel,
   createDefaultSetupForBridge,
@@ -549,6 +552,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
   const credentialManageButtonRef = useRef<HTMLButtonElement>(null);
   const integrationBackButtonRef = useRef<HTMLButtonElement>(null);
   const previousSelectedIntegrationRef = useRef<IntegrationId | null>(selectedIntegration);
+  const reducedMotion = useReducedMotion();
   const [credentialCatalogState, setCredentialCatalogState] = useState<{
     loading: boolean;
     health: CredentialBackendHealth | null;
@@ -635,6 +639,13 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     }
 
     const enteringDetail = selectedIntegration !== null;
+    if (reducedMotion) {
+      setActiveIntegrationDetail(selectedIntegration);
+      gsap.set(listRef.current, { display: enteringDetail ? "none" : "block", position: "relative", top: "auto", left: "auto", x: enteringDetail ? "-100%" : "0%", opacity: enteringDetail ? 0 : 1 });
+      gsap.set(detailRef.current, { display: enteringDetail ? "block" : "none", position: "relative", top: "auto", left: "auto", x: enteringDetail ? "0%" : "100%", opacity: enteringDetail ? 1 : 0 });
+      gsap.set(containerRef.current, { height: "auto" });
+      return;
+    }
     const tl = gsap.timeline();
 
     if (enteringDetail) {
@@ -678,7 +689,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
         },
       }, 0);
     }
-  }, [selectedIntegration]);
+  }, [reducedMotion, selectedIntegration]);
 
   if (!editableSettings || !systemSettings) {
     return null;
@@ -1335,7 +1346,30 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
           )}
           {definition && providerConnections.length > 0 ? (
             <div className="space-y-5">
-              {providerConnections.map((connection) => renderChatProviderConnectionEditor(connection, definition))}
+              {providerConnections.map((connection) => (
+                <ChatConnectorConnectionEditor
+                  key={connection.id}
+                  connection={connection}
+                  definition={definition}
+                  bindings={chatProviders.bindings.filter((binding) => binding.providerConnectionId === connection.id)}
+                  deliveries={chatProviders.deliveriesByConnection[connection.id] ?? []}
+                  deliveryError={chatProviders.deliveryErrorsByConnection?.[connection.id]}
+                  verificationOutcome={chatProviders.verificationOutcomes?.[connection.id]}
+                  projectOptions={projectOptions}
+                  agentPresetOptions={agentPresetOptions}
+                  pendingAction={chatProviders.savingId ?? undefined}
+                  pendingDeliveries={chatProviders.pendingDeliveries ?? {}}
+                  onUpdate={chatProviders.updateConnection}
+                  onDelete={chatProviders.deleteConnection}
+                  onVerify={chatProviders.verifyConnection}
+                  onCreateBinding={chatProviders.createBinding}
+                  onUpdateBinding={chatProviders.updateBinding}
+                  onDeleteBinding={chatProviders.deleteBinding}
+                  onInspectDelivery={chatProviders.inspectDelivery}
+                  onRetryDelivery={chatProviders.retryDelivery}
+                  onCancelDelivery={chatProviders.cancelDelivery}
+                />
+              ))}
             </div>
           ) : definition ? (
             <NoticePanel title={t(settingsIntegrationsMessages, "noConnections")}>{t(settingsIntegrationsMessages, "noConnectionsDescription")}{definition.label}.</NoticePanel>
@@ -2016,6 +2050,18 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                     const providerKind = integration.id;
                     const providerCard = chatProviderCards.find((card) => card.providerKind === providerKind);
                     const active = (providerCard?.activeConnectionCount ?? 0) > 0;
+                    return (
+                      <ChatConnectorCatalogCard
+                        key={integration.id}
+                        providerKind={providerKind}
+                        label={integration.label}
+                        description={getIntegrationDescription(integration)}
+                        viewModel={providerCard}
+                        prominent={providerKind === "discord"}
+                        onManage={() => setSelectedIntegration(integration.id)}
+                      />
+                    );
+                    /* c8 ignore next */
                     return (
                       <div key={integration.id} className={`group relative min-h-[176px] overflow-hidden rounded-[1.35rem] border p-5 shadow-[0_12px_30px_rgba(15,23,42,0.035)] transition-[border-color,background-color,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_42px_rgba(15,23,42,0.07)] ${
                         active

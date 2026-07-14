@@ -18,7 +18,7 @@ import {
 } from "lucide-preact";
 import type { LucideIcon } from "lucide-preact";
 import type { SprintReviewSummary } from "../../types.js";
-import type { CiStatusPresentation, CiWorkflowState } from "../../lib/ci-status-presentation.js";
+import { localizeCiStatusPresentation, type CiStatusPresentation, type CiWorkflowState } from "../../lib/ci-status-presentation.js";
 import {
   deriveWorkflowStatusPresentation,
   type WorkflowHumanInterventionEvidence,
@@ -27,6 +27,8 @@ import {
 } from "../../lib/workflow-status-presentation.js";
 import { calculatePosition, type Position } from "../../lib/positioning/index.js";
 import "./workflow-status-badge.css";
+import { useDashboardI18n } from "../../i18n/index.js";
+import { taskMessages } from "../../i18n/messages/tasks.js";
 
 export interface WorkflowStatusBadgeProps {
   scope: "task" | "sprint";
@@ -91,42 +93,42 @@ function reviewState(summary: SprintReviewSummary): "running" | "passed" | "chan
 const REVIEW_META = {
   running: {
     icon: Loader2,
-    label: "QA review in progress",
+    labelKey: "workflowQaReviewInProgress",
     tone: "border-signal-500/25 bg-signal-500/[0.07] text-signal-700 dark:text-signal-300",
     iconTone: "text-signal-500",
     accent: "from-signal-500 via-signal-300 to-signal-500",
-    regionLabel: "QA Review In Progress",
+    regionLabelKey: "workflowQaReviewInProgressRegion",
   },
   passed: {
     icon: CheckCircle2,
-    label: "QA review passed",
+    labelKey: "workflowQaReviewPassed",
     tone: "border-status-green/25 bg-status-green/[0.07] text-status-green",
     iconTone: "text-status-green",
     accent: "from-status-green via-signal-300 to-status-green",
-    regionLabel: "QA Review Complete",
+    regionLabelKey: "workflowQaReviewCompleteRegion",
   },
   changes_requested: {
     icon: PencilLine,
-    label: "QA edits requested",
+    labelKey: "workflowQaEditsRequested",
     tone: "border-blue-500/30 bg-blue-500/[0.08] text-blue-700 dark:text-blue-300",
     iconTone: "text-blue-500",
     accent: "from-blue-600 via-blue-300 to-blue-600",
-    regionLabel: "QA Changes Requested",
+    regionLabelKey: "workflowQaChangesRequestedRegion",
   },
   failed: {
     icon: XCircle,
-    label: "QA review failed",
+    labelKey: "workflowQaReviewFailed",
     tone: "border-status-red/30 bg-status-red/[0.07] text-status-red",
     iconTone: "text-status-red",
     accent: "from-status-red via-ember-400 to-status-red",
-    regionLabel: "QA Provider Review Failed",
+    regionLabelKey: "workflowQaProviderReviewFailedRegion",
   },
 } as const;
 
-function formatReviewDate(value: string): string {
+function formatReviewDate(value: string, locale: "en" | "de"): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(locale, {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -176,32 +178,33 @@ const FollowUpTaskDisclosure: FunctionComponent<{
   task: NonNullable<SprintReviewSummary["followUpTasks"]>[number];
   index: number;
 }> = ({ task, index }) => {
+  const { formatNumber, translate } = useDashboardI18n();
   const [expanded, setExpanded] = useState(false);
   const contentId = useId();
   return (
     <article className="rounded-lg border border-black/[0.06] dark:border-white/[0.07]">
       <button
         type="button"
-        aria-label={`Follow-up task ${index + 1}`}
+        aria-label={translate(taskMessages, "workflowFollowUpTask", { count: formatNumber(index + 1) })}
         aria-expanded={expanded}
         aria-controls={contentId}
         onClick={() => setExpanded((current) => !current)}
         className="flex w-full items-center justify-between gap-2 rounded-lg p-2 text-left outline-none transition-colors hover:bg-black/[0.025] focus-visible:ring-2 focus-visible:ring-blue-500 motion-reduce:transition-none dark:hover:bg-white/[0.025]"
       >
-        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Follow-up task {index + 1}: {task.title}</span>
+        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{translate(taskMessages, "workflowFollowUpTaskTitle", { count: formatNumber(index + 1), title: task.title })}</span>
         <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-blue-500 transition-transform motion-reduce:transition-none ${expanded ? "rotate-90" : ""}`} aria-hidden={true} />
       </button>
       {expanded && (
         <dl id={contentId} className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1.5 border-t border-black/[0.06] p-2 text-[11px] dark:border-white/[0.07]">
-          <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">Title</dt>
+          <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">{translate(taskMessages, "workflowTitle")}</dt>
           <dd className="break-words font-semibold text-slate-700 dark:text-slate-200">{task.title}</dd>
-          <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">Description</dt>
-          <dd className="break-words text-slate-600 dark:text-slate-300">{task.description || "Not provided"}</dd>
-          <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">Priority</dt>
+          <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">{translate(taskMessages, "description")}</dt>
+          <dd className="break-words text-slate-600 dark:text-slate-300">{task.description || translate(taskMessages, "workflowNotProvided")}</dd>
+          <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">{translate(taskMessages, "priority")}</dt>
           <dd className="capitalize text-slate-600 dark:text-slate-300">{task.priority}</dd>
-          <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">Dependencies</dt>
-          <dd className="break-words text-slate-600 dark:text-slate-300">{task.dependsOnTaskKeys.length > 0 ? task.dependsOnTaskKeys.join(", ") : "None"}</dd>
-          <dt className="col-span-2 font-bold uppercase tracking-[0.1em] text-slate-400">Prompt</dt>
+          <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">{translate(taskMessages, "dependencies")}</dt>
+          <dd className="break-words text-slate-600 dark:text-slate-300">{task.dependsOnTaskKeys.length > 0 ? task.dependsOnTaskKeys.join(", ") : translate(taskMessages, "workflowNone")}</dd>
+          <dt className="col-span-2 font-bold uppercase tracking-[0.1em] text-slate-400">{translate(taskMessages, "workflowPrompt")}</dt>
           <dd className="col-span-2 max-h-52 overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-black/[0.025] p-2 font-mono text-[10px] leading-relaxed text-slate-600 dark:bg-white/[0.03] dark:text-slate-300">{task.promptMarkdown}</dd>
         </dl>
       )}
@@ -210,6 +213,7 @@ const FollowUpTaskDisclosure: FunctionComponent<{
 };
 
 const QaReviewCard: FunctionComponent<{ summary: SprintReviewSummary; headingId: string }> = ({ summary, headingId }) => {
+  const { locale, formatNumber, translate } = useDashboardI18n();
   const state = reviewState(summary);
   const meta = REVIEW_META[state];
   const cardTone = state === "changes_requested"
@@ -229,7 +233,7 @@ const QaReviewCard: FunctionComponent<{ summary: SprintReviewSummary; headingId:
         <header className="flex flex-wrap items-start justify-between gap-2">
           <h3 id={headingId} className={`flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] ${meta.iconTone}`}>
             <ReviewIcon className={`h-4 w-4 ${state === "running" ? "motion-safe:animate-spin motion-reduce:animate-none" : ""}`} strokeWidth={2.4} aria-hidden={true} />
-            {meta.regionLabel}
+            {translate(taskMessages, meta.regionLabelKey)}
           </h3>
           {summary.outcome && (
             <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${meta.tone}`}>
@@ -237,23 +241,23 @@ const QaReviewCard: FunctionComponent<{ summary: SprintReviewSummary; headingId:
             </span>
           )}
         </header>
-        <section aria-label="Review summary">
-          <h4 className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Review summary</h4>
+        <section aria-label={translate(taskMessages, "workflowReviewSummary")}>
+          <h4 className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(taskMessages, "workflowReviewSummary")}</h4>
           <p className="mt-1.5 whitespace-pre-wrap break-words text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-300">
-            {summary.summary || (state === "running" ? "The QA reviewer is inspecting this workflow." : "No additional review summary was provided.")}
+            {summary.summary || translate(taskMessages, state === "running" ? "workflowReviewerInspecting" : "workflowNoReviewSummary")}
           </p>
         </section>
         {summary.fixInstructions && (
-          <section className="rounded-xl border border-blue-500/15 bg-blue-500/[0.045] p-3" aria-label="Fix instructions">
+          <section className="rounded-xl border border-blue-500/15 bg-blue-500/[0.045] p-3" aria-label={translate(taskMessages, "workflowFixInstructions")}>
             <h4 className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-blue-600 dark:text-blue-300">
-              <PencilLine className="h-3 w-3" aria-hidden={true} /> Fix instructions
+              <PencilLine className="h-3 w-3" aria-hidden={true} /> {translate(taskMessages, "workflowFixInstructions")}
             </h4>
             <p className="mt-1.5 whitespace-pre-wrap break-words text-xs leading-relaxed text-slate-600 dark:text-slate-300">{summary.fixInstructions}</p>
           </section>
         )}
         {findings.length > 0 && (
-          <section aria-label="Review findings">
-            <h4 className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Findings · {findings.length}</h4>
+          <section aria-label={translate(taskMessages, "workflowReviewFindings")}>
+            <h4 className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(taskMessages, "workflowFindingsCount", { count: formatNumber(findings.length) })}</h4>
             <ul className="mt-2 grid gap-1.5">
               {findings.map((finding, index) => (
                 <li key={`${index}-${finding}`} className="flex items-start gap-2 rounded-lg bg-black/[0.025] p-2 text-xs leading-snug text-slate-600 dark:bg-white/[0.03] dark:text-slate-300">
@@ -265,8 +269,8 @@ const QaReviewCard: FunctionComponent<{ summary: SprintReviewSummary; headingId:
           </section>
         )}
         {followUps.length > 0 && (
-          <section aria-label="Follow-up tasks">
-            <h4 className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Follow-up tasks · {followUps.length}</h4>
+          <section aria-label={translate(taskMessages, "workflowFollowUpTasks")}>
+            <h4 className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(taskMessages, "workflowFollowUpTasksCount", { count: formatNumber(followUps.length) })}</h4>
             <div className="mt-2 grid gap-1.5">
               {followUps.map((task, index) => (
                 <FollowUpTaskDisclosure key={`${index}-${task.title}`} task={task} index={index} />
@@ -276,9 +280,9 @@ const QaReviewCard: FunctionComponent<{ summary: SprintReviewSummary; headingId:
         )}
         {(summary.reviewer || summary.finishedAt || summary.targetTaskKey) && (
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 border-t border-black/[0.07] pt-3 text-[10px] dark:border-white/[0.07]">
-            {summary.reviewer && <><dt className="font-bold uppercase tracking-[0.12em] text-slate-400">Reviewer</dt><dd className="break-words text-slate-600 dark:text-slate-300">Reviewed by {summary.reviewer}</dd></>}
-            {summary.finishedAt && <><dt className="font-bold uppercase tracking-[0.12em] text-slate-400">Reviewed</dt><dd className="text-slate-600 dark:text-slate-300">{formatReviewDate(summary.finishedAt)}</dd></>}
-            {summary.targetTaskKey && <><dt className="font-bold uppercase tracking-[0.12em] text-slate-400">Target</dt><dd className="break-all font-mono text-slate-600 dark:text-slate-300">{summary.targetTaskKey}</dd></>}
+            {summary.reviewer && <><dt className="font-bold uppercase tracking-[0.12em] text-slate-400">{translate(taskMessages, "workflowReviewer")}</dt><dd className="break-words text-slate-600 dark:text-slate-300">{translate(taskMessages, "workflowReviewedBy", { reviewer: summary.reviewer })}</dd></>}
+            {summary.finishedAt && <><dt className="font-bold uppercase tracking-[0.12em] text-slate-400">{translate(taskMessages, "workflowReviewed")}</dt><dd className="text-slate-600 dark:text-slate-300">{formatReviewDate(summary.finishedAt, locale)}</dd></>}
+            {summary.targetTaskKey && <><dt className="font-bold uppercase tracking-[0.12em] text-slate-400">{translate(taskMessages, "workflowTarget")}</dt><dd className="break-all font-mono text-slate-600 dark:text-slate-300">{summary.targetTaskKey}</dd></>}
           </dl>
         )}
       </div>
@@ -296,6 +300,7 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
   align = "left",
   className = "",
 }) => {
+  const { locale, translate } = useDashboardI18n();
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const reviewTriggerRef = useRef<HTMLButtonElement>(null);
@@ -311,13 +316,17 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
   const effectiveCiPresentation = scope === "sprint" && normalizedStatus === "running"
     ? null
     : ciPresentation;
+  const localizedCiPresentation = useMemo(
+    () => effectiveCiPresentation ? localizeCiStatusPresentation(effectiveCiPresentation, locale) : null,
+    [effectiveCiPresentation, locale],
+  );
   const presentation = useMemo(() => deriveWorkflowStatusPresentation({
     scope,
     status,
     review,
-    ciPresentation: effectiveCiPresentation,
+    ciPresentation: localizedCiPresentation,
     humanIntervention,
-  }), [effectiveCiPresentation, humanIntervention, review, scope, status]);
+  }, locale), [humanIntervention, locale, localizedCiPresentation, review, scope, status]);
   const MainIcon = presentation.tone === "qa_changes"
     ? PencilLine
     : presentation.state === "failed"
@@ -425,7 +434,7 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
   };
   const triggerStatusLabel = presentation.requiresHuman
     ? presentation.label
-    : effectiveCiPresentation?.label ?? presentation.label;
+    : localizedCiPresentation?.label ?? presentation.label;
   return (
     <span
       className={`relative inline-flex max-w-full items-center ${className}`}
@@ -448,16 +457,16 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
         type="button"
         aria-expanded={open}
         aria-controls={overlayId}
-        aria-label={`CI status: ${triggerStatusLabel}. ${presentation.accessibleLabel} ${effectiveCiPresentation ? `CI evidence: ${effectiveCiPresentation.accessibleLabel} ` : ""}${open ? "Hide" : "Show"} workflow details`}
+        aria-label={translate(taskMessages, "workflowStatusAccessible", { status: triggerStatusLabel, details: presentation.accessibleLabel, evidence: localizedCiPresentation ? translate(taskMessages, "workflowCiEvidence", { evidence: localizedCiPresentation.accessibleLabel }) : "", action: translate(taskMessages, open ? "workflowHide" : "workflowShow") })}
         onClick={() => openFromTrigger(triggerRef.current)}
         onFocus={() => openFromTrigger(triggerRef.current)}
         onBlur={(event) => handleBlur(event.relatedTarget)}
         className={`inline-flex max-w-full items-center rounded-full border font-bold uppercase tracking-[0.12em] outline-none transition-[transform,box-shadow,background-color] hover:-translate-y-px focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-reduce:transform-none motion-reduce:transition-none dark:focus-visible:ring-offset-void-800 ${BADGE_TONES[presentation.tone]} ${review ? "rounded-r-xl" : ""} ${compact ? "gap-1.5 px-2.5 py-1 text-[9px] sm:text-[10px]" : "gap-2 px-3 py-1.5 text-[10px] sm:text-xs"}`}
       >
         <MainIcon className={`${compact ? "h-3 w-3" : "h-3.5 w-3.5"} shrink-0 ${presentation.state === "in_progress" && presentation.tone !== "qa_changes" ? "motion-safe:animate-spin motion-reduce:animate-none" : ""}`} strokeWidth={2.4} aria-hidden={true} />
-        <span className="min-w-0 truncate">{presentation.tone === "qa_changes" ? "QA edits" : presentation.label}</span>
+        <span className="min-w-0 truncate">{presentation.tone === "qa_changes" ? translate(taskMessages, "workflowQaEdits") : presentation.label}</span>
         {effectiveCiPresentation && effectiveCiPresentation.label !== presentation.label && <span className="sr-only">{effectiveCiPresentation.label}</span>}
-        {!review && <span className="sr-only">QA no review</span>}
+        {!review && <span className="sr-only">{translate(taskMessages, "qaNoReview")}</span>}
         {effectiveCiPresentation && (
           effectiveCiPresentation.state === "failed"
             ? <XCircle data-ci-icon="failure" className="sr-only text-status-red" aria-hidden={true} />
@@ -468,14 +477,14 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
       </button>
       {review && (
         <>
-          {currentReviewState === "running" && <span role="status" aria-label="QA review running" className="sr-only">QA review running</span>}
+          {currentReviewState === "running" && <span role="status" aria-label={translate(taskMessages, "workflowQaReviewRunning")} className="sr-only">{translate(taskMessages, "workflowQaReviewRunning")}</span>}
           <span id={reviewDescriptionId} className="sr-only">
-            {currentReviewState === "changes_requested" ? "QA changes requested" : REVIEW_META[currentReviewState!].label}. {open ? "Details are open." : "Activate to show review details."}
+            {currentReviewState === "changes_requested" ? translate(taskMessages, "workflowQaChangesRequested") : translate(taskMessages, REVIEW_META[currentReviewState!].labelKey)}. {translate(taskMessages, open ? "workflowDetailsOpen" : "workflowActivateReviewDetails")}
           </span>
           <button
             ref={reviewTriggerRef}
             type="button"
-            aria-label="QA review details"
+            aria-label={translate(taskMessages, "workflowQaReviewDetails")}
             aria-describedby={reviewDescriptionId}
             aria-expanded={open}
             aria-controls={overlayId}
@@ -496,7 +505,7 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
           id={overlayId}
           ref={overlayRef}
           role="region"
-          aria-label="CI workflow details"
+          aria-label={translate(taskMessages, "workflowCiDetails")}
           aria-describedby={review ? reviewHeadingId : undefined}
           tabIndex={-1}
           className={`fixed z-[99999] grid max-h-[calc(100vh-1.5rem)] w-[min(52rem,calc(100vw-1.5rem))] gap-3 overflow-y-auto motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 ${review ? "md:grid-cols-[minmax(0,19rem)_2rem_minmax(0,1fr)] md:items-center" : "max-w-[20rem]"}`}
@@ -512,10 +521,10 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
           onFocusCapture={openOverlay}
           onBlurCapture={(event) => handleBlur(event.relatedTarget)}
         >
-          <section className="min-w-0 rounded-[1.4rem] border border-black/[0.07] bg-white p-3.5 shadow-[0_16px_42px_rgba(15,23,42,0.11)] dark:border-white/[0.07] dark:bg-void-800" aria-label="Workflow status card">
+          <section className="min-w-0 rounded-[1.4rem] border border-black/[0.07] bg-white p-3.5 shadow-[0_16px_42px_rgba(15,23,42,0.11)] dark:border-white/[0.07] dark:bg-void-800" aria-label={translate(taskMessages, "workflowStatusCard")}>
             <div className="mb-3 flex items-center justify-between gap-3 px-1">
               <span>
-                <span className="block text-[9px] font-bold uppercase tracking-[0.17em] text-slate-400">Delivery flow</span>
+                <span className="block text-[9px] font-bold uppercase tracking-[0.17em] text-slate-400">{translate(taskMessages, "workflowDeliveryFlow")}</span>
                 <span className="mt-0.5 block text-sm font-bold text-slate-800 dark:text-white">{presentation.label}</span>
               </span>
               <span className={`flex h-8 w-8 items-center justify-center rounded-xl border ${BADGE_TONES[presentation.tone]}`} aria-hidden={true}>
@@ -537,7 +546,7 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
                 <ChevronRight className="workflow-status__chevron hidden h-6 w-6 md:block" strokeWidth={2.5} />
                 <ChevronRight className="workflow-status__chevron h-6 w-6 rotate-90 md:hidden" strokeWidth={2.5} />
               </span>
-              <div role="region" aria-label={REVIEW_META[currentReviewState!].regionLabel} tabIndex={-1} className="min-w-0 outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800">
+              <div role="region" aria-label={translate(taskMessages, REVIEW_META[currentReviewState!].regionLabelKey)} tabIndex={-1} className="min-w-0 outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800">
                 <QaReviewCard summary={review} headingId={reviewHeadingId} />
               </div>
             </>

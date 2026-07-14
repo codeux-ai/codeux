@@ -7,6 +7,8 @@ import { formatSprintDisplay } from "../../lib/format-sprint.js";
 import { buildTaskBoardSprintScopeState } from "../../lib/tasks/task-board-view-model.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { clampSprintCompletion, formatSprintCompletion } from "../../lib/sprint-progress-display.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { taskMessages } from "../../i18n/messages/tasks.js";
 
 export interface TaskBoardSprintSelectorProps {
   sprints: Sprint[];
@@ -23,6 +25,7 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
   sprintKeyPrefix,
   loading,
 }) => {
+  const { locale, formatDate, translate, translatePlural } = useDashboardI18n();
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -34,33 +37,44 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
   const selected = selectedId ? sprints.find((sprint: Sprint) => sprint.id === selectedId) : null;
   const selectedLabel = selected ? formatSprintDisplay(selected, sprintKeyPrefix) : null;
   const selectedAnnouncement = selectedLabel
-    ? `Selected sprint scope changed to ${selectedLabel}.`
-    : "Selected sprint scope changed to All Sprints.";
+    ? translate(taskMessages, "selectedScopeSprint", { scope: selectedLabel })
+    : translate(taskMessages, "selectedScopeAll");
   const scopeState = buildTaskBoardSprintScopeState({
     sprints,
     selectedSprintId: selectedId,
     selectedSprintLabel: selectedLabel,
     loading,
+    locale,
   });
   const options = useMemo(() => [
     {
       id: null as string | null,
-      label: "All Sprints",
-      description: "Project-wide task scope",
+      label: translate(taskMessages, "allSprints"),
+      description: translate(taskMessages, "projectWideTaskScope"),
+      dateLabel: "",
       sprint: null as Sprint | null,
       completion: 0,
     },
     ...sprints.map((sprint) => {
       const completion = clampSprintCompletion(sprint.completion);
+      const parsedDate = new Date(`${sprint.date}T00:00:00Z`);
+      const dateLabel = Number.isNaN(parsedDate.getTime())
+        ? sprint.date
+        : formatDate(parsedDate, { month: "short", day: "numeric", timeZone: "UTC" });
       return {
         id: sprint.id,
         label: formatSprintDisplay(sprint, sprintKeyPrefix),
-        description: `${sprint.date}, ${sprint.tasksCount} ${sprint.tasksCount === 1 ? "task" : "tasks"}, ${formatSprintCompletion(completion)} complete`,
+        dateLabel,
+        description: translate(taskMessages, "sprintOptionDescription", {
+          date: dateLabel,
+          tasks: translatePlural(taskMessages, "taskCount", sprint.tasksCount),
+          percent: formatSprintCompletion(completion, locale),
+        }),
         sprint,
         completion,
       };
     }),
-  ], [sprints, sprintKeyPrefix]);
+  ], [formatDate, locale, sprints, sprintKeyPrefix, translate, translatePlural]);
 
   const selectedIndex = Math.max(0, options.findIndex((option) => option.id === selectedId));
 
@@ -189,7 +203,7 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
       data-motion-list-reorder="listReorder"
     >
       <div id={statusId} className="sr-only" aria-live="polite" aria-atomic="true">
-        {open ? `Sprint scope list open. ${scopeState.description}` : `${selectedAnnouncement} ${scopeState.description}`}
+        {open ? translate(taskMessages, "scopeListOpen", { description: scopeState.description }) : `${selectedAnnouncement} ${scopeState.description}`}
       </div>
       <button
         ref={triggerRef}
@@ -199,7 +213,7 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
         aria-controls={listboxId}
         aria-describedby={statusId}
         aria-busy={loading}
-        aria-label={`Task sprint scope: ${scopeState.label}`}
+        aria-label={translate(taskMessages, "taskSprintScopeValue", { scope: scopeState.label })}
         onClick={() => {
           if (open) {
             closeListbox(false);
@@ -226,7 +240,7 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
               ? "border-ember-500/25 bg-ember-500/[0.08] text-ember-600 dark:text-ember-400"
               : "border-black/[0.06] bg-black/[0.03] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03]"
         }`}>
-          {scopeState.isLoading ? "Loading" : scopeState.isScoped ? "Selected" : scopeState.isEmpty ? "Empty" : "All"}
+          {translate(taskMessages, scopeState.isLoading ? "loading" : scopeState.isScoped ? "selected" : scopeState.isEmpty ? "empty" : "all")}
         </span>
         <ChevronDown className={`ml-auto h-4 w-4 shrink-0 text-slate-400 transition-transform motion-reduce:transition-none ${open ? "rotate-180 motion-reduce:rotate-0" : ""}`} strokeWidth={2} />
       </button>
@@ -235,7 +249,7 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
         <div
           id={listboxId}
           role="listbox"
-          aria-label="Task sprint scope"
+          aria-label={translate(taskMessages, "taskSprintScope")}
           aria-activedescendant={`tasks-sprint-option-${activeIndex}`}
           aria-busy={loading}
           style={{ transitionDuration: interactionTokens.listReveal.duration, transitionTimingFunction: interactionTokens.listReveal.ease }}
@@ -258,10 +272,10 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
           >
             <ListChecks className="w-4 h-4 text-signal-500" strokeWidth={2} />
             <div className="flex-1 min-w-0">
-              <span className="text-sm font-bold text-slate-800 dark:text-white">All Sprints</span>
-              <span className="block truncate text-[9px] font-mono uppercase tracking-[0.1em] text-slate-400">Project-wide scope</span>
+              <span className="text-sm font-bold text-slate-800 dark:text-white">{translate(taskMessages, "allSprints")}</span>
+              <span className="block truncate text-[9px] font-mono uppercase tracking-[0.1em] text-slate-400">{translate(taskMessages, "projectWideScope")}</span>
             </div>
-            {!selectedId && <span className="rounded-full bg-signal-500/[0.1] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-signal-600 dark:text-signal-400">Selected</span>}
+            {!selectedId && <span className="rounded-full bg-signal-500/[0.1] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-signal-600 dark:text-signal-400">{translate(taskMessages, "selected")}</span>}
           </button>
 
           <div className="h-px bg-black/[0.04] dark:bg-white/[0.04] shrink-0" />
@@ -273,12 +287,12 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
           >
             {loading && (
               <div role="status" className="px-5 py-3 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400">
-                Loading sprint scopes
+                {translate(taskMessages, "loadingSprintScopes")}
               </div>
             )}
             {!loading && sprints.length === 0 && (
               <div role="status" className="px-5 py-3 text-xs font-medium text-slate-500 dark:text-slate-400">
-                No sprints available. All Sprints remains selected until a sprint is created.
+                {translate(taskMessages, "noSprintScopes")}
               </div>
             )}
             {sprints.map((sprint, sprintIndex) => {
@@ -317,12 +331,12 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
                       {formatSprintDisplay(sprint, sprintKeyPrefix)}
                     </span>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[9px] font-mono text-slate-400 uppercase tracking-[0.1em] truncate min-w-0">{sprint.date}</span>
+                      <span className="text-[9px] font-mono text-slate-400 uppercase tracking-[0.1em] truncate min-w-0">{options[index].dateLabel}</span>
                       <span className="sr-only">{options[index].description}</span>
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-0.5 shrink-0 pl-2">
-                    {isActive && <span className="rounded-full bg-ember-500/[0.1] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-ember-600 dark:text-ember-400">Selected</span>}
+                    {isActive && <span className="rounded-full bg-ember-500/[0.1] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-ember-600 dark:text-ember-400">{translate(taskMessages, "selected")}</span>}
                     <span className="text-[10px] font-mono font-bold text-slate-500">{sprint.tasksCount}</span>
                     <div className="h-1 w-12 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.06]">
                       <div className="h-full rounded-full bg-signal-500 transition-[width] motion-reduce:transition-none" style={{ width: `${options[index].completion}%` }} />
