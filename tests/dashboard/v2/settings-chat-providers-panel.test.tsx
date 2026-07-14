@@ -323,9 +323,23 @@ describe("SettingsIntegrationsPanel chat connectors", () => {
     }));
   });
 
+  it("renders German connector success and keeps provider failures verbatim", async () => {
+    const state = createState("slack");
+    (state.chatProviders as typeof state.chatProviders & { error: string | null }).error = "Provider gateway unavailable: ECONNREFUSED";
+    render(<SettingsIntegrationsPanel state={state as any} />, "de");
+
+    await waitFor(() => expect(screen.getByText("Slack Konnektor")).not.toBeNull());
+    expect(screen.getByText("Chat-Konnektor-Einstellungen nicht verfügbar")).not.toBeNull();
+    expect(screen.getByText("Provider gateway unavailable: ECONNREFUSED")).not.toBeNull();
+    expect(screen.getByText("Zustellverlauf")).not.toBeNull();
+    expect(screen.getByRole("radiogroup", { name: "Slack Bridge Verbindungsmodus" })).not.toBeNull();
+    expect((screen.getByLabelText("Slack Bridge Bridge API key") as HTMLInputElement).value).toBe("");
+    expect(screen.getByText("Bearer [redacted] failed")).not.toBeNull();
+  });
+
   it("supports keyboard mode selection and persistent assertive errors", async () => {
     const state = createState("slack");
-    state.chatProviders.error = "Delivery history could not be refreshed.";
+    (state.chatProviders as typeof state.chatProviders & { error: string | null }).error = "Delivery history could not be refreshed.";
     render(<SettingsIntegrationsPanel state={state as any} />);
     const managed = await screen.findByRole("radio", { name: /Managed bridge/ });
     fireEvent.keyDown(managed, { key: "ArrowRight" });

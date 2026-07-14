@@ -974,6 +974,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     section: 'Architecture',
     title: "Dashboard internationalization",
     description: "The v2 dashboard includes a dependency-free internationalization foundation for English (en) and German (de). English is the compatibility default, and the dashboard does not infer a locale from browser preferences.",
+  },
   'architecture-high-concurrency-orchestration': {
     id: 'architecture-high-concurrency-orchestration',
     path: '/docs/architecture-high-concurrency-orchestration',

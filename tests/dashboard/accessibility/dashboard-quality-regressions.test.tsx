@@ -600,6 +600,7 @@ describe("dashboard accessibility quality regressions", () => {
 
     expect(screen.getByRole("region", { name: provider.name })).toBeInTheDocument();
     expect(screen.getByRole("radiogroup", { name: `${provider.name} Authentifizierungsmodus` })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `${provider.name} Anbieter-ID` })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: `Entfernen: ${provider.name}` })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Aufgabenaktionen für Aufgabe TASK-LONG öffnen:/ })).toHaveAccessibleName(/Very long task title/);
     expect(container.querySelector(".kanban-card h4")).toHaveClass("break-words");
