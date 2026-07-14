@@ -14,6 +14,7 @@ import { StructuredProviderResponseService } from "../../../src/services/structu
 import { StructuredAgentRequestService } from "../../../src/services/structured-agent-request-service.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import { buildSprintQaSnapshot } from "../../../src/domain/qa-review/sprint-qa-snapshot.js";
+import { QA_INFRA_FAILURE_GRACE } from "../../../src/domain/qa-review/qa-review-budget.js";
 
 /** Permissive guardrail stub: QA review runs are always allowed unless a test overrides it. */
 const qaGuardrailStub = () => ({
@@ -196,6 +197,153 @@ describe("QualityAssuranceService", () => {
     }));
     expect(removeWorktree).toHaveBeenCalledWith("/repo/project", "/repo/project/.worktrees/qa-review-snapshot");
   });
+
+  it.each(["task_completion", "sprint_completion"] as const)(
+    "resumes an interrupted %s reviewer with its correlated session, route, and snapshot",
+    async (triggerType) => {
+      const previousRun = {
+        id: `previous-${triggerType}`,
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        sprintRunId: "sprint-run-1",
+        taskId: triggerType === "task_completion" ? "task-1" : null,
+        taskRunId: triggerType === "task_completion" ? "task-run-1" : null,
+        triggerType,
+        status: "cancelled",
+        outcome: null,
+        runIndex: 1,
+        agentPresetId: "qa-agent",
+        agentName: "QA",
+        targetTaskKey: null,
+        targetSessionId: null,
+        targetProvider: null,
+        summaryMarkdown: "Interrupted",
+        fixInstructions: null,
+        payload: {
+          reviewLogicalSessionId: "cli-qa-review-codex-stable",
+          reviewSnapshotSessionId: "cli-qa-review-codex-stable-workspace",
+          reviewWorkspaceSessionId: "cli-qa-review-codex-stable-workspace",
+          reviewSnapshotWorkspace: "docker-volume://qa-preserved",
+          reviewProvider: "codex",
+          reviewProviderConfigId: "codex",
+          reviewModel: "gpt-stable",
+          reviewNativeSessionId: "native-stable",
+        },
+        startedAt: "2026-07-14T08:00:00.000Z",
+        finishedAt: "2026-07-14T08:01:00.000Z",
+        createdAt: "2026-07-14T08:00:00.000Z",
+        updatedAt: "2026-07-14T08:01:00.000Z",
+      } as any;
+      let currentRun = {
+        ...previousRun,
+        id: `current-${triggerType}`,
+        status: "running",
+        runIndex: 2,
+        payload: {},
+        finishedAt: null,
+      } as any;
+      const qaReviewRepository = {
+        getRun: vi.fn(() => currentRun),
+        updateRun: vi.fn((_id: string, update: any) => {
+          currentRun = {
+            ...currentRun,
+            ...update,
+            payload: update.payload === undefined ? currentRun.payload : update.payload,
+          };
+          return currentRun;
+        }),
+      };
+      const createExecutionInvocation = vi.fn(() => ({ id: `invocation-${triggerType}` }));
+      const executeRequest = vi.fn().mockResolvedValue({
+        parsed: {
+          verdict: "pass",
+          summary: "Looks good.",
+          findings: [],
+          fixInstructions: null,
+          targetTaskKey: null,
+          shouldHavePr: true,
+          followUpTasks: [],
+          raw: {},
+        },
+        sessionId: "cli-qa-review-codex-stable",
+        nativeSessionId: "native-resumed",
+        invocationId: `invocation-${triggerType}`,
+        openCodeBaselineRawUsageJson: null,
+      });
+      const createSession = vi.fn();
+      const service = new QualityAssuranceService({
+        projectManagementRepository: {} as any,
+        executionRepository: {
+          createExecutionInvocation,
+          getLatestProviderInvocationUsageBySession: vi.fn().mockReturnValue({
+            nativeSessionId: "native-stable",
+            rawUsageJson: null,
+          }),
+        } as any,
+        guardrailService: qaGuardrailStub(),
+        sessionTracking: { createSession, updateSession: vi.fn() } as any,
+        qaReviewRepository: qaReviewRepository as any,
+        taskService: {
+          resolveInvocationProvider: () => ({
+            provider: "codex",
+            providerConfigId: "codex",
+            providers: { codex: { model: "gpt-new", apiKey: "key", thinkingMode: "HIGH" } },
+          }),
+        } as any,
+        agentPresetSyncService: {} as any,
+        providerRunner: {} as any,
+        structuredAgentRequestService: { executeRequest } as any,
+        getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+        getGithubToken: () => undefined,
+        sendSessionMessage: async () => ({}),
+      });
+      const createOrReuseSnapshotWorkspace = vi.spyOn(
+        (service as any).workspaceManager,
+        "createOrReuseSnapshotWorkspace",
+      ).mockResolvedValue("docker-volume://qa-preserved");
+      vi.spyOn((service as any).workspaceManager, "removeWorktree").mockResolvedValue(undefined);
+
+      await (service as any).runReview({
+        triggerType,
+        scope: { projectId: "project-1", sprintId: "sprint-1" },
+        projectName: "QA Project",
+        sprintGoal: "Ship safely",
+        repoPath: "/repo/project",
+        agentInstructions: "Review carefully.",
+        subtasks: [],
+        currentTask: triggerType === "task_completion"
+          ? { id: "T1", title: "Task", prompt: "Prompt", depends_on: [], status: "COMPLETED", is_independent: true }
+          : null,
+        taskRun: triggerType === "task_completion" ? { id: "task-run-1", taskId: "task-1" } : null,
+        sprintRunId: "sprint-run-1",
+        agentPresetId: "qa-agent",
+        qaRun: currentRun,
+        resumeFromRun: previousRun,
+        reviewBranch: "feature/sprint-1",
+        baseBranch: "dev",
+      });
+
+      expect(createOrReuseSnapshotWorkspace).toHaveBeenCalled();
+      expect(createExecutionInvocation).toHaveBeenCalledTimes(1);
+      expect(executeRequest).toHaveBeenCalledWith(expect.objectContaining({
+        invocationId: `invocation-${triggerType}`,
+        logicalSessionId: "cli-qa-review-codex-stable",
+        continueSessionId: "native-stable",
+        workspaceSessionId: "cli-qa-review-codex-stable-workspace",
+        model: "gpt-stable",
+        cwd: "docker-volume://qa-preserved",
+      }));
+      expect(currentRun.payload).toMatchObject({
+        reviewExecutionInvocationId: `invocation-${triggerType}`,
+        reviewLogicalSessionId: "cli-qa-review-codex-stable",
+        reviewNativeSessionId: "native-resumed",
+        reviewContinuationSourceRunId: previousRun.id,
+      });
+      expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+        id: "cli-qa-review-codex-stable-workspace",
+      }));
+    },
+  );
 
   it("builds sprint review prompts with the full task instructions", async () => {
     const service = new QualityAssuranceService({
@@ -392,6 +540,179 @@ describe("QualityAssuranceService", () => {
     expect(tasks[1]?.title).toBe("Add rollback coverage");
     expect(tasks[1]?.promptMarkdown).toContain("rollback path");
     expect(tasks[1]?.dependsOnTaskIds).toEqual([task.id]);
+  });
+
+  it("resumes a checkpointed sprint QA coding handoff without rerunning the reviewer", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-service-sprint-resume-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const qaReviewRepository = new QaReviewRepository(storage);
+    const project = projectRepository.createProject({ name: "QA Project", sourceType: "local", sourceRef: dir });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      goal: "Ship safely",
+      status: "running",
+      featureBranch: "feature/sprint-1",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Initial task",
+      promptMarkdown: "Implement the initial feature.",
+      status: "completed",
+      isIndependent: true,
+      provider: "codex",
+      sessionId: "cli-codex-task-1",
+    });
+    const sprintRun = executionRepository.createSprintRun({ projectId: project.id, sprintId: sprint.id, status: "running" });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      state: "COMPLETED",
+      provider: "codex",
+      sessionId: "cli-codex-task-1",
+      startedAt: new Date(Date.now() - 60_000).toISOString(),
+      finishedAt: new Date(Date.now() - 30_000).toISOString(),
+    });
+    const passingPeerRun = qaReviewRepository.createRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      triggerType: "sprint_completion",
+      runIndex: 1,
+      payload: { verdict: "pass", summary: "Peer reviewer passed." },
+    });
+    qaReviewRepository.updateRun(passingPeerRun.id, {
+      status: "completed",
+      outcome: "pass",
+      summaryMarkdown: "Peer reviewer passed.",
+      finishedAt: new Date().toISOString(),
+    });
+    const qaRun = qaReviewRepository.createRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      triggerType: "sprint_completion",
+      runIndex: 1,
+      targetTaskKey: "T1",
+      targetSessionId: "cli-codex-task-1",
+      targetProvider: "codex",
+      payload: {
+        verdict: "changes_requested",
+        summary: "One integration fix is required.",
+        findings: ["Missing integration guard."],
+        fixInstructions: "Add the integration guard.",
+        targetTaskKey: "T1",
+        followUpTasks: [],
+        continuationStatus: "running",
+        continuationAttemptCount: 1,
+        continuationTaskRunId: taskRun.id,
+      },
+    });
+    qaReviewRepository.updateRun(qaRun.id, {
+      status: "completed",
+      outcome: "changes_requested",
+      targetTaskKey: "T1",
+      targetSessionId: "cli-codex-task-1",
+      targetProvider: "codex",
+      summaryMarkdown: "One integration fix is required.",
+      fixInstructions: "Add the integration guard.",
+      finishedAt: new Date().toISOString(),
+    });
+    const service = new QualityAssuranceService({
+      projectManagementRepository: projectRepository,
+      executionRepository,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {} as any,
+      qaReviewRepository,
+      taskService: {} as any,
+      agentPresetSyncService: {} as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        agents: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents,
+          qualityAssurance: {
+            ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+            enabled: true,
+            sprintCompletion: { enabled: true, agentPresetId: null },
+            maxSprintReviewRuns: 3,
+          },
+        },
+      }),
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+    const runReview = vi.spyOn(service as any, "runReview");
+    const requestFixes = vi.spyOn(service as any, "requestFixesForTask")
+      .mockImplementationOnce(async () => {
+        expect(qaReviewRepository.getRun(qaRun.id)?.payload).toMatchObject({
+          continuationStatus: "running",
+          continuationAttemptCount: 1,
+        });
+        throw new Error("Command spawner host exited (code=null, signal=SIGHUP)");
+      })
+      .mockResolvedValueOnce({ applied: true, mode: "cli", noProgress: false, blocker: null });
+    const subtasks = [{
+      record_id: task.id,
+      project_id: project.id,
+      sprint_id: sprint.id,
+      id: "T1",
+      title: task.title,
+      prompt: task.promptMarkdown,
+      depends_on: [],
+      is_independent: true,
+      status: "COMPLETED",
+      provider: "codex",
+      session_id: "cli-codex-task-1",
+    }] as any;
+
+    await expect(service.reviewSprintCompletion({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      repoPath: dir,
+      subtasks,
+    })).rejects.toThrow("Command spawner host exited");
+    expect(qaReviewRepository.getRun(qaRun.id)?.payload).toMatchObject({
+      continuationStatus: "pending",
+      continuationAttemptCount: 1,
+    });
+    expect(projectRepository.getTask(task.id)).toMatchObject({
+      status: "coding_completed",
+      isMerged: false,
+      mergeIndicator: "QA_PENDING",
+    });
+
+    const resumed = await service.reviewSprintCompletion({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      repoPath: dir,
+      subtasks,
+    });
+
+    expect(resumed.blockedCompletion).toBe(true);
+    expect(runReview).not.toHaveBeenCalled();
+    expect(requestFixes).toHaveBeenCalledTimes(2);
+    expect(requestFixes).toHaveBeenLastCalledWith(expect.objectContaining({
+      qaContinuationRunId: qaRun.id,
+      taskRun: expect.objectContaining({ id: taskRun.id }),
+    }));
+    expect(qaReviewRepository.getRun(qaRun.id)?.payload).toMatchObject({
+      continuationStatus: "completed",
+      continuationAttemptCount: 2,
+      continued: true,
+    });
+    expect(projectRepository.getTask(task.id)).toMatchObject({
+      status: "coding_completed",
+      isMerged: false,
+      mergeIndicator: "QA_PENDING",
+    });
   });
 
   it("does not continue an already merged task during sprint completion QA", async () => {
@@ -1610,7 +1931,7 @@ describe("QualityAssuranceService", () => {
       getGithubToken: () => undefined,
       sendSessionMessage: async () => ({}),
     });
-    vi.spyOn(service as any, "runReview").mockResolvedValue({
+    const runReviewSpy = vi.spyOn(service as any, "runReview").mockResolvedValue({
       verdict: "changes_requested",
       summary: "The task needs one follow-up fix.",
       findings: [],
@@ -1620,12 +1941,13 @@ describe("QualityAssuranceService", () => {
       followUpTasks: [],
       raw: { verdict: "changes_requested", summary: "The task needs one follow-up fix." },
     });
-    vi.spyOn(service as any, "requestFixesForTask").mockImplementation(async () => {
+    const requestFixesSpy = vi.spyOn(service as any, "requestFixesForTask").mockImplementation(async () => {
       const latestRun = qaReviewRepository.getLatestTaskRun(task.id);
       expect(latestRun?.status).toBe("completed");
       expect(latestRun?.outcome).toBe("changes_requested");
       expect(latestRun?.finishedAt).toBeTruthy();
-      return { applied: true, mode: "cli" };
+      expect(latestRun?.payload?.continuationStatus).toBe("running");
+      return { applied: true, mode: "cli", noProgress: false, blocker: null };
     });
 
     const outcome = await service.reviewCompletedTask({
@@ -1652,7 +1974,297 @@ describe("QualityAssuranceService", () => {
 
     expect(outcome.reopenedTask).toBe(true);
     expect(qaReviewRepository.getLatestTaskRun(task.id)?.payload?.continued).toBe(true);
+    expect(qaReviewRepository.getLatestTaskRun(task.id)?.payload?.continuationStatus).toBe("completed");
     expect(qaReviewRepository.getLatestTaskRun(task.id)?.payload?.postExhaustionVerificationEligible).toBe(false);
+    expect(projectRepository.getTask(task.id)).toMatchObject({
+      status: "coding_completed",
+      mergeIndicator: "QA_PENDING",
+    });
+
+    const completedRun = qaReviewRepository.getLatestTaskRun(task.id)!;
+    qaReviewRepository.updateRun(completedRun.id, {
+      payload: {
+        verdict: "changes_requested",
+        summary: "The task needs one follow-up fix.",
+      },
+    });
+    runReviewSpy.mockClear();
+    requestFixesSpy.mockClear();
+
+    const replayOutcome = await service.reviewCompletedTask({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      repoPath: dir,
+      task: {
+        record_id: task.id,
+        project_id: project.id,
+        sprint_id: sprint.id,
+        id: "T1",
+        title: "Initial task",
+        prompt: "Implement the initial feature.",
+        depends_on: [],
+        is_independent: true,
+        status: "CODING_COMPLETED",
+        provider: "opencode",
+        session_id: "session-1",
+        pr_url: "https://example.com/pr/1",
+      },
+      subtasks: [],
+    });
+
+    expect(replayOutcome.reopenedTask).toBe(true);
+    expect(runReviewSpy).not.toHaveBeenCalled();
+    expect(requestFixesSpy).toHaveBeenCalledTimes(1);
+    expect(qaReviewRepository.getLatestTaskRun(task.id)?.id).toBe(completedRun.id);
+    expect(qaReviewRepository.getLatestTaskRun(task.id)?.payload?.continuationStatus).toBe("completed");
+  });
+
+  it("checkpoints failed QA continuations for bounded same-session retry and restores the QA stage", async () => {
+    const updateTask = vi.fn();
+    const originalTaskRun = {
+      id: "task-run-original",
+      taskId: "task-1",
+      sprintRunId: "sprint-run-1",
+      sessionId: "cli-codex-original",
+      state: "COMPLETED",
+      startedAt: "2026-07-14T08:00:00.000Z",
+      finishedAt: "2026-07-14T08:05:00.000Z",
+    } as any;
+    const replacementTaskRun = {
+      ...originalTaskRun,
+      id: "task-run-replacement",
+      sessionId: "cli-codex-replacement",
+      state: "FAILED",
+      startedAt: "2026-07-14T08:10:00.000Z",
+      finishedAt: "2026-07-14T08:11:00.000Z",
+    } as any;
+    let storedRun = {
+      id: "qa-run-1",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      sprintRunId: "sprint-run-1",
+      taskId: "task-1",
+      taskRunId: originalTaskRun.id,
+      triggerType: "task_completion",
+      status: "completed",
+      outcome: "changes_requested",
+      runIndex: 1,
+      targetSessionId: "cli-codex-original",
+      summaryMarkdown: "The task needs a repair.",
+      fixInstructions: "Repair the implementation.",
+      payload: { continuationStatus: "pending" },
+      startedAt: "2026-07-14T08:06:00.000Z",
+      finishedAt: "2026-07-14T08:07:00.000Z",
+    } as any;
+    const qaReviewRepository = {
+      getRun: vi.fn(() => storedRun),
+      updateRun: vi.fn((_id: string, update: Record<string, unknown>) => {
+        storedRun = { ...storedRun, ...update };
+        return storedRun;
+      }),
+    } as any;
+    const executionRepository = {
+      getTaskRun: vi.fn((id: string) => id === originalTaskRun.id ? originalTaskRun : null),
+      listExecutionInvocations: vi.fn().mockReturnValue([]),
+      appendTaskRunEvent: vi.fn(),
+    } as any;
+    const service = new QualityAssuranceService({
+      projectManagementRepository: { updateTask } as any,
+      executionRepository,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {} as any,
+      qaReviewRepository,
+      taskService: {} as any,
+      agentPresetSyncService: {} as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+    const requestFixesForTask = vi.spyOn(service as any, "requestFixesForTask")
+      .mockRejectedValue(new Error("transient provider failure"));
+    const task = {
+      record_id: "task-1",
+      id: "T1",
+      title: "Task",
+      prompt: "Implement the task.",
+      depends_on: [],
+      is_independent: true,
+      status: "CODING_COMPLETED",
+      provider: "codex",
+      session_id: "cli-codex-original",
+    } as any;
+    const continuationArgs = {
+      run: storedRun,
+      task,
+      taskRun: originalTaskRun,
+      repoPath: "/repo/project",
+      featureBranch: "feature/sprint-1",
+      scope: { projectId: "project-1", sprintId: "sprint-1" },
+      decisiveRuns: 1,
+      maxTaskReviewRuns: 3,
+    };
+
+    await expect((service as any).continuePendingTaskQaRun(continuationArgs))
+      .rejects.toThrow("transient provider failure");
+
+    expect(storedRun.payload).toMatchObject({
+      continuationStatus: "pending",
+      continuationAttemptCount: 1,
+      continuationMode: "failed",
+      followUpNoProgress: false,
+    });
+    expect(task).toMatchObject({ status: "CODING_COMPLETED", merge_indicator: "QA_PENDING" });
+    expect(updateTask).toHaveBeenLastCalledWith("task-1", expect.objectContaining({
+      status: "coding_completed",
+      mergeIndicator: "QA_PENDING",
+    }));
+
+    storedRun = {
+      ...storedRun,
+      payload: {
+        ...storedRun.payload,
+        continuationStatus: "running",
+        continuationAttemptCount: 1,
+      },
+    };
+    task.status = "PENDING";
+    await expect((service as any).continuePendingTaskQaRun({
+      ...continuationArgs,
+      run: storedRun,
+      task,
+    })).rejects.toThrow("transient provider failure");
+    expect(storedRun.payload).toMatchObject({
+      continuationStatus: "pending",
+      continuationAttemptCount: 1,
+      followUpNoProgress: false,
+    });
+    expect(task).toMatchObject({ status: "CODING_COMPLETED", merge_indicator: "QA_PENDING" });
+
+    storedRun = {
+      ...storedRun,
+      payload: {
+        ...storedRun.payload,
+        continuationStatus: "failed",
+        continuationAttemptCount: QA_INFRA_FAILURE_GRACE - 1,
+        followUpNoProgress: false,
+      },
+    };
+    task.status = "RUNNING";
+    task.session_id = "cli-codex-replacement";
+    await expect((service as any).continuePendingTaskQaRun({
+      ...continuationArgs,
+      run: storedRun,
+      task,
+      taskRun: replacementTaskRun,
+    })).rejects.toThrow("transient provider failure");
+
+    expect(requestFixesForTask).toHaveBeenCalledTimes(3);
+    expect(requestFixesForTask).toHaveBeenLastCalledWith(expect.objectContaining({
+      task: expect.objectContaining({ session_id: "cli-codex-original" }),
+      taskRun: expect.objectContaining({ id: "task-run-original" }),
+    }));
+    expect(storedRun.payload).toMatchObject({
+      continuationStatus: "failed",
+      continuationAttemptCount: QA_INFRA_FAILURE_GRACE,
+      continuationMode: "failed",
+      followUpNoProgress: true,
+      followUpBlocker: "transient provider failure",
+    });
+  });
+
+  it("defers a legacy QA continuation while newer coding is active and reconciles it after completion", async () => {
+    let storedRun = {
+      id: "qa-run-legacy",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      sprintRunId: "sprint-run-1",
+      taskId: "task-1",
+      taskRunId: "task-run-original",
+      triggerType: "task_completion",
+      status: "completed",
+      outcome: "changes_requested",
+      runIndex: 1,
+      targetSessionId: "cli-codex-original",
+      summaryMarkdown: "The task needs a repair.",
+      fixInstructions: "Repair the implementation.",
+      payload: { continuationStatus: "failed", continuationMode: "failed", continued: false },
+      startedAt: "2026-07-14T08:06:00.000Z",
+      finishedAt: "2026-07-14T08:07:00.000Z",
+    } as any;
+    const qaReviewRepository = {
+      getRun: vi.fn(() => storedRun),
+      updateRun: vi.fn((_id: string, update: Record<string, unknown>) => {
+        storedRun = { ...storedRun, ...update };
+        return storedRun;
+      }),
+    } as any;
+    const updateTask = vi.fn();
+    const service = new QualityAssuranceService({
+      projectManagementRepository: { updateTask } as any,
+      executionRepository: { listExecutionInvocations: vi.fn().mockReturnValue([]) } as any,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {} as any,
+      qaReviewRepository,
+      taskService: {} as any,
+      agentPresetSyncService: {} as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+    const requestFixesForTask = vi.spyOn(service as any, "requestFixesForTask");
+    const task = {
+      record_id: "task-1",
+      id: "T1",
+      title: "Task",
+      prompt: "Implement the task.",
+      depends_on: [],
+      is_independent: true,
+      status: "RUNNING",
+      provider: "codex",
+      session_id: "cli-codex-replacement",
+    } as any;
+    const laterTaskRun = {
+      id: "task-run-replacement",
+      taskId: "task-1",
+      sessionId: "cli-codex-replacement",
+      state: "RUNNING",
+      startedAt: "2026-07-14T08:10:00.000Z",
+      finishedAt: null,
+    } as any;
+    const args = {
+      run: storedRun,
+      task,
+      taskRun: laterTaskRun,
+      repoPath: "/repo/project",
+      featureBranch: "feature/sprint-1",
+      scope: { projectId: "project-1", sprintId: "sprint-1" },
+      decisiveRuns: 1,
+      maxTaskReviewRuns: 3,
+    };
+
+    const deferred = await (service as any).continuePendingTaskQaRun(args);
+    expect(deferred).toMatchObject({ reviewed: false, reopenedTask: false, mergeBlocked: true });
+    expect(requestFixesForTask).not.toHaveBeenCalled();
+    expect(qaReviewRepository.updateRun).not.toHaveBeenCalled();
+
+    laterTaskRun.state = "COMPLETED";
+    laterTaskRun.finishedAt = "2026-07-14T08:15:00.000Z";
+    const reconciled = await (service as any).continuePendingTaskQaRun({ ...args, run: storedRun });
+    expect(reconciled).toMatchObject({ reviewed: true, reopenedTask: true, mergeBlocked: true });
+    expect(requestFixesForTask).not.toHaveBeenCalled();
+    expect(storedRun.payload).toMatchObject({
+      continuationStatus: "completed",
+      continuationReconciled: true,
+      continued: true,
+    });
+    expect(task).toMatchObject({ status: "CODING_COMPLETED", merge_indicator: "QA_PENDING" });
+    expect(updateTask).toHaveBeenLastCalledWith("task-1", expect.objectContaining({
+      status: "coding_completed",
+      mergeIndicator: "QA_PENDING",
+    }));
   });
 
   it("recovers a running task QA review when the execution invocation never linked provider runtime", async () => {
@@ -3236,6 +3848,7 @@ describe("QualityAssuranceService", () => {
 
     const updateTaskMock = vi.fn();
     const updateTaskRunMock = vi.fn();
+    const updateTaskDispatchMock = vi.fn();
 
     const service = new QualityAssuranceService({
       projectManagementRepository: {
@@ -3250,6 +3863,7 @@ describe("QualityAssuranceService", () => {
         createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "usage-followup" }),
         updateProviderInvocationUsage: vi.fn(),
         updateTaskRun: updateTaskRunMock,
+        updateTaskDispatch: updateTaskDispatchMock,
         appendTaskRunEvent: vi.fn(),
       } as any,
       guardrailService: qaGuardrailStub(),
@@ -3312,6 +3926,8 @@ describe("QualityAssuranceService", () => {
 
     const taskRunShape = {
       id: "task-run-123",
+      dispatchId: "dispatch-123",
+      state: "FAILED",
       workerBranch: null,
       prUrl: null,
     };
@@ -3340,6 +3956,12 @@ describe("QualityAssuranceService", () => {
       { remoteOnly: true },
     );
     expect(updateTaskRunMock).toHaveBeenCalledWith("task-run-123", { workerBranch: "task/feature-sprint-1-T1-gemini-recovered" });
+    expect(updateTaskRunMock).toHaveBeenCalledWith("task-run-123", { state: "COMPLETED" });
+    expect(updateTaskDispatchMock).toHaveBeenCalledWith("dispatch-123", {
+      status: "completed",
+      errorMessage: null,
+    });
+    expect(taskRunShape.state).toBe("COMPLETED");
     expect(taskShape.worker_branch).toBe("task/feature-sprint-1-T1-gemini-recovered");
     expect(taskRunShape.workerBranch).toBe("task/feature-sprint-1-T1-gemini-recovered");
   });
@@ -3613,6 +4235,107 @@ describe("QualityAssuranceService", () => {
     }));
     // initialHead (and thus the patch base) is the fast-forwarded tip.
     expect((service as any).workspaceArtifactService.exportBinaryPatch).toHaveBeenCalledWith("/worktree", "pushed-worker-tip");
+  });
+
+  it("reuses the durable QA patch baseline when restart happens after the provider committed", async () => {
+    let storedRun = {
+      id: "qa-run-publish-crash",
+      payload: {
+        continuationStatus: "running",
+        continuationWorkspaceBaseRef: "original-worker-tip",
+      },
+    } as any;
+    const qaReviewRepository = {
+      getRun: vi.fn(() => storedRun),
+      updateRun: vi.fn((_id: string, update: Record<string, unknown>) => {
+        storedRun = { ...storedRun, ...update };
+        return storedRun;
+      }),
+    } as any;
+    const updateTask = vi.fn();
+    const service = new QualityAssuranceService({
+      projectManagementRepository: { updateTask, getSprint: vi.fn().mockReturnValue(null) } as any,
+      executionRepository: {
+        getLatestProviderInvocationUsageBySession: vi.fn().mockReturnValue({ nativeSessionId: "native-followup" }),
+        updateTaskRun: vi.fn(),
+      } as any,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: { updateSession: vi.fn(), appendActivity: vi.fn() } as any,
+      qaReviewRepository,
+      taskService: {} as any,
+      agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue(undefined) } as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        git: { ...DEFAULT_DASHBOARD_SETTINGS.git, autoCreatePr: false },
+        memory: { ...DEFAULT_DASHBOARD_SETTINGS.memory, enabled: false },
+      }),
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+    vi.spyOn((service as any).invocationWorkspacePreparer, "resolveContinuationWorkspace").mockResolvedValue({
+      worktreePath: "/worktree",
+      hasPreservedWorkspace: true,
+      currentBranch: "feature/task-1",
+    });
+    vi.spyOn(service as any, "syncExistingCliFollowUpWorkspace").mockResolvedValue(undefined);
+    vi.spyOn((service as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("");
+    const runWorkspaceCommand = vi.spyOn(service as any, "runWorkspaceCommand").mockImplementation(
+      async (_path: string, _command: string, args: string[]) => ({
+        ok: true,
+        stdout: args.includes("--verify") ? "original-worker-tip\n" : "provider-created-commit\n",
+        stderr: "",
+        code: 0,
+      }),
+    );
+    vi.spyOn((service as any).providerExecutionService, "executeProvider").mockImplementation(async () => {
+      expect(updateTask).toHaveBeenLastCalledWith("task-record-1", {
+        status: "coding_completed",
+        isMerged: false,
+        mergeIndicator: "QA_PENDING",
+      });
+      return {
+        ok: true,
+        stdout: "",
+        stderr: "",
+        text: "already completed before restart",
+        usageTelemetry: { conversation: [], rawUsageJson: null },
+      };
+    });
+    const exportPatch = vi.spyOn((service as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("");
+    vi.spyOn((service as any).workspaceArtifactService, "applyPatchToBranch").mockResolvedValue({ hasChanges: false });
+    vi.spyOn((service as any).prService, "hasUnpushedCommits").mockResolvedValue(false);
+    vi.spyOn((service as any).prService, "hasWorkerBranchCommitsAgainstFeature").mockResolvedValue(true);
+    vi.spyOn(service as any, "workerBranchAdvancedFromBaseline").mockResolvedValue(true);
+
+    const result = await (service as any).continueCliTaskSession({
+      provider: "codex",
+      sessionId: "cli-codex-task-1",
+      task: {
+        id: "T1",
+        record_id: "task-record-1",
+        title: "Fix thing",
+        prompt: "Implement the fix",
+        depends_on: [],
+        is_independent: true,
+        status: "CODING_COMPLETED",
+        worker_branch: "feature/task-1",
+      },
+      taskRun: null,
+      repoPath: "/repo",
+      featureBranch: "feature/sprint-1",
+      scope: { projectId: "project-1", sprintId: "sprint-1" },
+      followUpPrompt: "Address QA findings",
+      qaContinuationRunId: storedRun.id,
+    });
+
+    expect(result.producedMergeWork).toBe(true);
+    expect(exportPatch).toHaveBeenCalledWith("/worktree", "original-worker-tip");
+    expect(runWorkspaceCommand).toHaveBeenCalledWith(
+      "/worktree",
+      "git",
+      ["rev-parse", "--verify", "original-worker-tip^{commit}"],
+    );
   });
 
   it("resets stale merged state when a CLI QA follow-up opens a new PR", async () => {
@@ -4484,7 +5207,13 @@ describe("QualityAssuranceService", () => {
       sendSessionMessage: async () => ({}),
     });
     vi.spyOn(service as any, "runReview")
-      .mockResolvedValueOnce({ verdict: "pass", summary: "A passed.", findings: [], fixInstructions: null, targetTaskKey: null, shouldHavePr: null, followUpTasks: [], raw: { reviewer: "a" } })
+      .mockImplementationOnce(async () => {
+        const precreated = qaReviewRepository.listLatestSprintCycleRuns(sprint.id);
+        expect(precreated).toHaveLength(2);
+        expect(precreated.find((run) => run.agentPresetId === qaA.id)?.payload?.reviewDispatchStatus).toBe("running");
+        expect(precreated.find((run) => run.agentPresetId === qaB.id)?.payload?.reviewDispatchStatus).toBe("pending");
+        return { verdict: "pass", summary: "A passed.", findings: [], fixInstructions: null, targetTaskKey: null, shouldHavePr: null, followUpTasks: [], raw: { reviewer: "a" } };
+      })
       .mockResolvedValueOnce({ verdict: "pass", summary: "B passed.", findings: [], fixInstructions: null, targetTaskKey: null, shouldHavePr: null, followUpTasks: [], raw: { reviewer: "b" } });
 
     const outcome = await service.reviewSprintCompletion({
@@ -4502,6 +5231,74 @@ describe("QualityAssuranceService", () => {
     const runs = qaReviewRepository.listLatestSprintCycleRuns(sprint.id);
     expect(runs).toHaveLength(2);
     expect(runs.every((run) => run.runIndex === 1 && run.outcome === "pass")).toBe(true);
+  });
+
+  it("continues only the interrupted task reviewer in a partially completed cycle", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-service-task-reviewer-recovery-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const qaReviewRepository = new QaReviewRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const project = projectRepository.createProject({ name: "QA Project", sourceType: "local", sourceRef: dir });
+    const sprint = projectRepository.createSprint(project.id, { name: "Sprint", goal: "Ship", status: "running", featureBranch: "feature/sprint" });
+    const task = projectRepository.createTask(project.id, { sprintId: sprint.id, taskKey: "T1", title: "Task", promptMarkdown: "Ship it", status: "coding_completed", isIndependent: true });
+    const qaA = agentPresetRepository.createAgentPreset(project.id, { name: "QA A", presetId: "qa-a-recovery", instructionMarkdown: "A" });
+    const qaB = agentPresetRepository.createAgentPreset(project.id, { name: "QA B", presetId: "qa-b-recovery", instructionMarkdown: "B" });
+    const completed = qaReviewRepository.createRun({ projectId: project.id, sprintId: sprint.id, taskId: task.id, triggerType: "task_completion", runIndex: 1, agentPresetId: qaA.id, agentName: "QA A" });
+    qaReviewRepository.updateRun(completed.id, { status: "completed", outcome: "pass", summaryMarkdown: "A passed", payload: { verdict: "pass", summary: "A passed" }, finishedAt: new Date().toISOString() });
+    const interrupted = qaReviewRepository.createRun({ projectId: project.id, sprintId: sprint.id, taskId: task.id, triggerType: "task_completion", runIndex: 1, agentPresetId: qaB.id, agentName: "QA B", payload: { reviewLogicalSessionId: "qa-b-session" } });
+    qaReviewRepository.updateRun(interrupted.id, { status: "cancelled", summaryMarkdown: "Restarted", finishedAt: new Date().toISOString() });
+    const resolveAgent = async (_projectId: string, id: string | null) => ({ id: id!, name: id === qaA.id ? "QA A" : "QA B", instructionMarkdown: "Review" });
+    const service = new QualityAssuranceService({
+      projectManagementRepository: projectRepository, executionRepository, guardrailService: qaGuardrailStub(), sessionTracking: {} as any,
+      qaReviewRepository, taskService: {} as any, agentPresetSyncService: { resolveTargetedQualityAssuranceAgent: resolveAgent } as any,
+      providerRunner: {} as any, getDashboardSettings: () => ({ ...DEFAULT_DASHBOARD_SETTINGS, agents: { ...DEFAULT_DASHBOARD_SETTINGS.agents, qualityAssurance: { ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance, enabled: true, taskCompletion: { enabled: true, agentPresetIds: [qaA.id, qaB.id], agentPresetId: qaA.id }, maxTaskReviewRuns: 1 } } }),
+      getGithubToken: () => undefined, sendSessionMessage: async () => ({}),
+    });
+    const runReview = vi.spyOn(service as any, "runReview").mockResolvedValue({ verdict: "pass", summary: "B passed", findings: [], fixInstructions: null, targetTaskKey: null, shouldHavePr: true, followUpTasks: [], raw: { verdict: "pass", summary: "B passed" } });
+    vi.spyOn(service as any, "cleanupCliWorkspaceIfNeeded").mockResolvedValue(undefined);
+    const outcome = await service.reviewCompletedTask({ projectId: project.id, sprintId: sprint.id, repoPath: dir, task: { record_id: task.id, id: "T1", title: "Task", prompt: "Ship it", depends_on: [], is_independent: true, status: "CODING_COMPLETED", pr_url: "https://example.test/1" } as any, subtasks: [] });
+
+    expect(outcome.reviewed).toBe(true);
+    expect(runReview).toHaveBeenCalledTimes(1);
+    expect(runReview).toHaveBeenCalledWith(expect.objectContaining({ agentPresetId: qaB.id, resumeFromRun: expect.objectContaining({ id: interrupted.id }) }));
+    expect(qaReviewRepository.listLatestTaskCycleRuns(task.id).filter((run) => run.agentPresetId === qaA.id)).toHaveLength(1);
+    expect(qaReviewRepository.countTaskRuns(task.id)).toBe(1);
+  });
+
+  it("fills a missing legacy sprint reviewer without rerunning the completed reviewer", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-service-sprint-reviewer-recovery-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const qaReviewRepository = new QaReviewRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const project = projectRepository.createProject({ name: "QA Project", sourceType: "local", sourceRef: dir });
+    const sprint = projectRepository.createSprint(project.id, { name: "Sprint", goal: "Ship", status: "running", featureBranch: "feature/sprint" });
+    const sprintRun = executionRepository.createSprintRun({ projectId: project.id, sprintId: sprint.id, status: "running" });
+    const qaA = agentPresetRepository.createAgentPreset(project.id, { name: "QA A", presetId: "sprint-a-recovery", instructionMarkdown: "A" });
+    const qaB = agentPresetRepository.createAgentPreset(project.id, { name: "QA B", presetId: "sprint-b-recovery", instructionMarkdown: "B" });
+    const legacy = qaReviewRepository.createRun({ projectId: project.id, sprintId: sprint.id, sprintRunId: sprintRun.id, triggerType: "sprint_completion", runIndex: 1, agentPresetId: qaA.id, agentName: "QA A", payload: { verdict: "pass", summary: "A passed", taskSnapshot: [] } });
+    qaReviewRepository.updateRun(legacy.id, { status: "completed", outcome: "pass", summaryMarkdown: "A passed", finishedAt: new Date().toISOString() });
+    const resolveAgent = async (_projectId: string, id: string | null) => ({ id: id!, name: id === qaA.id ? "QA A" : "QA B", instructionMarkdown: "Review" });
+    const service = new QualityAssuranceService({
+      projectManagementRepository: projectRepository, executionRepository, guardrailService: qaGuardrailStub(), sessionTracking: {} as any,
+      qaReviewRepository, taskService: {} as any, agentPresetSyncService: { resolveTargetedQualityAssuranceAgent: resolveAgent } as any,
+      providerRunner: {} as any, getDashboardSettings: () => ({ ...DEFAULT_DASHBOARD_SETTINGS, agents: { ...DEFAULT_DASHBOARD_SETTINGS.agents, qualityAssurance: { ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance, enabled: true, sprintCompletion: { enabled: true, agentPresetIds: [qaA.id, qaB.id], agentPresetId: qaA.id }, maxSprintReviewRuns: 1 } } }),
+      getGithubToken: () => undefined, sendSessionMessage: async () => ({}),
+    });
+    const runReview = vi.spyOn(service as any, "runReview").mockResolvedValue({ verdict: "pass", summary: "B passed", findings: [], fixInstructions: null, targetTaskKey: null, shouldHavePr: null, followUpTasks: [], raw: { verdict: "pass", summary: "B passed" } });
+    const outcome = await service.reviewSprintCompletion({ projectId: project.id, sprintId: sprint.id, sprintRunId: sprintRun.id, repoPath: dir, subtasks: [] });
+
+    expect(outcome.blockedCompletion).toBe(false);
+    expect(runReview).toHaveBeenCalledTimes(1);
+    expect(runReview).toHaveBeenCalledWith(expect.objectContaining({ agentPresetId: qaB.id }));
+    const latest = qaReviewRepository.listLatestSprintCycleRuns(sprint.id);
+    expect(latest).toHaveLength(2);
+    expect(latest.every((run) => run.runIndex === 1 && run.outcome === "pass")).toBe(true);
   });
 
   it("resolves one default QA reviewer when no trigger agent IDs are configured", async () => {

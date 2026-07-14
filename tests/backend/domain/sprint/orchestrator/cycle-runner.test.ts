@@ -3040,6 +3040,85 @@ describe("CycleRunner attention sync", () => {
     );
   });
 
+  it("replays a legacy failed QA fix handoff after restart even when old code changed the task state", async () => {
+    const deps = buildDeps();
+    const reviewCompletedTask = vi.fn().mockResolvedValue({
+      reviewed: true,
+      reopenedTask: true,
+      mergeBlocked: true,
+      reportText: "Resumed the pending QA follow-up.",
+    });
+    deps.qualityAssuranceService = {
+      getTaskMergeGateStatus: vi.fn().mockReturnValue({
+        mergeAllowed: false,
+        reason: "changes_requested",
+        summary: "QA requested fixes.",
+        latestRun: {
+          id: "qa-run-pending-followup",
+          status: "completed",
+          outcome: "changes_requested",
+          fixInstructions: "Address the review findings.",
+          payload: {
+            continuationStatus: "failed",
+            continuationMode: "failed",
+            continued: false,
+          },
+        },
+        runsUsed: 1,
+        maxRuns: 2,
+      }),
+      reviewCompletedTask,
+    } as any;
+    deps.getDashboardSettings = vi.fn().mockReturnValue({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      agents: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents,
+        qualityAssurance: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+          enabled: true,
+        },
+      },
+    });
+
+    const runner = new CycleRunner(deps);
+    const task = {
+      id: "T1",
+      record_id: "task-1",
+      title: "Restarted task",
+      prompt: "Finish implementation",
+      depends_on: [],
+      is_independent: true,
+      status: "RUNNING",
+      merge_indicator: "QA_PENDING",
+      provider: "codex",
+      session_id: "cli-codex-session-1",
+    };
+
+    await (runner as any).reviewCompletedTasks(
+      [task],
+      new Map([["T1", "RUNNING"]]),
+      {
+        executionContext: {
+          project: { id: "project-1", name: "Project 1" } as any,
+          sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+          sprintNumber: 1,
+          repoPath: "/repo/project-1",
+          featureBranch: "feature/sprint-1",
+          defaultBranch: "main",
+        },
+        repoPath: "/repo/project-1",
+        sprintRunId: "run-1",
+      } as any,
+      deps.getDashboardSettings(),
+    );
+
+    expect(reviewCompletedTask).toHaveBeenCalledTimes(1);
+    expect(reviewCompletedTask).toHaveBeenCalledWith(expect.objectContaining({
+      task: expect.objectContaining({ id: "T1", status: "RUNNING" }),
+    }));
+    expect(deps.startTask).not.toHaveBeenCalled();
+  });
+
   describe("QA exhaustion policy", () => {
     const runExhaustedPolicy = async (
       exhaustionPolicy: "ESCALATE_TO_HUMAN" | "FAIL_TASK" | "FINISH_TASK",

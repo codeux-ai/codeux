@@ -101,17 +101,19 @@ export async function ensureDefaultCodeUxAssetsInstalled(
 }
 
 async function buildDefaultAssetTargetDirectorySignature(): Promise<string> {
-  const directories = [
+  const targetPaths = [
     getHomeCodeUxPath("agents"),
     getHomeCodeUxPath("container"),
     getHomeCodeUxPath("quicksprints", "templates"),
+    ...DEFAULT_AGENT_FILES.map((fileName) => getHomeCodeUxPath("agents", fileName)),
+    getHomeCodeUxPath("container", DEFAULT_CONTAINER_SETUP_FILE),
   ];
-  const stats = await Promise.all(directories.map(async (directory) => {
+  const stats = await Promise.all(targetPaths.map(async (targetPath) => {
     try {
-      const stat = await fs.stat(directory, { bigint: true });
-      return `${directory}:${stat.mtimeNs}:${stat.size}`;
+      const stat = await fs.stat(targetPath, { bigint: true });
+      return `${targetPath}:${stat.mtimeNs}:${stat.size}`;
     } catch {
-      return `${directory}:missing`;
+      return `${targetPath}:missing`;
     }
   }));
   return stats.join("\0");
