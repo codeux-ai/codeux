@@ -11,6 +11,7 @@ import {
   type RemoteIssueSummary,
   searchProjectIssues,
 } from "../../../../../dashboard/src/v2/lib/project-api";
+import { renderWithI18n } from "../../../render-with-i18n.js";
 
 expect.extend(matchers);
 
@@ -75,7 +76,7 @@ describe("SprintIssueImportModal", () => {
     const onImport = vi.fn();
     const user = userEvent.setup();
 
-    render(<SprintIssueImportModal project={project} onClose={vi.fn()} onImport={onImport} />);
+    renderWithI18n(<SprintIssueImportModal project={project} onClose={vi.fn()} onImport={onImport} />);
 
     const dialog = screen.getByRole("dialog", { name: /browse backlog and import sprint context/i });
     expect(dialog).toHaveAccessibleDescription(/search issues, select a dense batch/i);
@@ -189,7 +190,7 @@ describe("SprintIssueImportModal", () => {
       .mockResolvedValueOnce([]);
     const user = userEvent.setup();
 
-    render(<SprintIssueImportModal project={project} onClose={vi.fn()} onImport={vi.fn()} />);
+    renderWithI18n(<SprintIssueImportModal project={project} onClose={vi.fn()} onImport={vi.fn()} />);
 
     await screen.findByText("Fix CI");
     fireEvent.click(screen.getAllByRole("button", { name: /select all visible results/i })[0]);
@@ -223,7 +224,7 @@ describe("SprintIssueImportModal", () => {
     vi.mocked(searchProjectIssues).mockResolvedValue([issue]);
     const onImportSpecialTasks = vi.fn();
 
-    render(
+    renderWithI18n(
       <SprintIssueImportModal
         project={project}
         onClose={vi.fn()}
@@ -255,7 +256,7 @@ describe("SprintIssueImportModal", () => {
   it("uses the requested initial provider and default host while preserving repository inference", async () => {
     vi.mocked(searchProjectIssues).mockResolvedValue([]);
 
-    render(
+    renderWithI18n(
       <SprintIssueImportModal
         project={project}
         initialProvider="gitlab"

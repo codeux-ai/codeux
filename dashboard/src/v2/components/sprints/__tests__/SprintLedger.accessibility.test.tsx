@@ -10,6 +10,7 @@ import { SprintLedgerHeader } from "../SprintLedgerHeader.js";
 import { SprintLedgerBulkActions } from "../SprintLedgerBulkActions.js";
 import type { Sprint } from "../../../types.js";
 import type { CiStatusPresentation } from "../../../lib/ci-status-presentation.js";
+import { renderWithI18n } from "../../../../../../tests/dashboard/render-with-i18n.js";
 
 expect.extend(matchers);
 
@@ -67,7 +68,7 @@ const failedCiStatus: CiStatusPresentation = {
 
 describe("SprintLedger Accessibility", () => {
   it("renders an accessible table name/caption", () => {
-    const { getByRole } = render(
+    const { getByRole } = renderWithI18n(
       <SprintLedger
         sprints={[mockSprint]}
         listWindow={10}
@@ -100,7 +101,7 @@ describe("SprintLedger Accessibility", () => {
 
   it("supports action menu keyboard open/close", async () => {
     const user = userEvent.setup();
-    render(
+    renderWithI18n(
       <table>
         <tbody>
           <SprintLedgerRow
@@ -138,7 +139,7 @@ describe("SprintLedger Accessibility", () => {
 
   it("announces sorting state via aria-sort, sort buttons, and live text", async () => {
     const user = userEvent.setup();
-    render(
+    renderWithI18n(
       <SprintLedger
         sprints={[mockSprint]}
         listWindow={10}
@@ -180,7 +181,7 @@ describe("SprintLedger Accessibility", () => {
   });
 
   it("provides explicit names for row controls including the sprint name", () => {
-    const { getByRole, getAllByRole } = render(
+    const { getByRole, getAllByRole } = renderWithI18n(
       <table>
         <tbody>
           <SprintLedgerRow
@@ -207,12 +208,12 @@ describe("SprintLedger Accessibility", () => {
     expect(getAllByRole("link", { name: /Open tasks for sprint Frontend Onboarding/i })[0]).toBeInTheDocument();
     expect(getAllByRole("link", { name: /Open live session for sprint Frontend Onboarding/i })[0]).toBeInTheDocument();
     expect(getAllByRole("button", { name: /Open actions menu for sprint Frontend Onboarding/i })[0]).toBeInTheDocument();
-    expect(getAllByRole("button", { name: /Start Frontend Onboarding/i })[0]).toBeInTheDocument();
+    expect(getAllByRole("button", { name: /Start sprint Frontend Onboarding/i })[0]).toBeInTheDocument();
   });
 
   it("keeps a compact human-attention row discoverable without removing keyboard controls", async () => {
     const user = userEvent.setup();
-    const { container } = render(
+    const { container } = renderWithI18n(
       <table>
         <tbody>
           <SprintLedgerRow
@@ -259,7 +260,7 @@ describe("SprintLedger Accessibility", () => {
 
   it("keeps QA, CI, lifecycle, and human-attention states independently accessible", async () => {
     const user = userEvent.setup();
-    const { container } = render(
+    const { container } = renderWithI18n(
       <table>
         <tbody>
           <SprintLedgerRow
@@ -327,7 +328,7 @@ describe("SprintLedger Accessibility", () => {
 
   it("announces bulk selection count through the ledger live region", async () => {
     const user = userEvent.setup();
-    render(
+    renderWithI18n(
       <SprintLedger
         sprints={[mockSprint]}
         listWindow={10}
@@ -360,7 +361,7 @@ describe("SprintLedger Accessibility", () => {
   it("clears filters when the clear button is clicked", async () => {
     const user = userEvent.setup();
     const onFiltersChange = vi.fn();
-    render(
+    renderWithI18n(
       <SprintLedgerHeader
         sprintsCount={10}
         ledgerSprintsCount={5}
@@ -379,7 +380,7 @@ describe("SprintLedger Accessibility", () => {
   });
 
   it("disables unrelated controls properly based on pending states", () => {
-    const { getAllByRole } = render(
+    const { getAllByRole } = renderWithI18n(
       <table>
         <tbody>
           <SprintLedgerRow
@@ -400,14 +401,14 @@ describe("SprintLedger Accessibility", () => {
         </tbody>
       </table>
     );
-    const startBtn = getAllByRole("button", { name: /Start Frontend Onboarding/i })[0];
+    const startBtn = getAllByRole("button", { name: /Start sprint Frontend Onboarding/i })[0];
     expect(startBtn).not.toBeDisabled();
   });
 
   it("requests confirmation before bulk delete", async () => {
     const user = userEvent.setup();
     const onBulkDelete = vi.fn();
-    render(
+    renderWithI18n(
       <SprintLedger
         sprints={[mockSprint]}
         listWindow={10}
@@ -438,7 +439,7 @@ describe("SprintLedger Accessibility", () => {
     await vi.waitFor(() => expect(screen.getByText(/1 of 1 selected/i)).toBeInTheDocument());
 
     // Click bulk delete
-    const bulkDeleteBtns = screen.getAllByRole("button", { name: /Delete 1 selected sprints\. Permanent action\./i });
+    const bulkDeleteBtns = screen.getAllByRole("button", { name: /Delete 1 selected sprint\. Permanent action\./i });
     const bulkDeleteBtn = bulkDeleteBtns[0];
     await user.click(bulkDeleteBtn);
 
@@ -456,7 +457,7 @@ describe("SprintLedger Accessibility", () => {
   it("requests confirmation before a row delete and restores fallback focus on cancel", async () => {
     const user = userEvent.setup();
     const onDeleteSprint = vi.fn();
-    render(
+    renderWithI18n(
       <SprintLedger
         sprints={[mockSprint]}
         listWindow={10}
@@ -498,7 +499,7 @@ describe("SprintLedger Accessibility", () => {
   it("announces bulk action completion after pending state clears", async () => {
     const user = userEvent.setup();
     const onBulkStart = vi.fn();
-    const { rerender } = render(
+    const { rerender } = renderWithI18n(
       <SprintLedger
         sprints={[mockSprint]}
         listWindow={10}
@@ -523,7 +524,7 @@ describe("SprintLedger Accessibility", () => {
     );
 
     await user.click(screen.getAllByRole("button", { name: /Select sprint Frontend Onboarding/i })[0]);
-    await user.click(screen.getByRole("button", { name: /Start 1 selected sprints/i }));
+    await user.click(screen.getByRole("button", { name: /Start 1 selected sprint/i }));
     expect(onBulkStart).toHaveBeenCalledWith(["sprint-1"]);
 
     rerender(
@@ -549,7 +550,7 @@ describe("SprintLedger Accessibility", () => {
         onBulkShowcaseDisable={vi.fn()}
       />
     );
-    expect(screen.getByRole("button", { name: /Starting 1 selected sprints/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Starting 1 selected sprint/i })).toBeDisabled();
 
     rerender(
       <SprintLedger
@@ -579,7 +580,7 @@ describe("SprintLedger Accessibility", () => {
   });
 
   it("surfaces mark-completed pending state on the target row", () => {
-    render(
+    renderWithI18n(
       <table>
         <tbody>
           <SprintLedgerRow
@@ -606,7 +607,7 @@ describe("SprintLedger Accessibility", () => {
   });
 
   it("describes row controls disabled by pending delete", () => {
-    render(
+    renderWithI18n(
       <table>
         <tbody>
           <SprintLedgerRow
@@ -635,7 +636,7 @@ describe("SprintLedger Accessibility", () => {
   });
 
   it("reveals and collapses bulk actions based on selection count", () => {
-    const { rerender } = render(
+    const { rerender } = renderWithI18n(
       <SprintLedgerBulkActions
         selectedCount={0}
         totalCount={10}
@@ -663,7 +664,7 @@ describe("SprintLedger Accessibility", () => {
   });
 
   it("has mobile labels mapped correctly via TableCell mobileLabel", () => {
-    render(
+    renderWithI18n(
       <table>
         <tbody>
           <SprintLedgerRow
@@ -707,7 +708,7 @@ describe("SprintLedger Accessibility", () => {
 
 
   it("announces filter results politely", () => {
-    render(
+    renderWithI18n(
       <SprintLedger
         sprints={[mockSprint]}
         listWindow={10}
@@ -732,4 +733,63 @@ describe("SprintLedger Accessibility", () => {
     );
     const liveRegion = screen.getByText(/Sorted by Created descending\. Showing 1 of 1 sprint\. No sprints selected\./i).closest("div[aria-live]");
     expect(liveRegion).toBeInTheDocument();
+  });
+
+  it("supports German filtering, selection, bulk actions, keyboard menus, mobile labels, and live updates", async () => {
+    const user = userEvent.setup();
+    const onBulkStart = vi.fn();
+    const onOpenRowMenu = vi.fn();
+    const longName = "Frontend Onboarding mit einem sehr langen unveränderten Sprintnamen für mobile Ansichten";
+    const runningSprint = {
+      ...mockSprint,
+      name: longName,
+      goal: "Keep issue OPS-17 and branch feature/original-content verbatim",
+    };
+    const commonProps = {
+      listWindow: 10 as const,
+      onListWindowChange: vi.fn(),
+      activeRunsBySprintId: new Map<string, { id: string; status: string }>(),
+      pauseResumeRunsBySprintId: new Map<string, { id: string; status: string }>(),
+      interventionBySprintId: new Map(),
+      pendingActionIds: new Set<string>(),
+      onToggleShowcase: vi.fn(),
+      onSprintToggle: vi.fn(),
+      onSprintPauseResume: vi.fn(),
+      onOpenRowMenu,
+      onBulkStart,
+      onBulkDelete: vi.fn(),
+      onEditSprint: vi.fn(),
+      onExportSprint: vi.fn(),
+      onOverridesSprint: vi.fn(),
+      onMarkCompletedSprint: vi.fn(),
+      onDeleteSprint: vi.fn(),
+      onBulkShowcaseEnable: vi.fn(),
+      onBulkShowcaseDisable: vi.fn(),
+    };
+    const view = renderWithI18n(
+      <SprintLedger initialQuery="läuft" sprints={[runningSprint, { ...mockSprint, id: "idle-2", status: "idle", name: "Hidden idle record" }]} {...commonProps} />,
+      {},
+      "de",
+    );
+
+    expect(screen.getByText(longName)).toBeInTheDocument();
+    expect(screen.getByText("Keep issue OPS-17 and branch feature/original-content verbatim")).toBeInTheDocument();
+    expect(screen.queryByText("Hidden idle record")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Auswählen").some((element) => element.classList.contains("lg:hidden"))).toBe(true);
+
+    const menuButton = screen.getByRole("button", { name: new RegExp(`Aktionsmenü für Sprint ${longName} öffnen`) });
+    menuButton.focus();
+    await user.keyboard("{Enter}");
+    expect(onOpenRowMenu).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: `Sprint ${longName} auswählen` }));
+    expect(await screen.findByText("1 von 1 ausgewählt")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /1 ausgewählten Sprint starten/i }));
+    expect(onBulkStart).toHaveBeenCalledWith([runningSprint.id]);
+
+    view.rerender(
+      <SprintLedger initialQuery="läuft" sprints={[{ ...runningSprint, status: "paused" }]} {...commonProps} />,
+    );
+    await waitFor(() => expect(screen.queryByText(longName)).not.toBeInTheDocument());
+    expect(screen.getByText("Keine passenden Sprints")).toBeInTheDocument();
   });

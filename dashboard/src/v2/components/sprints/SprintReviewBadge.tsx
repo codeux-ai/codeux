@@ -12,6 +12,8 @@ import {
 import type { LucideIcon } from "lucide-preact";
 import type { SprintReviewSummary } from "../../types.js";
 import { calculatePosition, type Position } from "../../lib/positioning/index.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import { sprintsMessages } from "../../i18n/messages/sprints.js";
 
 interface SprintReviewBadgeProps {
   summary: SprintReviewSummary;
@@ -79,23 +81,11 @@ function getReviewPresentation(summary: SprintReviewSummary): ReviewPresentation
   return REVIEW_PRESENTATIONS.passed;
 }
 
-function formatReviewDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "numeric",
-  }).format(date);
-}
-
 const FollowUpTaskDisclosure: FunctionComponent<{
   task: NonNullable<SprintReviewSummary["followUpTasks"]>[number];
   index: number;
 }> = ({ task, index }) => {
+  const { formatNumber, translate } = useDashboardI18n();
   const [isExpanded, setIsExpanded] = useState(false);
   const contentId = useId();
 
@@ -108,7 +98,7 @@ const FollowUpTaskDisclosure: FunctionComponent<{
         onClick={() => setIsExpanded((current) => !current)}
         className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-xs font-bold text-slate-700 outline-none transition-colors hover:bg-black/[0.025] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset motion-reduce:transition-none dark:text-slate-200 dark:hover:bg-white/[0.025]"
       >
-        <span>Follow-up task {index + 1}</span>
+        <span>{translate(sprintsMessages, "followUpTask", { number: formatNumber(index + 1) })}</span>
         <ChevronRight
           aria-hidden={true}
           className={`h-3.5 w-3.5 shrink-0 transition-transform motion-reduce:transition-none ${isExpanded ? "rotate-90" : ""}`}
@@ -116,15 +106,15 @@ const FollowUpTaskDisclosure: FunctionComponent<{
       </button>
       {isExpanded && (
         <dl id={contentId} className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 border-t border-black/[0.06] px-3 py-3 text-xs dark:border-white/[0.06]">
-          <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">Title</dt>
+          <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">{translate(sprintsMessages, "title")}</dt>
           <dd className="break-words font-semibold text-slate-700 dark:text-slate-200">{task.title}</dd>
-          <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">Description</dt>
-          <dd className="whitespace-pre-wrap break-words text-slate-600 dark:text-slate-300">{task.description || "Not provided"}</dd>
-          <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">Priority</dt>
+          <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">{translate(sprintsMessages, "description")}</dt>
+          <dd className="whitespace-pre-wrap break-words text-slate-600 dark:text-slate-300">{task.description || translate(sprintsMessages, "notProvided")}</dd>
+          <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">{translate(sprintsMessages, "priority")}</dt>
           <dd className="capitalize text-slate-600 dark:text-slate-300">{task.priority}</dd>
-          <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">Dependencies</dt>
-          <dd className="break-words text-slate-600 dark:text-slate-300">{task.dependsOnTaskKeys.length > 0 ? task.dependsOnTaskKeys.join(", ") : "None"}</dd>
-          <dt className="font-bold uppercase tracking-[0.1em] text-slate-400 sm:col-span-2">Prompt</dt>
+          <dt className="font-bold uppercase tracking-[0.1em] text-slate-400">{translate(sprintsMessages, "dependencies")}</dt>
+          <dd className="break-words text-slate-600 dark:text-slate-300">{task.dependsOnTaskKeys.length > 0 ? task.dependsOnTaskKeys.join(", ") : translate(sprintsMessages, "none")}</dd>
+          <dt className="font-bold uppercase tracking-[0.1em] text-slate-400 sm:col-span-2">{translate(sprintsMessages, "prompt")}</dt>
           <dd className="col-span-2 max-h-64 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-white/70 p-2 font-mono text-[11px] leading-relaxed text-slate-700 dark:bg-void-900/50 dark:text-slate-300">{task.promptMarkdown}</dd>
         </dl>
       )}
@@ -138,6 +128,7 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
   align = "center",
   showCompactLabel = false,
 }) => {
+  const { formatDate, formatNumber, translate } = useDashboardI18n();
   const overlayId = useId();
   const headingId = useId();
   const stateDescriptionId = useId();
@@ -152,9 +143,15 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
   const presentation = getReviewPresentation(summary);
   const StatusIcon = presentation.icon;
   const findings = summary.findings ?? [];
-  const reviewHeading = presentation.state === "passed" && summary.outcome?.toLowerCase() === "approved"
-    ? "QA Review Complete"
-    : presentation.heading;
+  const reviewHeading = translate(sprintsMessages, presentation.state === "passed" && summary.outcome?.toLowerCase() === "approved"
+    ? "qaReviewComplete"
+    : presentation.state === "passed"
+      ? "qaReviewPassed"
+      : presentation.state === "changes_requested"
+        ? "qaChangesRequested"
+        : "qaProviderFailed");
+  const badgeLabel = translate(sprintsMessages, presentation.state === "passed" ? "qaPassed" : presentation.state === "changes_requested" ? "qaChangesRequestedBadge" : "qaReviewFailed");
+  const compactLabel = translate(sprintsMessages, presentation.state === "passed" ? "qaCompact" : presentation.state === "changes_requested" ? "qaEdits" : "qaFailed");
   const preferredPosition: Position = align === "right" ? "left" : "right";
   const hasDetails = Boolean(
     summary.summary
@@ -260,7 +257,7 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
       <div className="relative inline-flex">
         <div
           role="status"
-          aria-label="QA review running"
+          aria-label={translate(sprintsMessages, "qaReviewRunning")}
           className={`inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/8 text-signal-600 shadow-[0_10px_24px_rgba(0,224,160,0.12)] motion-safe:animate-pulse motion-reduce:ring-1 motion-reduce:ring-signal-500/30 ${
             compact ? "px-2.5 py-1 text-[10px]" : "px-3 py-1.5 text-[10px]"
           } font-bold uppercase tracking-[0.14em] dark:text-signal-300`}
@@ -270,7 +267,7 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
             className={`motion-safe:animate-spin motion-reduce:animate-none ${compact ? "h-3 w-3" : "h-3.5 w-3.5"}`}
             strokeWidth={2.5}
           />
-          {(!compact || showCompactLabel) && <span>{compact ? "QA" : "Reviewing..."}</span>}
+          {(!compact || showCompactLabel) && <span>{compact ? translate(sprintsMessages, "qaCompact") : translate(sprintsMessages, "reviewing")}</span>}
         </div>
       </div>
     );
@@ -300,12 +297,12 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
       }}
     >
       <span id={stateDescriptionId} className="sr-only">
-        {presentation.badgeLabel}. {isOpen ? "Details are open." : "Activate to show review details."}
+        {badgeLabel}. {translate(sprintsMessages, isOpen ? "detailsOpen" : "activateReviewDetails")}
       </span>
       <button
         ref={triggerRef}
         type="button"
-        aria-label="QA review details"
+        aria-label={translate(sprintsMessages, "qaReviewDetails")}
         aria-describedby={stateDescriptionId}
         aria-expanded={isOpen}
         aria-controls={overlayId}
@@ -329,7 +326,7 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
           strokeWidth={2.5}
         />
         {(!compact || showCompactLabel) && (
-          <span className="min-w-0 truncate">{compact ? presentation.compactLabel : presentation.badgeLabel}</span>
+          <span className="min-w-0 truncate">{compact ? compactLabel : badgeLabel}</span>
         )}
       </button>
 
@@ -364,21 +361,21 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
                 </h2>
                 {summary.outcome && (
                   <span className={`rounded border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${presentation.tone}`}>
-                    Outcome: {summary.outcome.replaceAll("_", " ")}
+                    {translate(sprintsMessages, "outcome")}: {summary.outcome.replaceAll("_", " ")}
                   </span>
                 )}
               </div>
 
-              <section aria-label="Review summary">
-                <h3 className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Summary</h3>
+              <section aria-label={translate(sprintsMessages, "reviewSummary")}>
+                <h3 className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(sprintsMessages, "summary")}</h3>
                 <p className="mt-1 whitespace-pre-wrap break-words text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-300">
-                  {summary.summary || (hasDetails ? "No review summary was provided." : "No additional review details were provided.")}
+                  {summary.summary || translate(sprintsMessages, hasDetails ? "noReviewSummary" : "noReviewDetails")}
                 </p>
               </section>
 
               {summary.fixInstructions && (
-                <section aria-label="Fix instructions">
-                  <h3 className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Fix instructions</h3>
+                <section aria-label={translate(sprintsMessages, "fixInstructions")}>
+                  <h3 className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(sprintsMessages, "fixInstructions")}</h3>
                   <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-relaxed text-slate-600 dark:text-slate-300">
                     {summary.fixInstructions}
                   </p>
@@ -387,7 +384,7 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
 
               {summary.targetTaskKey && (
                 <div className="flex flex-wrap items-baseline gap-2 text-xs">
-                  <span className="font-bold uppercase tracking-[0.12em] text-slate-400">Target task</span>
+                  <span className="font-bold uppercase tracking-[0.12em] text-slate-400">{translate(sprintsMessages, "targetTask")}</span>
                   <span className="break-all font-mono font-semibold text-slate-700 dark:text-slate-200">{summary.targetTaskKey}</span>
                 </div>
               )}
@@ -396,14 +393,14 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
                 <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1 border-t border-black/[0.08] pt-3 text-[11px] dark:border-white/[0.08]">
                   {summary.reviewer && (
                     <>
-                      <dt className="font-bold uppercase tracking-[0.12em] text-slate-400">Reviewer</dt>
-                      <dd className="break-words text-slate-600 dark:text-slate-300">Reviewed by {summary.reviewer}</dd>
+                      <dt className="font-bold uppercase tracking-[0.12em] text-slate-400">{translate(sprintsMessages, "reviewer")}</dt>
+                      <dd className="break-words text-slate-600 dark:text-slate-300">{translate(sprintsMessages, "reviewedBy", { reviewer: summary.reviewer })}</dd>
                     </>
                   )}
                   {summary.finishedAt && (
                     <>
-                      <dt className="font-bold uppercase tracking-[0.12em] text-slate-400">Reviewed</dt>
-                      <dd className="text-slate-600 dark:text-slate-300">{formatReviewDate(summary.finishedAt)}</dd>
+                      <dt className="font-bold uppercase tracking-[0.12em] text-slate-400">{translate(sprintsMessages, "reviewed")}</dt>
+                      <dd className="text-slate-600 dark:text-slate-300">{Number.isNaN(new Date(summary.finishedAt).getTime()) ? summary.finishedAt : formatDate(new Date(summary.finishedAt), { month: "short", day: "numeric", hour: "numeric", minute: "numeric" })}</dd>
                     </>
                   )}
                 </dl>
@@ -411,10 +408,10 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
             </div>
 
             {findings.length > 0 && (
-              <section className="flex min-h-0 min-w-0 flex-col gap-2 border-t border-black/[0.08] pt-4 dark:border-white/[0.08] sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0" aria-label="Review findings">
+              <section className="flex min-h-0 min-w-0 flex-col gap-2 border-t border-black/[0.08] pt-4 dark:border-white/[0.08] sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0" aria-label={translate(sprintsMessages, "reviewFindings")}>
                 <h3 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300">
                   <ListChecks aria-hidden={true} className={`h-3.5 w-3.5 ${presentation.iconTone}`} />
-                  Findings ({findings.length})
+                  {translate(sprintsMessages, "findingsCount", { count: formatNumber(findings.length) })}
                 </h3>
                 <ul className="flex max-h-64 flex-col gap-1 overflow-y-auto pr-2 dropdown-scrollbar">
                   {findings.map((finding, index) => (
@@ -428,9 +425,9 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
             )}
 
             {summary.followUpTasks && summary.followUpTasks.length > 0 && (
-              <section className="flex min-w-0 flex-col gap-2 border-t border-black/[0.08] pt-4 dark:border-white/[0.08] sm:col-span-2" aria-label="Follow-up tasks">
+              <section className="flex min-w-0 flex-col gap-2 border-t border-black/[0.08] pt-4 dark:border-white/[0.08] sm:col-span-2" aria-label={translate(sprintsMessages, "followUpTasks")}>
                 <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300">
-                  Follow-up tasks ({summary.followUpTasks.length})
+                  {translate(sprintsMessages, "followUpTasksCount", { count: formatNumber(summary.followUpTasks.length) })}
                 </h3>
                 {summary.followUpTasks.map((task, index) => (
                   <FollowUpTaskDisclosure key={`${index}-${task.title}`} task={task} index={index} />

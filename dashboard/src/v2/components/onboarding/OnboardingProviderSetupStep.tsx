@@ -5,6 +5,7 @@ import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { ProviderInstanceCard } from "../settings/ProviderInstanceCard.js";
 import { sortProviderConfigEntries } from "../../lib/settings-view-models.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useOnboardingMessages } from "../../i18n/messages/onboarding.js";
 
 const providerLabels: Record<ProviderId, string> = {
   jules: "Jules",
@@ -15,17 +16,6 @@ const providerLabels: Record<ProviderId, string> = {
   opencode: "OpenCode",
   antigravity: "Antigravity",
   "mockup-cli": "Mockup CLI",
-};
-
-const providerDescriptions: Record<ProviderId, string> = {
-  jules: "Google Jules API service for agent session and workspace orchestration.",
-  gemini: "Gemini CLI with local OAuth auth-copy or API-key based execution.",
-  codex: "Codex CLI for OpenAI-powered local container execution.",
-  "claude-code": "Claude Code CLI with local auth-copy or provider API key.",
-  "qwen-code": "Qwen Code CLI with OAuth, Alibaba Coding Plan, or custom model provider config.",
-  opencode: "OpenCode CLI with local auth, provider keys, or OpenAI-compatible endpoints.",
-  antigravity: "Antigravity CLI (agy) for Google-powered local container execution.",
-  "mockup-cli": "Internal test-only mock provider.",
 };
 
 const getProviderWatermark = (providerId: ProviderId): string => (
@@ -60,12 +50,18 @@ export const OnboardingProviderSetupStep: FunctionComponent<OnboardingProviderSe
   configureProjectProvider,
 }) => {
   const tokens = useInteractionTokens();
+  const { t } = useOnboardingMessages();
+  const providerDescriptions: Record<ProviderId, string> = {
+    jules: t("providerDescriptionJules"), gemini: t("providerDescriptionGemini"), codex: t("providerDescriptionCodex"),
+    "claude-code": t("providerDescriptionClaude"), "qwen-code": t("providerDescriptionQwen"), opencode: t("providerDescriptionOpenCode"),
+    antigravity: t("providerDescriptionAntigravity"), "mockup-cli": t("providerDescriptionMock"),
+  };
 
   return (
     <div className="space-y-4">
       {selectedProviderTypes.length === 0 ? (
         <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/75 p-6 text-sm text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04]">
-          No providers selected. You can add provider credentials later in Settings.
+          {t("noProvidersSelected")}
         </div>
       ) : (
         <div className="space-y-6">
@@ -85,19 +81,19 @@ export const OnboardingProviderSetupStep: FunctionComponent<OnboardingProviderSe
                     <div className="min-w-0">
                       <div className="text-base font-black text-slate-900 dark:text-white">{providerLabels[providerId]}</div>
                       <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        {readinessStatus?.detectedFiles.length ? `Detected: ${readinessStatus.detectedFiles.join(", ")}` : providerDescriptions[providerId]}
+                        {readinessStatus?.detectedFiles.length ? t("detectedFiles", { files: readinessStatus.detectedFiles.join(", ") }) : providerDescriptions[providerId]}
                       </div>
                     </div>
                   </div>
                   <button
                     type="button"
-                    aria-label={`Add ${providerLabels[providerId]} provider instance`}
+                    aria-label={t("addProviderInstance", { provider: providerLabels[providerId] })}
                     onClick={() => addProviderInstance(providerId)}
                     className="inline-flex items-center gap-2 rounded-2xl border border-signal-500/20 bg-signal-500/10 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-signal-700 hover:bg-signal-500/15 dark:text-signal-200"
                     style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    <span>Add instance</span>
+                    <span>{t("addInstance")}</span>
                   </button>
                 </div>
                 <div className="relative z-10 mt-4 space-y-3">
