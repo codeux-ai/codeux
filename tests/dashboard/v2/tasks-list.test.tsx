@@ -1,10 +1,10 @@
 import * as useReducedMotionModule from "../../../dashboard/src/v2/hooks/use-reduced-motion.js";
 /** @vitest-environment happy-dom */
-import { h, Fragment } from "preact";
+import { h, Fragment, type ComponentChildren } from "preact";
 /** @jsx h */
 /** @jsxFrag Fragment */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, cleanup, fireEvent, act } from "@testing-library/preact";
+import { render as testingRender, screen, cleanup, fireEvent, act } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
 
@@ -13,6 +13,19 @@ import { TaskBoardSprintSelector } from "../../../dashboard/src/v2/components/ta
 import { ProjectDataProvider } from "../../../dashboard/src/v2/context/project-data.js";
 import gsap from "gsap";
 import * as dashboardApi from "../../../dashboard/src/lib/api/dashboard-api.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
+import type { DashboardLocale } from "../../../dashboard/src/v2/i18n/locales.js";
+
+const render = (ui: ComponentChildren, locale: DashboardLocale = "en") => {
+    const wrap = (children: ComponentChildren) => (
+        <DashboardI18nProvider initialLocale={locale} storage={null}>{children}</DashboardI18nProvider>
+    );
+    const result = testingRender(wrap(ui));
+    return {
+        ...result,
+        rerender: (nextUi: ComponentChildren) => result.rerender(wrap(nextUi)),
+    };
+};
 
 vi.spyOn(useReducedMotionModule, 'useReducedMotion').mockReturnValue(false);
 
@@ -325,6 +338,27 @@ const baseProps: any = {
         const progress = screen.getByRole("progressbar", { name: /Sprint One progress/i });
         expect(progress).toHaveAttribute("aria-valuenow", "7.5");
         expect(progress.firstElementChild).toHaveStyle({ width: "7.5%" });
+    });
+
+    it("localizes German filters, task state, actions, counts, and live regions", () => {
+        render(<ProjectDataProvider initialData={null as any}><TasksList pageData={pageData} /></ProjectDataProvider>, "de");
+
+        expect(screen.getByRole("heading", { name: "Aktive Datenströme" })).toBeInTheDocument();
+        expect(screen.getByRole("tab", { name: "Alle Aufgaben" })).toHaveAttribute("aria-selected", "true");
+        expect(screen.getByText("in Bearbeitung")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /Aufgabe task-1 Stoppen: Test Task/i })).toBeInTheDocument();
+        expect(screen.getByRole("region", { name: /Aktiver Datenstrom Sprint One. Laufend. Zu 7,5\s?% abgeschlossen./i })).toBeInTheDocument();
+        expect(screen.getByText("1 Aufgabe")).toBeInTheDocument();
+    });
+
+    it("announces German loading and empty filtered states", async () => {
+        const loadingView = render(<ProjectDataProvider initialData={null as any}><TasksList pageData={{ ...pageData, tasks: [], isLoading: true }} /></ProjectDataProvider>, "de");
+        expect(screen.getByRole("status", { name: "Aufgaben in aktiven Datenströmen werden geladen" })).toHaveAttribute("aria-busy", "true");
+        loadingView.unmount();
+
+        render(<ProjectDataProvider initialData={null as any}><TasksList pageData={pageData} /></ProjectDataProvider>, "de");
+        await act(async () => fireEvent.click(screen.getByRole("tab", { name: "Abgeschlossen" })));
+        expect(screen.getByRole("status", { name: "Keine aktiven Datenströme" })).toHaveTextContent("In aktiven Sprints entsprechen derzeit keine Aufgaben dem ausgewählten Filter.");
     });
 
     it("keeps the running sprint selector dot visible without raw pulse animation classes", () => {

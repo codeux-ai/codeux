@@ -34,3 +34,9 @@ const { translate, translatePlural, formatNumber } = useDashboardI18n();
 English and German must declare exactly the same top-level keys. Interpolation treats replacement values as literal text, plural messages require an `other` form, and locale-aware formatting delegates to the browser's native `Intl` implementation.
 
 Keep each catalog with its owning feature and import it only where the feature is loaded. Translate dashboard-authored interface copy only. Never translate provider output, API responses, stored instructions, project data, runtime diagnostics, or user-authored content.
+
+## Overview route
+
+The Overview route owns `messages/overview.ts`. Its headers, landmarks, metric and telemetry labels, source and task states, controls, plural counts, live-region announcements, and loading/empty/error fallbacks support English and German. Locale-bound formatters present counts, percentages, dates, costs, durations, and runtime times without changing timestamp interpretation, data ordering, polling, or realtime behavior.
+
+Live project, sprint, task, branch, repository, provider, and model values remain verbatim. Server errors, attention descriptions, and runtime-authored execution text are also outside the translation boundary.

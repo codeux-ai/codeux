@@ -51,6 +51,12 @@ The initial application bundle translates only root-owned shell copy: the skip l
 
 Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged.
 
+## Overview route coverage
+
+The Overview route owns `messages/overview.ts`. Its page header, landmarks, metric deck, source grid, active-stream list, controls, telemetry rail, live-region announcements, and empty/loading/error fallbacks switch together with the active locale. Overview presentation helpers receive locale-bound formatters for token totals, USD cost, durations, counts, percentages, sprint dates, and runtime times; they do not change timestamp parsing, list ordering, status precedence, polling, or realtime subscriptions.
+
+Project, sprint, task, branch, repository, provider, and model values remain verbatim. The same boundary applies to server errors, attention titles and markdown, and runtime-authored execution text. Only dashboard-generated fallback labels and status summaries are translated.
+
 ## Verification
 
 Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization.

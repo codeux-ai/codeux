@@ -1,5 +1,7 @@
 import type { Sprint, Task } from "../types.js";
 
+export type OverviewTaskFilter = "all" | "running" | "queued" | "completed";
+
 /**
  * Derives active sprint IDs from a list of sprints.
  * Sprints are considered active if their status is "active".
@@ -16,4 +18,16 @@ export function filterTasksToActiveSprints(tasks: Task[], activeSprintIds: Set<s
     return [];
   }
   return tasks.filter(task => activeSprintIds.has(task.sprintId));
+}
+
+export function filterOverviewTasks(tasks: Task[], filter: OverviewTaskFilter): Task[] {
+  if (filter === "all") {
+    return tasks;
+  }
+  const status = filter === "running"
+    ? "in_progress"
+    : filter === "queued"
+      ? "pending"
+      : "completed";
+  return tasks.filter((task) => task.status === status);
 }

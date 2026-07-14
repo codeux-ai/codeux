@@ -10,7 +10,44 @@ export interface SprintControlsProps {
   isPauseResumePending: boolean;
   onStartStop: () => void;
   onPauseResume: () => void;
+  labels?: SprintControlsLabels;
 }
+
+export interface SprintControlsLabels {
+  pause: string;
+  resume: string;
+  start: string;
+  stop: string;
+  pending: (action: string) => string;
+  pendingLabel: (action: string, sprintName: string) => string;
+  actionLabel: (action: string, sprintName: string) => string;
+  waitForAction: string;
+  waitForActionTitle: string;
+  pauseUnavailable: string;
+  mustRunToPause: string;
+  resumeExecution: string;
+  pauseExecution: string;
+  stopExecution: string;
+  startExecution: string;
+}
+
+const DEFAULT_LABELS: SprintControlsLabels = {
+  pause: "Pause",
+  resume: "Resume",
+  start: "Start",
+  stop: "Stop",
+  pending: (action) => `${action} pending`,
+  pendingLabel: (action, sprintName) => `${action} ${sprintName} is pending`,
+  actionLabel: (action, sprintName) => `${action} ${sprintName}`,
+  waitForAction: "Wait for the current sprint action to finish.",
+  waitForActionTitle: "Wait for the current sprint action to finish",
+  pauseUnavailable: "Pause is available after the sprint starts.",
+  mustRunToPause: "Sprint must be running to pause",
+  resumeExecution: "Resume sprint execution",
+  pauseExecution: "Pause sprint execution",
+  stopExecution: "Stop sprint execution",
+  startExecution: "Start sprint execution",
+};
 
 export const SprintControls: FunctionComponent<SprintControlsProps> = ({
   isActive,
@@ -20,11 +57,12 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
   onStartStop,
   onPauseResume,
   sprintName = "sprint",
+  labels = DEFAULT_LABELS,
 }) => {
   const interactionTokens = useInteractionTokens();
   const canPauseResume = isActive || isPaused;
-  const pauseResumeLabel = isPaused ? "Resume" : "Pause";
-  const startStopLabel = isActive ? "Stop" : "Start";
+  const pauseResumeLabel = isPaused ? labels.resume : labels.pause;
+  const startStopLabel = isActive ? labels.stop : labels.start;
   const isAnyPending = isPauseResumePending || isStartStopPending;
   const controlFeedbackStyle = {
     transitionDuration: interactionTokens.controlFeedback.duration,
@@ -35,14 +73,14 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
     transitionTimingFunction: interactionTokens.asyncFeedback.ease,
   };
   const busyLabel = isPauseResumePending
-    ? `${pauseResumeLabel} pending`
+    ? labels.pending(pauseResumeLabel)
     : isStartStopPending
-      ? `${startStopLabel} pending`
+      ? labels.pending(startStopLabel)
       : null;
   const disabledReason = isAnyPending
-    ? "Wait for the current sprint action to finish."
+    ? labels.waitForAction
     : !canPauseResume
-      ? "Pause is available after the sprint starts."
+      ? labels.pauseUnavailable
       : null;
   const reasonId = `sprint-controls-${sprintName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-reason`;
   const handlePauseResume = () => {
@@ -65,22 +103,22 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
         onClick={handlePauseResume}
         aria-label={
           isPauseResumePending
-            ? `${pauseResumeLabel} ${sprintName} is pending`
+            ? labels.pendingLabel(pauseResumeLabel, sprintName)
             : isPaused
-              ? `Resume ${sprintName}`
-              : `Pause ${sprintName}`
+              ? labels.actionLabel(labels.resume, sprintName)
+              : labels.actionLabel(labels.pause, sprintName)
         }
         aria-busy={isPauseResumePending ? "true" : undefined}
         aria-describedby={disabledReason ? reasonId : undefined}
         disabled={!canPauseResume || isAnyPending}
         title={
           isPauseResumePending || isStartStopPending
-            ? "Wait for the current sprint action to finish"
+            ? labels.waitForActionTitle
             : !canPauseResume
-              ? "Sprint must be running to pause"
+              ? labels.mustRunToPause
               : isPaused
-                ? "Resume sprint execution"
-                : "Pause sprint execution"
+                ? labels.resumeExecution
+                : labels.pauseExecution
         }
         className={`inline-flex min-h-8 min-w-[6.75rem] flex-1 flex-nowrap items-center justify-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-bold leading-tight no-underline decoration-transparent transition-colors hover:no-underline focus:no-underline focus-visible:ring-2 focus-visible:ring-signal-500/30 sm:flex-none ${
           isPaused
@@ -106,20 +144,20 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
         onClick={handleStartStop}
         aria-label={
           isStartStopPending
-            ? `${startStopLabel} ${sprintName} is pending`
+            ? labels.pendingLabel(startStopLabel, sprintName)
             : isActive
-              ? `Stop ${sprintName}`
-              : `Start ${sprintName}`
+              ? labels.actionLabel(labels.stop, sprintName)
+              : labels.actionLabel(labels.start, sprintName)
         }
         aria-busy={isStartStopPending ? "true" : undefined}
         aria-describedby={disabledReason ? reasonId : undefined}
         disabled={isAnyPending}
         title={
           isStartStopPending || isPauseResumePending
-            ? "Wait for the current sprint action to finish"
+            ? labels.waitForActionTitle
             : isActive
-              ? "Stop sprint execution"
-              : "Start sprint execution"
+              ? labels.stopExecution
+              : labels.startExecution
         }
         className={`inline-flex min-h-8 min-w-[6.75rem] flex-1 flex-nowrap items-center justify-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-bold leading-tight no-underline decoration-transparent transition-colors hover:no-underline focus:no-underline focus-visible:ring-2 focus-visible:ring-signal-500/30 sm:flex-none ${
           isActive
@@ -145,7 +183,7 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
         aria-live="polite"
         className={busyLabel ? "basis-full text-left text-[11px] font-bold leading-4 text-signal-600 dark:text-signal-300" : "sr-only"}
       >
-        {busyLabel ? `${busyLabel}. Wait for the current sprint action to finish.` : disabledReason ?? ""}
+        {busyLabel ? `${busyLabel}. ${labels.waitForAction}` : disabledReason ?? ""}
       </span>
     </>
   );
