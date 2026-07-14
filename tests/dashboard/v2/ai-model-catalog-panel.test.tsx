@@ -427,6 +427,14 @@ describe("AIModelCatalogPanel", () => {
     expect(screen.getByText("Ausgabe aus")).toBeInTheDocument();
     expect(screen.getAllByText("German (Germany)").length).toBeGreaterThan(0);
     expect(speechApi.downloadSpeechModel).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Kompatible Modelle vergleichen" }));
+    const catalog = screen.getByRole("region", { name: "Modellkatalog" });
+    expect(within(catalog).getByRole("combobox", { name: "Sprachmodelle nach Sprache filtern" })).toHaveValue("de-DE");
+    expect(within(catalog).getByText("Piper German MLS Medium")).toBeInTheDocument();
+    expect(within(catalog).queryByText("Kokoro 82M v1.0 Q8")).not.toBeInTheDocument();
+    expect(within(catalog).getByRole("option", { name: "German (Germany)" })).toHaveValue("de-DE");
+    expect(speechApi.downloadSpeechModel).not.toHaveBeenCalled();
   });
 
   it("preserves provider diagnostics when the catalog request fails", async () => {

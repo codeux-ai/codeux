@@ -1,16 +1,21 @@
 /** @vitest-environment happy-dom */
 /** @jsx h */
-import { h } from "preact";
+import { h, type ComponentChildren } from "preact";
 // @ts-ignore
 globalThis.React = { createElement: h };
-import { cleanup, render, screen, waitFor } from "@testing-library/preact";
+import { cleanup, render as renderTestingLibrary, screen, waitFor } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModelCard } from "../ModelCard.js";
 import type { EmbeddingModelWithStatus } from "../../../lib/memory-api.js";
+import { DashboardI18nProvider } from "../../../i18n/context.js";
 
 expect.extend(matchers);
+
+const render = (ui: ComponentChildren) => renderTestingLibrary(
+  <DashboardI18nProvider initialLocale="en" storage={null}>{ui}</DashboardI18nProvider>,
+);
 
 afterEach(() => {
   cleanup();
