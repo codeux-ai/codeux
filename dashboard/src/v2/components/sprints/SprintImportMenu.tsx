@@ -4,6 +4,8 @@ import { createPortal } from "preact/compat";
 import { useCallback, useState, useRef, useEffect, useLayoutEffect } from "preact/hooks";
 import { Boxes, CheckSquare, Download, FileText, Github, Gitlab, Layers, ListTodo, Palette, Shapes } from "lucide-preact";
 import { JiraIcon } from "../icons/JiraIcon.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import { sprintsMessages } from "../../i18n/messages/sprints.js";
 
 interface SprintImportMenuProps {
   disabled?: boolean;
@@ -34,6 +36,7 @@ export const SprintImportMenu = ({
   onImportFigma,
   onImportMural,
 }: SprintImportMenuProps) => {
+  const { translate } = useDashboardI18n();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -135,7 +138,7 @@ export const SprintImportMenu = ({
         className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-black/[0.06] bg-white/72 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-white sm:w-auto sm:px-4"
       >
         <Download className="h-3.5 w-3.5" strokeWidth={2.2} />
-        Import
+        {translate(sprintsMessages, "import")}
       </button>
 
       {isOpen && typeof document !== "undefined" && createPortal(
@@ -147,7 +150,7 @@ export const SprintImportMenu = ({
           style={{ top: menuPosition.top, left: menuPosition.left }}
         >
         <div className="flex flex-col gap-1">
-          <MenuSectionLabel label="Sprint sources" />
+          <MenuSectionLabel label={translate(sprintsMessages, "sprintSources")} />
           <button
             type="button"
             role="menuitem"
@@ -165,12 +168,12 @@ export const SprintImportMenu = ({
                 Markdown
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                Structured sprint and task bundle
+                {translate(sprintsMessages, "structuredSprintBundle")}
               </span>
             </div>
           </button>
 
-          <MenuSectionLabel label="Issue and work-item imports" />
+          <MenuSectionLabel label={translate(sprintsMessages, "issueWorkItemImports")} />
 
           <button
             type="button"
@@ -186,10 +189,10 @@ export const SprintImportMenu = ({
             </div>
             <div className="flex flex-1 flex-col">
               <span className="text-xs font-bold text-slate-700 transition-colors group-hover:text-slate-900 dark:text-slate-300 dark:group-hover:text-white">
-                GitHub Issues
+                {translate(sprintsMessages, "githubIssues")}
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                Search, filter, and multi-select
+                {translate(sprintsMessages, "githubIssuesDescription")}
               </span>
             </div>
           </button>
@@ -208,10 +211,10 @@ export const SprintImportMenu = ({
             </div>
             <div className="flex flex-1 flex-col">
               <span className="text-xs font-bold text-slate-700 transition-colors group-hover:text-slate-900 dark:text-slate-300 dark:group-hover:text-white">
-                GitLab Issues
+                {translate(sprintsMessages, "gitlabIssues")}
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                Import issue scope from GitLab
+                {translate(sprintsMessages, "gitlabIssuesDescription")}
               </span>
             </div>
           </button>
@@ -230,10 +233,10 @@ export const SprintImportMenu = ({
             </div>
             <div className="flex flex-1 flex-col">
               <span className="text-xs font-bold text-slate-700 transition-colors group-hover:text-slate-900 dark:text-slate-300 dark:group-hover:text-white">
-                Jira Issues
+                {translate(sprintsMessages, "jiraIssues")}
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                Import issue scope from Jira
+                {translate(sprintsMessages, "jiraIssuesDescription")}
               </span>
             </div>
           </button>
@@ -255,7 +258,7 @@ export const SprintImportMenu = ({
                 Notion
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                Import page or database scope
+                {translate(sprintsMessages, "notionDescription")}
               </span>
             </div>
           </button>
@@ -277,7 +280,7 @@ export const SprintImportMenu = ({
                 Asana
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                Import task scope from Asana
+                {translate(sprintsMessages, "asanaDescription")}
               </span>
             </div>
           </button>
@@ -299,12 +302,12 @@ export const SprintImportMenu = ({
                 Linear
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                Import issue scope from Linear
+                {translate(sprintsMessages, "linearDescription")}
               </span>
             </div>
           </button>
 
-          <MenuSectionLabel label="Canvas and whiteboard imports" />
+          <MenuSectionLabel label={translate(sprintsMessages, "canvasImports")} />
 
           <button
             type="button"
@@ -323,7 +326,7 @@ export const SprintImportMenu = ({
                 Miro
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                Import board and canvas items
+                {translate(sprintsMessages, "miroDescription")}
               </span>
             </div>
           </button>
@@ -345,7 +348,7 @@ export const SprintImportMenu = ({
                 Lucid
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                Import Lucidchart or Lucidspark scope
+                {translate(sprintsMessages, "lucidDescription")}
               </span>
             </div>
           </button>
@@ -367,7 +370,7 @@ export const SprintImportMenu = ({
                 Figma / FigJam
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                Import files and optional comments
+                {translate(sprintsMessages, "figmaDescription")}
               </span>
             </div>
           </button>
@@ -389,7 +392,7 @@ export const SprintImportMenu = ({
                 Mural
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                Import limited mural metadata
+                {translate(sprintsMessages, "muralDescription")}
               </span>
             </div>
           </button>

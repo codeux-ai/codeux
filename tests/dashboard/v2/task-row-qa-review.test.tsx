@@ -4,6 +4,7 @@
 import { cleanup, render, screen } from "@testing-library/preact";
 import { fireEvent } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
+import { renderWithI18n } from "../render-with-i18n.js";
 expect.extend(matchers);
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { TaskRow } from "../../../dashboard/src/v2/components/ui/TaskRow.js";
@@ -75,7 +76,7 @@ describe("TaskRow QA review indicator", () => {
   });
 
   it("shows a visible task QA indicator when a latest review exists", () => {
-    render(<TaskRow task={makeTask({
+    renderWithI18n(<TaskRow task={makeTask({
       status: "completed",
       outcome: "pass",
       summary: "Looks good.",
@@ -102,7 +103,7 @@ describe("TaskRow QA review indicator", () => {
       dependencyIndicators: [],
     };
 
-    render(<KanbanTaskCard viewModel={viewModel} onEdit={vi.fn()} onDelete={onDelete} />);
+    renderWithI18n(<KanbanTaskCard viewModel={viewModel} onEdit={vi.fn()} onDelete={onDelete} />);
 
     fireEvent.click(screen.getByRole("button", { name: /Delete task T1: Reviewed task/i }));
 
@@ -124,7 +125,7 @@ describe("TaskRow QA review indicator", () => {
       ],
     };
 
-    render(<KanbanTaskCard viewModel={viewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    renderWithI18n(<KanbanTaskCard viewModel={viewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
 
     expect(screen.getByText("Blocked: 1 dependency needs completion")).toBeVisible();
     expect(screen.getByText("Draggable reordering is disabled in reduced motion mode.")).toHaveClass("sr-only");
@@ -172,7 +173,7 @@ describe("TaskRow QA review indicator", () => {
       ],
     };
 
-    render(<KanbanTaskCard viewModel={viewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    renderWithI18n(<KanbanTaskCard viewModel={viewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
 
     expect(screen.getByRole("button", { name: "Rerun task T1: Reviewed task" })).toHaveAccessibleDescription("Open Live to rerun task T1.");
     expect(screen.getByRole("link", { name: "Open sprint preview for task T1: Reviewed task" })).toHaveAttribute("href", "/browser?sprintId=sprint-1");
@@ -191,7 +192,7 @@ describe("TaskRow QA review indicator", () => {
       dragStateLabel: "Pointer drag disabled while task changes are saving; keyboard reordering is not supported",
     };
 
-    render(<KanbanTaskCard viewModel={viewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    renderWithI18n(<KanbanTaskCard viewModel={viewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
 
     const card = screen.getByLabelText(/^Task T1: Reviewed task/i);
     expect(card).toHaveAttribute("aria-busy", "true");
