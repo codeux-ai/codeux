@@ -1,13 +1,21 @@
 import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
-import { CredentialConcurrentModificationError } from "../../../src/repositories/automation-credential-repository.js";
+import {
+  AutomationCredentialRepository,
+  CredentialConcurrentModificationError,
+} from "../../../src/repositories/automation-credential-repository.js";
+import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
+import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { registerAutomationCredentialRoutes } from "../../../src/server/automation-credential-routes.js";
 import { toHttpRouteError } from "../../../src/server/http-errors.js";
+import { EncryptedSqliteSecretStore } from "../../../src/infrastructure/security/encrypted-sqlite-secret-store.js";
+import { MountedKeyFileProvider } from "../../../src/infrastructure/security/mounted-key-file-provider.js";
 import {
   CredentialAccessDeniedError,
   CredentialEncryptedStateError,
   CredentialKeyCustodyUnavailableError,
+  CredentialBroker,
 } from "../../../src/services/credentials/credential-broker.js";
 
 const metadata = {
@@ -117,5 +125,56 @@ describe("automation credential routes", () => {
       .send({ expectedVersion: 1 });
     expect(invalid.status).toBe(422);
     expect(invalid.body.error).toMatch(/replace its value with the current version/);
+  });
+
+  it("uses real broker validation and fails closed when the explicit key provider is unavailable", async () => {
+    const storage = new AppDbStorage(":memory:");
+    const project = new ProjectManagementRepository(storage).createProject({
+      name: "Approved local test project",
+      sourceType: "local",
+      sourceRef: "/tmp/approved-local-test-project",
+    });
+    const repository = new AutomationCredentialRepository(storage);
+    const unavailableProvider = new MountedKeyFileProvider(undefined);
+    const credentialBroker = new CredentialBroker(
+      repository,
+      new EncryptedSqliteSecretStore(repository, unavailableProvider),
+      unavailableProvider,
+    );
+    const application = app(credentialBroker as unknown as Record<string, unknown>);
+    const canary = "SERVER_ROUTE_SECRET_CANARY_2f71e8";
+
+    const health = await request(application).get("/api/credentials/health");
+    expect(health.status).toBe(200);
+    expect(health.body).toMatchObject({ available: false, secure: true, provider: "mounted-key-file" });
+
+    const invalid = await request(application)
+      .post(`/api/projects/${project.id}/credentials`)
+      .send({
+        name: "Invalid kind",
+        kind: "invalid kind",
+        value: canary,
+        scope: "project",
+        allowedProjectIds: [],
+        capabilities: ["read"],
+      });
+    expect(invalid.status).toBe(400);
+    expect(invalid.body.error).toMatch(/kind may contain only/i);
+    expect(JSON.stringify(invalid.body)).not.toContain(canary);
+
+    const unavailable = await request(application)
+      .post(`/api/projects/${project.id}/credentials`)
+      .send({
+        name: "Unavailable provider",
+        kind: "http",
+        value: canary,
+        scope: "project",
+        allowedProjectIds: [],
+        capabilities: ["read"],
+      });
+    expect(unavailable.status).toBe(503);
+    expect(unavailable.body.error).toMatch(/secure key provider/i);
+    expect(JSON.stringify(unavailable.body)).not.toContain(canary);
+    storage.close();
   });
 });

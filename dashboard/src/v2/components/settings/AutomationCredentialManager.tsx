@@ -363,7 +363,11 @@ export const AutomationCredentialManager: FunctionComponent<AutomationCredential
       {!loading && health && !backendReady ? (
         <div role="alert" className="flex items-start gap-3 rounded-xl border border-status-amber/25 bg-status-amber/[0.08] p-4 text-sm text-amber-900 dark:text-amber-100">
           <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" />
-          <div><div className="font-bold">Secure credential storage is unavailable</div><p className="mt-1 text-xs leading-relaxed">{health.reason || "Restore the configured secure key provider and refresh this page. Existing metadata remains visible, but secret-bearing changes and tests are disabled."}</p></div>
+          <div>
+            <div className="font-bold">Secure credential storage is unavailable</div>
+            {health.reason ? <p className="mt-1 text-xs leading-relaxed">{health.reason}</p> : null}
+            <p className="mt-1 text-xs leading-relaxed">Restore the configured secure key provider, then refresh this page. Existing metadata remains visible, but secret-bearing changes, tests, promotion, and revocation are disabled until custody recovers.</p>
+          </div>
         </div>
       ) : null}
       {!loading && backendReady && credentials.length === 0 ? (
@@ -486,7 +490,7 @@ export const AutomationCredentialManager: FunctionComponent<AutomationCredential
                 ) : null}
 
                 <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-black/[0.06] pt-4 dark:border-white/[0.07]">
-                  <button type="button" className={`${buttonClassName} border-status-red/25 text-status-red`} disabled={disabled || credential.status === "revoked"} onClick={() => void confirmMutation({ title: `Revoke ${credential.name}?`, body: "Automation consumers will permanently lose access. Revoked credentials cannot be reactivated.", confirmLabel: "Revoke credential", destructive: true, requiredConfirmationText: "REVOKE" }, () => runMutation(credential, "revoke", "Credential revoked.", () => revokeAutomationCredential(projectId, credential.id, { expectedVersion: credential.version })))}><Trash2 className="h-3.5 w-3.5" />Revoke</button>
+                  <button type="button" className={`${buttonClassName} border-status-red/25 text-status-red`} disabled={disabled || !backendReady || credential.status === "revoked"} onClick={() => void confirmMutation({ title: `Revoke ${credential.name}?`, body: "Automation consumers will permanently lose access. Revoked credentials cannot be reactivated.", confirmLabel: "Revoke credential", destructive: true, requiredConfirmationText: "REVOKE" }, () => runMutation(credential, "revoke", "Credential revoked.", () => revokeAutomationCredential(projectId, credential.id, { expectedVersion: credential.version })))}><Trash2 className="h-3.5 w-3.5" />Revoke</button>
                   {busyAction?.startsWith(`${credential.id}:`) ? <span role="status" className="inline-flex items-center gap-1 text-xs text-slate-500"><Loader2 className="h-3.5 w-3.5 animate-spin" />Applying credential change…</span> : null}
                 </div>
                 <FeedbackMessage feedback={feedback[credential.id]} />

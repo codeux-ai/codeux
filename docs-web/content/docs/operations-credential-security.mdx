@@ -67,7 +67,15 @@ Existing global credentials created before management ownership was stored are m
 
 Project-scoped routes live under `/api/projects/:projectId/credentials`. Supported operations are create, bounded-name update (`PATCH /:credentialId`), bind, metadata-only compatibility assessment, test, rotate, replace, revoke, promote, and restrict. Compatibility evaluates key-backend readiness, configuration, active status, project access, allowed kinds, and all required capabilities without resolving plaintext. A backend is ready only when it is available and secure and reports both a non-empty key ID and a key version; missing key identity metadata produces the stable `backend_unavailable` compatibility issue. List, compatibility, health, and mutation responses return metadata or policy results only. Existing dashboard authentication and remote credential-management guards apply before these routes.
 
-Runtime validation failures return `400`, project/management denials return `403`, compare-and-swap conflicts return `409`, invalid encrypted state returns `422`, and unavailable key custody returns an actionable `503` response.
+Validation failures return `400`, project/management denials return `403`, concurrent-write conflicts return `409`, invalid encrypted state returns `422`, and unavailable key custody returns `503` with a safe recovery message.
+
+## Integrated verification contract
+
+Credential security is verified against an isolated normal local runtime. A composition-root restart test constructs successive `CodeUxServer` instances against the same home, confirming that production wiring recovers SQLite metadata, local-file key identity, named bindings, and authorized runtime resolution. Automated coverage also provisions custody concurrently and confirms that public REST and MCP payloads remain value-free. It covers lifecycle conflicts and mutations, typed validation failures, explicit key-provider outages, and custom-dashboard MCP slot listing, approval-gated binding, stale-conflict refresh/retry, and unbinding.
+
+Credentialed automation tests require missing, revoked, cross-project, wrong-kind, insufficient-capability, and unavailable-backend bindings to fail before provider or custom-node invocation. A distinctive disclosure canary is scanned across public responses, structured records, SQLite text columns, workspaces, Docker inputs, validation artifacts, graph/dashboard records, and browser or iframe state; only encrypted binary envelopes may contain it.
+
+Production-bundle browser coverage enables the documented Nodes and Custom Dashboards gates in an isolated Playwright runtime. It exercises Settings lifecycle feedback, node binding through publication and a local mock-provider run, custom-dashboard build/runtime slots and publication blocking, keyboard focus restoration, and narrow-viewport operation without external providers or network access.
 
 ## Troubleshooting without disclosure
 
