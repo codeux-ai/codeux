@@ -161,6 +161,29 @@ describe("nodes canvas state", () => {
     ]);
   });
 
+  it("localizes German validation explanations while preserving identity and order", () => {
+    const base = createInitialNodeCanvasGraph();
+    const graph = {
+      ...base,
+      nodes: base.nodes.map((node) => node.id === "task-1" ? { ...node, label: "" } : node),
+      edges: [{
+        id: "edge-missing-target",
+        source: { nodeId: "trigger-1", portId: "event" },
+        target: { nodeId: "missing-node", portId: "in" },
+      }],
+    };
+
+    const english = validateNodeCanvasGraph(graph);
+    const german = validateNodeCanvasGraph(graph, "de");
+
+    expect(german.map(({ code, entityId, field }) => ({ code, entityId, field })))
+      .toEqual(english.map(({ code, entityId, field }) => ({ code, entityId, field })));
+    expect(german.map((issue) => issue.message)).toEqual([
+      "Eine Node-Bezeichnung ist erforderlich.",
+      "Die Ziel-Node der Kante fehlt.",
+    ]);
+  });
+
   it("serializes deterministically and recovers malformed persisted input", () => {
     const graph = createInitialNodeCanvasGraph();
     const serialized = serializeNodeCanvasGraph(graph);

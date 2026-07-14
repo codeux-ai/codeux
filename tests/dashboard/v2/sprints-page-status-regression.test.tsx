@@ -9,6 +9,7 @@ import { SprintsPage } from "../../../dashboard/src/v2/pages/sprints/SprintsPage
 import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
 import { useSprintsPageData } from "../../../dashboard/src/v2/pages/sprints/use-sprints-page-data.js";
 import type { CiStatusPresentation } from "../../../dashboard/src/v2/lib/ci-status-presentation.js";
+import { renderWithI18n } from "../render-with-i18n.js";
 import { 
   createSprintRunFixture, 
   createManualPauseIntervention, 
@@ -125,7 +126,7 @@ describe("SprintsPage Status Regression", () => {
       interventionBySprintId,
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     // Check for "Needs you" badge - should only be one per sprint cell
     const badges = screen.getAllByText("Needs you");
@@ -149,7 +150,7 @@ describe("SprintsPage Status Regression", () => {
       interventionBySprintId,
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     // Assert "Needs you" badge is absent
     expect(screen.queryByText("Needs you")).not.toBeInTheDocument();
@@ -181,7 +182,7 @@ describe("SprintsPage Status Regression", () => {
       ciStatusBySprintId: new Map([["sprint-1", failedCiStatus]]),
     } as any);
 
-    const { container } = render(<SprintsPage />);
+    const { container } = renderWithI18n(<SprintsPage />);
 
     expect(screen.getAllByRole("button", { name: /CI status: CI failed.*Show workflow details/i })).toHaveLength(2);
     expect(container.querySelectorAll('[data-ci-icon="failure"]')).toHaveLength(2);

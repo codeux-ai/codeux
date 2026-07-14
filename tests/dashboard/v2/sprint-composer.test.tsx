@@ -4,6 +4,7 @@ import { render as testingLibraryRender, fireEvent, waitFor, within } from "@tes
 import { h } from "preact";
 import { useState } from "preact/hooks";
 import * as matchers from "@testing-library/jest-dom/matchers";
+import { renderWithI18n } from "../render-with-i18n.js";
 import { cleanup } from "@testing-library/preact";
 import type { SprintLinkedIssueInput } from "../../../dashboard/src/v2/types.js";
 import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
@@ -56,13 +57,13 @@ describe("SprintComposer", () => {
   };
 
   it("renders correctly", () => {
-    const { getByText, getByPlaceholderText } = render(<SprintComposer {...defaultProps} />);
+    const { getByText, getByPlaceholderText } = renderWithI18n(<SprintComposer {...defaultProps} />);
     expect(getByText("Compose The Next Sprint.")).toBeInTheDocument();
     expect(getByPlaceholderText("Runtime hardening")).toBeInTheDocument();
   });
 
   it("renders provider instance route labels, default models, and brand icons", async () => {
-    const { getByRole, getByText, queryByText } = render(
+    const { getByRole, getByText, queryByText } = renderWithI18n(
       <SprintComposer
         {...defaultProps}
         virtualProviders={[
@@ -136,7 +137,7 @@ describe("SprintComposer", () => {
       },
     ];
 
-    const { getAllByText, getByRole, getByText } = render(
+    const { getAllByText, getByRole, getByText } = renderWithI18n(
       <SprintComposer {...defaultProps} linkedIssues={issues} />
     );
 
@@ -212,7 +213,7 @@ describe("SprintComposer", () => {
       );
     };
 
-    const { getByText, getByPlaceholderText, getAllByText, getByRole, queryByText } = render(
+    const { getByText, getByPlaceholderText, getAllByText, getByRole, queryByText } = renderWithI18n(
       <Harness />
     );
 
@@ -247,7 +248,7 @@ describe("SprintComposer", () => {
       priority: "high" as const,
     };
 
-    const { getByText, getByRole, getAllByText } = render(
+    const { getByText, getByRole, getAllByText } = renderWithI18n(
       <SprintComposer
         {...defaultProps}
         importedTasks={[task]}
@@ -301,7 +302,7 @@ describe("SprintComposer", () => {
       },
     ];
 
-    const { getByPlaceholderText, getAllByText } = render(
+    const { getByPlaceholderText, getAllByText } = renderWithI18n(
       <SprintComposer
         {...defaultProps}
         agentPresets={agentPresets as any}
@@ -345,7 +346,7 @@ describe("SprintComposer", () => {
       includeConversation: false,
     };
 
-    const { getByPlaceholderText, getByRole, getAllByText, getByText } = render(
+    const { getByPlaceholderText, getByRole, getAllByText, getByText } = renderWithI18n(
       <SprintComposer
         {...defaultProps}
         onSubmit={onSubmit}
@@ -421,7 +422,7 @@ describe("SprintComposer", () => {
       },
     ];
 
-    const { rerender, getAllByText } = render(
+    const { rerender, getAllByText } = renderWithI18n(
       <SprintComposer
         {...defaultProps}
         agentPresets={[]}
@@ -465,7 +466,7 @@ describe("SprintComposer", () => {
 
     const mockOnSubmit = vi.fn(() => submitPromise);
 
-    const { getByText, getByPlaceholderText, queryByText, getAllByText, queryByRole, queryAllByText } = render(
+    const { getByText, getByPlaceholderText, queryByText, getAllByText, queryByRole, queryAllByText } = renderWithI18n(
       <SprintComposer {...defaultProps} onSubmit={mockOnSubmit} />
     );
 
@@ -510,7 +511,7 @@ describe("SprintComposer", () => {
     const mockOnSubmit = vi.fn(() => submitPromise);
     const mockOnClose = vi.fn();
 
-    const { getByPlaceholderText, getAllByText, getByRole, getByText } = render(
+    const { getByPlaceholderText, getAllByText, getByRole, getByText } = renderWithI18n(
       <SprintComposer {...defaultProps} onSubmit={mockOnSubmit} onClose={mockOnClose} />
     );
 
@@ -543,7 +544,7 @@ describe("SprintComposer", () => {
     });
     const onImprovePrompt = vi.fn(() => improvePromise);
 
-    const { getByPlaceholderText, getByRole, getByText } = render(
+    const { getByPlaceholderText, getByRole, getByText } = renderWithI18n(
       <SprintComposer {...defaultProps} onImprovePrompt={onImprovePrompt} />
     );
 
@@ -570,7 +571,7 @@ describe("SprintComposer", () => {
 
   it("moves focus to the first invalid required field", async () => {
     const onImprovePrompt = vi.fn();
-    const { getByPlaceholderText, getByRole, getAllByText } = render(
+    const { getByPlaceholderText, getByRole, getAllByText } = renderWithI18n(
       <SprintComposer {...defaultProps} onImprovePrompt={onImprovePrompt} />
     );
 
@@ -599,7 +600,7 @@ describe("SprintComposer", () => {
     const mockOnCancelPlanningRequest = vi.fn();
     const mockOnSubmit = vi.fn(async () => new Promise(() => undefined));
 
-    const { getByText, getByPlaceholderText, queryByText, getAllByText, getByRole } = render(
+    const { getByText, getByPlaceholderText, queryByText, getAllByText, getByRole } = renderWithI18n(
       <SprintComposer {...defaultProps} onSubmit={mockOnSubmit} onCancelPlanningRequest={mockOnCancelPlanningRequest} />
     );
 
@@ -656,7 +657,7 @@ describe("SprintComposer", () => {
     const mockOnStartNewSprint = vi.fn();
     const mockOnClose = vi.fn();
 
-    const { getByText, getByPlaceholderText, getAllByText, getByRole } = render(
+    const { getByText, getByPlaceholderText, getAllByText, getByRole } = renderWithI18n(
       <SprintComposer
         {...defaultProps}
         onClose={mockOnClose}
@@ -734,7 +735,7 @@ describe("AddTaskModal Lifecycle", () => {
     document.body.appendChild(trigger);
     trigger.focus();
 
-    const { getByLabelText, unmount } = render(
+    const { getByLabelText, unmount } = renderWithI18n(
       <AddTaskModal {...defaultProps} />
     );
 
@@ -757,7 +758,7 @@ describe("AddTaskModal Lifecycle", () => {
     });
     const mockOnSubmit = vi.fn(() => submitPromise);
 
-    const { getByLabelText, getByRole, getByText } = render(
+    const { getByLabelText, getByRole, getByText } = renderWithI18n(
       <AddTaskModal {...defaultProps} onSubmit={mockOnSubmit} />
     );
 
@@ -787,7 +788,7 @@ describe("AddTaskModal Lifecycle", () => {
   it("displays error in ActionFeedbackRegion without auto dismiss, and handles dismiss", async () => {
     const mockOnSubmit = vi.fn(() => Promise.reject(new Error("API Error 500")));
 
-    const { getByLabelText, getByRole, getByText, queryByText, queryByRole } = render(
+    const { getByLabelText, getByRole, getByText, queryByText, queryByRole } = renderWithI18n(
       <AddTaskModal {...defaultProps} onSubmit={mockOnSubmit} />
     );
 
@@ -833,7 +834,7 @@ describe("AddTaskModal Lifecycle", () => {
       .mockRejectedValueOnce(new Error("Task API unavailable"))
       .mockResolvedValueOnce(undefined);
 
-    const { getByLabelText, getByRole, getByText } = render(
+    const { getByLabelText, getByRole, getByText } = renderWithI18n(
       <AddTaskModal {...defaultProps} onClose={mockOnClose} onSubmit={mockOnSubmit} />
     );
 

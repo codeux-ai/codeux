@@ -7,6 +7,7 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import { SprintsPage } from "../../../dashboard/src/v2/pages/sprints/SprintsPage";
 import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
 import userEvent from "@testing-library/user-event";
+import { renderWithI18n } from "../render-with-i18n.js";
 
 // @ts-expect-error Types are not required for test
 import { useSprintsPageData } from "../../../dashboard/src/v2/pages/sprints/use-sprints-page-data";
@@ -116,7 +117,7 @@ describe("SprintsPage Integration Regressions", () => {
       setShowCreateComposer,
     } as any);
 
-    const { rerender } = render(<SprintsPage />);
+    const { rerender } = renderWithI18n(<SprintsPage />);
 
     const actionBarBtn = screen.getByRole("button", { name: /^new sprint$/i });
     fireEvent.click(actionBarBtn);
@@ -162,7 +163,7 @@ describe("SprintsPage Integration Regressions", () => {
       setShowCreateComposer,
     } as any);
 
-    const { rerender } = render(<SprintsPage />);
+    const { rerender } = renderWithI18n(<SprintsPage />);
 
     expect(screen.getByRole("button", { name: /close composer/i })).toBeInTheDocument();
     const quicksprintBtn = screen.getByRole("button", { name: /^quicksprint$/i });
@@ -196,7 +197,7 @@ describe("SprintsPage Integration Regressions", () => {
       showCreateComposer: true,
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     // Composer presence
     expect(screen.getByText("Sprint Composer")).toBeInTheDocument();
@@ -228,7 +229,7 @@ describe("SprintsPage Integration Regressions", () => {
       sortedSprints,
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     expect(screen.getByLabelText("Showing 25 of 25 sprints")).toBeInTheDocument();
   });
@@ -244,10 +245,10 @@ describe("SprintsPage Integration Regressions", () => {
       pauseResumeRunsBySprintId: new Map([["sprint-3", { id: "run-123", status: "paused" }]]),
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     // SprintControls disable states check
-    const resumeBtn = screen.getByRole('button', { name: /Resume sprint 3 is pending/i });
+    const resumeBtn = screen.getByRole('button', { name: /Resume sprint Sprint 3 is pending/i });
     expect(resumeBtn).toBeDisabled();
     expect(resumeBtn).toHaveAttribute('title', 'Wait for the current sprint action to finish');
   });
@@ -266,7 +267,7 @@ describe("SprintsPage Integration Regressions", () => {
       handleDeleteSprint,
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     // For the row menu - when bulk/delete action is pending, name changes to 'Cannot open actions menu...'
     const moreTrigger = screen.getAllByRole("button", { name: /Cannot open actions menu for sprint/i })[0];
@@ -285,7 +286,7 @@ describe("SprintsPage Integration Regressions", () => {
       handleClearSelected,
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     // Create a real selection so the bulk action bar is rendered.
     await userEvent.click(screen.getByRole("button", { name: /Select sprint Sprint 4/i }));

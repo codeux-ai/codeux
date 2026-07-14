@@ -62,6 +62,19 @@ describe("overview-telemetry-view-models", () => {
       expect(getEventStyle({ eventType: "sprint_paused", sprintRunStatus: "paused" } as ExecutionRuntimeEventSummary).label).toBe("sprint paused");
       expect(getEventStyle({ eventType: "sprint_completed", sprintRunStatus: "completed" } as ExecutionRuntimeEventSummary).label).toBe("sprint completed");
     });
+
+    it("localizes presentation labels while preserving event classification", () => {
+      const style = getEventStyle(
+        { eventType: "run_running", taskRunState: "in_progress" } as ExecutionRuntimeEventSummary,
+        {
+          taskState: (state) => `Aufgabe ${state}`,
+          sprintState: (state) => `Sprint ${state}`,
+          sprintPaused: "Sprint pausiert",
+          states: { in_progress: "in Bearbeitung" },
+        },
+      );
+      expect(style).toEqual({ label: "Aufgabe in Bearbeitung", toneClass: "text-status-blue" });
+    });
   });
 
   describe("getInterventionContent", () => {
@@ -82,6 +95,13 @@ describe("overview-telemetry-view-models", () => {
       const content = getInterventionContent(project);
       expect(content).toEqual({ title: "Merge Required" });
       expect((content as any).reason).toBeUndefined();
+    });
+
+    it("localizes only the dashboard fallback intervention title", () => {
+      const project = { humanIntervention: { title: "" } } as OverviewTelemetryProjectSummary;
+      expect(getInterventionContent(project, "Menschlicher Eingriff erforderlich")).toEqual({
+        title: "Menschlicher Eingriff erforderlich",
+      });
     });
   });
 });

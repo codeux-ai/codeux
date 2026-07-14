@@ -5,6 +5,8 @@ import type {
   IssueImportProviderMetadata,
 } from "../../../lib/issue-import-view-models.js";
 import { JiraIcon } from "../../icons/JiraIcon.js";
+import { useDashboardI18n } from "../../../i18n/index.js";
+import { sprintsMessages } from "../../../i18n/messages/sprints.js";
 
 interface IssueImportShellProps {
   provider: IssueImportProviderMetadata;
@@ -36,8 +38,10 @@ interface IssueImportErrorPanelProps {
 
 export const IssueImportLoadingSkeletonList: FunctionComponent<IssueImportLoadingSkeletonListProps> = ({
   count = 5,
-}) => (
-  <div className="grid gap-3" aria-label="Loading issues">
+}) => {
+  const { translate } = useDashboardI18n();
+  return (
+  <div className="grid gap-3" aria-label={translate(sprintsMessages, "loadingResults")}>
     {Array.from({ length: count }).map((_, index) => (
       <div
         key={index}
@@ -45,7 +49,8 @@ export const IssueImportLoadingSkeletonList: FunctionComponent<IssueImportLoadin
       />
     ))}
   </div>
-);
+  );
+};
 
 export const IssueImportErrorPanel: FunctionComponent<IssueImportErrorPanelProps> = ({ error }) => (
   <div
@@ -72,7 +77,7 @@ export const IssueImportShell: FunctionComponent<IssueImportShellProps> = ({
   filters,
   advancedFilters,
   advancedFiltersExpanded = false,
-  advancedFiltersLabel = "Advanced filters",
+  advancedFiltersLabel,
   advancedFiltersId = "issue-import-advanced-filters",
   activeFilterCountLabel,
   onAdvancedFiltersToggle,
@@ -81,6 +86,7 @@ export const IssueImportShell: FunctionComponent<IssueImportShellProps> = ({
   children,
   footer,
 }) => {
+  const { translate } = useDashboardI18n();
   const hasAdvancedFilters = Boolean(advancedFilters);
   const canToggleAdvancedFilters = hasAdvancedFilters && Boolean(onAdvancedFiltersToggle);
   const advancedFiltersVisible = canToggleAdvancedFilters ? advancedFiltersExpanded : true;
@@ -150,7 +156,7 @@ export const IssueImportShell: FunctionComponent<IssueImportShellProps> = ({
                         className={`inline-flex min-h-10 items-center gap-2 rounded-full border border-black/[0.06] bg-white/80 px-4 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 ${provider.accent.focusRingClassName} dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:text-white`}
                       >
                         <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2.1} aria-hidden="true" />
-                        {advancedFiltersLabel}
+                        {advancedFiltersLabel ?? translate(sprintsMessages, "advancedFiltersGeneric")}
                         <ChevronDown
                           className={`h-3.5 w-3.5 transition-transform ${advancedFiltersExpanded ? "rotate-180" : ""}`}
                           strokeWidth={2.1}

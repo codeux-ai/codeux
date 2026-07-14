@@ -5,6 +5,7 @@ import { cleanup, render, screen, within } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import type { ComponentChildren, VNode } from "preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { renderWithI18n } from "../render-with-i18n.js";
 
 import type {
   ExecutionAttentionItemSummary,
@@ -446,7 +447,7 @@ describe("shared QA and CI card status integration", () => {
   it("renders equivalent requested-change QA and failed CI workflow semantics on all four cards", async () => {
     const user = userEvent.setup();
     const data = buildSurfaceData(CI_HISTORY);
-    const { container } = render(<AllSurfaces data={data} />);
+    const { container } = renderWithI18n(<AllSurfaces data={data} />);
 
     for (const [, surfaceLabel] of SURFACES) {
       const surface = screen.getByRole("region", { name: surfaceLabel });
@@ -478,7 +479,7 @@ describe("shared QA and CI card status integration", () => {
   it.each(SURFACES)("opens and fully operates the %s QA details without pointer input", async (_name, surfaceLabel, Surface) => {
     const user = userEvent.setup();
     const data = buildSurfaceData(CI_HISTORY);
-    render(<Surface data={data} />);
+    renderWithI18n(<Surface data={data} />);
 
     const surface = screen.getByRole("region", { name: surfaceLabel });
     const trigger = within(surface).getByRole("button", { name: "QA review details" });
@@ -568,7 +569,7 @@ describe("shared QA and CI card status integration", () => {
     expect(taskScoped.taskViewModel.ciStatusPresentation?.label).toBe("CI pending");
     expect(taskScoped.liveItem.ciPresentation?.label).toBe("CI pending");
 
-    const { rerender } = render(<AllSurfaces data={recovered} />);
+    const { rerender } = renderWithI18n(<AllSurfaces data={recovered} />);
     for (const [, surfaceLabel] of SURFACES) {
       const surface = screen.getByRole("region", { name: surfaceLabel });
       expect(within(surface).getByRole("button", { name: /CI status: CI pending/i })).toBeVisible();
@@ -593,7 +594,7 @@ describe("shared QA and CI card status integration", () => {
     expect(replay.liveItem.ciPresentation).toEqual(first.liveItem.ciPresentation);
     expect(areCiStatusPresentationsEqual(replay.sprintCiStatus, first.sprintCiStatus)).toBe(true);
 
-    const view = render(<AllSurfaces data={first} />);
+    const view = renderWithI18n(<AllSurfaces data={first} />);
     const taskSurface = screen.getByRole("region", { name: "Task card surface" });
     const ciTrigger = within(taskSurface).getByRole("button", { name: /CI status: CI failed/i });
     ciTrigger.focus();

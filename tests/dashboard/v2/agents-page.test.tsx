@@ -24,6 +24,7 @@ import * as agentPresetApi from "../../../dashboard/src/v2/lib/agent-preset-api.
 import * as settingsApi from "../../../dashboard/src/v2/lib/settings-api.js";
 import { ProjectDataProvider } from "../../../dashboard/src/v2/context/project-data.js";
 import { AgentsPage } from "../../../dashboard/src/v2/AgentsPage.js";
+import { DashboardI18nProvider, type DashboardLocale } from "../../../dashboard/src/v2/i18n/index.js";
 import { clearEffectiveSettingsCacheForTests } from "../../../dashboard/src/v2/hooks/use-project-effective-settings.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
@@ -151,7 +152,8 @@ vi.mock("../../../dashboard/src/v2/components/agents/AgentPresetDetailPanel.js",
         disabled: props.pushingToFile || !props.canPushToFile,
         onClick: () => props.onPushToFile(props.preset.id),
       }, props.pushingToFile ? "Pushing to file" : "Push to file"),
-      h("button", { onClick: props.onEdit }, "Edit Agent")
+      h("button", { onClick: props.onEdit }, "Edit Agent"),
+      h("button", { onClick: () => props.onDelete(props.preset.id) }, "Delete Agent")
     )
   };
 });
@@ -348,11 +350,18 @@ describe("AgentsPage", () => {
     }
   });
 
-  const renderPage = async () => {
+  const renderPage = async (locale: DashboardLocale = "en") => {
     const res = render(
       <ProjectDataProvider>
         <AgentsPage />
-      </ProjectDataProvider>
+      </ProjectDataProvider>,
+      {
+        wrapper: ({ children }) => (
+          <DashboardI18nProvider initialLocale={locale} storage={null}>
+            {children}
+          </DashboardI18nProvider>
+        ),
+      },
     );
     await act(async () => {
       await new Promise((r) => setTimeout(r, 10));
@@ -524,7 +533,7 @@ describe("AgentsPage", () => {
     expect(screen.getByText("Review Agent")).toBeInTheDocument();
 
     // Both cards in the list should be visible
-    const cards = screen.getAllByRole("button", { name: /Planning Agent|Review Agent/i });
+    const cards = screen.getAllByTestId("showcase-card");
     expect(cards).toHaveLength(2);
 
     // Detail panel for "Planning Agent" (the first one) should be visible
@@ -535,6 +544,38 @@ describe("AgentsPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Review code")).toBeInTheDocument();
     });
+  });
+
+  it("localizes German route chrome while preserving agent-authored content", async () => {
+    await renderPage("de");
+
+    expect(await screen.findByRole("region", { name: "Agenten" })).toBeInTheDocument();
+    expect(screen.getByText("Agenten insgesamt")).toBeInTheDocument();
+    expect(screen.getAllByText("Planning Agent").length).toBeGreaterThan(0);
+    expect(screen.getByText("Do some planning")).toBeInTheDocument();
+  });
+
+  it("reports German creation and deletion feedback without localizing preset names", async () => {
+    vi.mocked(agentPresetApi.createAgentPreset).mockResolvedValue({
+      ...mockPresets[0],
+      id: "agent-new",
+      name: "Agent 3",
+    } as any);
+    vi.mocked(agentPresetApi.deleteAgentPreset).mockResolvedValue(undefined);
+
+    await renderPage("de");
+    fireEvent.click(screen.getByText("New Agent"));
+
+    expect(await screen.findByText("Agentenvorlage erstellt. Füllen Sie die Pflichtfelder aus und speichern Sie anschließend.")).toBeInTheDocument();
+    expect(agentPresetApi.createAgentPreset).toHaveBeenCalledWith("project-1", expect.objectContaining({ name: "Agent 3" }));
+
+    cleanup();
+    mockPresets = [mockPresets[0], mockPresets[1]];
+    await renderPage("de");
+    fireEvent.click(await screen.findByRole("button", { name: "Delete Agent" }));
+
+    expect(await screen.findByText("Agentenvorlage gelöscht.")).toBeInTheDocument();
+    expect(agentPresetApi.deleteAgentPreset).toHaveBeenCalledWith("agent-1");
   });
 
   it("shows route assignment tags from effective project settings", async () => {
