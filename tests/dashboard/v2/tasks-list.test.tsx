@@ -351,6 +351,65 @@ const baseProps: any = {
         expect(screen.getByText("1 Aufgabe")).toBeInTheDocument();
     });
 
+    it("keeps runtime task durations for terminal, review, and active states in English and German", () => {
+        const statusTasks = [
+            {
+                ...mockTask,
+                id: "completed-task",
+                recordId: "completed-task-record",
+                title: "Completed Task",
+                status: "completed",
+                time: "2m 14s",
+            },
+            {
+                ...mockTask,
+                id: "review-task",
+                recordId: "review-task-record",
+                title: "Review Task",
+                status: "coding_completed",
+                time: "3m 27s",
+            },
+            {
+                ...mockTask,
+                id: "active-task",
+                recordId: "active-task-record",
+                title: "Active Task",
+                status: "in_progress",
+                time: "4m 39s",
+            },
+        ];
+        const statusPageData = {
+            ...pageData,
+            tasks: statusTasks,
+            execution: {
+                ...pageData.execution,
+                taskDispatches: [{ id: "active-dispatch", taskId: "active-task-record", status: "running" }],
+            },
+        };
+
+        const englishView = render(
+            <ProjectDataProvider initialData={null as any}><TasksList pageData={statusPageData} /></ProjectDataProvider>,
+        );
+        expect(screen.getByText("2m 14s")).toBeInTheDocument();
+        expect(screen.getByText("3m 27s")).toBeInTheDocument();
+        expect(screen.getByText("4m 39s")).toBeInTheDocument();
+        expect(screen.getByText("Task completed-task status is now completed")).toBeInTheDocument();
+        expect(screen.getByText("Task review-task status is now coding completed")).toBeInTheDocument();
+        expect(screen.getByText("Task active-task status is now in progress")).toBeInTheDocument();
+        englishView.unmount();
+
+        render(
+            <ProjectDataProvider initialData={null as any}><TasksList pageData={statusPageData} /></ProjectDataProvider>,
+            "de",
+        );
+        expect(screen.getByText("2m 14s")).toBeInTheDocument();
+        expect(screen.getByText("3m 27s")).toBeInTheDocument();
+        expect(screen.getByText("4m 39s")).toBeInTheDocument();
+        expect(screen.getByText("Status der Aufgabe completed-task ist jetzt abgeschlossen")).toBeInTheDocument();
+        expect(screen.getByText("Status der Aufgabe review-task ist jetzt Code abgeschlossen")).toBeInTheDocument();
+        expect(screen.getByText("Status der Aufgabe active-task ist jetzt in Bearbeitung")).toBeInTheDocument();
+    });
+
     it("announces German loading and empty filtered states", async () => {
         const loadingView = render(<ProjectDataProvider initialData={null as any}><TasksList pageData={{ ...pageData, tasks: [], isLoading: true }} /></ProjectDataProvider>, "de");
         expect(screen.getByRole("status", { name: "Aufgaben in aktiven Datenströmen werden geladen" })).toHaveAttribute("aria-busy", "true");

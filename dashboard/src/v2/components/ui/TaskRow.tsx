@@ -33,13 +33,6 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
                 : task.status === "QA_REVIEW_FAILED"
                     ? "taskStatusQaReviewFailed"
                     : "taskStatusPending");
-    const taskTime = task.status === "completed"
-        ? translate("taskTimeDone")
-        : task.status === "coding_completed"
-            ? translate("taskTimeReview")
-            : task.status === "in_progress"
-                ? translate("taskTimeActive")
-                : task.time;
     const disabledReason = busy
         ? translate("taskActionPendingUnavailable", { action: playStopLabel })
         : !onPlayStop
@@ -116,7 +109,7 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
                 <div className="flex min-h-9 items-center gap-2 rounded-full border border-black/[0.05] bg-black/[0.02] px-2 dark:border-white/[0.06] dark:bg-white/[0.03]">
                     <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" strokeWidth={2} aria-hidden="true" />
                     <span className="sr-only">{translate("taskDuration")} </span>
-                    <span className="text-xs font-mono text-slate-500 dark:text-slate-400">{taskTime}</span>
+                    <span className="text-xs font-mono text-slate-500 dark:text-slate-400">{task.time}</span>
                 </div>
 
                 {/* Quick actions */}
