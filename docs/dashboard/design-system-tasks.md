@@ -6,13 +6,21 @@ Task board implementation must also follow the pure dashboard view-model and ren
 
 The Tasks page and Kanban board should feel like a 'Refined Production Board'. It prioritizes clear state scannability, exact layout, and reduced visual noise.
 
+### Operational hierarchy
+
+The page intro owns only project/sprint context and the primary **New Task** command. Filtered totals and selected-sprint completion live in the separate, named **Task board overview** region immediately below the controls. The overview uses compact monospace metrics for filtered total, running, completed, and critical work; when a sprint is selected, its name, date, completion percentage, completed-task progress semantics, and queued/running/completed distribution share the same surface. Long sprint names wrap inside `min-w-0` content instead of widening the workspace.
+
+Sprint scope, status, priority, and visible-card count form one named **Task board controls** rail. The rail is a one-column stack on phones, a two-column grid on intermediate widths, and a four-part row when space permits. Each control keeps a minimum 44px target, visible signal-colored focus treatment, and an independently bounded `min-w-0` container. Filter strips may scroll inside their own control, while the rail remains `max-w-full` and neither the sprint trigger nor listbox uses viewport-width sizing.
+
 ## 1. Board & Lanes
 *   **Containers:** Use precise framing with subtle inner shadows and distinct but calm borders (e.g., `border-black/[0.06] dark:border-white/[0.06]`).
 *   **Headers:** Lane headers should establish hierarchy using `font-display` for main titles and monospace text (`font-mono`) for metadata (like counts or tags).
+*   **Accessible Names:** Each lane heading includes its task count in screen-reader text, producing names such as `Queued lane, 3 tasks`. The visible count chip is decorative to avoid announcing the same number twice, while the lane's polite description reports the current filtered count.
 *   **Counts:** Use restrained chips for counts (e.g., `bg-black/[0.03] dark:bg-white/[0.03]`) rather than bold solid colors, unless indicating a critical bottleneck.
 *   **Empty States:** Empty lanes should be visually quiet, with dotted borders or subtle backgrounds to indicate they are active but empty, avoiding heavy text.
 *   **Drop Behavior:** Pointer drops are status transitions only. Dropping a card onto another visible lane resolves to that lane's default persisted status (`pending`, `in_progress`, or `completed`), while same-lane drops are no-ops because task ordering is not persisted by the task API.
 *   **Filtered Feedback:** Status filters, priority filters, sprint scope, and visible-card windows must expose `aria-live="polite"` summaries when their selected state changes. Empty lanes should announce that the lane is empty after current filters, in the selected sprint, or in the project, and should keep a stable minimum height so filter transitions do not collapse the board.
+*   **Responsive Framing:** Lane sections own their header and drop surface inside one calm frame. Boards render one column by default, two at `lg`, and three at `xl`; every grid, lane, and card-list boundary uses `min-w-0`. Drop surfaces keep a stable minimum height during loading, filtering, and empty results, and skeletons occupy the same framed lane body as settled cards.
 *   **Motion Contracts:** Board lists use the tokenized interaction contracts consistently: `controlFeedback` for local chip and control feedback, `selectionMovement` for active filter and sprint selection movement, `listReveal` for selector popovers and newly revealed lists, and `listReorder` for card/lane reorder transitions. Reduced-motion mode resolves those token durations to zero and must retain the same static state text, borders, and focus rings.
 *   **Route Scope Ownership:** Project and sprint selection must stay synchronized with TanStack Router search state. A project change on Tasks replaces `projectId` and clears the previous sprint; a sprint change replaces `sprintId` for the active project. Do not mutate `window.history` directly for these controls, because stale route search can override a later selector choice.
 
