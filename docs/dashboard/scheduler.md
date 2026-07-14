@@ -13,6 +13,10 @@ The page has two schedule surfaces:
 
 The `Calendar` / `24 Hours` switcher is implemented as a two-tab control. It exposes the active surface with `aria-selected`, points both tabs at the scheduler view panel with `aria-controls`, and supports arrow, Home, and End keyboard movement. During refresh, the view panel keeps cached schedule entries and occurrences visible, marks the panel busy, and announces that cached data is being shown while the latest schedule loads.
 
+All Scheduler-owned interface copy is available in English and German through the dashboard locale provider. Calendar labels, recurrence summaries, validation, confirmations, actions, status text, and live announcements follow the active locale. Presented dates and times use locale-aware `Intl` formatting; scheduled-entry summaries format instants in the entry's persisted timezone and show the timezone ID unchanged. Locale changes do not alter ISO timestamps, recurrence rules, target enums or payloads, user-authored titles/messages, project data, execution output, or server errors.
+
+The form validates absolute dates, positive recurrence intervals and counts, and recurrence end windows before converting values to ISO. Duplicate submissions are suppressed while a save is in flight, and overlapping refreshes ignore stale responses. Deletion requires confirmation; feedback uses live status or alert semantics for assistive technology.
+
 Operators can create entries for:
 - Sprints whose status is not `completed`.
 - Built-in or custom quicksprint templates available to the selected project.
