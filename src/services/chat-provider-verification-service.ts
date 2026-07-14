@@ -104,7 +104,7 @@ export class ChatProviderVerificationService {
         result = await this.withTimeout(
           this.verifyLive(profile, connection.bridgeMode, connection.setup, connection.secrets, configured),
         );
-        providerErrorCode = result.valid ? null : readProviderErrorCode(result) ?? "provider_verification_failed";
+        providerErrorCode = result.valid ? null : readProviderErrorCode(result, connection.secrets) ?? "provider_verification_failed";
         retryable = readRetryable(result);
       }
     } catch (error) {
@@ -113,7 +113,7 @@ export class ChatProviderVerificationService {
       retryable = true;
       result = {
         valid: false,
-        issues: [timedOut ? "Provider verification timed out." : sanitizeIssue(error)],
+        issues: [timedOut ? "Provider verification timed out." : sanitizeIssue(error, connection.secrets)],
       };
     }
 
@@ -121,8 +121,8 @@ export class ChatProviderVerificationService {
       capabilities: [...profile.verification.capabilities],
       providerErrorCode,
       retryable,
-      issues: result.issues.map(sanitizeIssue),
-      diagnostics: sanitizeDiagnostics(result.diagnostics ?? null),
+      issues: result.issues.map((issue) => sanitizeIssue(issue, connection.secrets)),
+      diagnostics: sanitizeDiagnostics(result.diagnostics ?? null, connection.secrets),
       setupGuidance,
     };
     const updated = this.deps.chatProviderSecretService.updateVerification(
@@ -279,28 +279,39 @@ function firstSecret(secrets: Record<string, unknown> | null, keys: readonly str
   return null;
 }
 
-function sanitizeIssue(value: unknown): string {
-  return redactText(value instanceof Error ? value.message : String(value))
-    .replace(/https?:\/\/[^\s)\]}]+/gi, "[REDACTED_URL]")
+function sanitizeIssue(value: unknown, secrets: Record<string, unknown> | null): string {
+  return sanitizeSensitiveText(value instanceof Error ? value.message : String(value), secrets)
     .slice(0, 500);
 }
 
-function sanitizeDiagnostics(value: unknown, key = ""): unknown {
+function sanitizeSensitiveText(value: string, secrets: Record<string, unknown> | null): string {
+  return redactKnownSecrets(redactText(value), secrets)
+    .replace(/https?:\/\/[^\s)\]}]+/gi, "[REDACTED_URL]")
+    .replace(/\b(authorization|cookie)\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]");
+}
+
+function sanitizeDiagnostics(value: unknown, secrets: Record<string, unknown> | null, key = ""): unknown {
   if (key && OMITTED_DIAGNOSTIC_KEY.test(key)) return undefined;
   if (Array.isArray(value)) {
-    return value.map((entry) => sanitizeDiagnostics(entry)).filter((entry) => entry !== undefined);
+    return value.map((entry) => sanitizeDiagnostics(entry, secrets)).filter((entry) => entry !== undefined);
   }
   if (value && typeof value === "object") {
     return Object.fromEntries(Object.entries(value)
-      .map(([entryKey, entryValue]) => [entryKey, sanitizeDiagnostics(entryValue, entryKey)] as const)
+      .map(([entryKey, entryValue]) => [entryKey, sanitizeDiagnostics(entryValue, secrets, entryKey)] as const)
       .filter((entry): entry is readonly [string, unknown] => entry[1] !== undefined));
   }
-  return typeof value === "string" ? redactText(value).slice(0, 500) : value;
+  return typeof value === "string" ? sanitizeSensitiveText(value, secrets).slice(0, 500) : value;
 }
 
-function readProviderErrorCode(result: ChatConnectorLiveVerificationResult): string | null {
+function readProviderErrorCode(
+  result: ChatConnectorLiveVerificationResult,
+  secrets: Record<string, unknown> | null,
+): string | null {
   const value = (result as ChatConnectorLiveVerificationResult & { providerErrorCode?: unknown }).providerErrorCode;
-  return readString(value);
+  const code = readString(value);
+  if (!code) return null;
+  const sanitized = redactKnownSecrets(code, secrets);
+  return sanitized === code ? sanitized : null;
 }
 
 function readRetryable(result: ChatConnectorLiveVerificationResult): boolean {
@@ -309,4 +320,14 @@ function readRetryable(result: ChatConnectorLiveVerificationResult): boolean {
 
 function readString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? redactText(value.trim()).slice(0, 100) : null;
+}
+
+function redactKnownSecrets(value: string, secrets: Record<string, unknown> | null): string {
+  const configuredSecrets = [...new Set(Object.values(secrets ?? {})
+    .filter((secret): secret is string => typeof secret === "string" && secret.length > 0))]
+    .sort((left, right) => right.length - left.length);
+  return configuredSecrets.reduce(
+    (sanitized, secret) => sanitized.split(secret).join("[REDACTED]"),
+    value,
+  );
 }

@@ -69,6 +69,15 @@ describe("ChatProviderActions", () => {
   it("lists provider setup definitions with generated ingress guidance", async () => {
     const { actions } = await createHarness();
 
+    const allResult = expectResult(await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "list_provider_definitions",
+      payload: { baseUrl: "https://codeux.example.test/" },
+    }));
+    expect((allResult.providerDefinitions as Array<{ kind: string }>).map((definition) => definition.kind).sort()).toEqual([
+      "discord", "imessage", "microsoft-teams", "slack", "telegram", "whatsapp",
+    ]);
+
     const result = expectResult(await actions.handleChatProviderAction({
       domain: "chat_providers",
       action: "list_provider_definitions",
@@ -216,6 +225,18 @@ describe("ChatProviderActions", () => {
 
     expect(first.approvalRequired).toBe(true);
     expect(JSON.stringify(first)).not.toContain("new-secret");
+    expect((await secretService.resolveConnection(connection.id)).secrets).toEqual({ signingSecret: "old-secret" });
+
+    const mismatchedApproval = await actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: {
+        providerConnectionId: connection.id,
+        secrets: { signingSecret: "different-secret" },
+      },
+      approval: { confirmed: true },
+    });
+    expect(mismatchedApproval.approvalRequired).toBe(true);
     expect((await secretService.resolveConnection(connection.id)).secrets).toEqual({ signingSecret: "old-secret" });
 
     const approved = expectResult(await actions.handleChatProviderAction({
@@ -558,11 +579,12 @@ describe("ChatProviderActions", () => {
           strategy: "configuration_and_live" as const,
           verifyLive: async () => ({
             valid: false,
-            issues: ["Provider rejected the configured bot identity."],
+            issues: ["Provider rejected provider-secret-token at https://provider.example.test/private-check."],
             providerErrorCode: "invalid_bot_identity",
             retryable: false,
             diagnostics: {
               capability: "authentication",
+              message: "Provider echoed provider-secret-token at https://provider.example.test/private-check.",
               authorization: "Bearer provider-secret-token",
               signedUrl: "https://provider.example.test/check?signature=provider-secret-token",
             },
@@ -597,12 +619,67 @@ describe("ChatProviderActions", () => {
       status: "failed",
       providerErrorCode: "invalid_bot_identity",
       retryable: false,
-      diagnostics: { capability: "authentication" },
+      diagnostics: {
+        capability: "authentication",
+        message: "Provider echoed [REDACTED] at [REDACTED_URL]",
+      },
     });
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain("provider-secret-token");
     expect(serialized).not.toContain("authorization");
     expect(serialized).not.toContain("signedUrl");
+  });
+
+  it("rejects MCP credential, endpoint, command, and verification mutations when credential administration is disabled", async () => {
+    const { providerRepository, secretService, verificationService } = await createHarness();
+    const actions = new ChatProviderActions(providerRepository, secretService, {
+      chatProviderVerificationService: verificationService,
+      allowCredentialMutation: () => false,
+    });
+    const connection = await secretService.createConnection({
+      providerKind: "slack",
+      displayName: "Credential authorization",
+      bridgeMode: "webhook",
+      setup: { eventsUrl: "https://provider.example.test/events" },
+      secrets: { signingSecret: "existing-signing-secret" },
+    });
+    const commandConnection = providerRepository.createConnection({
+      providerKind: "imessage",
+      displayName: "Command authorization",
+      bridgeMode: "native_bridge",
+      setup: { command: "/usr/local/bin/existing-bridge" },
+    });
+
+    await expect(actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "create_connection",
+      payload: {
+        providerKind: "slack",
+        displayName: "Denied credential",
+        secrets: { bridgeApiKey: "denied-secret" },
+      },
+    })).rejects.toThrow(/credential administration is disabled/i);
+    await expect(actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: {
+        providerConnectionId: connection.id,
+        setup: { eventsUrl: "https://provider.example.test/new-events" },
+      },
+    })).rejects.toThrow(/credential administration is disabled/i);
+    await expect(actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "update_connection",
+      payload: {
+        providerConnectionId: commandConnection.id,
+        setup: { command: "/usr/local/bin/new-bridge" },
+      },
+    })).rejects.toThrow(/credential administration is disabled/i);
+    await expect(actions.handleChatProviderAction({
+      domain: "chat_providers",
+      action: "verify_connection",
+      payload: { providerConnectionId: connection.id },
+    })).rejects.toThrow(/credential administration is disabled/i);
   });
 
   it("enforces persisted project ownership and one-use delivery retry approval", async () => {

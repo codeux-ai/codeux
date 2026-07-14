@@ -153,6 +153,19 @@ export function createDashboardDependencies(
     logger: logger.child({ component: "sprint-rollback-service" }),
   });
 
+  const chatProviderOutboundService = new ChatProviderOutboundService({
+    chatProviderRepository,
+    chatProviderSecretService,
+    connectorRegistry: chatConnectorRegistry,
+    logger: logger.child({ component: "chat-provider-outbound-service" }),
+  });
+  const chatProviderSessionRuntimeService = new ChatProviderSessionRuntimeService({
+    chatProviderRepository,
+    chatProviderSecretService,
+    connectorRegistry: chatConnectorRegistry,
+    logger: logger.child({ component: "chat-provider-session-runtime-service" }),
+  });
+
   const managementToolHandler = new ManagementToolHandler({
     sprintPreviewService: coreDeps.sprintPreviewService,
     customDashboardRepository: coreDeps.customDashboardRepository,
@@ -165,6 +178,11 @@ export function createDashboardDependencies(
     settingsRepository: coreDeps.settingsRepository,
     chatProviderRepository: coreDeps.chatProviderRepository,
     chatProviderSecretService: coreDeps.chatProviderSecretService,
+    chatProviderVerificationService: coreDeps.chatProviderVerificationService,
+    chatProviderOutboundService,
+    chatConnectorRegistry: coreDeps.chatConnectorRegistry,
+    headlessAuthService: coreDeps.headlessAuthService,
+    agentPresetRepository: coreDeps.agentPresetRepository,
     agentPresetSyncService: coreDeps.agentPresetSyncService,
     memoryService: coreDeps.memoryService,
     memoryPromotionService: coreDeps.memoryPromotionService,
@@ -213,19 +231,6 @@ export function createDashboardDependencies(
     providerExecutionService,
     managementToolHandler,
     executionRepository,
-  });
-
-  const chatProviderOutboundService = new ChatProviderOutboundService({
-    chatProviderRepository,
-    chatProviderSecretService,
-    connectorRegistry: chatConnectorRegistry,
-    logger: logger.child({ component: "chat-provider-outbound-service" }),
-  });
-  const chatProviderSessionRuntimeService = new ChatProviderSessionRuntimeService({
-    chatProviderRepository,
-    chatProviderSecretService,
-    connectorRegistry: chatConnectorRegistry,
-    logger: logger.child({ component: "chat-provider-session-runtime-service" }),
   });
 
   const chatThreadRuntimeService = new ChatThreadRuntimeService({

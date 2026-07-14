@@ -36,7 +36,7 @@ Reconnect attempts are capped and jittered, with at most one timer and active co
 
 ## Lifecycle and logging
 
-Dashboard startup launches ingress recovery, session recovery, and outbound stale-lease recovery independently. Connector failures are logged without blocking the dashboard server or global readiness. Repeated starts are idempotent.
+Dashboard startup launches ingress recovery, session recovery, and outbound stale-lease recovery independently. The production factory shares the same registry-backed secret, verification, ingress, outbound, and session service instances across REST routes, dashboard chat management, standalone MCP management, and lifecycle hooks. Connector failures are logged without blocking the dashboard server or global readiness. Repeated starts are idempotent.
 
 Shutdown order is ingress processing, outbound delivery, provider sessions, then the dashboard server handle. Structured connector logs carry correlation id, provider kind, connection, binding, delivery/session id, attempt, latency, outcome or session transition, retry time, and a redacted provider error code. Callback text, reply text, raw payloads, and credentials are not log metadata by default.
 

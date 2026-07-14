@@ -169,6 +169,37 @@ describe("chat provider ingress routes", () => {
     expect(context.postMessage).not.toHaveBeenCalled();
   });
 
+  it("authenticates and answers official Slack POST handshakes before persistence", async () => {
+    const context = await startTestServer();
+    const connection = await context.chatProviderSecretService.createConnection({
+      providerKind: "slack",
+      displayName: "Slack official handshake",
+      bridgeMode: "official_api",
+      status: "active",
+      setup: { appId: "app-handshake", workspaceId: "workspace-handshake" },
+      secrets: { signingSecret: "slack-signing-secret", botToken: "slack-bot-token" },
+    });
+    const payload = { type: "url_verification", challenge: "slack-challenge-value" };
+    const rawBody = JSON.stringify(payload);
+    const timestamp = String(Math.floor(Date.now() / 1_000));
+    const signature = `v0=${createHmac("sha256", "slack-signing-secret").update(`v0:${timestamp}:${rawBody}`).digest("hex")}`;
+
+    const rejected = await postRawIngress(context, connection.id, rawBody, {
+      "x-slack-request-timestamp": timestamp,
+      "x-slack-signature": "v0=invalid",
+    });
+    expect(rejected.status).toBe(401);
+
+    const accepted = await postRawIngress(context, connection.id, rawBody, {
+      "x-slack-request-timestamp": timestamp,
+      "x-slack-signature": signature,
+    });
+    expect(accepted.status).toBe(200);
+    expect(await accepted.json()).toEqual({ challenge: "slack-challenge-value" });
+    expect(context.chatProviderRepository.listDeliveries({ providerConnectionId: connection.id })).toEqual([]);
+    expect(context.postMessage).not.toHaveBeenCalled();
+  });
+
   it("authenticates official WhatsApp POST callbacks from exact raw bytes without a timestamp", async () => {
     const context = await startTestServer();
     const project = createProject(context, "whatsapp-raw-signature");

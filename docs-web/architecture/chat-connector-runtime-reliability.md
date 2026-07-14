@@ -26,6 +26,6 @@ Connector health aggregates persisted counts and last outcomes without network c
 
 ## Resumable sessions and lifecycle
 
-The session runtime consumes each profile's required/session-scope declarations. Managed drivers are optional, so unavailable or disabled connectors never block dashboard readiness. Durable sessions resume after restart with bounded reconnect attempts and one timer/controller per session.
+The session runtime consumes each profile's required/session-scope declarations. Managed drivers are optional, so unavailable or disabled connectors never block dashboard readiness. Durable sessions resume after restart with bounded reconnect attempts and one timer/controller per session. The production factory shares the same registry-backed secret, verification, ingress, outbound, and session service instances across REST routes, dashboard chat management, standalone MCP management, and lifecycle hooks.
 
 Shutdown clears reconnect and retry timers, aborts ingress, fetch, command, and session work, releases owned leases safely, and settles connector jobs before the server/storage boundary closes. Structured logs include correlation, provider, connection, binding, delivery/session, attempt, latency, outcome, retry time, transition, and redacted error code—never payload or credential text by default.

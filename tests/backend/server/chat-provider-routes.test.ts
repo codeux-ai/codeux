@@ -409,6 +409,7 @@ describe("chat provider dashboard routes", () => {
       conversationThreadId: conversationMessage.threadId,
       conversationMessageId: conversationMessage.id,
       status: "failed",
+      lastError: "Provider rejected https://provider.example.test/retry?signature=private-signature",
       payload: { replyText: "private payload text" },
     });
     context.chatProviderRepository.recordInboundMessage({
@@ -424,6 +425,10 @@ describe("chat provider dashboard routes", () => {
     expect(listed.deliveries.map((delivery: any) => delivery.direction).sort()).toEqual(["inbound", "outbound"]);
     expect(JSON.stringify(listed)).not.toContain("private payload text");
     expect(JSON.stringify(listed)).not.toContain("private inbound text");
+    expect(JSON.stringify(listed)).not.toContain("provider.example.test");
+    expect(listed.deliveries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: outbound.id, lastError: "Provider rejected [REDACTED_URL]" }),
+    ]));
 
     const deniedProject = createProject(context, "delivery-control-denied");
     const scopedList = await fetch(`${context.baseUrl}/api/chat-providers/deliveries`, {

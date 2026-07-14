@@ -337,7 +337,9 @@ function sanitizeDelivery(delivery: ChatProviderMessageDeliveryRecord): Omit<Cha
   const { payload: _payload, leaseOwner: _leaseOwner, leaseExpiresAt: _leaseExpiresAt, ...safe } = delivery;
   return {
     ...safe,
-    lastError: safe.lastError ? redactText(safe.lastError).slice(0, 500) : null,
+    lastError: safe.lastError
+      ? redactText(safe.lastError).replace(/https?:\/\/[^\s)\]}]+/gi, "[REDACTED_URL]").slice(0, 500)
+      : null,
   };
 }
 
