@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const dashboardRoot = path.join(root, "dashboard/src/v2");
+const dashboardRoot = path.join(root, "dashboard/src");
 const allowlistPath = path.join(root, "scripts/dashboard-i18n-allowlist.json");
 
 const ignoredDirectoryNames = new Set(["__tests__", "fixtures"]);
