@@ -143,6 +143,8 @@ Dashboard Login opens the provider's real interactive CLI in the managed contain
 
 The terminal interprets ANSI cursor and erase controls while removing non-display OSC/DCS strings such as Qwen window-title and terminal-color queries. Full-screen redraws stay within a bounded 100-column by 30-row layout, meaningful prompts and authentication links remain selectable, and output uses high-contrast white text. Click the console to focus it. Right-click exposes Paste without transferring focus away from the session, while Ctrl+V and Command+V continue to work normally. Arrow keys, Tab, Escape, Backspace, Ctrl+C, and Ctrl+D are sent directly to the provider CLI. Clipboard success or denial appears below the console instead of failing silently.
 
+When German is selected, dashboard-owned Integrations and MCP labels, instructions, validation, and accessible feedback are translated. Provider and product names, credentials, redacted secret placeholders, detected paths, endpoints, repository and tool identifiers, scopes, transport values, terminal output, and server-returned diagnostics remain exactly as supplied. Locale changes therefore do not alter saved settings, provider authentication, secure-storage checks, MCP installation, token regeneration, or terminal behavior.
+
 ## Connections panel
 
 A separate **Connections** panel lists active MCP client connections to this project — display name, role, transport, capabilities, last activity. From here you can rename connections or set the *preferred worker* for the project.
