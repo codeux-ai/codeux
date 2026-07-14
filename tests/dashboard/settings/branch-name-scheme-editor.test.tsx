@@ -6,8 +6,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
 import { BranchNameSchemeEditor } from "../../../dashboard/src/v2/components/settings/BranchNameSchemeEditor.js";
 import { TextInput } from "../../../dashboard/src/v2/components/settings/SettingsFormFields.js";
-import { getBranchSchemeOptions, getCanonicalBranchNameToken, BRANCH_NAME_TOKEN_LABELS } from "../../../dashboard/src/v2/lib/settings-view-models.js";
+import { getBranchNameTokenLabels, getBranchSchemeOptions, getCanonicalBranchNameToken, BRANCH_NAME_TOKEN_LABELS } from "../../../dashboard/src/v2/lib/settings-view-models.js";
 import { BRANCH_NAME_TOKENS } from "../../../src/domain/settings/branch-name-tokens.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
 
 describe("BranchNameSchemeEditor", () => {
   afterEach(() => {
@@ -92,5 +93,27 @@ describe("BranchNameSchemeEditor", () => {
     const limitCounter = screen.getByText("10 / 10");
     expect(limitCounter.className).toContain("text-red-500");
     expect(limitCounter.className).toContain("motion-safe:animate-form-shake");
+  });
+
+  it("localizes German presentation metadata while preserving branch tokens and template payloads", () => {
+    const onChange = vi.fn();
+    render(
+      <DashboardI18nProvider initialLocale="de">
+        <BranchNameSchemeEditor value="feature/{sprint_id}" onChange={onChange} />
+      </DashboardI18nProvider>,
+    );
+
+    expect((screen.getByRole("textbox", { name: "Sprint-Branch-Schema" }) as HTMLInputElement).value).toBe("feature/{sprint_id}");
+    expect(screen.getByText("Platzhalter:")).not.toBeNull();
+    expect(screen.getByText("{sprint_id}")).not.toBeNull();
+    expect(getBranchNameTokenLabels("de").sprint_id).toBe("Sprint-ID");
+    expect(getBranchSchemeOptions("de").map((option) => option.value)).toEqual(
+      BRANCH_NAME_TOKENS.map((token) => `{${token}}`),
+    );
+
+    fireEvent.input(screen.getByRole("textbox", { name: "Sprint-Branch-Schema" }), {
+      target: { value: "release/{sprint_number}" },
+    });
+    expect(onChange).toHaveBeenCalledWith("release/{sprint_number}");
   });
 });

@@ -4,6 +4,7 @@ import { SelectInput, Toggle, NumberInput } from "../SettingsFormFields.js";
 import { OptionCardChoiceGroup, SectionCard, Row, ToggleLinkedControlRow } from "./SharedPanelComponents.js";
 import { Plus, ShieldCheck, Trash2 } from "lucide-preact";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../lib/settings.js";
+import { useSettingsOperationsTranslations } from "../../../i18n/messages/settings-operations.js";
 
 type QaPresetOption = {
   value: string;
@@ -49,6 +50,7 @@ export const SelfReflectionControls: FunctionComponent<{
   basePath: string;
   last?: boolean;
 }> = ({ title, description, settings, update, getBadge, basePath, last }) => {
+  const { t } = useSettingsOperationsTranslations();
   const updateCriterion = (criterionId: string, patch: Partial<ReflectionCriterion>): void => {
     update({
       ...settings,
@@ -85,7 +87,7 @@ export const SelfReflectionControls: FunctionComponent<{
       <div className="flex w-full min-w-0 flex-col gap-4">
         <div className="flex flex-wrap items-center gap-3">
           <Toggle
-            aria-label={`Enable ${title}`}
+            aria-label={t("Enable {title}", { title })}
             value={settings.enabled}
             onChange={(value) => update({ ...settings, enabled: value })}
           />
@@ -97,16 +99,16 @@ export const SelfReflectionControls: FunctionComponent<{
                 : "border-black/[0.06] bg-black/[0.03] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"
             }`}
           >
-            {settings.enabled ? "Opted in" : "Off by default"}
+            {settings.enabled ? t("Opted in") : t("Off by default")}
           </span>
         </div>
 
         <label className="flex flex-col gap-2">
           <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
-            Max improvement attempts
+            {t("Max improvement attempts")}
           </span>
           <NumberInput
-            aria-label={`${title} max improvement attempts`}
+            aria-label={t("{title} max improvement attempts", { title })}
             value={settings.maxImprovementAttempts}
             min={0}
             max={5}
@@ -120,7 +122,7 @@ export const SelfReflectionControls: FunctionComponent<{
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
-              Criteria rows
+              {t("Criteria rows")}
             </div>
             <button
               type="button"
@@ -128,13 +130,13 @@ export const SelfReflectionControls: FunctionComponent<{
               className="inline-flex items-center gap-2 rounded-full border border-signal-500/25 bg-signal-500/[0.08] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-700 transition-colors hover:bg-signal-500/[0.14] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:text-signal-200"
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2.4} />
-              Add criterion
+              {t("Add criterion")}
             </button>
           </div>
 
           {settings.criteria.length === 0 ? (
             <div className="rounded-[1rem] border border-dashed border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">
-              No rating criteria are configured. Add a row before enabling self-reflection.
+              {t("No rating criteria are configured. Add a row before enabling self-reflection.")}
             </div>
           ) : (
             <div className="grid gap-3">
@@ -149,7 +151,7 @@ export const SelfReflectionControls: FunctionComponent<{
                   >
                     <label className="flex min-w-0 flex-col gap-1.5" htmlFor={labelId}>
                       <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-                        Label
+                        {t("Label")}
                       </span>
                       <input
                         id={labelId}
@@ -161,7 +163,7 @@ export const SelfReflectionControls: FunctionComponent<{
                     </label>
                     <label className="flex min-w-0 flex-col gap-1.5" htmlFor={promptId}>
                       <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-                        Rating prompt
+                        {t("Rating prompt")}
                       </span>
                       <textarea
                         id={promptId}
@@ -173,7 +175,7 @@ export const SelfReflectionControls: FunctionComponent<{
                     </label>
                     <label className="flex min-w-0 flex-col gap-1.5" htmlFor={thresholdId}>
                       <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-                        Threshold
+                        {t("Threshold")}
                       </span>
                       <input
                         id={thresholdId}
@@ -182,7 +184,7 @@ export const SelfReflectionControls: FunctionComponent<{
                         max={1}
                         step={0.05}
                         value={criterion.threshold}
-                        aria-label={`${criterion.label || `Criterion ${index + 1}`} threshold`}
+                        aria-label={t("{label} threshold", { label: criterion.label || t("Criterion {number}", { number: index + 1 }) })}
                         onInput={(event) => updateCriterion(criterion.id, { threshold: clampThreshold(Number(event.currentTarget.value)) })}
                         className="rounded-xl border border-black/[0.08] bg-white/80 px-3 py-2 font-mono text-sm text-slate-800 outline-none focus:border-signal-500/40 focus:ring-2 focus:ring-signal-500/20 dark:border-white/[0.08] dark:bg-void-900/60 dark:text-slate-100"
                       />
@@ -191,7 +193,7 @@ export const SelfReflectionControls: FunctionComponent<{
                       <button
                         type="button"
                         onClick={() => removeCriterion(criterion.id)}
-                        aria-label={`Remove ${criterion.label || `criterion ${index + 1}`}`}
+                        aria-label={t("Remove {label}", { label: criterion.label || t("Criterion {number}", { number: index + 1 }) })}
                         className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-status-red/20 bg-status-red/[0.06] text-status-red transition-colors hover:bg-status-red/[0.12] focus:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30"
                       >
                         <Trash2 className="h-4 w-4" strokeWidth={2.4} />
@@ -215,16 +217,17 @@ const QaAgentPresetChecklist: FunctionComponent<{
   disabled: boolean;
   onChange: (ids: string[]) => void;
 }> = ({ label, value, options, disabled, onChange }) => {
+  const { t } = useSettingsOperationsTranslations();
   const selectedCount = value.length;
-  const disabledReason = "Select a project to choose custom QA agents. Built-in QA routing remains available.";
+  const disabledReason = t("Select a project to choose custom QA agents. Built-in QA routing remains available.");
   const fallbackText = disabled
-    ? "Built-in QA fallback active. Select a project to choose custom QA agents."
+    ? t("Built-in QA fallback active. Select a project to choose custom QA agents.")
     : selectedCount === 0
-      ? "Built-in QA fallback active."
-      : `${selectedCount} custom QA ${selectedCount === 1 ? "agent" : "agents"} selected.`;
+      ? t("Built-in QA fallback active.")
+      : t(selectedCount === 1 ? "{count} custom QA agent selected." : "{count} custom QA agents selected.", { count: selectedCount });
   const optionCards = options.map((option) => ({
     ...option,
-    description: "Use this project agent for this QA trigger.",
+    description: t("Use this project agent for this QA trigger."),
     disabled,
     disabledReason: disabled ? disabledReason : undefined,
   }));
@@ -239,11 +242,11 @@ const QaAgentPresetChecklist: FunctionComponent<{
           options={optionCards}
           aria-label={label}
           selectedSummaryLabel={fallbackText}
-          helperText="Leave empty to use the built-in QA fallback for this trigger."
+          helperText={t("Leave empty to use the built-in QA fallback for this trigger.")}
         />
       ) : (
         <div className="rounded-[0.85rem] border border-dashed border-black/[0.06] bg-black/[0.02] px-3 py-2 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">
-          {disabled ? "Select a project to choose custom QA agents. Built-in QA routing remains available." : "No custom QA agents are available for this project. Built-in QA routing remains available."}
+          {disabled ? t("Select a project to choose custom QA agents. Built-in QA routing remains available.") : t("No custom QA agents are available for this project. Built-in QA routing remains available.")}
         </div>
       )}
     </div>
@@ -263,48 +266,49 @@ export const QAPanel: FunctionComponent<{
   selfReflection?: ProjectSettings["agents"]["selfReflection"]["qualityAssurance"];
   updateSelfReflection?: (settings: ProjectSettings["agents"]["selfReflection"]["qualityAssurance"]) => void;
 }> = ({ settings, update, getBadge, sectionBadge, presetOptions, selectorsDisabled, selectedProjectName, activeScope, selfReflection, updateSelfReflection }) => {
+  const { t } = useSettingsOperationsTranslations();
   const triggerRows = [
     {
       key: "taskCompletion" as const,
-      label: "Review every completed task",
-      description: "Runs once after a task completes, then only repeats for QA-driven follow-up loops until the task max run count is reached.",
-      presetLabel: "Task completion QA agent presets",
+      label: t("Review every completed task"),
+      description: t("Runs once after a task completes, then only repeats for QA-driven follow-up loops until the task max run count is reached."),
+      presetLabel: t("Task completion QA agent presets"),
       badgePath: "agents.qualityAssurance.taskCompletion.enabled",
     },
     {
       key: "sprintCompletion" as const,
-      label: "Review before sprint completion",
-      description: "Blocks final sprint completion when QA finds integration problems and can route the fix back into the most relevant task.",
-      presetLabel: "Sprint completion QA agent presets",
+      label: t("Review before sprint completion"),
+      description: t("Blocks final sprint completion when QA finds integration problems and can route the fix back into the most relevant task."),
+      presetLabel: t("Sprint completion QA agent presets"),
       badgePath: "agents.qualityAssurance.sprintCompletion.enabled",
     },
     {
       key: "completedTaskWithoutPr" as const,
-      label: "Review completed tasks without a PR",
-      description: "Checks whether a missing PR is valid or whether the task still needs branch and PR hygiene before it can stay complete.",
-      presetLabel: "Completed task without PR QA agent presets",
+      label: t("Review completed tasks without a PR"),
+      description: t("Checks whether a missing PR is valid or whether the task still needs branch and PR hygiene before it can stay complete."),
+      presetLabel: t("Completed task without PR QA agent presets"),
       badgePath: "agents.qualityAssurance.completedTaskWithoutPr.enabled",
     },
   ];
 
   return (
       <SectionCard
-        title="Quality Assurance"
+        title={t("Quality Assurance")}
         watermark="QA"
         badge={sectionBadge}
         icon={<ShieldCheck strokeWidth={2.4} />}
         highlights={[
-          { label: "QA agent", value: settings.enabled ? "Enabled" : "Off", tone: settings.enabled ? "active" : "warning" },
-          { label: "Review triggers", value: `${triggerRows.filter((trigger) => settings[trigger.key].enabled).length} of ${triggerRows.length}` },
-          { label: "Self-reflection", value: selfReflection?.enabled ? "Enabled" : "Off" },
+          { label: t("QA agent"), value: settings.enabled ? t("Enabled") : t("Off"), tone: settings.enabled ? "active" : "warning" },
+          { label: t("Review triggers"), value: t("{enabled} of {total}", { enabled: triggerRows.filter((trigger) => settings[trigger.key].enabled).length, total: triggerRows.length }) },
+          { label: t("Self-reflection"), value: selfReflection?.enabled ? t("Enabled") : t("Off") },
         ]}
       >
         <Row
-          label="Enable QA agent"
-          description="Runs a senior QA pass after completion events, using full sprint context and continuing the current task session when fixes are required."
+          label={t("Enable QA agent")}
+          description={t("Runs a senior QA pass after completion events, using full sprint context and continuing the current task session when fixes are required.")}
           badge={getBadge("agents.qualityAssurance.enabled")}
         >
-          <Toggle aria-label="Toggle setting"             value={settings.enabled}
+          <Toggle aria-label={t("Toggle setting")} value={settings.enabled}
             onChange={(value) => update({ enabled: value })}
           />
         </Row>
@@ -316,8 +320,8 @@ export const QAPanel: FunctionComponent<{
                 <div className="rounded-[1rem] border border-black/[0.06] bg-white/65 p-3 dark:border-white/[0.06] dark:bg-white/[0.04]">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                      <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">Task QA max runs</div>
-                      <div className="mt-1 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">Initial task review plus follow-up checks. Default is 3.</div>
+                      <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t("Task QA max runs")}</div>
+                      <div className="mt-1 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">{t("Initial task review plus follow-up checks. Default is 3.")}</div>
                     </div>
                     {getBadge("agents.qualityAssurance.maxTaskReviewRuns") ? (
                       <span className="rounded-full border border-amber-500/20 bg-amber-500/[0.08] px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-200">
@@ -330,7 +334,7 @@ export const QAPanel: FunctionComponent<{
                       value={settings.maxTaskReviewRuns}
                       min={1}
                       max={20}
-                      aria-label="Task QA max runs"
+                      aria-label={t("Task QA max runs")}
                       onChange={(value) => update({
                         maxTaskReviewRuns: Number.isFinite(value) ? Math.min(20, Math.max(1, Math.floor(value))) : 1,
                       })}
@@ -341,8 +345,8 @@ export const QAPanel: FunctionComponent<{
                 <div className="rounded-[1rem] border border-black/[0.06] bg-white/65 p-3 dark:border-white/[0.06] dark:bg-white/[0.04]">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                      <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">Sprint QA max runs</div>
-                      <div className="mt-1 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">Initial sprint review plus sprint-level follow-up checks. Default is 3.</div>
+                      <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t("Sprint QA max runs")}</div>
+                      <div className="mt-1 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">{t("Initial sprint review plus sprint-level follow-up checks. Default is 3.")}</div>
                     </div>
                     {getBadge("agents.qualityAssurance.maxSprintReviewRuns") ? (
                       <span className="rounded-full border border-amber-500/20 bg-amber-500/[0.08] px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-200">
@@ -355,7 +359,7 @@ export const QAPanel: FunctionComponent<{
                       value={settings.maxSprintReviewRuns}
                       min={1}
                       max={20}
-                      aria-label="Sprint QA max runs"
+                      aria-label={t("Sprint QA max runs")}
                       onChange={(value) => update({
                         maxSprintReviewRuns: Number.isFinite(value) ? Math.min(20, Math.max(1, Math.floor(value))) : 1,
                       })}
@@ -367,9 +371,9 @@ export const QAPanel: FunctionComponent<{
               <div className="rounded-[1rem] border border-black/[0.06] bg-white/65 p-3 dark:border-white/[0.06] dark:bg-white/[0.04]">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">When QA max runs is exhausted</div>
+                    <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t("When QA max runs is exhausted")}</div>
                     <div className="mt-1 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
-                      Finish marks the task complete despite no QA pass; Fail marks it failed; Escalate holds it for a human.
+                      {t("Finish marks the task complete despite no QA pass; Fail marks it failed; Escalate holds it for a human.")}
                     </div>
                   </div>
                   {getBadge("agents.qualityAssurance.exhaustionPolicy") ? (
@@ -387,11 +391,11 @@ export const QAPanel: FunctionComponent<{
                         : DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.exhaustionPolicy,
                     })}
                     options={[
-                      { value: "FINISH_TASK", label: "Finish task" },
-                      { value: "FAIL_TASK", label: "Fail task" },
-                      { value: "ESCALATE_TO_HUMAN", label: "Escalate to human" },
+                      { value: "FINISH_TASK", label: t("Finish task") },
+                      { value: "FAIL_TASK", label: t("Fail task") },
+                      { value: "ESCALATE_TO_HUMAN", label: t("Escalate to human") },
                     ]}
-                    aria-label="QA exhaustion policy"
+                    aria-label={t("QA exhaustion policy")}
                   />
                 </div>
               </div>
@@ -399,7 +403,7 @@ export const QAPanel: FunctionComponent<{
 
             {selectedProjectName && activeScope !== "project" ? (
               <div className="rounded-[1.15rem] border border-signal-500/18 bg-signal-500/[0.08] px-4 py-3 text-xs leading-relaxed text-signal-700 dark:border-signal-400/18 dark:bg-signal-400/[0.08] dark:text-signal-200">
-                QA settings are project-local. Changing any QA control here switches the panel to Project scope for {selectedProjectName}.
+                {t("QA settings are project-local. Changing any QA control here switches the panel to Project scope for {projectName}.", { projectName: selectedProjectName })}
               </div>
             ) : null}
 
@@ -441,21 +445,21 @@ export const QAPanel: FunctionComponent<{
 
             {selectorsDisabled ? (
               <div className="rounded-[1.15rem] border border-black/[0.05] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.05] dark:bg-white/[0.02] dark:text-slate-400">
-                Select a project to choose a custom QA agent. Built-in QA routing remains available without a project-specific preset.
+                {t("Select a project to choose a custom QA agent. Built-in QA routing remains available without a project-specific preset.")}
               </div>
             ) : null}
 
           </>
         ) : (
           <div className="rounded-[1.15rem] border border-dashed border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">
-            QA is disabled. Enable it to review completed tasks, gate sprint completion, and inspect completed tasks that do not yet have a PR.
+            {t("QA is disabled. Enable it to review completed tasks, gate sprint completion, and inspect completed tasks that do not yet have a PR.")}
           </div>
         )}
 
         {selfReflection && updateSelfReflection ? (
           <SelfReflectionControls
-            title="QA self-reflection"
-            description="Optionally rates QA review output against editable criteria and can retry improvement before the review is accepted."
+            title={t("QA self-reflection")}
+            description={t("Optionally rates QA review output against editable criteria and can retry improvement before the review is accepted.")}
             settings={selfReflection}
             update={updateSelfReflection}
             getBadge={getBadge}
