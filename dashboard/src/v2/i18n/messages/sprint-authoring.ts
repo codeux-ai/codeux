@@ -496,14 +496,50 @@ const PROJECT_SETTINGS_GERMAN: Readonly<Record<string, string>> = {
   "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete.": "Importierte GitHub-/GitLab-Issues nach Sprintabschluss und abgeschlossenem Main-Merge-Gate schließen.",
   "Close imported GitHub/GitLab issues after the sprint finishes. Disabled while GitHub mode is Local.": "Importierte GitHub-/GitLab-Issues nach Sprintabschluss schließen. Im lokalen GitHub-Modus deaktiviert.",
   "Controls how aggressively the sprint loop waits on checks, comments, and autofix behavior.": "Steuert, wie intensiv die Sprint-Schleife auf Checks, Kommentare und automatische Korrekturen wartet.",
+  "Controls how aggressively the sprint loop waits on checks, comments, and autofix behavior. Disabled while GitHub mode is Local.": "Steuert, wie intensiv die Sprint-Schleife auf Checks, Kommentare und automatische Korrekturen wartet. Im lokalen GitHub-Modus deaktiviert.",
+  "Turn CI and PR gate reasoning on for this scope.": "CI- und PR-Gate-Auswertung für diesen Bereich aktivieren.",
+  "Track PR and CI updates while runs are active.": "PR- und CI-Aktualisierungen während aktiver Läufe verfolgen.",
+  "Require review comment resolution before main branch merge.": "Vor dem Merge in den Main-Branch die Klärung von Review-Kommentaren verlangen.",
+  "Escalate main-branch merge conflicts to the virtual worker with branch and sprint context.": "Merge-Konflikte im Main-Branch mit Branch- und Sprintkontext an den virtuellen Worker eskalieren.",
+  "Dispatch the virtual worker to fix failing CI on the main-branch merge gate before escalating to a human.": "Den virtuellen Worker zur Behebung fehlgeschlagener CI am Main-Branch-Merge-Gate einsetzen, bevor an einen Menschen eskaliert wird.",
+  "Require review comment resolution before feature branch merge.": "Vor dem Merge des Feature-Branches die Klärung von Review-Kommentaren verlangen.",
+  "Escalate feature-branch merge conflicts to the virtual worker with branch and prompt context.": "Merge-Konflikte im Feature-Branch mit Branch- und Anweisungskontext an den virtuellen Worker eskalieren.",
+  "Policy for leaving feature work at PR creation or merging after checks and comments are satisfied.": "Legt fest, ob Feature-Arbeit nach der PR-Erstellung verbleibt oder nach erfolgreichen Checks und geklärten Kommentaren gemergt wird.",
+  "Policy for leaving the final main PR at creation or merging it after checks and comments are satisfied.": "Legt fest, ob der abschließende Main-PR nach der Erstellung verbleibt oder nach erfolgreichen Checks und geklärten Kommentaren gemergt wird.",
   "Enable or disable orchestration phases and tune watch-loop timing.": "Orchestrierungsphasen aktivieren oder deaktivieren und Überwachungszeiten einstellen.",
+  "Polling interval in seconds for the orchestration watch loop.": "Abfrageintervall der Orchestrierungs-Überwachungsschleife in Sekunden.",
+  "Maximum watch-loop runtime before the server returns progress and rerun guidance.": "Maximale Laufzeit der Überwachungsschleife, bevor der Server Fortschritt und Hinweise zur erneuten Ausführung zurückgibt.",
   "Execution environment, cleanup rules, and container credential mount behavior.": "Ausführungsumgebung, Bereinigungsregeln und Einbindung von Container-Zugangsdaten.",
   "Run provider CLIs on the host or inside a containerized runtime.": "Provider-CLIs auf dem Host oder in einer containerisierten Laufzeit ausführen.",
   "Use the auto-updating Code UX runtime or an explicit custom image.": "Die automatisch aktualisierte Code-UX-Laufzeit oder ein eigenes Image verwenden.",
+  "Container image used only in custom mode.": "Container-Image, das nur im Modus für eigene Images verwendet wird.",
+  "Optional bootstrap script relative to the repo or runtime root.": "Optionales Startskript relativ zum Repository- oder Laufzeitstamm.",
+  "Type a relative path or browse to an absolute local script.": "Einen relativen Pfad eingeben oder zu einem absoluten lokalen Skript navigieren.",
+  "Build and reuse an extension image for an explicitly configured setup script.": "Ein Erweiterungs-Image für ein ausdrücklich konfiguriertes Einrichtungsskript erstellen und wiederverwenden.",
+  "Build and reuse a derived Docker image keyed by the base image and setup script contents.": "Ein abgeleitetes Docker-Image anhand des Basis-Images und des Inhalts des Einrichtungsskripts erstellen und wiederverwenden.",
+  "Download the matched browser into a reusable local Docker volume for coding containers.": "Den passenden Browser in ein wiederverwendbares lokales Docker-Volume für Coding-Container herunterladen.",
+  "Seconds to wait before retrying a rate-limited provider call.": "Wartezeit in Sekunden vor der Wiederholung eines durch Rate-Limit begrenzten Provider-Aufrufs.",
+  "Maximum rate-limit retries before the invocation fails instead of requeueing again.": "Maximale Anzahl von Rate-Limit-Wiederholungen, bevor der Aufruf fehlschlägt, statt erneut eingereiht zu werden.",
+  "Maximum number of retry attempts to extract valid JSON from noisy model responses.": "Maximale Anzahl von Wiederholungsversuchen, um gültiges JSON aus fehlerhaften Modellantworten zu extrahieren.",
   "Preview runtime controls, browser visibility, rebuild policy, and container limits for the in-app browser.": "Vorschaulaufzeit, Browsersichtbarkeit, Neubau-Regeln und Containerlimits für den App-Browser.",
+  "Stop the oldest active previews before launching another one when this limit is exceeded.": "Die ältesten aktiven Vorschauen stoppen, bevor bei Überschreitung dieses Limits eine weitere gestartet wird.",
+  "Lower bound for localhost preview port allocation.": "Untergrenze für die Zuweisung lokaler Vorschauports.",
+  "Upper bound for localhost preview port allocation.": "Obergrenze für die Zuweisung lokaler Vorschauports.",
+  "Published container port used by the browser proxy.": "Veröffentlichter Container-Port, den der Browser-Proxy verwendet.",
+  "Optional project-relative browser startup override script.": "Optionales projektbezogenes Skript, das den Browserstart überschreibt.",
+  "Optional command that replaces auto-detected preview startup. Per-container overrides are available in Browser.": "Optionaler Befehl, der den automatisch erkannten Vorschaustart ersetzt. Überschreibungen pro Container sind im Browser verfügbar.",
+  "Environment variables injected into every preview container for this scope.": "Umgebungsvariablen, die für diesen Bereich in jeden Vorschau-Container eingefügt werden.",
   "Enable or disable installed skills available to the orchestration layer.": "Installierte Skills für die Orchestrierung aktivieren oder deaktivieren.",
   "Local Git mode keeps orchestration repo-local, so pull request, linked issue, and CI automation controls are disabled until GitHub mode is Remote.": "Der lokale Git-Modus hält die Orchestrierung im Repository; PR-, Issue- und CI-Automatisierung bleiben bis zum Remote-Modus deaktiviert.",
   "System": "System", "Project": "Projekt", "Sprint": "Sprint", "Mixed": "Gemischt",
+};
+
+const translateCapturedProjectSettingsLabel = (value: string): string => {
+  const normalizedValue = value.toLocaleLowerCase("en-US");
+  const match = Object.entries(PROJECT_SETTINGS_GERMAN).find(
+    ([label]) => label.toLocaleLowerCase("en-US") === normalizedValue,
+  );
+  return match?.[1] ?? value;
 };
 
 export const translateProjectSettingsLiteral = (locale: DashboardLocale, value: string): string => {
@@ -516,15 +552,15 @@ export const translateProjectSettingsLiteral = (locale: DashboardLocale, value: 
   }
   const togglePhase = /^Toggle the (.+) phase for this scope\.$/.exec(value);
   if (togglePhase) {
-    return `Phase „${translateProjectSettingsLiteral(locale, togglePhase[1])}“ für diesen Bereich ein- oder ausschalten.`;
+    return `Phase „${translateCapturedProjectSettingsLabel(togglePhase[1])}“ für diesen Bereich ein- oder ausschalten.`;
   }
   const enableForScope = /^Enable (.+) for this scope\.$/.exec(value);
   if (enableForScope) {
-    return `${translateProjectSettingsLiteral(locale, enableForScope[1])} für diesen Bereich aktivieren.`;
+    return `${translateCapturedProjectSettingsLabel(enableForScope[1])} für diesen Bereich aktivieren.`;
   }
   const runtimePath = /^Runtime path mounted for (.+)\.$/.exec(value);
   if (runtimePath) {
-    return `Eingebundener Laufzeitpfad für ${translateProjectSettingsLiteral(locale, runtimePath[1])}.`;
+    return `Eingebundener Laufzeitpfad für ${translateCapturedProjectSettingsLabel(runtimePath[1])}.`;
   }
   const enableLabel = /^Enable (.+)$/.exec(value);
   if (enableLabel) {

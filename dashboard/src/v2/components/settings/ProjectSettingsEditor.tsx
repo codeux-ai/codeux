@@ -3,7 +3,7 @@ import { useId } from "preact/hooks";
 import type { ProjectSettings, SettingsValueSource, ThinkingMode } from "../../../types.js";
 import { PreviewEnvironmentEditor as BasePreviewEnvironmentEditor } from "../browser/PreviewEnvironmentEditor.js";
 import { AvantgardeSelect as BaseAvantgardeSelect } from "../ui/AvantgardeSelect.js";
-import { TextInput, TextAreaInput, NumberInput, SelectInput as BaseSelectInput, Toggle as BaseToggle } from "./SettingsFormFields.js";
+import { TextInput as BaseTextInput, TextAreaInput, NumberInput, SelectInput as BaseSelectInput, Toggle as BaseToggle } from "./SettingsFormFields.js";
 import {
   getFieldSource,
   getFieldSourceLabel,
@@ -49,6 +49,17 @@ const Toggle: FunctionComponent<ComponentProps<typeof BaseToggle>> = (props) => 
     return <BaseToggle {...props} aria-label={tr(props["aria-label"])} aria-description={localizedDescription} />;
   }
   return <BaseToggle {...props} aria-labelledby={props["aria-labelledby"]} aria-description={localizedDescription} />;
+};
+
+const TextInput: FunctionComponent<ComponentProps<typeof BaseTextInput>> = (props) => {
+  const tr = useSettingsLiteral();
+  return (
+    <BaseTextInput
+      {...props}
+      aria-label={props["aria-label"] ? tr(props["aria-label"]) : props["aria-label"]}
+      aria-description={props["aria-description"] ? tr(props["aria-description"]) : props["aria-description"]}
+    />
+  );
 };
 
 const SelectInput: FunctionComponent<ComponentProps<typeof BaseSelectInput>> = (props) => {

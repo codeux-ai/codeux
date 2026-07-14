@@ -37,7 +37,7 @@ English and German must declare exactly the same top-level keys. Interpolation t
 
 Keep each catalog with its owning feature and import it only where the feature is loaded. Translate dashboard-authored interface copy only. Never translate provider output, API responses, stored instructions, project data, runtime diagnostics, or user-authored content.
 
-Sprint authoring uses `messages/sprint-authoring.ts` for Sprint Composer, sprint/task modals, Quicksprint, planning progress, Markdown transfer, and sprint settings-override chrome. Its boundary is intentionally presentation-only: sprint goals, task prompts, template Markdown, combined prompts, provider/model IDs, agent names, schedule targets, and settings keys and values pass through unchanged.
+Sprint authoring uses `messages/sprint-authoring.ts` for Sprint Composer, sprint/task modals, Quicksprint, planning progress, Markdown transfer, and sprint settings-override chrome. Its boundary is intentionally presentation-only: sprint goals, task prompts, template Markdown, combined prompts, provider/model IDs, agent names, schedule targets, and settings keys and values pass through unchanged. The sprint settings editor localizes dashboard-authored card, row, and ARIA descriptions. Generated descriptions resolve known lowercased settings labels without applying case-insensitive translation to standalone or user-authored values.
 
 ## Nodes route
 

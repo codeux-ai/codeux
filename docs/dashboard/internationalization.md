@@ -86,7 +86,7 @@ The feature-gated Nodes route owns `messages/nodes.ts`. Its page shell, flow lib
 
 Node localization is presentation-only. Graph JSON, node and edge identities, node types, schema and widget keys, command names, configuration values, migration markers, skill names, API errors, policy/provider diagnostics, run logs, and provider input/output are never rewritten. Known runtime states are translated only while rendering; their contract values remain unchanged.
 
-Sprint authoring treats this as a strict data boundary: sprint goals, task prompts, template Markdown, combined planning prompts, provider/model identifiers, agent names, schedule targets, and settings keys and values are never passed through the translator. Only the labels, descriptions, validation, progress text, and accessible announcements surrounding those values are localized.
+Sprint authoring treats this as a strict data boundary: sprint goals, task prompts, template Markdown, combined planning prompts, provider/model identifiers, agent names, schedule targets, and settings keys and values are never passed through the translator. Only the labels, descriptions, validation, progress text, and accessible announcements surrounding those values are localized. The sprint settings editor translates its dashboard-authored card and row descriptions plus control ARIA descriptions. Generated descriptions may resolve a known settings label case-insensitively after presentation code lowercases it; standalone values and user-authored skill names remain exact.
 
 ## Verification
 
