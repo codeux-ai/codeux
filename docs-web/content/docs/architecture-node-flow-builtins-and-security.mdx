@@ -31,7 +31,7 @@ Foreach assigns deterministic logical-item identities from the published node id
 
 `EgressPolicyService` is the single request boundary for HTTP nodes and future custom-node network calls. HTTPS is required by default. A node must explicitly opt into HTTP, and even then private networking remains blocked. The service rejects credentials embedded in URLs; loopback, private, link-local, carrier-grade NAT, benchmarking, multicast, and cloud-metadata addresses; metadata hostnames; restricted raw headers; and ports or hosts outside configured allowlists.
 
-Each redirect is handled manually and fully revalidated. DNS is resolved twice before dispatch, and a changed or newly private result is treated as rebinding. Cross-origin redirects remove credential headers. Response bodies are streamed into a bounded buffer, content types are allowlisted, timeouts and caller cancellation propagate, retry counts are capped, unsafe methods require an idempotency key before retry, and an in-process rate window bounds requests per project and host.
+Each redirect is handled manually and fully revalidated. DNS is resolved twice before dispatch, and a changed or newly private result is treated as rebinding. Cross-origin redirects remove credential headers. Response bodies are streamed into a bounded buffer, content types are allowlisted, and request timeouts must be finite values from 1 through 120,000 milliseconds; invalid timeout policy fails before network dispatch. Valid timeouts and caller cancellation propagate, retry counts are capped, unsafe methods require an idempotency key before retry, and an in-process rate window bounds requests per project and host.
 
 ## OAuth boundary
 

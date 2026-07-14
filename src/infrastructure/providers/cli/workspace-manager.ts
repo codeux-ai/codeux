@@ -295,23 +295,34 @@ export class WorkspaceManager implements IWorkspaceManager {
   async createOrReuseSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string> {
     await this.assertExactGitWorktreeRoot(repoPath);
     const workspaceRef = this.buildWorktreePath(repoPath, `${sessionId}-snapshot`, "DOCKER");
-    if (await this.workspaceExists(workspaceRef)) {
+    return await this.withWorkspaceLock(workspaceRef, async () => {
+      if (await this.workspaceExists(workspaceRef)) {
+        try {
+          await this.assertWorkspaceHasHead(workspaceRef);
+          return workspaceRef;
+        } catch {
+          // A restart can land after the volume is created but before its Git
+          // snapshot is initialized. Do not resume into that partial workspace:
+          // rebuild it from the requested branch so review/provider work sees a
+          // complete repository instead of an empty volume.
+          await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
+        }
+      }
+      const refLookup = this.createRefLookup(repoPath);
+      await this.createVolume(workspaceRef);
+      if (await this.trySeedSingleBranchWorkspace(repoPath, workspaceRef, checkout, refLookup).catch(() => false)) {
+        return workspaceRef;
+      }
+      await this.seedAndCheckoutVolume(
+        repoPath,
+        workspaceRef,
+        await this.snapshotSeedBranches(repoPath, checkout),
+        () => this.checkoutSnapshotBranch(repoPath, workspaceRef, checkout, refLookup),
+        refLookup,
+        checkout?.remoteOnly === true,
+      );
       return workspaceRef;
-    }
-    const refLookup = this.createRefLookup(repoPath);
-    await this.createVolume(workspaceRef);
-    if (await this.trySeedSingleBranchWorkspace(repoPath, workspaceRef, checkout, refLookup).catch(() => false)) {
-      return workspaceRef;
-    }
-    await this.seedAndCheckoutVolume(
-      repoPath,
-      workspaceRef,
-      await this.snapshotSeedBranches(repoPath, checkout),
-      () => this.checkoutSnapshotBranch(repoPath, workspaceRef, checkout, refLookup),
-      refLookup,
-      checkout?.remoteOnly === true,
-    );
-    return workspaceRef;
+    });
   }
 
   /**

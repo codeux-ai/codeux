@@ -121,8 +121,15 @@ export class EgressPolicyService {
   ): Promise<EgressResponse> {
     let current = (await this.validateUrl(initialUrl, policy)).url;
     const maxRedirects = Math.max(0, Math.min(10, Math.floor(policy.maxRedirects ?? 3)));
+    let timeoutMs = 30_000;
+    if (policy.timeoutMs !== undefined) {
+      const requestedTimeoutMs = policy.timeoutMs;
+      if (!Number.isFinite(requestedTimeoutMs) || requestedTimeoutMs < 1 || requestedTimeoutMs > 120_000) {
+        throw new ValidationError("Egress timeout must be between 1 and 120000 milliseconds.");
+      }
+      timeoutMs = Math.floor(requestedTimeoutMs);
+    }
     for (let redirects = 0; ; redirects += 1) {
-      const timeoutMs = Math.max(1, Math.min(120_000, Math.floor(policy.timeoutMs ?? 30_000)));
       const controller = new AbortController();
       const abort = (): void => controller.abort(parentSignal?.reason);
       parentSignal?.addEventListener("abort", abort, { once: true });
