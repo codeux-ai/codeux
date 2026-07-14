@@ -6,6 +6,7 @@ expect.extend(matchers);
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen, cleanup } from '@testing-library/preact';
 import { StatsPageHero, getRelativeTime } from '../components/StatsPageHero.js';
+import { StatsI18nProvider } from '../stats-i18n.js';
 
 function createStats(overrides: Record<string, unknown> = {}) {
   const usage = {
@@ -431,5 +432,33 @@ describe('StatsPageHero', () => {
     expect(container.querySelector('.\\!flex-nowrap')).toBeNull();
     expect(screen.getByRole('group', { name: 'Time window presets' }).className).toContain('flex-wrap');
     expect(screen.getByRole('group', { name: 'Analytics modes' }).className).toContain('flex-wrap');
+  });
+
+  it('renders German presets, locale labels, and invalid custom-range feedback', () => {
+    render(
+      <StatsI18nProvider locale="de">
+        <StatsPageHero
+          selectedProject={{ id: 'proj-1', name: 'Project 1' } as any}
+          stats={createStats()}
+          activeQuery={{ window: 'custom' } as any}
+          customFrom="2026-07-10"
+          customTo="2026-07-01"
+          applyPresetWindow={vi.fn()}
+          setCustomFrom={vi.fn()}
+          setCustomTo={vi.fn()}
+          applyCustomRange={vi.fn()}
+          visualMode="composition"
+          setVisualMode={vi.fn()}
+        />
+      </StatsI18nProvider>,
+    );
+
+    expect(screen.getByRole('group', { name: 'Zeitraumvorgaben' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Gesamter Zeitraum' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Benutzerdefiniert' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Statistik-Analysemodi' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Zeitraum anwenden' })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('alert')).toHaveTextContent('Das Enddatum muss nach dem Startdatum liegen.');
+    expect(getRelativeTime(new Date(Date.now() - 120_000).toISOString(), 'de')).toBe('vor 2 Min.');
   });
 });

@@ -17,6 +17,8 @@ import type { ExecutionInvocationMessageRecord, ExecutionInvocationRecord } from
 import { fetchInvocationMessages } from "../../../../lib/invocation-api.js";
 import { formatCost, formatDateTime, formatStatsDuration, formatTokens } from "../../stats-utils.js";
 import { CHIP_CLASS, CONTROL_FOCUS_CLASS, STATUS_TONE_CLASS, SUBPANEL_CLASS } from "../StatsShared.js";
+import { useStatsI18n } from "../../stats-i18n.js";
+import type { DashboardLocale } from "../../../../i18n/locales.js";
 
 interface InvocationMessagesPanelProps {
   invocation: ExecutionInvocationRecord;
@@ -74,34 +76,34 @@ function formatRoleLabel(message: ExecutionInvocationMessageRecord, invocation: 
   return message.role;
 }
 
-function formatStatsDurationLabel(invocation: ExecutionInvocationRecord): string {
+function formatStatsDurationLabel(invocation: ExecutionInvocationRecord, locale: DashboardLocale): string {
   if (!invocation.finishedAt) {
-    return "running";
+    return locale === "de" ? "laufend" : "running";
   }
 
   const startedAtMs = Date.parse(invocation.startedAt);
   const finishedAtMs = Date.parse(invocation.finishedAt);
   if (!Number.isFinite(startedAtMs) || !Number.isFinite(finishedAtMs)) {
-    return "running";
+    return locale === "de" ? "laufend" : "running";
   }
 
-  return formatStatsDuration(Math.max(0, finishedAtMs - startedAtMs));
+  return formatStatsDuration(Math.max(0, finishedAtMs - startedAtMs), locale);
 }
 
-function renderStatusChip(status: ExecutionInvocationRecord["status"]): JSX.Element {
+function renderStatusChip(status: ExecutionInvocationRecord["status"], locale: DashboardLocale): JSX.Element {
   const baseClass = `${CHIP_CLASS} inline-flex items-center px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em]`;
 
   switch (status) {
     case "running":
-      return <span className={`${baseClass} ${STATUS_TONE_CLASS.signal}`}>Running</span>;
+      return <span className={`${baseClass} ${STATUS_TONE_CLASS.signal}`}>{locale === "de" ? "Laufend" : "Running"}</span>;
     case "completed":
-      return <span className={`${baseClass} ${STATUS_TONE_CLASS.positive}`}>Completed</span>;
+      return <span className={`${baseClass} ${STATUS_TONE_CLASS.positive}`}>{locale === "de" ? "Abgeschlossen" : "Completed"}</span>;
     case "failed":
-      return <span className={`${baseClass} ${STATUS_TONE_CLASS.negative}`}>Failed</span>;
+      return <span className={`${baseClass} ${STATUS_TONE_CLASS.negative}`}>{locale === "de" ? "Fehlgeschlagen" : "Failed"}</span>;
     case "cancelled":
-      return <span className={`${baseClass} ${STATUS_TONE_CLASS.neutral}`}>Cancelled</span>;
+      return <span className={`${baseClass} ${STATUS_TONE_CLASS.neutral}`}>{locale === "de" ? "Abgebrochen" : "Cancelled"}</span>;
     case "paused":
-      return <span className={`${baseClass} ${STATUS_TONE_CLASS.warning}`}>Paused</span>;
+      return <span className={`${baseClass} ${STATUS_TONE_CLASS.warning}`}>{locale === "de" ? "Pausiert" : "Paused"}</span>;
     default:
       return <span className={`${baseClass} ${STATUS_TONE_CLASS.neutral}`}>{status}</span>;
   }
@@ -143,7 +145,7 @@ function getStringMetadata(metadata: Record<string, unknown> | null | undefined,
   return null;
 }
 
-function buildMessageMetadata(message: ExecutionInvocationMessageRecord): string[] {
+function buildMessageMetadata(message: ExecutionInvocationMessageRecord, locale: DashboardLocale): string[] {
   const metadata = message.metadata;
   const tokens = getNumberMetadata(metadata, ["totalTokens", "tokens", "tokenCount"]);
   const inputTokens = getNumberMetadata(metadata, ["inputTokens", "promptTokens"]);
@@ -161,20 +163,21 @@ function buildMessageMetadata(message: ExecutionInvocationMessageRecord): string
     labels.push(toolName);
   }
   if (tokens !== null) {
-    labels.push(`${formatTokens(tokens)} tokens`);
+    labels.push(`${formatTokens(tokens, locale)} ${locale === "de" ? "Token" : "tokens"}`);
   } else if (inputTokens !== null || outputTokens !== null) {
-    labels.push(`${formatTokens(inputTokens ?? 0)} in / ${formatTokens(outputTokens ?? 0)} out`);
+    labels.push(`${formatTokens(inputTokens ?? 0, locale)} ${locale === "de" ? "ein" : "in"} / ${formatTokens(outputTokens ?? 0, locale)} ${locale === "de" ? "aus" : "out"}`);
   }
   if (costUsd !== null) {
-    labels.push(formatCost(costUsd));
+    labels.push(formatCost(costUsd, locale));
   } else if (costCents !== null) {
-    labels.push(formatCost(costCents / 100));
+    labels.push(formatCost(costCents / 100, locale));
   }
 
   return labels;
 }
 
 export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelProps> = ({ invocation }) => {
+  const { locale, formatNumber } = useStatsI18n();
   const [messages, setMessages] = useState<ExecutionInvocationMessageRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -221,14 +224,14 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
   );
 
   const summaryItems = useMemo(() => [
-    { label: "Model", value: invocation.model || "Unknown model" },
-    { label: "Duration", value: formatStatsDurationLabel(invocation) },
-    { label: "Total", value: `${formatTokens(invocation.totalTokens ?? 0)} tokens` },
-    { label: "Flow", value: `${formatTokens(invocation.inputTokens ?? 0)} in / ${formatTokens(invocation.outputTokens ?? 0)} out` },
+    { label: locale === "de" ? "Modell" : "Model", value: invocation.model || (locale === "de" ? "Unbekanntes Modell" : "Unknown model") },
+    { label: locale === "de" ? "Dauer" : "Duration", value: formatStatsDurationLabel(invocation, locale) },
+    { label: locale === "de" ? "Gesamt" : "Total", value: `${formatTokens(invocation.totalTokens ?? 0, locale)} ${locale === "de" ? "Token" : "tokens"}` },
+    { label: locale === "de" ? "Fluss" : "Flow", value: `${formatTokens(invocation.inputTokens ?? 0, locale)} ${locale === "de" ? "ein" : "in"} / ${formatTokens(invocation.outputTokens ?? 0, locale)} ${locale === "de" ? "aus" : "out"}` },
     ...(invocation.cachedInputTokens && invocation.cachedInputTokens > 0
-      ? [{ label: "Cached", value: `${formatTokens(invocation.cachedInputTokens)} tokens` }]
+      ? [{ label: locale === "de" ? "Im Cache" : "Cached", value: `${formatTokens(invocation.cachedInputTokens, locale)} ${locale === "de" ? "Token" : "tokens"}` }]
       : []),
-    { label: "Messages", value: messageCount.toLocaleString() },
+    { label: locale === "de" ? "Nachrichten" : "Messages", value: formatNumber(messageCount) },
   ], [
     invocation.cachedInputTokens,
     invocation.finishedAt,
@@ -237,7 +240,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
     invocation.outputTokens,
     invocation.startedAt,
     invocation.totalTokens,
-    messageCount,
+    messageCount, locale, formatNumber,
   ]);
 
   const toggleSystemMessage = (messageId: string) => {
@@ -251,16 +254,16 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
     <div
       id={`invocation-messages-${invocation.id}`}
       role="region"
-      aria-label={`Invocation ${invocation.id} message transcript`}
+      aria-label={locale === "de" ? `Nachrichtenprotokoll des Aufrufs ${invocation.id}` : `Invocation ${invocation.id} message transcript`}
       aria-busy={loading ? "true" : "false"}
       className={`${SUBPANEL_CLASS} mt-2 max-h-[560px] w-full min-w-0 max-w-full space-y-4 overflow-y-auto p-3 text-[color:var(--stats-detail-color)] sm:p-4`}
     >
       {invocation.lastErrorMessage ? (
         <details className={`${SUBPANEL_CLASS} group p-3`}>
           <summary className={`flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--stats-control-radius)] px-1 text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-negative-text)] transition-colors hover:text-[color:var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}>
-            <span>Error Summary</span>
-            <span className="text-[9px] text-[color:var(--stats-label-color)] group-open:hidden">Open</span>
-            <span className="hidden text-[9px] text-[color:var(--stats-label-color)] group-open:inline">Close</span>
+            <span>{locale === "de" ? "Fehlerzusammenfassung" : "Error Summary"}</span>
+            <span className="text-[9px] text-[color:var(--stats-label-color)] group-open:hidden">{locale === "de" ? "Öffnen" : "Open"}</span>
+            <span className="hidden text-[9px] text-[color:var(--stats-label-color)] group-open:inline">{locale === "de" ? "Schließen" : "Close"}</span>
           </summary>
           <div className={`mt-3 whitespace-pre-wrap break-words rounded-[var(--stats-subpanel-radius)] border px-3 py-3 text-sm leading-relaxed [overflow-wrap:anywhere] ${STATUS_TONE_CLASS.negative}`}>
             {invocation.lastErrorMessage}
@@ -272,16 +275,16 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
             <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">
-              Message Transcript
+              {locale === "de" ? "Nachrichtenprotokoll" : "Message Transcript"}
             </div>
             <div className="mt-1 truncate text-[11px] text-[color:var(--stats-detail-color)]">
-              Last message {formatDateTime(invocation.lastMessageAt)}
+              {locale === "de" ? "Letzte Nachricht" : "Last message"} {formatDateTime(invocation.lastMessageAt, locale)}
             </div>
           </div>
           <button
             type="button"
             onClick={() => navigator.clipboard.writeText(JSON.stringify(messages, null, 2))}
-            aria-label="Copy as JSON"
+            aria-label={locale === "de" ? "Als JSON kopieren" : "Copy as JSON"}
             className={`${CHIP_CLASS} inline-flex h-9 w-9 items-center justify-center text-[color:var(--stats-label-color)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[color:var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}
           >
             <Clipboard className="h-4 w-4" />
@@ -289,7 +292,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {renderStatusChip(invocation.status)}
+          {renderStatusChip(invocation.status, locale)}
           <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {summaryItems.map((item) => (
               <div key={item.label} className={SUMMARY_ITEM_CLASS}>
@@ -304,36 +307,36 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
       {loading ? (
         <SystemFeedbackState
           icon={Loader2}
-          title="Loading transcript messages"
-          detail="Fetching the recorded message list for this invocation."
+          title={locale === "de" ? "Protokollnachrichten werden geladen" : "Loading transcript messages"}
+          detail={locale === "de" ? "Die gespeicherte Nachrichtenliste für diesen Aufruf wird abgerufen." : "Fetching the recorded message list for this invocation."}
           role="status"
-          ariaLabel="Loading transcript messages"
+          ariaLabel={locale === "de" ? "Protokollnachrichten werden geladen" : "Loading transcript messages"}
           tone="signal"
           busy
         />
       ) : error ? (
         <SystemFeedbackState
           icon={AlertTriangle}
-          title="Failed to load invocation messages"
+          title={locale === "de" ? "Aufrufnachrichten konnten nicht geladen werden" : "Failed to load invocation messages"}
           detail={error}
           role="alert"
-          ariaLabel="Transcript messages failed to load"
+          ariaLabel={locale === "de" ? "Protokollnachrichten konnten nicht geladen werden" : "Transcript messages failed to load"}
           tone="negative"
         />
       ) : messages.length === 0 ? (
         <SystemFeedbackState
           icon={Inbox}
-          title="No transcript messages recorded"
-          detail="This invocation has no stored message records to inspect."
+          title={locale === "de" ? "Keine Protokollnachrichten erfasst" : "No transcript messages recorded"}
+          detail={locale === "de" ? "Für diesen Aufruf sind keine gespeicherten Nachrichten vorhanden." : "This invocation has no stored message records to inspect."}
           role="status"
-          ariaLabel="No transcript messages"
+          ariaLabel={locale === "de" ? "Keine Protokollnachrichten" : "No transcript messages"}
         />
       ) : (
         <div className="space-y-3">
           {visibleMessages.map((message, index) => {
             const isSystem = message.role === "system";
             const isExpanded = Boolean(expandedSystemMessages[message.id]);
-            const metadataLabels = buildMessageMetadata(message);
+            const metadataLabels = buildMessageMetadata(message, locale);
             const isErrorMessage = /\berror\b|\bfailed\b|\bexception\b/i.test(message.contentMarkdown);
             const roleLabel = formatRoleLabel(message, invocation);
             const contentStyle = isSystem && !isExpanded
@@ -349,7 +352,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
             return (
               <article
                 key={message.id}
-                aria-label={`${message.role} message ${index + 1}`}
+                aria-label={`${message.role} ${locale === "de" ? "Nachricht" : "message"} ${formatNumber(index + 1)}`}
                 className={`${SUBPANEL_CLASS} min-w-0 border-l-2 p-3 break-words [overflow-wrap:anywhere] ${ROLE_CARD_CLASS[message.role]} ${isErrorMessage ? "text-[color:var(--stats-negative-text)]" : ""}`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -364,7 +367,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
                       <div className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">
                         {roleLabel}
                       </div>
-                      <div className="mt-1 text-[10px] text-[color:var(--stats-detail-color)]">{formatDateTime(message.createdAt)}</div>
+                      <div className="mt-1 text-[10px] text-[color:var(--stats-detail-color)]">{formatDateTime(message.createdAt, locale)}</div>
                     </div>
                   </div>
 
@@ -388,10 +391,10 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
                     type="button"
                     onClick={() => toggleSystemMessage(message.id)}
                     aria-expanded={isExpanded}
-                    aria-label={`${isExpanded ? "Collapse" : "Expand"} system message ${index + 1}`}
+                    aria-label={locale === "de" ? `${isExpanded ? "Reduzieren" : "Erweitern"}: Systemnachricht ${formatNumber(index + 1)}` : `${isExpanded ? "Collapse" : "Expand"} system message ${formatNumber(index + 1)}`}
                     className={`${CHIP_CLASS} mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[color:var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}
                   >
-                    {isExpanded ? "Show less" : "Show more"}
+                    {isExpanded ? (locale === "de" ? "Weniger anzeigen" : "Show less") : (locale === "de" ? "Mehr anzeigen" : "Show more")}
                   </button>
                 ) : null}
               </article>
@@ -405,14 +408,14 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
               className={`inline-flex items-center gap-2 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-detail-color)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[color:var(--stats-value-color)] ${CHIP_CLASS} ${CONTROL_FOCUS_CLASS}`}
             >
               <ExternalLink className="h-3.5 w-3.5" />
-              Show all {messages.length} messages
+              {locale === "de" ? `Alle ${formatNumber(messages.length)} Nachrichten anzeigen` : `Show all ${formatNumber(messages.length)} messages`}
             </button>
           ) : null}
 
           <div className={`${CHIP_CLASS} inline-flex max-w-full items-center gap-2 px-3 py-2 text-[11px] text-[color:var(--stats-detail-color)]`}>
             <MessageSquare className="h-3.5 w-3.5 shrink-0" />
             <span className="min-w-0 break-words [overflow-wrap:anywhere]">
-              Transcript rendered as plain text for readability and safety.
+              {locale === "de" ? "Das Protokoll wird aus Gründen der Lesbarkeit und Sicherheit als Klartext dargestellt." : "Transcript rendered as plain text for readability and safety."}
             </span>
           </div>
         </div>

@@ -3,6 +3,7 @@ import type { ProjectExecutionStatsChartSeries, ProjectExecutionStatsSnapshot } 
 import type { ChartZoomRange, StatsVisualMode } from "./components/StatsShared.js";
 import { calculateChartMetrics, groupChartSeries } from "./chart-view-models.js";
 import type { GroupedChartSeriesSection } from "./chart-view-models.js";
+import { useStatsI18n } from "./stats-i18n.js";
 
 const DEFAULT_STORAGE_SCOPE = "default";
 const SERIES_STORAGE_PREFIX = "codeux_stats_enabled_series";
@@ -160,6 +161,7 @@ export function useUsageChartState(
   projectId: string | null,
   stats: ProjectExecutionStatsSnapshot | null
 ): UsageChartState {
+  const { locale } = useStatsI18n();
   const [visualMode, setVisualModeState] = useState<StatsVisualMode>(() => readStoredVisualMode(projectId));
   const [zoomRange, setZoomRange] = useState<ChartZoomRange | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -228,8 +230,8 @@ export function useUsageChartState(
       )
     : null;
   const seriesGroups = useMemo(
-    () => groupChartSeries(stats?.chartSeries ?? [], enabledSeriesState),
-    [enabledSeriesState, stats?.chartSeries]
+    () => groupChartSeries(stats?.chartSeries ?? [], enabledSeriesState, locale),
+    [enabledSeriesState, locale, stats?.chartSeries]
   );
   const activeSeriesCount = seriesGroups.reduce((count, group) => count + group.activeCount, 0);
 

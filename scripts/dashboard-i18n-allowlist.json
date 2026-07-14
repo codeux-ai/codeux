@@ -2,6 +2,41 @@
   "version": 1,
   "entries": [
     {
+      "path": "dashboard/src/v2/AgentsPage.tsx",
+      "line": 802,
+      "kind": "attribute:placeholder",
+      "text": "feature/agents-update",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/agents/AgentPresetEditorPanel.tsx",
+      "line": 1213,
+      "kind": "jsx-text",
+      "text": "id",
+      "rationale": "This is a persisted record field identifier shown as technical metadata and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/brand/Logo.tsx",
+      "line": 150,
+      "kind": "jsx-text",
+      "text": "Code",
+      "rationale": "This is product or brand identity and remains unchanged across locales."
+    },
+    {
+      "path": "dashboard/src/v2/components/browser/PreviewEnvironmentEditor.tsx",
+      "line": 76,
+      "kind": "attribute:placeholder",
+      "text": "CODE_UX_ALLOW_PUBLIC_DASHBOARD",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/layout/Sidebar.tsx",
+      "line": 197,
+      "kind": "jsx-text",
+      "text": "Code",
+      "rationale": "This is product or brand identity and remains unchanged across locales."
+    },
+    {
       "path": "dashboard/src/v2/components/memory/ModelBrowser.tsx",
       "line": 671,
       "kind": "attribute:placeholder",
@@ -37,11 +72,53 @@
       "rationale": "This fragment prefixes a runtime version number and is technical data rather than interface copy."
     },
     {
+      "path": "dashboard/src/v2/components/onboarding/OnboardingExperience.tsx",
+      "line": 1687,
+      "kind": "attribute:placeholder",
+      "text": "agents@codeux.ai",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/onboarding/OnboardingInstallationStep.tsx",
+      "line": 421,
+      "kind": "jsx-text",
+      "text": "stderr:",
+      "rationale": "This labels verbatim process output streams using their technical identifiers."
+    },
+    {
+      "path": "dashboard/src/v2/components/onboarding/OnboardingInstallationStep.tsx",
+      "line": 422,
+      "kind": "jsx-text",
+      "text": "stdout:",
+      "rationale": "This labels verbatim process output streams using their technical identifiers."
+    },
+    {
+      "path": "dashboard/src/v2/components/onboarding/OnboardingIntro.tsx",
+      "line": 583,
+      "kind": "jsx-text",
+      "text": "Code",
+      "rationale": "This is product or brand identity and remains unchanged across locales."
+    },
+    {
       "path": "dashboard/src/v2/components/onboarding/OnboardingIntroductionStep.tsx",
       "line": 89,
       "kind": "jsx-expression",
       "text": "MIT License Copyright (c) 2026 Pierre Voss Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the \"Software\"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
       "rationale": "The verbatim MIT license is English legal documentation and must not be translated."
+    },
+    {
+      "path": "dashboard/src/v2/components/quicksprint/QuicksprintBrowseView.tsx",
+      "line": 311,
+      "kind": "jsx-text",
+      "text": "Quicksprint",
+      "rationale": "This is product or brand identity and remains unchanged across locales."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 102,
+      "kind": "attribute:placeholder",
+      "text": "api-token",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
     },
     {
       "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
@@ -65,11 +142,67 @@
       "rationale": "This is a technical naming-template example whose protocol tokens must remain unchanged."
     },
     {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsAgentAuthoringPanel.tsx",
+      "line": 67,
+      "kind": "jsx-text",
+      "text": ".code-ux/agents",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsAppearancePanel.tsx",
+      "line": 32,
+      "kind": "metadata:label",
+      "text": "animatedBackgroundDeepOcean",
+      "rationale": "This is a typed settings-shell message key used as technical option metadata and is translated before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsAppearancePanel.tsx",
+      "line": 33,
+      "kind": "metadata:label",
+      "text": "animatedBackgroundNeonDreams",
+      "rationale": "This is a typed settings-shell message key used as technical option metadata and is translated before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsAppearancePanel.tsx",
+      "line": 34,
+      "kind": "metadata:label",
+      "text": "animatedBackgroundAuroraBorealis",
+      "rationale": "This is a typed settings-shell message key used as technical option metadata and is translated before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsAppearancePanel.tsx",
+      "line": 35,
+      "kind": "metadata:label",
+      "text": "animatedBackgroundCosmicDust",
+      "rationale": "This is a typed settings-shell message key used as technical option metadata and is translated before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsAppearancePanel.tsx",
+      "line": 36,
+      "kind": "metadata:label",
+      "text": "animatedBackgroundEtherealMist",
+      "rationale": "This is a typed settings-shell message key used as technical option metadata and is translated before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsAppearancePanel.tsx",
+      "line": 37,
+      "kind": "metadata:label",
+      "text": "animatedBackgroundQuantumField",
+      "rationale": "This is a typed settings-shell message key used as technical option metadata and is translated before rendering."
+    },
+    {
       "path": "dashboard/src/v2/components/settings/panels/SettingsBrowserPanel.tsx",
       "line": 200,
       "kind": "attribute:placeholder",
       "text": "pnpm dev --host 0.0.0.0",
       "rationale": "This is an executable command example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsGeneralPanel.tsx",
+      "line": 371,
+      "kind": "attribute:placeholder",
+      "text": ".code-ux/container/setup.sh",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
     },
     {
       "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
@@ -108,6 +241,13 @@
     },
     {
       "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
+      "line": 1404,
+      "kind": "jsx-text",
+      "text": "/mnt/code-ux/google-drive",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
       "line": 1577,
       "kind": "attribute:placeholder",
       "text": "agents@codeux.ai",
@@ -122,6 +262,48 @@
     },
     {
       "path": "dashboard/src/v2/components/settings/panels/SettingsMcpPanel.tsx",
+      "line": 423,
+      "kind": "jsx-text",
+      "text": "Code UX (",
+      "rationale": "This is product or brand identity and remains unchanged across locales."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsMcpPanel.tsx",
+      "line": 606,
+      "kind": "attribute:placeholder",
+      "text": "Playwright",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsMcpPanel.tsx",
+      "line": 610,
+      "kind": "attribute:placeholder",
+      "text": "playwright",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsMcpPanel.tsx",
+      "line": 629,
+      "kind": "attribute:placeholder",
+      "text": "npx",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsMcpPanel.tsx",
+      "line": 632,
+      "kind": "attribute:placeholder",
+      "text": "@playwright/mcp@latest",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsMcpPanel.tsx",
+      "line": 632,
+      "kind": "jsx-expression",
+      "text": "@playwright/mcp@latest",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsMcpPanel.tsx",
       "line": 635,
       "kind": "attribute:placeholder",
       "text": "{ \"API_KEY\": \"...\" }",
@@ -133,6 +315,13 @@
       "kind": "jsx-expression",
       "text": "{ \"API_KEY\": \"...\" }",
       "rationale": "This is a JSON configuration example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsMcpPanel.tsx",
+      "line": 641,
+      "kind": "attribute:placeholder",
+      "text": "https://example.com/mcp",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
     },
     {
       "path": "dashboard/src/v2/components/settings/panels/SettingsMcpPanel.tsx",
@@ -154,6 +343,41 @@
       "kind": "jsx-text",
       "text": "~/.code-ux/credentials/",
       "rationale": "This is a filesystem path and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/SettingsCategoryRail.tsx",
+      "line": 37,
+      "kind": "metadata:label",
+      "text": "Basics",
+      "rationale": "This is a category-group discriminator used to select a settings-shell message key; it is localized before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/SettingsCategoryRail.tsx",
+      "line": 38,
+      "kind": "metadata:label",
+      "text": "AI & Knowledge",
+      "rationale": "This is a category-group discriminator used to select a settings-shell message key; it is localized before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/SettingsCategoryRail.tsx",
+      "line": 39,
+      "kind": "metadata:label",
+      "text": "Delivery",
+      "rationale": "This is a category-group discriminator used to select a settings-shell message key; it is localized before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/SettingsCategoryRail.tsx",
+      "line": 40,
+      "kind": "metadata:label",
+      "text": "Connections",
+      "rationale": "This is a category-group discriminator used to select a settings-shell message key; it is localized before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/SettingsCategoryRail.tsx",
+      "line": 41,
+      "kind": "metadata:label",
+      "text": "System",
+      "rationale": "This is a category-group discriminator used to select a settings-shell message key; it is localized before rendering."
     },
     {
       "path": "dashboard/src/v2/components/sprints/SprintCanvasImportModal.tsx",
@@ -196,6 +420,48 @@
       "kind": "attribute:placeholder",
       "text": "sticky_note, text",
       "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintImportMenu.tsx",
+      "line": 168,
+      "kind": "jsx-text",
+      "text": "Markdown",
+      "rationale": "This is a file format or external product name and remains unchanged across locales."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintImportMenu.tsx",
+      "line": 280,
+      "kind": "jsx-text",
+      "text": "Asana",
+      "rationale": "This is a file format or external product name and remains unchanged across locales."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintImportMenu.tsx",
+      "line": 302,
+      "kind": "jsx-text",
+      "text": "Linear",
+      "rationale": "This is a file format or external product name and remains unchanged across locales."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintImportMenu.tsx",
+      "line": 326,
+      "kind": "jsx-text",
+      "text": "Miro",
+      "rationale": "This is a file format or external product name and remains unchanged across locales."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintImportMenu.tsx",
+      "line": 348,
+      "kind": "jsx-text",
+      "text": "Lucid",
+      "rationale": "This is a file format or external product name and remains unchanged across locales."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintImportMenu.tsx",
+      "line": 392,
+      "kind": "jsx-text",
+      "text": "Mural",
+      "rationale": "This is a file format or external product name and remains unchanged across locales."
     },
     {
       "path": "dashboard/src/v2/components/sprints/SprintIssueImportModal.tsx",
@@ -301,6 +567,1210 @@
       "kind": "attribute:placeholder",
       "text": "triage, backend",
       "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/TitleBar.tsx",
+      "line": 134,
+      "kind": "jsx-text",
+      "text": "Code",
+      "rationale": "This is product or brand identity and remains unchanged across locales."
+    },
+    {
+      "path": "dashboard/src/v2/components/top-nav/BrandSection.tsx",
+      "line": 57,
+      "kind": "jsx-text",
+      "text": "Code",
+      "rationale": "This is product or brand identity and remains unchanged across locales."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/AddProjectModal.tsx",
+      "line": 648,
+      "kind": "attribute:placeholder",
+      "text": "/home/user/projects/my-project",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/AddProjectModal.tsx",
+      "line": 693,
+      "kind": "attribute:placeholder",
+      "text": "https://github.com/user/repo.git",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/AddProjectModal.tsx",
+      "line": 716,
+      "kind": "attribute:placeholder",
+      "text": "/home/user/projects",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/AddProjectModal.tsx",
+      "line": 893,
+      "kind": "attribute:placeholder",
+      "text": "/home/user/projects/my-project",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/AddProjectModal.tsx",
+      "line": 936,
+      "kind": "attribute:placeholder",
+      "text": "my-awesome-project",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/NewProjectModal.tsx",
+      "line": 313,
+      "kind": "attribute:placeholder",
+      "text": "/home/user/projects/my-repo",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/NewProjectModal.tsx",
+      "line": 385,
+      "kind": "attribute:placeholder",
+      "text": "my-project",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/NewProjectModal.tsx",
+      "line": 406,
+      "kind": "attribute:placeholder",
+      "text": "/home/user/projects",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 112,
+      "kind": "metadata:label",
+      "text": "Global defaults",
+      "rationale": "This is canonical routing-profile metadata; the Models panel replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 113,
+      "kind": "metadata:label",
+      "text": "Worker defaults",
+      "rationale": "This is canonical routing-profile metadata; the Models panel replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 175,
+      "kind": "metadata:description",
+      "text": "Shown when a sprint has no planned tasks yet.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 175,
+      "kind": "metadata:label",
+      "text": "Planning Missing",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 176,
+      "kind": "metadata:description",
+      "text": "Shown after a planning request is prepared.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 176,
+      "kind": "metadata:label",
+      "text": "Planning Created",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 177,
+      "kind": "metadata:description",
+      "text": "Shown when the sprint feature branch must be created first.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 177,
+      "kind": "metadata:label",
+      "text": "Branch Missing",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 178,
+      "kind": "metadata:description",
+      "text": "Header for merge-required intervention output.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 178,
+      "kind": "metadata:label",
+      "text": "Merge Header",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 179,
+      "kind": "metadata:description",
+      "text": "Per-task merge instruction block.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 179,
+      "kind": "metadata:label",
+      "text": "Merge Task",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 180,
+      "kind": "metadata:description",
+      "text": "Header for agent-owned intervention items.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 180,
+      "kind": "metadata:label",
+      "text": "Agent Attention Header",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 181,
+      "kind": "metadata:description",
+      "text": "Per-task agent intervention block.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 181,
+      "kind": "metadata:label",
+      "text": "Agent Attention Task",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 182,
+      "kind": "metadata:description",
+      "text": "Header for human-owned intervention items.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 182,
+      "kind": "metadata:label",
+      "text": "Human Attention Header",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 183,
+      "kind": "metadata:description",
+      "text": "Per-task human intervention block.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 183,
+      "kind": "metadata:label",
+      "text": "Human Attention Task",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 184,
+      "kind": "metadata:description",
+      "text": "Top section for live orchestration status output.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 184,
+      "kind": "metadata:label",
+      "text": "Run Header",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 185,
+      "kind": "metadata:description",
+      "text": "Shown when orchestration pauses for merges.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 185,
+      "kind": "metadata:label",
+      "text": "Run Merge Required",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 186,
+      "kind": "metadata:description",
+      "text": "Shown when orchestration pauses with nothing runnable.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 186,
+      "kind": "metadata:label",
+      "text": "Run No More Actions",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 187,
+      "kind": "metadata:description",
+      "text": "Final sprint completion guidance.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 187,
+      "kind": "metadata:label",
+      "text": "Completion Steps",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 188,
+      "kind": "metadata:description",
+      "text": "Shown when cleanup confirms a fully merged sprint.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 188,
+      "kind": "metadata:label",
+      "text": "Cleanup All Merged",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 189,
+      "kind": "metadata:description",
+      "text": "Shown when cleanup is skipped because tasks failed.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 189,
+      "kind": "metadata:label",
+      "text": "Cleanup Failed",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 190,
+      "kind": "metadata:description",
+      "text": "Shown when cleanup waits on merges.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 190,
+      "kind": "metadata:label",
+      "text": "Cleanup Deferred",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 191,
+      "kind": "metadata:description",
+      "text": "Shown when the sprint is still empty.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 191,
+      "kind": "metadata:label",
+      "text": "Cleanup Empty",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/KnowledgePage.tsx",
+      "line": 213,
+      "kind": "jsx-text",
+      "text": "search_knowledge",
+      "rationale": "This is an MCP tool identifier shown as code and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 86,
+      "kind": "metadata:label",
+      "text": "Classic",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 87,
+      "kind": "metadata:label",
+      "text": "Square",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 88,
+      "kind": "metadata:label",
+      "text": "Tall",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 89,
+      "kind": "metadata:label",
+      "text": "Pebble",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 90,
+      "kind": "metadata:label",
+      "text": "Soft",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 94,
+      "kind": "metadata:label",
+      "text": "Smile Arcs",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 95,
+      "kind": "metadata:label",
+      "text": "Visor",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 96,
+      "kind": "metadata:label",
+      "text": "Single Lens",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 97,
+      "kind": "metadata:label",
+      "text": "Pixel",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 98,
+      "kind": "metadata:label",
+      "text": "Heart",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 102,
+      "kind": "metadata:label",
+      "text": "Jewel",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 103,
+      "kind": "metadata:label",
+      "text": "Bunny",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 104,
+      "kind": "metadata:label",
+      "text": "Beacon",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 105,
+      "kind": "metadata:label",
+      "text": "Signal",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 106,
+      "kind": "metadata:label",
+      "text": "None",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 111,
+      "kind": "metadata:label",
+      "text": "Clean",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 112,
+      "kind": "metadata:label",
+      "text": "Pulse",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 113,
+      "kind": "metadata:label",
+      "text": "Jade Dust",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 114,
+      "kind": "metadata:label",
+      "text": "Halo",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 115,
+      "kind": "metadata:label",
+      "text": "Orbit",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 120,
+      "kind": "metadata:label",
+      "text": "Bumper",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 121,
+      "kind": "metadata:label",
+      "text": "Studio",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 122,
+      "kind": "metadata:label",
+      "text": "Earbuds",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 123,
+      "kind": "metadata:label",
+      "text": "Halo Loop",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 124,
+      "kind": "metadata:label",
+      "text": "Wing Fins",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 132,
+      "kind": "metadata:label",
+      "text": "Signal Jade",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 133,
+      "kind": "metadata:label",
+      "text": "Ember Amber",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 134,
+      "kind": "metadata:label",
+      "text": "Cosmic Violet",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 135,
+      "kind": "metadata:label",
+      "text": "Warm Coral",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 136,
+      "kind": "metadata:label",
+      "text": "Sky Blue",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 137,
+      "kind": "metadata:label",
+      "text": "Neon Fuchsia",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 139,
+      "kind": "metadata:label",
+      "text": "Forest Emerald",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 140,
+      "kind": "metadata:label",
+      "text": "Luxe Gold",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 141,
+      "kind": "metadata:label",
+      "text": "Crimson",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 142,
+      "kind": "metadata:label",
+      "text": "Lavender",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 143,
+      "kind": "metadata:label",
+      "text": "Electric Cyan",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 144,
+      "kind": "metadata:label",
+      "text": "Rose Quartz",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 154,
+      "kind": "metadata:label",
+      "text": "Noir",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 155,
+      "kind": "metadata:label",
+      "text": "Pearl",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 156,
+      "kind": "metadata:label",
+      "text": "Signal Jade",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 157,
+      "kind": "metadata:label",
+      "text": "Void",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 158,
+      "kind": "metadata:label",
+      "text": "Ice",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 159,
+      "kind": "metadata:label",
+      "text": "Sapphire",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 160,
+      "kind": "metadata:label",
+      "text": "Ruby",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 161,
+      "kind": "metadata:label",
+      "text": "Royal Violet",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 162,
+      "kind": "metadata:label",
+      "text": "Forest",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 163,
+      "kind": "metadata:label",
+      "text": "Bronze",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 164,
+      "kind": "metadata:label",
+      "text": "Vivid Amber",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 165,
+      "kind": "metadata:label",
+      "text": "Lilac",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 174,
+      "kind": "metadata:label",
+      "text": "Pearl",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 175,
+      "kind": "metadata:label",
+      "text": "Ivory",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 176,
+      "kind": "metadata:label",
+      "text": "Cream",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 177,
+      "kind": "metadata:label",
+      "text": "Arctic",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 178,
+      "kind": "metadata:label",
+      "text": "Sage",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 179,
+      "kind": "metadata:label",
+      "text": "Rose Dust",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 180,
+      "kind": "metadata:label",
+      "text": "Onyx",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 181,
+      "kind": "metadata:label",
+      "text": "Graphite",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 182,
+      "kind": "metadata:label",
+      "text": "Charcoal",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 183,
+      "kind": "metadata:label",
+      "text": "Midnight",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 184,
+      "kind": "metadata:label",
+      "text": "Deep Navy",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/agent-avatar.ts",
+      "line": 185,
+      "kind": "metadata:label",
+      "text": "Plum Noir",
+      "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
+      "line": 35,
+      "kind": "metadata:label",
+      "text": "Status Report",
+      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
+      "line": 41,
+      "kind": "metadata:label",
+      "text": "Sprint Progress",
+      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
+      "line": 47,
+      "kind": "metadata:label",
+      "text": "What’s Failing?",
+      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
+      "line": 53,
+      "kind": "metadata:label",
+      "text": "Plan Next Steps",
+      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
+      "line": 59,
+      "kind": "metadata:label",
+      "text": "Add Nodes Workflow",
+      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
+      "line": 65,
+      "kind": "metadata:label",
+      "text": "Add Dashboard",
+      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
+      "line": 71,
+      "kind": "metadata:label",
+      "text": "Create Skill",
+      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
+      "line": 77,
+      "kind": "metadata:label",
+      "text": "List Skills",
+      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/experience-mode.ts",
+      "line": 14,
+      "kind": "metadata:label",
+      "text": "Easy",
+      "rationale": "This canonical experience-mode fallback is compatibility metadata; settings and onboarding replace it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/experience-mode.ts",
+      "line": 15,
+      "kind": "metadata:description",
+      "text": "Simplified dashboard language and fewer advanced controls.",
+      "rationale": "This canonical experience-mode fallback is compatibility metadata; settings and onboarding replace it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/experience-mode.ts",
+      "line": 19,
+      "kind": "metadata:label",
+      "text": "Standard",
+      "rationale": "This canonical experience-mode fallback is compatibility metadata; settings and onboarding replace it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/experience-mode.ts",
+      "line": 20,
+      "kind": "metadata:description",
+      "text": "Balanced dashboard controls for regular project operation.",
+      "rationale": "This canonical experience-mode fallback is compatibility metadata; settings and onboarding replace it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/experience-mode.ts",
+      "line": 24,
+      "kind": "metadata:label",
+      "text": "Expert",
+      "rationale": "This canonical experience-mode fallback is compatibility metadata; settings and onboarding replace it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/experience-mode.ts",
+      "line": 25,
+      "kind": "metadata:description",
+      "text": "Full operational detail and advanced controls.",
+      "rationale": "This canonical experience-mode fallback is compatibility metadata; settings and onboarding replace it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 80,
+      "kind": "metadata:label",
+      "text": "navChat",
+      "rationale": "This is a typed shell message key, not rendered copy; navigation resolves it through the shell catalog."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 80,
+      "kind": "metadata:label",
+      "text": "navOverview",
+      "rationale": "This is a typed shell message key, not rendered copy; navigation resolves it through the shell catalog."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 80,
+      "kind": "metadata:label",
+      "text": "navSprints",
+      "rationale": "This is a typed shell message key, not rendered copy; navigation resolves it through the shell catalog."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 81,
+      "kind": "metadata:label",
+      "text": "navAgents",
+      "rationale": "This is a typed shell message key, not rendered copy; navigation resolves it through the shell catalog."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 81,
+      "kind": "metadata:label",
+      "text": "navNodes",
+      "rationale": "This is a typed shell message key, not rendered copy; navigation resolves it through the shell catalog."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 81,
+      "kind": "metadata:label",
+      "text": "navTasks",
+      "rationale": "This is a typed shell message key, not rendered copy; navigation resolves it through the shell catalog."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 82,
+      "kind": "metadata:dockLabel",
+      "text": "navDashboardsDock",
+      "rationale": "This is a typed shell message key, not rendered copy; navigation resolves it through the shell catalog."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 82,
+      "kind": "metadata:label",
+      "text": "navDashboards",
+      "rationale": "This is a typed shell message key, not rendered copy; navigation resolves it through the shell catalog."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 83,
+      "kind": "metadata:label",
+      "text": "navMemory",
+      "rationale": "This is a typed shell message key, not rendered copy; navigation resolves it through the shell catalog."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 83,
+      "kind": "metadata:label",
+      "text": "navSchedule",
+      "rationale": "This is a typed shell message key, not rendered copy; navigation resolves it through the shell catalog."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 83,
+      "kind": "metadata:label",
+      "text": "navStats",
+      "rationale": "This is a typed shell message key, not rendered copy; navigation resolves it through the shell catalog."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 84,
+      "kind": "metadata:dockLabel",
+      "text": "navBrowserDock",
+      "rationale": "This is a typed shell message key, not rendered copy; navigation resolves it through the shell catalog."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 84,
+      "kind": "metadata:label",
+      "text": "navBrowserPreview",
+      "rationale": "This is a typed shell message key, not rendered copy; navigation resolves it through the shell catalog."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 84,
+      "kind": "metadata:label",
+      "text": "navKnowledge",
+      "rationale": "This is a typed shell message key, not rendered copy; navigation resolves it through the shell catalog."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 85,
+      "kind": "metadata:label",
+      "text": "navDocs",
+      "rationale": "This is a typed shell message key, not rendered copy; navigation resolves it through the shell catalog."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 85,
+      "kind": "metadata:label",
+      "text": "navFiles",
+      "rationale": "This is a typed shell message key, not rendered copy; navigation resolves it through the shell catalog."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 85,
+      "kind": "metadata:label",
+      "text": "navLive",
+      "rationale": "This is a typed shell message key, not rendered copy; navigation resolves it through the shell catalog."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 86,
+      "kind": "metadata:dockLabel",
+      "text": "navSettingsDock",
+      "rationale": "This is a typed shell message key, not rendered copy; navigation resolves it through the shell catalog."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 86,
+      "kind": "metadata:label",
+      "text": "navSettings",
+      "rationale": "This is a typed shell message key, not rendered copy; navigation resolves it through the shell catalog."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 96,
+      "kind": "metadata:label",
+      "text": "Chat",
+      "rationale": "This canonical route fallback preserves compatibility for non-UI consumers; dashboard navigation replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 97,
+      "kind": "metadata:label",
+      "text": "Overview",
+      "rationale": "This canonical route fallback preserves compatibility for non-UI consumers; dashboard navigation replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 98,
+      "kind": "metadata:label",
+      "text": "Sprints",
+      "rationale": "This canonical route fallback preserves compatibility for non-UI consumers; dashboard navigation replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 99,
+      "kind": "metadata:label",
+      "text": "Tasks",
+      "rationale": "This canonical route fallback preserves compatibility for non-UI consumers; dashboard navigation replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 100,
+      "kind": "metadata:label",
+      "text": "Agents",
+      "rationale": "This canonical route fallback preserves compatibility for non-UI consumers; dashboard navigation replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 101,
+      "kind": "metadata:label",
+      "text": "Nodes",
+      "rationale": "This canonical route fallback preserves compatibility for non-UI consumers; dashboard navigation replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 102,
+      "kind": "metadata:dockLabel",
+      "text": "Dash",
+      "rationale": "This canonical route fallback preserves compatibility for non-UI consumers; dashboard navigation replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 102,
+      "kind": "metadata:label",
+      "text": "Dashboards",
+      "rationale": "This canonical route fallback preserves compatibility for non-UI consumers; dashboard navigation replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 103,
+      "kind": "metadata:label",
+      "text": "Stats",
+      "rationale": "This canonical route fallback preserves compatibility for non-UI consumers; dashboard navigation replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 104,
+      "kind": "metadata:label",
+      "text": "Schedule",
+      "rationale": "This canonical route fallback preserves compatibility for non-UI consumers; dashboard navigation replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 105,
+      "kind": "metadata:label",
+      "text": "Memory",
+      "rationale": "This canonical route fallback preserves compatibility for non-UI consumers; dashboard navigation replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 106,
+      "kind": "metadata:label",
+      "text": "Knowledge",
+      "rationale": "This canonical route fallback preserves compatibility for non-UI consumers; dashboard navigation replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 107,
+      "kind": "metadata:dockLabel",
+      "text": "Browser",
+      "rationale": "This canonical route fallback preserves compatibility for non-UI consumers; dashboard navigation replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 107,
+      "kind": "metadata:label",
+      "text": "Browser Preview",
+      "rationale": "This canonical route fallback preserves compatibility for non-UI consumers; dashboard navigation replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 108,
+      "kind": "metadata:label",
+      "text": "Files",
+      "rationale": "This canonical route fallback preserves compatibility for non-UI consumers; dashboard navigation replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 109,
+      "kind": "metadata:label",
+      "text": "Live",
+      "rationale": "This canonical route fallback preserves compatibility for non-UI consumers; dashboard navigation replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 110,
+      "kind": "metadata:label",
+      "text": "Docs",
+      "rationale": "This canonical route fallback preserves compatibility for non-UI consumers; dashboard navigation replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 111,
+      "kind": "metadata:dockLabel",
+      "text": "Config",
+      "rationale": "This canonical route fallback preserves compatibility for non-UI consumers; dashboard navigation replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/navigation-items.ts",
+      "line": 111,
+      "kind": "metadata:label",
+      "text": "Settings",
+      "rationale": "This canonical route fallback preserves compatibility for non-UI consumers; dashboard navigation replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/no-project-chat-assistant.ts",
+      "line": 34,
+      "kind": "metadata:label",
+      "text": "Open Add Project",
+      "rationale": "This canonical assistant-action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/no-project-chat-assistant.ts",
+      "line": 35,
+      "kind": "metadata:description",
+      "text": "Launch the existing Add Project flow.",
+      "rationale": "This canonical assistant-action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/no-project-chat-assistant.ts",
+      "line": 41,
+      "kind": "metadata:label",
+      "text": "View Projects",
+      "rationale": "This canonical assistant-action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/no-project-chat-assistant.ts",
+      "line": 42,
+      "kind": "metadata:description",
+      "text": "Open the project list.",
+      "rationale": "This canonical assistant-action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/no-project-chat-assistant.ts",
+      "line": 49,
+      "kind": "metadata:label",
+      "text": "Open Settings",
+      "rationale": "This canonical assistant-action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/no-project-chat-assistant.ts",
+      "line": 50,
+      "kind": "metadata:description",
+      "text": "Review providers, routing, and dashboard preferences.",
+      "rationale": "This canonical assistant-action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/no-project-chat-assistant.ts",
+      "line": 57,
+      "kind": "metadata:label",
+      "text": "Start Onboarding",
+      "rationale": "This canonical assistant-action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/no-project-chat-assistant.ts",
+      "line": 58,
+      "kind": "metadata:description",
+      "text": "Reopen the guided setup flow.",
+      "rationale": "This canonical assistant-action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/no-project-chat-assistant.ts",
+      "line": 64,
+      "kind": "metadata:label",
+      "text": "Read Docs",
+      "rationale": "This canonical assistant-action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/no-project-chat-assistant.ts",
+      "line": 65,
+      "kind": "metadata:description",
+      "text": "Open the dashboard chat documentation.",
+      "rationale": "This canonical assistant-action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/no-project-chat-assistant.ts",
+      "line": 72,
+      "kind": "metadata:label",
+      "text": "Quickstart",
+      "rationale": "This canonical assistant-action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/no-project-chat-assistant.ts",
+      "line": 73,
+      "kind": "metadata:description",
+      "text": "Open the first-run quickstart.",
+      "rationale": "This canonical assistant-action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
     },
     {
       "path": "dashboard/src/v2/lib/provider-runtime-preview.ts",
@@ -696,38 +2166,122 @@
     },
     {
       "path": "dashboard/src/v2/pages/stats/components/GitTelemetryTab.tsx",
-      "line": 394,
+      "line": 152,
       "kind": "jsx-text",
-      "text": "PRs ·",
-      "rationale": "This is a compact Git or pricing unit used alongside runtime measurements."
+      "text": "PRs",
+      "rationale": "This is a locale-neutral telemetry abbreviation or unit label whose technical meaning must remain unchanged."
     },
     {
       "path": "dashboard/src/v2/pages/stats/components/GitTelemetryTab.tsx",
-      "line": 426,
+      "line": 269,
       "kind": "jsx-text",
-      "text": "PRs ·",
-      "rationale": "This is a compact Git or pricing unit used alongside runtime measurements."
+      "text": "PRs",
+      "rationale": "This is a locale-neutral telemetry abbreviation or unit label whose technical meaning must remain unchanged."
     },
     {
       "path": "dashboard/src/v2/pages/stats/components/GitTelemetryTab.tsx",
-      "line": 435,
+      "line": 311,
+      "kind": "attribute:label",
+      "text": "PRs",
+      "rationale": "This is a locale-neutral telemetry abbreviation or unit label whose technical meaning must remain unchanged."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/GitTelemetryTab.tsx",
+      "line": 398,
       "kind": "jsx-text",
       "text": "PRs ·",
-      "rationale": "This is a compact Git or pricing unit used alongside runtime measurements."
+      "rationale": "This is a locale-neutral telemetry abbreviation or unit label whose technical meaning must remain unchanged."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/GitTelemetryTab.tsx",
+      "line": 430,
+      "kind": "jsx-text",
+      "text": "PRs ·",
+      "rationale": "This is a locale-neutral telemetry abbreviation or unit label whose technical meaning must remain unchanged."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/GitTelemetryTab.tsx",
+      "line": 439,
+      "kind": "jsx-text",
+      "text": "PRs ·",
+      "rationale": "This is a locale-neutral telemetry abbreviation or unit label whose technical meaning must remain unchanged."
     },
     {
       "path": "dashboard/src/v2/pages/stats/components/ModelsStudio.tsx",
-      "line": 216,
+      "line": 224,
       "kind": "attribute:label",
       "text": "$ / 1M Tok",
-      "rationale": "This is a compact Git or pricing unit used alongside runtime measurements."
+      "rationale": "This is a locale-neutral telemetry abbreviation or unit label whose technical meaning must remain unchanged."
     },
     {
       "path": "dashboard/src/v2/pages/stats/components/ReliabilityStudio.tsx",
-      "line": 456,
+      "line": 467,
       "kind": "attribute:label",
       "text": "$ / 1M Tok",
-      "rationale": "This is a compact Git or pricing unit used alongside runtime measurements."
+      "rationale": "This is a locale-neutral telemetry abbreviation or unit label whose technical meaning must remain unchanged."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/stats-ui-primitives.tsx",
+      "line": 672,
+      "kind": "attribute:label",
+      "text": "In",
+      "rationale": "This is a locale-neutral telemetry abbreviation or unit label whose technical meaning must remain unchanged."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/stats-ui-primitives.tsx",
+      "line": 673,
+      "kind": "attribute:label",
+      "text": "Out",
+      "rationale": "This is a locale-neutral telemetry abbreviation or unit label whose technical meaning must remain unchanged."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/system/SystemFilterBar.tsx",
+      "line": 22,
+      "kind": "metadata:label",
+      "text": "Running",
+      "rationale": "This is canonical invocation-status enum metadata; the Stats surface maps it to locale-specific copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/system/SystemFilterBar.tsx",
+      "line": 23,
+      "kind": "metadata:label",
+      "text": "Completed",
+      "rationale": "This is canonical invocation-status enum metadata; the Stats surface maps it to locale-specific copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/system/SystemFilterBar.tsx",
+      "line": 24,
+      "kind": "metadata:label",
+      "text": "Failed",
+      "rationale": "This is canonical invocation-status enum metadata; the Stats surface maps it to locale-specific copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/system/SystemFilterBar.tsx",
+      "line": 25,
+      "kind": "metadata:label",
+      "text": "Cancelled",
+      "rationale": "This is canonical invocation-status enum metadata; the Stats surface maps it to locale-specific copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/system/SystemFilterBar.tsx",
+      "line": 26,
+      "kind": "metadata:label",
+      "text": "Paused",
+      "rationale": "This is canonical invocation-status enum metadata; the Stats surface maps it to locale-specific copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/TelemetryLedger.tsx",
+      "line": 557,
+      "kind": "jsx-text",
+      "text": "p50",
+      "rationale": "This is a locale-neutral telemetry abbreviation or unit label whose technical meaning must remain unchanged."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/TelemetryLedger.tsx",
+      "line": 558,
+      "kind": "jsx-text",
+      "text": "p95",
+      "rationale": "This is a locale-neutral telemetry abbreviation or unit label whose technical meaning must remain unchanged."
     }
   ]
 }

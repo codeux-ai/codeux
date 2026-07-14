@@ -6,17 +6,21 @@ import type {
   DashboardMessageBundle,
   DashboardPluralMessages,
 } from "../../../dashboard/src/v2/i18n/locales.js";
+import { agentsMessages } from "../../../dashboard/src/v2/i18n/messages/agents.js";
 import { appMessages } from "../../../dashboard/src/v2/i18n/messages/app.js";
 import { browserPreviewMessages } from "../../../dashboard/src/v2/i18n/messages/browser-preview.js";
 import { chatMessages } from "../../../dashboard/src/v2/i18n/messages/chat.js";
 import { customDashboardMessages } from "../../../dashboard/src/v2/i18n/messages/custom-dashboards.js";
+import { fileBrowserMessages } from "../../../dashboard/src/v2/i18n/messages/file-browser.js";
 import { knowledgeMessages } from "../../../dashboard/src/v2/i18n/messages/knowledge.js";
 import { liveMessages } from "../../../dashboard/src/v2/i18n/messages/live.js";
 import { memoryMessages } from "../../../dashboard/src/v2/i18n/messages/memory.js";
 import { nodesMessages } from "../../../dashboard/src/v2/i18n/messages/nodes.js";
 import { onboardingMessages } from "../../../dashboard/src/v2/i18n/messages/onboarding.js";
+import { overviewMessages } from "../../../dashboard/src/v2/i18n/messages/overview.js";
 import { projectMessages } from "../../../dashboard/src/v2/i18n/messages/projects.js";
 import { schedulerMessages } from "../../../dashboard/src/v2/i18n/messages/scheduler.js";
+import { settingsAgentsGuidanceMessages } from "../../../dashboard/src/v2/i18n/messages/settings-agents-guidance.js";
 import { settingsIntegrationsMessages } from "../../../dashboard/src/v2/i18n/messages/settings-integrations.js";
 import { settingsModelsMessages } from "../../../dashboard/src/v2/i18n/messages/settings-models.js";
 import { settingsOperationsMessages } from "../../../dashboard/src/v2/i18n/messages/settings-operations.js";
@@ -24,20 +28,25 @@ import { settingsShellMessages } from "../../../dashboard/src/v2/i18n/messages/s
 import { shellMessages } from "../../../dashboard/src/v2/i18n/messages/shell.js";
 import { sprintAuthoringMessages } from "../../../dashboard/src/v2/i18n/messages/sprint-authoring.js";
 import { sprintsMessages } from "../../../dashboard/src/v2/i18n/messages/sprints.js";
+import { statsMessages } from "../../../dashboard/src/v2/i18n/messages/stats.js";
 import { taskMessages } from "../../../dashboard/src/v2/i18n/messages/tasks.js";
 
 const bundles = {
+  agents: agentsMessages,
   app: appMessages,
   "browser-preview": browserPreviewMessages,
   chat: chatMessages,
   "custom-dashboards": customDashboardMessages,
+  "file-browser": fileBrowserMessages,
   knowledge: knowledgeMessages,
   live: liveMessages,
   memory: memoryMessages,
   nodes: nodesMessages,
   onboarding: onboardingMessages,
+  overview: overviewMessages,
   projects: projectMessages,
   scheduler: schedulerMessages,
+  "settings-agents-guidance": settingsAgentsGuidanceMessages,
   "settings-integrations": settingsIntegrationsMessages,
   "settings-models": settingsModelsMessages,
   "settings-operations": settingsOperationsMessages,
@@ -45,6 +54,7 @@ const bundles = {
   shell: shellMessages,
   "sprint-authoring": sprintAuthoringMessages,
   sprints: sprintsMessages,
+  stats: statsMessages,
   tasks: taskMessages,
 } as const satisfies Readonly<Record<string, DashboardMessageBundle>>;
 

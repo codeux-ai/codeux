@@ -41,6 +41,9 @@ import { getAccentHex, generateRandomAgentAvatar } from "../../lib/agent-avatar.
 import { defaultAgentMcpAccess, normalizeAgentMcpAccess } from "../../lib/agent-mcp-display.js";
 import { estimateTokens, formatTokenCount } from "../../lib/token-estimate.js";
 import { PersistentSkillStorageChip } from "./PersistentSkillStorageChip.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import type { DashboardMessageVariables, DashboardTextMessageKey } from "../../i18n/index.js";
+import { agentsMessages } from "../../i18n/messages/agents.js";
 
 /* ─────────────────────────────────────────────────────────
  * Validation rules
@@ -73,25 +76,25 @@ function validate({
   instruction: string;
   memoryEnabled: boolean;
   memory: string;
-}): FormErrors {
+}, localize: (key: DashboardTextMessageKey<typeof agentsMessages>, variables?: DashboardMessageVariables) => string, formatNumber: (value: number) => string): FormErrors {
   const errors: FormErrors = {};
   const trimmedName = name.trim();
   if (!trimmedName) {
-    errors.name = "Name is required";
+    errors.name = localize("nameRequired");
   } else if (trimmedName.length > NAME_MAX) {
-    errors.name = `Name must be ${NAME_MAX} characters or fewer`;
+    errors.name = localize("nameTooLong", { limit: formatNumber(NAME_MAX) });
   }
 
   if (description.trim().length > DESCRIPTION_MAX) {
-    errors.description = `Description must be ${DESCRIPTION_MAX} characters or fewer`;
+    errors.description = localize("descriptionTooLong", { limit: formatNumber(DESCRIPTION_MAX) });
   }
 
   if (instruction.length > INSTRUCTION_SOFT_MAX * 1.5) {
-    errors.instruction = `Instructions exceed safe limit (${instruction.length.toLocaleString()} / ${(INSTRUCTION_SOFT_MAX * 1.5).toLocaleString()})`;
+    errors.instruction = localize("instructionsTooLong", { current: formatNumber(instruction.length), limit: formatNumber(INSTRUCTION_SOFT_MAX * 1.5) });
   }
 
   if (memoryEnabled && memory.trim().length === 0) {
-    errors.memory = "Provide an override or disable the toggle";
+    errors.memory = localize("memoryOverrideRequired");
   }
 
   return errors;
@@ -111,27 +114,21 @@ const fromContainerRootMode = (value: ContainerRootMode): boolean | null => {
 
 const CONTAINER_ROOT_MODE_OPTIONS: Array<{
   value: ContainerRootMode;
-  label: string;
-  hint: string;
-  ariaLabel: string;
+  labelKey: "inherit" | "forceNonRoot" | "forceRoot";
+  hintKey: "inheritRootHint" | "forceNonRootHint" | "forceRootHint";
+  ariaLabelKey: "inheritRootAria" | "forceNonRootAria" | "forceRootAria";
 }> = [
   {
     value: "inherit",
-    label: "Inherit",
-    hint: "Use the scoped Docker Runtime setting.",
-    ariaLabel: "Inherit global Docker root setting",
+    labelKey: "inherit", hintKey: "inheritRootHint", ariaLabelKey: "inheritRootAria",
   },
   {
     value: "non_root",
-    label: "Force non-root",
-    hint: "Keep this agent on the default safer posture.",
-    ariaLabel: "Force Docker non-root for this agent",
+    labelKey: "forceNonRoot", hintKey: "forceNonRootHint", ariaLabelKey: "forceNonRootAria",
   },
   {
     value: "root",
-    label: "Force root",
-    hint: "Only for tools that need package-manager or OS-level writes.",
-    ariaLabel: "Force Docker root for this agent",
+    labelKey: "forceRoot", hintKey: "forceRootHint", ariaLabelKey: "forceRootAria",
   },
 ];
 
@@ -216,31 +213,36 @@ const formatMemoryStrength = (value: number): string => {
   return value.toFixed(2).replace(/\.?0+$/, "");
 };
 
-const formatMemoryConfigSummary = (config: AgentMemoryConfig): string => {
+const formatMemoryConfigSummary = (
+  config: AgentMemoryConfig,
+  localize: (key: DashboardTextMessageKey<typeof agentsMessages>, variables?: DashboardMessageVariables) => string,
+  pluralize: (key: "categoryCount", count: number) => string,
+  formatNumber: (value: number) => string,
+): string => {
   const tierLabel =
     config.tier === "both"
-      ? "Both tiers"
+      ? localize("bothTiers")
       : config.tier === "short_term"
-        ? "Short term"
-        : "Long term";
+        ? localize("shortTerm")
+        : localize("longTerm");
 
   const categoryLabel =
     config.categories.length === 0
-      ? "All categories"
-      : `${config.categories.length} category${config.categories.length === 1 ? "" : "s"}`;
+      ? localize("allCategories")
+      : pluralize("categoryCount", config.categories.length);
 
   const parts = [tierLabel, categoryLabel];
 
   if (config.minStrength > 0) {
-    parts.push(`min ${formatMemoryStrength(config.minStrength)}`);
+    parts.push(localize("minStrengthSummary", { value: formatMemoryStrength(config.minStrength) }));
   }
 
   if (config.maxShortTerm > 0) {
-    parts.push(`${config.maxShortTerm} short-term`);
+    parts.push(localize("shortTermCount", { count: formatNumber(config.maxShortTerm) }));
   }
 
   if (config.maxLongTerm > 0) {
-    parts.push(`${config.maxLongTerm} long-term`);
+    parts.push(localize("longTermCount", { count: formatNumber(config.maxLongTerm) }));
   }
 
   return parts.join(" · ");
@@ -263,6 +265,10 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   onSave: (id: string, updates: Partial<AgentPreset>) => void;
   onCancel: () => void;
 }> = ({ preset, saving, defaultMemoryInstruction = "", providerOptions = [], availableMcpServers = [], availableSkillStorages = [], isDashboardReplyAgent = false, onSave, onCancel }) => {
+  const { formatDate, formatNumber, locale, translate, translatePlural } = useDashboardI18n();
+  const t = useCallback((key: DashboardTextMessageKey<typeof agentsMessages>, variables?: DashboardMessageVariables): string => (
+    translate(agentsMessages, key, variables)
+  ), [translate]);
   const panelRef = useRef<HTMLFormElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
@@ -299,7 +305,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const [knowledgeDirty, setKnowledgeDirty] = useState(false);
   const [actionStatus, setActionStatus] = useState<ActionStatus>({
     tone: "neutral",
-    message: "Validation runs after fields are edited or Save Agent is pressed.",
+    message: t("validationHint"),
   });
 
   const setMcpAccessNormalized = (next: AgentMcpAccessConfig): void => setMcpAccess(normalizeAgentMcpAccess(next));
@@ -309,7 +315,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const handleRandomizeAvatar = (): void => {
     const seed = Date.now().toString(36) + Math.random().toString(36).substring(2);
     setAvatarConfig(generateRandomAgentAvatar(seed));
-    setActionStatus({ tone: "success", message: "Avatar randomized. Save Agent to keep the new appearance." });
+    setActionStatus({ tone: "success", message: t("avatarRandomizedSave") });
   };
 
   /* Reset when preset switches */
@@ -330,8 +336,8 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     setShowMemoryPanel(false);
     setTouched({});
     setKnowledgeDirty(false);
-    setActionStatus({ tone: "neutral", message: "Validation runs after fields are edited or Save Agent is pressed." });
-  }, [preset.id]);
+    setActionStatus({ tone: "neutral", message: t("validationHint") });
+  }, [preset.id, t]);
 
   /* Entry animation */
   useLayoutEffect(() => {
@@ -348,8 +354,8 @@ export const AgentPresetEditorPanel: FunctionComponent<{
         instruction: instructionMarkdown,
         memoryEnabled: memoryOverrideEnabled,
         memory: memoryMarkdown,
-      }),
-    [name, description, instructionMarkdown, memoryOverrideEnabled, memoryMarkdown]
+      }, t, (value) => formatNumber(value)),
+    [name, description, instructionMarkdown, memoryOverrideEnabled, memoryMarkdown, t, formatNumber]
   );
 
   const hasErrors = Object.keys(errors).length > 0;
@@ -414,14 +420,14 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     setTouched({ name: true, description: true, instruction: true, memory: true });
     if (hasErrors) {
       focusFirstInvalidField(errors);
-      setActionStatus({ tone: "error", message: "Fix the highlighted fields, then retry Save Agent." });
+      setActionStatus({ tone: "error", message: t("fixHighlighted") });
       return;
     }
     if (!isDirty) {
-      setActionStatus({ tone: "neutral", message: "No changes to save." });
+      setActionStatus({ tone: "neutral", message: t("noChangesToSave") });
       return;
     }
-    setActionStatus({ tone: "pending", message: "Saving agent changes..." });
+    setActionStatus({ tone: "pending", message: t("savingAgentChanges") });
     onSave(preset.id, {
       name: name.trim(),
       description: description.trim(),
@@ -477,7 +483,12 @@ export const AgentPresetEditorPanel: FunctionComponent<{
 
   const memoryIsDefault =
     memoryMarkdown.trim() === defaultMemoryInstruction.trim() && defaultMemoryInstruction.trim().length > 0;
-  const memoryConfigSummary = useMemo(() => formatMemoryConfigSummary(memoryConfig), [memoryConfig]);
+  const memoryConfigSummary = useMemo(() => formatMemoryConfigSummary(
+    memoryConfig,
+    t,
+    (_key, count) => translatePlural(agentsMessages, "categoryCount", count),
+    (value) => formatNumber(value),
+  ), [memoryConfig, t, translatePlural, formatNumber]);
 
   const instructionLength = instructionMarkdown.length;
   const instructionOver = instructionLength > INSTRUCTION_SOFT_MAX;
@@ -488,8 +499,8 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const mcpItems = useMemo(() => ([
     {
       id: "code_ux",
-      label: isDashboardReplyAgent && !mcpAccess.codeUxEnabled ? "Code UX · Runtime" : "Code UX",
-      active: isDashboardReplyAgent || mcpAccess.codeUxEnabled,
+      label: isDashboardReplyAgent && !mcpAccess.codeUxEnabled ? `Code UX · ${t("runtime")}` : "Code UX",
+      active: mcpAccess.codeUxEnabled,
       kind: "code_ux" as const,
     },
     ...availableMcpServers.map((server) => ({
@@ -498,7 +509,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
       active: mcpAccess.linkedServerIds.includes(server.id),
       kind: "custom" as const,
     })),
-  ]), [mcpAccess, availableMcpServers, isDashboardReplyAgent]);
+  ]), [mcpAccess, availableMcpServers, isDashboardReplyAgent, t]);
   const visibleMcpItems = mcpItems.slice(0, 5);
   const hiddenMcpCount = mcpItems.length - visibleMcpItems.length;
   const activeMcpCount = mcpItems.filter((item) => item.active).length;
@@ -510,14 +521,14 @@ export const AgentPresetEditorPanel: FunctionComponent<{
       setActionStatus({
         tone: isDashboardReplyAgent ? "neutral" : "error",
         message: isDashboardReplyAgent
-          ? "Review Code UX MCP and scheduler access before enabling it for the dashboard reply agent."
-          : "Code UX access is risk-gated for non-chat agents. Review the MCP manager warning before enabling it.",
+          ? t("reviewDashboardMcp")
+          : t("reviewRiskMcp"),
       });
       return;
     }
     setActionStatus({
       tone: "success",
-      message: `${item.label} ${item.active ? "disabled" : "enabled"} for this agent. Save Agent to persist MCP access.`,
+      message: t("mcpItemChanged", { name: item.label, state: t(item.active ? "stateDisabled" : "stateEnabled") }),
     });
     if (item.kind === "code_ux") {
       setMcpAccessNormalized({ ...mcpAccess, codeUxEnabled: !item.active });
@@ -544,7 +555,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
         ref={panelRef}
         onSubmit={handleSubmit}
         noValidate
-        aria-label={`Edit ${preset.name}`}
+        aria-label={t("editAgentAria", { name: preset.name })}
         className="relative flex flex-col overflow-hidden rounded-[1.9rem] border border-black/[0.06] bg-white/70 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
       >
         <BorderTrace accentHex={accentHex} />
@@ -554,33 +565,33 @@ export const AgentPresetEditorPanel: FunctionComponent<{
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
             <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">
               <Sparkles className="h-3 w-3" strokeWidth={2.4} />
-              Editing Agent
+              {t("editingAgent")}
               {isDirty && !saving && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[9px] tracking-[0.14em] text-amber-600 dark:text-amber-400">
                   <span className="h-1 w-1 rounded-full bg-amber-500" />
-                  Unsaved
+                  {t("unsaved")}
                 </span>
               )}
               {!isDirty && !saving && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-black/[0.06] bg-white/60 px-2 py-0.5 text-[9px] tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
                   <Check className="h-2.5 w-2.5" strokeWidth={3} />
-                  Saved
+                  {t("saved")}
                 </span>
               )}
               {saving && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-signal-500/30 bg-signal-500/10 px-2 py-0.5 text-[9px] tracking-[0.14em] text-signal-600 dark:text-signal-400">
                   <RefreshCw className="h-2.5 w-2.5 animate-spin" strokeWidth={2.4} />
-                  Saving
+                  {t("saving")}
                 </span>
               )}
             </div>
             <h2 className="truncate font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
-              {name.trim() || "Unnamed Agent"}
+              {name.trim() || t("unnamedAgent")}
             </h2>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <span className="hidden font-mono text-[10px] text-slate-400 dark:text-slate-500 md:inline">
-              {isMac ? "⌘S" : "Ctrl+S"} to save · Esc to cancel
+              {t("shortcutSaveCancel", { saveShortcut: isMac ? "⌘S" : "Ctrl+S" })}
             </span>
             <button
               type="button"
@@ -589,7 +600,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
               className="inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/40 px-4 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] text-slate-600 backdrop-blur-md transition-colors hover:bg-white/70 hover:text-slate-900 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
             >
               <X className="h-3.5 w-3.5" strokeWidth={2.4} />
-              Cancel
+              {t("cancel")}
             </button>
             <button
               type="submit"
@@ -603,12 +614,12 @@ export const AgentPresetEditorPanel: FunctionComponent<{
               ) : (
                 <Save className="h-3.5 w-3.5" strokeWidth={2.4} />
               )}
-              Save Agent
+              {t("saveAgent")}
             </button>
           </div>
           {submitDisabled && !saving && (
             <p className="mt-2 text-right text-[11px] text-slate-500">
-              {hasErrors ? "Fix errors to save" : "No changes"}
+              {t(hasErrors ? "fixErrorsToSave" : "noChanges")}
             </p>
           )}
           <div
@@ -624,7 +635,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
         <div className="flex flex-col gap-6 p-6 md:p-8">
           {/* Row 1 — profile identity + live appearance customizer */}
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <SectionCard icon={UserRound} eyebrow="Profile" title="Identity">
+            <SectionCard icon={UserRound} eyebrow={t("profile")} title={t("identity")}>
               <AgentAvatarStage
                 config={avatarConfig}
                 expression={avatarExpression}
@@ -637,11 +648,11 @@ export const AgentPresetEditorPanel: FunctionComponent<{
               />
               <FieldShell
                 icon={Tag}
-                label="Agent Name"
+                label={t("agentName")}
                 htmlFor="agent-name"
-                helper="Shown across the dashboard, sprints, and worker logs."
+                helper={t("agentNameHelper")}
                 required
-                counter={`${name.length}/${NAME_MAX}`}
+                counter={`${formatNumber(name.length)}/${formatNumber(NAME_MAX)}`}
                 error={touched.name ? errors.name : undefined}
                 errorId="agent-name-error"
               >
@@ -652,7 +663,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                   value={name}
                   onInput={(event) => setName(event.currentTarget.value)}
                   onBlur={() => setTouched((t) => ({ ...t, name: true }))}
-                  placeholder="e.g. Planning Agent"
+                  placeholder={t("namePlaceholder")}
                   maxLength={NAME_MAX + 20}
                   autoComplete="off"
                   aria-required="true"
@@ -668,10 +679,10 @@ export const AgentPresetEditorPanel: FunctionComponent<{
 
               <FieldShell
                 icon={FileText}
-                label="Short Description"
+                label={t("shortDescription")}
                 htmlFor="agent-description"
-                helper="Used by the Planning agent when it chooses the best coding specialist for each task."
-                counter={`${description.length}/${DESCRIPTION_MAX}`}
+                helper={t("descriptionHelper")}
+                counter={`${formatNumber(description.length)}/${formatNumber(DESCRIPTION_MAX)}`}
                 error={touched.description ? errors.description : undefined}
                 errorId="agent-description-error"
               >
@@ -681,7 +692,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                   value={description}
                   onInput={(event) => setDescription(event.currentTarget.value)}
                   onBlur={() => setTouched((t) => ({ ...t, description: true }))}
-                  placeholder="e.g. Frontend specialist for Preact, Tailwind, responsive UI, and accessibility work."
+                  placeholder={t("descriptionPlaceholder")}
                   rows={3}
                   maxLength={DESCRIPTION_MAX + 60}
                   aria-invalid={touched.description && !!errors.description}
@@ -695,12 +706,12 @@ export const AgentPresetEditorPanel: FunctionComponent<{
               </FieldShell>
             </SectionCard>
 
-            <SectionCard icon={Palette} eyebrow="Appearance" title="Customize">
+            <SectionCard icon={Palette} eyebrow={t("appearance")} title={t("customize")}>
               <AgentAvatarCustomizer
                 config={avatarConfig || {}}
                 onChange={(next) => {
                   setAvatarConfig(next);
-                  setActionStatus({ tone: "success", message: "Avatar option changed. Save Agent to persist appearance." });
+                  setActionStatus({ tone: "success", message: t("avatarChangedSave") });
                 }}
                 disabled={saving}
               />
@@ -708,13 +719,13 @@ export const AgentPresetEditorPanel: FunctionComponent<{
           </div>
 
           {/* Row 2 — behavior (full width for long prompts) */}
-          <SectionCard icon={FileText} eyebrow="Behavior" title="System Prompt & Memory">
+          <SectionCard icon={FileText} eyebrow={t("behavior")} title={t("systemPromptMemory")}>
               <FieldShell
                 icon={FileText}
-                label="System Instructions"
+                label={t("systemInstructions")}
                 htmlFor="agent-instructions"
-                helper="Markdown is supported. This becomes the system prompt prepended to every conversation."
-                counter={`${instructionLength.toLocaleString()} chars · ~${formatTokenCount(instructionTokens)} tok`}
+                helper={t("instructionsHelper")}
+                counter={t("characterTokenCount", { characters: formatNumber(instructionLength), tokens: formatTokenCount(instructionTokens, locale) })}
                 error={touched.instruction ? errors.instruction : undefined}
                 errorId="agent-instructions-error"
               >
@@ -725,15 +736,15 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                     value={instructionMarkdown}
                     onChange={setInstructionMarkdown}
                     onBlur={() => setTouched((t) => ({ ...t, instruction: true }))}
-                    placeholder={"You are a planning specialist. Decompose user goals into clear, testable subtasks…"}
+                    placeholder={t("instructionsPlaceholder")}
                     minRows={8}
                     minHeightClass="min-h-[14rem]"
                     invalid={touched.instruction && !!errors.instruction}
                     ariaErrorId={touched.instruction && errors.instruction ? "agent-instructions-error" : undefined}
-                    emptyPreviewHint="No instructions yet — switch to Write to compose the system prompt."
+                    emptyPreviewHint={t("noInstructionsPreview")}
                     toolbarNote={instructionOver ? (
                       <span className="inline-flex items-center gap-1 rounded-md border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-600 dark:text-amber-400">
-                        Long
+                        {t("longPrompt")}
                       </span>
                     ) : undefined}
                   />
@@ -741,7 +752,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                 {instructionOver && !errors.instruction && (
                   <p className="flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400">
                     <AlertCircle className="h-3.5 w-3.5 shrink-0" strokeWidth={2.4} />
-                    {instructionLength.toLocaleString()} characters exceeds the recommended {INSTRUCTION_SOFT_MAX.toLocaleString()} — long prompts increase latency and cost.
+                    {t("instructionLengthWarning", { count: formatNumber(instructionLength), limit: formatNumber(INSTRUCTION_SOFT_MAX) })}
                   </p>
                 )}
               </FieldShell>
@@ -756,16 +767,16 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                          Memory Template Override
+                          {t("memoryTemplateOverride")}
                         </div>
                         <p className="mt-1 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
-                          Replace the project default with a bespoke memory prompt for this agent only.
+                          {t("memoryTemplateHelper")}
                         </p>
                       </div>
                       <label className="relative inline-flex cursor-pointer shrink-0 items-center">
                         <input
                           type="checkbox"
-                          aria-label="Enable Memory Template Override"
+                          aria-label={t("enableMemoryTemplateOverride")}
                           checked={memoryOverrideEnabled}
                           onChange={(event) => {
                             const checked = event.currentTarget.checked;
@@ -791,16 +802,16 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                         htmlFor="agent-memory"
                         className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400"
                       >
-                        Memory Template Markdown
+                        {t("memoryTemplateMarkdown")}
                       </label>
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-[10px] font-bold text-slate-400 dark:text-slate-500">
-                          {memoryMarkdown.length.toLocaleString()} chars · ~{formatTokenCount(memoryTokens)} tok
+                          {t("characterTokenCount", { characters: formatNumber(memoryMarkdown.length), tokens: formatTokenCount(memoryTokens, locale) })}
                         </span>
                         {memoryIsDefault && (
                           <span className="inline-flex items-center gap-1 rounded-md border border-signal-500/20 bg-signal-500/8 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400">
                             <Check className="h-2.5 w-2.5" strokeWidth={3} />
-                            Default
+                            {t("default")}
                           </span>
                         )}
                         {!memoryIsDefault && defaultMemoryInstruction.trim().length > 0 && (
@@ -808,13 +819,13 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                             type="button"
                             onClick={() => {
                               useDefaultMemory();
-                              setActionStatus({ tone: "success", message: "Memory template reset to the project default. Save Agent to persist it." });
+                              setActionStatus({ tone: "success", message: t("memoryResetSave") });
                             }}
                             disabled={saving}
                             className="inline-flex items-center gap-1 rounded-md border border-black/[0.06] bg-white/60 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-white hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-white"
                           >
                             <RefreshCw className="h-2.5 w-2.5" strokeWidth={2.4} />
-                            Reset to default
+                            {t("resetToDefault")}
                           </button>
                         )}
                       </div>
@@ -826,12 +837,12 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                         value={memoryMarkdown}
                         onChange={setMemoryMarkdown}
                         onBlur={() => setTouched((t) => ({ ...t, memory: true }))}
-                        placeholder="Override the default memory prompt template for this agent."
+                        placeholder={t("memoryOverridePlaceholder")}
                         minRows={5}
                         minHeightClass="min-h-[10rem]"
                         invalid={touched.memory && !!errors.memory}
                         ariaErrorId={touched.memory && errors.memory ? "agent-memory-error" : undefined}
-                        emptyPreviewHint="No override yet — switch to Write to compose the memory template."
+                        emptyPreviewHint={t("noMemoryPreview")}
                       />
                     </div>
                     {touched.memory && errors.memory && (
@@ -851,10 +862,10 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                        Memory Injection Filters
+                        {t("memoryInjectionFilters")}
                       </div>
                       <p className="mt-1 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
-                        Control which memories are injected into this agent's prompts.
+                        {t("memoryFiltersBody")}
                       </p>
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-2">
@@ -874,7 +885,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                             value={memoryConfig}
                             onChange={(next) => {
                               setMemoryConfig(next);
-                              setActionStatus({ tone: "success", message: "Memory filters updated. Save Agent to persist them." });
+                              setActionStatus({ tone: "success", message: t("memoryFiltersSave") });
                             }}
                             onClose={() => setShowMemoryPanel(false)}
                             disabled={saving}
@@ -888,7 +899,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                           className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-white/60 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white"
                         >
                           <SlidersHorizontal className="h-3 w-3" strokeWidth={2.4} />
-                          Manage Memory
+                          {t("manageMemory")}
                         </button>
                       </Popover>
                       <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-black/[0.06] bg-white/60 px-3 py-1.5 text-[10px] font-semibold normal-case tracking-normal text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
@@ -901,25 +912,25 @@ export const AgentPresetEditorPanel: FunctionComponent<{
               </div>
             </SectionCard>
 
-          <SectionCard icon={Database} eyebrow="Persistent Skills" title="Storage Attachments">
+          <SectionCard icon={Database} eyebrow={t("persistentSkills")} title={t("storageAttachments")}>
             <div className="flex flex-col gap-4 rounded-2xl border border-black/[0.05] bg-white/30 p-5 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div className="min-w-0">
                   <div className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                    Persistent skill retrieval
+                    {t("persistentSkillRetrieval")}
                   </div>
                   <p className="mt-1 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
-                    Attach durable skill storages to this agent. Retrieval is disabled until storage is attached and this opt-in is enabled.
+                    {t("persistentSkillBody")}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   <span className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${persistentSkillsActive ? "border-signal-500/25 bg-signal-500/[0.08] text-signal-700 dark:text-signal-200" : "border-black/[0.06] bg-black/[0.03] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"}`}>
-                    {persistentSkillsActive ? "Enabled" : "Default off"}
+                    {t(persistentSkillsActive ? "enabled" : "defaultOff")}
                   </span>
                   <label className="relative inline-flex cursor-pointer shrink-0 items-center">
                     <input
                       type="checkbox"
-                      aria-label="Enable persistent skill retrieval"
+                      aria-label={t("enablePersistentSkills")}
                       checked={persistentSkillsEnabled}
                       disabled={saving || persistentSkillStorageIds.length === 0}
                       onChange={(event) => setPersistentSkillsEnabled(event.currentTarget.checked)}
@@ -933,7 +944,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
               <div className="flex flex-wrap gap-2">
                 {availableSkillStorages.length === 0 ? (
                   <div className="rounded-[1rem] border border-dashed border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">
-                    No project skill storages are available. Create one in Settings, Agents.
+                    {t("noSkillStorages")}
                   </div>
                 ) : availableSkillStorages.map((storage) => {
                   const checked = persistentSkillStorageIds.includes(storage.id);
@@ -983,10 +994,9 @@ export const AgentPresetEditorPanel: FunctionComponent<{
           </SectionCard>
 
           {/* Knowledge subscriptions */}
-          <SectionCard icon={Library} eyebrow="Grounding" title="Knowledge Base">
+          <SectionCard icon={Library} eyebrow={t("grounding")} title={t("knowledgeBase")}>
             <p className="-mt-1 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
-              Subscribe this agent to documents from the shared library. Subscribed docs appear in the
-              agent's manifest, and it retrieves passages on demand via <code className="rounded bg-black/[0.05] px-1 py-0.5 font-mono text-[11px] dark:bg-white/[0.06]">search_knowledge</code>.
+              {t("knowledgeSubscriptionsBody")}
             </p>
             <AgentKnowledgePanel
               agentPresetId={preset.id}
@@ -998,7 +1008,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
 
           {/* Row 3 — routing + connected tools */}
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <SectionCard icon={Route} eyebrow="Routing" title="Provider & Model">
+            <SectionCard icon={Route} eyebrow={t("routing")} title={t("providerModel")}>
               <div className="rounded-2xl border border-black/[0.05] bg-white/30 p-5 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
                 <div className="flex items-start gap-4">
                   <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black/[0.04] text-slate-500 dark:bg-white/[0.04] dark:text-slate-300">
@@ -1006,34 +1016,34 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                      Optional Agent Provider
+                      {t("optionalProvider")}
                     </div>
                     <p className="mt-1 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
-                      Used only when a route is set to the Agent strategy. Blank agents inherit that route's primary instance.
+                      {t("optionalProviderBody")}
                     </p>
                   </div>
                 </div>
 
                 <div className="mt-5 grid gap-4">
-                  <FieldShell icon={Cpu} label="Provider Instance" helper="Leave unset to inherit route, worker, or global defaults.">
+                  <FieldShell icon={Cpu} label={t("providerInstance")} helper={t("providerInstanceHelper")}>
                     <AvantgardeSelect
-                      aria-label="Provider instance"
+                      aria-label={t("providerInstance")}
                       value={providerConfigId}
                       onChange={(next) => {
                         setProviderConfigId(next);
                         setModel("");
                       }}
                       disabled={saving || providerOptions.length === 0}
-                      placeholder="Inherit route default"
+                      placeholder={t("inheritRouteDefault")}
                       options={[
                         {
                           value: "",
-                          label: "Inherit route default",
+                          label: t("inheritRouteDefault"),
                           icon: <Route className="h-4 w-4 text-slate-400" strokeWidth={2.2} />,
                         },
                         ...providerOptions.map((option) => ({
                           value: option.value,
-                          label: `${option.label}${option.enabled ? "" : " (paused)"}`,
+                          label: `${option.label}${option.enabled ? "" : ` (${t("paused")})`}`,
                           icon: <ProviderBrandIcon id={option.provider} disabled={!option.enabled} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />,
                         })),
                       ]}
@@ -1045,29 +1055,29 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                       <ProviderBrandIcon id={selectedProvider.provider} disabled={!selectedProvider.enabled} className="h-9 w-9 rounded-xl" imageClassName="h-5 w-5" />
                       <div className="min-w-0">
                         <div className="truncate text-sm font-semibold text-slate-900 dark:text-white">{selectedProvider.label}</div>
-                        <div className="truncate text-[11px] text-slate-500 dark:text-slate-400">{selectedProvider.model || "default model"}</div>
+                        <div className="truncate text-[11px] text-slate-500 dark:text-slate-400">{selectedProvider.model || t("defaultModel")}</div>
                       </div>
                     </div>
                   ) : null}
 
-                  <FieldShell icon={Sparkles} label="Model Override" htmlFor="agent-model" helper="Optional. Leave blank to use the selected provider instance model.">
+                  <FieldShell icon={Sparkles} label={t("modelOverride")} htmlFor="agent-model" helper={t("modelOverrideHelper")}>
                     <input
                       id="agent-model"
                       type="text"
                       value={model}
                       onInput={(event) => setModel(event.currentTarget.value)}
                       disabled={saving || !providerConfigId}
-                      placeholder={selectedProvider?.model || "Inherited"}
+                      placeholder={selectedProvider?.model || t("inherited")}
                       className="rounded-2xl border border-black/[0.05] bg-white/40 px-5 py-3 shadow-sm text-[13px] font-medium text-slate-900 outline-none backdrop-blur-md transition-all placeholder-slate-400 focus:border-signal-500 focus:ring-4 focus:ring-signal-500/10 disabled:opacity-50 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-white dark:placeholder-slate-600 dark:focus:ring-signal-500/15"
                     />
                   </FieldShell>
 
                   <FieldShell
                     icon={ShieldCheck}
-                    label="Docker Root Mode"
-                    helper="Root mode is off by default. Force root only for tools that require package-manager or OS-level writes inside Docker."
+                    label={t("dockerRootMode")}
+                    helper={t("dockerRootBody")}
                   >
-                    <div role="radiogroup" aria-label="Agent Docker root mode" className="grid gap-2 sm:grid-cols-3">
+                    <div role="radiogroup" aria-label={t("agentDockerRootMode")} className="grid gap-2 sm:grid-cols-3">
                       {CONTAINER_ROOT_MODE_OPTIONS.map((option) => {
                         const active = containerRootMode === option.value;
                         return (
@@ -1087,18 +1097,18 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                               value={option.value}
                               checked={active}
                               disabled={saving}
-                              aria-label={option.ariaLabel}
+                              aria-label={t(option.ariaLabelKey)}
                               onChange={() => {
                                 setContainerRootMode(option.value);
-                                setActionStatus({ tone: "success", message: "Docker root mode changed. Save Agent to persist the runtime posture." });
+                                setActionStatus({ tone: "success", message: t("dockerRootChanged") });
                               }}
                               className="peer sr-only"
                             />
                             <span className="text-[10px] font-bold uppercase tracking-[0.14em] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-signal-500">
-                              {option.label}
+                              {t(option.labelKey)}
                             </span>
                             <span className={`text-[11px] leading-relaxed ${active ? "text-current/75" : "text-slate-400 dark:text-slate-500"}`}>
-                              {option.hint}
+                              {t(option.hintKey)}
                             </span>
                           </label>
                         );
@@ -1108,7 +1118,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                 </div>
               </div>
             </SectionCard>
-            <SectionCard icon={Plug} eyebrow="Tools" title="Connected MCPs">
+            <SectionCard icon={Plug} eyebrow={t("tools")} title={t("connectedMcps")}>
               <div className="rounded-2xl border border-black/[0.05] bg-white/30 p-5 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
                 <div className="flex items-start gap-4">
                   <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black/[0.04] text-slate-500 dark:bg-white/[0.04] dark:text-slate-300">
@@ -1117,7 +1127,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                        MCP Servers
+                        {t("mcpServers")}
                       </div>
                       <Popover
                         isOpen={mcpModalOpen}
@@ -1130,7 +1140,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                             value={mcpAccess}
                             onChange={(next) => {
                               setMcpAccessNormalized(next);
-                              setActionStatus({ tone: "success", message: "MCP access updated. Save Agent to persist tool access." });
+                              setActionStatus({ tone: "success", message: t("mcpPending") });
                             }}
                             availableServers={availableMcpServers}
                             isDashboardReplyAgent={isDashboardReplyAgent}
@@ -1142,12 +1152,12 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                           className={`inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-white/60 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-white hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white ${saving ? "pointer-events-none opacity-50" : ""}`}
                         >
                           <Settings2 className="h-3 w-3" strokeWidth={2.4} />
-                          Manage
+                          {t("manage")}
                         </span>
                       </Popover>
                     </div>
                     <p className="mt-1 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
-                      Tap to link or unlink. {activeMcpCount} active. Use Manage to configure Code UX tools.
+                      {t("mcpActiveSummary", { count: formatNumber(activeMcpCount) })}
                     </p>
                   </div>
                 </div>
@@ -1160,7 +1170,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                       onClick={() => toggleMcpItem(item)}
                       disabled={saving}
                       aria-pressed={item.active}
-                      aria-label={`${item.label} ${item.active ? "Enabled" : "Disabled"}`}
+                      aria-label={`${item.label} ${t(item.active ? "enabled" : "disabled")}`}
                       className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:opacity-50 ${
                         item.active
                           ? "border-signal-500/30 bg-signal-500/[0.12] text-signal-700 dark:text-signal-200"
@@ -1172,7 +1182,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                         : <Plug className="h-3 w-3" strokeWidth={2.4} />}
                       {item.label}
                       <span className="rounded-full border border-current/20 px-1.5 py-0.5 text-[8px] uppercase tracking-[0.12em]">
-                        {item.active ? "Enabled" : "Disabled"}
+                        {t(item.active ? "enabled" : "disabled")}
                       </span>
                     </button>
                   ))}
@@ -1183,7 +1193,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                       disabled={saving}
                       className="inline-flex items-center rounded-full border border-black/[0.08] bg-white/50 px-3 py-1.5 text-[11px] font-bold text-slate-400 transition-colors hover:text-slate-600 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-500 dark:hover:text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
                     >
-                      +{hiddenMcpCount} more
+                      {t("moreCount", { count: formatNumber(hiddenMcpCount) })}
                     </button>
                   )}
                 </div>
@@ -1195,10 +1205,10 @@ export const AgentPresetEditorPanel: FunctionComponent<{
           <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-black/[0.04] bg-white/20 px-4 py-3 text-[10px] font-mono text-slate-400 dark:border-white/[0.04] dark:bg-white/[0.01] dark:text-slate-500">
             <span className="inline-flex items-center gap-1.5">
               <Plus className="h-3 w-3" strokeWidth={2.2} />
-              Created {new Date(preset.createdAt).toLocaleDateString()}
+              {t("createdAt", { date: formatDate(new Date(preset.createdAt)) })}
             </span>
             <span aria-hidden="true">·</span>
-            <span>Updated {new Date(preset.updatedAt).toLocaleDateString()}</span>
+            <span>{t("updatedAt", { date: formatDate(new Date(preset.updatedAt)) })}</span>
             <span aria-hidden="true">·</span>
             <span className="truncate">id {preset.id}</span>
           </div>
@@ -1208,10 +1218,10 @@ export const AgentPresetEditorPanel: FunctionComponent<{
       <ConfirmDialog
         isOpen={discardOpen}
         options={{
-          title: "Discard unsaved changes?",
-          body: "Your edits to this agent will be lost. This action can't be undone.",
-          confirmLabel: "Discard",
-          cancelLabel: "Keep editing",
+          title: t("discardChangesTitle"),
+          body: t("discardChangesBody"),
+          confirmLabel: t("discard"),
+          cancelLabel: t("keepEditing"),
           destructive: true,
         }}
         onConfirm={() => {

@@ -8,6 +8,7 @@ import {
 } from "../locales.js";
 
 const germanSettingsOperationsMessages = {
+  "Provider routing moved to the v2 `AI Models` panel.": "Das Provider-Routing wurde in den v2-Bereich „KI-Modelle“ verschoben.",
   "Experience Mode": "Erfahrungsmodus",
   "Choose how much operational detail Code UX shows while keeping every saved setting intact.": "Lege fest, wie viele Betriebsdetails Code UX anzeigt. Alle gespeicherten Einstellungen bleiben erhalten.",
   "Current mode": "Aktueller Modus",

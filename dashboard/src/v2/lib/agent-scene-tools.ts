@@ -1,3 +1,7 @@
+import type { DashboardLocale } from "../i18n/index.js";
+import { translateDashboardMessage } from "../i18n/index.js";
+import { agentsMessages } from "../i18n/messages/agents.js";
+
 export const AGENT_SCENE_TOOL_IDS = [
   "screwdriver",
   "jackhammer",
@@ -145,6 +149,17 @@ export const AGENT_SCENE_TOOL_CATALOG: Readonly<Record<AgentSceneTool, ToolBluep
       { id: "glow", geometry: sphere(0.12, 18), material: "glow", position: [-0.37, 0.36, 0], animationRef: "glow" },
     ],
   },
+};
+
+export const getAgentSceneToolLabel = (tool: AgentSceneTool, locale: DashboardLocale = "en"): string => {
+  const key = {
+    screwdriver: "toolScrewdriver",
+    jackhammer: "toolJackhammer",
+    wrench: "toolWrench",
+    hammer: "toolHammer",
+    torch: "toolTorch",
+  } as const;
+  return translateDashboardMessage(agentsMessages, locale, key[tool]);
 };
 
 export interface ToolMotionPose {

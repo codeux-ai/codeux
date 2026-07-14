@@ -6,6 +6,9 @@ import {
   AGENT_RESPONSE_EMOTIONS,
   type AgentResponseEffect,
 } from "../../../../src/contracts/connection-chat-types.js";
+import type { DashboardLocale } from "../i18n/index.js";
+import { translateDashboardMessage } from "../i18n/index.js";
+import { agentsMessages } from "../i18n/messages/agents.js";
 
 const supportedEmotions = new Set<string>(AGENT_RESPONSE_EMOTIONS);
 const supportedAnimations = new Set<string>(AGENT_RESPONSE_ANIMATIONS);
@@ -88,7 +91,23 @@ export function resolveAgentResponseEffect(metadata: unknown, markdown: string):
   return metadataEffect ?? extractAgentResponseEffect(markdown).effect;
 }
 
-export function getAgentResponseEffectCaption(effect: AgentResponseEffect): string {
+export function getAgentResponseEffectCaption(effect: AgentResponseEffect, locale: DashboardLocale = "en"): string {
   if (effect.caption) return effect.caption;
-  return `Feeling ${effect.emotion}.`;
+  const emotionKey = {
+    happy: "expressionHappy",
+    sad: "expressionSad",
+    angry: "expressionAngry",
+    sleepy: "expressionSleepy",
+    bored: "expressionBored",
+    curious: "expressionCurious",
+    thinking: "expressionThinking",
+    excited: "expressionExcited",
+    surprised: "expressionSurprised",
+    proud: "expressionProud",
+  } as const;
+  return translateDashboardMessage(agentsMessages, locale, "feelingEmotion", {
+    emotion: locale === "en"
+      ? effect.emotion
+      : translateDashboardMessage(agentsMessages, locale, emotionKey[effect.emotion]),
+  });
 }
