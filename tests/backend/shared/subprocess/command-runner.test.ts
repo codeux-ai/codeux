@@ -49,6 +49,37 @@ describe("CommandRunner", () => {
     await expect(runner.run(node, ["ok\0bad"])).rejects.toThrow(/null bytes/);
   });
 
+  it("canonicalizes an existing working directory before spawning", async () => {
+    const tempDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "code-ux-command-runner-cwd-"));
+    const nestedDir = path.join(tempDir, "nested");
+    const aliasDir = path.join(tempDir, "alias");
+    try {
+      await fsPromises.mkdir(nestedDir);
+      await fsPromises.symlink(nestedDir, aliasDir, process.platform === "win32" ? "junction" : "dir");
+
+      const result = await runner.run(node, ["-e", "process.stdout.write(process.cwd())"], { cwd: aliasDir });
+
+      expect(result.ok).toBe(true);
+      expect(result.stdout).toBe(await fsPromises.realpath(nestedDir));
+    } finally {
+      await fsPromises.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects invalid working directories before spawning", async () => {
+    const tempDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "code-ux-command-runner-invalid-cwd-"));
+    const filePath = path.join(tempDir, "file.txt");
+    await fsPromises.writeFile(filePath, "not a directory", "utf8");
+    try {
+      await expect(runner.run(node, ["-e", "process.exit(0)"], { cwd: " " })).rejects.toThrow(/cwd cannot be empty/i);
+      await expect(runner.run(node, ["-e", "process.exit(0)"], { cwd: `${tempDir}\0outside` })).rejects.toThrow(/null bytes/i);
+      await expect(runner.run(node, ["-e", "process.exit(0)"], { cwd: path.join(tempDir, "missing") })).rejects.toThrow(/existing directory/i);
+      await expect(runner.run(node, ["-e", "process.exit(0)"], { cwd: filePath })).rejects.toThrow(/existing directory/i);
+    } finally {
+      await fsPromises.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("should handle error exit code", async () => {
     const result = await runner.run(node, ["-e", "process.exit(1)"]);
     expect(result.ok).toBe(false);
