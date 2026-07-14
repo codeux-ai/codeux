@@ -3,6 +3,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/preact";
+import { renderWithI18n } from "../../../render-with-i18n.js";
 import { LiveTaskCard, QuotaCountdown, TaskDuration } from "../../../../../dashboard/src/v2/components/LiveTaskCard";
 import { LiveTaskInvocationRow } from "../../../../../dashboard/src/v2/components/live-session/LiveTaskInvocationRow.js";
 import type { ExecutionInvocationRecord, Subtask } from "../../../../../dashboard/src/types.js";
@@ -139,19 +140,19 @@ describe("LiveTaskCard", () => {
 
   it("renders running state properly", () => {
     const task = getMockTask("RUNNING");
-    const { container } = render(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} onEdit={vi.fn()} onForceComplete={vi.fn()} isRerunning={false} />);
+    const { container } = renderWithI18n(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} onEdit={vi.fn()} onForceComplete={vi.fn()} isRerunning={false} />);
     expect(container).toBeTruthy();
   });
 
   it("renders completed state properly", () => {
     const task = getMockTask("COMPLETED");
-    const { container } = render(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} onEdit={vi.fn()} onForceComplete={vi.fn()} isRerunning={false} />);
+    const { container } = renderWithI18n(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} onEdit={vi.fn()} onForceComplete={vi.fn()} isRerunning={false} />);
     expect(container).toBeTruthy();
   });
 
   it("renders shared CI progression on a running card without a duplicate merge badge", () => {
     const task = { ...getMockTask("RUNNING"), merge_indicator: "CI" as const };
-    const { container } = render(
+    const { container } = renderWithI18n(
       <LiveTaskCard
         task={task}
         allTasks={[task]}
@@ -175,7 +176,7 @@ describe("LiveTaskCard", () => {
     // The subtask record stays RUNNING/in_progress while on hold; the live phase from the
     // dispatch drives the badge so the user sees the quota wait clearly.
     const task = getMockTask("RUNNING");
-    const { container } = render(
+    const { container } = renderWithI18n(
       <LiveTaskCard
         task={task}
         allTasks={[task]}
@@ -194,7 +195,7 @@ describe("LiveTaskCard", () => {
   it("renders a quota countdown timer from the dispatch retry-after tag", () => {
     const task = getMockTask("RUNNING");
     const resetIso = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
-    const { container } = render(
+    const { container } = renderWithI18n(
       <LiveTaskCard
         task={task}
         allTasks={[task]}
@@ -215,7 +216,7 @@ describe("LiveTaskCard", () => {
   });
 
   it("keeps quota countdown export compatible and falls back to the raw error without retry metadata", () => {
-    render(<QuotaCountdown errorMessage="Provider quota exhausted without retry metadata." />);
+    renderWithI18n(<QuotaCountdown errorMessage="Provider quota exhausted without retry metadata." />);
     expect(screen.getByText("Provider quota exhausted without retry metadata.")).toBeTruthy();
   });
 
@@ -223,7 +224,7 @@ describe("LiveTaskCard", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-21T10:00:05.000Z"));
 
-    const { container } = render(
+    const { container } = renderWithI18n(
       <TaskDuration
         dispatchTiming={{
           startedAt: "2026-03-21T10:00:00.000Z",
@@ -256,7 +257,7 @@ describe("LiveTaskCard", () => {
         finishedAt: null,
       },
     };
-    render(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} onEdit={vi.fn()} onForceComplete={vi.fn()} isRerunning={false} />);
+    renderWithI18n(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} onEdit={vi.fn()} onForceComplete={vi.fn()} isRerunning={false} />);
     expect(screen.getByLabelText("QA review running")).toBeTruthy();
     expect(screen.getByText("QA")).toBeTruthy();
   });
@@ -283,7 +284,7 @@ describe("LiveTaskCard", () => {
       },
     };
 
-    render(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} onEdit={vi.fn()} onForceComplete={vi.fn()} isRerunning={false} />);
+    renderWithI18n(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} onEdit={vi.fn()} onForceComplete={vi.fn()} isRerunning={false} />);
 
     fireEvent.click(screen.getByRole("button", { name: "QA review details" }));
     expect(await screen.findByText("Preserve the persisted review projection.")).toBeTruthy();
@@ -304,7 +305,7 @@ describe("LiveTaskCard", () => {
       selfReflectionRating: getMockSelfReflectionRating(),
     };
 
-    render(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} onEdit={vi.fn()} onForceComplete={vi.fn()} isRerunning={false} />);
+    renderWithI18n(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} onEdit={vi.fn()} onForceComplete={vi.fn()} isRerunning={false} />);
 
     const trigger = screen.getByLabelText("Self-reflection rating 5 out of 5");
     expect(trigger.textContent).toContain("5/5");
@@ -320,7 +321,7 @@ describe("LiveTaskCard", () => {
 
   it("shows a task-scoped invocation feed with transcript links", () => {
     const task = getMockTask("RUNNING");
-    const { container } = render(
+    const { container } = renderWithI18n(
       <LiveTaskCard
         task={task}
         allTasks={[task]}
@@ -348,7 +349,7 @@ describe("LiveTaskCard", () => {
     const task = getMockTask("RUNNING");
     const onForceComplete = vi.fn();
 
-    render(
+    renderWithI18n(
       <LiveTaskCard
         task={task}
         allTasks={[task]}
@@ -371,7 +372,7 @@ describe("LiveTaskCard", () => {
   });
 
   it("renders invocation row labels, fallback metadata, and encoded transcript links", () => {
-    render(
+    renderWithI18n(
       <LiveTaskInvocationRow
         invocation={getMockInvocation({
           id: "xi task/with space",

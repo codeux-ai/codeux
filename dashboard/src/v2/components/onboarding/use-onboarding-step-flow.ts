@@ -14,42 +14,60 @@ import {
 import type { DashboardExperienceMode, OnboardingRuntimeReadiness, ProviderId, SystemSettings } from "../../../types.js";
 import { normalizeDashboardExperienceMode } from "../../lib/experience-mode.js";
 import { getProviderInitialSelection } from "../../lib/onboarding-settings-draft.js";
+import {
+  translateOnboardingMessage,
+  useOnboardingMessages,
+  type OnboardingMessageKey,
+} from "../../i18n/messages/onboarding.js";
+import type { DashboardLocale } from "../../i18n/locales.js";
 
 export type StepId = "mode" | "installation" | "introduction" | "providers" | "provider-setup" | "git" | "jira" | "defaults" | "automation" | "appearance";
 
-export const onboardingSteps: Array<{ id: StepId; label: string; icon: typeof Settings }> = [
-  { id: "mode", label: "Setup mode", icon: SlidersHorizontal },
-  { id: "installation", label: "Installation", icon: Box },
-  { id: "introduction", label: "Introduction", icon: ShieldCheck },
-  { id: "providers", label: "Select Providers", icon: Cpu },
-  { id: "provider-setup", label: "Providers", icon: Settings },
-  { id: "git", label: "Git", icon: GitBranch },
-  { id: "jira", label: "Jira", icon: ClipboardList },
-  { id: "defaults", label: "Default providers", icon: Layers },
-  { id: "automation", label: "Automation", icon: Sparkles },
-  { id: "appearance", label: "Appearance", icon: Monitor },
+const onboardingStepDefinitions: Array<{ id: StepId; labelKey: OnboardingMessageKey; icon: typeof Settings }> = [
+  { id: "mode", labelKey: "stepSetupMode", icon: SlidersHorizontal },
+  { id: "installation", labelKey: "stepInstallation", icon: Box },
+  { id: "introduction", labelKey: "stepIntroduction", icon: ShieldCheck },
+  { id: "providers", labelKey: "stepSelectProviders", icon: Cpu },
+  { id: "provider-setup", labelKey: "stepProviders", icon: Settings },
+  { id: "git", labelKey: "stepGit", icon: GitBranch },
+  { id: "jira", labelKey: "stepJira", icon: ClipboardList },
+  { id: "defaults", labelKey: "stepDefaultProviders", icon: Layers },
+  { id: "automation", labelKey: "stepAutomation", icon: Sparkles },
+  { id: "appearance", labelKey: "stepAppearance", icon: Monitor },
 ];
 
-export const easyOnboardingSteps: Array<{ id: StepId; label: string; icon: typeof Settings }> = [
-  { id: "mode", label: "Setup mode", icon: SlidersHorizontal },
-  { id: "installation", label: "Installation", icon: Box },
-  { id: "introduction", label: "Introduction", icon: ShieldCheck },
-  { id: "provider-setup", label: "Provider", icon: Cpu },
-  { id: "git", label: "GitHub", icon: GitBranch },
+const easyOnboardingStepDefinitions: Array<{ id: StepId; labelKey: OnboardingMessageKey; icon: typeof Settings }> = [
+  { id: "mode", labelKey: "stepSetupMode", icon: SlidersHorizontal },
+  { id: "installation", labelKey: "stepInstallation", icon: Box },
+  { id: "introduction", labelKey: "stepIntroduction", icon: ShieldCheck },
+  { id: "provider-setup", labelKey: "stepProvider", icon: Cpu },
+  { id: "git", labelKey: "stepGithub", icon: GitBranch },
 ];
+
+const localizeSteps = (
+  definitions: Array<{ id: StepId; labelKey: OnboardingMessageKey; icon: typeof Settings }>,
+  locale: DashboardLocale,
+): Array<{ id: StepId; label: string; icon: typeof Settings }> => definitions.map(({ labelKey, ...step }) => ({
+  ...step,
+  label: translateOnboardingMessage(locale, labelKey),
+}));
+
+export const onboardingSteps = localizeSteps(onboardingStepDefinitions, "en");
+export const easyOnboardingSteps = localizeSteps(easyOnboardingStepDefinitions, "en");
 
 export const getOnboardingStepsForMode = (
   mode: DashboardExperienceMode,
+  locale: DashboardLocale = "en",
 ): Array<{ id: StepId; label: string; icon: typeof Settings }> => (
-  mode === "EASY" ? easyOnboardingSteps : onboardingSteps
+  localizeSteps(mode === "EASY" ? easyOnboardingStepDefinitions : onboardingStepDefinitions, locale)
 );
 
-export const defaultOnboardingReadiness: OnboardingRuntimeReadiness = {
+export const getDefaultOnboardingReadiness = (locale: DashboardLocale = "en"): OnboardingRuntimeReadiness => ({
   checkedAt: "",
   cluster: {
     status: "not_ready",
-    label: "Checking",
-    detail: "Runtime checks are loading.",
+    label: translateOnboardingMessage(locale, "checking"),
+    detail: translateOnboardingMessage(locale, "runtimeChecksLoading"),
   },
   dependencies: [],
   providers: [],
@@ -58,7 +76,9 @@ export const defaultOnboardingReadiness: OnboardingRuntimeReadiness = {
     recommendedMode: null,
     options: [],
   },
-};
+});
+
+export const defaultOnboardingReadiness = getDefaultOnboardingReadiness();
 
 export interface OnboardingFlowState {
   open: boolean;
@@ -95,12 +115,12 @@ const clampStep = (step: number, mode: DashboardExperienceMode): number => (
   Math.min(getOnboardingStepsForMode(mode).length - 1, Math.max(0, step))
 );
 
-export const createInitialOnboardingFlowState = (): OnboardingFlowState => ({
+export const createInitialOnboardingFlowState = (locale: DashboardLocale = "en"): OnboardingFlowState => ({
   open: false,
   activeStep: 0,
   lastStep: 0,
   experienceMode: "EXPERT",
-  readiness: defaultOnboardingReadiness,
+  readiness: getDefaultOnboardingReadiness(locale),
   settings: null,
   selectedProviders: [],
   saving: false,
@@ -176,9 +196,10 @@ export const onboardingFlowReducer = (
 };
 
 export function useOnboardingStepFlow() {
-  const [state, dispatch] = useReducer(onboardingFlowReducer, undefined, createInitialOnboardingFlowState);
+  const { locale } = useOnboardingMessages();
+  const [state, dispatch] = useReducer(onboardingFlowReducer, locale, createInitialOnboardingFlowState);
 
-  const steps = useMemo(() => getOnboardingStepsForMode(state.experienceMode), [state.experienceMode]);
+  const steps = useMemo(() => getOnboardingStepsForMode(state.experienceMode, locale), [locale, state.experienceMode]);
   const activeStepData = steps[state.activeStep] ?? steps[0]!;
   const selectedProviderTypes = useMemo(
     () => onboardingProviderTypes.filter((provider) => state.selectedProviders.includes(provider)),
