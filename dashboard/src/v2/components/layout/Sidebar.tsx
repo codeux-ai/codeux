@@ -251,7 +251,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                         onFocus={(event) => updateSidebarToggleTooltipPosition(event.currentTarget)}
                         className={`mt-2 relative flex items-center ${isMinimized ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-2 min-h-[40px] rounded-2xl transition-[background-color,border-color,box-shadow,color,opacity,transform] motion-reduce:transition-none group focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-2xl focus-visible:z-10 bg-transparent border-0 cursor-pointer`}
                         style={controlTransitionStyle}
-                        aria-label={translate(shellMessages, isMinimized ? "expandSidebar" : "collapseSidebar")}
+                        aria-label={translate(shellMessages, isMinimized ? "expand" : "collapseSidebar")}
                         aria-describedby={isMinimized ? "nav-tooltip-sidebar-toggle" : undefined}
                         aria-expanded={!isMinimized}
                         aria-controls="primary-navigation"
