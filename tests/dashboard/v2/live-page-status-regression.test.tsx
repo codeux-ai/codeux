@@ -327,7 +327,7 @@ describe("LiveSessionPage Status Regression", () => {
       </DashboardI18nProvider>
     );
     const { rerender } = render(renderGermanPage());
-    expect(screen.getByRole("button", { name: /CI-Status: CI läuft/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^CI-Status: CI läuft\./i })).toBeInTheDocument();
 
     vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
       tasksWithLiveActivities: [liveTask({ status: "COMPLETED", is_merged: true, merge_indicator: "MERGED" })],
@@ -349,8 +349,8 @@ describe("LiveSessionPage Status Regression", () => {
     }));
     rerender(renderGermanPage());
 
-    expect(screen.getByRole("button", { name: /CI-Status: CI bestanden/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /CI-Status: CI fehlgeschlagen/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^CI-Status: CI bestanden\./i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^CI-Status: CI fehlgeschlagen\./i })).not.toBeInTheDocument();
     expect(screen.queryByText("Merged")).not.toBeInTheDocument();
   });
 
@@ -372,7 +372,7 @@ describe("LiveSessionPage Status Regression", () => {
     }));
 
     const { rerender } = render(renderGermanPage());
-    expect(screen.getByRole("button", { name: /CI-Status: CI fehlgeschlagen/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^CI-Status: CI fehlgeschlagen\./i })).toBeInTheDocument();
 
     vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
       transportState: "reconnecting",
@@ -382,7 +382,7 @@ describe("LiveSessionPage Status Regression", () => {
     }));
     rerender(renderGermanPage());
 
-    expect(screen.getByRole("button", { name: /CI-Status: CI fehlgeschlagen/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^CI-Status: CI fehlgeschlagen\./i })).toBeInTheDocument();
     expect(screen.getAllByText("Verbindung wird wiederhergestellt").length).toBeGreaterThan(0);
 
     vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
@@ -392,8 +392,8 @@ describe("LiveSessionPage Status Regression", () => {
     }));
     rerender(renderGermanPage());
 
-    expect(screen.queryByRole("button", { name: /CI-Status: CI fehlgeschlagen/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /CI-Status: CI läuft/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^CI-Status: CI fehlgeschlagen\./i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^CI-Status: CI läuft\./i })).toBeInTheDocument();
   });
 
   it("preserves QA disclosures, runtime feed, prompt disclosure, and task controls", async () => {
