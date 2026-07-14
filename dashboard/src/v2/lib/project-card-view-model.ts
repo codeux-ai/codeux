@@ -6,17 +6,10 @@ import type {
   ProjectCardViewModel,
   Source,
 } from "../types.js";
-import {
-  translateDashboardMessage,
-  type DashboardLocale,
-  type DashboardMessageVariables,
-  type DashboardTextMessageKey,
-} from "../i18n/locales.js";
-import { projectMessages } from "../i18n/messages/projects.js";
 
 export const PROJECT_CARD_EMPTY_VALUE = "--";
 
-const createProjectCardTimestampFormatter = (locale: DashboardLocale): Intl.DateTimeFormat => new Intl.DateTimeFormat(locale, {
+const PROJECT_CARD_TIMESTAMP_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
   year: "numeric",
@@ -31,11 +24,36 @@ const PROJECT_PROVIDER_LABELS: Record<Source["gitProvider"], string> = {
   local: "Local",
 };
 
-const projectText = (
-  locale: DashboardLocale,
-  key: DashboardTextMessageKey<typeof projectMessages>,
-  variables?: DashboardMessageVariables,
-): string => translateDashboardMessage(projectMessages, locale, key, variables);
+const PROJECT_CARD_ACTIONS: Array<Pick<ProjectCardActionDescriptor, "kind" | "label" | "ariaLabel" | "title" | "tone">> = [
+  {
+    kind: "open-project",
+    label: "Open",
+    ariaLabel: "Open project",
+    title: "Open project",
+    tone: "default",
+  },
+  {
+    kind: "setup-project",
+    label: "Setup project",
+    ariaLabel: "Setup project",
+    title: "Setup project",
+    tone: "default",
+  },
+  {
+    kind: "settings",
+    label: "Settings",
+    ariaLabel: "Project settings",
+    title: "Project settings",
+    tone: "default",
+  },
+  {
+    kind: "delete",
+    label: "Delete",
+    ariaLabel: "Delete project",
+    title: "Delete project",
+    tone: "danger",
+  },
+];
 
 export function formatProjectCardDisplayValue(value: string | null | undefined): ProjectCardDisplayValue {
   const trimmed = typeof value === "string" ? value.trim() : "";
@@ -45,10 +63,7 @@ export function formatProjectCardDisplayValue(value: string | null | undefined):
   };
 }
 
-export function formatProjectCardTimestamp(
-  value: string | null | undefined,
-  locale: DashboardLocale = "en",
-): ProjectCardDisplayValue {
+export function formatProjectCardTimestamp(value: string | null | undefined): ProjectCardDisplayValue {
   const trimmed = typeof value === "string" ? value.trim() : "";
   if (!trimmed) {
     return {
@@ -66,7 +81,7 @@ export function formatProjectCardTimestamp(
   }
 
   return {
-    value: createProjectCardTimestampFormatter(locale).format(parsed),
+    value: PROJECT_CARD_TIMESTAMP_FORMATTER.format(parsed),
     isEmpty: false,
   };
 }
@@ -111,37 +126,31 @@ export function getProjectCardLastRunStatus(project: Source): ProjectCardDisplay
   return formatProjectCardDisplayValue(project.lastRunStatus);
 }
 
-export function getProjectCardSourceBadge(
-  project: Source,
-  locale: DashboardLocale = "en",
-): ProjectCardSourceBadge {
+export function getProjectCardSourceBadge(project: Source): ProjectCardSourceBadge {
   if (project.sourceType === "git") {
     return {
       kind: "remote-git",
-      label: projectText(locale, "remoteGit"),
-      description: buildSourceDescription("remote-git", project, locale),
+      label: "Remote Git",
+      description: buildSourceDescription("remote-git", project),
     };
   }
 
   if (project.repoUrl?.trim()) {
     return {
       kind: "local-repository",
-      label: projectText(locale, "localRepository"),
-      description: buildSourceDescription("local-repository", project, locale),
+      label: "Local repo",
+      description: buildSourceDescription("local-repository", project),
     };
   }
 
   return {
     kind: "local",
-    label: projectText(locale, "local"),
-    description: buildSourceDescription("local", project, locale),
+    label: "Local",
+    description: buildSourceDescription("local", project),
   };
 }
 
-export function getProjectCardTaskCompletion(
-  project: Source,
-  locale: DashboardLocale = "en",
-): ProjectCardTaskCompletion {
+export function getProjectCardTaskCompletion(project: Source): ProjectCardTaskCompletion {
   const completedTasks = Math.max(0, Math.trunc(project.completedTasks));
   const openTasks = Math.max(0, Math.trunc(project.openTasks));
   const totalTasks = completedTasks + openTasks;
@@ -158,10 +167,7 @@ export function getProjectCardTaskCompletion(
 
   const percentage = Math.round((completedTasks / totalTasks) * 100);
   return {
-    value: new Intl.NumberFormat(locale, {
-      style: "percent",
-      maximumFractionDigits: 0,
-    }).format(percentage / 100),
+    value: `${percentage}%`,
     percentage,
     completedTasks,
     openTasks,
@@ -170,83 +176,41 @@ export function getProjectCardTaskCompletion(
   };
 }
 
-export function buildProjectCardActions(locale: DashboardLocale = "en"): ProjectCardActionDescriptor[] {
-  return [
-    {
-      kind: "open-project",
-      label: projectText(locale, "openAction"),
-      ariaLabel: projectText(locale, "openProject"),
-      title: projectText(locale, "openProject"),
-      tone: "default",
-    },
-    {
-      kind: "setup-project",
-      label: projectText(locale, "setupProject"),
-      ariaLabel: projectText(locale, "setupProject"),
-      title: projectText(locale, "setupProject"),
-      tone: "default",
-    },
-    {
-      kind: "settings",
-      label: projectText(locale, "settings"),
-      ariaLabel: projectText(locale, "projectSettings"),
-      title: projectText(locale, "projectSettings"),
-      tone: "default",
-    },
-    {
-      kind: "delete",
-      label: projectText(locale, "delete"),
-      ariaLabel: projectText(locale, "deleteProject"),
-      title: projectText(locale, "deleteProject"),
-      tone: "danger",
-    },
-  ];
+export function buildProjectCardActions(): ProjectCardActionDescriptor[] {
+  return PROJECT_CARD_ACTIONS.map((action) => ({ ...action }));
 }
 
-export function buildProjectCardViewModel(
-  project: Source,
-  locale: DashboardLocale = "en",
-): ProjectCardViewModel {
+export function buildProjectCardViewModel(project: Source): ProjectCardViewModel {
   return {
-    sourceBadge: getProjectCardSourceBadge(project, locale),
-    sourceTypeLabel: project.sourceType === "git"
-      ? projectText(locale, "remoteGit")
-      : project.repoUrl?.trim()
-        ? projectText(locale, "localRepository")
-        : projectText(locale, "local"),
+    sourceBadge: getProjectCardSourceBadge(project),
+    sourceTypeLabel: project.sourceType === "git" ? "Remote Git" : project.repoUrl?.trim() ? "Local repo" : "Local",
     providerLabel: getProjectCardProviderLabel(project),
     hostLabel: getProjectCardHostLabel(project),
     gitUrl: getProjectCardGitUrl(project),
     localDirectory: getProjectCardLocalDirectory(project),
-    createdAt: formatProjectCardTimestamp(project.createdAt, locale),
-    updatedAt: formatProjectCardTimestamp(project.updatedAt, locale),
-    lastRunAt: formatProjectCardTimestamp(project.lastRunAt, locale),
+    createdAt: formatProjectCardTimestamp(project.createdAt),
+    updatedAt: formatProjectCardTimestamp(project.updatedAt),
+    lastRunAt: formatProjectCardTimestamp(project.lastRunAt),
     lastRunStatus: getProjectCardLastRunStatus(project),
     branch: getProjectCardBranch(project),
     featureBranchPrefix: getProjectCardFeatureBranchPrefix(project),
-    taskCompletion: getProjectCardTaskCompletion(project, locale),
+    taskCompletion: getProjectCardTaskCompletion(project),
     emptyValue: PROJECT_CARD_EMPTY_VALUE,
-    actions: buildProjectCardActions(locale),
+    actions: buildProjectCardActions(),
   };
 }
 
-function buildSourceDescription(
-  kind: ProjectCardSourceBadge["kind"],
-  project: Source,
-  locale: DashboardLocale,
-): string {
+function buildSourceDescription(kind: ProjectCardSourceBadge["kind"], project: Source): string {
   const provider = getProjectCardProviderLabel(project).value;
   const host = project.gitHostDomain?.trim() || PROJECT_CARD_EMPTY_VALUE;
 
   if (kind === "local") {
-    return projectText(locale, "localProjectDescription", {
-      path: project.baseDir || PROJECT_CARD_EMPTY_VALUE,
-    });
+    return `Local project rooted at ${project.baseDir || PROJECT_CARD_EMPTY_VALUE}.`;
   }
 
   if (kind === "local-repository") {
-    return projectText(locale, "localRepositoryDescription", { provider, host });
+    return `Local project with inferred ${provider} origin on ${host}.`;
   }
 
-  return projectText(locale, "remoteRepositoryDescription", { provider, host });
+  return `${provider} repository hosted on ${host}.`;
 }

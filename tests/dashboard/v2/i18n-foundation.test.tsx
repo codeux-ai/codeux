@@ -222,7 +222,9 @@ describe("dashboard i18n foundation", () => {
     expect(translateDashboardPlural(featureMessages, "en", "itemCount", 1)).toBe("1 item");
     expect(translateDashboardPlural(featureMessages, "en", "itemCount", 2)).toBe("2 items");
     expect(translateDashboardPlural(featureMessages, "de", "itemCount", 2)).toBe("2 Einträge");
-    expect(translateDashboardPlural(featureMessages, "de", "itemCount", 1000)).toBe("1.000 Einträge");
+    expect(translateDashboardPlural(featureMessages, "de", "itemCount", 1234, {
+      count: new Intl.NumberFormat("de").format(1234),
+    })).toBe("1.234 Einträge");
   });
 
   it("formats numbers, dates, times, relative times, and lists with the selected locale", () => {

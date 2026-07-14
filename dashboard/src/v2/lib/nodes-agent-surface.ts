@@ -17,6 +17,8 @@ import {
   normalizeNodeCanvasGraph,
   validateNodeCanvasGraph,
 } from "./nodes-canvas-state.js";
+import type { DashboardLocale } from "../i18n/locales.js";
+import { translateNodesMessage } from "../i18n/messages/nodes.js";
 
 export type NodeCanvasAgentCommand =
   | {
@@ -126,11 +128,13 @@ const NODE_KINDS: readonly NodeCanvasNodeKind[] = ["trigger", "agent", "task", "
 export const applyNodeCanvasAgentCommand = (
   graph: NodeCanvasGraph,
   command: unknown,
-): NodeCanvasAgentCommandResult => applyNodeCanvasAgentCommands(graph, [command]);
+  locale: DashboardLocale = "en",
+): NodeCanvasAgentCommandResult => applyNodeCanvasAgentCommands(graph, [command], locale);
 
 export const applyNodeCanvasAgentCommands = (
   graph: NodeCanvasGraph,
   commands: unknown,
+  locale: DashboardLocale = "en",
 ): NodeCanvasAgentCommandResult => {
   let nextGraph = normalizeNodeCanvasGraph(graph);
   const commandIssues: NodeCanvasAgentIssue[] = [];
@@ -138,7 +142,7 @@ export const applyNodeCanvasAgentCommands = (
   if (!Array.isArray(commands)) {
     return withGraphValidation(nextGraph, [
       agentIssue("invalid_agent_command_payload", "commands", "commands", "Agent commands must be an array."),
-    ]);
+    ], locale);
   }
 
   commands.forEach((candidate, index) => {
@@ -156,15 +160,18 @@ export const applyNodeCanvasAgentCommands = (
         "invalid_agent_command_payload",
         commandEntityId(index),
         "command",
-        error instanceof Error ? error.message : "Agent command could not be applied.",
+        error instanceof Error ? error.message : translateNodesMessage(locale, "commandApplyFailed"),
       ));
     }
   });
 
-  return withGraphValidation(nextGraph, commandIssues);
+  return withGraphValidation(nextGraph, commandIssues, locale);
 };
 
-export const buildNodeCanvasAgentSummary = (graph: NodeCanvasGraph): NodeCanvasAgentSummary => {
+export const buildNodeCanvasAgentSummary = (
+  graph: NodeCanvasGraph,
+  locale: DashboardLocale = "en",
+): NodeCanvasAgentSummary => {
   const normalizedGraph = normalizeNodeCanvasGraph(graph);
   return {
     nodeCount: normalizedGraph.nodes.length,
@@ -173,7 +180,7 @@ export const buildNodeCanvasAgentSummary = (graph: NodeCanvasGraph): NodeCanvasA
     selectedEdgeIds: [...normalizedGraph.selection.edgeIds].sort(compareStrings),
     nodes: normalizedGraph.nodes.map(summarizeNode),
     edges: normalizedGraph.edges.map(summarizeEdge),
-    validationBlockers: toAgentIssues(validateNodeCanvasGraph(normalizedGraph)),
+    validationBlockers: toAgentIssues(validateNodeCanvasGraph(normalizedGraph, locale)),
   };
 };
 
@@ -535,10 +542,64 @@ const entitySnapshots = <TEntity extends { id: string }>(
 const withGraphValidation = (
   graph: NodeCanvasGraph,
   commandIssues: readonly NodeCanvasAgentIssue[],
+  locale: DashboardLocale = "en",
 ): NodeCanvasAgentCommandResult => ({
   graph,
-  issues: [...commandIssues, ...toAgentIssues(validateNodeCanvasGraph(graph))].sort(compareIssues),
+  issues: [
+    ...commandIssues.map((issue) => localizeAgentIssue(issue, locale)),
+    ...toAgentIssues(validateNodeCanvasGraph(graph, locale)),
+  ].sort(compareIssues),
 });
+
+const localizeAgentIssue = (
+  issue: NodeCanvasAgentIssue,
+  locale: DashboardLocale,
+): NodeCanvasAgentIssue => {
+  if (locale === "en") {
+    return issue;
+  }
+  const exactMessages = new Map<string, Parameters<typeof translateNodesMessage>[1]>([
+    ["Agent commands must be an array.", "commandsArrayRequired"],
+    ["Agent command could not be applied.", "commandApplyFailed"],
+    ["Agent command must be an object.", "commandObjectRequired"],
+    ["Agent command name is required.", "commandNameRequired"],
+    ["Add node command requires a valid node kind.", "addNodeKindRequired"],
+    ["Patch node command must include label, position, or config.", "patchNodePayloadRequired"],
+    ["Delete entities command requires nodeIds or edgeIds.", "deleteEntitiesRequired"],
+    ["Serialized graph must contain nodes.", "serializedGraphNodesRequired"],
+    ["Serialized graph must be valid JSON.", "serializedGraphJsonRequired"],
+    ["Position must include finite x and y numbers.", "finitePositionRequired"],
+    ["Position must be an object.", "positionObjectRequired"],
+    ["Position x must be a finite number.", "finitePositionXRequired"],
+    ["Position y must be a finite number.", "finitePositionYRequired"],
+    ["Metadata must be an object.", "metadataObjectRequired"],
+    ["Agent intent must be a string.", "agentIntentStringRequired"],
+    ["Task intent must be a string.", "taskIntentStringRequired"],
+    ["Config patch must be an object.", "configObjectRequired"],
+    ["Config values must be string, number, boolean, or null.", "configPrimitiveRequired"],
+  ]);
+  const exactKey = exactMessages.get(issue.message);
+  if (exactKey) {
+    return { ...issue, message: translateNodesMessage(locale, exactKey) };
+  }
+  const unknownCommand = /^Unknown agent command "(.*)"\.$/.exec(issue.message);
+  if (unknownCommand) {
+    return { ...issue, message: translateNodesMessage(locale, "unknownCommand", { command: unknownCommand[1] ?? "" }) };
+  }
+  if (issue.message === `${issue.field} endpoint must be an object.`) {
+    return { ...issue, message: translateNodesMessage(locale, "endpointObjectRequired", { field: issue.field }) };
+  }
+  if (issue.message === `${issue.field} must be an array of strings.`) {
+    return { ...issue, message: translateNodesMessage(locale, "stringArrayRequired", { field: issue.field }) };
+  }
+  if (issue.message === `${issue.field} must be a string.`) {
+    return { ...issue, message: translateNodesMessage(locale, "stringRequired", { field: issue.field }) };
+  }
+  if (issue.message === `${issue.field} must be a boolean.`) {
+    return { ...issue, message: translateNodesMessage(locale, "booleanRequired", { field: issue.field }) };
+  }
+  return issue;
+};
 
 const toAgentIssues = (issues: readonly NodeCanvasValidationIssue[]): NodeCanvasAgentIssue[] => (
   issues.map((issue) => ({ ...issue }))

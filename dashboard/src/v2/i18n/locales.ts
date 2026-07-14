@@ -108,6 +108,5 @@ export const translateDashboardPlural = <
     : localizedMessage;
   const pluralCategory = new Intl.PluralRules(locale, options).select(count);
   const template = messages[pluralCategory] ?? messages.other;
-  const formattedCount = new Intl.NumberFormat(locale).format(count);
-  return interpolateDashboardMessage(template, { ...variables, count: formattedCount });
+  return interpolateDashboardMessage(template, { count, ...variables });
 };

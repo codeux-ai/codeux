@@ -13,6 +13,8 @@ import { MARKDOWN_PROSE_CLASS } from "../ui/MarkdownEditorField.js";
 import { getInstructionAccentHex, formatBytes } from "../../lib/instruction-file-display.js";
 import { estimateTokens, formatTokenCount } from "../../lib/token-estimate.js";
 import { renderMarkdown } from "../../../lib/markdown.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import { agentsMessages } from "../../i18n/messages/agents.js";
 
 const isMac =
   typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.platform);
@@ -29,6 +31,7 @@ export const InstructionFileEditorPanel: FunctionComponent<{
   file: InstructionFileSummary;
   onSaved: (updated: InstructionFileContent) => void;
 }> = ({ projectId, file, onSaved }) => {
+  const { formatNumber, locale, translate } = useDashboardI18n();
   const panelRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const accentHex = getInstructionAccentHex(file.providerId);
@@ -44,7 +47,9 @@ export const InstructionFileEditorPanel: FunctionComponent<{
   const [touched, setTouched] = useState(false);
 
   const dirty = content !== loadedContent;
-  const validationError = touched && content.trim().length === 0 ? "Instruction file content is required before saving." : null;
+  const validationError = touched && content.trim().length === 0
+    ? translate(agentsMessages, "instructionRequired")
+    : null;
 
   /* Load file content whenever the selected file changes */
   useEffect(() => {
@@ -84,7 +89,7 @@ export const InstructionFileEditorPanel: FunctionComponent<{
     if (content.trim().length === 0) {
       setMode("write");
       window.setTimeout(() => textareaRef.current?.focus(), 0);
-      setError("Instruction file content is required. Add guidance or use the starter template, then retry Save.");
+      setError(translate(agentsMessages, "instructionRequiredRetry"));
       return;
     }
     setSaving(true);
@@ -101,7 +106,7 @@ export const InstructionFileEditorPanel: FunctionComponent<{
     } finally {
       setSaving(false);
     }
-  }, [saving, dirty, projectId, file.id, content, onSaved]);
+  }, [saving, dirty, projectId, file.id, content, onSaved, translate]);
 
   /* Cmd/Ctrl+S to save */
   useEffect(() => {
@@ -130,14 +135,14 @@ export const InstructionFileEditorPanel: FunctionComponent<{
   const previewHtml = useMemo(() => renderMarkdown(content), [content]);
 
   const status = saving
-    ? { cls: "border-signal-500/30 bg-signal-500/10 text-signal-600 dark:text-signal-400", label: "Saving", icon: <RefreshCw className="h-2.5 w-2.5 animate-spin" strokeWidth={2.4} /> }
+    ? { cls: "border-signal-500/30 bg-signal-500/10 text-signal-600 dark:text-signal-400", label: translate(agentsMessages, "saving"), icon: <RefreshCw className="h-2.5 w-2.5 animate-spin" strokeWidth={2.4} /> }
     : error
-      ? { cls: "border-status-red/20 bg-status-red/[0.08] text-status-red", label: "Needs retry", icon: <AlertCircle className="h-2.5 w-2.5" strokeWidth={2.4} /> }
+      ? { cls: "border-status-red/20 bg-status-red/[0.08] text-status-red", label: translate(agentsMessages, "needsRetry"), icon: <AlertCircle className="h-2.5 w-2.5" strokeWidth={2.4} /> }
       : dirty
-      ? { cls: "border-amber-400/30 bg-amber-400/10 text-amber-600 dark:text-amber-400", label: "Unsaved", icon: <span className="h-1 w-1 rounded-full bg-amber-500" /> }
+      ? { cls: "border-amber-400/30 bg-amber-400/10 text-amber-600 dark:text-amber-400", label: translate(agentsMessages, "unsaved"), icon: <span className="h-1 w-1 rounded-full bg-amber-500" /> }
       : justSaved
-        ? { cls: "border-signal-500/30 bg-signal-500/10 text-signal-600 dark:text-signal-400", label: "Saved", icon: <Check className="h-2.5 w-2.5" strokeWidth={3} /> }
-        : { cls: "border-black/[0.06] bg-white/60 text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400", label: exists ? "In sync" : "Not created", icon: <Check className="h-2.5 w-2.5" strokeWidth={3} /> };
+        ? { cls: "border-signal-500/30 bg-signal-500/10 text-signal-600 dark:text-signal-400", label: translate(agentsMessages, "saved"), icon: <Check className="h-2.5 w-2.5" strokeWidth={3} /> }
+        : { cls: "border-black/[0.06] bg-white/60 text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400", label: translate(agentsMessages, exists ? "inSync" : "notCreated"), icon: <Check className="h-2.5 w-2.5" strokeWidth={3} /> };
 
   return (
     <div
@@ -198,7 +203,7 @@ export const InstructionFileEditorPanel: FunctionComponent<{
                   }`}
                 >
                   <Icon className="h-3.5 w-3.5" strokeWidth={2.4} />
-                  {value === "write" ? "Write" : "Preview"}
+                  {translate(agentsMessages, value === "write" ? "write" : "preview")}
                 </button>
               );
             })}
@@ -209,18 +214,18 @@ export const InstructionFileEditorPanel: FunctionComponent<{
               type="button"
               onClick={() => {
                 const previousFocus = document.activeElement as HTMLElement | null;
-                if (window.confirm("Revert unsaved instruction file edits? This restores the last saved content.")) {
+                if (window.confirm(translate(agentsMessages, "revertConfirm"))) {
                   setContent(loadedContent);
                   setTouched(false);
                   setError(null);
                 }
                 window.setTimeout(() => previousFocus?.focus(), 0);
               }}
-              title="Revert changes"
+              title={translate(agentsMessages, "revertChanges")}
               className="inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/40 px-4 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] text-slate-600 backdrop-blur-md transition-colors hover:bg-white/70 hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
             >
               <RotateCcw className="h-3.5 w-3.5" strokeWidth={2.4} />
-              Revert
+              {translate(agentsMessages, "revertChanges")}
             </button>
           )}
 
@@ -233,12 +238,12 @@ export const InstructionFileEditorPanel: FunctionComponent<{
             className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] text-white dark:text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:scale-[1.03] hover:bg-signal-400 hover:shadow-[0_0_32px_rgba(0,224,160,0.36)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none disabled:hover:scale-100 dark:disabled:bg-white/[0.05] dark:disabled:text-slate-500"
           >
             {saving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.4} /> : <Save className="h-3.5 w-3.5" strokeWidth={2.4} />}
-            Save
+            {translate(agentsMessages, "save")}
           </button>
         </div>
         {dirty && !saving && (
           <span className="absolute -bottom-5 right-6 text-[10px] text-amber-500 font-bold uppercase tracking-wider">
-            Unsaved changes
+            {translate(agentsMessages, "unsavedChanges")}
           </span>
         )}
       </div>
@@ -253,23 +258,23 @@ export const InstructionFileEditorPanel: FunctionComponent<{
         )}
         {!error && (
           <div role="status" aria-live="polite" className="min-h-[2.75rem] rounded-2xl border border-black/[0.05] bg-white/35 px-4 py-3 text-[12px] font-medium text-slate-500 dark:border-white/[0.05] dark:bg-white/[0.02] dark:text-slate-400">
-            {saving ? "Saving instruction file..." : dirty ? "Unsaved instruction edits. Save to write the file." : "Instruction file is saved."}
+            {translate(agentsMessages, saving ? "savingInstructionFile" : dirty ? "unsavedInstructionEdits" : "instructionFileSaved")}
           </div>
         )}
 
         {/* Meta strip */}
         <div className="flex flex-wrap items-center gap-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
-          <span className="font-mono normal-case tracking-normal">{content.length.toLocaleString()} chars</span>
+          <span className="font-mono normal-case tracking-normal">{translate(agentsMessages, "characterCount", { count: formatNumber(content.length) })}</span>
           <span aria-hidden>·</span>
-          <span className="font-mono normal-case tracking-normal">~{formatTokenCount(tokens)} tok</span>
+          <span className="font-mono normal-case tracking-normal">~{formatTokenCount(tokens, locale)} {translate(agentsMessages, "tokens")}</span>
           {exists && (
             <>
               <span aria-hidden>·</span>
-              <span className="font-mono normal-case tracking-normal">{formatBytes(file.size)} on disk</span>
+              <span className="font-mono normal-case tracking-normal">{translate(agentsMessages, "bytesOnDisk", { size: formatBytes(file.size, locale) })}</span>
             </>
           )}
           <span className="ml-auto hidden items-center gap-1.5 font-mono normal-case tracking-normal md:inline-flex">
-            {isMac ? "⌘S" : "Ctrl+S"} to save
+            {translate(agentsMessages, "shortcutToSave", { shortcut: isMac ? "⌘S" : "Ctrl+S" })}
           </span>
         </div>
 
@@ -285,7 +290,7 @@ export const InstructionFileEditorPanel: FunctionComponent<{
               spellcheck={false}
               aria-invalid={!!validationError}
               aria-errormessage={validationError ? "instruction-file-content-error" : undefined}
-              placeholder={`# ${file.label}\n\nWrite the instructions agents should follow in this project…`}
+              placeholder={translate(agentsMessages, "instructionPlaceholder", { label: file.label })}
               className="block h-[60vh] min-h-[420px] w-full resize-y rounded-2xl border border-black/[0.05] bg-white/40 px-5 py-4 font-mono text-[13px] leading-relaxed text-slate-900 shadow-sm outline-none backdrop-blur-md transition-all placeholder-slate-400 focus:border-signal-500 focus:ring-4 focus:ring-signal-500/10 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-white dark:placeholder-slate-600 dark:focus:ring-signal-500/15"
             />
             {validationError && (
@@ -302,7 +307,7 @@ export const InstructionFileEditorPanel: FunctionComponent<{
                   className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-signal-500/25 bg-white/85 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-signal-600 shadow-sm backdrop-blur-md transition-all hover:scale-[1.03] hover:bg-signal-500/10 dark:bg-void-800/85 dark:text-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
                 >
                   <Sparkles className="h-3.5 w-3.5" strokeWidth={2.4} />
-                  Insert starter template
+                  {translate(agentsMessages, "insertStarterTemplate")}
                 </button>
               </div>
             )}
@@ -315,7 +320,7 @@ export const InstructionFileEditorPanel: FunctionComponent<{
         ) : (
           <div className="flex h-[60vh] min-h-[420px] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-black/[0.08] bg-white/30 text-center dark:border-white/[0.08] dark:bg-white/[0.02]">
             <FileText className="h-8 w-8 text-slate-300 dark:text-slate-600" strokeWidth={1.4} />
-            <p className="text-sm text-slate-400 dark:text-slate-500">Nothing to preview yet.</p>
+            <p className="text-sm text-slate-400 dark:text-slate-500">{translate(agentsMessages, "nothingToPreview")}</p>
           </div>
         )}
       </div>

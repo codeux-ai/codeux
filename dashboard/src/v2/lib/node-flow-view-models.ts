@@ -9,6 +9,12 @@ import type {
   NodeWidgetField,
   NodeWidgetSchema,
 } from "../types.js";
+import type { DashboardLocale } from "../i18n/locales.js";
+import {
+  translateNodesMessage,
+  translateNodesPlural,
+  translateNodesStatus,
+} from "../i18n/messages/nodes.js";
 
 export const NODE_FLOW_NODE_WIDTH = 220;
 export const NODE_FLOW_NODE_HEIGHT = 116;
@@ -117,33 +123,37 @@ export const layoutNodeFlowGraph = (graph: NodeFlowGraph): NodeFlowCanvasGraph =
   };
 };
 
-export const summarizeNodeFlow = (flow: NodeFlowRecord): NodeFlowSummary => ({
+export const summarizeNodeFlow = (
+  flow: NodeFlowRecord,
+  locale: DashboardLocale = "en",
+): NodeFlowSummary => ({
   id: flow.id,
   title: flow.title,
-  description: flow.description || `${flow.graph.nodes.length} nodes, ${flow.graph.edges.length} edges`,
+  description: flow.description || `${translateNodesPlural(locale, "nodeCount", flow.graph.nodes.length)}, ${translateNodesPlural(locale, "edgeCount", flow.graph.edges.length)}`,
   nodeCount: flow.graph.nodes.length,
   edgeCount: flow.graph.edges.length,
   versionLabel: `v${flow.version}`,
-  updatedLabel: formatRelativeDate(flow.updatedAt),
+  updatedLabel: formatRelativeDate(flow.updatedAt, locale),
 });
 
 export const getValidationBadgeState = (
   validation: NodeFlowValidationResponse | null,
   dirty: boolean,
+  locale: DashboardLocale = "en",
 ): ValidationBadgeViewModel => {
   if (dirty) {
-    return { tone: "warning", label: "Unsaved", title: "This flow has unsaved edits." };
+    return { tone: "warning", label: translateNodesMessage(locale, "unsaved"), title: translateNodesMessage(locale, "unsavedTitle") };
   }
   if (!validation) {
-    return { tone: "neutral", label: "Unvalidated", title: "Validation has not run in this editor session." };
+    return { tone: "neutral", label: translateNodesMessage(locale, "unvalidated"), title: translateNodesMessage(locale, "unvalidatedTitle") };
   }
   if (validation.valid) {
-    return { tone: "success", label: "Valid", title: "The graph passed validation." };
+    return { tone: "success", label: translateNodesMessage(locale, "valid"), title: translateNodesMessage(locale, "validTitle") };
   }
   return {
     tone: "danger",
-    label: `${validation.errors.length} issue${validation.errors.length === 1 ? "" : "s"}`,
-    title: validation.errors[0]?.message ?? "The graph has validation issues.",
+    label: translateNodesPlural(locale, "issueCount", validation.errors.length),
+    title: validation.errors[0]?.message ?? translateNodesMessage(locale, "validationFallback"),
   };
 };
 
@@ -231,9 +241,12 @@ export const redactNodeFlowSecrets = (value: NodeFlowJsonValue): NodeFlowJsonVal
   return next;
 };
 
-export const formatNodeFlowRunStatus = (run: NodeFlowRunRecord): string => {
+export const formatNodeFlowRunStatus = (
+  run: NodeFlowRunRecord,
+  locale: DashboardLocale = "en",
+): string => {
   const timing = run.finishedAt || run.startedAt || run.createdAt;
-  return `${run.status.replaceAll("_", " ")} · ${formatRelativeDate(timing)}`;
+  return `${translateNodesStatus(locale, run.status)} · ${formatRelativeDate(timing, locale)}`;
 };
 
 export const stableStringify = (value: NodeFlowJsonValue | NodeFlowGraph | null | undefined): string => {
@@ -253,12 +266,12 @@ const sortJsonValue = (value: NodeFlowJsonValue | undefined): NodeFlowJsonValue 
   return value;
 };
 
-const formatRelativeDate = (iso: string): string => {
+const formatRelativeDate = (iso: string, locale: DashboardLocale): string => {
   const date = new Date(iso);
   if (!Number.isFinite(date.getTime())) {
-    return "Unknown";
+    return translateNodesMessage(locale, "unknown");
   }
-  return date.toLocaleString(undefined, {
+  return date.toLocaleString(locale, {
     month: "short",
     day: "numeric",
     hour: "2-digit",

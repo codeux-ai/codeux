@@ -18,6 +18,8 @@ export function FilterStrip<T extends string>({
     onClear,
     ariaLabel,
     ariaLabelledBy,
+    clearLabel,
+    clearAriaLabel,
 }: {
     options: readonly (T | { value: T; label: string; ariaLabel?: string })[];
     active: T;
@@ -26,6 +28,8 @@ export function FilterStrip<T extends string>({
     onClear?: () => void;
     ariaLabel?: string;
     ariaLabelledBy?: string;
+    clearLabel?: string;
+    clearAriaLabel?: string;
 }) {
     const { translate } = useOptionalDashboardI18n();
     const listRef = useRef<HTMLDivElement>(null);
@@ -166,10 +170,10 @@ export function FilterStrip<T extends string>({
                         type="button"
                         style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
                         onClick={onClear}
-                        aria-label={translate(shellMessages, ariaLabel ? "clearFiltersFor" : "clearFilters", ariaLabel ? { label: ariaLabel } : undefined)}
+                        aria-label={clearAriaLabel ?? translate(shellMessages, ariaLabel ? "clearFiltersFor" : "clearFilters", ariaLabel ? { label: ariaLabel } : undefined)}
                         className="relative z-10 flex-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 text-xs font-semibold tracking-wide px-3 py-1.5 rounded-lg transition-all overflow-hidden animate-in fade-in zoom-in-95 touch-target ml-1 border-l border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-void-600/50"
                     >
-                        {translate(shellMessages, "clearAll")}
+                        {clearLabel ?? translate(shellMessages, "clearAll")}
                     </button>
                 )}
             </div>
