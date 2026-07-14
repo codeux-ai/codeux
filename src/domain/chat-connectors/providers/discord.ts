@@ -106,7 +106,6 @@ export interface DiscordInteractionRequest {
   now?: Date;
   timestampToleranceMs?: number;
 }
-
 export function verifyDiscordInteractionRequest(input: DiscordInteractionRequest): DiscordInteractionResult {
   const signature = getHeader(input.headers, "x-signature-ed25519");
   if (!signature) {

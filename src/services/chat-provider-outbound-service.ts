@@ -304,8 +304,7 @@ export class ChatProviderOutboundService {
   }
 
   private computeNextAttemptAt(attemptCount: number, retryAfterMs?: number): Date {
-    const exponentialDelay = this.initialBackoffMs * Math.pow(2, Math.max(0, attemptCount - 1));
-    const delay = Math.max(exponentialDelay, retryAfterMs ?? 0);
+    const delay = retryAfterMs ?? this.initialBackoffMs * Math.pow(2, Math.max(0, attemptCount - 1));
     return new Date(this.now().getTime() + delay);
   }
 

@@ -248,7 +248,7 @@ export const microsoftTeamsChatConnectorProfile: ChatConnectorProfile = {
     },
     handshake: { type: "none" },
     acknowledgement: { statusCode: 200, headers: { "content-type": "application/json" }, body: null },
-    normalize: normalizeMicrosoftTeamsActivity,
+    normalize: (payload, mode) => normalizeMicrosoftTeamsActivity(payload, { requireType: mode === "official_api" }),
   },
   identity: {
     resolve: (normalized, payload) => ({

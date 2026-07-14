@@ -5,14 +5,21 @@ import type {
   ChatProviderMessageDeliveryRecord,
 } from "../contracts/chat-provider-types.js";
 import { getChatConnectorProfileForMode } from "../domain/chat-connectors/registry.js";
-import { ChatConnectorOutboundExecutionError } from "../domain/chat-connectors/types.js";
 import type {
   ChatConnectorCommandOutboundRequest,
   ChatConnectorHttpOutboundRequest,
-  ChatConnectorOutboundExecutor,
   ChatConnectorProfile,
 } from "../domain/chat-connectors/types.js";
+import {
+  parseImessageBridgeResponse,
+  type ImessageBridgeEnvelope,
+} from "../domain/chat-connectors/providers/imessage.js";
+import { ChatConnectorOutboundResponseError } from "../domain/chat-connectors/types.js";
 import { redactText } from "../shared/security/redaction.js";
+import {
+  ImessageNativeBridge,
+  ImessageNativeBridgeError,
+} from "./chat-providers/imessage-native-bridge.js";
 
 export interface ChatProviderOutboundBridgePayload {
   providerKind: string;
@@ -36,6 +43,10 @@ export interface ChatProviderOutboundAdapterContext {
 export interface ChatProviderOutboundAdapterResult {
   externalMessageId?: string | null;
   responseMetadata?: Record<string, unknown>;
+  failure?: {
+    message: string;
+    retryable: boolean;
+  };
 }
 
 export interface ChatProviderOutboundAdapter {
@@ -64,60 +75,27 @@ export function createDefaultChatProviderOutboundAdapter(): ChatProviderOutbound
   return new ConfiguredChatProviderOutboundAdapter();
 }
 
-export interface ConfiguredChatProviderOutboundAdapterOptions {
-  fetch?: typeof fetch;
-  now?: () => number;
-  wait?: (delayMs: number, signal?: AbortSignal) => Promise<void>;
-}
-
 export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutboundAdapter {
-  private readonly executors = new Map<string, ChatConnectorOutboundExecutor | null>();
-  private readonly fetchImpl: typeof fetch;
-
-  constructor(private readonly options: ConfiguredChatProviderOutboundAdapterOptions = {}) {
-    this.fetchImpl = options.fetch ?? fetch;
-  }
+  private readonly imessageNativeBridge = new ImessageNativeBridge();
   private readonly rateLimitReadyAt = new Map<string, number>();
 
   async send(context: ChatProviderOutboundAdapterContext): Promise<ChatProviderOutboundAdapterResult> {
     let profile: ChatConnectorProfile;
     try {
       profile = getChatConnectorProfileForMode(context.connection.providerKind, context.connection.bridgeMode);
-      const executor = this.getExecutor(profile, context.connection.bridgeMode);
-      if (executor) {
-        return await executor.send(context);
-      }
       const request = profile.outbound.buildRequest(context);
       return request.transport === "http"
-        ? this.sendHttp(context, profile, request)
-        : this.sendNative(context, profile, request);
+        ? await this.sendHttp(context, profile, request)
+        : await this.sendNative(context, profile, request);
     } catch (error) {
       if (error instanceof ChatProviderOutboundAdapterError) {
         throw error;
-      }
-      if (error instanceof ChatConnectorOutboundExecutionError) {
-        throw new ChatProviderOutboundAdapterError(error.message, error.retryable, error.statusCode);
       }
       throw new ChatProviderOutboundAdapterError(
         error instanceof Error ? error.message : "Unsupported chat provider bridge mode.",
         false,
       );
     }
-  }
-
-  private getExecutor(
-    profile: ChatConnectorProfile,
-    mode: ChatProviderConnectionInternalRecord["bridgeMode"],
-  ): ChatConnectorOutboundExecutor | null {
-    const key = `${profile.kind}:${mode}`;
-    if (this.executors.has(key)) return this.executors.get(key) ?? null;
-    const executor = profile.outbound.createExecutor?.(mode, {
-      fetch: this.fetchImpl,
-      now: this.options.now,
-      wait: this.options.wait,
-    }) ?? null;
-    this.executors.set(key, executor);
-    return executor;
   }
 
   private async sendHttp(
@@ -136,26 +114,63 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
 
     let response: Response;
     try {
-      response = await this.fetchImpl(normalizedUrl, {
+      response = await fetch(normalizedUrl, {
         method: "POST",
         headers,
         body: JSON.stringify(request.body),
         signal: AbortSignal.timeout(request.timeoutMs),
       });
     } catch (error) {
+      const isTelegramOfficialApi = context.connection.providerKind === "telegram"
+        && context.connection.bridgeMode === "official_api";
       throw new ChatProviderOutboundAdapterError(
-        `Failed to reach ${context.connection.bridgeMode} bridge: ${error instanceof Error ? error.message : String(error)}`,
-        true,
+        isTelegramOfficialApi
+          ? "Telegram Bot API send did not return a response; delivery status is unknown."
+          : `Failed to reach ${context.connection.bridgeMode} bridge: ${error instanceof Error ? error.message : String(error)}`,
+        !isTelegramOfficialApi,
       );
     }
 
     const responseText = await response.text().catch(() => "");
-    const responseHeaders = Object.fromEntries(response.headers.entries());
-    const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
-    const parsed = profile.outbound.parseResponse(responseText, {
+    const responseContext = {
+      bridgeMode: context.connection.bridgeMode,
+      mode: context.connection.bridgeMode,
       statusCode: response.status,
-      headers: responseHeaders,
-    }, context.connection.bridgeMode);
+      headers: Object.fromEntries(response.headers.entries()),
+    } as const;
+    const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
+    const classification = profile.outbound.classifyError?.(
+      response.status,
+      responseText,
+      responseContext,
+    );
+    if (classification) {
+      throw new ChatProviderOutboundAdapterError(
+        classification.message,
+        classification.retryable,
+        response.status,
+        retryAfterMs,
+      );
+    }
+
+    let parsed: ChatProviderOutboundAdapterResult;
+    if (context.connection.providerKind === "imessage") {
+      parsed = parseImessageBridgeResponse(responseText, context.correlationId);
+    } else {
+      try {
+        parsed = profile.outbound.parseResponse(responseText, responseContext);
+      } catch (error) {
+        if (error instanceof ChatConnectorOutboundResponseError) {
+          throw new ChatProviderOutboundAdapterError(
+            error.message,
+            error.retryable,
+            error.statusCode ?? response.status,
+            error.retryAfterMs ?? retryAfterMs,
+          );
+        }
+        throw error;
+      }
+    }
     if (parsed.failure) {
       throw new ChatProviderOutboundAdapterError(
         parsed.failure.message,
@@ -166,8 +181,10 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
     }
     if (!response.ok) {
       throw new ChatProviderOutboundAdapterError(
-        `${context.connection.bridgeMode} bridge returned HTTP ${response.status}${responseText ? `: ${responseText.slice(0, 500)}` : ""}`,
-        profile.outbound.isRetryableStatus(response.status),
+        context.connection.providerKind === "telegram" && context.connection.bridgeMode === "official_api"
+          ? `Telegram Bot API returned HTTP ${response.status}.`
+          : `${context.connection.bridgeMode} bridge returned HTTP ${response.status}${responseText ? `: ${responseText.slice(0, 500)}` : ""}`,
+        profile.outbound.isRetryableStatus(response.status, context.connection.bridgeMode),
         response.status,
         retryAfterMs,
       );
@@ -203,8 +220,25 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
       throw new ChatProviderOutboundAdapterError("Native bridge command is not configured.", false);
     }
 
-    const env: NodeJS.ProcessEnv = { ...process.env };
     const bridgeToken = getFirstSecret(context.connection.secrets, request.tokenSecretKeys);
+    if (context.connection.providerKind === "imessage") {
+      try {
+        return await this.imessageNativeBridge.send({
+          command: request.command,
+          workingDirectory: request.workingDirectory,
+          bridgeToken,
+          correlationId: context.correlationId,
+          request: request.body as ImessageBridgeEnvelope,
+          timeoutMs: request.timeoutMs,
+        });
+      } catch (error) {
+        if (error instanceof ImessageNativeBridgeError) {
+          throw new ChatProviderOutboundAdapterError(error.message, error.retryable);
+        }
+        throw error;
+      }
+    }
+    const env: NodeJS.ProcessEnv = { ...process.env };
     if (bridgeToken) {
       env.CODEUX_CHAT_BRIDGE_TOKEN = bridgeToken;
     }
@@ -223,7 +257,12 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
       );
     }
 
-    return profile.outbound.parseResponse(result.stdout);
+    return profile.outbound.parseResponse(result.stdout, {
+      bridgeMode: context.connection.bridgeMode,
+      mode: context.connection.bridgeMode,
+      statusCode: 200,
+      headers: {},
+    });
   }
 }
 

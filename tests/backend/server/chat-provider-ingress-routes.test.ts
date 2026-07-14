@@ -1,4 +1,4 @@
-import { createHmac, createPrivateKey, createPublicKey, sign } from "crypto";
+import { createHmac } from "crypto";
 import express from "express";
 import type { Server } from "http";
 import * as fs from "fs/promises";
@@ -28,15 +28,6 @@ interface TestServerContext {
 const serversToClose: Server[] = [];
 const tempDirs: string[] = [];
 const openStorages: AppDbStorage[] = [];
-const discordPrivateKey = createPrivateKey({
-  key: Buffer.from("302e020100300506032b6570042204209d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60", "hex"),
-  format: "der",
-  type: "pkcs8",
-});
-const discordPublicKey = createPublicKey(discordPrivateKey)
-  .export({ format: "der", type: "spki" })
-  .subarray(-32)
-  .toString("hex");
 
 afterEach(async () => {
   for (const server of serversToClose.splice(0)) {
@@ -151,68 +142,79 @@ describe("chat provider ingress routes", () => {
     });
   });
 
-  it("authenticates official Discord interactions and returns PONG through the production ingress boundary", async () => {
+  it("handles the official WhatsApp subscription challenge with 200 and 403 responses", async () => {
     const context = await startTestServer();
-    const project = createProject(context, "discord-official-ingress");
-    const connection = context.chatProviderRepository.createConnection({
-      providerKind: "discord",
-      displayName: "Discord official API",
-      bridgeMode: "official_api",
-      status: "active",
-      setup: {
-        applicationId: "999999999999999999",
-        publicKey: discordPublicKey,
-        intents: "37377",
-      },
-      secrets: { botToken: "write-only-bot-token" },
-    });
+    const connection = createOfficialWhatsAppConnection(context);
+    const endpoint = `${context.baseUrl}/api/chat-providers/ingress/${connection.id}`;
+
+    const accepted = await fetch(`${endpoint}?${new URLSearchParams({
+      "hub.mode": "subscribe",
+      "hub.verify_token": "whatsapp-verify-token",
+      "hub.challenge": "123456789",
+    })}`);
+    expect(accepted.status).toBe(200);
+    expect(accepted.headers.get("content-type")).toContain("text/plain");
+    expect(await accepted.text()).toBe("123456789");
+
+    const rejected = await fetch(`${endpoint}?${new URLSearchParams({
+      "hub.mode": "subscribe",
+      "hub.verify_token": "wrong-token",
+      "hub.challenge": "123456789",
+    })}`);
+    expect(rejected.status).toBe(403);
+    expect(await rejected.text()).toBe("Forbidden");
+    expect(context.postMessage).not.toHaveBeenCalled();
+  });
+
+  it("authenticates official WhatsApp POST callbacks from exact raw bytes without a timestamp", async () => {
+    const context = await startTestServer();
+    const project = createProject(context, "whatsapp-raw-signature");
+    const connection = createOfficialWhatsAppConnection(context);
     context.chatProviderRepository.createChannelBinding({
       providerConnectionId: connection.id,
-      externalChannelId: "222222222222222222",
-      externalChannelName: "triage",
+      externalChannelId: "109876543210987",
+      externalChannelName: "WhatsApp business number",
       projectId: project.id,
     });
-    const timestamp = String(Math.floor(Date.now() / 1_000));
-    const pingBody = '{ "type": 1 }';
-    const ping = await postRawIngress(context, connection.id, pingBody, discordHeaders(timestamp, pingBody));
+    const payload = whatsappMessageWebhook();
+    const rawBody = `${JSON.stringify(payload, null, 2)}\n`;
+    const signature = `sha256=${createHmac("sha256", "whatsapp-app-secret").update(rawBody).digest("hex")}`;
 
-    expect(ping.status).toBe(200);
-    expect(await ping.json()).toEqual({ type: 1 });
+    const reserialized = await postRawIngress(context, connection.id, JSON.stringify(payload), {
+      "x-hub-signature-256": signature,
+    });
+    expect(reserialized.status).toBe(401);
     expect(context.postMessage).not.toHaveBeenCalled();
 
-    const invalid = await postRawIngress(context, connection.id, pingBody, {
-      "X-Signature-Ed25519": "0".repeat(128),
-      "X-Signature-Timestamp": timestamp,
+    const accepted = await postRawIngress(context, connection.id, rawBody, {
+      "x-hub-signature-256": signature,
     });
-    expect(invalid.status).toBe(401);
+    expect(accepted.status).toBe(202);
+    expect(await accepted.json()).toMatchObject({
+      status: "accepted",
+      providerKind: "whatsapp",
+      delivery: expect.objectContaining({ externalMessageId: "wamid.route-inbound" }),
+    });
+    expect(context.postMessage).toHaveBeenCalledTimes(1);
+  });
 
-    const interactionBody = JSON.stringify({
-      id: "111111111111111111",
-      type: 2,
-      channel_id: "222222222222222222",
-      channel: { id: "222222222222222222", name: "triage", type: 0 },
-      member: { user: { id: "333333333333333333", username: "alex" } },
-      data: { name: "ask", options: [{ name: "prompt", value: "repair production ingress" }] },
-    });
-    const accepted = await postRawIngress(
-      context,
-      connection.id,
-      interactionBody,
-      discordHeaders(timestamp, interactionBody),
-    );
+  it("acknowledges official WhatsApp status callbacks without creating deliveries or messages", async () => {
+    const context = await startTestServer();
+    const connection = createOfficialWhatsAppConnection(context);
+    const rawBody = JSON.stringify(whatsappStatusWebhook());
+    const signature = `sha256=${createHmac("sha256", "whatsapp-app-secret").update(rawBody).digest("hex")}`;
 
-    const acceptedBody = await accepted.json();
-    expect({ status: accepted.status, body: acceptedBody }).toEqual({
-      status: 202,
-      body: expect.objectContaining({
-        status: "accepted",
-        providerKind: "discord",
-        delivery: expect.objectContaining({ externalMessageId: "111111111111111111", status: "processed" }),
-      }),
+    const response = await postRawIngress(context, connection.id, rawBody, {
+      "x-hub-signature-256": signature,
     });
-    expect(context.postMessage).toHaveBeenCalledWith(project.id, expect.objectContaining({
-      bodyMarkdown: "repair production ingress",
-    }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      status: "ignored",
+      providerKind: "whatsapp",
+    });
+    expect(context.chatProviderRepository.listDeliveries({ providerConnectionId: connection.id })).toEqual([]);
+    expect(context.postMessage).not.toHaveBeenCalled();
   });
 
   it("rejects unauthenticated and stale bridge requests without creating messages", async () => {
@@ -240,6 +242,11 @@ describe("chat provider ingress routes", () => {
       "x-code-ux-timestamp": String(Date.now()),
     });
     expect(missingAuth.status).toBe(401);
+
+    const missingTimestamp = await postIngress(context, connection.id, payload, {
+      Authorization: "Bearer bridge-token",
+    });
+    expect(missingTimestamp.status).toBe(401);
 
     const stale = await postIngress(context, connection.id, payload, {
       Authorization: "Bearer bridge-token",
@@ -315,7 +322,7 @@ async function startTestServer(): Promise<TestServerContext> {
   const app = express();
   app.use(express.json({
     verify: (req, _res, buf) => {
-      (req as typeof req & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+      (req as typeof req & { rawBody?: string }).rawBody = buf.toString("utf8");
     },
   }));
   registerChatProviderIngressRoutes(app, {
@@ -374,18 +381,77 @@ function postRawIngress(
 ): Promise<Response> {
   return fetch(`${context.baseUrl}/api/chat-providers/ingress/${providerConnectionId}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...headers },
+    headers: {
+      "Content-Type": "application/json",
+      ...headers,
+    },
     body: rawBody,
   });
 }
 
-function discordHeaders(timestamp: string, rawBody: string): Record<string, string> {
+function createOfficialWhatsAppConnection(context: TestServerContext) {
+  return context.chatProviderRepository.createConnection({
+    providerKind: "whatsapp",
+    displayName: "WhatsApp official connection",
+    bridgeMode: "official_api",
+    status: "active",
+    setup: {
+      graphApiVersion: "v23.0",
+      phoneNumberId: "109876543210987",
+    },
+    secrets: {
+      accessToken: "whatsapp-access-token",
+      appSecret: "whatsapp-app-secret",
+      webhookVerifyToken: "whatsapp-verify-token",
+    },
+  });
+}
+
+function whatsappMessageWebhook(): Record<string, unknown> {
   return {
-    "X-Signature-Ed25519": sign(
-      null,
-      Buffer.from(`${timestamp}${rawBody}`),
-      discordPrivateKey,
-    ).toString("hex"),
-    "X-Signature-Timestamp": timestamp,
+    object: "whatsapp_business_account",
+    entry: [{
+      id: "waba-route",
+      changes: [{
+        field: "messages",
+        value: {
+          messaging_product: "whatsapp",
+          metadata: {
+            display_phone_number: "+1 555 765 4321",
+            phone_number_id: "109876543210987",
+          },
+          contacts: [{ profile: { name: "Example Sender" }, wa_id: "15551234567" }],
+          messages: [{
+            from: "15551234567",
+            id: "wamid.route-inbound",
+            timestamp: "1783963200",
+            type: "text",
+            text: { body: "Route this exact payload" },
+          }],
+        },
+      }],
+    }],
+  };
+}
+
+function whatsappStatusWebhook(): Record<string, unknown> {
+  return {
+    object: "whatsapp_business_account",
+    entry: [{
+      id: "waba-route",
+      changes: [{
+        field: "messages",
+        value: {
+          messaging_product: "whatsapp",
+          metadata: { phone_number_id: "109876543210987" },
+          statuses: [{
+            id: "wamid.outbound-status",
+            status: "delivered",
+            timestamp: "1783963300",
+            recipient_id: "15551234567",
+          }],
+        },
+      }],
+    }],
   };
 }
