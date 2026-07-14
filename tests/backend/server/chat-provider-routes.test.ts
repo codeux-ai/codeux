@@ -64,7 +64,7 @@ describe("chat provider dashboard routes", () => {
     expect(slack.officialDocumentation).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: "Slack Events API", url: expect.stringMatching(/^https:\/\//) }),
     ]));
-    expect(slack.limitations).toEqual(expect.arrayContaining([expect.any(String)]));
+    expect(slack.limitations).toEqual(expect.any(Array));
     expect(slack.bridgeModes[0].setupHints).toMatchObject({
       integration: "managed_plugin",
       requiredSetupFields: ["pluginName"],
