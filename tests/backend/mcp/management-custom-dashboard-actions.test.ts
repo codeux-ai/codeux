@@ -13,6 +13,12 @@ import { CustomDashboardRepository } from "../../../src/repositories/custom-dash
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
 import { CustomDashboardValidationService } from "../../../src/services/custom-dashboard-validation-service.js";
+import { AutomationCredentialRepository } from "../../../src/repositories/automation-credential-repository.js";
+import { MountedKeyFileProvider } from "../../../src/infrastructure/security/mounted-key-file-provider.js";
+import { EncryptedSqliteSecretStore } from "../../../src/infrastructure/security/encrypted-sqlite-secret-store.js";
+import { CredentialBroker } from "../../../src/services/credentials/credential-broker.js";
+import { AutomationAuditExportService } from "../../../src/services/automation-audit-export-service.js";
+import { CustomDashboardCredentialBindingService } from "../../../src/services/custom-dashboard-credential-binding-service.js";
 
 const tempDirs: string[] = [];
 
@@ -22,6 +28,20 @@ function manifest(title = "Delivery Pulse"): CustomDashboardManifest {
     title,
     entryFile: "src/dashboard.tsx",
     filePaths: ["src/dashboard.tsx"],
+  };
+}
+
+function credentialManifest(title = "Delivery Pulse"): CustomDashboardManifest {
+  return {
+    ...manifest(title),
+    credentialSlots: [{
+      slotId: "metrics_api",
+      label: "Metrics API",
+      phase: "runtime",
+      required: true,
+      allowedKinds: ["http.token"],
+      requiredCapabilities: ["metrics.read"],
+    }],
   };
 }
 
@@ -39,6 +59,8 @@ async function createFixture(): Promise<{
   handler: ManagementToolHandler;
   repository: CustomDashboardRepository;
   validationService: CustomDashboardValidationService;
+  bindingService: CustomDashboardCredentialBindingService;
+  credentialBroker: CredentialBroker;
   projectId: string;
 }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "custom-dashboard-mcp-"));
@@ -51,8 +73,26 @@ async function createFixture(): Promise<{
     sourceRef: dir,
   });
   const repository = new CustomDashboardRepository(storage);
+  const credentialRepository = new AutomationCredentialRepository(storage);
+  const keyPath = path.join(dir, "credential-root.key");
+  await fs.writeFile(keyPath, Buffer.alloc(32, 9).toString("base64"), { mode: 0o600 });
+  const keyProvider = new MountedKeyFileProvider(keyPath);
+  const auditService = new AutomationAuditExportService(storage);
+  const credentialBroker = new CredentialBroker(
+    credentialRepository,
+    new EncryptedSqliteSecretStore(credentialRepository, keyProvider),
+    keyProvider,
+    auditService,
+  );
+  const bindingService = new CustomDashboardCredentialBindingService({
+    customDashboardRepository: repository,
+    projectManagementRepository: projects,
+    credentialBroker,
+    auditService,
+  });
   const validationService = new CustomDashboardValidationService({
     customDashboardRepository: repository,
+    customDashboardCredentialBindingService: bindingService,
     projectManagementRepository: projects,
     settingsRepository: new SettingsRepository(path.join(dir, "settings.db")),
     readinessPollMs: 1,
@@ -60,6 +100,7 @@ async function createFixture(): Promise<{
   });
   const handler = new ManagementToolHandler({
     customDashboardRepository: repository,
+    customDashboardCredentialBindingService: bindingService,
     customDashboardValidationService: validationService,
     projectManagementRepository: projects,
     sprintPreviewService: {},
@@ -79,11 +120,17 @@ async function createFixture(): Promise<{
     planningAgentService: {},
     sprintIssueService: {},
   } as any);
-  return { handler, repository, validationService, projectId: project.id };
+  return { handler, repository, validationService, bindingService, credentialBroker, projectId: project.id };
 }
 
 function parseResponse(response: { content: Array<{ text: string }> }): Record<string, any> {
   return JSON.parse(response.content[0]?.text ?? "{}") as Record<string, any>;
+}
+
+function pendingApprovalFingerprints(handler: ManagementToolHandler): string[] {
+  return [...(handler as unknown as {
+    pendingDestructiveApprovals: Map<string, number>;
+  }).pendingDestructiveApprovals.keys()];
 }
 
 afterEach(async () => {
@@ -237,5 +284,270 @@ describe("manage_custom_dashboards", () => {
       approval: { confirmed: true },
     }));
     expect(archived.result.dashboard.status).toBe("archived");
+  });
+
+  it("runs the metadata-only slot lifecycle through MCP with approval, conflict refresh, retry, and unbind", async () => {
+    const canary = "CUSTOM_DASHBOARD_REAL_SECRET_CANARY_7f8d9a";
+    const { handler, repository, credentialBroker, projectId } = await createFixture();
+    const dashboard = repository.createDraft(projectId, {
+      title: "Credential dashboard",
+      manifest: credentialManifest(),
+      fileBundle: fileBundle(),
+    });
+    const credential = await credentialBroker.create(projectId, {
+      name: "Metrics",
+      kind: "http.token",
+      value: canary,
+      scope: "project",
+      allowedProjectIds: [],
+      capabilities: ["metrics.read"],
+    });
+    const replacement = await credentialBroker.create(projectId, {
+      name: "Replacement metrics",
+      kind: "http.token",
+      value: `${canary}_REPLACEMENT`,
+      scope: "project",
+      allowedProjectIds: [],
+      capabilities: ["metrics.read"],
+    });
+
+    const listed = parseResponse(await handler.handleManageCustomDashboards({
+      action: "list_credential_slots",
+      projectId,
+      dashboardId: dashboard.id,
+    }));
+    expect(listed.result.bindings).toMatchObject({ valid: false, credentialBindingRevision: 1 });
+    expect(listed.result.bindings.slots[0].candidates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ credentialId: credential.id, compatible: true }),
+    ]));
+    expect(JSON.stringify(listed)).not.toContain(canary);
+
+    const bindArgs = {
+      action: "bind_credential" as const,
+      projectId,
+      dashboardId: dashboard.id,
+      slotId: "metrics_api",
+      credentialId: credential.id,
+      expectedBindingRevision: 1,
+    };
+    const preflight = parseResponse(await handler.handleManageCustomDashboards(bindArgs));
+    expect(preflight.approvalRequired).toBe(true);
+    expect(repository.getDashboardById(dashboard.id)?.credentialBindings).toEqual([]);
+
+    const bound = parseResponse(await handler.handleManageCustomDashboards({
+      ...bindArgs,
+      approval: { confirmed: true },
+    }));
+    expect(bound.result.bindings).toMatchObject({ valid: true, credentialBindingRevision: 2 });
+    expect(JSON.stringify(bound)).not.toContain(canary);
+
+    const boundDashboard = repository.getDashboardById(dashboard.id)!;
+    repository.updateDraft(dashboard.id, {
+      manifest: {
+        ...boundDashboard.manifest,
+        metadata: { nested: { credentialId: credential.id, value: `prefix-${credential.id}-suffix` } },
+      },
+      fileBundle: fileBundle(`export const nested = ${JSON.stringify(credential.id)};`),
+      sourceNodeGraph: {
+        nodes: [{
+          id: "metrics",
+          type: "integrations_metadata",
+          title: "Metrics",
+          config: { nested: { credentialId: credential.id, value: credential.id } },
+        }],
+        edges: [],
+      },
+      runtimeMetadata: {
+        validation: {
+          viewerArtifact: {
+            kind: "vite-dist",
+            entryFile: "index.html",
+            files: [{
+              path: "index.html",
+              content: `<main data-binding="${credential.id}">Nested</main>`,
+              contentType: "text/html",
+            }],
+          },
+        },
+      },
+    });
+    const revision = repository.createRevision(dashboard.id);
+    const validation = repository.createValidationSession(revision.id, {
+      status: "passed",
+      validationReport: passedReport(),
+      finishedAt: new Date().toISOString(),
+    });
+
+    const generic = parseResponse(await handler.handleManageCustomDashboards({ action: "get", dashboardId: dashboard.id }));
+    expect(JSON.stringify(generic)).not.toContain("credentialBindings");
+    expect(JSON.stringify(generic)).not.toContain(credential.id);
+    const catalog = parseResponse(await handler.handleManageCustomDashboards({ action: "data_catalog", projectId }));
+    expect(JSON.stringify(catalog)).not.toContain(credential.id);
+
+    credentialBroker.revoke(projectId, credential.id, { expectedVersion: credential.version });
+    const deniedPublication = parseResponse(await handler.handleManageCustomDashboards({
+      action: "publish_revision",
+      dashboardId: dashboard.id,
+      revisionId: revision.id,
+      validationSessionId: validation.id,
+    }));
+    expect(deniedPublication.result).toMatchObject({
+      status: "error",
+      errorType: "validation",
+      issues: [expect.objectContaining({ field: "credentialBindings.metrics_api", code: "not_active" })],
+    });
+    expect(JSON.stringify(deniedPublication)).not.toContain(credential.id);
+    expect(JSON.stringify(deniedPublication)).not.toContain(canary);
+    expect(repository.getDashboardById(dashboard.id)?.publishedRevisionId).toBeNull();
+
+    const replaceArgs = {
+      action: "bind_credential" as const,
+      projectId,
+      dashboardId: dashboard.id,
+      slotId: "metrics_api",
+      credentialId: replacement.id,
+      expectedBindingRevision: 2,
+    };
+    expect(parseResponse(await handler.handleManageCustomDashboards(replaceArgs)).approvalRequired).toBe(true);
+    const replaced = parseResponse(await handler.handleManageCustomDashboards({
+      ...replaceArgs,
+      approval: { confirmed: true },
+    }));
+    expect(replaced.result.bindings).toMatchObject({ valid: true, credentialBindingRevision: 3 });
+    expect(replaced.result.bindings.slots[0].binding.credentialId).toBe(replacement.id);
+    expect(JSON.stringify(replaced)).not.toContain(canary);
+
+    const staleUnbindArgs = {
+      action: "unbind_credential" as const,
+      projectId,
+      dashboardId: dashboard.id,
+      slotId: "metrics_api",
+      expectedBindingRevision: 2,
+    };
+    expect(parseResponse(await handler.handleManageCustomDashboards(staleUnbindArgs)).approvalRequired).toBe(true);
+    const conflict = parseResponse(await handler.handleManageCustomDashboards({
+      ...staleUnbindArgs,
+      approval: { confirmed: true },
+    }));
+    expect(conflict.result).toMatchObject({ status: "error", errorType: "runtime" });
+    expect(conflict.result.message).toMatch(/expected revision 2, current revision 3/i);
+    expect(repository.getDashboardById(dashboard.id)?.credentialBindings).toEqual([
+      { slotId: "metrics_api", credentialId: replacement.id },
+    ]);
+    expect(JSON.stringify(conflict)).not.toContain(canary);
+
+    const refreshed = parseResponse(await handler.handleManageCustomDashboards({
+      action: "list_credential_slots",
+      projectId,
+      dashboardId: dashboard.id,
+    }));
+    expect(refreshed.result.bindings).toMatchObject({ valid: true, credentialBindingRevision: 3 });
+    expect(refreshed.result.bindings.slots[0].binding.credentialId).toBe(replacement.id);
+
+    const retryUnbindArgs = { ...staleUnbindArgs, expectedBindingRevision: 3 };
+    expect(parseResponse(await handler.handleManageCustomDashboards(retryUnbindArgs)).approvalRequired).toBe(true);
+    const unbound = parseResponse(await handler.handleManageCustomDashboards({
+      ...retryUnbindArgs,
+      approval: { confirmed: true },
+    }));
+    expect(unbound.result.bindings).toMatchObject({ valid: false, credentialBindingRevision: 4 });
+    expect(JSON.stringify(unbound)).not.toContain(canary);
+    expect(repository.getDashboardById(dashboard.id)?.credentialBindings).toEqual([]);
+  });
+
+  it("rejects secret-bearing bind fields and cross-project dashboard binding access", async () => {
+    const canary = "MCP_REJECTED_BIND_SECRET_CANARY";
+    const { handler, repository, credentialBroker, projectId } = await createFixture();
+    const dashboard = repository.createDraft(projectId, {
+      title: "Credential dashboard",
+      manifest: credentialManifest(),
+      fileBundle: fileBundle(),
+    });
+    const credential = await credentialBroker.create(projectId, {
+      name: "Metrics",
+      kind: "http.token",
+      value: canary,
+      scope: "project",
+      allowedProjectIds: [],
+      capabilities: ["metrics.read"],
+    });
+    const unsafe = {
+      action: "bind_credential" as const,
+      projectId,
+      dashboardId: dashboard.id,
+      slotId: "metrics_api",
+      credentialId: credential.id,
+      expectedBindingRevision: 1,
+      value: canary,
+    };
+    const deniedInitial = parseResponse(await handler.handleManageCustomDashboards(unsafe as any));
+    expect(deniedInitial.result).toMatchObject({ status: "error", errorType: "validation", field: "payload" });
+    expect(JSON.stringify(deniedInitial)).not.toContain(canary);
+    expect(pendingApprovalFingerprints(handler)).toEqual([]);
+
+    const deniedConfirmed = parseResponse(await handler.handleManageCustomDashboards({
+      ...unsafe,
+      approval: { confirmed: true },
+    } as any));
+    expect(deniedConfirmed.result.status).toBe("error");
+    expect(JSON.stringify(deniedConfirmed)).not.toContain(canary);
+    expect(pendingApprovalFingerprints(handler)).toEqual([]);
+
+    const deniedApprovalPayload = parseResponse(await handler.handleManageCustomDashboards({
+      action: "bind_credential",
+      projectId,
+      dashboardId: dashboard.id,
+      slotId: "metrics_api",
+      credentialId: credential.id,
+      expectedBindingRevision: 1,
+      approval: { confirmed: false, value: canary },
+    } as any));
+    expect(deniedApprovalPayload.result).toMatchObject({
+      status: "error",
+      errorType: "validation",
+      field: "approval",
+    });
+    expect(JSON.stringify(deniedApprovalPayload)).not.toContain(canary);
+    expect(pendingApprovalFingerprints(handler)).toEqual([]);
+
+    const cleanBind = {
+      action: "bind_credential" as const,
+      projectId,
+      dashboardId: dashboard.id,
+      slotId: "metrics_api",
+      credentialId: credential.id,
+      expectedBindingRevision: 1,
+      approval: { confirmed: true },
+    };
+    const cleanPreflight = parseResponse(await handler.handleManageCustomDashboards(cleanBind));
+    expect(cleanPreflight.approvalRequired).toBe(true);
+    const fingerprints = pendingApprovalFingerprints(handler);
+    expect(fingerprints).toHaveLength(1);
+    expect(fingerprints[0]).not.toContain(canary);
+    expect(fingerprints[0]).not.toContain('"value"');
+
+    const bound = parseResponse(await handler.handleManageCustomDashboards(cleanBind));
+    expect(bound.result.bindings.valid).toBe(true);
+    expect(pendingApprovalFingerprints(handler)).toEqual([]);
+
+    const unsafeUnbind = {
+      action: "unbind_credential" as const,
+      projectId,
+      dashboardId: dashboard.id,
+      slotId: "metrics_api",
+      expectedBindingRevision: 2,
+      headers: { authorization: canary },
+    };
+    const deniedUnbind = parseResponse(await handler.handleManageCustomDashboards(unsafeUnbind as any));
+    expect(deniedUnbind.result).toMatchObject({ status: "error", errorType: "validation", field: "payload" });
+    expect(JSON.stringify(deniedUnbind)).not.toContain(canary);
+    expect(pendingApprovalFingerprints(handler)).toEqual([]);
+
+    const crossProject = parseResponse(await handler.handleManageCustomDashboards({
+      action: "list_credential_slots",
+      projectId: "another-project",
+      dashboardId: dashboard.id,
+    }));
+    expect(crossProject.result.status).toBe("error");
   });
 });

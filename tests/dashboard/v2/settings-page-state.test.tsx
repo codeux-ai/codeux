@@ -549,7 +549,7 @@ describe("useSettingsPageState", () => {
       result.current.setSettingsSearch("automation");
     });
 
-    expect(result.current.filteredCategories.length).toBe(1);
+    expect(result.current.filteredCategories.map((category) => category.id)).toEqual(["general", "integrations"]);
     expect(result.current.activeCategory).toBe("general");
   });
 

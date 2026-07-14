@@ -1,9 +1,45 @@
 import { describe, expect, it } from "vitest";
 import { BuiltinExecutors, MAX_FOREACH_ITEMS } from "../../../src/services/node-flows/builtins/builtin-executors.js";
+import { listNodeDefinitions } from "../../../src/domain/node-flows/node-definition-registry.js";
+import { customNodeDefinitionFromArtifact, type CustomNodeArtifact } from "../../../src/contracts/custom-node-types.js";
 
 const base = { projectId: "p", flowId: "f", publicationId: "pub", runId: "r", nodeId: "n", upstream: {}, flowInput: {}, subflowDepth: 0 };
 
 describe("governed built-in executors", () => {
+  it("declares bounded credential kind and capability policy on every built-in slot", () => {
+    const requirements = listNodeDefinitions().filter((definition) => !definition.type.startsWith("custom."))
+      .flatMap((definition) => definition.credentials.map((credential) => ({ definition: definition.type, credential })));
+
+    expect(requirements).toEqual(expect.arrayContaining([
+      expect.objectContaining({ definition: "provider_prompt", credential: expect.objectContaining({ requiredCapabilities: ["read"] }) }),
+      expect.objectContaining({ definition: "http_request", credential: expect.objectContaining({ requiredCapabilities: ["read"] }) }),
+    ]));
+    expect(requirements.every(({ credential }) => credential.allowedKinds.length > 0 && credential.allowedKinds.length <= 128
+      && credential.requiredCapabilities.length > 0 && credential.requiredCapabilities.length <= 128)).toBe(true);
+  });
+
+  it("normalizes the schema-v1 custom-node requiredCapability into definition policy", () => {
+    const artifact = {
+      manifest: {
+        nodeType: "custom.capability-fixture",
+        version: 1,
+        name: "Capability fixture",
+        description: "",
+        inputSchema: { type: "object" },
+        outputSchema: { type: "object" },
+        configurationSchema: { type: "object" },
+        capabilities: ["credentials.read"],
+        credentials: [{ slot: "jobs", label: "Jobs", required: true, allowedKinds: ["http.token"], requiredCapability: "jobs.list" }],
+        resources: { timeoutMs: 30_000 },
+      },
+    } as unknown as CustomNodeArtifact;
+
+    expect(customNodeDefinitionFromArtifact(artifact).credentials).toEqual([expect.objectContaining({
+      slot: "jobs",
+      requiredCapabilities: ["jobs.list"],
+    })]);
+  });
+
   it("selects explicit condition and switch ports", async () => {
     const executors = new BuiltinExecutors();
     await expect(executors.execute("condition", { ...base, flowInput: { enabled: true }, config: { path: "input.enabled" } }))

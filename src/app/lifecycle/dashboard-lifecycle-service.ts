@@ -75,6 +75,7 @@ import type { EmbeddingService } from "../../services/embedding-service.js";
 import type { MemoryRepository } from "../../repositories/memory-repository.js";
 import type { CustomDashboardRepository } from "../../repositories/custom-dashboard-repository.js";
 import type { CustomDashboardValidationService } from "../../services/custom-dashboard-validation-service.js";
+import type { CustomDashboardCredentialBindingService } from "../../services/custom-dashboard-credential-binding-service.js";
 import type { SkillService } from "../../services/skill-service.js";
 import type { GuardrailService } from "../../services/guardrail-service.js";
 import type { ProjectSettings } from "../../contracts/settings-scope-types.js";
@@ -156,6 +157,7 @@ export interface BootDashboardDeps {
   headlessReadinessService: HeadlessOperationalReadinessService;
   automationSloService: AutomationSloService;
   customDashboardRepository?: CustomDashboardRepository;
+  customDashboardCredentialBindingService?: CustomDashboardCredentialBindingService;
   customDashboardValidationService?: CustomDashboardValidationService;
   skillService: SkillService;
   dashboardRealtimeService: DashboardRealtimeService;
@@ -525,6 +527,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     headlessReadinessService: deps.headlessReadinessService,
     automationSloService: deps.automationSloService,
     customDashboardRepository: deps.customDashboardRepository,
+    customDashboardCredentialBindingService: deps.customDashboardCredentialBindingService,
     customDashboardValidationService: deps.customDashboardValidationService,
     skillService: deps.skillService,
     projectManagementRepository: deps.projectManagementRepository,

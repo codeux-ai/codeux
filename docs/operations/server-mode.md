@@ -105,7 +105,9 @@ Use `/ready` for runtime readiness. It reports whether the Code UX runtime finis
 
 Do not include `Authorization` headers in probe logs. The probe endpoints do not require bearer credentials.
 
-`/ready` also reports `credentialKey`, `auditStore`, and `distributedRunner`. `/health` remains live during a key-provider outage, while `/ready` returns `503`. Startup aborts before dashboard or MCP binding when encrypted credential rows exist but their key provider cannot recover the wrapping key. Select a provider with `CODE_UX_CREDENTIAL_KEY_PROVIDER=mounted-key-file|vault|kms`; mounted files use `CODE_UX_CREDENTIAL_KEY_FILE` and owner-only permissions. Vault/KMS modes require their host adapter to be configured and healthy.
+`/ready` also reports `credentialKey`, `auditStore`, and `distributedRunner`. `/health` remains live during a key-provider outage, while `/ready` returns `503`. Startup aborts before dashboard or MCP binding when encrypted credential rows exist but their key provider cannot recover the wrapping key. Server mode never auto-provisions local-file custody. Select a provider with `CODE_UX_CREDENTIAL_KEY_PROVIDER=mounted-key-file|vault|kms`; mounted files use `CODE_UX_CREDENTIAL_KEY_FILE` and owner-only permissions. Vault/KMS modes require their host adapter to be configured and healthy.
+
+The same explicit-custody requirement applies to dashboard-disabled headless operation, authenticated dashboards, non-loopback dashboard bindings, and remote credential management. Only the trusted loopback local dashboard auto-provisions its owner-only user-home key; Electron uses OS `safeStorage`. Remote setup therefore fails closed rather than borrowing the local-dashboard key, deriving a key, or falling back to plaintext. Restore the configured mount or the exact Vault/KMS key version before enabling runners; do not copy root keys into SQLite, a project checkout, deployment logs, or diagnostic bundles.
 
 Authenticated operators can inspect `/api/admin/readiness`, export redacted NDJSON from `/api/admin/audit/export`, and sample `/api/admin/metrics/slo`. Audit rows include the correlation id, principal, project, action, outcome, and redacted metadata for management requests, credential access, runs, attempts, approvals, and outbox delivery.
 
@@ -235,6 +237,8 @@ Existing HTTP sessions authenticated with the previous token should be treated a
 | Worker appears stale or offline | Heartbeats stopped, the worker process is down, network access failed, or the stable connection key changed unexpectedly. | Restart the worker with the same `--connection-key`, verify `/ready`, and check logs for bounded connection metadata. |
 | Worker connects but does not claim work | No active project assignment, project not included in `--project-id` / `--active-project-id`, stale endpoint status, task executor mismatch, or no lease returned. | Confirm project assignment and worker status, then verify queued dispatches. Do not start local execution without a lease token. |
 | `/health` passes but `/ready` fails | Listener is alive but runtime readiness has not completed or the server is degraded. | Wait for startup recovery to finish, then inspect structured logs. Use `/ready` for load balancer readiness gates. |
+| `/ready` reports credential custody unavailable | The explicit mounted-file, Vault, or KMS provider is missing, insecure, unhealthy, or cannot return the required key version. | Keep runners disabled, inspect metadata-only readiness and provider configuration, and restore the exact provider/key version. Do not print key material or substitute a new key for encrypted rows. |
+| A credential operation returns a version conflict | Another operator changed metadata, scope, capabilities, status, or encrypted value first. | Refresh the metadata-only record, review the new version, and intentionally retry with that version. Do not bypass optimistic concurrency. |
 | Secret values appear in an exported settings bundle | The export was explicitly approved with `includeSecrets: true`. | Store the bundle only in approved secret storage, rotate exposed credentials if it was shared, and prefer redacted exports for review. |
 
 ## Related Docs
@@ -242,4 +246,5 @@ Existing HTTP sessions authenticated with the previous token should be treated a
 - [MCP Runtime and Dispatch](../mcp/runtime-and-dispatch.md)
 - [Streamable HTTP Worker Gateway](../architecture/streamable-http-worker-gateway.md)
 - [Security Hardening](./security-hardening.md)
+- [Automation Credential Security](./credential-security.md)
 - [CLI Commands Reference](../reference/cli-commands.md)

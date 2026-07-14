@@ -185,6 +185,7 @@ export class CodeUxServer {
   private sprintFileBrowserService: SprintFileBrowserService;
   private sprintBranchService: SprintBranchService;
   private customDashboardRepository: import("../repositories/custom-dashboard-repository.js").CustomDashboardRepository;
+  private customDashboardCredentialBindingService: import("../services/custom-dashboard-credential-binding-service.js").CustomDashboardCredentialBindingService;
   private customDashboardValidationService: import("../services/custom-dashboard-validation-service.js").CustomDashboardValidationService;
   private agentPresetSyncService: AgentPresetSyncService;
   private executionRepository: ExecutionRepository;
@@ -287,6 +288,7 @@ export class CodeUxServer {
       logger: this.logger.child({ component: "sprint-branch-service" }),
     });
     this.customDashboardRepository = deps.customDashboardRepository;
+    this.customDashboardCredentialBindingService = deps.customDashboardCredentialBindingService;
     this.customDashboardValidationService = deps.customDashboardValidationService;
     this.sprintMarkdownService = deps.sprintMarkdownService;
     this.sprintIssueService = deps.sprintIssueService;
@@ -1467,6 +1469,7 @@ export class CodeUxServer {
         headlessReadinessService: this.headlessReadinessService,
         automationSloService: this.automationSloService,
         customDashboardRepository: this.customDashboardRepository,
+        customDashboardCredentialBindingService: this.customDashboardCredentialBindingService,
         customDashboardValidationService: this.customDashboardValidationService,
         skillService: this.skillService,
         chatThreadRuntimeService: this.chatThreadRuntimeService,

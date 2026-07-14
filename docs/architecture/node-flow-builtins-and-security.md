@@ -19,6 +19,12 @@ The governed built-in catalog extends publication-based node-flow execution with
 
 The existing `input`, `set_fields`, `template`, `provider_prompt`, `http_request`, and `output` nodes retain their previous contracts. Typed manifest ports identify branch handles, many-valued merge inputs, and trigger outputs. Branch routing only runs a node when at least one incoming edge is active, allowing merges to join a selected path without treating an unselected sibling as a failure.
 
+## Credential-bound execution
+
+Versioned definition manifests declare credential slots by required state, allowed kinds, and required capabilities. Draft review and publication use metadata-only broker compatibility; the canonical graph stores only slot-to-credential-ID bindings. Required missing bindings and bindings denied for unavailable custody, configuration, status, project access, kind, or capability stop publication. Optional unbound slots remain valid.
+
+At runtime, the immutable published graph is revalidated and the broker repeats authorization immediately before resolving a value for the active attempt. A revoked, restricted, rebound, wrong-kind, insufficiently capable, or unavailable credential fails the attempt closed. Exact resolved values are redacted from built-in output, invocation/attempt records, diagnostics, retries, HTTP/provider responses, and external-effect persistence; neither publication nor MCP inspection injects or returns plaintext.
+
 Foreach assigns deterministic logical-item identities from the published node id and item index. Each downstream node run and numbered attempt persists that identity together with the item-specific input. The `concurrency` setting defaults to one and is capped at 64; `maxItems` is a rejection bound rather than a truncation rule. A zero-item input selects `empty`, while the `items` branch is persisted as skipped. Per-item failures retain their own retry history, successful siblings are not replayed during approval or restart continuation, and aggregated output preserves input order.
 
 ## Governed egress

@@ -40,6 +40,7 @@ import type {
   NodeFlowRunSummaryResponse,
   RunNodeFlowOptions,
 } from "../contracts/node-flow-types.js";
+import type { NodeDefinitionManifest } from "../contracts/node-definition-types.js";
 
 const EXTERNALLY_OBSERVABLE_NODE_TYPES = new Set(["provider_prompt", "http_request"]);
 const CLI_PROVIDER_IDS = new Set<ProviderId>(["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity", "mockup-cli"]);
@@ -718,6 +719,7 @@ export class NodeFlowRuntimeService {
   ): Promise<NodeExecutionResult> {
     const reference = node.definition ?? { type: node.type, version: 1 };
     const definition = resolveNodeDefinition(reference.type, reference.version);
+    this.validateNodeCredentialBindings(node, definition);
     if (EXTERNALLY_OBSERVABLE_NODE_TYPES.has(node.type) || definition?.executionKind === "custom") {
       const invocation = this.deps.executionRepository.createExecutionInvocation({
         projectId: context.projectId,
@@ -1043,11 +1045,42 @@ export class NodeFlowRuntimeService {
     }
   }
 
-  private async resolveNodeCredential(context: RuntimeContext,node:NodeFlowNode,slot:string):Promise<string|undefined>{
-    const binding=node.credentialBindings?.find((candidate)=>candidate.slot===slot);
-    if (!binding) return undefined;
+  private validateNodeCredentialBindings(node: NodeFlowNode, definition: NodeDefinitionManifest | null): void {
+    if (!definition) throw new ValidationError(`Node ${node.id} references an unavailable definition.`);
+    const declaredSlots = new Map(definition.credentials.map((requirement) => [requirement.slot, requirement]));
+    const boundSlots = new Set<string>();
+    for (const binding of node.credentialBindings ?? []) {
+      if (!declaredSlots.has(binding.slot)) {
+        throw new ValidationError(`Node ${node.id} does not declare credential slot ${binding.slot}.`);
+      }
+      if (boundSlots.has(binding.slot)) {
+        throw new ValidationError(`Node ${node.id} has more than one binding for credential slot ${binding.slot}.`);
+      }
+      boundSlots.add(binding.slot);
+    }
+    const missing = definition.credentials.find((requirement) => requirement.required && !boundSlots.has(requirement.slot));
+    if (missing) throw new ValidationError(`Node ${node.id} requires credential slot ${missing.slot}.`);
+  }
+
+  private async resolveNodeCredential(context: RuntimeContext, node: NodeFlowNode, slot: string): Promise<string | undefined> {
+    const reference = node.definition ?? { type: node.type, version: 1 };
+    const definition = resolveNodeDefinition(reference.type, reference.version);
+    const requirement = definition?.credentials.find((candidate) => candidate.slot === slot);
+    if (!requirement) throw new ValidationError(`Node ${node.id} does not declare credential slot ${slot}.`);
+    const binding = node.credentialBindings?.find((candidate) => candidate.slot === slot);
+    if (!binding) {
+      if (requirement.required) throw new ValidationError(`Node ${node.id} requires credential slot ${slot}.`);
+      return undefined;
+    }
     if (!this.deps.credentialBroker) throw new ValidationError("Credential broker is not configured for node flow runtime.");
-    const resolved=await this.deps.credentialBroker.resolveCredentialId({projectId:context.projectId,credentialId:binding.credentialId,bindingKey:`${context.flowId}:${node.id}:${slot}`,capability:"read",workspaceId:context.runId});
+    const resolved = await this.deps.credentialBroker.resolveCredentialId({
+      projectId: context.projectId,
+      credentialId: binding.credentialId,
+      bindingKey: `${context.flowId}:${node.id}:${slot}`,
+      requiredCapabilities: requirement.requiredCapabilities,
+      allowedKinds: requirement.allowedKinds,
+      workspaceId: context.runId,
+    });
     if (resolved.value) context.resolvedCredentialValues.push(resolved.value);
     return resolved.value;
   }

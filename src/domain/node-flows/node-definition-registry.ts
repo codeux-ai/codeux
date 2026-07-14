@@ -1,5 +1,9 @@
-import type { NodeDefinitionManifest } from "../../contracts/node-definition-types.js";
+import type { NodeDefinitionCredentialRequirement, NodeDefinitionManifest } from "../../contracts/node-definition-types.js";
 import type { NodeFlowPort, NodeFlowValueSchema, NodeWidgetField } from "../../contracts/node-flow-types.js";
+
+const MAX_CREDENTIAL_POLICY_ITEMS = 128;
+const MAX_CREDENTIAL_POLICY_VALUE_LENGTH = 128;
+const CREDENTIAL_POLICY_VALUE = /^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/;
 
 const objectSchema = (required: string[] = [], properties: Record<string, NodeFlowValueSchema> = {}) => ({
   type: "object" as const,
@@ -27,6 +31,7 @@ const builtin = (input: {
   properties?: Record<string, NodeFlowValueSchema>; fields?: NodeWidgetField[];
   ports?: NodeFlowPort[]; sideEffect?: NodeDefinitionManifest["sideEffect"];
   capabilities?: string[];
+  credentials: NodeDefinitionCredentialRequirement[];
 }): NodeDefinitionManifest => ({
   type: input.type,
   version: 1,
@@ -35,7 +40,7 @@ const builtin = (input: {
   configurationSchema: objectSchema([], input.properties),
   ui: { label: input.label, description: input.description, category: input.category, widgetSchema: { fields: input.fields ?? [] } },
   ports: input.ports ?? [dataPort("input", "input"), dataPort("output", "output")],
-  credentials: [],
+  credentials: input.credentials,
   capabilities: input.capabilities ?? [],
   sideEffect: input.sideEffect ?? "none",
   defaultPolicy: { retry: { maxAttempts: 1, backoffMs: 0 } },
@@ -73,7 +78,7 @@ const manifests: NodeDefinitionManifest[] = [
     configurationSchema: objectSchema(["prompt"], { prompt: { type: "string" }, template: { type: "string" }, provider: { type: "string" } }),
     ui: { label: "Provider prompt", description: "Runs a prompt through a configured CLI provider.", category: "ai", widgetSchema: { fields: [field("prompt", "Prompt", "textarea", true), field("provider", "Provider", "text")] } },
     ports: [dataPort("input", "input"), dataPort("output", "output")],
-    credentials: [{ slot: "provider", label: "Provider connection", required: false, allowedKinds: ["provider"] }],
+    credentials: [{ slot: "provider", label: "Provider connection", required: false, allowedKinds: ["provider"], requiredCapabilities: ["read"] }],
     capabilities: ["provider.execute"], sideEffect: "external",
     defaultPolicy: { retry: { maxAttempts: 1, backoffMs: 0 } }, documentation: "docs/architecture/node-flows.md#runtime",
     deprecation: { deprecated: false },
@@ -83,40 +88,50 @@ const manifests: NodeDefinitionManifest[] = [
     configurationSchema: objectSchema(["url"], { url: { type: "string" }, method: { type: "string" }, timeoutMs: { type: "number" }, headers: { type: "object" } }),
     ui: { label: "HTTP request", description: "Calls a bounded HTTP or HTTPS endpoint.", category: "integration", widgetSchema: { fields: [field("url", "URL", "text", true), field("method", "Method", "text")] } },
     ports: [dataPort("input", "input"), dataPort("output", "output")],
-    credentials: [{ slot: "auth", label: "HTTP credential", required: false, allowedKinds: ["http"] }],
+    credentials: [{ slot: "auth", label: "HTTP credential", required: false, allowedKinds: ["http"], requiredCapabilities: ["read"] }],
     capabilities: ["network.http"], sideEffect: "external",
     defaultPolicy: { retry: { maxAttempts: 1, backoffMs: 0 }, timeout: { timeoutMs: 30_000 } }, documentation: "docs/architecture/node-flows.md#runtime",
     deprecation: { deprecated: false },
   },
   builtin({ type: "condition", label: "Condition", description: "Selects one explicit boolean branch.", category: "control",
+    credentials: [],
     properties: { path: { type: "string" }, operator: { type: "string" }, value: { type: "any" } },
     fields: [field("path", "Value path", "text"), field("operator", "Operator", "select")],
     ports: [dataPort("input", "input"), dataPort("true", "output"), dataPort("false", "output")] }),
   builtin({ type: "switch", label: "Switch", description: "Selects one named case or the default branch.", category: "control",
+    credentials: [],
     properties: { path: { type: "string" }, cases: { type: "array", items: { type: "object" } } },
     fields: [field("path", "Value path", "text"), field("cases", "Cases", "json")],
     ports: [dataPort("input", "input"), { ...dataPort("case", "output"), cardinality: "many" }, dataPort("default", "output")] }),
   builtin({ type: "foreach", label: "Foreach", description: "Emits a bounded list for deterministic fan-out.", category: "control",
+    credentials: [],
     properties: { path: { type: "string" }, maxItems: { type: "number" }, concurrency: { type: "number" } }, fields: [field("path", "Items path", "text"), field("maxItems", "Maximum items", "number"), field("concurrency", "Concurrency", "number")],
     ports: [dataPort("input", "input"), { ...dataPort("items", "output"), schema: { type: "array", items: { type: "any" } } }, dataPort("empty", "output")] }),
   builtin({ type: "merge", label: "Merge", description: "Combines upstream values with an explicit strategy.", category: "transform",
+    credentials: [],
     properties: { strategy: { type: "string" } }, fields: [field("strategy", "Strategy", "select")],
     ports: [{ ...dataPort("input", "input"), cardinality: "many" }, dataPort("output", "output")] }),
   builtin({ type: "delay", label: "Delay", description: "Waits for a bounded duration with cancellation.", category: "control",
+    credentials: [],
     properties: { delayMs: { type: "number" } }, fields: [field("delayMs", "Delay (ms)", "number", true)] }),
   builtin({ type: "approval", label: "Approval", description: "Persists an operator decision gate.", category: "control",
+    credentials: [],
     properties: { summary: { type: "string" }, logicalItem: { type: "string" } }, fields: [field("summary", "Summary", "textarea")],
     ports: [dataPort("input", "input"), dataPort("approved", "output"), dataPort("rejected", "output")], sideEffect: "write" }),
   builtin({ type: "email_draft", label: "Email Draft", description: "Creates an email draft without sending it.", category: "integration",
+    credentials: [],
     properties: { to: { type: "any" }, subject: { type: "string" }, body: { type: "string" } },
     fields: [field("to", "To", "text", true), field("subject", "Subject", "text", true), field("body", "Body", "textarea", true)] }),
   builtin({ type: "email_send", label: "Email Send", description: "Sends an approved email through the idempotent outbox.", category: "integration",
+    credentials: [],
     properties: { to: { type: "any" }, subject: { type: "string" }, body: { type: "string" }, logicalItem: { type: "string" } },
     fields: [field("to", "To", "text", true), field("subject", "Subject", "text", true), field("body", "Body", "textarea", true)],
     sideEffect: "external", capabilities: ["email.send"] }),
   builtin({ type: "execute_subflow", label: "Execute Subflow", description: "Executes a project-owned published flow.", category: "control",
+    credentials: [],
     properties: { flowId: { type: "string" }, input: { type: "object" } }, fields: [field("flowId", "Flow ID", "text", true), field("input", "Input", "json")] }),
   builtin({ type: "webhook_trigger", label: "Webhook Trigger", description: "Emits authenticated webhook input.", category: "trigger",
+    credentials: [],
     ports: [dataPort("output", "output")], capabilities: ["webhook.receive"] }),
   {
     type: "output", version: 1, executable: true, executionKind: "local",
@@ -127,6 +142,37 @@ const manifests: NodeDefinitionManifest[] = [
     deprecation: { deprecated: false },
   },
 ];
+
+export function validateNodeDefinitionCredentialPolicy(manifest: NodeDefinitionManifest): string[] {
+  const issues: string[] = [];
+  if (manifest.credentials.length > MAX_CREDENTIAL_POLICY_ITEMS) {
+    issues.push(`Definition ${manifest.type}@${manifest.version} declares too many credential slots.`);
+  }
+  const slots = new Set<string>();
+  for (const requirement of manifest.credentials) {
+    if (!CREDENTIAL_POLICY_VALUE.test(requirement.slot) || requirement.slot.length > MAX_CREDENTIAL_POLICY_VALUE_LENGTH) {
+      issues.push(`Definition ${manifest.type}@${manifest.version} has an invalid credential slot.`);
+    } else if (slots.has(requirement.slot)) {
+      issues.push(`Definition ${manifest.type}@${manifest.version} has a duplicate credential slot: ${requirement.slot}.`);
+    }
+    slots.add(requirement.slot);
+    for (const [label, values] of [
+      ["allowed kinds", requirement.allowedKinds],
+      ["required capabilities", requirement.requiredCapabilities],
+    ] as const) {
+      if (!Array.isArray(values) || values.length === 0 || values.length > MAX_CREDENTIAL_POLICY_ITEMS
+        || values.some((value) => typeof value !== "string" || value.length > MAX_CREDENTIAL_POLICY_VALUE_LENGTH || !CREDENTIAL_POLICY_VALUE.test(value))) {
+        issues.push(`Definition ${manifest.type}@${manifest.version} must declare bounded ${label} for slot ${requirement.slot}.`);
+      }
+    }
+  }
+  return issues;
+}
+
+for (const manifest of manifests) {
+  const [policyIssue] = validateNodeDefinitionCredentialPolicy(manifest);
+  if (policyIssue) throw new Error(policyIssue);
+}
 
 const keyFor = (type: string, version: number): string => `${type}@${version}`;
 const registry = new Map(manifests.map((manifest) => [keyFor(manifest.type, manifest.version), manifest]));
@@ -145,6 +191,8 @@ export const registerCustomNodeDefinition = (manifest: NodeDefinitionManifest): 
   if (manifest.executionKind !== "custom" || !manifest.type.startsWith("custom.") || manifest.executable !== true) {
     throw new Error("Only executable custom node definitions can be registered dynamically.");
   }
+  const [policyIssue] = validateNodeDefinitionCredentialPolicy(manifest);
+  if (policyIssue) throw new Error(policyIssue);
   const key = keyFor(manifest.type, manifest.version);
   const existing = registry.get(key);
   if (existing) {

@@ -278,13 +278,16 @@ Only instruction markdown is writable, and only compatibility-critical system ad
 | `POST` | `/api/custom-dashboards/:dashboardId/revisions` | Create an immutable revision. |
 | `POST` | `/api/custom-dashboards/:dashboardId/revisions/:revisionId/validate` | Start validation for a revision. |
 | `POST` | `/api/custom-dashboards/:dashboardId/revisions/:revisionId/publish` | Publish a validated revision. |
+| `GET` | `/api/projects/:projectId/custom-dashboards/:dashboardId/credential-bindings` | Review draft or revision slots, bindings, backend health, and bounded compatible credential metadata. |
+| `PUT` | `/api/projects/:projectId/custom-dashboards/:dashboardId/credential-bindings` | Bind or replace a slot using `slotId`, `credentialId`, and `expectedBindingRevision`. |
+| `DELETE` | `/api/projects/:projectId/custom-dashboards/:dashboardId/credential-bindings/:slotId` | Unbind a slot using `expectedBindingRevision`. |
 | `GET` | `/api/custom-dashboard-validations/:sessionId` | Get validation session status. |
 | `GET` | `/api/custom-dashboard-validations/:sessionId/logs` | Get validation logs. |
 | `POST` | `/api/custom-dashboard-validations/:sessionId/stop` | Stop a validation runtime. |
 | `DELETE` | `/api/custom-dashboard-validations/:sessionId` | Remove a validation session after cleanup. |
 | `ALL` | `/api/custom-dashboard-validations/:sessionId/proxy{*rest}` | Proxy same-origin traffic to the validation runtime host port. |
 
-Publishing rejects failed, queued, running, cancelled, missing, or cross-revision validation sessions and keeps the previously published revision unchanged.
+Authenticated remote access to binding routes requires the credential-administrator role, project access, and enabled remote credential management. Binding responses contain credential IDs and metadata only; generic dashboard responses recursively redact known IDs from nested content. Validation and publication fail closed for required or incompatible bindings without resolving secret values, publication denials return sanitized slot-specific issues, and the previously published revision remains unchanged on any denial.
 
 ---
 

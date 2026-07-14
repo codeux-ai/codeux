@@ -275,7 +275,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     id: 'user-dashboard-node-flows',
     path: '/docs/user-dashboard-node-flows',
     section: 'User Guide',
-    title: "Node Flows",
+    title: "Node Flows Dashboard",
     description: "The Nodes page (/nodes) is the project-scoped backend authoring, publication, and operations surface for canonical node flows. No selected project means no flow library, credential metadata, publications, or durable r...",
   },
   'user-dashboard-scheduler': {
@@ -563,7 +563,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/settings-integrations',
     section: 'User Guide',
     title: "Integrations",
-    description: "Lists provider, git-host, issue-tracker, and read-only importer integrations and exposes manage/add actions.",
+    description: "Lists automation credentials, providers, git hosts, issue trackers, and read-only importer integrations and exposes manage/add actions.",
   },
   'settings-jules-automation': {
     id: 'settings-jules-automation',
@@ -836,7 +836,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/operations-credential-security',
     section: 'User Guide',
     title: "Automation Credential Security",
-    description: "Code UX resolves canonical node credential IDs and named project binding keys through the credential broker. Stored values are not exposed to nodes, dashboard reads, MCP payloads, agent context, run inspection records...",
+    description: "Code UX stores automation credentials through a broker rather than exposing secret values to node definitions, dashboard reads, MCP payloads, agent context, or run inspection records. Canonical node bindings reference...",
   },
   'operations-runbook': {
     id: 'operations-runbook',
@@ -856,8 +856,8 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     id: 'operations-server-mode',
     path: '/docs/operations-server-mode',
     section: 'User Guide',
-    title: "Authenticated Headless Server Mode",
-    description: "Code UX separates MCP bearer access from the authenticated dashboard administrative API. Remote dashboard/API deployments must use digest-backed service identities or terminate OIDC at a trusted reverse proxy; loopbac...",
+    title: "Secure Headless Server Mode",
+    description: "Server mode runs Code UX as an authenticated MCP HTTP control plane without binding the dashboard UI, dashboard REST routes, dashboard realtime websocket, terminal websocket, or static dashboard assets. Use it for hea...",
   },
   'settings-google-drive-mount': {
     id: 'settings-google-drive-mount',
@@ -906,7 +906,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/architecture-node-flow-builtins-and-security',
     section: 'Architecture',
     title: "Node Flow Built-ins and External-Effect Security",
-    description: "The governed catalog adds deterministic branches, bounded collection processing, durable approvals, and replay-safe external effects while keeping the versioned definition registry as the executable authority.",
+    description: "The governed built-in catalog extends publication-based node-flow execution with deterministic control nodes and durable boundaries for external effects. The definition registry remains the executable authority; a gra...",
   },
   'architecture-node-flow-durable-execution': {
     id: 'architecture-node-flow-durable-execution',
@@ -927,7 +927,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/architecture-node-flows',
     section: 'Architecture',
     title: "Node Flows",
-    description: "Node flows are project-owned, versioned Graph v2 workflows.",
+    description: "Node flows are project-scoped, repeatable workflow graphs for turning an operator or agent-defined procedure into a saved Code UX workflow. They are not a generic n8n compatibility layer. A good flow uses Code UX conc...",
   },
   'architecture-speech-input': {
     id: 'architecture-speech-input',
