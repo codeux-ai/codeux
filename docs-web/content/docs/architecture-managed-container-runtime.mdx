@@ -4,7 +4,7 @@ The managed container runtime removes first-invocation Docker builds while keepi
 
 ## Runtime Flow
 
-At startup Code UX checks the stable `base` and `browser` channel tags when the persisted update watermark is older than six hours, resolves immutable repository digests, smoke-tests Node 24, and activates verified digests for future containers. A restart inside the freshness window does not issue registry pulls. Checks run in the background and fail open to the last verified digest.
+At startup Code UX checks the stable `base` and `browser` channel tags when the persisted update watermark is older than six hours, resolves immutable repository digests, smoke-tests Node 24, and activates verified digests for future containers. Restarts inside the freshness window issue no registry pull. Checks run in the background and fail open to the last verified digest.
 
 The `base` image is a multi-architecture `node:24-trixie-slim` development environment. The `browser` image adds pinned Playwright, Playwright MCP, and Linux browser dependencies, but contains no browser binary. CI rejects embedded browser/Widevine artifacts, smoke-tests both targets, publishes SBOM/provenance attestations, and signs their digests.
 
@@ -21,15 +21,6 @@ Provider tools and the Playwright browser have separate volume lifecycles:
 5. Future containers mount the completed volume read-only at `/opt/code-ux/provider-tool`.
 
 Onboarding selection, settings saves, Login, and invocation all join this singleflight path. Filesystem locks prevent separate Code UX processes from installing the same provider concurrently.
-
-Verified image, provider-tool, and browser identities are cached process-wide. Warm invocations do
-not launch another inspection or provider-version container. Cheap bootstrap marker and ownership
-checks run inside the provider container; if an asset was removed or recreated outside Code UX, the
-first affected launch invalidates that one cache entry, repairs it through the singleflight prepare
-path, and retries once. Managed launches use `--pull never`, so a missing local digest is recovered
-explicitly instead of causing a surprise image pull on the invocation path.
-An already-verified provider volume remains immediately usable during a background stable-channel
-check, so warm invocations do not wait for registry metadata or a future staged version.
 
 Stable sources are fixed in backend code: npm for Gemini, Codex, Claude Code, Qwen Code, and OpenCode; Antigravity uses its official platform manifest and checksum-verifying installer. Jules and Mockup CLI need no volume.
 

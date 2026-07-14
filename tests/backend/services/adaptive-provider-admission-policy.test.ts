@@ -73,11 +73,36 @@ describe("AdaptiveProviderAdmissionPolicy", () => {
     expect(policy.getEffectiveLimit({ provider: "codex", configuredLimit: 0, purpose: "task_coding" })).toBe(6);
   });
 
-  it("pauses a new background launch when pressure is already high and nothing is running", () => {
-    const snapshot = { ...healthy(), freeMemoryBytes: GIB };
+  it("pauses a new background launch only for reliable critical memory pressure", () => {
+    const snapshot = { ...healthy(), platform: "linux" as const, freeMemoryBytes: GIB };
     const { policy } = createPolicy(snapshot);
 
     expect(policy.getEffectiveLimit({ provider: "codex", configuredLimit: 0, purpose: "task_coding" })).toBe(-1);
+  });
+
+  it("keeps one background slot when CPU pressure is critical and nothing is running", () => {
+    const snapshot = { ...healthy(), platform: "linux" as const, loadOneMinute: 64 };
+    const { policy } = createPolicy(snapshot);
+
+    expect(policy.getEffectiveLimit({ provider: "codex", configuredLimit: 0, purpose: "task_coding" })).toBe(1);
+  });
+
+  it("ignores Darwin raw free-memory pressure while retaining automatic admission", () => {
+    const snapshot: ProviderAdmissionResourceSnapshot = {
+      cpuCount: 3,
+      loadOneMinute: 1,
+      totalMemoryBytes: 7 * GIB,
+      freeMemoryBytes: 668 * 1024 ** 2,
+      sampledAtMs: 1_000,
+      platform: "darwin",
+    };
+    const { policy, logger } = createPolicy(snapshot);
+
+    expect(policy.getEffectiveLimit({ provider: "codex", configuredLimit: 0, purpose: "task_coding" })).toBe(1);
+    expect(logger.info).toHaveBeenCalledWith(
+      "Provider admission resource pressure changed",
+      expect.objectContaining({ pressure: "healthy", memoryPressureReliable: false }),
+    );
   });
 
   it("does not apply local resource admission to hosted Jules work", () => {

@@ -32,6 +32,8 @@ The browser payload follows the same pattern. When enabled, Code UX downloads th
 
 The default managed path never runs `docker build`. Login, coding, QA, previews, and custom dashboard validation share the same resolver instead of building separate base images.
 
+Packaged installs seed the lightweight baseline setup script into `~/.code-ux/container/setup.sh` when needed. Concurrent seed requests share one operation, and the verified result is reused for five minutes rather than rescanning the same bundled files on every agent lookup. Code UX migrates the recognized legacy provider-install bootstrap once, while an already-current baseline or a user-authored setup script remains untouched.
+
 ## Provider Preparation
 
 Selecting a provider during onboarding starts preparation immediately, before Login. Login and invocations join the same preparation job, so a ready provider performs no download.

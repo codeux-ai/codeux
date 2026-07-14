@@ -559,7 +559,7 @@ Container execution notes:
 
 Repository demo script:
 - `.code-ux/container/setup.sh` is included as a baseline bootstrap script.
-- Packaged desktop installs also ship this script as a default asset. On first use, Code UX copies it to `~/.code-ux/container/setup.sh` when that file does not already exist, so Docker can mount a normal user-directory script instead of relying on a repo checkout.
+- Packaged desktop installs also ship this script as a default asset. On first use, Code UX copies it to `~/.code-ux/container/setup.sh` when that file does not already exist, so Docker can mount a normal user-directory script instead of relying on a repo checkout. Concurrent default-asset requests share one install operation, and a successful verification is reused for five minutes instead of rescanning the same files on every agent lookup. The known pre-managed-runtime bootstrap is migrated once to the current lightweight baseline; an already-current baseline and unrelated user-authored setup scripts are left untouched.
 - It verifies `npm`, ensures `git` + `gh`, installs `pnpm` when needed, and leaves provider CLI installation to the runtime's provider-specific fallback.
 - `npm` refresh is now opt-in via `CODE_UX_REFRESH_NPM=1` instead of happening on every container start.
 - Playwright availability is controlled by `containerInstallPlaywrightBrowsers`. Managed provider invocations select the browser-dependency image and mount a verified local browser volume read-only; previews use the base image. Custom-image setups remain responsible for their own browser dependencies.

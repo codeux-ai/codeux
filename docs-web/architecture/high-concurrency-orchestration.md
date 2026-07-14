@@ -5,10 +5,15 @@ the dashboard, and interactive replies.
 
 - A positive `maxConcurrentTasks` is a hard cap.
 - Local-provider `0` uses adaptive CPU and memory admission; Jules `0` remains unlimited hosted work.
+- Darwin admission ignores raw free-memory percentage because it excludes reclaimable cache, while
+  retaining CPU/load pressure. A zero-running provider keeps one progress slot unless reliable
+  critical memory requires a complete pause.
 - Docker inventory, managed artifact verification, Git fetches, bundles, and workspace preparation
   are single-flighted and cached away from ordinary warm launches.
 - Automatic image pulls and provider release checks use a persisted six-hour freshness window, so
   burst-time restarts do not stampede registries or the Docker control plane.
+- Concurrent default-asset seeding is single-flight and revalidated at a five-minute cadence; the
+  legacy bootstrap migrates once without overwriting user-authored setup scripts.
 - Telemetry and invocation persistence process deltas instead of rewriting complete transcripts.
 - Every retention table advances through 500-row cursor batches only while provider work is idle.
 - Passive idle-time WAL checkpoints and a 256-page incremental-vacuum cap avoid full-file barriers.

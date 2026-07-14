@@ -24,11 +24,14 @@ One slot is held back from ordinary background work for `worker_reply`, `dashboa
 `clarification_reply`. A configured positive provider ceiling remains an upper bound; adaptive CPU and memory admission can temporarily grant fewer new starts while the host is saturated.
 
 Admission samples one-minute load and free memory through a one-second in-process cache. When load
-per CPU reaches 0.9 or free memory falls to 15%, background expansion freezes at the current running
-count. One interactive reply may use the reserved slot. At load per CPU 1.5 or free memory 7%, no
-additional background slot is granted. Extreme load alone does not consume the reply reservation
-because Linux load also counts I/O wait; critically low memory does. Existing work is never killed;
-admission resumes as pressure falls.
+per CPU reaches 0.9 or reliable free memory falls to 15%, background expansion freezes at the
+current running count. One interactive reply may use the reserved slot. At load per CPU 1.5 or
+reliable free memory 7%, no additional background slot is granted. Darwin's raw `os.freemem()` does
+not include readily reclaimable cache, so it is not used as a memory-pressure signal there; CPU/load
+pressure remains active. Extreme load alone does not consume the reply reservation because load can
+also include CI and I/O work. If no provider is running, adaptive admission keeps one background
+slot work-conserving unless a reliable critically-low-memory signal requires a full pause. Existing
+work is never killed; admission resumes as pressure falls.
 
 The policy does not call Docker. A rejected bounded claim may invoke stale-runtime reconciliation,
 but a claim with available capacity reaches the atomic SQLite boundary first.
@@ -65,6 +68,11 @@ Automatic runtime pulls and provider release lookups use a six-hour persisted fr
 restarting runtime processes during a CI burst does not create a registry/control-plane stampede.
 Manual preparation remains forceful, and launch-time validation repairs an externally removed or
 corrupted artifact on demand.
+
+Bundled user defaults use the same principle: concurrent seed requests share one in-flight install,
+and a successful verification is reused for five minutes. The managed container setup script
+migrates the known legacy installer once, while user-authored setup scripts remain untouched. This
+keeps scheduling polls from rescanning and rewriting the same assets during a burst.
 
 Provider containers receive a soft Docker CPU weight rather than a hard CPU quota. Idle CPU remains
 available to CI, while Docker control-plane and sibling runtime work can make progress during a
