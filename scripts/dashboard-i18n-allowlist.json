@@ -37,34 +37,6 @@
       "rationale": "This is product or brand identity and remains unchanged across locales."
     },
     {
-      "path": "dashboard/src/v2/components/memory/ModelBrowser.tsx",
-      "line": 671,
-      "kind": "attribute:placeholder",
-      "text": "owner/repo or https://huggingface.co/owner/repo",
-      "rationale": "This is an example of user-supplied repository or license metadata and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/memory/ModelBrowser.tsx",
-      "line": 695,
-      "kind": "attribute:placeholder",
-      "text": "MIT or Apache-2.0",
-      "rationale": "This is an example of user-supplied repository or license metadata and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/memory/ModelBrowser.tsx",
-      "line": 699,
-      "kind": "attribute:placeholder",
-      "text": "https://...",
-      "rationale": "This is an example of user-supplied repository or license metadata and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/nodes/NodeFlowInspector.tsx",
-      "line": 100,
-      "kind": "jsx-text",
-      "text": "· v",
-      "rationale": "This fragment prefixes a runtime version number and is technical data rather than interface copy."
-    },
-    {
       "path": "dashboard/src/v2/components/nodes/NodeRunDebugger.tsx",
       "line": 16,
       "kind": "jsx-text",
@@ -112,20 +84,6 @@
       "kind": "jsx-text",
       "text": "Quicksprint",
       "rationale": "This is product or brand identity and remains unchanged across locales."
-    },
-    {
-      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
-      "line": 102,
-      "kind": "attribute:placeholder",
-      "text": "api-token",
-      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
-      "line": 118,
-      "kind": "jsx-text",
-      "text": "· v",
-      "rationale": "This fragment prefixes a runtime version number and is technical data rather than interface copy."
     },
     {
       "path": "dashboard/src/v2/components/settings/BranchNameSchemeEditor.tsx",
@@ -203,62 +161,6 @@
       "kind": "attribute:placeholder",
       "text": ".code-ux/container/setup.sh",
       "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
-      "line": 946,
-      "kind": "attribute:placeholder",
-      "text": "/project",
-      "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
-      "line": 950,
-      "kind": "attribute:placeholder",
-      "text": "payments, mobile, infra",
-      "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
-      "line": 998,
-      "kind": "attribute:placeholder",
-      "text": "C0123456789 or chat-id",
-      "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
-      "line": 1036,
-      "kind": "attribute:placeholder",
-      "text": "/project",
-      "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
-      "line": 1046,
-      "kind": "attribute:placeholder",
-      "text": "mobile",
-      "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
-      "line": 1404,
-      "kind": "jsx-text",
-      "text": "/mnt/code-ux/google-drive",
-      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
-      "line": 1577,
-      "kind": "attribute:placeholder",
-      "text": "agents@codeux.ai",
-      "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
-      "line": 1753,
-      "kind": "attribute:placeholder",
-      "text": "https://api.example.com",
-      "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
     },
     {
       "path": "dashboard/src/v2/components/settings/panels/SettingsMcpPanel.tsx",
@@ -471,104 +373,6 @@
       "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
     },
     {
-      "path": "dashboard/src/v2/components/sprints/SprintIssueImportModal.tsx",
-      "line": 744,
-      "kind": "attribute:placeholder",
-      "text": "bug, security",
-      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/sprints/SprintIssueImportModal.tsx",
-      "line": 752,
-      "kind": "attribute:placeholder",
-      "text": "me or alice",
-      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/sprints/SprintIssueImportModal.tsx",
-      "line": 761,
-      "kind": "attribute:placeholder",
-      "text": "octocat",
-      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/sprints/SprintIssueImportModal.tsx",
-      "line": 770,
-      "kind": "attribute:placeholder",
-      "text": "v1.2",
-      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/sprints/SprintJiraImportModal.tsx",
-      "line": 799,
-      "kind": "attribute:placeholder",
-      "text": "me",
-      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/sprints/SprintJiraImportModal.tsx",
-      "line": 814,
-      "kind": "attribute:placeholder",
-      "text": "currentUser()",
-      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/sprints/SprintJiraImportModal.tsx",
-      "line": 836,
-      "kind": "attribute:placeholder",
-      "text": "Bug, Story, Epic",
-      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/sprints/SprintJiraImportModal.tsx",
-      "line": 851,
-      "kind": "attribute:placeholder",
-      "text": "High, Critical, Medium",
-      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/sprints/SprintJiraImportModal.tsx",
-      "line": 912,
-      "kind": "attribute:placeholder",
-      "text": "project = OPS AND labels in (security)",
-      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/sprints/SprintProjectManagementImportModal.tsx",
-      "line": 503,
-      "kind": "attribute:placeholder",
-      "text": "database-id",
-      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/sprints/SprintProjectManagementImportModal.tsx",
-      "line": 514,
-      "kind": "attribute:placeholder",
-      "text": "workspace-gid",
-      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/sprints/SprintProjectManagementImportModal.tsx",
-      "line": 537,
-      "kind": "attribute:placeholder",
-      "text": "team-id",
-      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/sprints/SprintProjectManagementImportModal.tsx",
-      "line": 558,
-      "kind": "attribute:placeholder",
-      "text": "In Progress",
-      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/components/sprints/SprintProjectManagementImportModal.tsx",
-      "line": 578,
-      "kind": "attribute:placeholder",
-      "text": "triage, backend",
-      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
-    },
-    {
       "path": "dashboard/src/v2/components/TitleBar.tsx",
       "line": 134,
       "kind": "jsx-text",
@@ -637,265 +441,6 @@
       "kind": "attribute:placeholder",
       "text": "/home/user/projects",
       "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 112,
-      "kind": "metadata:label",
-      "text": "Global defaults",
-      "rationale": "This is canonical routing-profile metadata; the Models panel replaces it with catalog copy before rendering."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 113,
-      "kind": "metadata:label",
-      "text": "Worker defaults",
-      "rationale": "This is canonical routing-profile metadata; the Models panel replaces it with catalog copy before rendering."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 175,
-      "kind": "metadata:description",
-      "text": "Shown when a sprint has no planned tasks yet.",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 175,
-      "kind": "metadata:label",
-      "text": "Planning Missing",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 176,
-      "kind": "metadata:description",
-      "text": "Shown after a planning request is prepared.",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 176,
-      "kind": "metadata:label",
-      "text": "Planning Created",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 177,
-      "kind": "metadata:description",
-      "text": "Shown when the sprint feature branch must be created first.",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 177,
-      "kind": "metadata:label",
-      "text": "Branch Missing",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 178,
-      "kind": "metadata:description",
-      "text": "Header for merge-required intervention output.",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 178,
-      "kind": "metadata:label",
-      "text": "Merge Header",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 179,
-      "kind": "metadata:description",
-      "text": "Per-task merge instruction block.",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 179,
-      "kind": "metadata:label",
-      "text": "Merge Task",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 180,
-      "kind": "metadata:description",
-      "text": "Header for agent-owned intervention items.",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 180,
-      "kind": "metadata:label",
-      "text": "Agent Attention Header",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 181,
-      "kind": "metadata:description",
-      "text": "Per-task agent intervention block.",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 181,
-      "kind": "metadata:label",
-      "text": "Agent Attention Task",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 182,
-      "kind": "metadata:description",
-      "text": "Header for human-owned intervention items.",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 182,
-      "kind": "metadata:label",
-      "text": "Human Attention Header",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 183,
-      "kind": "metadata:description",
-      "text": "Per-task human intervention block.",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 183,
-      "kind": "metadata:label",
-      "text": "Human Attention Task",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 184,
-      "kind": "metadata:description",
-      "text": "Top section for live orchestration status output.",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 184,
-      "kind": "metadata:label",
-      "text": "Run Header",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 185,
-      "kind": "metadata:description",
-      "text": "Shown when orchestration pauses for merges.",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 185,
-      "kind": "metadata:label",
-      "text": "Run Merge Required",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 186,
-      "kind": "metadata:description",
-      "text": "Shown when orchestration pauses with nothing runnable.",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 186,
-      "kind": "metadata:label",
-      "text": "Run No More Actions",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 187,
-      "kind": "metadata:description",
-      "text": "Final sprint completion guidance.",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 187,
-      "kind": "metadata:label",
-      "text": "Completion Steps",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 188,
-      "kind": "metadata:description",
-      "text": "Shown when cleanup confirms a fully merged sprint.",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 188,
-      "kind": "metadata:label",
-      "text": "Cleanup All Merged",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 189,
-      "kind": "metadata:description",
-      "text": "Shown when cleanup is skipped because tasks failed.",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 189,
-      "kind": "metadata:label",
-      "text": "Cleanup Failed",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 190,
-      "kind": "metadata:description",
-      "text": "Shown when cleanup waits on merges.",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 190,
-      "kind": "metadata:label",
-      "text": "Cleanup Deferred",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 191,
-      "kind": "metadata:description",
-      "text": "Shown when the sprint is still empty.",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
-      "line": 191,
-      "kind": "metadata:label",
-      "text": "Cleanup Empty",
-      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
-    },
-    {
-      "path": "dashboard/src/v2/KnowledgePage.tsx",
-      "line": 213,
-      "kind": "jsx-text",
-      "text": "search_knowledge",
-      "rationale": "This is an MCP tool identifier shown as code and must remain verbatim."
     },
     {
       "path": "dashboard/src/v2/lib/agent-avatar.ts",
@@ -1323,62 +868,6 @@
       "kind": "metadata:label",
       "text": "Plum Noir",
       "rationale": "This is a stable persisted avatar-option fallback identifier; the Agents catalog supplies the localized label before rendering."
-    },
-    {
-      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
-      "line": 35,
-      "kind": "metadata:label",
-      "text": "Status Report",
-      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
-    },
-    {
-      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
-      "line": 41,
-      "kind": "metadata:label",
-      "text": "Sprint Progress",
-      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
-    },
-    {
-      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
-      "line": 47,
-      "kind": "metadata:label",
-      "text": "What’s Failing?",
-      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
-    },
-    {
-      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
-      "line": 53,
-      "kind": "metadata:label",
-      "text": "Plan Next Steps",
-      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
-    },
-    {
-      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
-      "line": 59,
-      "kind": "metadata:label",
-      "text": "Add Nodes Workflow",
-      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
-    },
-    {
-      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
-      "line": 65,
-      "kind": "metadata:label",
-      "text": "Add Dashboard",
-      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
-    },
-    {
-      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
-      "line": 71,
-      "kind": "metadata:label",
-      "text": "Create Skill",
-      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
-    },
-    {
-      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
-      "line": 77,
-      "kind": "metadata:label",
-      "text": "List Skills",
-      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
     },
     {
       "path": "dashboard/src/v2/lib/experience-mode.ts",
@@ -2221,20 +1710,6 @@
       "rationale": "This is a locale-neutral telemetry abbreviation or unit label whose technical meaning must remain unchanged."
     },
     {
-      "path": "dashboard/src/v2/pages/stats/components/stats-ui-primitives.tsx",
-      "line": 672,
-      "kind": "attribute:label",
-      "text": "In",
-      "rationale": "This is a locale-neutral telemetry abbreviation or unit label whose technical meaning must remain unchanged."
-    },
-    {
-      "path": "dashboard/src/v2/pages/stats/components/stats-ui-primitives.tsx",
-      "line": 673,
-      "kind": "attribute:label",
-      "text": "Out",
-      "rationale": "This is a locale-neutral telemetry abbreviation or unit label whose technical meaning must remain unchanged."
-    },
-    {
       "path": "dashboard/src/v2/pages/stats/components/system/SystemFilterBar.tsx",
       "line": 22,
       "kind": "metadata:label",
@@ -2282,6 +1757,2519 @@
       "kind": "jsx-text",
       "text": "p95",
       "rationale": "This is a locale-neutral telemetry abbreviation or unit label whose technical meaning must remain unchanged."
+    },
+    {
+      "path": "dashboard/src/v2/components/custom-dashboards/CustomDashboardCredentialSlotsPanel.tsx",
+      "line": 135,
+      "kind": "jsx-text",
+      "text": "Manage credentials in Settings",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/custom-dashboards/CustomDashboardCredentialSlotsPanel.tsx",
+      "line": 140,
+      "kind": "attribute:aria-label",
+      "text": "Dashboard credential slots",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/custom-dashboards/CustomDashboardCredentialSlotsPanel.tsx",
+      "line": 145,
+      "kind": "jsx-text",
+      "text": "Declared credential slots",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/custom-dashboards/CustomDashboardCredentialSlotsPanel.tsx",
+      "line": 148,
+      "kind": "jsx-text",
+      "text": "Bind only project-visible metadata that satisfies each declaration. Secret values never enter this editor, generated files, or runtime text.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/custom-dashboards/CustomDashboardCredentialSlotsPanel.tsx",
+      "line": 158,
+      "kind": "jsx-text",
+      "text": "Refresh",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/custom-dashboards/CustomDashboardCredentialSlotsPanel.tsx",
+      "line": 163,
+      "kind": "jsx-text",
+      "text": "Loading credential metadata and custody health…",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/custom-dashboards/CustomDashboardCredentialSlotsPanel.tsx",
+      "line": 169,
+      "kind": "jsx-text",
+      "text": "Secure credential custody is unavailable.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/custom-dashboards/CustomDashboardCredentialSlotsPanel.tsx",
+      "line": 211,
+      "kind": "jsx-text",
+      "text": "Slot",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/custom-dashboards/CustomDashboardCredentialSlotsPanel.tsx",
+      "line": 220,
+      "kind": "jsx-text",
+      "text": "Allowed kinds",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/custom-dashboards/CustomDashboardCredentialSlotsPanel.tsx",
+      "line": 221,
+      "kind": "jsx-text",
+      "text": "Required capabilities",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/custom-dashboards/CustomDashboardCredentialSlotsPanel.tsx",
+      "line": 225,
+      "kind": "jsx-text",
+      "text": "Current credential metadata",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/custom-dashboards/CustomDashboardCredentialSlotsPanel.tsx",
+      "line": 232,
+      "kind": "jsx-text",
+      "text": "Capabilities:",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/custom-dashboards/CustomDashboardCredentialSlotsPanel.tsx",
+      "line": 235,
+      "kind": "jsx-text",
+      "text": "No credential is bound.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/custom-dashboards/CustomDashboardCredentialSlotsPanel.tsx",
+      "line": 249,
+      "kind": "jsx-text",
+      "text": "Compatible credential",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/custom-dashboards/CustomDashboardCredentialSlotsPanel.tsx",
+      "line": 260,
+      "kind": "attribute:placeholder",
+      "text": "Choose compatible metadata…",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/custom-dashboards/CustomDashboardCredentialSlotsPanel.tsx",
+      "line": 282,
+      "kind": "jsx-text",
+      "text": "No",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/custom-dashboards/CustomDashboardCredentialSlotsPanel.tsx",
+      "line": 282,
+      "kind": "jsx-text",
+      "text": "active, configured, project-authorized credential matches this slot.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/custom-dashboards/CustomDashboardCredentialSlotsPanel.tsx",
+      "line": 296,
+      "kind": "jsx-text",
+      "text": "Unbind credential",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/custom-dashboards/CustomDashboardCredentialSlotsPanel.tsx",
+      "line": 302,
+      "kind": "jsx-text",
+      "text": "Unbinding this required slot will block readiness until another compatible credential is bound.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/custom-dashboards/CustomDashboardCredentialSlotsPanel.tsx",
+      "line": 307,
+      "kind": "jsx-text",
+      "text": "Compatible binding",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/custom-dashboards/CustomDashboardEditorPanel.tsx",
+      "line": 64,
+      "kind": "metadata:label",
+      "text": "Credentials",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/memory/ModelBrowser.tsx",
+      "line": 690,
+      "kind": "attribute:placeholder",
+      "text": "owner/repo or https://huggingface.co/owner/repo",
+      "rationale": "This is an example of user-supplied repository or license metadata and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/memory/ModelBrowser.tsx",
+      "line": 714,
+      "kind": "attribute:placeholder",
+      "text": "MIT or Apache-2.0",
+      "rationale": "This is an example of user-supplied repository or license metadata and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/memory/ModelBrowser.tsx",
+      "line": 718,
+      "kind": "attribute:placeholder",
+      "text": "https://...",
+      "rationale": "This is an example of user-supplied repository or license metadata and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/nodes/NodeCredentialPicker.tsx",
+      "line": 164,
+      "kind": "jsx-text",
+      "text": "Choose a project-visible credential with",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/nodes/NodeCredentialPicker.tsx",
+      "line": 164,
+      "kind": "jsx-text",
+      "text": "access. Secret values never enter this page.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/nodes/NodeCredentialPicker.tsx",
+      "line": 167,
+      "kind": "jsx-text",
+      "text": "Checking credential compatibility…",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/nodes/NodeCredentialPicker.tsx",
+      "line": 172,
+      "kind": "jsx-text",
+      "text": "Secure credential storage is unavailable. Existing bindings remain unchanged.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/nodes/NodeCredentialPicker.tsx",
+      "line": 176,
+      "kind": "attribute:aria-label",
+      "text": "Compatible credentials",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/nodes/NodeCredentialPicker.tsx",
+      "line": 177,
+      "kind": "jsx-text",
+      "text": "Compatible",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/nodes/NodeCredentialPicker.tsx",
+      "line": 187,
+      "kind": "attribute:aria-label",
+      "text": "Currently bound",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/nodes/NodeCredentialPicker.tsx",
+      "line": 193,
+      "kind": "attribute:aria-label",
+      "text": "Unavailable credentials",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/nodes/NodeCredentialPicker.tsx",
+      "line": 194,
+      "kind": "jsx-text",
+      "text": "Unavailable for this slot",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/nodes/NodeCredentialPicker.tsx",
+      "line": 205,
+      "kind": "jsx-text",
+      "text": "No other compatible credential is available for this slot.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/nodes/NodeCredentialPicker.tsx",
+      "line": 212,
+      "kind": "jsx-text",
+      "text": "Open credential Settings",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/nodes/NodeFlowInspector.tsx",
+      "line": 127,
+      "kind": "jsx-text",
+      "text": "· v",
+      "rationale": "This fragment prefixes a runtime version number and is technical data rather than interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/components/nodes/NodeFlowInspector.tsx",
+      "line": 161,
+      "kind": "jsx-text",
+      "text": "Credential bindings",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/nodes/NodeFlowInspector.tsx",
+      "line": 162,
+      "kind": "jsx-text",
+      "text": "This node does not request credentials.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/nodes/NodeFlowInspector.tsx",
+      "line": 177,
+      "kind": "jsx-text",
+      "text": "access · secret value never displayed",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 125,
+      "kind": "jsx-text",
+      "text": "The managing project is always retained. Select every additional project that may use this credential.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 345,
+      "kind": "jsx-text",
+      "text": "Automation credential management",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 347,
+      "kind": "jsx-text",
+      "text": "Secure storage ready",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 350,
+      "kind": "jsx-text",
+      "text": "Create project-owned or explicitly allowlisted credentials. Secret values are write-only; this page retains only non-secret metadata.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 352,
+      "kind": "attribute:aria-label",
+      "text": "Refresh automation credentials",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 353,
+      "kind": "jsx-text",
+      "text": "Refresh",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 358,
+      "kind": "jsx-text",
+      "text": "Loading credential health and project-visible metadata…",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 367,
+      "kind": "jsx-text",
+      "text": "Secure credential storage is unavailable",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 369,
+      "kind": "jsx-text",
+      "text": "Restore the configured secure key provider, then refresh this page. Existing metadata remains visible, but secret-bearing changes, tests, promotion, and revocation are disabled until custody recovers.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 374,
+      "kind": "jsx-text",
+      "text": "Ready, not configured.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 374,
+      "kind": "jsx-text",
+      "text": "Store the first credential below and grant only the capabilities its automation consumer requires.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 377,
+      "kind": "jsx-text",
+      "text": "Configured.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 377,
+      "kind": "jsx-text",
+      "text": "active credential",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 377,
+      "kind": "jsx-text",
+      "text": "ready for compatible project automation.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 381,
+      "kind": "jsx-text",
+      "text": "Store a credential",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 383,
+      "kind": "jsx-text",
+      "text": "Name",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 383,
+      "kind": "attribute:aria-label",
+      "text": "Credential name",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 384,
+      "kind": "jsx-text",
+      "text": "Kind",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 384,
+      "kind": "attribute:aria-label",
+      "text": "Credential kind",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 384,
+      "kind": "attribute:placeholder",
+      "text": "api-token",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 386,
+      "kind": "jsx-text",
+      "text": "Scope",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 388,
+      "kind": "attribute:aria-label",
+      "text": "Credential scope",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 399,
+      "kind": "jsx-text",
+      "text": "Secret value",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 399,
+      "kind": "jsx-text",
+      "text": "write-only",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 399,
+      "kind": "attribute:aria-label",
+      "text": "Secret value",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 408,
+      "kind": "jsx-text",
+      "text": "Visible to this project",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 409,
+      "kind": "jsx-text",
+      "text": "No credential metadata is visible to this project.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 421,
+      "kind": "jsx-text",
+      "text": "· metadata version",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 426,
+      "kind": "jsx-text",
+      "text": "Capabilities",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 427,
+      "kind": "jsx-text",
+      "text": "Project access",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 429,
+      "kind": "jsx-text",
+      "text": "This globally accessible credential is managed by another project. You may use it where compatible, but management actions are disabled here.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 433,
+      "kind": "jsx-text",
+      "text": "Display name",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 434,
+      "kind": "jsx-text",
+      "text": "Save name",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 434,
+      "kind": "jsx-text",
+      "text": "Test",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 438,
+      "kind": "jsx-text",
+      "text": "New secret value",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 438,
+      "kind": "jsx-text",
+      "text": "write-only",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 440,
+      "kind": "jsx-text",
+      "text": "Rotate",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 441,
+      "kind": "jsx-text",
+      "text": "Replace",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 472,
+      "kind": "jsx-text",
+      "text": "Apply restriction",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 501,
+      "kind": "jsx-text",
+      "text": "Promote credential",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 506,
+      "kind": "jsx-text",
+      "text": "Revoke",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/AutomationCredentialManager.tsx",
+      "line": 507,
+      "kind": "jsx-text",
+      "text": "Applying credential change…",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorBindingEditor.tsx",
+      "line": 50,
+      "kind": "attribute:label",
+      "text": "Delete binding",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorBindingEditor.tsx",
+      "line": 55,
+      "kind": "jsx-text",
+      "text": "Mobile label: Channel name",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorBindingEditor.tsx",
+      "line": 56,
+      "kind": "jsx-text",
+      "text": "Project",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorBindingEditor.tsx",
+      "line": 57,
+      "kind": "jsx-text",
+      "text": "Agent preset",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorBindingEditor.tsx",
+      "line": 58,
+      "kind": "jsx-text",
+      "text": "Project selector prefix",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorBindingEditor.tsx",
+      "line": 58,
+      "kind": "attribute:placeholder",
+      "text": "/project",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorBindingEditor.tsx",
+      "line": 59,
+      "kind": "jsx-text",
+      "text": "Routing hint",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorBindingEditor.tsx",
+      "line": 60,
+      "kind": "jsx-text",
+      "text": "Thread identifier",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorBindingEditor.tsx",
+      "line": 63,
+      "kind": "attribute:title",
+      "text": "Ambiguous routing",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorBindingEditor.tsx",
+      "line": 63,
+      "kind": "jsx-text",
+      "text": "When more than one project matches a channel, the selector prefix and routing hint must resolve one binding; otherwise Code UX asks for clarification instead of guessing.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorCatalogCard.tsx",
+      "line": 32,
+      "kind": "jsx-text",
+      "text": "Recommended starting point",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorCatalogCard.tsx",
+      "line": 33,
+      "kind": "jsx-text",
+      "text": "Verified active",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorCatalogCard.tsx",
+      "line": 46,
+      "kind": "jsx-text",
+      "text": "Manage",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorConnectionEditor.tsx",
+      "line": 116,
+      "kind": "jsx-text",
+      "text": ". Stored credentials remain write-only.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorConnectionEditor.tsx",
+      "line": 117,
+      "kind": "attribute:label",
+      "text": "Save connection",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorConnectionEditor.tsx",
+      "line": 117,
+      "kind": "attribute:label",
+      "text": "Test connection",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorConnectionEditor.tsx",
+      "line": 117,
+      "kind": "attribute:label",
+      "text": "Delete connection",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorConnectionEditor.tsx",
+      "line": 122,
+      "kind": "jsx-text",
+      "text": "Display name",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorConnectionEditor.tsx",
+      "line": 122,
+      "kind": "jsx-text",
+      "text": "Connection status",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorConnectionEditor.tsx",
+      "line": 123,
+      "kind": "jsx-text",
+      "text": "Connection mode",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorConnectionEditor.tsx",
+      "line": 124,
+      "kind": "jsx-text",
+      "text": "Runtime enabled",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorConnectionEditor.tsx",
+      "line": 125,
+      "kind": "jsx-text",
+      "text": "Ingress URL",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorConnectionEditor.tsx",
+      "line": 126,
+      "kind": "jsx-text",
+      "text": "Setup",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorConnectionEditor.tsx",
+      "line": 127,
+      "kind": "jsx-text",
+      "text": "Write-only credentials",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorConnectionEditor.tsx",
+      "line": 131,
+      "kind": "attribute:title",
+      "text": "Channel, project, and thread routing",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorConnectionEditor.tsx",
+      "line": 131,
+      "kind": "jsx-text",
+      "text": "Bindings map provider-specific channel identifiers to projects and optional thread identifiers. Shared channels require an unambiguous selector.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorDeliveryHistory.tsx",
+      "line": 18,
+      "kind": "jsx-text",
+      "text": "Delivery history",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorDeliveryHistory.tsx",
+      "line": 19,
+      "kind": "jsx-text",
+      "text": "Outbound status only; payload bodies are never shown",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorDeliveryHistory.tsx",
+      "line": 21,
+      "kind": "attribute:title",
+      "text": "Loading deliveries",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorDeliveryHistory.tsx",
+      "line": 21,
+      "kind": "jsx-text",
+      "text": "Refreshing redacted delivery state.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorDeliveryHistory.tsx",
+      "line": 22,
+      "kind": "attribute:title",
+      "text": "Delivery history unavailable",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorDeliveryHistory.tsx",
+      "line": 22,
+      "kind": "jsx-text",
+      "text": "Existing delivery records remain visible.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorDeliveryHistory.tsx",
+      "line": 23,
+      "kind": "attribute:title",
+      "text": "No outbound deliveries",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorDeliveryHistory.tsx",
+      "line": 23,
+      "kind": "jsx-text",
+      "text": "Delivery attempts will appear here after a bound channel sends a reply.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorDeliveryHistory.tsx",
+      "line": 35,
+      "kind": "jsx-text",
+      "text": "Channel",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorDeliveryHistory.tsx",
+      "line": 40,
+      "kind": "attribute:label",
+      "text": "Inspect",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorDeliveryHistory.tsx",
+      "line": 41,
+      "kind": "attribute:label",
+      "text": "Retry",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorDeliveryHistory.tsx",
+      "line": 42,
+      "kind": "attribute:label",
+      "text": "Cancel",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorVerificationResult.tsx",
+      "line": 34,
+      "kind": "jsx-text",
+      "text": "Diagnostic code:",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/chat-connectors/ChatConnectorVerificationResult.tsx",
+      "line": 35,
+      "kind": "jsx-text",
+      "text": "The backend marked this failure retryable.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
+      "line": 1003,
+      "kind": "attribute:placeholder",
+      "text": "/project",
+      "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
+      "line": 1007,
+      "kind": "attribute:placeholder",
+      "text": "payments, mobile, infra",
+      "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
+      "line": 1055,
+      "kind": "attribute:placeholder",
+      "text": "C0123456789 or chat-id",
+      "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
+      "line": 1093,
+      "kind": "attribute:placeholder",
+      "text": "/project",
+      "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
+      "line": 1103,
+      "kind": "attribute:placeholder",
+      "text": "mobile",
+      "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
+      "line": 1481,
+      "kind": "jsx-text",
+      "text": "/mnt/code-ux/google-drive",
+      "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
+      "line": 1654,
+      "kind": "attribute:placeholder",
+      "text": "agents@codeux.ai",
+      "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
+      "line": 1830,
+      "kind": "attribute:placeholder",
+      "text": "https://api.example.com",
+      "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintIssueImportModal.tsx",
+      "line": 732,
+      "kind": "attribute:placeholder",
+      "text": "bug, security",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintIssueImportModal.tsx",
+      "line": 740,
+      "kind": "attribute:placeholder",
+      "text": "me or alice",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintIssueImportModal.tsx",
+      "line": 749,
+      "kind": "attribute:placeholder",
+      "text": "octocat",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintIssueImportModal.tsx",
+      "line": 758,
+      "kind": "attribute:placeholder",
+      "text": "v1.2",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintJiraImportModal.tsx",
+      "line": 772,
+      "kind": "attribute:placeholder",
+      "text": "me",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintJiraImportModal.tsx",
+      "line": 787,
+      "kind": "attribute:placeholder",
+      "text": "currentUser()",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintJiraImportModal.tsx",
+      "line": 809,
+      "kind": "attribute:placeholder",
+      "text": "Bug, Story, Epic",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintJiraImportModal.tsx",
+      "line": 824,
+      "kind": "attribute:placeholder",
+      "text": "High, Critical, Medium",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintJiraImportModal.tsx",
+      "line": 885,
+      "kind": "attribute:placeholder",
+      "text": "project = OPS AND labels in (security)",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintProjectManagementImportModal.tsx",
+      "line": 500,
+      "kind": "attribute:placeholder",
+      "text": "database-id",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintProjectManagementImportModal.tsx",
+      "line": 511,
+      "kind": "attribute:placeholder",
+      "text": "workspace-gid",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintProjectManagementImportModal.tsx",
+      "line": 534,
+      "kind": "attribute:placeholder",
+      "text": "team-id",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintProjectManagementImportModal.tsx",
+      "line": 555,
+      "kind": "attribute:placeholder",
+      "text": "In Progress",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/sprints/SprintProjectManagementImportModal.tsx",
+      "line": 575,
+      "kind": "attribute:placeholder",
+      "text": "triage, backend",
+      "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/components/stats/TopCardsModeRenderer.tsx",
+      "line": 371,
+      "kind": "attribute:label",
+      "text": "Total Spend",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/stats/TopCardsModeRenderer.tsx",
+      "line": 381,
+      "kind": "attribute:label",
+      "text": "Average per Task",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/stats/TopCardsModeRenderer.tsx",
+      "line": 391,
+      "kind": "attribute:label",
+      "text": "Average per Sprint",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/stats/TopCardsModeRenderer.tsx",
+      "line": 401,
+      "kind": "attribute:label",
+      "text": "Blended Cost / 1M Tokens",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/stats/TopCardsModeRenderer.tsx",
+      "line": 411,
+      "kind": "attribute:label",
+      "text": "Pricing Coverage",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardColumns.tsx",
+      "line": 29,
+      "kind": "jsx-text",
+      "text": "lane,",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardColumns.tsx",
+      "line": 190,
+      "kind": "jsx-text",
+      "text": "lane contains",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardColumns.tsx",
+      "line": 190,
+      "kind": "jsx-text",
+      "text": "after current filters.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardColumns.tsx",
+      "line": 209,
+      "kind": "jsx-text",
+      "text": "Loading",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardColumns.tsx",
+      "line": 209,
+      "kind": "jsx-text",
+      "text": "tasks.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardColumns.tsx",
+      "line": 225,
+      "kind": "jsx-text",
+      "text": "No",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardColumns.tsx",
+      "line": 225,
+      "kind": "jsx-text",
+      "text": "tasks",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardFilters.tsx",
+      "line": 80,
+      "kind": "jsx-text",
+      "text": "Task board controls",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardFilters.tsx",
+      "line": 86,
+      "kind": "jsx-text",
+      "text": "Sprint scope",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardFilters.tsx",
+      "line": 97,
+      "kind": "jsx-text",
+      "text": "Status",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardFilters.tsx",
+      "line": 112,
+      "kind": "jsx-text",
+      "text": "Priority",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardFilters.tsx",
+      "line": 128,
+      "kind": "jsx-text",
+      "text": "Visible cards",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardFilters.tsx",
+      "line": 132,
+      "kind": "attribute:label",
+      "text": "Show",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardOverview.tsx",
+      "line": 32,
+      "kind": "jsx-text",
+      "text": "Task board overview",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardOverview.tsx",
+      "line": 42,
+      "kind": "jsx-text",
+      "text": "Active sprint scope",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardOverview.tsx",
+      "line": 51,
+      "kind": "jsx-text",
+      "text": "Complete",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardOverview.tsx",
+      "line": 71,
+      "kind": "jsx-text",
+      "text": "completed",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardOverview.tsx",
+      "line": 73,
+      "kind": "jsx-text",
+      "text": "running",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardOverview.tsx",
+      "line": 75,
+      "kind": "jsx-text",
+      "text": "queued",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardSprintSelector.tsx",
+      "line": 238,
+      "kind": "attribute:aria-label",
+      "text": "Task sprint scope",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardSprintSelector.tsx",
+      "line": 261,
+      "kind": "jsx-text",
+      "text": "All Sprints",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardSprintSelector.tsx",
+      "line": 262,
+      "kind": "jsx-text",
+      "text": "Project-wide scope",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardSprintSelector.tsx",
+      "line": 264,
+      "kind": "jsx-text",
+      "text": "Selected",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardSprintSelector.tsx",
+      "line": 276,
+      "kind": "jsx-text",
+      "text": "Loading sprint scopes",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardSprintSelector.tsx",
+      "line": 281,
+      "kind": "jsx-text",
+      "text": "No sprints available. All Sprints remains selected until a sprint is created.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskBoardSprintSelector.tsx",
+      "line": 325,
+      "kind": "jsx-text",
+      "text": "Selected",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskCardActionMenu.tsx",
+      "line": 81,
+      "kind": "attribute:aria-label",
+      "text": "Execution and navigation actions",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskCardActionMenu.tsx",
+      "line": 82,
+      "kind": "jsx-text",
+      "text": "Execution &amp; navigation",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskCardActionMenu.tsx",
+      "line": 144,
+      "kind": "attribute:aria-label",
+      "text": "Task management actions",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskCardActionMenu.tsx",
+      "line": 145,
+      "kind": "jsx-text",
+      "text": "Task management",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskCardActionMenu.tsx",
+      "line": 160,
+      "kind": "jsx-text",
+      "text": "Edit",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskCardActionMenu.tsx",
+      "line": 168,
+      "kind": "attribute:aria-label",
+      "text": "Destructive task actions",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskCardActionMenu.tsx",
+      "line": 169,
+      "kind": "jsx-text",
+      "text": "Danger zone",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskCardActionMenu.tsx",
+      "line": 183,
+      "kind": "jsx-text",
+      "text": "Delete",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/tasks/TaskCardActionMenu.tsx",
+      "line": 209,
+      "kind": "jsx-text",
+      "text": "Actions",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 191,
+      "kind": "jsx-text",
+      "text": "Follow-up task",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 196,
+      "kind": "jsx-text",
+      "text": "Title",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 198,
+      "kind": "jsx-text",
+      "text": "Description",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 200,
+      "kind": "jsx-text",
+      "text": "Priority",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 202,
+      "kind": "jsx-text",
+      "text": "Dependencies",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 204,
+      "kind": "jsx-text",
+      "text": "Prompt",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 240,
+      "kind": "attribute:aria-label",
+      "text": "Review summary",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 241,
+      "kind": "jsx-text",
+      "text": "Review summary",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 247,
+      "kind": "attribute:aria-label",
+      "text": "Fix instructions",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 249,
+      "kind": "jsx-text",
+      "text": "Fix instructions",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 255,
+      "kind": "attribute:aria-label",
+      "text": "Review findings",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 256,
+      "kind": "jsx-text",
+      "text": "Findings ·",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 268,
+      "kind": "attribute:aria-label",
+      "text": "Follow-up tasks",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 269,
+      "kind": "jsx-text",
+      "text": "Follow-up tasks ·",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 279,
+      "kind": "jsx-text",
+      "text": "Reviewer",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 279,
+      "kind": "jsx-text",
+      "text": "Reviewed by",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 280,
+      "kind": "jsx-text",
+      "text": "Reviewed",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 281,
+      "kind": "jsx-text",
+      "text": "Target",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 460,
+      "kind": "jsx-text",
+      "text": "QA no review",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 471,
+      "kind": "attribute:aria-label",
+      "text": "QA review running",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 471,
+      "kind": "jsx-text",
+      "text": "QA review running",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 478,
+      "kind": "attribute:aria-label",
+      "text": "QA review details",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 499,
+      "kind": "attribute:aria-label",
+      "text": "CI workflow details",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 515,
+      "kind": "attribute:aria-label",
+      "text": "Workflow status card",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/components/ui/WorkflowStatusBadge.tsx",
+      "line": 518,
+      "kind": "jsx-text",
+      "text": "Delivery flow",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 121,
+      "kind": "metadata:label",
+      "text": "Global defaults",
+      "rationale": "This is canonical routing-profile metadata; the Models panel replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 122,
+      "kind": "metadata:label",
+      "text": "Worker defaults",
+      "rationale": "This is canonical routing-profile metadata; the Models panel replaces it with catalog copy before rendering."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 186,
+      "kind": "metadata:label",
+      "text": "Planning Missing",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 186,
+      "kind": "metadata:description",
+      "text": "Shown when a sprint has no planned tasks yet.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 187,
+      "kind": "metadata:label",
+      "text": "Planning Created",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 187,
+      "kind": "metadata:description",
+      "text": "Shown after a planning request is prepared.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 188,
+      "kind": "metadata:label",
+      "text": "Branch Missing",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 188,
+      "kind": "metadata:description",
+      "text": "Shown when the sprint feature branch must be created first.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 189,
+      "kind": "metadata:label",
+      "text": "Merge Header",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 189,
+      "kind": "metadata:description",
+      "text": "Header for merge-required intervention output.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 190,
+      "kind": "metadata:label",
+      "text": "Merge Task",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 190,
+      "kind": "metadata:description",
+      "text": "Per-task merge instruction block.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 191,
+      "kind": "metadata:label",
+      "text": "Agent Attention Header",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 191,
+      "kind": "metadata:description",
+      "text": "Header for agent-owned intervention items.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 192,
+      "kind": "metadata:label",
+      "text": "Agent Attention Task",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 192,
+      "kind": "metadata:description",
+      "text": "Per-task agent intervention block.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 193,
+      "kind": "metadata:label",
+      "text": "Human Attention Header",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 193,
+      "kind": "metadata:description",
+      "text": "Header for human-owned intervention items.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 194,
+      "kind": "metadata:label",
+      "text": "Human Attention Task",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 194,
+      "kind": "metadata:description",
+      "text": "Per-task human intervention block.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 195,
+      "kind": "metadata:label",
+      "text": "Run Header",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 195,
+      "kind": "metadata:description",
+      "text": "Top section for live orchestration status output.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 196,
+      "kind": "metadata:label",
+      "text": "Run Merge Required",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 196,
+      "kind": "metadata:description",
+      "text": "Shown when orchestration pauses for merges.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 197,
+      "kind": "metadata:label",
+      "text": "Run No More Actions",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 197,
+      "kind": "metadata:description",
+      "text": "Shown when orchestration pauses with nothing runnable.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 198,
+      "kind": "metadata:label",
+      "text": "Completion Steps",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 198,
+      "kind": "metadata:description",
+      "text": "Final sprint completion guidance.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 199,
+      "kind": "metadata:label",
+      "text": "Cleanup All Merged",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 199,
+      "kind": "metadata:description",
+      "text": "Shown when cleanup confirms a fully merged sprint.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 200,
+      "kind": "metadata:label",
+      "text": "Cleanup Failed",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 200,
+      "kind": "metadata:description",
+      "text": "Shown when cleanup is skipped because tasks failed.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 201,
+      "kind": "metadata:label",
+      "text": "Cleanup Deferred",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 201,
+      "kind": "metadata:description",
+      "text": "Shown when cleanup waits on merges.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 202,
+      "kind": "metadata:label",
+      "text": "Cleanup Empty",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/hooks/use-settings-page-state.ts",
+      "line": 202,
+      "kind": "metadata:description",
+      "text": "Shown when the sprint is still empty.",
+      "rationale": "This is a search-only instruction-template alias used to index technical setting identifiers; it is never rendered as interface copy."
+    },
+    {
+      "path": "dashboard/src/v2/KnowledgePage.tsx",
+      "line": 214,
+      "kind": "jsx-text",
+      "text": "search_knowledge",
+      "rationale": "This is an MCP tool identifier shown as code and must remain verbatim."
+    },
+    {
+      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
+      "line": 50,
+      "kind": "metadata:label",
+      "text": "Status Report",
+      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
+      "line": 56,
+      "kind": "metadata:label",
+      "text": "Sprint Progress",
+      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
+      "line": 62,
+      "kind": "metadata:label",
+      "text": "What’s Failing?",
+      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
+      "line": 68,
+      "kind": "metadata:label",
+      "text": "Plan Next Steps",
+      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
+      "line": 74,
+      "kind": "metadata:label",
+      "text": "Add Nodes Workflow",
+      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
+      "line": 82,
+      "kind": "metadata:label",
+      "text": "Add Dashboard",
+      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
+      "line": 90,
+      "kind": "metadata:label",
+      "text": "Create Skill",
+      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/lib/cinematic-quick-actions.ts",
+      "line": 96,
+      "kind": "metadata:label",
+      "text": "List Skills",
+      "rationale": "This canonical action fallback preserves the command contract; the chat catalog replaces it before any dashboard rendering."
+    },
+    {
+      "path": "dashboard/src/v2/NodesPage.tsx",
+      "line": 362,
+      "kind": "jsx-text",
+      "text": "Flow name",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/NodesPage.tsx",
+      "line": 362,
+      "kind": "jsx-text",
+      "text": "Description",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/NodesPage.tsx",
+      "line": 362,
+      "kind": "attribute:title",
+      "text": "No flows in this project",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/NodesPage.tsx",
+      "line": 362,
+      "kind": "attribute:description",
+      "text": "Create a draft to start from the canonical backend workspace.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/NodesPage.tsx",
+      "line": 362,
+      "kind": "jsx-text",
+      "text": "Create draft",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 189,
+      "kind": "attribute:title",
+      "text": "What consumed tokens",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 190,
+      "kind": "attribute:description",
+      "text": "Prompt, cache, generation, and reasoning lanes reconcile to the selected snapshot.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 193,
+      "kind": "jsx-text",
+      "text": "Total token volume",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 204,
+      "kind": "jsx-text",
+      "text": "Zero total tokens — no token allocation is available.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 207,
+      "kind": "jsx-text",
+      "text": "accounts for",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 207,
+      "kind": "jsx-text",
+      "text": "of recorded volume.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 210,
+      "kind": "attribute:aria-label",
+      "text": "Exact token allocation values",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 246,
+      "kind": "attribute:title",
+      "text": "Where spend landed",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 247,
+      "kind": "attribute:description",
+      "text": "Token-priced input, output, cache, and provider-reported fallback remain distinct.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 250,
+      "kind": "jsx-text",
+      "text": "Total recorded spend",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 272,
+      "kind": "attribute:aria-label",
+      "text": "Exact spend allocation values",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 292,
+      "kind": "jsx-text",
+      "text": "Total cost",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 293,
+      "kind": "jsx-text",
+      "text": "Spend share",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 294,
+      "kind": "jsx-text",
+      "text": "Tokens",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 295,
+      "kind": "jsx-text",
+      "text": "Token share",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 296,
+      "kind": "jsx-text",
+      "text": "Calls",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 297,
+      "kind": "jsx-text",
+      "text": "Cost / call",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 365,
+      "kind": "jsx-text",
+      "text": "No",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 365,
+      "kind": "jsx-text",
+      "text": "cost allocation is available for this window.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 386,
+      "kind": "attribute:aria-label",
+      "text": "Cost allocation",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 399,
+      "kind": "attribute:title",
+      "text": "Models driving spend",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 400,
+      "kind": "attribute:description",
+      "text": "Provider and model identities stay separate while cost and token shares remain comparable.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 405,
+      "kind": "attribute:title",
+      "text": "Execution purposes driving spend",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostAllocationPanels.tsx",
+      "line": 406,
+      "kind": "attribute:description",
+      "text": "Human-readable workflow intent with cost, volume, call count, and per-call context.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 38,
+      "kind": "metadata:label",
+      "text": "Spend",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 39,
+      "kind": "metadata:label",
+      "text": "Tokens",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 40,
+      "kind": "metadata:label",
+      "text": "Calls",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 41,
+      "kind": "metadata:label",
+      "text": "Cost / call",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 42,
+      "kind": "metadata:label",
+      "text": "Recent",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 43,
+      "kind": "metadata:label",
+      "text": "Name",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 193,
+      "kind": "jsx-text",
+      "text": "Filtered spend",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 195,
+      "kind": "jsx-text",
+      "text": "matching",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 198,
+      "kind": "jsx-text",
+      "text": "Average /",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 200,
+      "kind": "jsx-text",
+      "text": "All",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 200,
+      "kind": "jsx-text",
+      "text": "active",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 203,
+      "kind": "jsx-text",
+      "text": "Pricing provenance",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 228,
+      "kind": "jsx-text",
+      "text": "Spend",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 229,
+      "kind": "jsx-text",
+      "text": "Spend share",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 230,
+      "kind": "jsx-text",
+      "text": "Tokens",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 231,
+      "kind": "jsx-text",
+      "text": "Calls",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 232,
+      "kind": "jsx-text",
+      "text": "Cost / call",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 233,
+      "kind": "jsx-text",
+      "text": "Last activity",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 238,
+      "kind": "jsx-text",
+      "text": "Token mix",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 239,
+      "kind": "jsx-text",
+      "text": "total",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 249,
+      "kind": "jsx-text",
+      "text": "Input",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 250,
+      "kind": "jsx-text",
+      "text": "Cached",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 251,
+      "kind": "jsx-text",
+      "text": "Output",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 252,
+      "kind": "jsx-text",
+      "text": "Reasoning",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 329,
+      "kind": "jsx-text",
+      "text": "Cost ledgers",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 330,
+      "kind": "jsx-text",
+      "text": "Task and sprint spend",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 331,
+      "kind": "jsx-text",
+      "text": "Find expensive work and audit pricing coverage without splitting conceptual sprint reruns.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 337,
+      "kind": "attribute:aria-label",
+      "text": "Cost ledgers",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 369,
+      "kind": "jsx-text",
+      "text": "Search",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 381,
+      "kind": "attribute:aria-label",
+      "text": "Clear cost ledger search",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 407,
+      "kind": "jsx-text",
+      "text": "Showing",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 407,
+      "kind": "jsx-text",
+      "text": "of",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 407,
+      "kind": "jsx-text",
+      "text": "rows. More rows load as you scroll.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 412,
+      "kind": "jsx-text",
+      "text": "No",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 412,
+      "kind": "jsx-text",
+      "text": "have cost telemetry in this window.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 415,
+      "kind": "jsx-text",
+      "text": "No",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 415,
+      "kind": "jsx-text",
+      "text": "match “",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostEntityLedgers.tsx",
+      "line": 416,
+      "kind": "jsx-text",
+      "text": "Clear search",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 218,
+      "kind": "jsx-text",
+      "text": "Time series",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 219,
+      "kind": "jsx-text",
+      "text": "Spend over time",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 223,
+      "kind": "attribute:aria-label",
+      "text": "Chart marker key",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 224,
+      "kind": "jsx-text",
+      "text": "Peak",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 225,
+      "kind": "jsx-text",
+      "text": "Selected",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 232,
+      "kind": "jsx-text",
+      "text": "No usage in this window",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 233,
+      "kind": "jsx-text",
+      "text": "Cost averages and a spend trend will appear after a provider invocation is recorded.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 237,
+      "kind": "jsx-text",
+      "text": "No time buckets available",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 238,
+      "kind": "jsx-text",
+      "text": "The headline usage is preserved, but there is not enough bucket data to draw a trend.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 290,
+      "kind": "attribute:aria-label",
+      "text": "Spend buckets",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 330,
+      "kind": "jsx-text",
+      "text": "Focused bucket",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 334,
+      "kind": "jsx-text",
+      "text": "Exact spend",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 335,
+      "kind": "jsx-text",
+      "text": "Calls",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 336,
+      "kind": "jsx-text",
+      "text": "Tokens",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 337,
+      "kind": "jsx-text",
+      "text": "Coverage",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 345,
+      "kind": "jsx-text",
+      "text": "Spend over time data",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 347,
+      "kind": "jsx-text",
+      "text": "Bucket",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 347,
+      "kind": "jsx-text",
+      "text": "Exact spend",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 347,
+      "kind": "jsx-text",
+      "text": "Pricing coverage",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 347,
+      "kind": "jsx-text",
+      "text": "Calls",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 347,
+      "kind": "jsx-text",
+      "text": "Tokens",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 403,
+      "kind": "attribute:aria-label",
+      "text": "Cost executive overview",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 406,
+      "kind": "jsx-text",
+      "text": "Cost intelligence",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 407,
+      "kind": "jsx-text",
+      "text": "Executive overview",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 408,
+      "kind": "jsx-text",
+      "text": "Spend, normalized rates, and pricing confidence from the shared Cost analytics model.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostOverviewPanel.tsx",
+      "line": 424,
+      "kind": "jsx-text",
+      "text": "Pricing coverage",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/cost/CostStudio.tsx",
+      "line": 17,
+      "kind": "attribute:aria-label",
+      "text": "Cost analysis studio",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/stats-ui-primitives.tsx",
+      "line": 674,
+      "kind": "attribute:label",
+      "text": "In",
+      "rationale": "This is a locale-neutral telemetry abbreviation or unit label whose technical meaning must remain unchanged."
+    },
+    {
+      "path": "dashboard/src/v2/pages/stats/components/stats-ui-primitives.tsx",
+      "line": 675,
+      "kind": "attribute:label",
+      "text": "Out",
+      "rationale": "This is a locale-neutral telemetry abbreviation or unit label whose technical meaning must remain unchanged."
+    },
+    {
+      "path": "dashboard/src/v2/TasksPage.tsx",
+      "line": 36,
+      "kind": "jsx-text",
+      "text": "Task board update failed",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/TasksPage.tsx",
+      "line": 43,
+      "kind": "jsx-text",
+      "text": "Updating task board filters. Current cards remain visible until results settle.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/TasksPage.tsx",
+      "line": 95,
+      "kind": "jsx-text",
+      "text": "Plan Sprint",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/TasksPage.tsx",
+      "line": 270,
+      "kind": "attribute:aria-label",
+      "text": "Task Board",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/TasksPage.tsx",
+      "line": 277,
+      "kind": "attribute:title",
+      "text": "Tasks",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/TasksPage.tsx",
+      "line": 287,
+      "kind": "jsx-text",
+      "text": "Filtered to show",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/TasksPage.tsx",
+      "line": 287,
+      "kind": "jsx-text",
+      "text": "status and",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/TasksPage.tsx",
+      "line": 287,
+      "kind": "jsx-text",
+      "text": "priority.",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/TasksPage.tsx",
+      "line": 326,
+      "kind": "jsx-text",
+      "text": "Task workspace",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
+    },
+    {
+      "path": "dashboard/src/v2/TasksPage.tsx",
+      "line": 332,
+      "kind": "jsx-text",
+      "text": "Task board",
+      "rationale": "This is pre-existing English feature copy retained while that merged feature awaits its dedicated localization pass."
     }
   ]
 }
