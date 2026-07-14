@@ -138,6 +138,50 @@ describe("local-merge helpers", () => {
     expect(runner.mock.calls.filter(([, args]) => args[0] === "worktree" && args[1] === "remove")).toHaveLength(1);
   });
 
+  it("retries a temporary merge when the target ref advances during publication", async () => {
+    const featureBase = (await git(repo, "rev-parse", "feature")).stdout.trim();
+    await git(repo, "checkout", "-b", "worker", "feature");
+    await commitFile(repo, "worker.txt", "worker\n", "feat: worker output");
+    await git(repo, "checkout", "-b", "concurrent-fix", "feature");
+    await commitFile(repo, "ci-fix.txt", "ci fix\n", "fix: concurrent CI repair");
+    const concurrentTip = (await git(repo, "rev-parse", "HEAD")).stdout.trim();
+    await git(repo, "checkout", "main");
+
+    let injectedConcurrentUpdate = false;
+    const runner = vi.fn(async (command: string, args: string[], cwd: string) => {
+      if (
+        command === "git"
+        && args[0] === "update-ref"
+        && args[1] === "refs/heads/feature"
+        && args.length === 4
+        && !injectedConcurrentUpdate
+      ) {
+        injectedConcurrentUpdate = true;
+        await runCommandStrict(
+          "git",
+          ["update-ref", "refs/heads/feature", concurrentTip, featureBase],
+          repo,
+        );
+      }
+      return await runCommandStrict(command, args, cwd);
+    });
+
+    const result = await mergeBranchLocallyInTemporaryWorktree({
+      repoPath: repo,
+      targetBranch: "feature",
+      sourceBranch: "worker",
+      commitMessage: "Merge branch 'worker' into feature",
+      runner,
+    });
+
+    expect(result).toMatchObject({ ok: true, conflict: false });
+    expect(runner.mock.calls.filter(([, args]) => args[0] === "update-ref" && args[1] === "refs/heads/feature"))
+      .toHaveLength(2);
+    expect(await git(repo, "merge-base", "--is-ancestor", concurrentTip, "feature")).toMatchObject({ code: 0 });
+    expect(await git(repo, "show", "feature:ci-fix.txt")).toMatchObject({ stdout: "ci fix" });
+    expect(await git(repo, "show", "feature:worker.txt")).toMatchObject({ stdout: "worker" });
+  });
+
   it("runs temporary local merges through containerized git when enabled", async () => {
     const previousContainerizedGit = process.env.CODE_UX_CONTAINERIZED_GIT;
     const previousGitContainerMode = process.env.CODE_UX_GIT_CONTAINER_MODE;

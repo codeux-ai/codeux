@@ -63,6 +63,22 @@ const buildCommitIdentityEnv = (
 };
 
 const GIT_PUSH_RETRY_ATTEMPTS = 3;
+const GIT_REF_UPDATE_RETRY_ATTEMPTS = 8;
+const NULL_GIT_OBJECT_ID = "0".repeat(40);
+
+class ConcurrentGitRefUpdateError extends Error {
+  constructor(
+    readonly ref: string,
+    readonly expectedSha: string | null,
+    readonly actualSha: string | null,
+  ) {
+    super(
+      `Git ref '${ref}' changed while publishing a workspace patch `
+      + `(expected ${expectedSha ?? "missing"}, found ${actualSha ?? "missing"}).`,
+    );
+    this.name = "ConcurrentGitRefUpdateError";
+  }
+}
 
 const resolveGitAdministrativeDirectory = async (repoPath: string): Promise<string | null> => {
   const dotGitPath = path.join(repoPath, ".git");
@@ -216,7 +232,6 @@ export class WorkspaceArtifactService {
   }): Promise<AppliedWorkspacePatchResult> {
     const hasPatch = args.patchText.trim().length > 0;
     const parentRefs = args.parentRefs ?? [];
-    const materializationBaseRef = await this.resolveMaterializationBaseRef(args);
 
     // Determine whether a merge commit must be recorded even without a tree change:
     // when at least one parent ref is not yet contained in the base branch.
@@ -250,19 +265,42 @@ export class WorkspaceArtifactService {
         GIT_INDEX_FILE: indexPath,
       };
 
-      const materialized = await this.materializePatchCommit({
-        repoPath: args.repoPath,
-        patchBaseRef: args.baseRef,
-        commitBaseRef: materializationBaseRef,
-        workerBranch: args.workerBranch,
-        patchPath,
-        commitMessage: args.commitMessage,
-        parentRefs,
-        indexEnv,
-        gitIdentity: args.gitIdentity,
-        hasPatch,
-        forceCommitForMergeParent: mergeParentsNeedRecording,
-      });
+      let materialized: {
+        commitSha?: string;
+        stats?: AppliedWorkspacePatchResult["stats"];
+      } | null = null;
+
+      for (let attempt = 1; attempt <= GIT_REF_UPDATE_RETRY_ATTEMPTS; attempt++) {
+        const materializationBase = await this.resolveMaterializationBase(args);
+        try {
+          materialized = await this.materializePatchCommit({
+            repoPath: args.repoPath,
+            patchBaseRef: args.baseRef,
+            commitBaseRef: materializationBase.commitBaseRef,
+            expectedWorkerTip: materializationBase.expectedWorkerTip,
+            workerBranch: args.workerBranch,
+            patchPath,
+            commitMessage: args.commitMessage,
+            parentRefs,
+            indexEnv,
+            gitIdentity: args.gitIdentity,
+            hasPatch,
+            forceCommitForMergeParent: mergeParentsNeedRecording,
+          });
+          break;
+        } catch (error) {
+          if (!(error instanceof ConcurrentGitRefUpdateError) || attempt === GIT_REF_UPDATE_RETRY_ATTEMPTS) {
+            throw error;
+          }
+          // Another task merge or repair advanced the same branch. Rebuild the patch commit on
+          // that new tip instead of overwriting it; Git's compare-and-swap ref update keeps both
+          // writers parallel without a process-wide branch lock.
+        }
+      }
+
+      if (!materialized) {
+        throw new Error(`Failed to materialize workspace patch for '${args.workerBranch}'.`);
+      }
 
       if (!materialized.commitSha) {
         return { hasChanges: false };
@@ -289,6 +327,8 @@ export class WorkspaceArtifactService {
     patchBaseRef: string;
     /** Latest worker-branch tip that the final commit must descend from. */
     commitBaseRef: string;
+    /** Worker ref value used to choose commitBaseRef, or null when the ref did not exist. */
+    expectedWorkerTip: string | null;
     workerBranch: string;
     patchPath: string;
     commitMessage: string;
@@ -370,7 +410,27 @@ export class WorkspaceArtifactService {
         : "not-current";
       const syncCheckedOut = currentBranch === args.workerBranch && status.length === 0;
 
-      await git(["update-ref", `refs/heads/${args.workerBranch}`, commit], normalEnv);
+      const workerRef = `refs/heads/${args.workerBranch}`;
+      try {
+        await git([
+          "update-ref",
+          workerRef,
+          commit,
+          args.expectedWorkerTip ?? NULL_GIT_OBJECT_ID,
+        ], normalEnv);
+      } catch (error) {
+        const actualWorkerTip = (await git(["rev-parse", "--verify", workerRef], normalEnv).catch(() => "")).trim() || null;
+        if (actualWorkerTip !== args.expectedWorkerTip) {
+          if (syncCheckedOut && actualWorkerTip) {
+            // update-ref moves a checked-out branch without refreshing its index/worktree. Restore
+            // the clean checkout before retrying so the final successful publication can keep it
+            // clean as well; user-dirty checkouts never enter this path.
+            await git(["reset", "--hard", actualWorkerTip], normalEnv).catch(() => undefined);
+          }
+          throw new ConcurrentGitRefUpdateError(workerRef, args.expectedWorkerTip, actualWorkerTip);
+        }
+        throw error;
+      }
       if (syncCheckedOut) {
         await git(["reset", "--hard", commit], normalEnv);
       }
@@ -385,28 +445,30 @@ export class WorkspaceArtifactService {
     }
   }
 
-  private async resolveMaterializationBaseRef(args: {
+  private async resolveMaterializationBase(args: {
     repoPath: string;
     baseRef: string;
     workerBranch: string;
     githubMode?: "REMOTE" | "LOCAL";
     gitAuth?: GitHttpAuthOptions;
-  }): Promise<string> {
+  }): Promise<{ commitBaseRef: string; expectedWorkerTip: string | null }> {
+    const localRef = `refs/heads/${args.workerBranch}`;
+    let expectedWorkerTip: string | null = null;
+    try {
+      expectedWorkerTip = (await runCommandStrict(
+        "git",
+        ["rev-parse", "--verify", localRef],
+        args.repoPath,
+      )).stdout.trim() || null;
+    } catch {
+      // A fresh worker branch may not exist in the host repository yet.
+    }
+
     if (args.githubMode === "LOCAL") {
-      const localRef = `refs/heads/${args.workerBranch}`;
-      try {
-        const currentTip = (await runCommandStrict(
-          "git",
-          ["rev-parse", "--verify", localRef],
-          args.repoPath,
-        )).stdout.trim();
-        if (currentTip && await this.isAncestor(args.repoPath, args.baseRef, currentTip)) {
-          return currentTip;
-        }
-      } catch {
-        // A fresh worker branch may not exist in the host repository yet.
+      if (expectedWorkerTip && await this.isAncestor(args.repoPath, args.baseRef, expectedWorkerTip)) {
+        return { commitBaseRef: expectedWorkerTip, expectedWorkerTip };
       }
-      return args.baseRef;
+      return { commitBaseRef: args.baseRef, expectedWorkerTip };
     }
 
     const remoteRef = `refs/remotes/origin/${args.workerBranch}`;
@@ -418,15 +480,19 @@ export class WorkspaceArtifactService {
         args.repoPath,
         pushEnv ?? process.env,
       );
-      await runCommandStrict("git", ["rev-parse", "--verify", remoteRef], args.repoPath);
+      const remoteTip = (await runCommandStrict(
+        "git",
+        ["rev-parse", "--verify", remoteRef],
+        args.repoPath,
+      )).stdout.trim();
       if (await this.isAncestor(args.repoPath, args.baseRef, remoteRef)) {
-        return remoteRef;
+        return { commitBaseRef: remoteTip, expectedWorkerTip };
       }
     } catch {
       // No remote worker branch exists yet, or it is unrelated to this workspace base.
       // In either case keep the normal base-ref materialization path.
     }
-    return args.baseRef;
+    return { commitBaseRef: args.baseRef, expectedWorkerTip };
   }
 
   private async isAncestor(repoPath: string, ancestorRef: string, descendantRef: string): Promise<boolean> {

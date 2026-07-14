@@ -259,6 +259,97 @@ describe("WorkspaceArtifactService", () => {
       .toBe("ci fix\n");
   });
 
+  it("re-materializes a local patch when the feature ref advances during publication", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-artifact-ref-race-"));
+    cleanupPaths.push(tempRoot);
+
+    const hostRepoPath = path.join(tempRoot, "host-repo");
+    const workspaceRepoPath = path.join(tempRoot, "workspace-repo");
+
+    await runCommandStrict("git", ["init", hostRepoPath], tempRoot);
+    await runGit(hostRepoPath, ["config", "user.name", "Code UX Test"]);
+    await runGit(hostRepoPath, ["config", "user.email", "code-ux@example.com"]);
+    await runGit(hostRepoPath, ["checkout", "-b", "feature/test"]);
+    await fs.writeFile(path.join(hostRepoPath, "base.txt"), "base\n", "utf8");
+    await runGit(hostRepoPath, ["add", "base.txt"]);
+    await runGit(hostRepoPath, ["commit", "-m", "base"]);
+    const baseRef = (await runGit(hostRepoPath, ["rev-parse", "HEAD"])).trim();
+
+    await runCommandStrict("git", ["clone", hostRepoPath, workspaceRepoPath], tempRoot);
+    await runGit(workspaceRepoPath, ["checkout", "feature/test"]);
+    await fs.writeFile(path.join(workspaceRepoPath, "ci-fix.txt"), "ci fix\n", "utf8");
+
+    await runGit(hostRepoPath, ["checkout", "-b", "task/root", baseRef]);
+    await fs.writeFile(path.join(hostRepoPath, "root-output.txt"), "root output\n", "utf8");
+    await runGit(hostRepoPath, ["add", "root-output.txt"]);
+    await runGit(hostRepoPath, ["commit", "-m", "root task"]);
+    await runGit(hostRepoPath, ["checkout", "feature/test"]);
+    await runGit(hostRepoPath, ["merge", "--no-ff", "-m", "merge root task", "task/root"]);
+    const concurrentMergeTip = (await runGit(hostRepoPath, ["rev-parse", "HEAD"])).trim();
+    await runGit(hostRepoPath, ["reset", "--hard", baseRef]);
+
+    const workspaceManager = {
+      runWorkspaceCommand: async (
+        _worktreePath: string,
+        command: string,
+        args: string[],
+        options: WorkspaceCommandOptions = {},
+      ) => await runCommandStrict(command, args, workspaceRepoPath, options.env ?? process.env, {
+        trimOutput: options.trimOutput,
+        signal: options.signal,
+        stdinFile: options.stdinFile,
+      }),
+    } as IWorkspaceManager;
+
+    const service = new WorkspaceArtifactService(workspaceManager);
+    const patchText = await service.exportBinaryPatch("workspace", baseRef);
+    const actualRunCommandStrict = cliProcessRunner.runCommandStrict;
+    let injectedConcurrentMerge = false;
+    let publicationAttempts = 0;
+    vi.spyOn(cliProcessRunner, "runCommandStrict").mockImplementation(async (command, args, cwd, env, options) => {
+      if (
+        cwd === hostRepoPath
+        && command === "git"
+        && args[0] === "update-ref"
+        && args[1] === "refs/heads/feature/test"
+        && args.length === 4
+      ) {
+        publicationAttempts++;
+        if (!injectedConcurrentMerge) {
+          injectedConcurrentMerge = true;
+          await actualRunCommandStrict(
+            "git",
+            ["update-ref", "refs/heads/feature/test", concurrentMergeTip, baseRef],
+            hostRepoPath,
+          );
+        }
+      }
+      return await actualRunCommandStrict(command, args, cwd, env, options);
+    });
+
+    const result = await service.applyPatchToBranch({
+      repoPath: hostRepoPath,
+      baseRef,
+      workerBranch: "feature/test",
+      patchText,
+      commitMessage: "fix local CI",
+      githubMode: "LOCAL",
+    });
+
+    expect(result.hasChanges).toBe(true);
+    expect(publicationAttempts).toBe(2);
+    expect((await runGit(hostRepoPath, ["show", "-s", "--format=%P", result.commitSha!])).trim())
+      .toBe(concurrentMergeTip);
+    expect(await runGit(hostRepoPath, ["show", "refs/heads/feature/test:root-output.txt"], { trimOutput: false }))
+      .toBe("root output\n");
+    expect(await runGit(hostRepoPath, ["show", "refs/heads/feature/test:ci-fix.txt"], { trimOutput: false }))
+      .toBe("ci fix\n");
+    expect((await runGit(hostRepoPath, ["branch", "--show-current"])).trim()).toBe("feature/test");
+    expect(await runGit(hostRepoPath, ["status", "--porcelain"], { trimOutput: false })).toBe("");
+    expect(await fs.readFile(path.join(hostRepoPath, "root-output.txt"), "utf8")).toBe("root output\n");
+    expect(await fs.readFile(path.join(hostRepoPath, "ci-fix.txt"), "utf8")).toBe("ci fix\n");
+  });
+
   it("keeps a checked-out worker branch clean after materializing a patch", async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-artifact-service-"));
     cleanupPaths.push(tempRoot);
@@ -384,7 +475,10 @@ describe("WorkspaceArtifactService", () => {
       expect.objectContaining({ command: "git", args: ["apply", "--cached", "--binary", expect.stringContaining("workspace.patch")] }),
       expect.objectContaining({ command: "git", args: ["write-tree"] }),
       expect.objectContaining({ command: "git", args: expect.arrayContaining(["commit-tree"]) }),
-      expect.objectContaining({ command: "git", args: ["update-ref", "refs/heads/worker/test", expect.any(String)] }),
+      expect.objectContaining({
+        command: "git",
+        args: ["update-ref", "refs/heads/worker/test", expect.any(String), "0".repeat(40)],
+      }),
     ]));
     expect(await runGit(hostRepoPath, ["show", "refs/heads/worker/test:file.txt"], { trimOutput: false }))
       .toBe("base\nworker change\n");
