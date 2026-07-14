@@ -857,6 +857,74 @@ jobs:
     expect(result.reportText).toContain("Merged locally");
   });
 
+  it("restores merged metadata when restart recovery finds the worker branch already integrated", async () => {
+    context.githubMode = "LOCAL";
+    context.gitStatus.openPullRequests = [];
+    context.gitStatus.mergedPullRequests = [];
+    subtasks[0].status = "CODING_COMPLETED";
+    subtasks[0].worker_branch = "feat/T1";
+    subtasks[0].pr_url = undefined;
+    subtasks[0].is_merged = false;
+    context.executionRepository = {
+      getLatestTaskRun: vi.fn().mockReturnValue({
+        id: "run-1",
+        provider: "mockup-cli",
+        mode: "docker_cli",
+        state: "COMPLETED",
+        workerBranch: "feat/T1",
+      }),
+      listTaskRunEvents: vi.fn().mockReturnValue([
+        { eventType: "cli_provider_completed" },
+        { eventType: "cli_git_pushed", payload: { pushedBranch: "feat/T1" } },
+      ]),
+      updateTaskRun: vi.fn(),
+      appendTaskRunEvent: vi.fn(),
+    } as any;
+    vi.mocked(runCommandStrict).mockImplementation((_cmd: string, args: string[]) => {
+      if (args[0] === "rev-parse") {
+        const ref = args[2] || "";
+        return Promise.resolve({
+          stdout: ref.includes("feat/T1")
+            ? "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            : "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          stderr: "",
+        } as any);
+      }
+      if (args[0] === "rev-list") {
+        return Promise.resolve({ stdout: "0", stderr: "" } as any);
+      }
+      return Promise.resolve({ stdout: "", stderr: "" } as any);
+    });
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0]).toMatchObject({
+      status: "COMPLETED",
+      is_merged: true,
+      merge_indicator: "MERGED",
+      worker_branch: undefined,
+    });
+    expect(context.persistMergedTask).toHaveBeenCalledWith(expect.objectContaining({
+      id: "T1",
+      is_merged: true,
+      merge_indicator: "MERGED",
+    }));
+    expect(context.executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "ci_gate_status",
+      "system",
+      expect.objectContaining({
+        state: "merged_branch",
+        workerBranch: "feat/T1",
+        githubMode: "LOCAL",
+      }),
+      expect.objectContaining({
+        sourceEventKey: "ci-gate:merged_branch:feature/sprint1:feat/T1",
+      }),
+    );
+    expect(result.reportText).toContain("Recovered local merge");
+  });
+
   it("reuses one temporary worktree when multiple LOCAL worker branches are ready", async () => {
     context.githubMode = "LOCAL";
     subtasks = [
