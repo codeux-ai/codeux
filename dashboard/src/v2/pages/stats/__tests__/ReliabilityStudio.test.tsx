@@ -7,6 +7,7 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import { Bot, Code2, GitBranch, Zap } from "lucide-preact";
 import { ReliabilityStudio } from "../components/ReliabilityStudio.js";
 import { getProviderIcon } from "../components/stats-ui-primitives.js";
+import { StatsI18nProvider } from "../stats-i18n.js";
 
 expect.extend(matchers);
 
@@ -405,5 +406,24 @@ describe("ReliabilityStudio", () => {
     expect(getProviderIcon("opencode").icon).toBe(GitBranch);
     expect(getProviderIcon("antigravity").icon).toBe(Zap);
     expect(getProviderIcon("unknown-provider").icon).toBe(Bot);
+  });
+
+  it("renders German provider comparisons while preserving provider and source labels", () => {
+    render(
+      <StatsI18nProvider locale="de">
+        <ReliabilityStudio
+          stats={baseStats as any}
+          providerSegments={providerSegments}
+          sourceSegments={sourceSegments}
+        />
+      </StatsI18nProvider>,
+    );
+
+    expect(screen.getByText("Provider-Vertrauen und Fehlerrisiko")).toBeTruthy();
+    expect(screen.getAllByText("3 Anbieter").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Qwen Code").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("reported").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Gemeldet").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/1,23\s*\$/).length).toBeGreaterThan(0);
   });
 });

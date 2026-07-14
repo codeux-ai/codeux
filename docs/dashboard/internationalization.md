@@ -51,7 +51,7 @@ The root bundle translates its shell copy: the skip link, main landmark label, r
 
 Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged.
 
-Stats also formats presentation values with the active locale. This covers numbers, USD currency, percentages, dates, times, durations, and pluralized counts. Date and time presentation remains explicitly UTC because telemetry buckets and custom-range queries use UTC boundaries; localization changes notation, not bucket membership, precision, ordering, chart geometry, or cost calculations. Provider/model/purpose identifiers, project/sprint/task names, Git refs, invocation messages, provider errors, server-supplied telemetry labels, and API errors remain verbatim.
+Stats also formats presentation values with the active locale. This covers numbers, USD currency, percentages, dates, times, durations, and pluralized counts. Custom-range controls keep locale-neutral `YYYY-MM-DD` query values while their visible range summary and application announcement use locale-formatted UTC dates. Date and time presentation remains explicitly UTC because telemetry buckets and custom-range queries use UTC boundaries; localization changes notation, not bucket membership, precision, ordering, chart geometry, or cost calculations. Provider/model/purpose identifiers, project/sprint/task names, Git refs, invocation messages, provider errors, server-supplied telemetry labels, and API errors remain verbatim.
 
 ## Verification
 

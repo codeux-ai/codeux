@@ -589,7 +589,7 @@ export const ReliabilityStudio: FunctionComponent<{
           />
           <StudioMetricTile
             label={locale === "de" ? "Provider-Abdeckung" : "Provider Coverage"}
-            value={providerRows.length > 0 ? `${formatNumber(providerRows.length)} Provider` : locale === "de" ? "Keine Provider" : "No providers"}
+            value={providerRows.length > 0 ? `${formatNumber(providerRows.length)} ${locale === "de" ? "Anbieter" : "providers"}` : locale === "de" ? "Keine Anbieter" : "No providers"}
             detail={highestRiskProvider ? `${locale === "de" ? "Höchstes Risiko" : "Highest risk"}: ${highestRiskProvider.provider.label}` : locale === "de" ? "Keine Provider-Telemetrie eingegangen" : "No provider telemetry landed"}
             toneClass="text-[color:var(--stats-accent-cyan)]"
           />
@@ -680,7 +680,7 @@ export const ReliabilityStudio: FunctionComponent<{
             </div>
           </div>
           <div className={FLAT_BADGE_CLASS}>
-            {formatNumber(providerRows.length)} Provider
+            {formatNumber(providerRows.length)} {locale === "de" ? "Anbieter" : "Provider"}
           </div>
         </div>
         {providerRows.length === 0 ? (

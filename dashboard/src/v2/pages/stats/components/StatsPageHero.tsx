@@ -73,13 +73,33 @@ export function getRelativeTime(isoString: string, locale: DashboardLocale = "en
   return locale === "de" ? `vor ${day} Tag${day === 1 ? "" : "en"}` : `${day} day${day > 1 ? "s" : ""} ago`;
 }
 
-function formatWindowLabel(activeQuery: ProjectStatsQuery, allTime: string, start: string, end: string): string {
+function formatWindowBoundary(
+  value: string | null | undefined,
+  fallback: string,
+  formatDate: (value: Date, options?: Intl.DateTimeFormatOptions) => string,
+): string {
+  if (!value) {
+    return fallback;
+  }
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime())
+    ? value
+    : formatDate(date, { dateStyle: "medium", timeZone: "UTC" });
+}
+
+function formatWindowLabel(
+  activeQuery: ProjectStatsQuery,
+  allTime: string,
+  start: string,
+  end: string,
+  formatDate: (value: Date, options?: Intl.DateTimeFormatOptions) => string,
+): string {
   if (activeQuery.window !== "custom") {
     return activeQuery.window === "all" ? allTime : activeQuery.window;
   }
 
-  const from = activeQuery.from || start;
-  const to = activeQuery.to || end;
+  const from = formatWindowBoundary(activeQuery.from, start, formatDate);
+  const to = formatWindowBoundary(activeQuery.to, end, formatDate);
   return `${from} → ${to}`;
 }
 
@@ -123,7 +143,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
   visualMode,
   setVisualMode,
 }) => {
-  const { locale, text } = useStatsI18n();
+  const { locale, text, formatDate } = useStatsI18n();
   const [customRangeError, setCustomRangeError] = useState<string>("");
   const [customRangeStatus, setCustomRangeStatus] = useState<string>("");
   const [customRangeAttempted, setCustomRangeAttempted] = useState(activeQuery.window === "custom");
@@ -144,7 +164,13 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
   const canApplyCustomRange = isValidCustomRange(customFrom, customTo);
   const selectedProjectLabel = selectedProject?.name || text("noProjectSelected");
   const generatedLabel = stats?.generatedAt ? formatDateTime(stats.generatedAt, locale) : text("noSnapshot");
-  const rangeScopeLabel = stats?.range?.label || formatWindowLabel(activeQuery, text("allTime"), text("start"), text("end"));
+  const rangeScopeLabel = stats?.range?.label || formatWindowLabel(
+    activeQuery,
+    text("allTime"),
+    text("start"),
+    text("end"),
+    formatDate,
+  );
   const activeModeLabel = {
     trend: text("trend"), composition: text("composition"), models: text("models"),
     reliability: text("providers"), ledgers: text("ledgers"), system: text("system"),
@@ -177,7 +203,10 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
 
     setCustomRangeError("");
     setCustomRangeAttempted(true);
-    setCustomRangeStatus(text("customRangeApplied", { from: customFrom, to: customTo }));
+    setCustomRangeStatus(text("customRangeApplied", {
+      from: formatWindowBoundary(customFrom, text("start"), formatDate),
+      to: formatWindowBoundary(customTo, text("end"), formatDate),
+    }));
     applyCustomRange();
   };
 

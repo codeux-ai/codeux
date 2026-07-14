@@ -134,6 +134,7 @@ describe("SystemFilterBar", () => {
 
     expect(screen.getByRole("searchbox", { name: "Systemstatistiken durchsuchen" })).toBeTruthy();
     expect(screen.getByRole("group", { name: "Status Filter" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Anbieter Filter" })).toBeTruthy();
     expect(screen.getByRole("group", { name: "Fehlerkategorie Filter" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Laufend" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "cli_task_coding" })).toBeTruthy();

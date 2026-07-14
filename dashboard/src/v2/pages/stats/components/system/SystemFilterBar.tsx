@@ -163,7 +163,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
         ) : null}
 
         {availableProviders.length > 0 ? (
-          <FilterGroup label={locale === "de" ? "Provider" : "Providers"}>
+          <FilterGroup label={locale === "de" ? "Anbieter" : "Providers"}>
             {availableProviders.map((provider) => {
               const active = filters.provider.includes(provider);
               return (

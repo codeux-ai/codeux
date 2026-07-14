@@ -172,7 +172,7 @@ export const ModelCard: FunctionComponent<{
             <span className="text-sm font-semibold normal-case text-[color:var(--stats-value-color)]">
               {formatTokens(model.usage.totalTokens, locale)}
             </span>
-            <span className="text-[color:var(--stats-label-color)]">tokens</span>
+            <span className="text-[color:var(--stats-label-color)]">{locale === "de" ? "Token" : "tokens"}</span>
           </div>
           <div className={`inline-flex items-center gap-2 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${CHIP_CLASS}`}>
             <DollarSign className="h-3.5 w-3.5 text-[color:var(--stats-positive-text)]" strokeWidth={2.2} />

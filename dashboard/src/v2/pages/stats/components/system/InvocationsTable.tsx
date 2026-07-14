@@ -110,6 +110,13 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   error,
   }) => {
   const { locale, formatNumber } = useStatsI18n();
+  const sortLabels: Record<SystemSortKey, string> = {
+    startedAt: locale === "de" ? "Zeit" : "time",
+    inputTokens: locale === "de" ? "Eingabe-Tokens" : "input tokens",
+    outputTokens: locale === "de" ? "Ausgabe-Tokens" : "output tokens",
+    totalTokens: locale === "de" ? "Gesamt-Tokens" : "total tokens",
+    durationMs: locale === "de" ? "durchschnittlicher Dauer" : "average duration",
+  };
   const expandedInvocation = expandedId === null
     ? null
     : invocations.find((invocation) => invocation.id === expandedId) ?? null;
@@ -269,7 +276,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <button
                 type="button"
                 onClick={() => handleSort("startedAt")}
-                aria-label={getSortButtonLabel("time", "startedAt")}
+                aria-label={getSortButtonLabel(sortLabels.startedAt, "startedAt")}
                 className={`flex items-center ${TAB_IDLE_CLASS}`}
               >
                 {locale === "de" ? "Zeit" : "Time"} {renderSortIcon("startedAt")}
@@ -282,20 +289,20 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <button
                 type="button"
                 onClick={() => handleSort("inputTokens")}
-                aria-label={getSortButtonLabel("input tokens", "inputTokens")}
+                aria-label={getSortButtonLabel(sortLabels.inputTokens, "inputTokens")}
                 className={`flex items-center ${TAB_IDLE_CLASS}`}
               >
-                In {renderSortIcon("inputTokens")}
+                {locale === "de" ? "Eingabe" : "In"} {renderSortIcon("inputTokens")}
               </button>
             </th>
             <th id="invocations-output" scope="col" aria-sort={getAriaSort("outputTokens")} className="pb-2">
               <button
                 type="button"
                 onClick={() => handleSort("outputTokens")}
-                aria-label={getSortButtonLabel("output tokens", "outputTokens")}
+                aria-label={getSortButtonLabel(sortLabels.outputTokens, "outputTokens")}
                 className={`flex items-center ${TAB_IDLE_CLASS}`}
               >
-                Out {renderSortIcon("outputTokens")}
+                {locale === "de" ? "Ausgabe" : "Out"} {renderSortIcon("outputTokens")}
               </button>
             </th>
             <th id="invocations-cached" scope="col" className="pb-2">{locale === "de" ? "Im Cache" : "Cached"}</th>
@@ -303,7 +310,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <button
                 type="button"
                 onClick={() => handleSort("totalTokens")}
-                aria-label={getSortButtonLabel("total tokens", "totalTokens")}
+                aria-label={getSortButtonLabel(sortLabels.totalTokens, "totalTokens")}
                 className={`flex items-center ${TAB_IDLE_CLASS}`}
               >
                 {locale === "de" ? "Gesamt" : "Total"} {renderSortIcon("totalTokens")}
@@ -313,7 +320,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <button
                 type="button"
                 onClick={() => handleSort("durationMs")}
-                aria-label={getSortButtonLabel("average duration", "durationMs")}
+                aria-label={getSortButtonLabel(sortLabels.durationMs, "durationMs")}
                 className={`flex items-center ${TAB_IDLE_CLASS}`}
               >
                 {locale === "de" ? "Durchschn. Dauer" : "Avg Duration"} {renderSortIcon("durationMs")}
@@ -377,11 +384,11 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                     </div>
                   </td>
                   <td headers="invocations-input" className={cellClass}>
-                    <div className={mobileLabelClass}>In</div>
+                    <div className={mobileLabelClass}>{locale === "de" ? "Eingabe" : "In"}</div>
                     <div className="text-[11px] text-[color:var(--stats-detail-color)]">{formatTokens(invocation.inputTokens ?? 0, locale)}</div>
                   </td>
                   <td headers="invocations-output" className={cellClass}>
-                    <div className={mobileLabelClass}>Out</div>
+                    <div className={mobileLabelClass}>{locale === "de" ? "Ausgabe" : "Out"}</div>
                     <div className="text-[11px] text-[color:var(--stats-detail-color)]">{formatTokens(invocation.outputTokens ?? 0, locale)}</div>
                   </td>
                   <td headers="invocations-cached" className={cellClass}>

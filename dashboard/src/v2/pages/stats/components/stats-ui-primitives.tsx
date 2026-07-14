@@ -141,7 +141,7 @@ export const RangeToggle: FunctionComponent<{
   onCustomToChange,
   onApplyCustom,
 }) => {
-  const { locale } = useStatsI18n();
+  const { text } = useStatsI18n();
   return (
   <div className="flex flex-col gap-4">
     <div className={`inline-flex flex-wrap gap-1 p-1 ${CHIP_CLASS}`}>
@@ -157,7 +157,7 @@ export const RangeToggle: FunctionComponent<{
               : CONTROL_IDLE_CLASS
           }`}
         >
-          {value === "all" ? (locale === "de" ? "Gesamte Zeit" : "All time") : value}
+          {value === "all" ? text("allTime") : value}
         </button>
       ))}
       <button
@@ -170,18 +170,20 @@ export const RangeToggle: FunctionComponent<{
             : CONTROL_IDLE_CLASS
         }`}
       >
-        {locale === "de" ? "Benutzerdefiniert" : "Custom"}
+        {text("custom")}
       </button>
     </div>
     <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
       <input
         type="date"
+        aria-label={text("customStartDate")}
         value={customFrom}
         onInput={(event) => onCustomFromChange((event.currentTarget as HTMLInputElement).value)}
         className={INPUT_CLASS}
       />
       <input
         type="date"
+        aria-label={text("customEndDate")}
         value={customTo}
         onInput={(event) => onCustomToChange((event.currentTarget as HTMLInputElement).value)}
         className={INPUT_CLASS}
@@ -191,7 +193,7 @@ export const RangeToggle: FunctionComponent<{
         onClick={onApplyCustom}
         className={`inline-flex h-11 items-center justify-center rounded-[var(--stats-control-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-control-active)] px-4 text-[11px] font-bold uppercase tracking-[0.12em] text-[color:var(--stats-control-text-active)] transition-[background-color,border-color,color] duration-150 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-control-active-strong)] motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`}
       >
-        {locale === "de" ? "Anwenden" : "Apply"}
+        {text("applyRange")}
       </button>
     </div>
   </div>
@@ -205,16 +207,16 @@ export const ViewToggle: FunctionComponent<{
   className?: string;
   controlsId?: string;
 }> = ({ value, onChange, ariaLabel = "Analytics modes", className = "", controlsId }) => {
-  const { locale } = useStatsI18n();
+  const { text } = useStatsI18n();
   const tokens = useInteractionTokens();
   const buttonRefs = useRef<Partial<Record<StatsVisualMode, HTMLButtonElement | null>>>({});
   const modes: Array<{ id: StatsVisualMode; label: string; accessibleLabel: string; icon: LucideIcon }> = [
-    { id: "trend", label: "Trend", accessibleLabel: "Trend", icon: BarChart3 },
-    { id: "composition", label: locale === "de" ? "Zusammensetzung" : "Composition", accessibleLabel: locale === "de" ? "Zusammensetzung" : "Composition", icon: PieChart },
-    { id: "models", label: locale === "de" ? "Modelle" : "Models", accessibleLabel: locale === "de" ? "Modelle" : "Models", icon: Cpu },
-    { id: "reliability", label: locale === "de" ? "Provider" : "Providers", accessibleLabel: locale === "de" ? "Provider" : "Providers", icon: ShieldCheck },
-    { id: "ledgers", label: "Ledgers", accessibleLabel: "Ledgers", icon: Layers3 },
-    { id: "system", label: "System", accessibleLabel: "System", icon: Terminal },
+    { id: "trend", label: text("trend"), accessibleLabel: text("trend"), icon: BarChart3 },
+    { id: "composition", label: text("composition"), accessibleLabel: text("composition"), icon: PieChart },
+    { id: "models", label: text("models"), accessibleLabel: text("models"), icon: Cpu },
+    { id: "reliability", label: text("providers"), accessibleLabel: text("providers"), icon: ShieldCheck },
+    { id: "ledgers", label: text("ledgers"), accessibleLabel: text("ledgers"), icon: Layers3 },
+    { id: "system", label: text("system"), accessibleLabel: text("system"), icon: Terminal },
   ];
   const focusMode = (index: number) => {
     const nextMode = modes[index];
@@ -256,7 +258,7 @@ export const ViewToggle: FunctionComponent<{
       className={`flex w-full max-w-full min-w-0 flex-wrap gap-1 p-1 ${CHIP_CLASS} ${className}`.trim()}
     >
       <span className="sr-only" aria-live="polite">
-        {locale === "de" ? "Ausgewählter Analysemodus" : "Selected analytics mode"}: {modes.find((mode) => mode.id === value)?.accessibleLabel ?? value}.
+        {text("selectedAnalyticsMode")}: {modes.find((mode) => mode.id === value)?.accessibleLabel ?? value}.
       </span>
       {modes.map((mode) => {
         const Icon = mode.icon;
@@ -329,17 +331,20 @@ export const TokenChip: FunctionComponent<{
   label: string;
   value: number | string;
   tone: string;
-}> = ({ icon: Icon, label, value, tone }) => (
-  <div className={`relative inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-[var(--stats-chip-radius)] border px-3 py-1.5 transition-[background-color,border-color,color] duration-150 motion-reduce:transition-none ${tone}`}>
-    <div className="relative flex min-w-0 items-center gap-1.5 opacity-85">
-      <Icon className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden="true" />
-      <span className="truncate text-[10px] font-bold uppercase tracking-[0.14em]">{label}</span>
+}> = ({ icon: Icon, label, value, tone }) => {
+  const { locale } = useStatsI18n();
+  return (
+    <div className={`relative inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-[var(--stats-chip-radius)] border px-3 py-1.5 transition-[background-color,border-color,color] duration-150 motion-reduce:transition-none ${tone}`}>
+      <div className="relative flex min-w-0 items-center gap-1.5 opacity-85">
+        <Icon className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden="true" />
+        <span className="truncate text-[10px] font-bold uppercase tracking-[0.14em]">{label}</span>
+      </div>
+      <div className="relative shrink-0 text-[11px] font-semibold text-[color:var(--stats-value-color)]">
+        {typeof value === "number" ? formatTokens(value, locale) : value}
+      </div>
     </div>
-    <div className="relative shrink-0 text-[11px] font-semibold text-[color:var(--stats-value-color)]">
-      {typeof value === "number" ? formatTokens(value) : value}
-    </div>
-  </div>
-);
+  );
+};
 
 export function getProviderIcon(provider: string | null | undefined): { icon: ComponentType<any>; bg: string; text: string } {
   const p = (provider || "").toLowerCase();
@@ -610,7 +615,7 @@ export const PurposeRibbon: FunctionComponent<{
   totalTokens?: number;
   dominantPurposeId?: string | null;
 }> = ({ purposes, totalTokens = 0, dominantPurposeId = null }) => {
-  const { locale, formatNumber } = useStatsI18n();
+  const { locale, text, formatNumber } = useStatsI18n();
   const rankedPurposes = [...purposes].sort((left, right) => {
     const delta = right.usage.totalTokens - left.usage.totalTokens;
     return delta !== 0 ? delta : left.label.localeCompare(right.label);
@@ -669,8 +674,8 @@ export const PurposeRibbon: FunctionComponent<{
                 ) : null}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <TokenChip icon={ArrowDownRight} label="In" value={purpose.usage.inputTokens} tone={STATUS_TONE_CLASS.neutral} />
-                <TokenChip icon={ArrowUpRight} label="Out" value={purpose.usage.outputTokens} tone={STATUS_TONE_CLASS.neutral} />
+                <TokenChip icon={ArrowDownRight} label={text("input")} value={purpose.usage.inputTokens} tone={STATUS_TONE_CLASS.neutral} />
+                <TokenChip icon={ArrowUpRight} label={text("output")} value={purpose.usage.outputTokens} tone={STATUS_TONE_CLASS.neutral} />
               </div>
             </div>
           </div>

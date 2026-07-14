@@ -422,7 +422,7 @@ describe("StatsPage Shell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 
     expect(applyCustomRange).toHaveBeenCalledTimes(1);
-    expect(screen.getAllByRole("status").some((status) => status.textContent === "Custom range applied: 2026-06-26 to 2026-07-03.")).toBe(true);
+    expect(screen.getAllByRole("status").some((status) => status.textContent === "Custom range applied: Jun 26, 2026 to Jul 3, 2026.")).toBe(true);
   });
 
   it("calls visual mode switches from the hero and renders active content for three modes", () => {
