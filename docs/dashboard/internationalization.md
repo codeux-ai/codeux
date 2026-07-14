@@ -47,10 +47,12 @@ Interpolation replaces only named `{variable}` tokens through literal string sub
 
 ## Translation scope
 
-The initial application bundle translates only root-owned shell copy: the skip link, main landmark label, route loading announcement, and hidden footer. Route catalogs should be imported with their route when those features are localized.
+The root bundle translates its shell copy: the skip link, main landmark label, route loading announcement, and hidden footer. The lazy-loaded Stats route owns `messages/stats.ts` and binds that catalog to the root locale through a feature-level provider, so opening Stats does not pull its catalog into the entry bundle. Its modes, filters, charts, metric cards, analysis studios, ledgers, system tables, state feedback, and accessibility descriptions are available in English and German.
 
 Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged.
 
+Stats also formats presentation values with the active locale. This covers numbers, USD currency, percentages, dates, times, durations, and pluralized counts. Date and time presentation remains explicitly UTC because telemetry buckets and custom-range queries use UTC boundaries; localization changes notation, not bucket membership, precision, ordering, chart geometry, or cost calculations. Provider/model/purpose identifiers, project/sprint/task names, Git refs, invocation messages, provider errors, server-supplied telemetry labels, and API errors remain verbatim.
+
 ## Verification
 
-Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization.
+Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization. Stats-specific suites cover German presets and custom-range validation, localized presentation helpers, chart and accessibility states, analysis comparisons, ledgers, system filters, failure/retry behavior, responsive layouts, and stable telemetry calculations.

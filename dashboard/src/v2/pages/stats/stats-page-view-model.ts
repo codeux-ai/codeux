@@ -5,6 +5,7 @@ import type {
   SegmentDefinition,
 } from "../../types.js";
 import { createStatsSegments, createSeries, EMPTY_USAGE } from "./stats-utils.js";
+import type { DashboardLocale } from "../../i18n/index.js";
 
 export interface StatsPageViewModel {
   usage: ExecutionUsageTotals;
@@ -18,24 +19,24 @@ export interface StatsPageViewModel {
   completionConfidence: string;
 }
 
-export function deriveStatsPageViewModel(stats: ProjectExecutionStatsSnapshot | null): StatsPageViewModel {
+export function deriveStatsPageViewModel(stats: ProjectExecutionStatsSnapshot | null, locale: DashboardLocale = "en"): StatsPageViewModel {
   const usage = stats?.usage || EMPTY_USAGE;
   const buckets = stats?.buckets || [];
   const tokenSeries = createSeries(buckets, (bucket) => bucket.usage.totalTokens);
   const activeTimeSeries = createSeries(buckets, (bucket) => bucket.usage.activeTimeMs / 1000);
   const wallTimeSeries = createSeries(buckets, (bucket) => bucket.usage.wallTimeMs / 1000);
   const planningUsage = stats?.purposes.find((purpose) => purpose.id === "planning") || null;
-  const { providerSegments, sourceSegments, tokenSegments } = createStatsSegments(stats, usage);
+  const { providerSegments, sourceSegments, tokenSegments } = createStatsSegments(stats, usage, locale);
 
-  let completionConfidence = "Unavailable";
+  let completionConfidence = locale === "de" ? "Nicht verfügbar" : "Unavailable";
   if (!stats) {
-    completionConfidence = "No telemetry";
+    completionConfidence = locale === "de" ? "Keine Telemetrie" : "No telemetry";
   } else if (usage.reportedInvocationCount > 0 && usage.estimatedInvocationCount === 0) {
-    completionConfidence = "Provider reported";
+    completionConfidence = locale === "de" ? "Vom Anbieter gemeldet" : "Provider reported";
   } else if (usage.reportedInvocationCount > 0 && usage.estimatedInvocationCount > 0) {
-    completionConfidence = "Mixed reported + fallback";
+    completionConfidence = locale === "de" ? "Gemeldet und Ersatzwerte gemischt" : "Mixed reported + fallback";
   } else if (usage.estimatedInvocationCount > 0) {
-    completionConfidence = "Estimated fallback";
+    completionConfidence = locale === "de" ? "Geschätzte Ersatzwerte" : "Estimated fallback";
   }
 
   return {

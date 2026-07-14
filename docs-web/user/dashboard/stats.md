@@ -2,6 +2,8 @@
 
 The **Stats** page (`/stats`) is the analytics surface for the active project. It shows project execution, usage, cost, Git, provider/model, ledger, and invocation telemetry in one flat Analysis Studio with responsive layouts and light/dark mode support.
 
+Stats follows the dashboard language setting in English or German. Interface labels and accessibility descriptions are translated, while numbers, US-dollar costs, percentages, dates, times, durations, and count wording use the active locale. Chart buckets and custom-range boundaries remain UTC, so changing language never changes the underlying timeframe or calculation. Project data, provider/model/purpose identifiers, Git refs, invocation messages, provider errors, server labels, and API errors are shown exactly as recorded.
+
 Stats metric cards, chips, filters, tables, and ledger rows use warm void surfaces, hairline borders, compact typography, subtle depth, and quiet selected states. Data colors are reserved for telemetry meaning such as chart series, status, source confidence, and token/churn breakdowns.
 
 Stats uses the same page width and spacing rhythm as the rest of the dashboard. An unboxed introduction shows the selected project, generated snapshot time, and sprint lens; one compact command rail holds the time-window and analysis-mode controls. On wide screens the window and view controls sit side by side, while narrow screens wrap them into a readable vertical flow.

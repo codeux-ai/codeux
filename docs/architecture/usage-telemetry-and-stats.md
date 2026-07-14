@@ -307,6 +307,8 @@ Billing labels in PR descriptions resolve usage against configured provider inst
 
 The dashboard now has a dedicated `/stats` page.
 
+The Stats presentation follows the dashboard's active English or German locale. Dashboard-authored labels and accessibility summaries are translated, and numbers, USD values, percentages, dates, times, durations, and plurals use locale-aware formatters. Telemetry aggregation and chart buckets remain UTC and retain their existing precision and sort semantics. Identifiers and externally supplied content—including provider/model/purpose ids, entity names, Git refs, invocation messages, provider errors, server labels, and API errors—are displayed verbatim.
+
 The page focuses on:
 
 - the hero keeps project, sprint, snapshot freshness, range resolution, and active-mode context visible, with wrap-first preset chips and explicit custom date inputs above the mode toggle
