@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import { GitBranch, Github } from "lucide-preact";
 import type { SystemSettings, ProjectSettings } from "../../../types.js";
 import { PillChoiceGroup } from "../settings/SettingsFormFields.js";
+import { useOnboardingMessages } from "../../i18n/messages/onboarding.js";
 
 export interface OnboardingGitStepProps {
   settings: SystemSettings | null;
@@ -22,6 +23,7 @@ export const OnboardingGitStep: FunctionComponent<OnboardingGitStepProps> = ({
   manageGithubPrWorkflow = true,
   onEasyGithubChange,
 }) => {
+  const { t } = useOnboardingMessages();
   if (!settings) return null;
 
   if (easy) {
@@ -31,9 +33,9 @@ export const OnboardingGitStep: FunctionComponent<OnboardingGitStepProps> = ({
           <div className="flex items-start gap-3">
             <Github className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
             <div>
-              <div className="text-base font-black text-slate-900 dark:text-white">GitHub workflow</div>
+              <div className="text-base font-black text-slate-900 dark:text-white">{t("gitHubWorkflow")}</div>
               <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                Keep setup short with only the GitHub workflow defaults needed for the first run.
+                {t("easyGitBody")}
               </div>
             </div>
           </div>
@@ -50,8 +52,8 @@ export const OnboardingGitStep: FunctionComponent<OnboardingGitStepProps> = ({
               })}
             />
             <span>
-              <span className="block text-sm font-bold text-slate-900 dark:text-white">Use GitHub for this workspace</span>
-              <span className="mt-1 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">Keep remote branch and pull request workflow enabled.</span>
+              <span className="block text-sm font-bold text-slate-900 dark:text-white">{t("useGithubWorkspace")}</span>
+              <span className="mt-1 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t("useGithubBody")}</span>
             </span>
           </label>
           <label className={`flex items-start gap-3 rounded-2xl border border-black/[0.06] bg-white/75 p-4 text-left dark:border-white/[0.06] dark:bg-white/[0.04] ${useGithub ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}>
@@ -66,8 +68,8 @@ export const OnboardingGitStep: FunctionComponent<OnboardingGitStepProps> = ({
               })}
             />
             <span>
-              <span className="block text-sm font-bold text-slate-900 dark:text-white">Let Code UX create and manage GitHub PR workflow defaults</span>
-              <span className="mt-1 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">Create PRs and use conservative PR workflow defaults.</span>
+              <span className="block text-sm font-bold text-slate-900 dark:text-white">{t("manageGithubDefaults")}</span>
+              <span className="mt-1 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t("manageGithubDefaultsBody")}</span>
             </span>
           </label>
         </div>
@@ -81,18 +83,18 @@ export const OnboardingGitStep: FunctionComponent<OnboardingGitStepProps> = ({
         <div className="flex items-start gap-3">
           <GitBranch className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
           <div className="min-w-0 flex-1">
-            <div className="text-base font-black text-slate-900 dark:text-white">Git mode</div>
+            <div className="text-base font-black text-slate-900 dark:text-white">{t("gitMode")}</div>
             <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-              Remote mode keeps pull requests and CI automation available. Local mode stays repo-local for offline or self-managed workflows.
+              {t("gitModeBody")}
             </div>
             <div className="mt-4">
               <PillChoiceGroup
-                aria-label="Git mode"
+                aria-label={t("gitMode")}
                 value={gitMode}
                 onChange={(value) => updateCliWorkflow({ gitMode: value as "local" | "remote" })}
                 options={[
-                  { value: "remote", label: "Remote branch generation", hint: "PRs, CI, and remote branch sync stay enabled." },
-                  { value: "local", label: "Local branch generation", hint: "Disable remote PR orchestration and stay repo-local." },
+                  { value: "remote", label: t("remoteBranchGeneration"), hint: t("remoteHint") },
+                  { value: "local", label: t("localBranchGeneration"), hint: t("localHint") },
                 ]}
                 valid
               />
