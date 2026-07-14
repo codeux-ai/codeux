@@ -1,4 +1,5 @@
 import type { SprintReviewSummary } from "../types.js";
+import type { ExecutionAttentionItemSummary } from "../../types.js";
 import type {
   CiStatusPresentation,
   CiWorkflowState,
@@ -20,7 +21,22 @@ export interface WorkflowStatusPresentation {
   tone: "pending" | "active" | "successful" | "failed" | "qa_changes";
   label: string;
   accessibleLabel: string;
+  requiresHuman: boolean;
   stages: [WorkflowStage, WorkflowStage, WorkflowStage, WorkflowStage, WorkflowStage, WorkflowStage];
+}
+
+export interface WorkflowHumanInterventionEvidence {
+  ownerType: string | null;
+  status?: string | null;
+  assignedWorkerEndpointId?: string | null;
+  title?: string | null;
+}
+
+export interface WorkflowTaskIdentity {
+  recordId?: string | null;
+  taskKey?: string | null;
+  sprintId?: string | null;
+  dispatchId?: string | null;
 }
 
 export interface WorkflowStatusPresentationInput {
@@ -28,10 +44,64 @@ export interface WorkflowStatusPresentationInput {
   status: string;
   review?: SprintReviewSummary | null;
   ciPresentation?: CiStatusPresentation | null;
+  humanIntervention?: WorkflowHumanInterventionEvidence | null;
 }
 
 function normalizeStatus(value: string): string {
   return value.trim().toLowerCase().replaceAll("-", "_").replaceAll(" ", "_");
+}
+
+const ACTIVE_ATTENTION_STATUSES = new Set(["open", "claimed"]);
+const HUMAN_ATTENTION_OWNERS = new Set(["human", "user"]);
+
+/**
+ * Human-needed is intentionally narrower than generic attention: the item must
+ * still be active, explicitly human-owned, and explicitly unassigned. A
+ * sprint-run intervention summary is not sufficient evidence because that
+ * contract omits status/assignment and may be synthesized from lifecycle
+ * events such as a manual pause or runtime error.
+ */
+export function isActiveHumanIntervention(
+  intervention: WorkflowHumanInterventionEvidence | null | undefined,
+): boolean {
+  if (!intervention) return false;
+  const ownerType = normalizeStatus(intervention.ownerType ?? "");
+  const status = intervention.status == null ? null : normalizeStatus(intervention.status);
+  const hasExplicitWorkerAssignment = Object.prototype.hasOwnProperty.call(
+    intervention,
+    "assignedWorkerEndpointId",
+  );
+  return HUMAN_ATTENTION_OWNERS.has(ownerType)
+    && status !== null
+    && ACTIVE_ATTENTION_STATUSES.has(status)
+    && hasExplicitWorkerAssignment
+    && intervention.assignedWorkerEndpointId === null;
+}
+
+function attentionTaskIds(item: ExecutionAttentionItemSummary): string[] {
+  const ids = [item.taskId];
+  for (const key of ["taskId", "taskKey"] as const) {
+    const value = item.payload?.[key];
+    if (typeof value === "string") ids.push(value);
+  }
+  return ids.flatMap((value) => value?.trim() ? [value.trim()] : []);
+}
+
+export function findActiveTaskHumanIntervention(
+  attentionItems: readonly ExecutionAttentionItemSummary[] | undefined,
+  identity: WorkflowTaskIdentity,
+): ExecutionAttentionItemSummary | null {
+  const taskIds = new Set(
+    [identity.recordId, identity.taskKey].flatMap((value) => value?.trim() ? [value.trim()] : []),
+  );
+  if (taskIds.size === 0 && !identity.dispatchId) return null;
+
+  return attentionItems?.find((item) => {
+    if (!isActiveHumanIntervention(item)) return false;
+    if (identity.sprintId && item.sprintId && item.sprintId !== identity.sprintId) return false;
+    if (identity.dispatchId && item.dispatchId === identity.dispatchId) return true;
+    return attentionTaskIds(item).some((taskId) => taskIds.has(taskId));
+  }) ?? null;
 }
 
 function fallbackCiStep(id: CiWorkflowStep["id"], workflowCompleted: boolean): CiWorkflowStep {
@@ -190,27 +260,31 @@ export function deriveWorkflowStatusPresentation(
   ] as WorkflowStatusPresentation["stages"];
   const failed = stages.some((stage) => stage.state === "failed");
   const active = stages.some((stage) => stage.state === "in_progress");
-  const state: CiWorkflowState = failed
+  const requiresHuman = isActiveHumanIntervention(input.humanIntervention);
+  const state: CiWorkflowState = requiresHuman || failed
     ? "failed"
     : active
       ? "in_progress"
       : stages[5].state === "successful"
         ? "successful"
         : "pending";
-  const label = displayLabel(stages);
+  const label = requiresHuman ? "Human needed" : displayLabel(stages);
   const qaChangesRequested = stages.some((stage) => (
     stage.id === "qa" && stage.state === "failed" && stage.statusLabel === "Changes requested"
   ));
   return {
     scope: input.scope,
     state,
-    tone: qaChangesRequested
+    tone: requiresHuman
+      ? "failed"
+      : qaChangesRequested
       ? "qa_changes"
       : state === "in_progress"
         ? "active"
         : state,
     label,
-    accessibleLabel: `${label}. ${stages.map((stage) => `${stage.label}: ${stage.statusLabel}`).join(". ")}.`,
+    accessibleLabel: `${label}. ${requiresHuman && input.humanIntervention?.title ? `${input.humanIntervention.title}. ` : ""}${stages.map((stage) => `${stage.label}: ${stage.statusLabel}`).join(". ")}.`,
+    requiresHuman,
     stages,
   };
 }

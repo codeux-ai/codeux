@@ -32,7 +32,7 @@ export const KanbanTaskCard: FunctionComponent<{
   onDragStart?: (e: DragEvent) => void;
   onDragEnd?: (e: DragEvent) => void;
 }> = memo(({ viewModel, index = 0, onEdit, onDelete, agentPresetName, agentPresetAvatarConfig, isDragging = false, onDragStart, onDragEnd }) => {
-  const { task, humanizedCreatedAt, dependencyIndicators, selfReflectionRating, ciStatusPresentation, sessionId, sessionState, prUrl, liveRunningTime, liveStartedAt } = viewModel;
+  const { task, humanizedCreatedAt, dependencyIndicators, selfReflectionRating, ciStatusPresentation, humanIntervention, sessionId, sessionState, prUrl, liveRunningTime, liveStartedAt } = viewModel;
   const cardRef = useRef<HTMLDivElement>(null);
   const pri = PRIORITY_CFG[task.priority];
   const statusLabel = STATUS_CFG[task.status].label;
@@ -200,6 +200,7 @@ export const KanbanTaskCard: FunctionComponent<{
           status={task.status}
           review={task.latestReview}
           ciPresentation={ciStatusPresentation ?? null}
+          humanIntervention={humanIntervention ?? null}
           compact
           align="right"
           className="min-w-0 max-w-full"

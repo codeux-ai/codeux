@@ -77,11 +77,11 @@ The Overview telemetry rail combines cross-project runtime health with selected-
 
 The Overview queue follows the same selected sprint scope as the Live page. If a sprint is selected in the top navigation, the queue shows only the active attention items returned by the selected-sprint live snapshot; unrelated sprint blockers are not reconstructed in the browser. Overview renders the queue read-only, so claim, resolve, and dismiss actions remain on the Live page.
 
-Overview active-stream task rows use the shared bright delivery workflow badge instead of a standalone QA badge. Open it to inspect Coding → Pull request → QA → CI → Merge → Completion. When a review exists, the animated chevron reveals the adjacent QA review card; requested edits stay blue, and reduced motion keeps every state visible while stopping connector and chevron animation.
+Overview active-stream task rows use the shared bright delivery workflow badge instead of a standalone QA badge. The badge combines each task's persisted lifecycle, review, and merge state with task-scoped realtime CI events and attention, matching the projection used on Tasks and Live. Open it to inspect the current Coding → Pull request → QA → CI → Merge → Completion stage. Active task-matched human-only attention appears as red **Human needed**; resolved, machine-owned, worker-assigned, and unrelated items do not override the stage. When a review exists, the responsive arrow floats between the independent workflow and QA cards; requested edits stay blue, and reduced motion keeps every state visible while stopping connector and arrow animation.
 
 ## Loading behavior
 
-Overview requests a compact active-sprint task feed instead of downloading historical task prompts, reviews, ratings, and CI evidence. The top-bar counters share that request, and the telemetry rail reuses the page's execution snapshot instead of issuing a duplicate Live request. Full task details still load when a workflow needs them, including the Tasks page and an opened global search.
+Overview requests a compact active-sprint task feed instead of downloading historical task prompts, reviews, and ratings. The top-bar counters share that request, while Active Streams and the telemetry rail reuse the page's realtime execution snapshot for current task-scoped CI/merge evidence instead of issuing a duplicate Live request. Full task details still load when a workflow needs them, including the Tasks page and an opened global search.
 
 The wide seven-day analytics snapshot refreshes every 30 seconds on Overview rather than on each execution heartbeat. The dedicated Stats page remains realtime for operators actively inspecting telemetry.
 

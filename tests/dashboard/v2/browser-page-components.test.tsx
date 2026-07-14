@@ -545,7 +545,7 @@ describe("LaunchContainerPanel", () => {
 
     expect(screen.getByText("Launching")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Launching preview container for Sprint 1. Launch controls are temporarily unavailable and the selected sprint is preserved.");
-    expect(screen.getByRole("combobox")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Sprint to preview" })).toBeDisabled();
     const button = screen.getByRole("button", { name: "Launching preview container" });
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute("aria-busy", "true");

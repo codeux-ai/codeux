@@ -1,3 +1,4 @@
+import type { ExecutionAttentionItemSummary } from "../../../types.js";
 import type { Task, TaskStatus, TaskExecutorType } from "../../types.js";
 import type { CiStatusPresentation } from "../ci-status-presentation.js";
 import { type LiveTaskEnrichment } from "./live-task-enrichment.js";
@@ -22,6 +23,7 @@ export interface TaskCardViewModel {
   dependencyActionLabel?: string;
   qaReviewLabel?: string;
   ciStatusPresentation?: CiStatusPresentation | null;
+  humanIntervention?: ExecutionAttentionItemSummary | null;
   ciStatusSourceSignature?: string;
   optimisticSavingLabel?: string | null;
   dragStateLabel?: string;
@@ -50,6 +52,7 @@ export interface TaskCardActionDescriptor {
 export interface TaskCardViewModelOptions {
   taskPullRequestsEnabled?: boolean;
   ciStatusPresentation?: CiStatusPresentation | null;
+  humanIntervention?: ExecutionAttentionItemSummary | null;
   ciStatusSourceSignature?: string;
 }
 
@@ -231,6 +234,7 @@ export function buildTaskCardViewModel(
     dependencyActionLabel: buildDependencyActionLabel(dependencyIndicators),
     qaReviewLabel: task.latestReview ? undefined : "QA no review",
     ciStatusPresentation: options.ciStatusPresentation ?? null,
+    humanIntervention: options.humanIntervention ?? null,
     ciStatusSourceSignature: options.ciStatusSourceSignature ?? "",
     optimisticSavingLabel: task.isOptimistic ? "Saving task changes" : null,
     dragStateLabel: task.isOptimistic

@@ -16,9 +16,9 @@ Sprints are viewed either in a visual organic cell gallery or a dense ledger for
 
 ### Sprint attention indicators
 
-Failed execution keeps the red gallery-cell perimeter and pulsing exclamation indicator labelled **Sprint execution failed**. A sprint genuinely waiting on a person instead shows an amber person and visible `zZZ` cue labelled **Sprint waiting for human intervention**, positioned exactly 10px above the gallery cell without a red perimeter. Failure takes precedence if both states are available.
+Failed gallery cells rely on the interactive delivery workflow badge for their visible and accessible failure state. They do not add a duplicate **Execution failed** banner, red perimeter, or static outer failure ring. A sprint genuinely waiting on a person instead shows an amber person and visible `zZZ` cue labelled **Sprint waiting for human intervention**, positioned exactly 10px above the gallery cell without a red perimeter.
 
-When reduced motion is enabled, optional attention motion stops while the indicator, visible context, and semantic label remain. The waiting cue is limited to human-owned active intervention. Worker- and system-owned items—including merge conflicts a worker can resolve—do not show **Waiting for you**, a separate merge-conflict badge, or a human-attention border. Their operational state remains available through the interactive workflow details.
+When reduced motion is enabled, optional attention motion stops while the waiting indicator, visible context, and semantic label remain. The waiting cue is limited to human-owned active intervention. Worker- and system-owned items—including merge conflicts a worker can resolve—do not show **Waiting for you**, a separate merge-conflict badge, or a human-attention border. Failed and worker-owned operational state remains available through the interactive workflow details.
 
 ## Delivery workflow and QA review details
 
@@ -31,13 +31,13 @@ Sprint cells and ledger rows keep their sprint lifecycle status and use one brig
 | Blue pencil, **QA edits** / **QA changes requested** | QA completed successfully and requested changes. This is an actionable review outcome, not a provider failure. |
 | Red X, **QA failed** | The QA provider run failed, errored, or was cancelled before returning a usable verdict. It does not mean QA requested code changes. |
 
-Hovering, focusing, or activating the badge opens an opaque viewport-positioned workflow card with Coding → Pull request → QA → CI → Merge → Completion, preventing sprint content from bleeding through. Six circles are joined by motion-safe animated dotted connectors. When review data exists, an animated chevron links an adjacent opaque QA review card with the outcome, summary, findings, fix instructions, reviewer metadata, and collapsed follow-up specifications. `Escape` restores focus to the exact trigger that opened it.
+Hovering, focusing, or activating the badge opens one viewport-positioned interaction region without a visible outer card. The independent opaque Delivery flow card shows Coding → Pull request → QA → CI → Merge → Completion, and six circles are joined by motion-safe animated dotted connectors. When review data exists, a floating responsive arrow links an independent opaque QA review card with the outcome, summary, findings, fix instructions, reviewer metadata, and collapsed follow-up specifications. `Escape` restores focus to the exact trigger that opened it.
 
 Generated follow-up task specifications are collapsed initially, so long prompts do not dominate the review. Each **Follow-up task N** button exposes `aria-expanded` and can be toggled with the keyboard or touch. Expansion reveals the generated title, description, priority, dependency task keys (or **None**), and full Markdown prompt in a bounded scrolling area. The card uses one column on constrained screens, may split summary and findings on wider screens, clamps to the viewport, and scrolls vertically when needed. Reduced motion removes spinner, pulse, rotation, and transition movement without removing labels, borders, focus rings, expanded content, or state semantics.
 
 ## Six-stage delivery flow
 
-The workflow badge summarizes six stages shared by Sprints, Tasks, Overview, and Live:
+The workflow badge summarizes six stages shared by Sprints, Tasks, Overview, and Live. Sprint-run intervention summaries do not override this workflow trigger because they may represent a generic pause or runtime error; genuinely human-waiting sprints retain the separate amber waiting cue described above:
 
 1. **Coding** — waiting, active, paused, complete, or failed.
 2. **Pull request** — waiting, creating, missing, or ready.
@@ -48,7 +48,7 @@ The workflow badge summarizes six stages shared by Sprints, Tasks, Overview, and
 
 The four first-class workflow states are `pending`, `in_progress`, `successful`, and `failed`. Pending uses a neutral clock, `in_progress` is presented as running with the signal-colored progress treatment, `successful` uses a green check, and `failed` uses a red X. A sprint aggregates the newest state for each task workflow plus the final feature-to-default-branch merge workflow. Failed wins over in progress, in progress wins over pending, and pending wins over successful, both for each step and for the overall badge.
 
-The red X is reserved for an actual provider/runtime or workflow failure. Requested QA edits use the bright blue pencil treatment even when failed-check evidence is also present. A review blocker remains pending, and a merge conflict belongs to Merge rather than CI.
+The red X identifies an actual provider/runtime or workflow failure, or explicit active **Human needed** intervention. Requested QA edits use the bright blue pencil treatment even when failed-check evidence is also present. A review blocker remains pending, and a merge conflict belongs to Merge rather than CI.
 
 These badges do not poll per card. Task feature-PR gates are persisted as `ci_gate_status` task-run events, final feature-to-default-branch gates as `main_merge_gate_status` sprint-run events, and unresolved CI repair attention remains active while its item is `open` or `claimed`. For each task or main-merge entity, the projection selects the newest matching event by creation time and then event ID; the sprint presentation aggregates those latest entity states. Persisted task merge metadata is used only as durable fallback evidence when no matching event is available.
 

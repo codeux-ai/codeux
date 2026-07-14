@@ -33,6 +33,7 @@ import {
 } from "../../lib/automation-credential-api.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
+import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 
 interface ProjectOption {
   id: string;
@@ -382,7 +383,20 @@ export const AutomationCredentialManager: FunctionComponent<AutomationCredential
         <div className="mt-4 grid gap-4 lg:grid-cols-3">
           <label className="min-w-0 text-xs font-bold text-slate-700 dark:text-slate-200">Name<input aria-label="Credential name" value={name} onInput={(event) => setName(event.currentTarget.value)} maxLength={128} disabled={!backendReady || busyAction !== null} className={inputClassName} /></label>
           <label className="min-w-0 text-xs font-bold text-slate-700 dark:text-slate-200">Kind<input aria-label="Credential kind" value={kind} onInput={(event) => setKind(event.currentTarget.value)} placeholder="api-token" maxLength={128} disabled={!backendReady || busyAction !== null} className={inputClassName} /></label>
-          <label className="min-w-0 text-xs font-bold text-slate-700 dark:text-slate-200">Scope<select aria-label="Credential scope" value={scope} onChange={(event) => setScope(event.currentTarget.value as AutomationCredentialScope)} disabled={!backendReady || busyAction !== null} className={inputClassName}><option value="project">Project-owned</option><option value="global">Global with allowlist</option></select></label>
+          <label className="min-w-0 text-xs font-bold text-slate-700 dark:text-slate-200">
+            Scope
+            <AvantgardeSelect
+              aria-label="Credential scope"
+              value={scope}
+              onChange={(value) => setScope(value as AutomationCredentialScope)}
+              disabled={!backendReady || busyAction !== null}
+              className="mt-1.5"
+              options={[
+                { value: "project", label: "Project-owned" },
+                { value: "global", label: "Global with allowlist" },
+              ]}
+            />
+          </label>
           <label className="min-w-0 text-xs font-bold text-slate-700 dark:text-slate-200 lg:col-span-3">Secret value<span className="ml-1 font-medium text-slate-400">write-only</span><input aria-label="Secret value" type="password" autoComplete="new-password" value={value} onInput={(event) => setValue(event.currentTarget.value)} disabled={!backendReady || busyAction !== null} className={inputClassName} /></label>
         </div>
         <div className="mt-4"><CapabilityPicker legend="Capabilities" values={createCapabilities} onChange={setCreateCapabilities} disabled={!backendReady || busyAction !== null} /></div>

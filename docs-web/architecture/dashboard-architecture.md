@@ -156,6 +156,8 @@ Key tokens (defined in `styles.css`):
 
 Components prefer **design tokens over hardcoded values**. New components should reuse existing tokens rather than introducing one-offs.
 
+User-visible single-choice fields use the shared `AvantgardeSelect` trigger/listbox primitive instead of browser-native selects. This keeps option surfaces aligned with Warm Void in both themes while preserving labels, descriptions, disabled and busy states, keyboard navigation, compact layouts, and focus restoration. Disabled options remain visible but are skipped by pointer and keyboard selection. The older native Select wrapper is retained only for isolated compatibility tests and has no production callers.
+
 ## Accessibility
 
 - Every interactive element is keyboard-reachable.

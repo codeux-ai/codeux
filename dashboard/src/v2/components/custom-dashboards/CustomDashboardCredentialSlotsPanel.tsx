@@ -10,6 +10,7 @@ import type {
   CustomDashboardCredentialSlotReview,
 } from "../../lib/custom-dashboard-api.js";
 import { writeSettingsNavigationState } from "../../lib/settings-navigation-state.js";
+import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 
 interface CustomDashboardCredentialSlotsPanelProps {
   projectId: string;
@@ -85,7 +86,7 @@ export const CustomDashboardCredentialSlotsPanel: FunctionComponent<CustomDashbo
 }) => {
   const [selectedCredentialBySlot, setSelectedCredentialBySlot] = useState<Record<string, string>>({});
   const actionRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const selectRefs = useRef<Record<string, HTMLSelectElement | null>>({});
+  const selectRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   useEffect(() => {
     setSelectedCredentialBySlot({});
@@ -246,22 +247,22 @@ export const CustomDashboardCredentialSlotsPanel: FunctionComponent<CustomDashbo
               <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                 <label className="min-w-0 text-xs font-bold text-slate-600 dark:text-slate-300">
                   Compatible credential
-                  <select
-                    ref={(element) => { selectRefs.current[slot.slotId] = element; }}
+                  <AvantgardeSelect
+                    triggerRef={(element) => { selectRefs.current[slot.slotId] = element; }}
                     aria-label={`Compatible credential for ${slot.label}`}
                     value={selectedCredentialId}
                     disabled={saving || options.length === 0 || !backendReady(health)}
-                    onInput={(event) => setSelectedCredentialBySlot((currentSelections) => ({
+                    onChange={(value) => setSelectedCredentialBySlot((currentSelections) => ({
                       ...currentSelections,
-                      [slot.slotId]: event.currentTarget.value,
+                      [slot.slotId]: value,
                     }))}
-                    className="mt-1 min-h-10 w-full min-w-0 rounded-xl border border-black/[0.09] bg-white px-3 text-sm text-slate-800 outline-none focus:border-signal-500 focus:ring-2 focus:ring-signal-500/25 disabled:opacity-60 dark:border-white/[0.09] dark:bg-void-800 dark:text-white"
-                  >
-                    <option value="">Choose compatible metadata…</option>
-                    {options.map((credential) => (
-                      <option key={credential.id} value={credential.id}>{credential.name} · {credential.kind}</option>
-                    ))}
-                  </select>
+                    className="mt-1 w-full min-w-0"
+                    placeholder="Choose compatible metadata…"
+                    options={[
+                      { value: "", label: "Choose compatible metadata…" },
+                      ...options.map((credential) => ({ value: credential.id, label: `${credential.name} · ${credential.kind}` })),
+                    ]}
+                  />
                 </label>
                 <button
                   ref={(element) => { actionRefs.current[slot.slotId] = element; }}

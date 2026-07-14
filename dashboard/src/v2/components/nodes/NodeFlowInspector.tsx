@@ -17,6 +17,7 @@ import {
 } from "../../lib/node-flow-view-models.js";
 import { NodeWidgetField } from "./NodeWidgetField.js";
 import { NodeCredentialPicker, type CredentialSelectionResult } from "./NodeCredentialPicker.js";
+import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 
 export type CredentialBindingSaveStatus = "saving" | "saved" | "conflict" | "policy-denied" | "error";
 
@@ -197,18 +198,18 @@ export const NodeFlowInspector: FunctionComponent<NodeFlowInspectorProps> = ({
       <section className="flex flex-col gap-3 border-t border-black/[0.06] pt-4 dark:border-white/[0.06]" aria-labelledby="node-agent-attachments-heading" aria-busy={attachmentsLoading || attaching}>
         <h3 id="node-agent-attachments-heading" className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Agent Attachments</h3>
         <div className="flex gap-2">
-          <select
+          <AvantgardeSelect
             aria-label="Agent preset"
-            className={inputClass}
+            className="min-w-0 flex-1"
             value={attachAgentId}
             disabled={attachmentsLoading || attaching}
-            onChange={(event) => onAttachAgentIdChange(event.currentTarget.value)}
-          >
-            <option value="">Select agent</option>
-            {agents.map((agent) => (
-              <option key={agent.id} value={agent.id}>{agent.name}</option>
-            ))}
-          </select>
+            onChange={onAttachAgentIdChange}
+            placeholder="Select agent"
+            options={[
+              { value: "", label: "Select agent" },
+              ...agents.map((agent) => ({ value: agent.id, label: agent.name })),
+            ]}
+          />
           <button
             type="button"
             aria-label="Attach node flow to agent"

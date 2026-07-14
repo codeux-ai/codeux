@@ -47,13 +47,13 @@ The base `designGuidance` defaults are:
 - `hideDefaultStyleguides: false`
 - no custom entries
 
-Existing projects and imported local or Git projects inherit `none` unless an operator, setup flow, or sprint override changes them.
+Every imported, new local, and new remote project starts with explicit project overrides selecting `none` for both Tech Stack Guidance and Styleguide. This keeps project creation independent from system-level guidance selections and prevents create-time caller selections from silently applying reusable instructions before an operator reviews the project.
 
-New local and new remote project creation seeds an explicit project override for the generic Code UX styleguide, `code-ux-award-winning`. It does not automatically select tech-stack guidance unless the creation flow provides one. Caller-provided guidance overrides are preserved, with only a missing styleguide selection filled by the Code UX styleguide seed.
+Project creation preserves unrelated guidance fields, including custom catalog entries and `hideDefaultStyleguides`, while normalizing both selected ids to `none`. An operator can select guidance from the top navigation or Settings -> Guidance after the project has been added; sprint overrides can still change the effective selection for an individual sprint.
 
 ## Prompt Effects
 
-Planning and Project Setup resolve the effective project settings before building prompts. Selected non-`none` tech-stack and styleguide entries are added as a compact `Project Guidance` section. `None` selections do not inject catalog entry instructions, so imported projects do not receive Code UX styleguide instructions by default.
+Planning and Project Setup resolve the effective project settings before building prompts. Selected non-`none` tech-stack and styleguide entries are added as a compact `Project Guidance` section. `None` selections do not inject catalog entry instructions, so newly added projects do not receive reusable tech-stack or styleguide instructions by default.
 
 When the styleguide remains `none`, Project Setup still asks the setup agent to inspect the repository's existing styling, brand assets, design tokens, components, layouts, and interaction patterns before proposing a project-specific styleguide. This setup-only discovery notice is included even when tech-stack guidance is also `none`; Planning prompts continue to omit inactive `none` selections entirely.
 

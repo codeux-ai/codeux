@@ -94,7 +94,8 @@ describe("nodes inspector panels", () => {
 
     fireEvent.input(screen.getByLabelText("Label"), { target: { value: "Implementation Router" } });
     fireEvent.input(screen.getByLabelText("Description"), { target: { value: "Route by task type." } });
-    await user.selectOptions(screen.getByLabelText("Agent intent"), "review");
+    await user.click(screen.getByLabelText("Agent intent"));
+    await user.click(screen.getByRole("option", { name: "review" }));
     fireEvent.input(screen.getByLabelText("Agent preset"), { target: { value: "agent-preset-reviewer" } });
     await user.click(screen.getByRole("switch", { name: "Enabled" }));
 
