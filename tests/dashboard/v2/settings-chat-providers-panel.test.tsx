@@ -30,7 +30,10 @@ vi.mock("gsap", () => {
         return { revert: vi.fn() };
       }),
       set: vi.fn((target: unknown, props: Record<string, unknown>) => applyStyles(target, props)),
-      to: vi.fn((target: unknown, props: Record<string, unknown>) => applyStyles(target, props)),
+      to: vi.fn((target: unknown, props: Record<string, unknown>) => {
+        applyStyles(target, props);
+        if (typeof props.onComplete === "function") props.onComplete();
+      }),
       fromTo: vi.fn((target: unknown, _from: Record<string, unknown>, to: Record<string, unknown>) => applyStyles(target, to)),
       timeline: vi.fn(() => {
         const timeline = {
@@ -81,7 +84,16 @@ const providerDefinitions: DashboardChatProviderSetupDefinition[] = [
         { key: "signingSecret", label: "Signing secret", required: true },
       ],
     },
+    {
+      mode: "official_api",
+      label: "Provider API",
+      integration: "official_api",
+      setupFields: [],
+      secretFields: [],
+    },
   ],
+  officialDocumentation: [{ label: `${kind} documentation`, url: `https://example.test/${kind}` }],
+  limitations: ["Provider delivery limits apply."],
 }));
 
 const slackConnection: DashboardChatProviderConnectionRecord = {
@@ -95,6 +107,10 @@ const slackConnection: DashboardChatProviderConnectionRecord = {
   credentials: [
     { key: "bridgeApiKey", label: "Bridge API key", configured: true, redactedValue: "••••••••" },
   ],
+  verificationStatus: "verified",
+  verificationDetails: null,
+  verifiedAt: "2026-01-01T00:00:00.000Z",
+  secretVersion: 1,
   ingressUrl: "http://localhost/api/chat-providers/ingress/conn-slack",
   setupHints: {
     bridgeModeLabel: "Managed bridge",
@@ -138,6 +154,9 @@ const failedDelivery: ChatProviderMessageDeliveryRecord = {
   conversationThreadId: null,
   conversationMessageId: "message-1",
   payload: null,
+  nextAttemptAt: null,
+  leaseOwner: null,
+  leaseExpiresAt: null,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
 };
@@ -206,6 +225,11 @@ const createState = (selectedIntegration: string | null) => ({
     createBinding: vi.fn(),
     updateBinding: vi.fn(),
     deleteBinding: vi.fn(),
+    refreshHealth: vi.fn(),
+    verifyConnection: vi.fn(),
+    inspectDelivery: vi.fn(),
+    retryDelivery: vi.fn(),
+    cancelDelivery: vi.fn(),
   },
 });
 
@@ -222,6 +246,7 @@ describe("SettingsIntegrationsPanel chat connectors", () => {
     for (const label of ["WhatsApp", "iMessage", "Telegram", "Slack", "Microsoft Teams", "Discord"]) {
       expect(screen.getByText(label)).not.toBeNull();
     }
+    expect(screen.getAllByRole("article", { name: /chat connector/ })[0]?.getAttribute("aria-label")).toBe("Discord chat connector");
     expect(screen.getByText("1 connections")).not.toBeNull();
     expect(screen.getByText("1 channels")).not.toBeNull();
     expect(screen.getByText("Replies on")).not.toBeNull();
@@ -235,11 +260,17 @@ describe("SettingsIntegrationsPanel chat connectors", () => {
     expect(screen.getByText("Slack setup guidance")).not.toBeNull();
     expect((screen.getByLabelText("Slack Bridge display name") as HTMLInputElement).value).toBe("Slack Bridge");
     expect(screen.getByRole("radiogroup", { name: "Slack Bridge bridge mode" })).not.toBeNull();
+    expect(screen.getByRole("radio", { name: /Provider-native API/ })).not.toBeNull();
+    expect(screen.getByRole("radio", { name: /Custom webhook/ })).not.toBeNull();
+    expect(screen.getByText("slack documentation")).not.toBeNull();
+    expect(screen.getByText("Provider delivery limits apply.")).not.toBeNull();
     expect((screen.getByLabelText("Slack Bridge ingress URL") as HTMLInputElement).value).toBe("http://localhost/api/chat-providers/ingress/conn-slack");
     expect((screen.getByLabelText("Slack Bridge Bridge API key") as HTMLInputElement).value).toBe("");
-    expect(screen.getByText(/configured\. Enter a replacement only when rotating it\./i)).not.toBeNull();
+    expect(screen.getByText(/Configured\. Enter a replacement only to rotate it\./i)).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Test connection" })).not.toBeNull();
+    expect(screen.getByRole("region", { name: "Slack Bridge verification result" })).not.toBeNull();
 
-    expect(screen.getByText("Shared-channel routing")).not.toBeNull();
+    expect(screen.getByText("Channel, project, and thread routing")).not.toBeNull();
     expect((screen.getByLabelText("C123 project selector prefix") as HTMLInputElement).value).toBe("/project");
     expect((screen.getByLabelText("C123 routing hint") as HTMLInputElement).value).toBe("engineering");
     expect(screen.getByLabelText("C123 Suppress rich widgets").getAttribute("aria-checked")).toBe("true");
@@ -248,12 +279,40 @@ describe("SettingsIntegrationsPanel chat connectors", () => {
     expect(screen.getByText(/Bearer \[redacted\] failed/)).not.toBeNull();
     expect(screen.queryByText(/xoxb-12345678901234567890123456789012/)).toBeNull();
 
-    const binding = screen.getByText("C123").closest("div")!.parentElement!.parentElement as HTMLElement;
-    fireEvent.click(within(binding).getByRole("button", { name: "Save" }));
+    const binding = screen.getByRole("region", { name: "C123 channel binding" });
+    fireEvent.click(within(binding).getByRole("button", { name: "Save binding" }));
     expect(state.chatProviders.updateBinding).toHaveBeenCalledWith("binding-slack", expect.objectContaining({
       projectId: "project-1",
       routingHints: { projectSelectorPrefix: "/project", projectSelector: "engineering" },
       suppressRichWidgets: true,
     }));
+  });
+
+  it("supports keyboard mode selection and persistent assertive errors", async () => {
+    const state = createState("slack");
+    state.chatProviders.error = "Delivery history could not be refreshed.";
+    render(<SettingsIntegrationsPanel state={state as any} />);
+    const managed = await screen.findByRole("radio", { name: /Managed bridge/ });
+    fireEvent.keyDown(managed, { key: "ArrowRight" });
+    expect(screen.getByRole("radio", { name: /Custom webhook/ }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText("Verification stale")).not.toBeNull();
+    const error = screen.getByRole("alert");
+    expect(error.getAttribute("aria-live")).toBe("assertive");
+    expect(error.textContent).toContain("Delivery history could not be refreshed.");
+  });
+
+  it("confirms credential replacement and provider-side delivery retry", async () => {
+    const state = createState("slack");
+    render(<SettingsIntegrationsPanel state={state as any} />);
+    const secret = await screen.findByLabelText("Slack Bridge Bridge API key");
+    fireEvent.input(secret, { target: { value: "replacement-value" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
+    expect(await screen.findByRole("dialog", { name: /Confirm Slack Bridge transport change/ })).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(state.chatProviders.updateConnection).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("dialog", { name: "Retry delivery?" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Retry delivery" })).not.toBeNull();
   });
 });

@@ -77,6 +77,25 @@ export interface ChatProviderSetupSchema {
   bridgeModes: readonly ChatProviderBridgeSetupSchema[];
 }
 
+export interface ChatProviderDocumentationLink {
+  label: string;
+  url: string;
+}
+
+export interface ChatProviderSetupHints {
+  bridgeModeLabel: string;
+  integration: ChatProviderBridgeIntegration;
+  requiredSetupFields: string[];
+  requiredSecretFields: string[];
+}
+
+export interface ChatProviderSetupDefinition extends Omit<ChatProviderSetupSchema, "bridgeModes"> {
+  ingressUrlTemplate: string;
+  bridgeModes: Array<ChatProviderBridgeSetupSchema & { setupHints: ChatProviderSetupHints }>;
+  officialDocumentation: ChatProviderDocumentationLink[];
+  limitations: string[];
+}
+
 export type ChatProviderSetupConfig = Record<string, unknown>;
 export type ChatProviderSecretConfig = Record<string, unknown>;
 export type ChatProviderRoutingHints = Record<string, unknown>;
@@ -228,6 +247,48 @@ export interface ChatProviderMessageDeliveryRecord {
   leaseExpiresAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type ChatProviderPublicDeliveryRecord = Omit<
+  ChatProviderMessageDeliveryRecord,
+  "payload" | "leaseOwner" | "leaseExpiresAt"
+>;
+
+export interface ChatProviderSetupGuidance {
+  providerKind: ChatProviderKind;
+  bridgeMode: string;
+  requiredSetupFields: string[];
+  requiredSecretFields: string[];
+  capabilities: string[];
+  liveVerificationAvailable: boolean;
+}
+
+export interface ChatProviderVerificationOutcome {
+  providerConnectionId: string;
+  providerKind: ChatProviderKind;
+  status: Extract<ChatProviderVerificationStatus, "verified" | "failed">;
+  verifiedAt: string | null;
+  capabilities: string[];
+  providerErrorCode: string | null;
+  retryable: boolean;
+  issues: string[];
+  diagnostics: unknown;
+  setupGuidance: ChatProviderSetupGuidance;
+}
+
+export interface ChatProviderConnectorHealth {
+  configuredCount: number;
+  activeCount: number;
+  verifiedCount: number;
+  errorCount: number;
+  lastVerificationOutcomes: Array<{
+    providerConnectionId: string;
+    providerKind: ChatProviderKind;
+    status: ChatProviderVerificationStatus;
+    verifiedAt: string | null;
+    providerErrorCode: string | null;
+    retryable: boolean;
+  }>;
 }
 
 export interface ChatProviderIngressReplayReceiptRecord {

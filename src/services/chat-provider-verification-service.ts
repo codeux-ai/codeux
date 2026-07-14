@@ -1,7 +1,10 @@
 import type {
   ChatProviderBridgeMode,
   ChatProviderConnectionRecord,
+  ChatProviderConnectorHealth,
   ChatProviderKind,
+  ChatProviderSetupGuidance,
+  ChatProviderVerificationOutcome,
   ChatProviderVerificationStatus,
 } from "../contracts/chat-provider-types.js";
 import {
@@ -23,43 +26,6 @@ import type { ChatProviderSecretService } from "./chat-provider-secret-service.j
 
 const DEFAULT_VERIFICATION_TIMEOUT_MS = 15_000;
 const OMITTED_DIAGNOSTIC_KEY = /(?:authorization|cookie|header|payload|request|response|body|text|token|secret|password|signature|signed|url|uri)/i;
-
-export interface ChatProviderSetupGuidance {
-  providerKind: ChatProviderKind;
-  bridgeMode: string;
-  requiredSetupFields: string[];
-  requiredSecretFields: string[];
-  capabilities: string[];
-  liveVerificationAvailable: boolean;
-}
-
-export interface ChatProviderVerificationOutcome {
-  providerConnectionId: string;
-  providerKind: ChatProviderKind;
-  status: Extract<ChatProviderVerificationStatus, "verified" | "failed">;
-  verifiedAt: string | null;
-  capabilities: string[];
-  providerErrorCode: string | null;
-  retryable: boolean;
-  issues: string[];
-  diagnostics: unknown;
-  setupGuidance: ChatProviderSetupGuidance;
-}
-
-export interface ChatProviderConnectorHealth {
-  configuredCount: number;
-  activeCount: number;
-  verifiedCount: number;
-  errorCount: number;
-  lastVerificationOutcomes: Array<{
-    providerConnectionId: string;
-    providerKind: ChatProviderKind;
-    status: ChatProviderVerificationStatus;
-    verifiedAt: string | null;
-    providerErrorCode: string | null;
-    retryable: boolean;
-  }>;
-}
 
 export interface ChatProviderVerificationServiceDependencies {
   chatProviderRepository: ChatProviderRepository;

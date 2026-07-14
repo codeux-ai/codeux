@@ -41,6 +41,16 @@ This document defines the visual patterns and rules for the Settings workspace. 
 3.  **High-Risk Actions**:
     *   Destructive actions in the Danger Zone (`Wipe Project`, `Wipe Database`) use the `danger` tone, yielding clear semantic `bg-status-red text-white` presentation. Panels themselves hint at danger via red-tinted borders and backgrounds.
 
+## Chat connector settings
+
+Settings > Integrations presents Discord prominently, followed by WhatsApp, iMessage, Telegram, Slack, and Microsoft Teams. Catalog cards report only verified active connections as healthy. Connector definitions, supported modes, official-documentation links, and limitations come from the Code UX backend; the browser never calls provider APIs directly.
+
+The chat connector workspace is composed from focused catalog, connection, verification, binding, and delivery-history components. Mode choices distinguish provider-native APIs, managed bridges, custom webhooks, and native bridges. Arrow keys operate the mode radiogroup, every editor and delivery list has a named region, controls retain visible focus rings, and narrow layouts wrap actions and fields without horizontal overflow. Pending and success messages use polite status feedback; errors remain in an assertive live region until cleared.
+
+Connection activation requires all required setup fields, required write-only credentials, and a successful **Test connection** result. Blank credential inputs preserve stored values. Material mode, endpoint, command, setup, or credential edits make the previous verification stale; those edits save the connection as a draft and require another test. Endpoint/command changes and credential replacement use the shared confirmation dialog, as do connection/binding deletion.
+
+Bindings expose provider-specific channel identifiers, project and optional thread routing, project-selector ambiguity guidance, agent presets, inbound/outbound toggles, and rich-widget suppression. Delivery history never renders payload bodies, signed URLs, or stored secrets. It shows status, attempt count, next retry, terminal/retryable/ambiguous state, and redacted diagnostics. Retry and cancellation require confirmation because either can affect an external provider. Failed history refreshes preserve previously loaded records and display the failure instead of presenting a false empty state.
+
 4.  **Metadata and Hierarchy**:
     *   Metadata chips (`visible categories` while Smart Find is active, `unsaved edits`) and badges leverage standard tokens to maintain visual rhythm. `Visible categories` is search-only metadata and must not appear when Smart Find is idle.
     *   Headers and contextual information (e.g., `SettingsHeader`) separate sections with thin borders (`--border-hairline`).

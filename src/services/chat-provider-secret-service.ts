@@ -55,7 +55,9 @@ export class ChatProviderSecretService {
     let envelope: Awaited<ReturnType<SecretStore["seal"]>> | null | undefined;
     let secretKeys: string[] = [];
     if (input.secrets !== undefined) {
-      const normalized = normalizeSecrets(input.secrets);
+      const normalized = input.secrets === null
+        ? null
+        : normalizeSecrets({ ...(await this.resolveConnection(connectionId)).secrets, ...input.secrets });
       envelope = normalized ? await this.seal(connectionId, normalized) : null;
       secretKeys = configuredSecretKeys(normalized);
     }
