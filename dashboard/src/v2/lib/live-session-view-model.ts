@@ -28,6 +28,9 @@ import {
   deriveTaskCiStatusPresentation,
   type CiStatusPresentation,
 } from "./ci-status-presentation.js";
+import { DEFAULT_DASHBOARD_LOCALE, type DashboardLocale } from "../i18n/locales.js";
+import { createDashboardFormatters } from "../i18n/formatters.js";
+import { translateLiveMessage, translateLivePlural } from "../i18n/messages/live.js";
 
 export type LiveSessionTaskFilter = "All" | "Running" | "Completed" | "Failed" | "Pending";
 
@@ -89,7 +92,7 @@ export interface LiveSessionTaskCardStateInput {
 
 export interface LiveTransportBannerViewModel {
   isVisible: boolean;
-  title: "Connection Error" | "Disconnected" | "Reconnecting" | "Refreshing Live Data" | "Recovering Live Data" | "Stale Data";
+  title: string;
   message: string;
   wrapperClass: string;
   iconClass: string;
@@ -101,6 +104,7 @@ export interface LiveTransportBannerViewModel {
 }
 
 const LIVE_SNAPSHOT_STALE_MS = 60_000;
+// English compatibility label: Stale Data. The localized value comes from the Live catalog.
 
 const EMPTY_LIVE_SESSION_STATS: DashboardStats = {
   total: 0,
@@ -545,6 +549,7 @@ export function deriveFilteredLiveSessionTasks(
   tasks: Subtask[],
   stats: DashboardStats,
   activeFilter: LiveSessionTaskFilter,
+  locale: DashboardLocale = DEFAULT_DASHBOARD_LOCALE,
 ): FilteredLiveSessionTasks {
   const filteredTasks: Subtask[] = [];
   const targetStatus = FILTER_STATUS_MAP[activeFilter];
@@ -576,15 +581,21 @@ export function deriveFilteredLiveSessionTasks(
       Failed: stats.failed,
       Pending: pendingCount,
     },
-    announcement: deriveLiveSessionTaskFilterAnnouncement(activeFilter, filteredTasks.length),
+    announcement: deriveLiveSessionTaskFilterAnnouncement(activeFilter, filteredTasks.length, locale),
   };
 }
 
 export function deriveLiveSessionTaskFilterAnnouncement(
   activeFilter: LiveSessionTaskFilter,
   filteredTaskCount: number,
+  locale: DashboardLocale = DEFAULT_DASHBOARD_LOCALE,
 ): string {
-  return `${filteredTaskCount} ${activeFilter.toLowerCase()} task${filteredTaskCount === 1 ? "" : "s"} shown.`;
+  const filterKey = ({ All: "filterAll", Running: "filterRunning", Completed: "filterCompleted", Failed: "filterFailed", Pending: "filterPendingLabel" } as const)[activeFilter];
+  const formattedCount = createDashboardFormatters(locale).formatNumber(filteredTaskCount);
+  return translateLivePlural(locale, "filterResults", filteredTaskCount, {
+    count: formattedCount,
+    filter: translateLiveMessage(locale, filterKey).toLocaleLowerCase(locale),
+  });
 }
 
 export function deriveLiveSessionTaskCardItems(input: LiveSessionTaskCardStateInput): LiveSessionTaskCardItem[] {
@@ -655,11 +666,13 @@ export function deriveLiveTransportBannerViewModel(args: {
   error: string | null;
   snapshotUpdatedAt?: string | null;
   nowMs?: number;
+  locale?: DashboardLocale;
 }): LiveTransportBannerViewModel | null {
+  const locale = args.locale ?? DEFAULT_DASHBOARD_LOCALE;
   if (args.error) {
     return {
       isVisible: true,
-      title: "Connection Error",
+      title: translateLiveMessage(locale, "connectionError"),
       message: args.error,
       wrapperClass: "bg-status-red/10 border-status-red/20 text-status-red",
       iconClass: "text-status-red",
@@ -674,8 +687,8 @@ export function deriveLiveTransportBannerViewModel(args: {
   if (args.transportState === "disconnected") {
     return {
       isVisible: true,
-      title: "Disconnected",
-      message: "Lost connection to the live stream. Cached runtime data remains visible while retrying.",
+      title: translateLiveMessage(locale, "disconnected"),
+      message: translateLiveMessage(locale, "lostConnection"),
       wrapperClass: "bg-status-red/10 border-status-red/20 text-status-red",
       iconClass: "text-status-red",
       icon: "disconnected",
@@ -689,8 +702,8 @@ export function deriveLiveTransportBannerViewModel(args: {
   if (args.transportState === "reconnecting") {
     return {
       isVisible: true,
-      title: "Reconnecting",
-      message: "Attempting to restore connection. Cached runtime data remains visible.",
+      title: translateLiveMessage(locale, "reconnecting"),
+      message: translateLiveMessage(locale, "restoringConnection"),
       wrapperClass: "bg-status-amber/10 border-status-amber/20 text-status-amber",
       iconClass: "text-status-amber",
       icon: "reconnecting",
@@ -704,10 +717,10 @@ export function deriveLiveTransportBannerViewModel(args: {
   if (args.transportState === "connected" && args.isRecovering) {
     return {
       isVisible: true,
-      title: args.snapshotUpdatedAt ? "Refreshing Live Data" : "Recovering Live Data",
+      title: translateLiveMessage(locale, args.snapshotUpdatedAt ? "refreshingLiveData" : "recoveringLiveData"),
       message: args.snapshotUpdatedAt
-        ? "Keeping the current runtime snapshot visible while the live stream catches up."
-        : "Waiting for the first runtime snapshot after transport recovery.",
+        ? translateLiveMessage(locale, "keepingSnapshotVisible")
+        : translateLiveMessage(locale, "waitingFirstSnapshot"),
       wrapperClass: "bg-signal-500/10 border-signal-500/20 text-signal-700 dark:text-signal-300",
       iconClass: "text-signal-600 dark:text-signal-300",
       icon: "reconnecting",
@@ -729,8 +742,8 @@ export function deriveLiveTransportBannerViewModel(args: {
   ) {
     return {
       isVisible: true,
-      title: "Stale Data",
-      message: "Live runtime content is still visible, but the latest snapshot is more than a minute old.",
+      title: translateLiveMessage(locale, "staleData"),
+      message: translateLiveMessage(locale, "staleSnapshotMessage"),
       wrapperClass: "bg-status-amber/10 border-status-amber/20 text-status-amber",
       iconClass: "text-status-amber",
       icon: "reconnecting",
@@ -750,12 +763,14 @@ export function deriveLiveSessionSnapshotSurface(args: {
   snapshotUpdatedAt?: string | null;
   transportBannerTitle?: LiveTransportBannerViewModel["title"] | null;
   error?: string | null;
+  locale?: DashboardLocale;
 }): ExecutionSnapshotSurfaceState {
+  const locale = args.locale ?? DEFAULT_DASHBOARD_LOCALE;
   if (args.transportState === "reconnecting" || args.transportState === "disconnected") {
     return {
       kind: "reconnecting",
-      label: "Reconnecting",
-      description: "Cached runtime snapshot remains visible while the live stream reconnects.",
+      label: translateLiveMessage(locale, "reconnecting"),
+      description: translateLiveMessage(locale, "reconnectSnapshotDescription"),
       isBusy: true,
     };
   }
@@ -763,8 +778,8 @@ export function deriveLiveSessionSnapshotSurface(args: {
   if (args.error) {
     return {
       kind: "recovering",
-      label: "Retrying Load",
-      description: "Cached runtime snapshot remains visible while the failed live data request can be retried.",
+      label: translateLiveMessage(locale, "retryingLoad"),
+      description: translateLiveMessage(locale, "retrySnapshotDescription"),
       isBusy: true,
     };
   }
@@ -772,27 +787,27 @@ export function deriveLiveSessionSnapshotSurface(args: {
   if (args.isRecovering) {
     return {
       kind: "recovering",
-      label: args.snapshotUpdatedAt ? "Recovering" : "Awaiting Snapshot",
+      label: translateLiveMessage(locale, args.snapshotUpdatedAt ? "recovering" : "awaitingSnapshot"),
       description: args.snapshotUpdatedAt
-        ? "Cached runtime snapshot remains visible while fresh live data is loading."
-        : "Waiting for the first runtime snapshot after transport recovery.",
+        ? translateLiveMessage(locale, "freshDataLoading")
+        : translateLiveMessage(locale, "waitingFirstSnapshot"),
       isBusy: true,
     };
   }
 
-  if (args.transportBannerTitle === "Stale Data") {
+  if (args.transportBannerTitle === translateLiveMessage(locale, "staleData")) {
     return {
       kind: "stale",
-      label: "Stale Snapshot",
-      description: "Cached runtime snapshot remains visible, but it is more than a minute old.",
+      label: translateLiveMessage(locale, "staleSnapshot"),
+      description: translateLiveMessage(locale, "staleSnapshotDescription"),
       isBusy: true,
     };
   }
 
   return {
     kind: "live",
-    label: "Live",
-    description: "Runtime data is current.",
+    label: translateLiveMessage(locale, "live"),
+    description: translateLiveMessage(locale, "currentSnapshotDescription"),
     isBusy: false,
   };
 }

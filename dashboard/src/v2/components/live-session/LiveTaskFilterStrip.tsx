@@ -4,6 +4,15 @@ import {
   LIVE_SESSION_TASK_FILTERS,
   type LiveSessionTaskFilter,
 } from "../../lib/live-session-view-model.js";
+import { useLiveI18n, type LiveMessageKey } from "../../i18n/messages/live.js";
+
+const FILTER_LABEL_KEYS: Record<LiveSessionTaskFilter, LiveMessageKey> = {
+  All: "filterAll",
+  Running: "filterRunning",
+  Completed: "filterCompleted",
+  Failed: "filterFailed",
+  Pending: "filterPendingLabel",
+};
 
 export const LiveTaskFilterStrip: FunctionComponent<{
   activeFilter: LiveSessionTaskFilter;
@@ -23,6 +32,7 @@ export const LiveTaskFilterStrip: FunctionComponent<{
   selectionMovementStyle,
   pendingFilter = null,
 }) => {
+  const { t, formatNumber } = useLiveI18n();
   const activateFilter = (filter: LiveSessionTaskFilter): void => {
     if (filter === activeFilter || filter === pendingFilter) {
       return;
@@ -32,25 +42,28 @@ export const LiveTaskFilterStrip: FunctionComponent<{
 
   return (
     <>
-      <div className="flex max-w-full flex-wrap gap-1 rounded-xl bg-black/[0.04] p-1 dark:bg-white/[0.04] sm:w-fit" role="tablist" aria-label="Task status filters">
+      <div className="flex max-w-full flex-wrap gap-1 rounded-xl bg-black/[0.04] p-1 dark:bg-white/[0.04] sm:w-fit" role="tablist" aria-label={t("taskStatusFilters")}>
         {LIVE_SESSION_TASK_FILTERS.map((filter, index) => {
           const isSelected = activeFilter === filter;
           const isPending = pendingFilter === filter;
+          const localizedFilter = t(FILTER_LABEL_KEYS[filter]);
           const disabledReason = isPending
-            ? `${filter} filter selection is already in progress.`
+            ? t("filterPending", { filter: localizedFilter })
             : isSelected
-              ? `${filter} filter is already selected.`
+              ? t("filterSelected", { filter: localizedFilter })
               : null;
+          const count = taskCounts[filter];
+          const ariaSuffix = disabledReason ? `. ${disabledReason}` : "";
 
           return (
             <button
               key={filter}
               role="tab"
-              aria-label={`${filter} tasks filter, ${taskCounts[filter]} task${taskCounts[filter] === 1 ? "" : "s"}${disabledReason ? `. ${disabledReason}` : ""}`}
+              aria-label={t("filterAria", { filter: localizedFilter, count: formatNumber(count), tasks: t(count === 1 ? "taskSingular" : "taskPlural"), suffix: ariaSuffix })}
               aria-selected={isSelected}
               aria-disabled={isPending ? "true" : undefined}
               aria-busy={isPending ? "true" : undefined}
-              title={disabledReason ?? `Show ${filter.toLowerCase()} tasks`}
+              title={disabledReason ?? t("showFilterTasks", { filter: localizedFilter.toLocaleLowerCase() })}
               tabIndex={isSelected ? 0 : -1}
               onClick={(event) => {
                 if (disabledReason) {
@@ -83,13 +96,13 @@ export const LiveTaskFilterStrip: FunctionComponent<{
                            : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                          } ${isPending ? "cursor-progress opacity-70" : ""}`}
             >
-              {filter}
+              {localizedFilter}
               <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-mono
                   ${isSelected
                     ? "bg-signal-500/[0.12] text-signal-600 dark:text-signal-400"
                     : "bg-black/[0.06] dark:bg-white/[0.06] text-slate-400"
                   }`}>
-                {taskCounts[filter]}
+                {formatNumber(count)}
               </span>
               {isPending && <span className="sr-only">{disabledReason}</span>}
             </button>
