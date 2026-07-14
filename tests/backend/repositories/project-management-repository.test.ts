@@ -434,6 +434,7 @@ describe("ProjectManagementRepository", () => {
     const projects = repository.listProjects().projects;
     const sprints = repository.listSprints(project.id).sprints;
     const tasks = repository.listTasks(project.id, sprint.id);
+    const taskOverviews = repository.listTaskOverviews(project.id);
 
     expect(projects).toHaveLength(1);
     expect(projects[0]).toMatchObject({
@@ -462,6 +463,15 @@ describe("ProjectManagementRepository", () => {
       executorType: "mcp_worker",
       status: "in_progress",
     });
+    expect(taskOverviews[1]).toMatchObject({
+      taskKey: "T02",
+      promptMarkdown: "",
+      description: "",
+      dependsOnTaskIds: [taskA.id],
+      executorType: "mcp_worker",
+      status: "in_progress",
+    });
+    expect(tasks[1]?.promptMarkdown).toBe("Replace mocks");
   });
 
   it("creates imported special tasks with source metadata and prompt sections", async () => {
@@ -1074,6 +1084,74 @@ describe("ProjectManagementRepository", () => {
       findings: ["Missing regression test"],
       reviewer: "QA Bot",
       finishedAt: "2026-05-30T09:06:00.000Z",
+    });
+  });
+
+  it("returns equivalent expanded QA metadata through task and sprint summaries", async () => {
+    const { storage, repository } = await createRepository();
+    const project = repository.createProject({
+      name: "Shared QA Summary Project",
+      sourceType: "local",
+      sourceRef: "/workspace/shared-qa-summary",
+    });
+    const sprint = repository.createSprint(project.id, { name: "Shared QA Sprint" });
+    const task = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Shared QA task",
+    });
+    const payload = JSON.stringify({
+      findings: ["Add a regression assertion"],
+      followUpTasks: [{
+        title: "Regression follow-up",
+        promptMarkdown: "Add the full regression scenario.",
+        dependsOnTaskKeys: ["T01"],
+        priority: "high",
+      }],
+      rawProviderResponse: "must not be projected",
+    });
+    const insert = storage.getDatabase().prepare(`
+      INSERT INTO qa_review_runs (
+        id, project_id, sprint_id, task_id, trigger_type, status, outcome, run_index,
+        target_task_key, summary_markdown, fix_instructions, payload_json, agent_name,
+        started_at, finished_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 'completed', 'changes_requested', 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const [id, taskId, triggerType] of [
+      ["shared-task-review", task.id, "task_completion"],
+      ["shared-sprint-review", null, "sprint_completion"],
+    ] as const) {
+      insert.run(
+        id,
+        project.id,
+        sprint.id,
+        taskId,
+        triggerType,
+        "T01",
+        "Changes are required.",
+        "Add the missing regression path.",
+        payload,
+        "QA Reviewer",
+        "2026-07-13T13:00:00.000Z",
+        "2026-07-13T13:01:00.000Z",
+        "2026-07-13T13:00:00.000Z",
+        "2026-07-13T13:01:00.000Z",
+      );
+    }
+
+    const taskSummary = repository.listTasks(project.id, sprint.id)[0]?.latestReview;
+    const sprintSummary = repository.listSprints(project.id).sprints[0]?.latestReview;
+    expect(taskSummary).toEqual(sprintSummary);
+    expect(taskSummary).toMatchObject({
+      fixInstructions: "Add the missing regression path.",
+      targetTaskKey: "T01",
+      followUpTasks: [{
+        title: "Regression follow-up",
+        promptMarkdown: "Add the full regression scenario.",
+        description: null,
+        dependsOnTaskKeys: ["T01"],
+        priority: "high",
+      }],
     });
   });
 
@@ -2022,5 +2100,128 @@ describe("ProjectManagementRepository", () => {
     });
 
     expect(updated.mergeIndicator).toBeNull();
+  });
+
+  it("projects compact persisted CI state for task and sprint cards across restart-style reads", async () => {
+    const { storage, repository, executionRepository } = await createRepository();
+    const project = repository.createProject({
+      name: "Persisted CI Card Project",
+      sourceType: "local",
+      sourceRef: "/workspace/persisted-ci-card-project",
+    });
+    const sprint = repository.createSprint(project.id, { name: "Persisted CI Sprint" });
+    const runningTask = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Running checks",
+      status: "in_progress",
+      mergeIndicator: "CI",
+    });
+    const malformedTask = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T02",
+      title: "Malformed detail",
+      status: "in_progress",
+      mergeIndicator: "CI",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: runningTask.id,
+      state: "RUNNING",
+    });
+    const malformedTaskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: malformedTask.id,
+      state: "RUNNING",
+    });
+
+    executionRepository.appendTaskRunEvent(taskRun.id, "ci_gate_status", "system", {
+      state: "waiting_checks",
+      hasPendingChecks: true,
+    }, { createdAt: "2026-07-13T10:00:00.000Z" });
+    executionRepository.appendSprintRunEvent(sprintRun.id, "main_merge_gate_status", "system", {
+      state: "pending_checks",
+      hasPendingChecks: true,
+    }, { createdAt: "2026-07-13T10:00:00.000Z" });
+    storage.getDatabase().prepare(`
+      INSERT INTO task_run_events (
+        id, task_run_id, project_id, event_type, originator, payload_json, source_event_key, created_at
+      ) VALUES (?, ?, ?, 'ci_gate_status', 'system', ?, NULL, ?)
+    `).run(
+      "malformed-ci-event",
+      malformedTaskRun.id,
+      project.id,
+      "{malformed",
+      "2026-07-13T10:01:00.000Z",
+    );
+
+    const insertAttention = storage.getDatabase().prepare(`
+      INSERT INTO project_attention_items (
+        id, project_id, sprint_id, task_id, sprint_run_id, dispatch_id,
+        attention_type, severity, owner_type, status, assigned_worker_endpoint_id,
+        title, summary_markdown, payload_json, opened_at, claimed_at, resolved_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, NULL, ?, 'high', ?, 'open', NULL, ?, ?, ?, ?, NULL, NULL, ?)
+    `);
+    insertAttention.run(
+      "task-ci-attention",
+      project.id,
+      sprint.id,
+      runningTask.id,
+      sprintRun.id,
+      "ci_fix_required",
+      "worker",
+      "Task CI failure",
+      "CI repair is active.",
+      JSON.stringify({ failedChecks: ["test"] }),
+      "2026-07-13T10:02:00.000Z",
+      "2026-07-13T10:02:00.000Z",
+    );
+    insertAttention.run(
+      "main-ci-handoff",
+      project.id,
+      null,
+      null,
+      sprintRun.id,
+      "human_escalation_required",
+      "human",
+      "Main CI failure",
+      "A human CI repair is required.",
+      JSON.stringify({ sourceAttentionType: "ci_fix_required", mergeStage: "main" }),
+      "2026-07-13T10:03:00.000Z",
+      "2026-07-13T10:03:00.000Z",
+    );
+
+    expect(repository.listTasks(project.id, sprint.id).map((task) => [task.taskKey, task.ciStatus])).toEqual([
+      ["T01", "failed"],
+      ["T02", "pending"],
+    ]);
+    expect(repository.listSprints(project.id).sprints[0]?.ciStatus).toBe("failed");
+
+    storage.getDatabase().prepare(`
+      UPDATE project_attention_items
+      SET status = 'resolved', resolved_at = ?, updated_at = ?
+      WHERE id IN ('task-ci-attention', 'main-ci-handoff')
+    `).run("2026-07-13T10:04:00.000Z", "2026-07-13T10:04:00.000Z");
+    executionRepository.appendTaskRunEvent(taskRun.id, "ci_gate_status", "system", {
+      state: "merge_confirmed",
+    }, { createdAt: "2026-07-13T10:05:00.000Z" });
+    executionRepository.appendSprintRunEvent(sprintRun.id, "main_merge_gate_status", "system", {
+      state: "merged",
+    }, { createdAt: "2026-07-13T10:05:00.000Z" });
+
+    const restartedRepository = new ProjectManagementRepository(storage);
+    const restartedTasks = restartedRepository.listTasks(project.id, sprint.id);
+    expect(restartedTasks.find((task) => task.id === runningTask.id)?.ciStatus).toBeNull();
+    expect(restartedTasks.find((task) => task.id === malformedTask.id)?.ciStatus).toBe("pending");
+    expect(restartedRepository.listSprints(project.id).sprints[0]?.ciStatus).toBe("pending");
   });
 });

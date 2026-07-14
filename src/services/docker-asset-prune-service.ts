@@ -1,8 +1,9 @@
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
-import { runCommandStrict } from "./cli-process-runner.js";
+import { runCommandStrict, type CommandResult } from "./cli-process-runner.js";
 import { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
+import { AsyncSemaphore } from "../shared/async-semaphore.js";
 import type { Logger } from "../shared/logging/logger.js";
 
 export interface DockerAssetPruneResult {
@@ -15,22 +16,65 @@ export interface DockerAssetPruneResult {
   prunedPlaywrightBrowserVolumes?: string[];
 }
 
+export interface DockerAssetPruneServiceOptions {
+  dockerConcurrency?: number;
+  fileSystemConcurrency?: number;
+  dockerBatchSize?: number;
+}
+
+interface DockerVolumeInspection {
+  Name?: string;
+  CreatedAt?: string;
+  Labels?: Record<string, string>;
+}
+
 const WORKSPACE_VOLUME_PREFIX = "code-ux-";
 const WORKSPACE_VOLUME_LABEL = "code-ux.workspace=true";
 const RUNTIME_VOLUME_LABEL = "code-ux.workspace-runtime=true";
 const RUNTIME_VOLUME_SUFFIX = "-runtime";
 const DOCKER_PRUNE_TIMEOUT_MS = 10_000;
 const DOCKER_REMOVE_BATCH_SIZE = 50;
+const DEFAULT_DOCKER_CONCURRENCY = 4;
+const DEFAULT_FILE_SYSTEM_CONCURRENCY = 8;
 const PROVIDER_TOOL_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const WORKSPACE_VOLUME_CREATION_GRACE_MS = 10 * 60 * 1000;
 
 export class DockerAssetPruneService {
+  private readonly dockerSemaphore: AsyncSemaphore;
+  private readonly fileSystemSemaphore: AsyncSemaphore;
+  private readonly dockerBatchSize: number;
+  private cleanupInFlight: Promise<DockerAssetPruneResult> | null = null;
+
   constructor(
     private readonly sessionTrackingRepository: SessionTrackingRepository,
     private readonly logger?: Logger,
-  ) {}
+    options: DockerAssetPruneServiceOptions = {},
+  ) {
+    this.dockerSemaphore = new AsyncSemaphore(options.dockerConcurrency ?? DEFAULT_DOCKER_CONCURRENCY);
+    this.fileSystemSemaphore = new AsyncSemaphore(
+      options.fileSystemConcurrency ?? DEFAULT_FILE_SYSTEM_CONCURRENCY,
+    );
+    const configuredBatchSize = Math.floor(options.dockerBatchSize ?? DOCKER_REMOVE_BATCH_SIZE);
+    this.dockerBatchSize = Number.isFinite(configuredBatchSize)
+      ? Math.max(1, configuredBatchSize)
+      : DOCKER_REMOVE_BATCH_SIZE;
+  }
 
-  async cleanupOnStartup(): Promise<DockerAssetPruneResult> {
+  cleanupOnStartup(): Promise<DockerAssetPruneResult> {
+    if (this.cleanupInFlight) {
+      return this.cleanupInFlight;
+    }
+
+    const cleanup = this.performCleanupOnStartup();
+    this.cleanupInFlight = cleanup;
+    void cleanup.then(
+      () => this.clearCleanup(cleanup),
+      () => this.clearCleanup(cleanup),
+    );
+    return cleanup;
+  }
+
+  private async performCleanupOnStartup(): Promise<DockerAssetPruneResult> {
     const trackedSessionIds = new Set(
       this.sessionTrackingRepository
         .listTrackedCliSessions()
@@ -49,9 +93,15 @@ export class DockerAssetPruneService {
 
     // Remove helper containers before workspace volumes: a surviving helper keeps its volume
     // mounted, which would otherwise block the volume removal below.
-    const prunedWorkspaceVolumes = await this.pruneWorkspaceVolumes(trackedSessionIds);
-    const prunedProviderToolVolumes = await this.pruneProviderToolVolumes();
-    const prunedPlaywrightBrowserVolumes = await this.prunePlaywrightBrowserVolumes();
+    const [
+      prunedWorkspaceVolumes,
+      prunedProviderToolVolumes,
+      prunedPlaywrightBrowserVolumes,
+    ] = await Promise.all([
+      this.pruneWorkspaceVolumes(trackedSessionIds),
+      this.pruneProviderToolVolumes(),
+      this.prunePlaywrightBrowserVolumes(),
+    ]);
     const prunedSetupImages: string[] = [];
 
     if (
@@ -129,22 +179,11 @@ export class DockerAssetPruneService {
 
   private async readVolumeCreationTimes(volumeNames: string[]): Promise<Map<string, number>> {
     const createdAtByVolume = new Map<string, number>();
-    for (let index = 0; index < volumeNames.length; index += DOCKER_REMOVE_BATCH_SIZE) {
-      const batch = volumeNames.slice(index, index + DOCKER_REMOVE_BATCH_SIZE);
-      if (batch.length === 0) continue;
-      const result = await this.runDocker(["volume", "inspect", ...batch]);
-      if (!result?.ok) continue;
-      try {
-        const entries = JSON.parse(result.stdout) as Array<{ Name?: string; CreatedAt?: string }>;
-        for (const entry of entries) {
-          if (!entry?.Name) continue;
-          const createdAt = Date.parse(entry.CreatedAt || "");
-          if (Number.isFinite(createdAt)) {
-            createdAtByVolume.set(entry.Name, createdAt);
-          }
-        }
-      } catch {
-        // Unknown creation times retain the historical stale-session behavior.
+    const inspections = await this.readVolumeInspections(volumeNames);
+    for (const [name, entry] of inspections) {
+      const createdAt = Date.parse(entry.CreatedAt || "");
+      if (Number.isFinite(createdAt)) {
+        createdAtByVolume.set(name, createdAt);
       }
     }
     return createdAtByVolume;
@@ -163,22 +202,18 @@ export class DockerAssetPruneService {
     const listed = await this.runDocker(["volume", "ls", "-q", "--filter", "label=ai.codeux.asset=provider-tool"]);
     const names = this.parseLines(listed?.stdout);
     if (names.length === 0) return [];
-    const active = await this.readActiveProviderToolVolumes();
-    const inspected: Array<{ name: string; provider: string; createdAt: number }> = [];
-    for (const name of names) {
-      const result = await this.runDocker(["volume", "inspect", name]);
-      if (!result?.ok) continue;
-      try {
-        const entry = (JSON.parse(result.stdout) as Array<{ CreatedAt?: string; Labels?: Record<string, string> }>)[0];
-        inspected.push({
-          name,
-          provider: entry?.Labels?.["ai.codeux.provider"] || "unknown",
-          createdAt: Date.parse(entry?.CreatedAt || "") || 0,
-        });
-      } catch {
-        // Ignore malformed Docker inspection responses.
-      }
-    }
+    const [active, inspections] = await Promise.all([
+      this.readActiveProviderToolVolumes(),
+      this.readVolumeInspections(names),
+    ]);
+    const inspected = names.flatMap((name) => {
+      const entry = inspections.get(name);
+      return entry ? [{
+        name,
+        provider: entry.Labels?.["ai.codeux.provider"] || "unknown",
+        createdAt: Date.parse(entry.CreatedAt || "") || 0,
+      }] : [];
+    });
     const newestByProvider = new Map<string, Set<string>>();
     for (const item of [...inspected].sort((left, right) => right.createdAt - left.createdAt)) {
       const keep = newestByProvider.get(item.provider) ?? new Set<string>();
@@ -209,18 +244,14 @@ export class DockerAssetPruneService {
     const listed = await this.runDocker(["volume", "ls", "-q", "--filter", "label=ai.codeux.asset=playwright-browser"]);
     const names = this.parseLines(listed?.stdout);
     if (names.length === 0) return [];
-    const active = await this.readActivePlaywrightBrowserVolumes();
-    const inspected: Array<{ name: string; createdAt: number }> = [];
-    for (const name of names) {
-      const result = await this.runDocker(["volume", "inspect", name]);
-      if (!result?.ok) continue;
-      try {
-        const entry = (JSON.parse(result.stdout) as Array<{ CreatedAt?: string }>)[0];
-        inspected.push({ name, createdAt: Date.parse(entry?.CreatedAt || "") || 0 });
-      } catch {
-        // Ignore malformed Docker inspection responses.
-      }
-    }
+    const [active, inspections] = await Promise.all([
+      this.readActivePlaywrightBrowserVolumes(),
+      this.readVolumeInspections(names),
+    ]);
+    const inspected = names.flatMap((name) => {
+      const entry = inspections.get(name);
+      return entry ? [{ name, createdAt: Date.parse(entry.CreatedAt || "") || 0 }] : [];
+    });
     const newest = new Set(
       [...inspected]
         .sort((left, right) => right.createdAt - left.createdAt)
@@ -266,29 +297,33 @@ export class DockerAssetPruneService {
         .filter((file) => file.isDirectory() && /-temp-[a-z0-9]+$/.test(file.name))
         .map((file) => file.name);
 
-      const pruned: string[] = [];
-      for (const tempDir of tempDirsToPrune) {
+      const removed = await Promise.all(tempDirsToPrune.map(async (tempDir) => {
         const fullPath = path.join(credentialsParentDir, tempDir);
         try {
-          await fs.rm(fullPath, { recursive: true, force: true });
-          pruned.push(tempDir);
-        } catch (e) {
+          await this.fileSystemSemaphore.run(
+            async () => await fs.rm(fullPath, { recursive: true, force: true }),
+          );
+          return tempDir;
+        } catch {
           // Ignore deletion errors on individual directories
+          return null;
         }
-      }
-      return pruned;
+      }));
+      return removed.filter((tempDir): tempDir is string => tempDir !== null);
     } catch {
       // If credentials directory doesn't exist or is not readable, just return empty array
       return [];
     }
   }
 
-  private async runDocker(args: string[]) {
-    try {
-      return await runCommandStrict("docker", args, process.cwd(), process.env, { timeout: DOCKER_PRUNE_TIMEOUT_MS });
-    } catch {
-      return null;
-    }
+  private async runDocker(args: string[]): Promise<CommandResult | null> {
+    return await this.dockerSemaphore.run(async () => {
+      try {
+        return await runCommandStrict("docker", args, process.cwd(), process.env, { timeout: DOCKER_PRUNE_TIMEOUT_MS });
+      } catch {
+        return null;
+      }
+    });
   }
 
   private parseLines(value: string | undefined): string[] {
@@ -299,25 +334,79 @@ export class DockerAssetPruneService {
   }
 
   private async removeDockerItems(baseArgs: string[], itemNames: string[]): Promise<string[]> {
-    const pruned: string[] = [];
-    for (let index = 0; index < itemNames.length; index += DOCKER_REMOVE_BATCH_SIZE) {
-      const batch = itemNames.slice(index, index + DOCKER_REMOVE_BATCH_SIZE);
+    const batchResults = await Promise.all(this.toDockerBatches(itemNames).map(async (batch) => {
       const result = await this.runDocker([...baseArgs, ...batch]);
       if (result?.ok) {
-        pruned.push(...batch);
-        continue;
+        return batch;
       }
       if (batch.length === 1) {
-        continue;
+        return [];
       }
-      for (const item of batch) {
+      const individualResults = await Promise.all(batch.map(async (item) => {
         const singleResult = await this.runDocker([...baseArgs, item]);
-        if (singleResult?.ok) {
-          pruned.push(item);
-        }
+        return singleResult?.ok ? item : null;
+      }));
+      return individualResults.filter((item): item is string => item !== null);
+    }));
+    return batchResults.flat();
+  }
+
+  private async readVolumeInspections(
+    volumeNames: string[],
+  ): Promise<Map<string, DockerVolumeInspection>> {
+    const inspections = new Map<string, DockerVolumeInspection>();
+    const batchResults = await Promise.all(this.toDockerBatches(volumeNames).map(async (batch) => {
+      const result = await this.runDocker(["volume", "inspect", ...batch]);
+      const entries = this.parseVolumeInspections(batch, result);
+      if (entries.length > 0 || batch.length === 1) {
+        return entries;
       }
+
+      // A volume can disappear between list and inspect. Preserve the former
+      // per-volume behavior for the rest of the batch without serializing it.
+      const individualEntries = await Promise.all(batch.map(async (name) => (
+        this.parseVolumeInspections(
+          [name],
+          await this.runDocker(["volume", "inspect", name]),
+        )
+      )));
+      return individualEntries.flat();
+    }));
+
+    for (const [name, entry] of batchResults.flat()) {
+      inspections.set(name, entry);
     }
-    return pruned;
+    return inspections;
+  }
+
+  private parseVolumeInspections(
+    requestedNames: string[],
+    result: CommandResult | null,
+  ): Array<[string, DockerVolumeInspection]> {
+    if (!result?.ok) return [];
+    try {
+      const entries = JSON.parse(result.stdout) as DockerVolumeInspection[];
+      return entries.flatMap((entry, index) => {
+        const name = entry?.Name || requestedNames[index];
+        return name ? [[name, entry] as [string, DockerVolumeInspection]] : [];
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  private toDockerBatches(itemNames: string[]): string[][] {
+    const batches: string[][] = [];
+    for (let index = 0; index < itemNames.length; index += this.dockerBatchSize) {
+      batches.push(itemNames.slice(index, index + this.dockerBatchSize));
+    }
+    return batches;
+  }
+
+  private clearCleanup(cleanup: Promise<DockerAssetPruneResult>): void {
+    if (this.cleanupInFlight === cleanup) {
+      this.cleanupInFlight = null;
+    }
   }
 
   private extractWorkspaceKey(volumeName: string): string | null {

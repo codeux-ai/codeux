@@ -266,6 +266,8 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFoc
   const [confirmationText, setConfirmationText] = useState("");
 
   const cardRef = useRef<HTMLDivElement>(null);
+  const wasOpenRef = useRef(isOpen);
+  const animationGenerationRef = useRef(0);
   const trapRef = useFocusTrap(shouldRender && !isClosing, { onClose: () => handleClose(onCancel), restoreFocus });
   const reducedMotion = useReducedMotion();
   const gsapTokens = useGsapInteractionTokens();
@@ -276,10 +278,15 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFoc
   };
 
   useEffect(() => {
+    const isOpening = isOpen && !wasOpenRef.current;
+    wasOpenRef.current = isOpen;
     if (isOpen) {
       setShouldRender(true);
       setIsClosing(false);
-      setConfirmationText("");
+      if (isOpening) {
+        setConfirmationText("");
+        setConfirmFlash(false);
+      }
     } else if (shouldRender) {
       setIsClosing(true);
     }
@@ -288,11 +295,12 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFoc
   useLayoutEffect(() => {
     if (shouldRender && !isClosing) {
       const d_card = reducedMotion ? 0 : gsapTokens.enterExit.duration;
+      animationGenerationRef.current += 1;
 
       if (cardRef.current) {
         gsap.fromTo(cardRef.current,
           { y: reducedMotion ? 0 : MODAL_MOTION.entry.yStart, opacity: MODAL_MOTION.entry.opacityStart, scale: reducedMotion ? 1 : MODAL_MOTION.entry.scaleStart, filter: reducedMotion ? MODAL_MOTION.entry.filterEnd : MODAL_MOTION.entry.filterStart },
-          { y: MODAL_MOTION.entry.yEnd, opacity: MODAL_MOTION.entry.opacityEnd, scale: MODAL_MOTION.entry.scaleEnd, filter: MODAL_MOTION.entry.filterEnd, duration: d_card, ease: gsapTokens.enterExit.ease }
+          { y: MODAL_MOTION.entry.yEnd, opacity: MODAL_MOTION.entry.opacityEnd, scale: MODAL_MOTION.entry.scaleEnd, filter: MODAL_MOTION.entry.filterEnd, duration: d_card, ease: gsapTokens.enterExit.ease, overwrite: true }
         );
       }
     }
@@ -316,20 +324,24 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFoc
   useEffect(() => {
     if (isClosing) {
       const d = reducedMotion ? 0 : gsapTokens.enterExit.duration;
+      const card = cardRef.current;
+      const animationGeneration = ++animationGenerationRef.current;
 
       const onExitComplete = () => {
+        if (animationGeneration !== animationGenerationRef.current) return;
         setShouldRender(false);
         setIsClosing(false);
       };
 
-      if (cardRef.current) {
-        gsap.to(cardRef.current, {
+      if (card) {
+        gsap.to(card, {
           y: MODAL_MOTION.exit.yEnd,
           opacity: MODAL_MOTION.exit.opacityEnd,
           scale: MODAL_MOTION.exit.scaleEnd,
           filter: MODAL_MOTION.exit.filterEnd,
           duration: d,
           ease: gsapTokens.enterExit.ease,
+          overwrite: true,
           onComplete: onExitComplete
         });
       } else {

@@ -1,4 +1,5 @@
 import type { FunctionComponent, RefObject } from "preact";
+import { lazy, Suspense } from "preact/compat";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { Bell, CalendarClock, Moon, Sun, ChevronDown, FolderOpen, ArrowRight, Code2, Palette, Plus, Target } from "lucide-preact";
@@ -10,16 +11,19 @@ import { BrandSection } from "./top-nav/BrandSection.js";
 import { GlobalSearch } from "./top-nav/GlobalSearch.js";
 import { TelemetryStats } from "./top-nav/TelemetryStats.js";
 
-import { AddProjectModal, type AddProjectModalSubmission } from "./ui/AddProjectModal.js";
-import { AddSprintModal, type AddSprintModalSubmission } from "./ui/AddSprintModal.js";
+import type { AddProjectModalSubmission } from "./ui/AddProjectModal.js";
+import type { AddSprintModalSubmission } from "./ui/AddSprintModal.js";
 import { buildProjectCreationSettingsOverride } from "../../lib/settings-updaters.js";
-import { DEFAULT_DASHBOARD_SETTINGS } from "../../lib/settings.js";
 import { useProjectData } from "../context/project-data.js";
 import { useSprints } from "../../hooks/useSprints.js";
 import { formatSprintDisplay } from "../lib/format-sprint.js";
 import { clearProjectEffectiveSettingsCache, useProjectEffectiveSettings } from "../hooks/use-project-effective-settings.js";
 import { saveProjectDesignGuidanceSettings } from "../lib/settings-api.js";
-import { DESIGN_GUIDANCE_NONE_ID } from "../../../../src/domain/settings/design-guidance-catalog.js";
+import {
+    DEFAULT_DESIGN_GUIDANCE_SETTINGS,
+    DESIGN_GUIDANCE_NONE_ID,
+} from "../../../../src/domain/settings/design-guidance-catalog.js";
+import { BUILTIN_CODE_UX_TECHSTACK_ID } from "../../../../src/domain/settings/project-creation-defaults.js";
 import {
     getDesignGuidanceActiveLabel,
     getDesignGuidanceSelectedId,
@@ -35,6 +39,9 @@ import { useToast } from "./feedback/ToastProvider.js";
 import { useThemeSetting } from "../hooks/useThemeSetting.js";
 import { useIsDark } from "../hooks/use-is-dark.js";
 import type { AgentSchedulerSummaryEntry } from "../lib/scheduler-api.js";
+
+const AddProjectModal = lazy(() => import("./ui/AddProjectModal.js").then((module) => ({ default: module.AddProjectModal })));
+const AddSprintModal = lazy(() => import("./ui/AddSprintModal.js").then((module) => ({ default: module.AddSprintModal })));
 
 export function useDropdownKeyboard(
     isOpen: boolean,
@@ -489,7 +496,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
     const filteredProjects = useMemo(() => projects.filter(p => p.name.toLowerCase().includes(projectFilter.toLowerCase())), [projects, projectFilter]);
     const filteredSprints = useMemo(() => sprints.filter(s => s.name.toLowerCase().includes(sprintFilter.toLowerCase())), [sprints, sprintFilter]);
-    const designGuidance = effectiveSettings?.settings.designGuidance ?? DEFAULT_DASHBOARD_SETTINGS.designGuidance;
+    const designGuidance = effectiveSettings?.settings.designGuidance ?? DEFAULT_DESIGN_GUIDANCE_SETTINGS;
     const techstackOptions = useMemo(
         () => getVisibleDesignGuidanceEntries(designGuidance, "techStack"),
         [designGuidance],
@@ -692,7 +699,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                 isPrivate: project.isPrivate,
                 settingsOverrides: buildProjectCreationSettingsOverride({
                     ...(isLocalProject ? { githubMode: "LOCAL" as const } : {}),
-                    selectedTechstackId: project.selectedTechstackId ?? DEFAULT_DASHBOARD_SETTINGS.techstackCatalog.defaultTechstackId,
+                    selectedTechstackId: project.selectedTechstackId ?? BUILTIN_CODE_UX_TECHSTACK_ID,
                     applicationKind: project.applicationKind ?? null,
                 }),
             });
@@ -1210,23 +1217,25 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
             </div>
         </header>
 
-            {showAddProject && (
-                <AddProjectModal
-                    onClose={() => {
-                        setShowAddProject(false);
-                    }}
-                    onAdd={(project) => { void handleCreateProject(project); }}
-                />
-            )}
-            {showAddSprint && (
-                <AddSprintModal
-                    projectName={selectedProject?.name}
-                    onClose={() => {
-                        setShowAddSprint(false);
-                    }}
-                    onAdd={(sprint) => { void handleCreateSprint(sprint); }}
-                />
-            )}
+            <Suspense fallback={null}>
+                {showAddProject && (
+                    <AddProjectModal
+                        onClose={() => {
+                            setShowAddProject(false);
+                        }}
+                        onAdd={(project) => { void handleCreateProject(project); }}
+                    />
+                )}
+                {showAddSprint && (
+                    <AddSprintModal
+                        projectName={selectedProject?.name}
+                        onClose={() => {
+                            setShowAddSprint(false);
+                        }}
+                        onAdd={(sprint) => { void handleCreateSprint(sprint); }}
+                    />
+                )}
+            </Suspense>
         </>
     );
 };

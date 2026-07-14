@@ -15,7 +15,9 @@ import type {
   ExecutionInvocationMessageRecord,
   CreateExecutionInvocationInput,
   UpdateExecutionInvocationInput,
-  AppendExecutionInvocationMessageInput
+  AppendExecutionInvocationMessageInput,
+  SyncExecutionInvocationMessagesResult,
+  SyncExecutionInvocationMessagesOptions,
 } from "../../contracts/execution-types.js";
 
 // Helper methods needed for validation
@@ -354,6 +356,157 @@ export function writeExecutionInvocationMessage(
 
     notifyRealtime(invocation.projectId, false);
     return record;
+  } catch (error) {
+    if (error instanceof RepositoryError) throw error;
+    logger.error("Operation failed", { error, invocationId });
+    throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+  }
+}
+
+function serializeMessageJson(value: Record<string, unknown> | null | undefined): string | null {
+  return value ? JSON.stringify(value) : null;
+}
+
+interface InvocationMessageSyncRow {
+  id: string;
+  role: ExecutionInvocationMessageRecord["role"];
+  content_markdown: string;
+  tool_calls_json: string | null;
+  metadata_json: string | null;
+  created_at: string;
+}
+
+/**
+ * Reconciles an invocation transcript by stable ordinal in one transaction.
+ *
+ * Provider transcripts are append-heavy, with occasional in-place lifecycle
+ * changes (for example a tool call moving from running to completed). Keeping
+ * the existing row for each ordinal avoids the DELETE + complete re-insert
+ * amplification that otherwise makes every telemetry tick O(total turns)
+ * writes. A truncated or rotated source only removes the obsolete tail.
+ */
+export function writeSyncExecutionInvocationMessages(
+  db: DatabaseAdapter,
+  logger: Logger,
+  getters: ValidationGetters,
+  invocationId: string,
+  inputs: AppendExecutionInvocationMessageInput[],
+  notifyRealtime: (projectId: string, includeOverview: boolean) => void,
+  options: SyncExecutionInvocationMessagesOptions = {},
+): SyncExecutionInvocationMessagesResult {
+  try {
+    const invocation = getters.getExecutionInvocation(invocationId);
+    if (!invocation) {
+      throw new EntityNotFoundError(`Execution invocation not found: ${invocationId}`);
+    }
+
+    const result = db.transaction((): SyncExecutionInvocationMessagesResult => {
+      const changedFromIndex = Math.min(
+        Math.max(Math.floor(options.changedFromIndex ?? 0), 0),
+        inputs.length,
+      );
+      const existing = db.prepare(`
+        SELECT id, role, content_markdown, tool_calls_json, metadata_json, created_at
+        FROM execution_invocation_messages
+        WHERE invocation_id = ?
+        ORDER BY created_at ASC, rowid ASC
+        LIMIT -1 OFFSET ?
+      `).all(invocationId, changedFromIndex) as InvocationMessageSyncRow[];
+      const commonCount = Math.min(existing.length, inputs.length - changedFromIndex);
+      const updateStatement = db.prepare(`
+        UPDATE execution_invocation_messages
+        SET role = ?, content_markdown = ?, tool_calls_json = ?, metadata_json = ?
+        WHERE id = ? AND invocation_id = ?
+      `);
+      const insertStatement = db.prepare(`
+        INSERT INTO execution_invocation_messages (
+          id, invocation_id, role, content_markdown, tool_calls_json, metadata_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      let updated = 0;
+      let unchanged = 0;
+      for (let index = 0; index < commonCount; index += 1) {
+        const current = existing[index]!;
+        const next = inputs[changedFromIndex + index]!;
+        const toolCallsJson = serializeMessageJson(next.toolCallsJson);
+        const metadataJson = serializeMessageJson(next.metadata);
+        if (
+          current.role === next.role
+          && current.content_markdown === next.contentMarkdown
+          && current.tool_calls_json === toolCallsJson
+          && current.metadata_json === metadataJson
+        ) {
+          unchanged += 1;
+          continue;
+        }
+        updateStatement.run(
+          next.role,
+          next.contentMarkdown,
+          toolCallsJson,
+          metadataJson,
+          current.id,
+          invocationId,
+        );
+        updated += 1;
+      }
+
+      let inserted = 0;
+      for (let index = changedFromIndex + commonCount; index < inputs.length; index += 1) {
+        const next = inputs[index]!;
+        const createdAt = next.createdAt || new Date().toISOString();
+        insertStatement.run(
+          `xim_${randomUUID().replace(/-/g, "")}`,
+          invocationId,
+          next.role,
+          next.contentMarkdown,
+          serializeMessageJson(next.toolCallsJson),
+          serializeMessageJson(next.metadata),
+          createdAt,
+        );
+        inserted += 1;
+      }
+
+      let deleted = 0;
+      if (changedFromIndex + existing.length > inputs.length) {
+        const deleteResult = db.prepare(`
+          DELETE FROM execution_invocation_messages
+          WHERE rowid IN (
+            SELECT rowid
+            FROM execution_invocation_messages
+            WHERE invocation_id = ?
+            ORDER BY created_at ASC, rowid ASC
+            LIMIT -1 OFFSET ?
+          )
+        `).run(invocationId, inputs.length);
+        deleted = deleteResult.changes;
+      }
+
+      if (inserted > 0 || updated > 0 || deleted > 0) {
+        const lastCreatedRow = inputs.length > 0
+          ? db.prepare(`
+              SELECT created_at
+              FROM execution_invocation_messages
+              WHERE invocation_id = ?
+              ORDER BY created_at DESC, rowid DESC
+              LIMIT 1
+            `).get(invocationId) as { created_at: string } | undefined
+          : undefined;
+        const now = new Date().toISOString();
+        db.prepare(`
+          UPDATE execution_invocations
+          SET message_count = ?, last_message_at = ?, updated_at = ?
+          WHERE id = ?
+        `).run(inputs.length, lastCreatedRow?.created_at ?? null, now, invocationId);
+      }
+
+      return { inserted, updated, deleted, unchanged: changedFromIndex + unchanged };
+    });
+
+    if (result.inserted > 0 || result.updated > 0 || result.deleted > 0) {
+      notifyRealtime(invocation.projectId, false);
+    }
+    return result;
   } catch (error) {
     if (error instanceof RepositoryError) throw error;
     logger.error("Operation failed", { error, invocationId });

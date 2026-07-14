@@ -71,6 +71,10 @@ Jules remains outside this local CLI parser and watcher path. Its remote session
 
 Chat's Invocations rail is server-authoritative. It reads the paginated `GET /api/projects/:projectId/execution/invocations` projection; `project.execution.updated` and `snapshot_required` trigger REST refetches for the list and selected transcript instead of creating browser-only invocation rows.
 
+The cinematic feedback model is separate from whichever invocation is selected in that rail. Only the latest running `dashboard_reply` or `worker_reply` for the resolved Project Manager preset is eligible, with `startedAt` and invocation id providing deterministic precedence. The model loads the persisted transcript through the existing invocation-message endpoint and exposes only non-empty normalized assistant prose. User/system turns, injected context, reasoning, tool arguments, and tool output are never promoted into stage copy.
+
+Logical tool activity is deduplicated by normalized `metadata.toolCallId`; a stable message id is the fallback only when no call id exists. The frontend refreshes this projection when the active invocation or its `messageCount`, `lastMessageAt`, or `updatedAt` changes, preserves same-invocation feedback during refresh, and aborts or generation-invalidates stale work after project/invocation changes. Terminal or missing invocations clear the feedback. A transcript request failure remains a local, non-fatal state and does not replace the normal chat transcript or make unrelated work foreground activity.
+
 Startup recovery reconciles stale workflow and provider rows from durable task-run, sprint-run, dispatch, process, and Docker-container evidence. Preparation-only rows can fail without provider linkage, terminal provider rows are reconciled without extending their usage window, and a recovered completed provider attempt may continue from its preserved workspace without a duplicate provider run.
 
 ## Focused verification

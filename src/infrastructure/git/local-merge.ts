@@ -16,6 +16,7 @@ const CODE_UX_GIT_IDENTITY_ARGS = [
   "-c", "user.name=Code UX",
   "-c", "user.email=agents@codeux.ai",
 ];
+const LOCAL_MERGE_REF_UPDATE_RETRY_ATTEMPTS = 8;
 
 export interface LocalMergeResult {
   ok: boolean;
@@ -525,6 +526,52 @@ export async function workerBranchHasMergeWork(args: {
 }
 
 /**
+ * Returns true when the recorded worker branch still exists and every commit on
+ * it is already reachable from the feature branch. This lets restart recovery
+ * distinguish an interrupted post-merge persistence step from a missing or
+ * genuinely no-output worker branch.
+ */
+export async function workerBranchIsMergedIntoFeature(args: {
+  repoPath: string;
+  featureBranch: string;
+  workerBranch: string;
+  runner?: LocalMergeRunner;
+}): Promise<boolean> {
+  const runner = args.runner ?? defaultRunner;
+  const branch = args.workerBranch.trim();
+  if (!branch) return false;
+
+  const sourceRefs = [
+    `refs/heads/${branch}`,
+    `refs/remotes/origin/${branch}`,
+  ];
+  const baseRefs = [
+    `refs/remotes/origin/${args.featureBranch}`,
+    `refs/heads/${args.featureBranch}`,
+  ];
+
+  for (const sourceRef of sourceRefs) {
+    if (!(await gitRefExists(args.repoPath, sourceRef, runner))) continue;
+    const sourceCommit = await gitResolveCommit(args.repoPath, sourceRef, runner);
+    if (!sourceCommit) continue;
+
+    for (const baseRef of baseRefs) {
+      if (!(await gitRefExists(args.repoPath, baseRef, runner))) continue;
+      const baseCommit = await gitResolveCommit(args.repoPath, baseRef, runner);
+      if (!baseCommit) continue;
+      try {
+        const result = await runner("git", ["rev-list", "--count", `${baseCommit}..${sourceCommit}`], args.repoPath);
+        if (Number.parseInt(result.stdout.trim(), 10) === 0) return true;
+      } catch {
+        // Try the next local/remote ref pair before treating the merge as unproven.
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
  * Deletes a local branch after its work has been merged. Never deletes the branch that is currently
  * checked out (git refuses anyway) and swallows errors — branch cleanup is best-effort and must
  * never fail a merge. Returns true when the branch was removed.
@@ -652,6 +699,7 @@ export function createTemporaryWorktreeBranchMerger(args: {
   const targetBranch = args.targetBranch.trim();
   let visibleCheckout: CheckedOutRef | null | undefined;
   let worktreePath: string | null = null;
+  let worktreeHead: string | null = null;
   let worktreeCreated = false;
   let mergedTarget = false;
   let closed = false;
@@ -694,6 +742,9 @@ export function createTemporaryWorktreeBranchMerger(args: {
       await runner("git", ["worktree", "add", "--detach", worktreePath, targetBranch], args.repoPath);
       worktreeCreated = true;
       await normalizeTemporaryWorktreeGitMetadata(args.repoPath, worktreePath);
+      // Real Git always resolves this to an object ID. The symbolic fallback keeps injected
+      // runners usable for higher-level orchestration tests that intentionally stub empty output.
+      worktreeHead = await gitResolveCommit(worktreePath, "HEAD", runner) ?? targetBranch;
       return null;
     } catch (err) {
       return { ok: false, conflict: false, error: formatGitError(err) };
@@ -725,26 +776,59 @@ export function createTemporaryWorktreeBranchMerger(args: {
         return { ok: false, conflict: false, error: "Temporary worktree was not created." };
       }
 
-      try {
-        await runGitWithCodeUxIdentity(worktreePath, ["merge", "--no-ff", "-m", commitMessage, sourceBranch], runner);
-        await runner("git", ["update-ref", `refs/heads/${targetBranch}`, "HEAD"], worktreePath);
-        mergedTarget = true;
-        return { ok: true, conflict: false };
-      } catch (err) {
-        const resolvedCodeUxConflict = await resolveCodeUxOnlyMergeConflicts(worktreePath, commitMessage, runner);
-        if (resolvedCodeUxConflict?.ok) {
-          await runner("git", ["update-ref", `refs/heads/${targetBranch}`, "HEAD"], worktreePath);
-          mergedTarget = true;
-          return resolvedCodeUxConflict;
+      const targetRef = `refs/heads/${targetBranch}`;
+      for (let attempt = 1; attempt <= LOCAL_MERGE_REF_UPDATE_RETRY_ATTEMPTS; attempt++) {
+        const expectedTarget = await gitResolveCommit(args.repoPath, targetRef, runner) ?? targetBranch;
+
+        if (worktreeHead !== expectedTarget) {
+          try {
+            await runner("git", ["reset", "--hard", expectedTarget], worktreePath);
+            worktreeHead = expectedTarget;
+          } catch (error) {
+            return { ok: false, conflict: false, error: formatGitError(error) };
+          }
         }
-        const conflict = resolvedCodeUxConflict ? true : await hasUnmergedConflictEntries(worktreePath, runner);
+
+        let mergeResult: LocalMergeResult = { ok: true, conflict: false };
         try {
-          await runner("git", ["merge", "--abort"], worktreePath);
-        } catch {
-          // Abort can itself fail if there was nothing to abort; ignore.
+          await runGitWithCodeUxIdentity(worktreePath, ["merge", "--no-ff", "-m", commitMessage, sourceBranch], runner);
+        } catch (error) {
+          const resolvedCodeUxConflict = await resolveCodeUxOnlyMergeConflicts(worktreePath, commitMessage, runner);
+          if (resolvedCodeUxConflict?.ok) {
+            mergeResult = resolvedCodeUxConflict;
+          } else {
+            const conflict = resolvedCodeUxConflict ? true : await hasUnmergedConflictEntries(worktreePath, runner);
+            try {
+              await runner("git", ["merge", "--abort"], worktreePath);
+            } catch {
+              // Abort can itself fail if there was nothing to abort; ignore.
+            }
+            return { ok: false, conflict, error: resolvedCodeUxConflict?.error ?? formatGitError(error) };
+          }
         }
-        return { ok: false, conflict, error: formatGitError(err) };
+
+        const mergedHead = await gitResolveCommit(worktreePath, "HEAD", runner) ?? "HEAD";
+        worktreeHead = mergedHead;
+
+        try {
+          await runner("git", ["update-ref", targetRef, mergedHead, expectedTarget], worktreePath);
+          mergedTarget = true;
+          return mergeResult;
+        } catch (error) {
+          const actualTarget = await gitResolveCommit(args.repoPath, targetRef, runner);
+          if (actualTarget !== expectedTarget && attempt < LOCAL_MERGE_REF_UPDATE_RETRY_ATTEMPTS) {
+            // A concurrent CI repair or merge advanced the target. Re-run this merge from that
+            // commit; the compare-and-swap prevents either writer from discarding the other.
+            continue;
+          }
+          const detail = actualTarget !== expectedTarget
+            ? `Target branch '${targetBranch}' kept changing during local merge publication.`
+            : formatGitError(error);
+          return { ok: false, conflict: false, error: detail };
+        }
       }
+
+      return { ok: false, conflict: false, error: `Target branch '${targetBranch}' could not be updated.` };
     },
     async close(): Promise<void> {
       if (closed) return;

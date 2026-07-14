@@ -30,34 +30,26 @@ Bearer tokens and local provider credentials remain local and are not logged by 
 [Reconcile loop, every 3 s]
    │
    ▼
-For each project that needs attention:
+For each project that has worker work:
    │
-   ├─ pickNextWorkerAttention(projectId)   // pull next eligible item
+   ├─ Resolve workers.maxConcurrency and provider capacity
    │
-   ├─ if found:
-   │     ├─ Create ephemeral virtual endpoint in WorkerEndpointRepository
-   │     ├─ Assign worker to project (ProjectWorkerAssignmentService)
-   │     ├─ handleAttentionItem(endpoint.id, item, reason)
-   │     │     │
-   │     │     ├─ For coding/ci_fix/merge_conflict:
-   │     │     │     ├─ Resolve provider settings & model
-   │     │     │     ├─ Provision worktree (WorkspaceManager)
-   │     │     │     ├─ Spawn CLI (DOCKER or HOST mode)
-   │     │     │     │
-   │     │     │     ├─ [Session poll loop, every 2 s]
-   │     │     │     │     ├─ Pull session state
-   │     │     │     │     ├─ Update dispatch (workerTaskDispatchService)
-   │     │     │     │     └─ Exit on terminal state or cancel
-   │     │     │     │
-   │     │     │     └─ Cleanup worktree (unless preserve policy)
-   │     │     │
-   │     │     └─ For action_required (plan / clarification):
-   │     │           └─ Auto-approve or auto-reply (per automationInterventions)
-   │     │
-   │     └─ Release worker assignment & delete ephemeral endpoint
+   ├─ worker attention pending/running?
+   │     └─ wait for active dispatches, then run one exclusive attention cycle
    │
-   └─ if no item: skip project
+   └─ otherwise reserve distinct dispatches up to both limits
+         ├─ atomically claim each dispatch lease
+         ├─ create one ephemeral endpoint/assignment per dispatch
+         ├─ run provider/workspace cycles concurrently
+         └─ release each assignment and endpoint independently
 ```
+
+The process-local cycle registry prevents duplicate task/dispatch reservations and overlapping
+reconcile passes; atomic SQLite leases remain the cross-process authority. Provider capacity is
+checked before an endpoint is created, and the local budget is consumed as a batch fans out.
+Attention claims use a conditional SQLite update and remain project-exclusive because repairs can
+change shared state. Attention arriving after durable coding runs started waits for them instead of
+cancelling them.
 
 Default reconcile cadence: `VIRTUAL_WORKER_RECONCILE_MS = 3000`. Default session poll: `VIRTUAL_WORKER_SESSION_POLL_MS = 2000`. Initial scheduling uses microtasks to coalesce rapid events, but follow-up cycles after `remaining_worker_work` are deferred on the reconcile cadence so stale or unchanged worker state cannot starve dashboard HTTP probes or shutdown handling.
 
@@ -124,9 +116,15 @@ Each dispatch operates on its own Git worktree under `<repo>/.worktrees/<session
 
 Cleanup of terminal CLI worktrees also runs at sprint finalisation.
 
-Docker-backed planning uses a read-only snapshot workspace instead of a mutable task worktree. In `REMOTE` git mode, fresh planning invocations refresh `origin` and check out only `origin/<branch>` for the explicit sprint feature branch or the effective runtime git default branch, never the host repo's current checkout. If that remote tracking ref or fallback cannot be prepared, planning fails instead of falling back to a stale local branch. Restart and Continue reuse the preserved snapshot workspace so cancelled or interrupted provider sessions can still resume.
+Docker-backed planning uses a read-only snapshot workspace instead of a mutable task worktree. In `REMOTE` git mode, fresh planning invocations refresh `origin` and check out only `origin/<branch>` for the explicit sprint feature branch or the effective runtime git default branch, never the host repo's current checkout. If that remote tracking ref or fallback cannot be prepared, planning fails instead of falling back to a stale local branch. In `LOCAL` git mode, sprint branch allocation and preflight use local heads only and never fetch, inspect, fast-forward from, or push to `origin`, even if the repository has a remote configured. Restart and Continue reuse the preserved snapshot workspace so cancelled or interrupted provider sessions can still resume.
 
 Provider CLI workspace preparation is centralized through `InvocationWorkspacePreparer`. Its shared provider-invocation option builder constructs snapshot checkout, git policy, and fresh/continue lifecycle values for Docker provider calls, while its continuation resolver locates preserved workspaces and their current branches. Fresh Docker invocations in `REMOTE` git mode use explicit remote refs only: planning, project setup, dashboard/chat replies, worker inbox replies, node-flow provider prompts, QA review snapshots, task coding, QA follow-up, CI autofix, and merge-conflict repair all materialize from `origin/<branch>` refs rather than local branches or the host repo's current checkout. Dashboard/chat replies resolve dashboard settings with the project scope before building this policy, so local Git projects keep `LOCAL` snapshot behavior and do not require `origin/<defaultBranch>`. Continuation/restart flows may reuse a preserved workspace for provider-session continuity; if a preserved workspace is missing and a new workspace must be materialized, the same remote-only branch policy applies.
+
+QA reviewers, standalone CI-fix workers, and merge-conflict workers checkpoint their own logical session and workspace before provider execution. Under restart invocation policy `continue`, the replacement invocation reuses that workspace and resumes the provider-native conversation when available. Merge-conflict continuation also recognizes an in-progress Git merge and continues resolving it instead of replaying the merge operation.
+
+CI-fix and merge-conflict repair checkpoints retain the original workspace Git baseline, the finalized repair head, and the host-publication phase. A restart after provider or merge completion exports from that original baseline and resumes publication instead of treating the repair commit as a new baseline, rerunning the provider, or replaying the merge. Merge recovery also recognizes a completed merge commit by its target-branch ancestry when the restart landed immediately before the finalization checkpoint. Host publication commits carry the repair head as a trailer; recovery from `host_publishing` finds that marker and idempotently pushes the existing remote branch before settlement, preventing a second patch application when the process exited after materialization but before the `host_published` checkpoint. For legacy unmarked publications, Code UX derives the effective workspace tree including uncommitted and newly created files and searches matching reachable repair commits even if the branch later advanced. Settlement requires the exact repair tree and subject, baseline ancestry, and the target parent for merge repairs.
+
+Docker-volume artifact export performs Git discovery, staging, binary diffing, and temporary-index cleanup in one helper-container invocation instead of paying four or five Docker control-plane round trips per completed task. Host-side patch transaction files live under Git's administrative directory so materialization stays on the warm project Git helper rather than creating one-shot helpers for external temporary binds. When a LOCAL branch advances while an isolated worker is running, patch materialization applies the diff against its true workspace base and three-way merges the resulting tree onto the current descendant tip. Concurrent work is retained, identical already-landed file additions are de-duplicated, and genuine overlapping edits remain conflicts.
 
 ## Session lifecycle
 
@@ -159,6 +157,12 @@ Terminal session states:
 
 Dashboard chat replies use the same provider execution and invocation records, but the 3D Chat stage deliberately separates the selected Project Manager from project-wide execution. The Project Manager is active only when the selected thread has an awaited reply or a running `dashboard_reply`/`worker_reply` invocation matches the preset resolved for that stage. Every other running task, planning, CI, QA, or agent reply invocation remains truthful background activity. It may produce a thought/status cue and background count, but it cannot choose the Project Manager's working expression, caption, busy state, or work tool.
 
+Foreground transcript feedback is narrower than the general working state. The dashboard selects the newest running `dashboard_reply` or `worker_reply` in the selected project whose `agentPresetId` matches that resolved Project Manager preset; invocation-detail selection and unrelated running work do not participate. Only that record equips the animated work tool and creates the transient progress bubble. The bubble projects the latest non-empty persisted assistant prose whose normalized kind is absent or `assistant`, plus explicit **In progress** text and a logical tool count. `tool_call`/`tool_result` pairs sharing `toolCallId` count once, and stable message ids deduplicate tool records without a call id. It excludes user, reasoning, injected-context, raw tool, and unknown internal turns, and uses a startup placeholder at zero messages.
+
+The feedback hook refetches the persisted transcript when `messageCount`, `lastMessageAt`, or `updatedAt` changes so append-only updates and same-length telemetry rewrites both refresh. A same-invocation refresh preserves its last accepted projection. Transcript-fetch errors are non-fatal and keep the prior snapshot or startup placeholder. Pending requests are aborted when superseded, and generation checks ignore late responses after invocation or project changes. Terminal, missing, replaced, wrong-project, or wrong-preset invocations clear the snapshot; the stage additionally clears ownership on later thread changes while allowing the first-send `new-thread` to created-thread handoff. The projection never becomes a durable thread message and is removed before the final reply is staged. This is a read model over persisted invocation telemetry, not a backend streaming or delivery-guarantee contract.
+
+With motion enabled, the progress bubble animates on first appearance and eligible interim-message changes, and the selected invocation rotates its deterministic work tool every seven seconds. Reduced motion keeps the initial tool static and suppresses those progress transitions, rotation, and thought dots. WebGL failure follows the same static fallback. In both cases visible phase, **In progress**, interim/startup, tool-count, and tool-label text remains authoritative. Responsive layout bounds and internally scrolls the exchange and progress prose, gives wide code/tables their own horizontal overflow, grows progress typography and width through 2XL, and shifts the compact desktop thought bubble farther left with tail spacing so it stays clear of the larger avatar and reply column.
+
 JSON-mode dashboard replies can return optional `agentEffect` metadata, while MCP-native replies can embed a `codeux:agent` JSON fence. The exact shape is `{ "emotion": string, "animation": string, "caption"?: string, "durationMs": number }`: emotions are `happy`, `sad`, `angry`, `sleepy`, `bored`, `curious`, `thinking`, `excited`, `surprised`, or `proud`; animations are `hyped`, `shake_head`, `nod`, `laughing`, `wink`, or `dance`; duration is an inclusive 500–10000 safe integer; and a caption must trim to 1–120 characters. Invalid payloads are ignored without losing the reply, and invalid native fences are preserved as ordinary JSON. Valid native fences are removed from visible markdown and the first effect is stored as `metadata.agentEffect`.
 
 The dashboard revalidates persisted metadata and gives a valid `metadata.agentEffect` precedence over a backward-compatible valid fence. Only the latest reply-direction message can apply it, since Project Manager replies may be stored with `authorType: "system"`. Errors, outgoing routing, and active Project Manager work outrank the effect. External-channel prompts suppress this contract; outbound sanitization strips valid `codeux:agent` fences, downgrades invalid ones to readable JSON, and does not forward avatar metadata.
@@ -173,6 +177,8 @@ The virtual worker can claim and act on these attention item categories:
 | `ci_failure` | Provision a worker; instruct the CLI to read the failing CI log and apply a fix; respects `julesCiAutofixMaxRetries`. |
 
 Repair attention is scheduled before ordinary coding dispatches. Code UX does not lease a coding task while CI-fix or merge-conflict attention is waiting, and capacity is checked against the provider selected by the invocation-specific route rather than the generic virtual-worker provider. The final provider-slot wait is bounded to 30 seconds so sprint finalization cannot wait forever on a saturated or stale route.
+
+Startup recovery releases `ci_fix_required` and `merge_conflict` items claimed by stopped virtual-worker endpoints and returns them to the queue with their repair-session checkpoint intact. Continuing that same interrupted attempt does not spend another guardrail attempt. Retryable interruption preserves the repair workspace; terminal success or exhaustion follows normal cleanup.
 
 Task-scoped CI repair continues the originating coding session, native provider session, effective model, coding-agent instructions, and preserved workspace by default. Settings → AI Models → CI fix can disable this behavior and force the standalone CI Fix route; sprint-level final-merge repair always uses that route. Failed invocations return attention to an unclaimed retryable state while the guardrail budget remains. When the default five-attempt limit is reached, Code UX creates a human handoff containing the last error and attempt count.
 

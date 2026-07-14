@@ -1,11 +1,16 @@
 import type { ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
+import type { CustomDashboardValidationIssue } from "../../contracts/custom-dashboard-types.js";
 
 export type ManagementErrorKind = "validation" | "runtime";
 
 export class ManagementValidationError extends Error {
   readonly kind = "validation" as const;
 
-  constructor(message: string, readonly field?: string) {
+  constructor(
+    message: string,
+    readonly field?: string,
+    readonly issues?: CustomDashboardValidationIssue[],
+  ) {
     super(message);
     this.name = "ManagementValidationError";
   }
@@ -15,8 +20,12 @@ export function isManagementValidationError(error: unknown): error is Management
   return error instanceof ManagementValidationError;
 }
 
-export function managementValidationError(message: string, field?: string): ManagementValidationError {
-  return new ManagementValidationError(message, field);
+export function managementValidationError(
+  message: string,
+  field?: string,
+  issues?: CustomDashboardValidationIssue[],
+): ManagementValidationError {
+  return new ManagementValidationError(message, field, issues);
 }
 
 export function formatManagementErrorEnvelope(
@@ -35,6 +44,9 @@ export function formatManagementErrorEnvelope(
   };
   if (isManagementValidationError(error) && error.field) {
     result.field = error.field;
+  }
+  if (isManagementValidationError(error) && error.issues) {
+    result.issues = error.issues;
   }
   return { result };
 }

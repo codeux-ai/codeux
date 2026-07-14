@@ -1,6 +1,16 @@
 import type { SprintStatus } from "../../types.js";
 import type { Sprint } from "../../types.js";
+import type {
+  ExecutionAttentionItemSummary,
+  ExecutionRuntimeEventSummary,
+  ExecutionTaskDispatchSummary,
+} from "../../../../../src/contracts/app-types.js";
 import { filterShowcaseSprints, sortSprintsByRecency } from "../../lib/sprint-gallery.js";
+import {
+  deriveSprintCiStatusPresentation,
+  type CiStatusPresentation,
+  type CiTaskMergeEvidence,
+} from "../../lib/ci-status-presentation.js";
 import type { DashboardSettings, ProviderConfigId, ProviderId, SystemSettings } from "../../../types.js";
 import {
   getProviderDisplayMetadata,
@@ -30,6 +40,62 @@ const CONNECTION_STATUS_PRIORITY: Record<string, number> = {
   stale: 4,
   offline: 5,
 };
+
+export function areCiStatusPresentationsEqual(
+  left: CiStatusPresentation,
+  right: CiStatusPresentation,
+): boolean {
+  return left === right || (
+    left.scope === right.scope
+    && left.state === right.state
+    && left.label === right.label
+    && left.accessibleLabel === right.accessibleLabel
+    && left.failureKind === right.failureKind
+    && left.steps.every((step, index) => {
+      const other = right.steps[index];
+      return step.id === other.id
+        && step.label === other.label
+        && step.state === other.state
+        && step.statusLabel === other.statusLabel
+        && step.failureKind === other.failureKind;
+    })
+  );
+}
+
+export function buildCiStatusBySprintId(
+  sprints: readonly Pick<Sprint, "id">[],
+  taskDispatches: readonly ExecutionTaskDispatchSummary[],
+  events: readonly ExecutionRuntimeEventSummary[],
+  attentionItems: readonly ExecutionAttentionItemSummary[],
+): Map<string, CiStatusPresentation> {
+  const sprintIds = new Set(sprints.map((sprint) => sprint.id));
+  const taskEvidenceBySprintId = new Map<string, Map<string, CiTaskMergeEvidence>>();
+
+  for (const dispatch of taskDispatches) {
+    if (!sprintIds.has(dispatch.sprintId)) continue;
+    const sprintTasks = taskEvidenceBySprintId.get(dispatch.sprintId)
+      ?? new Map<string, CiTaskMergeEvidence>();
+    sprintTasks.set(dispatch.taskId, {
+      record_id: dispatch.taskId,
+      id: dispatch.taskKey,
+      sprint_id: dispatch.sprintId,
+      pr_url: dispatch.prUrl ?? undefined,
+    });
+    taskEvidenceBySprintId.set(dispatch.sprintId, sprintTasks);
+  }
+
+  const result = new Map<string, CiStatusPresentation>();
+  for (const sprint of sprints) {
+    const presentation = deriveSprintCiStatusPresentation({
+      sprintId: sprint.id,
+      events,
+      attentionItems,
+      tasks: [...(taskEvidenceBySprintId.get(sprint.id)?.values() ?? [])],
+    });
+    if (presentation) result.set(sprint.id, presentation);
+  }
+  return result;
+}
 
 export const compareString = (left: string, right: string): number => (
   left.localeCompare(right, undefined, { sensitivity: "base" })

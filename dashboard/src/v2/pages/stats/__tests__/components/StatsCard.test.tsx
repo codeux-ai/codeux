@@ -128,6 +128,7 @@ describe("StatsCard", () => {
     const modes = [
       { label: "Trend", value: "trend" },
       { label: "Composition", value: "composition" },
+      { label: "Cost", value: "cost" },
       { label: "Models", value: "models" },
       { label: "Providers", value: "reliability" },
       { label: "Ledgers", value: "ledgers" },

@@ -3,14 +3,26 @@
 /** @jsx h */
 /** @jsxFrag Fragment */
 import { h, Fragment } from "preact";
+import { useState } from "preact/hooks";
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { render, waitFor, screen, fireEvent, cleanup, within } from "@testing-library/preact";
+import userEvent from "@testing-library/user-event";
 import { SettingsIntegrationsPanel } from "../../../dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.js";
 import { fetchLocalFiles } from "../../../dashboard/src/v2/lib/project-api.js";
+import { fetchAutomationCredentials, fetchCredentialHealth } from "../../../dashboard/src/v2/lib/automation-credential-api.js";
 
 vi.mock("../../../dashboard/src/v2/lib/project-api.js", () => ({
   fetchLocalFiles: vi.fn(),
 }));
+
+vi.mock("../../../dashboard/src/v2/lib/automation-credential-api.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../dashboard/src/v2/lib/automation-credential-api.js")>();
+  return {
+    ...actual,
+    fetchAutomationCredentials: vi.fn(),
+    fetchCredentialHealth: vi.fn(),
+  };
+});
 
 vi.mock("gsap", () => {
   const applyStyles = (target: unknown, props: Record<string, unknown>) => {
@@ -160,6 +172,66 @@ describe("SettingsIntegrationsPanel", () => {
     updateSystem: vi.fn(),
     updateProject: vi.fn(),
     ...overrides,
+  });
+
+  it("places automation credentials first and supports keyboard Manage, back navigation, and focus restoration", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchAutomationCredentials).mockResolvedValue([]);
+    vi.mocked(fetchCredentialHealth).mockResolvedValue({
+      available: true,
+      secure: true,
+      provider: "local-file",
+      keyId: "root",
+      keyVersion: 1,
+    });
+
+    const Harness = () => {
+      const [selectedIntegration, setSelectedIntegration] = useState<"automation-credentials" | "github" | null>(null);
+      return (
+        <SettingsIntegrationsPanel state={{
+          activeScope: "project",
+          selectedProject: { id: "project-1", name: "Selected project" },
+          projects: [{ id: "project-1", name: "Selected project" }],
+          editableSettings: {
+            cliWorkflow: { executionMode: "DOCKER" },
+            git: { githubMode: "REMOTE" },
+          },
+          systemSettings: {
+            integrations: { providers: {}, githubToken: "", gitlabToken: "" },
+          },
+          projectSources: {},
+          selectedIntegration,
+          setSelectedIntegration,
+          integrations: [
+            { id: "automation-credentials", label: "Automation Credentials", description: "Write-only project automation secrets" },
+            { id: "github", label: "GitHub", description: "Git provider" },
+          ],
+          importingHints: false,
+          externalHints: { resolved: {} },
+          handleImportHints: vi.fn(),
+          updateEditableSettings: vi.fn(),
+          updateSystem: vi.fn(),
+          updateProject: vi.fn(),
+        } as any} />
+      );
+    };
+
+    const { container } = render(<Harness />);
+    const card = await waitFor(() => container.querySelector('[data-integration-card="automation-credentials"]') as HTMLElement);
+    expect(container.textContent?.indexOf("Automation Credentials")).toBeLessThan(container.textContent?.indexOf("GitHub") ?? -1);
+    expect(within(card).getByText("Ready · not configured")).toBeTruthy();
+    expect(screen.queryByText("Automation credential management")).toBeNull();
+
+    const manageButton = within(card).getByRole("button", { name: "Manage" });
+    manageButton.focus();
+    await user.keyboard("{Enter}");
+    expect(await screen.findByText("Automation credential management")).toBeTruthy();
+    const backButton = screen.getByRole("button", { name: "Back to Integrations" });
+    await waitFor(() => expect(document.activeElement).toBe(backButton));
+
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(screen.queryByText("Automation credential management")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(manageButton));
   });
 
   it("keeps the selected integration detail in flow so long forms are not clipped", async () => {

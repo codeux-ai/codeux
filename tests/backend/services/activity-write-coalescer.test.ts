@@ -31,7 +31,7 @@ describe("ActivityWriteCoalescer", () => {
     vi.advanceTimersByTime(250);
     expect(sink.batches).toHaveLength(1);
     expect(sink.batches[0].sessionId).toBe("s1");
-    expect(sink.batches[0].items.map((i) => i.description)).toEqual(["line 1", "line 2"]);
+    expect(sink.batches[0].items.map((i) => i.description)).toEqual(["line 1\nline 2"]);
   });
 
   it("flushes immediately once the buffer hits maxBuffer", () => {
@@ -43,10 +43,11 @@ describe("ActivityWriteCoalescer", () => {
     expect(sink.batches).toHaveLength(0);
     coalescer.push("c");
     expect(sink.batches).toHaveLength(1);
-    expect(sink.batches[0].items).toHaveLength(3);
+    expect(sink.batches[0].items).toHaveLength(1);
+    expect(sink.batches[0].items[0].description).toBe("a\nb\nc");
   });
 
-  it("stamps each activity at push time to preserve ordering", () => {
+  it("keeps the first timestamp when adjacent rows are compacted", () => {
     const sink = makeSink();
     const coalescer = new ActivityWriteCoalescer(sink, "s1", { flushIntervalMs: 250 });
 
@@ -56,9 +57,25 @@ describe("ActivityWriteCoalescer", () => {
     coalescer.push("second");
     coalescer.stop();
 
-    const [a, b] = sink.batches[0].items;
+    const [a] = sink.batches[0].items;
     expect(a.createTime).toBe("2026-01-01T00:00:00.000Z");
-    expect(b.createTime).toBe("2026-01-01T00:00:00.500Z");
+    expect(a.description).toBe("first\nsecond");
+  });
+
+  it("does not merge different originators or exceed the row size bound", () => {
+    const sink = makeSink();
+    const coalescer = new ActivityWriteCoalescer(sink, "s1", {
+      flushIntervalMs: 250,
+      maxChunkChars: 256,
+    });
+
+    coalescer.push("a".repeat(200), "agent");
+    coalescer.push("b".repeat(100), "agent");
+    coalescer.push("provider line", "provider");
+    coalescer.stop();
+
+    expect(sink.batches[0].items).toHaveLength(3);
+    expect(sink.batches[0].items.map((item) => item.originator)).toEqual(["agent", "agent", "provider"]);
   });
 
   it("stop() flushes the tail and a subsequent timer does not double-write", () => {

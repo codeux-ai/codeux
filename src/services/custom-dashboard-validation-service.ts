@@ -40,6 +40,7 @@ import { DockerSessionLifecycle, sanitizeContainerNameComponent } from "./docker
 import { DockerBootstrapBuilder } from "../infrastructure/providers/cli/docker-bootstrap-builder.js";
 import { assertSafePathSegment, isPathInside } from "../utils/path-validator.js";
 import { managedRuntimeService, type ManagedRuntimeService } from "./managed-runtime-service.js";
+import type { CustomDashboardCredentialBindingService } from "./custom-dashboard-credential-binding-service.js";
 
 const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -55,6 +56,7 @@ const VIEWER_ARTIFACT_MAX_TOTAL_BYTES = 8 * 1024 * 1024;
 
 export interface CustomDashboardValidationServiceDeps {
   customDashboardRepository: CustomDashboardRepository;
+  customDashboardCredentialBindingService: CustomDashboardCredentialBindingService;
   projectManagementRepository: ProjectManagementRepository;
   settingsRepository: SettingsRepository;
   logger?: Logger;
@@ -118,6 +120,19 @@ export class CustomDashboardValidationService {
         throw new EntityNotFoundError(`Custom dashboard not found: ${dashboardId}`);
       }
       const revision = this.requireRevision(projectId, dashboardId, revisionId);
+      const bindingReview = await this.deps.customDashboardCredentialBindingService.reviewRevision(
+        projectId,
+        dashboardId,
+        revisionId,
+      );
+      if (!bindingReview.valid) {
+        return this.deps.customDashboardRepository.createValidationSession(revision.id, {
+          status: "failed",
+          validationReport: this.deps.customDashboardCredentialBindingService.toValidationReport(bindingReview),
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+        });
+      }
       const { runtimeRoot, workspacePath, runtimeHomePath, logPath } = await this.resolveValidationRuntimePaths(
         project.baseDir,
         dashboardId,

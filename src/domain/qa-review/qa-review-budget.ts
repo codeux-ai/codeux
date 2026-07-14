@@ -22,6 +22,28 @@ export function shouldVerifyContinuedQaFix(run: QaReviewRunRecord | null): boole
     && run.payload?.postExhaustionVerificationEligible === true;
 }
 
+export function isPendingQaContinuation(run: QaReviewRunRecord | null): boolean {
+  if (run?.status !== "completed" || run.outcome !== "changes_requested" || !run.fixInstructions?.trim()) {
+    return false;
+  }
+  const continuationStatus = run.payload?.continuationStatus;
+  if (continuationStatus === "pending" || continuationStatus === "running") {
+    return true;
+  }
+  if (continuationStatus === "failed") {
+    const attemptCount = run.payload?.continuationAttemptCount;
+    const exhaustedAttempts = typeof attemptCount === "number"
+      && Number.isFinite(attemptCount)
+      && attemptCount >= QA_INFRA_FAILURE_GRACE;
+    return run.payload?.followUpNoProgress !== true && !exhaustedAttempts;
+  }
+  if (typeof continuationStatus === "string") {
+    return false;
+  }
+  return typeof run.payload?.continued !== "boolean"
+    && typeof run.payload?.continuationMode !== "string";
+}
+
 export interface QaReviewBudgetArgs {
   existingRuns: number;
   decisiveRuns: number;

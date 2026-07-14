@@ -2,6 +2,46 @@ import type { Subtask } from "../../contracts/app-types.js";
 import type { Logger } from "../../shared/logging/logger.js";
 import { getTaskDispatchDeferral } from "../../services/sprint-task-dispatch-service.js";
 
+const PROVIDER_CAP_LOG_INTERVAL_MS = 10_000;
+const providerCapLogState = new WeakMap<Logger, Map<string, { loggedAt: number; signature: string }>>();
+
+const shouldLogProviderCapBlock = (
+  logger: Logger,
+  provider: string,
+  block: {
+    count: number;
+    limit?: number;
+    currentCount?: number;
+    source: "pre_dispatch" | "dispatch";
+    taskIds: readonly string[];
+  },
+): boolean => {
+  let state = providerCapLogState.get(logger);
+  if (!state) {
+    state = new Map();
+    providerCapLogState.set(logger, state);
+  }
+  const signature = [
+    block.limit ?? "auto",
+    block.currentCount ?? "unknown",
+    block.count,
+    block.source,
+    ...block.taskIds,
+  ].join(":");
+  const now = Date.now();
+  const previous = state.get(provider);
+  if (
+    previous
+    && previous.signature === signature
+    && now >= previous.loggedAt
+    && now - previous.loggedAt < PROVIDER_CAP_LOG_INTERVAL_MS
+  ) {
+    return false;
+  }
+  state.set(provider, { loggedAt: now, signature });
+  return true;
+};
+
 interface StartReadyTasksOptions {
   action: "status" | "orchestrate" | "plan";
   maxFailures: number;
@@ -145,6 +185,7 @@ export const runStartReadyTasksStep = async (
   }
 
   for (const [provider, block] of providerCapBlocks) {
+    if (!shouldLogProviderCapBlock(options.logger, provider, block)) continue;
     options.logger.info("Provider concurrency cap deferred ready tasks", {
       provider,
       limit: block.limit,

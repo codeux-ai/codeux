@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render } from "@testing-library/preact";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { h } from "preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 /** @jsx h */
@@ -17,12 +17,16 @@ vi.mock("gsap", () => ({
     },
   },
 }));
+const motionPreference = vi.hoisted(() => ({ reduced: true }));
 vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", async (importOriginal) => ({
   ...await importOriginal<typeof import("../../../dashboard/src/v2/hooks/use-reduced-motion.js")>(),
-  useReducedMotion: () => true,
+  useReducedMotion: () => motionPreference.reduced,
 }));
 vi.mock("../../../dashboard/src/v2/hooks/use-project-effective-settings.js", () => ({
   useProjectEffectiveSettings: () => ({ data: null }),
+}));
+vi.mock("../../../dashboard/src/v2/lib/invocation-api.js", () => ({
+  fetchInvocationMessages: vi.fn(),
 }));
 vi.mock("../../../dashboard/src/v2/components/agents/LazyAgentAvatarScene.js", () => ({
   LazyAgentAvatarScene: (props: { expression: string; tool: string | null }) => (
@@ -37,8 +41,11 @@ import { ChatPageShell } from "../../../dashboard/src/v2/components/chat/ChatPag
 import { ChatRail } from "../../../dashboard/src/v2/components/chat/ChatRail.js";
 import { ChatCreateAppQuickActions } from "../../../dashboard/src/v2/components/chat/ChatCreateAppQuickActions.js";
 import { CinematicStage } from "../../../dashboard/src/v2/components/chat/cinematic/CinematicStage.js";
+import { CinematicInvocationProgressBubble } from "../../../dashboard/src/v2/components/chat/cinematic/CinematicInvocationProgressBubble.js";
 import { StageActivityStrip } from "../../../dashboard/src/v2/components/chat/cinematic/StageActivityStrip.js";
-import type { AgentPresetRecord, ExecutionInvocationRecord, Source } from "../../../dashboard/src/v2/types.js";
+import { fetchInvocationMessages } from "../../../dashboard/src/v2/lib/invocation-api.js";
+import gsap from "gsap";
+import type { AgentPresetRecord, ChatMessageRecord, ChatThread, ExecutionInvocationMessageRecord, ExecutionInvocationRecord, Source } from "../../../dashboard/src/v2/types.js";
 
 const mockProject = {
   id: "proj-1",
@@ -53,17 +60,40 @@ const projectManagerPreset = {
   name: "Project Manager",
 } as AgentPresetRecord;
 
-const renderStageForInvocation = (
-  invocation: Pick<ExecutionInvocationRecord, "agentPresetId" | "status" | "type">,
-) => {
-  const activityInvocation = {
+const invocationRecord = (
+  overrides: Partial<ExecutionInvocationRecord> = {},
+): ExecutionInvocationRecord => ({
     id: "invocation-1",
+    projectId: "proj-1",
     messageCount: 0,
+    lastMessageAt: null,
     provider: "codex",
     providerInvocationId: null,
     startedAt: "2026-07-11T10:00:00.000Z",
-    ...invocation,
-  } as ExecutionInvocationRecord;
+    updatedAt: "2026-07-11T10:00:00.000Z",
+    agentPresetId: "pm-agent",
+    status: "running",
+    type: "dashboard_reply",
+    ...overrides,
+  } as ExecutionInvocationRecord);
+
+const invocationMessage = (
+  overrides: Partial<ExecutionInvocationMessageRecord> = {},
+): ExecutionInvocationMessageRecord => ({
+  id: "invocation-message-1",
+  invocationId: "invocation-1",
+  role: "assistant",
+  contentMarkdown: "Inspecting configuration.",
+  toolCallsJson: null,
+  metadata: null,
+  createdAt: "2026-07-11T10:00:01.000Z",
+  ...overrides,
+});
+
+const renderStageForInvocation = (
+  invocation: Partial<ExecutionInvocationRecord>,
+) => {
+  const activityInvocation = invocationRecord(invocation);
 
   return render(
     <CinematicStage
@@ -92,7 +122,16 @@ const renderStageForInvocation = (
 };
 
 describe("ChatPageShell", () => {
-  afterEach(cleanup);
+  beforeEach(() => {
+    motionPreference.reduced = true;
+    vi.clearAllMocks();
+    vi.mocked(fetchInvocationMessages).mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    motionPreference.reduced = true;
+    cleanup();
+  });
 
   it("renders onboarding mode without project chat controls when no project is selected", () => {
     const { getByText, queryByRole } = render(
@@ -206,7 +245,7 @@ describe("ChatPageShell", () => {
   });
 
   it("shows a clean planning label without background or provider prefixes", () => {
-    const { getByText, queryByText } = render(
+    const { getByTestId, getByText, queryByText } = render(
       <StageActivityStrip
         backgroundActivityCount={1}
         backgroundCue={{
@@ -223,6 +262,12 @@ describe("ChatPageShell", () => {
 
     expect(getByText("Planning in progress")).toBeInTheDocument();
     expect(queryByText(/Background|Codex/)).not.toBeInTheDocument();
+    expect(getByTestId("cinematic-thinking-bubble")).toHaveClass(
+      "left-1/2",
+      "-translate-x-1/2",
+      "md:-top-14",
+    );
+    expect(getByTestId("cinematic-thinking-bubble")).not.toHaveClass("md:-translate-x-[163%]");
   });
 
   it("renders create-app quickactions with accessible labels and disabled status text", () => {
@@ -292,11 +337,13 @@ describe("ChatPageShell", () => {
     expect(getByTestId("cinematic-stage")).toHaveAttribute("data-background-activity-count", "1");
     expect(getByTestId("agent-avatar-scene")).not.toHaveAttribute("data-expression", "thinking");
     expect(getByTestId("agent-avatar-scene")).toHaveAttribute("data-tool", "");
+    expect(fetchInvocationMessages).not.toHaveBeenCalled();
+    expect(queryByText("In progress")).not.toBeInTheDocument();
     expect(queryByText("Container starting")).toBeInTheDocument();
     expect(queryByText(/Background.*Codex/i)).not.toBeInTheDocument();
   });
 
-  it("activates the Project Manager for its matching dashboard-reply invocation", () => {
+  it("activates the Project Manager tool and progress bubble at zero-message startup", () => {
     const { container, getByTestId, getByText } = renderStageForInvocation({
       agentPresetId: "pm-agent",
       status: "running",
@@ -305,9 +352,228 @@ describe("ChatPageShell", () => {
 
     expect(getByTestId("cinematic-stage")).toHaveAttribute("data-background-activity-count", "0");
     expect(getByTestId("agent-avatar-scene")).toHaveAttribute("data-expression", "thinking");
+    expect(getByTestId("agent-avatar-scene").getAttribute("data-tool")).not.toBe("");
+    expect(getByTestId("cinematic-invocation-progress")).toHaveAttribute("data-invocation-id", "invocation-1");
+    expect(getByText("In progress")).toBeInTheDocument();
+    expect(getByText("0 tools used")).toBeInTheDocument();
+    expect(getByText("Preparing the first progress update…")).toBeInTheDocument();
+    expect(getByTestId("cinematic-exchange")).toHaveClass(
+      "top-[48%]",
+      "bottom-32",
+      "min-h-0",
+      "md:w-[42%]",
+      "lg:w-[40%]",
+    );
+    expect(getByTestId("cinematic-exchange")).not.toHaveClass("top-full");
     const activityLabel = getByText(/Container starting/);
     expect(activityLabel).toBeInTheDocument();
     expect(activityLabel.closest('[role="status"]')).toHaveAttribute("aria-atomic", "true");
     expect(container.querySelector(".stage-thinking-dot")).toHaveClass("motion-reduce:animate-none");
+  });
+
+  it("shows a work tool while an awaited reply is active before invocation feedback exists", () => {
+    const selectedThread = {
+      id: "thread-awaiting-reply",
+      title: "Awaiting reply",
+      messageCount: 1,
+      runtimeState: null,
+    } as ChatThread;
+    const view = render(
+      <CinematicStage
+        selectedProject={mockProject as Source}
+        selectedThread={selectedThread}
+        messages={[]}
+        threadMessagesLoading={false}
+        hasAwaitedReply
+        invocations={[]}
+        sending={false}
+        error={null}
+        input=""
+        setInput={vi.fn()}
+        onSpeechTranscript={vi.fn()}
+        handleSend={vi.fn(async () => undefined)}
+        handleCreateAppQuickaction={vi.fn(async () => undefined)}
+        initialEligibilityLoaded
+        canCreateInitialAppQuickactions={false}
+        navigateHistory={vi.fn(() => false)}
+        composerRef={{ current: null }}
+        activeConnection={null}
+        agentPreset={projectManagerPreset}
+        onOpenThreads={vi.fn()}
+      />,
+    );
+
+    expect(view.getByTestId("agent-avatar-scene")).toHaveAttribute("data-expression", "thinking");
+    expect(view.getByTestId("agent-avatar-scene").getAttribute("data-tool")).not.toBe("");
+    expect(view.queryByTestId("cinematic-invocation-progress")).not.toBeInTheDocument();
+  });
+
+  it("projects changing interim assistant markdown and a deduplicated tool count", async () => {
+    vi.mocked(fetchInvocationMessages)
+      .mockResolvedValueOnce([
+        invocationMessage({ contentMarkdown: "Inspecting **configuration**." }),
+        invocationMessage({ id: "tool-call", role: "tool", contentMarkdown: "", metadata: { kind: "tool_call", toolCallId: "call-1" } }),
+        invocationMessage({ id: "tool-result", role: "tool", contentMarkdown: "", metadata: { kind: "tool_result", toolCallId: "call-1" } }),
+      ])
+      .mockResolvedValueOnce([
+        invocationMessage({ id: "latest", contentMarkdown: "Applying the safe update." }),
+        invocationMessage({ id: "tool-call", role: "tool", contentMarkdown: "", metadata: { kind: "tool_call", toolCallId: "call-1" } }),
+        invocationMessage({ id: "tool-result", role: "tool", contentMarkdown: "", metadata: { kind: "tool_result", toolCallId: "call-1" } }),
+        invocationMessage({ id: "tool-call-2", role: "tool", contentMarkdown: "", metadata: { kind: "tool_call", toolCallId: "call-2" } }),
+      ]);
+    const firstInvocation = invocationRecord({ messageCount: 3, lastMessageAt: "2026-07-11T10:00:01.000Z" });
+    const renderStage = (invocation: ExecutionInvocationRecord) => (
+      <CinematicStage
+        selectedProject={mockProject as Source}
+        selectedThread={null}
+        messages={[]}
+        threadMessagesLoading={false}
+        hasAwaitedReply={false}
+        invocations={[invocation]}
+        sending={false}
+        error={null}
+        input=""
+        setInput={vi.fn()}
+        onSpeechTranscript={vi.fn()}
+        handleSend={vi.fn(async () => undefined)}
+        handleCreateAppQuickaction={vi.fn(async () => undefined)}
+        initialEligibilityLoaded
+        canCreateInitialAppQuickactions={false}
+        navigateHistory={vi.fn(() => false)}
+        composerRef={{ current: null }}
+        activeConnection={null}
+        agentPreset={projectManagerPreset}
+        onOpenThreads={vi.fn()}
+      />
+    );
+    const view = render(renderStage(firstInvocation));
+
+    await waitFor(() => expect(view.getByTestId("cinematic-invocation-progress")).toHaveTextContent("Inspecting configuration."));
+    expect(view.getByText("1 tool used")).toBeInTheDocument();
+    expect(view.getByTestId("agent-avatar-scene").getAttribute("data-tool")).not.toBe("");
+
+    view.rerender(renderStage(invocationRecord({
+      messageCount: 4,
+      lastMessageAt: "2026-07-11T10:00:02.000Z",
+      updatedAt: "2026-07-11T10:00:02.000Z",
+    })));
+
+    await waitFor(() => expect(view.getByText("Applying the safe update.")).toBeInTheDocument());
+    expect(view.getByTestId("cinematic-invocation-progress")).not.toHaveTextContent("Inspecting configuration.");
+    expect(view.getByText("2 tools used")).toBeInTheDocument();
+  });
+
+  it("removes transient invocation feedback and its tool at terminal state", async () => {
+    vi.mocked(fetchInvocationMessages).mockResolvedValue([
+      invocationMessage({ contentMarkdown: "Final reply text." }),
+    ]);
+    const finalMessage = {
+      id: "thread-message-1",
+      threadId: "thread-1",
+      direction: "connection_to_dashboard",
+      authorType: "system",
+      bodyMarkdown: "Final reply text.",
+      metadata: null,
+      createdAt: "2026-07-11T10:00:03.000Z",
+    } as ChatMessageRecord;
+    const stage = (
+      invocation: ExecutionInvocationRecord,
+      messages: ChatMessageRecord[] = [],
+      selectedThread: ChatThread | null = null,
+    ) => (
+      <CinematicStage
+        selectedProject={mockProject as Source}
+        selectedThread={selectedThread}
+        messages={messages}
+        threadMessagesLoading={false}
+        hasAwaitedReply={false}
+        invocations={[invocation]}
+        sending={false}
+        error={null}
+        input=""
+        setInput={vi.fn()}
+        onSpeechTranscript={vi.fn()}
+        handleSend={vi.fn(async () => undefined)}
+        handleCreateAppQuickaction={vi.fn(async () => undefined)}
+        initialEligibilityLoaded
+        canCreateInitialAppQuickactions={false}
+        navigateHistory={vi.fn(() => false)}
+        composerRef={{ current: null }}
+        activeConnection={null}
+        agentPreset={projectManagerPreset}
+        onOpenThreads={vi.fn()}
+      />
+    );
+    const initialThread = {
+      id: "thread-1",
+      title: "Active thread",
+      messageCount: 0,
+    } as ChatThread;
+    const view = render(stage(invocationRecord(), [], initialThread));
+    await waitFor(() => expect(view.getByTestId("cinematic-invocation-progress")).toBeInTheDocument());
+
+    view.rerender(stage(invocationRecord(), [], {
+      id: "thread-2",
+      title: "Another thread",
+      messageCount: 0,
+    } as ChatThread));
+    expect(view.queryByTestId("cinematic-invocation-progress")).not.toBeInTheDocument();
+    expect(view.getByTestId("agent-avatar-scene").getAttribute("data-tool")).not.toBe("");
+
+    view.rerender(stage(invocationRecord({ status: "completed" }), [finalMessage]));
+
+    expect(view.queryByTestId("cinematic-invocation-progress")).not.toBeInTheDocument();
+    expect(view.getByTestId("agent-avatar-scene")).toHaveAttribute("data-tool", "");
+    expect(view.getAllByText("Final reply text.")).toHaveLength(1);
+    expect(view.getByTestId("cinematic-exchange")).toContainElement(view.getByText("Final reply text."));
+    expect(view.getByTestId("cinematic-agent-reply")).toHaveClass(
+      "max-w-[620px]",
+      "lg:max-w-[560px]",
+      "2xl:max-w-[680px]",
+    );
+    expect(view.getByTestId("cinematic-agent-reply").parentElement).toHaveClass(
+      "ml-auto",
+      "justify-end",
+      "lg:max-w-[560px]",
+    );
+    expect(view.getByTestId("cinematic-agent-reply").querySelector(".prose")).toHaveClass(
+      "prose-sm",
+      "text-[12px]",
+      "leading-5",
+    );
+  });
+
+  it("keeps reduced-motion progress semantic, static, and safely rendered", () => {
+    const view = render(
+      <CinematicInvocationProgressBubble
+        invocationId="invocation-safe"
+        message={'**Safe update** <script>alert("no")</script> [unsafe](javascript:alert(1))'}
+        toolCount={1}
+      />,
+    );
+    const status = view.getByRole("status");
+
+    expect(status).toHaveAttribute("aria-live", "polite");
+    expect(status).toHaveAttribute("aria-atomic", "true");
+    expect(status).toHaveAttribute("aria-busy", "true");
+    expect(view.getByText("Safe update").tagName).toBe("STRONG");
+    expect(view.container.querySelector("a")).not.toBeInTheDocument();
+    expect(view.container.querySelector("script")).not.toBeInTheDocument();
+    expect(view.getByText("1 tool used")).toBeInTheDocument();
+    expect(vi.mocked(gsap.fromTo)).not.toHaveBeenCalled();
+    expect(view.container.querySelector(".motion-reduce\\:animate-none")).toBeInTheDocument();
+  });
+
+  it("animates first appearance and meaningful interim-message changes", () => {
+    motionPreference.reduced = false;
+    const view = render(
+      <CinematicInvocationProgressBubble invocationId="invocation-motion" message="First update" toolCount={0} />,
+    );
+    expect(vi.mocked(gsap.fromTo)).toHaveBeenCalledTimes(1);
+
+    view.rerender(
+      <CinematicInvocationProgressBubble invocationId="invocation-motion" message="Second update" toolCount={0} />,
+    );
+    expect(vi.mocked(gsap.fromTo)).toHaveBeenCalledTimes(2);
   });
 });

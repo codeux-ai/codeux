@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 import { Plus, Trash2 } from "lucide-preact";
 import type { NodeFlowJsonObject, NodeFlowJsonValue, NodeWidgetField as NodeWidgetFieldContract } from "../../types.js";
 import { getWidgetFieldDefaultValue } from "../../lib/node-flow-view-models.js";
+import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 
 interface NodeWidgetFieldProps {
   field: NodeWidgetFieldContract;
@@ -85,22 +86,19 @@ export const NodeWidgetField: FunctionComponent<NodeWidgetFieldProps> = ({
 
     if (field.type === "select") {
       return (
-        <select
+        <AvantgardeSelect
           id={`node-widget-${field.id}`}
-          className={fieldBaseClass}
           value={String(resolvedValue)}
           aria-describedby={errorId}
-          onChange={(event) => {
-            const selected = field.options?.find((option) => String(option.value) === event.currentTarget.value);
-            onChange(field.id, selected?.value ?? event.currentTarget.value);
+          onChange={(value) => {
+            const selected = field.options?.find((option) => String(option.value) === value);
+            onChange(field.id, selected?.value ?? value);
           }}
-        >
-          {(field.options ?? []).map((option) => (
-            <option key={`${field.id}-${String(option.value)}`} value={String(option.value)}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          options={(field.options ?? []).map((option) => ({
+            value: String(option.value),
+            label: option.label,
+          }))}
+        />
       );
     }
 

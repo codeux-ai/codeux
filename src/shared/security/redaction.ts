@@ -1,5 +1,6 @@
 const SENSITIVE_KEYS_LIST = [
   "apiKey", "token", "authorization", "password", "secret",
+  "credentialValue", "replacementValue", "rotationValue",
   "anthropicApiKey", "codexApiKey", "geminiApiKey", "jiraApiToken", "julesApiKey",
   "openaiCompatibleApiKey", "openRouterApiKey", "providerApiKey", "qwenApiKey",
   "githubToken", "gitlabToken", "jiraToken",

@@ -490,7 +490,10 @@ describe("useSettingsPageState", () => {
 
     render(<SettingsPage />);
 
-    expect(screen.getByRole("region", { name: "Settings category panel" })).toHaveAttribute("aria-busy", "true");
+    const categoryPanel = screen.getByRole("region", { name: "Settings category panel" });
+    expect(categoryPanel).toHaveAttribute("aria-busy", "true");
+    expect(categoryPanel).toHaveClass("self-start", "justify-start");
+    expect(categoryPanel).not.toHaveClass("self-center", "justify-center");
     expect(screen.getByRole("status", { name: "Loading settings" })).toHaveTextContent("Loading settings.");
   });
 
@@ -673,7 +676,7 @@ describe("useSettingsPageState", () => {
       result.current.setSettingsSearch("automation");
     });
 
-    expect(result.current.filteredCategories.length).toBe(1);
+    expect(result.current.filteredCategories.map((category) => category.id)).toEqual(["general", "integrations"]);
     expect(result.current.activeCategory).toBe("general");
   });
 

@@ -1,6 +1,6 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import { initializeProject } from "../../../../src/domain/projects/project-initializer.js";
-import { CODE_UX_AWARD_WINNING_STYLEGUIDE_ID } from "../../../../src/domain/settings/design-guidance-catalog.js";
+import { DESIGN_GUIDANCE_NONE_ID } from "../../../../src/domain/settings/design-guidance-catalog.js";
 
 vi.mock("../../../../src/infrastructure/git/local-repo-initializer.js", () => ({
   initLocalRepo: vi.fn(),
@@ -30,7 +30,7 @@ describe("initializeProject validation", () => {
     ).resolves.toBeTruthy();
   });
 
-  it("pins imported projects to the built-in Project manager dashboard reply fallback", async () => {
+  it("pins imported projects to None guidance and the built-in Project manager dashboard reply fallback", async () => {
     const createProject = vi.fn().mockResolvedValue({});
     await initializeProject(
       { sourceRef: path.resolve(process.cwd(), "imported-repo"), name: "imported", sourceType: "local" },
@@ -40,6 +40,10 @@ describe("initializeProject validation", () => {
     expect(createProject).toHaveBeenCalledWith(expect.objectContaining({
       initMode: "existing",
       settingsOverrides: expect.objectContaining({
+        designGuidance: expect.objectContaining({
+          selectedTechStackId: DESIGN_GUIDANCE_NONE_ID,
+          selectedStyleguideId: DESIGN_GUIDANCE_NONE_ID,
+        }),
         agents: expect.objectContaining({
           routing: expect.objectContaining({
             dashboardReply: { agentPresetId: null },
@@ -88,7 +92,7 @@ describe("initializeProject validation", () => {
     }));
   });
 
-  it("seeds new local projects with the Code UX styleguide override", async () => {
+  it("starts new local projects with both guidance selections set to None", async () => {
     const createProject = vi.fn().mockResolvedValue({});
     await initializeProject(
       { initMode: "new-local", sourceRef: "valid-local-repo", name: "valid", sourceType: "local" },
@@ -98,7 +102,8 @@ describe("initializeProject validation", () => {
     expect(createProject).toHaveBeenCalledWith(expect.objectContaining({
       settingsOverrides: expect.objectContaining({
         designGuidance: expect.objectContaining({
-          selectedStyleguideId: CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
+          selectedTechStackId: DESIGN_GUIDANCE_NONE_ID,
+          selectedStyleguideId: DESIGN_GUIDANCE_NONE_ID,
         }),
       }),
     }));
@@ -167,8 +172,55 @@ describe("initializeProject validation", () => {
       initMode: "new-remote",
       settingsOverrides: expect.objectContaining({
         designGuidance: expect.objectContaining({
-          selectedStyleguideId: CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
+          selectedTechStackId: DESIGN_GUIDANCE_NONE_ID,
+          selectedStyleguideId: DESIGN_GUIDANCE_NONE_ID,
         }),
+      }),
+    }));
+  });
+
+  it("normalizes caller-provided guidance selections while preserving unrelated guidance fields", async () => {
+    const createProject = vi.fn().mockResolvedValue({});
+    const customTechStack = {
+      id: "custom-stack",
+      name: "Custom Stack",
+      summary: "Custom stack summary",
+      instructionMarkdown: "Use the custom stack.",
+    };
+    const customStyleguide = {
+      id: "custom-styleguide",
+      name: "Custom Styleguide",
+      summary: "Custom styleguide summary",
+      instructionMarkdown: "Use the custom styleguide.",
+    };
+
+    await initializeProject(
+      {
+        sourceRef: path.resolve(process.cwd(), "imported-repo"),
+        name: "imported",
+        sourceType: "local",
+        settingsOverrides: {
+          designGuidance: {
+            selectedTechStackId: customTechStack.id,
+            selectedStyleguideId: customStyleguide.id,
+            hideDefaultStyleguides: true,
+            customTechStacks: [customTechStack],
+            customStyleguides: [customStyleguide],
+          },
+        },
+      },
+      { createProject, getGithubToken: vi.fn() }
+    );
+
+    expect(createProject).toHaveBeenCalledWith(expect.objectContaining({
+      settingsOverrides: expect.objectContaining({
+        designGuidance: {
+          selectedTechStackId: DESIGN_GUIDANCE_NONE_ID,
+          selectedStyleguideId: DESIGN_GUIDANCE_NONE_ID,
+          hideDefaultStyleguides: true,
+          customTechStacks: [customTechStack],
+          customStyleguides: [customStyleguide],
+        },
       }),
     }));
   });

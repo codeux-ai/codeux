@@ -12,6 +12,7 @@ describe("DockerService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     dockerService = new DockerService();
+    dockerService.invalidateContainerInventory();
   });
 
   describe("listContainers", () => {
@@ -24,7 +25,7 @@ describe("DockerService", () => {
       } as any);
 
       await expect(dockerService.isAvailable()).resolves.toBe(true);
-      expect(runCommandStrict).toHaveBeenCalledWith("docker", ["ps", "-q"], process.cwd());
+      expect(runCommandStrict).toHaveBeenCalledWith("docker", ["ps", "--format", "{{json .}}"], process.cwd());
     });
 
     it("should report docker as unavailable when docker ps fails", async () => {
@@ -53,6 +54,66 @@ describe("DockerService", () => {
       const containers = await dockerService.listContainers();
 
       expect(containers).toEqual([]);
+    });
+
+    it("shares one in-flight inventory probe across service instances", async () => {
+      let resolveProbe: ((value: any) => void) | undefined;
+      vi.mocked(runCommandStrict).mockImplementation(() => new Promise((resolve) => {
+        resolveProbe = resolve;
+      }));
+      const secondService = new DockerService();
+
+      const availablePromise = dockerService.isAvailable();
+      const containersPromise = secondService.listContainers();
+      expect(runCommandStrict).toHaveBeenCalledTimes(1);
+
+      resolveProbe?.({ exitCode: 0, stdout: "", stderr: "", durationMs: 10 });
+
+      await expect(availablePromise).resolves.toBe(true);
+      await expect(containersPromise).resolves.toEqual([]);
+      expect(runCommandStrict).toHaveBeenCalledTimes(1);
+    });
+
+    it("refreshes the shared inventory only after the caller TTL expires", async () => {
+      vi.useFakeTimers();
+      try {
+        vi.mocked(runCommandStrict).mockResolvedValue({
+          exitCode: 0,
+          stdout: "",
+          stderr: "",
+          durationMs: 10,
+        });
+
+        await dockerService.getContainerInventory(10_000);
+        await vi.advanceTimersByTimeAsync(9_999);
+        await new DockerService().getContainerInventory(10_000);
+        expect(runCommandStrict).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(1);
+        await dockerService.getContainerInventory(10_000);
+        expect(runCommandStrict).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("caches Docker failures briefly and retries after the failure TTL", async () => {
+      vi.useFakeTimers();
+      try {
+        vi.mocked(runCommandStrict)
+          .mockRejectedValueOnce(new Error("Cannot connect to the Docker daemon"))
+          .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "", durationMs: 10 });
+
+        await expect(dockerService.isAvailable(10_000)).resolves.toBe(false);
+        await expect(new DockerService().isAvailable(10_000)).resolves.toBe(false);
+        expect(runCommandStrict).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(2_000);
+        await expect(dockerService.isAvailable(10_000)).resolves.toBe(true);
+        expect(runCommandStrict).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("should parse multiple containers and their labels correctly", async () => {

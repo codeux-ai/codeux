@@ -162,6 +162,7 @@ describe("queryProjectStatsSnapshot", () => {
                 {
                   bucketIndex: 0,
                   task_id: "task-1",
+                  sprint_id: "sprint-1",
                   sprint_key: "sprint-1",
                   provider: "openai",
                   purpose: "test",
@@ -177,6 +178,8 @@ describe("queryProjectStatsSnapshot", () => {
                   reasoningOutputTokens: 0,
                   totalTokens: 3500000,
                   toolCallCount: 0,
+                  providerReportedCostInvocationCount: 0,
+                  providerReportedCostUsd: 0,
                   reportedInvocationCount: 1,
                   estimatedInvocationCount: 0,
                   unsupportedInvocationCount: 0,
@@ -214,6 +217,12 @@ describe("queryProjectStatsSnapshot", () => {
     expect(snapshot.usage.cachedInputCostUsd).toBe(1.25); // 500,000 / 1_000_000 * 2.5
     expect(snapshot.usage.outputCostUsd).toBe(30); // 2,000,000 / 1_000_000 * 15
     expect(snapshot.usage.totalCostUsd).toBe(36.25);
+    expect(snapshot.usage.costCoverage).toEqual({
+      configuredPricingInvocationCount: 1,
+      providerReportedCostInvocationCount: 0,
+      unpricedInvocationCount: 0,
+      providerReportedCostUsd: 0,
+    });
 
     // Assert provider and model costs are tracked
     expect(snapshot.providers.find(p => p.id === "openai")?.usage.totalCostUsd).toBe(36.25);
@@ -221,6 +230,16 @@ describe("queryProjectStatsSnapshot", () => {
 
     // Assert bucket aggregates have correct cost
     expect(snapshot.buckets[0].usage.totalCostUsd).toBe(36.25);
+    expect(snapshot.tasks[0]?.usage.costCoverage?.configuredPricingInvocationCount).toBe(1);
+    expect(snapshot.purposes[0]?.usage.costCoverage?.configuredPricingInvocationCount).toBe(1);
+    expect(snapshot.costAnalytics?.sprints).toHaveLength(1);
+    expect(snapshot.costAnalytics?.sprints[0]).toMatchObject({
+      id: "sprint-1",
+      usage: {
+        totalCostUsd: 36.25,
+        costCoverage: { configuredPricingInvocationCount: 1 },
+      },
+    });
 
     // Assert chart series exist
     expect(snapshot.chartSeries.find(s => s.id === 'core_total_cost')).toMatchObject({ grouping: 'totals', formatter: 'number', defaultEnabled: false });
@@ -348,7 +367,8 @@ describe("queryProjectStatsSnapshot pricing resolver caching", () => {
                 {
                   bucketIndex: 0,
                   task_id: "task-1",
-                  sprint_key: "sprint-1",
+                  sprint_id: "sprint-canonical",
+                  sprint_key: "sprint-run-1",
                   provider: "openai",
                   purpose: "test",
                   usage_source: "reported",
@@ -363,6 +383,8 @@ describe("queryProjectStatsSnapshot pricing resolver caching", () => {
                   reasoningOutputTokens: 0,
                   totalTokens: 3500000,
                   toolCallCount: 0,
+                  providerReportedCostInvocationCount: 0,
+                  providerReportedCostUsd: 0,
                   reportedInvocationCount: 1,
                   estimatedInvocationCount: 0,
                   unsupportedInvocationCount: 0,
@@ -371,7 +393,8 @@ describe("queryProjectStatsSnapshot pricing resolver caching", () => {
                 {
                   bucketIndex: 0,
                   task_id: "task-2",
-                  sprint_key: "sprint-2",
+                  sprint_id: "sprint-canonical",
+                  sprint_key: "sprint-run-2",
                   provider: "openai",
                   purpose: "test2",
                   usage_source: "estimated",
@@ -386,6 +409,8 @@ describe("queryProjectStatsSnapshot pricing resolver caching", () => {
                   reasoningOutputTokens: 0,
                   totalTokens: 3500000,
                   toolCallCount: 0,
+                  providerReportedCostInvocationCount: 0,
+                  providerReportedCostUsd: 0,
                   reportedInvocationCount: 0,
                   estimatedInvocationCount: 1,
                   unsupportedInvocationCount: 0,
@@ -419,6 +444,15 @@ describe("queryProjectStatsSnapshot pricing resolver caching", () => {
     expect(snapshot.providers.find(p => p.id === "openai")?.usage.totalCostUsd).toBe(expectedCost);
     expect(snapshot.models.find(m => m.provider === "openai" && m.model === "gpt-4")?.usage.totalCostUsd).toBe(expectedCost);
     expect(snapshot.buckets[0].usage.totalCostUsd).toBe(expectedCost);
+    expect(snapshot.sprints.map((sprint) => sprint.id).sort()).toEqual(["sprint-run-1", "sprint-run-2"]);
+    expect(snapshot.costAnalytics?.sprints).toHaveLength(1);
+    expect(snapshot.costAnalytics?.sprints[0]).toMatchObject({
+      id: "sprint-canonical",
+      usage: {
+        totalCostUsd: expectedCost,
+        costCoverage: { configuredPricingInvocationCount: 2 },
+      },
+    });
   });
 });
 

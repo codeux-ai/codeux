@@ -333,6 +333,7 @@ describe("useNotifications", () => {
     await waitFor(() => expect(realtimeCallback).toBeDefined());
     await act(async () => result.current.refresh());
     const initialGlobalCalls = vi.mocked(dashboardApi.fetchDashboardNotifications).mock.calls.length;
+    const initialReadinessCalls = vi.mocked(dashboardApi.fetchOnboardingReadiness).mock.calls.length;
     const initialSchedulerCalls = vi.mocked(schedulerApi.fetchActiveAgentSchedulerEntries).mock.calls.length;
 
     await act(async () => {
@@ -346,6 +347,7 @@ describe("useNotifications", () => {
       expect(dashboardApi.fetchDashboardNotifications).toHaveBeenCalledTimes(initialGlobalCalls + 1);
     });
     expect(schedulerApi.fetchActiveAgentSchedulerEntries).toHaveBeenCalledTimes(initialSchedulerCalls);
+    expect(dashboardApi.fetchOnboardingReadiness).toHaveBeenCalledTimes(initialReadinessCalls);
 
     await act(async () => {
       realtimeCallback?.({
@@ -354,9 +356,7 @@ describe("useNotifications", () => {
         event: { eventType: "project.execution.updated" },
       } as Parameters<NonNullable<typeof realtimeCallback>>[0]);
     });
-    await waitFor(() => {
-      expect(schedulerApi.fetchActiveAgentSchedulerEntries).toHaveBeenCalledTimes(initialSchedulerCalls + 1);
-    });
+    expect(schedulerApi.fetchActiveAgentSchedulerEntries).toHaveBeenCalledTimes(initialSchedulerCalls);
     expect(result.current.notifications.some((notification) => notification.id === "4")).toBe(false);
   });
 });

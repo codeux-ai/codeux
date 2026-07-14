@@ -27,7 +27,10 @@ export function resolveSprintAttentionIndicatorState({
     return { kind: "failure", accessibleText: "Sprint execution failed" };
   }
 
-  if (humanIntervention && statusPresentation.showHumanInterventionBadge) {
+  if (
+    humanIntervention?.ownerType === "human"
+    && statusPresentation.showHumanInterventionBadge
+  ) {
     return { kind: "human", accessibleText: "Sprint waiting for human intervention" };
   }
 
@@ -47,6 +50,9 @@ export const SprintAttentionIndicator: FunctionComponent<SprintAttentionIndicato
 }) => {
   const reducedMotion = useReducedMotion();
   const isFailure = state.kind === "failure";
+  const toneClass = isFailure
+    ? "border-status-red/45 bg-status-red/[0.12] text-status-red shadow-[0_0_18px_rgba(227,0,15,0.18)]"
+    : "border-status-amber/30 bg-[#F9F8F4] text-amber-700 shadow-[0_12px_30px_rgba(120,78,8,0.16)] dark:border-status-amber/25 dark:bg-void-800 dark:text-amber-300 dark:shadow-[0_14px_34px_rgba(0,0,0,0.3)]";
   const motionStyle = reducedMotion
     ? undefined
     : {
@@ -64,7 +70,7 @@ export const SprintAttentionIndicator: FunctionComponent<SprintAttentionIndicato
       data-sprint-attention-indicator={state.kind}
       data-compact={compact ? "true" : "false"}
       data-reduced-motion={reducedMotion ? "true" : "false"}
-      className={`inline-flex shrink-0 items-center justify-center border border-status-red/45 bg-status-red/[0.12] font-bold text-status-red shadow-[0_0_18px_rgba(227,0,15,0.18)] motion-reduce:shadow-none ${
+      className={`inline-flex shrink-0 items-center justify-center whitespace-nowrap border font-bold backdrop-blur-xl motion-reduce:shadow-none ${toneClass} ${
         compact
           ? "h-7 min-w-7 gap-0.5 rounded-lg px-1.5"
           : "min-h-9 gap-2 rounded-full px-3 py-1.5"
@@ -87,7 +93,7 @@ export const SprintAttentionIndicator: FunctionComponent<SprintAttentionIndicato
           <UserRound aria-hidden="true" className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} strokeWidth={2.6} />
           <span
             aria-hidden="true"
-            className={`${compact ? "text-[8px]" : "text-[10px]"} font-black tracking-[-0.05em] motion-safe:animate-bounce motion-reduce:animate-none`}
+            className={`${compact ? "text-[8px]" : "text-[10px]"} font-black tracking-[-0.05em] motion-safe:animate-pulse motion-reduce:animate-none`}
             style={motionStyle}
           >
             zZZ

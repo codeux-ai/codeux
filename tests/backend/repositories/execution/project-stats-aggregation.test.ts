@@ -49,6 +49,12 @@ describe("project-stats-aggregation", () => {
     expect(mapped.inputCostUsd).toBe(0);
     expect(mapped.outputCostUsd).toBe(0);
     expect(mapped.totalCostUsd).toBeCloseTo(0.42);
+    expect(mapped.costCoverage).toEqual({
+      configuredPricingInvocationCount: 0,
+      providerReportedCostInvocationCount: 1,
+      unpricedInvocationCount: 0,
+      providerReportedCostUsd: 0.42,
+    });
   });
 
   it("prefers token pricing over provider-reported cost when pricing is available", () => {
@@ -71,6 +77,57 @@ describe("project-stats-aggregation", () => {
     expect(mapped.inputCostUsd).toBe(2);
     expect(mapped.outputCostUsd).toBe(3);
     expect(mapped.totalCostUsd).toBe(5);
+    expect(mapped.costCoverage).toEqual({
+      configuredPricingInvocationCount: 1,
+      providerReportedCostInvocationCount: 0,
+      unpricedInvocationCount: 0,
+      providerReportedCostUsd: 0,
+    });
+  });
+
+  it("distinguishes legitimate provider-reported zero cost from unpriced usage", () => {
+    const zeroCost = mapAggregatedUsage({
+      invocationCount: 1,
+      activeTimeMs: 1,
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+      reasoningOutputTokens: 0,
+      totalTokens: 0,
+      toolCallCount: 0,
+      providerReportedCostInvocationCount: 1,
+      providerReportedCostUsd: 0,
+      reportedInvocationCount: 1,
+      estimatedInvocationCount: 0,
+      unsupportedInvocationCount: 0,
+      unavailableInvocationCount: 0,
+    });
+    const unpriced = mapAggregatedUsage({
+      invocationCount: 2,
+      activeTimeMs: 1,
+      inputTokens: 10,
+      cachedInputTokens: 0,
+      outputTokens: 5,
+      reasoningOutputTokens: 0,
+      totalTokens: 15,
+      toolCallCount: 0,
+      providerReportedCostInvocationCount: 0,
+      providerReportedCostUsd: 0,
+      reportedInvocationCount: 2,
+      estimatedInvocationCount: 0,
+      unsupportedInvocationCount: 0,
+      unavailableInvocationCount: 0,
+    });
+
+    expect(zeroCost.totalCostUsd).toBe(0);
+    expect(zeroCost.costCoverage).toMatchObject({
+      providerReportedCostInvocationCount: 1,
+      unpricedInvocationCount: 0,
+    });
+    expect(unpriced.costCoverage).toMatchObject({
+      providerReportedCostInvocationCount: 0,
+      unpricedInvocationCount: 2,
+    });
   });
 
   it("mergeAggregatedUsage sums fields accurately", () => {
@@ -78,10 +135,17 @@ describe("project-stats-aggregation", () => {
     const source = createEmptyUsageTotals();
     source.invocationCount = 5;
     source.inputTokens = 10;
+    source.costCoverage = {
+      configuredPricingInvocationCount: 2,
+      providerReportedCostInvocationCount: 1,
+      unpricedInvocationCount: 2,
+      providerReportedCostUsd: 0.5,
+    };
 
     mergeAggregatedUsage(target, source);
     expect(target.invocationCount).toBe(5);
     expect(target.inputTokens).toBe(10);
+    expect(target.costCoverage).toEqual(source.costCoverage);
   });
 
   it("accumulateBucketUsage adds values and updates maps correctly", () => {

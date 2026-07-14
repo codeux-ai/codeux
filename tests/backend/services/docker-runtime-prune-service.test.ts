@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -53,7 +53,7 @@ describe("DockerRuntimePruneService", () => {
       resolveRuntimeRoot: () => repoRuntime,
     });
 
-    const result = service.cleanup(new Date("2026-03-14T01:00:00.000Z"));
+    const result = await service.cleanup(new Date("2026-03-14T01:00:00.000Z"));
 
     expect(result.prunedPaths).toContain(staleHome);
     await expect(fs.access(staleHome)).rejects.toThrow();
@@ -81,7 +81,7 @@ describe("DockerRuntimePruneService", () => {
       resolveRuntimeRoot: () => repoRuntime,
     });
 
-    const result = service.cleanup(new Date("2026-03-14T01:00:00.000Z"));
+    const result = await service.cleanup(new Date("2026-03-14T01:00:00.000Z"));
 
     expect(result.prunedPaths).toContain(staleTempDir);
     await expect(fs.access(staleTempDir)).rejects.toThrow();
@@ -108,9 +108,27 @@ describe("DockerRuntimePruneService", () => {
       resolveRuntimeRoot: () => repoRuntime,
     });
 
-    const result = service.cleanup(new Date("2026-03-14T01:00:00.000Z"));
+    const result = await service.cleanup(new Date("2026-03-14T01:00:00.000Z"));
 
     expect(result.prunedPaths).not.toContain(staleTempDir);
     await expect(fs.access(staleTempDir)).resolves.toBeUndefined();
+  });
+
+  it("joins overlapping runtime prune requests into one asynchronous filesystem sweep", async () => {
+    const root = await makeTempDir();
+    const runtimeBase = path.join(root, "runtime");
+    await fs.mkdir(runtimeBase, { recursive: true });
+    const listTrackedCliSessions = vi.fn(() => []);
+    const sessionRepo = { listTrackedCliSessions } as unknown as SessionTrackingRepository;
+    const service = new DockerRuntimePruneService(sessionRepo, undefined, {
+      runtimeBaseRoots: [runtimeBase],
+    });
+
+    const firstCleanup = service.cleanup(new Date("2026-03-14T01:00:00.000Z"));
+    const secondCleanup = service.cleanup(new Date("2026-03-14T01:01:00.000Z"));
+
+    expect(secondCleanup).toBe(firstCleanup);
+    expect(listTrackedCliSessions).toHaveBeenCalledTimes(1);
+    await Promise.all([firstCleanup, secondCleanup]);
   });
 });

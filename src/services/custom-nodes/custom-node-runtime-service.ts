@@ -155,7 +155,8 @@ export class CustomNodeRuntimeService {
           projectId: request.projectId,
           bindingKey,
           credentialId: bindingKey,
-          capability: slot.requiredCapability,
+          requiredCapabilities: [slot.requiredCapability],
+          allowedKinds: slot.allowedKinds,
           workspaceId: request.workspaceId,
         });
         resolved[slot.slot] = credential.value;

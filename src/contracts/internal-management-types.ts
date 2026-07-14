@@ -59,7 +59,7 @@ export interface ManageProjectsArgs extends Partial<CreateProjectInput> {
 }
 
 export interface ManageSprintsArgs {
-  action: "list" | "get" | "create" | "update" | "delete" | "start" | "pause" | "cancel" | "force_cancel" | "inspect_run" | "import_issues" | "plan";
+  action: "list" | "get" | "create" | "followup" | "update" | "delete" | "start" | "pause" | "cancel" | "force_cancel" | "inspect_run" | "import_issues" | "plan";
   projectId?: string;
   sprintId?: string;
   sprintRunId?: string;
@@ -377,11 +377,17 @@ export interface ManageCustomDashboardsArgs extends Partial<CreateCustomDashboar
     | "validation_logs"
     | "publish_revision"
     | "archive"
-    | "data_catalog";
+    | "data_catalog"
+    | "list_credential_slots"
+    | "bind_credential"
+    | "unbind_credential";
   projectId?: string;
   dashboardId?: string;
   revisionId?: string;
   validationSessionId?: string;
+  slotId?: string;
+  credentialId?: string;
+  expectedBindingRevision?: number;
   sessionId?: string;
   tail?: number | string;
   approval?: ManagementApproval;

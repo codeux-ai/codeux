@@ -3,16 +3,20 @@ import { memo } from "preact/compat";
 import { FolderGit2, CheckCircle2, Circle, PlayCircle, Clock, Play, Square, Settings, Maximize2, Loader2 } from "lucide-preact";
 import type { Task } from "../../types.js";
 import type { TaskStreamState } from "../../hooks/use-overview-stream-actions.js";
-import { SprintReviewBadge } from "../sprints/SprintReviewBadge.js";
+import { WorkflowStatusBadge } from "./WorkflowStatusBadge.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import type { CiStatusPresentation } from "../../lib/ci-status-presentation.js";
+import type { ExecutionAttentionItemSummary } from "../../../types.js";
 
 interface TaskRowProps {
     task: Task;
     state?: TaskStreamState;
+    ciPresentation?: CiStatusPresentation | null;
+    humanIntervention?: ExecutionAttentionItemSummary | null;
     onPlayStop?: () => void;
 }
 
-export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onPlayStop }) => {
+export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, ciPresentation = null, humanIntervention = null, onPlayStop }) => {
     const isRunning = state?.isRunning ?? task.status === "in_progress";
     const busy = state?.busy ?? false;
     const interactionTokens = useInteractionTokens();
@@ -47,11 +51,17 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
                 <span className={`text-base md:text-lg font-bold tracking-tight text-slate-900 dark:text-white truncate group-hover:translate-x-1.5 transition-transform duration-300 ease-out ${task.status === 'completed' ? 'opacity-50' : task.status === 'coding_completed' ? 'opacity-80' : ''}`}>
                     {task.title}
                 </span>
-                {task.latestReview && (
-                    <div className="ml-3 shrink-0">
-                        <SprintReviewBadge summary={task.latestReview} compact showCompactLabel align="right" />
-                    </div>
-                )}
+                <div className="ml-3 shrink-0">
+                    <WorkflowStatusBadge
+                        scope="task"
+                        status={task.status}
+                        review={task.latestReview}
+                        ciPresentation={ciPresentation}
+                        humanIntervention={humanIntervention}
+                        compact
+                        align="right"
+                    />
+                </div>
             </div>
 
             {/* Source */}

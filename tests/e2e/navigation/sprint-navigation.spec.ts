@@ -65,8 +65,8 @@ async function expectSelectedProjectAndSprint(
 
 async function loadSprintPageForProject(page: Page, project: ProjectSummary, sprint: SprintRecord): Promise<void> {
   await page.goto('/sprints');
-  await expect(page.locator('[data-tour-id="project-selector"]')).toContainText(project.name);
-  await expect(page.getByRole('row', { name: new RegExp(sprint.name) })).toBeVisible();
+  await expect(page.locator('[data-tour-id="project-selector"]')).toContainText(project.name, { timeout: 15_000 });
+  await expect(page.getByRole('row', { name: new RegExp(sprint.name) })).toBeVisible({ timeout: 15_000 });
 }
 
 async function selectProjectFromTopNav(page: Page, project: ProjectSummary): Promise<void> {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   evaluateQaReviewBudget,
+  isPendingQaContinuation,
   isRecoveredStaleQaRun,
   shouldVerifyContinuedQaFix,
   RECOVERED_STALE_QA_SUMMARY_PREFIX,
@@ -59,6 +60,30 @@ describe("QA Review Budget", () => {
         status: "completed",
         outcome: "changes_requested",
         payload: { continued: true },
+      }))).toBe(false);
+    });
+  });
+
+  describe("isPendingQaContinuation", () => {
+    const changesRequestedRun = (payload: Record<string, unknown>): QaReviewRunRecord => makeRun({
+      outcome: "changes_requested",
+      fixInstructions: "Apply the requested fix.",
+      payload,
+    });
+
+    it("retries a legacy failed continuation that was not marked terminal", () => {
+      expect(isPendingQaContinuation(changesRequestedRun({
+        continuationStatus: "failed",
+        continuationMode: "failed",
+        continued: false,
+      }))).toBe(true);
+    });
+
+    it("does not retry a failed continuation after the infrastructure grace ceiling", () => {
+      expect(isPendingQaContinuation(changesRequestedRun({
+        continuationStatus: "failed",
+        continuationAttemptCount: QA_INFRA_FAILURE_GRACE,
+        followUpNoProgress: true,
       }))).toBe(false);
     });
   });

@@ -979,14 +979,15 @@ export const SchedulerPage: FunctionComponent = () => {
             {targetType === "memory_remediation" && (
               <label className="block">
                 <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Long-term remediation mode</span>
-                <select
+                <AvantgardeSelect
                   value={memoryRemediationMode}
-                  onChange={(event) => setMemoryRemediationMode(event.currentTarget.value === "ai" ? "ai" : "deterministic")}
-                  className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
-                >
-                  <option value="deterministic">Deterministic cleanup</option>
-                  <option value="ai">AI-routed review</option>
-                </select>
+                  onChange={(value) => setMemoryRemediationMode(value === "ai" ? "ai" : "deterministic")}
+                  className="mt-2 w-full"
+                  options={[
+                    { value: "deterministic", label: "Deterministic cleanup" },
+                    { value: "ai", label: "AI-routed review" },
+                  ]}
+                />
                 <p className="mt-2 text-xs leading-relaxed text-slate-400">
                   Runs project-scoped long-term memory cleanup for CI-failure memories and exact duplicates. AI mode reviews candidates through the Remediation route.
                 </p>

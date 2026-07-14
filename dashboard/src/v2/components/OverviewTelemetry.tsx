@@ -2,24 +2,30 @@ import type { FunctionComponent } from "preact";
 import { Activity, AlertTriangle, FolderKanban, Layers, Radio, Zap } from "lucide-preact";
 import { useMemo } from "preact/hooks";
 import { SkeletonPanel } from "./layout/SkeletonLoader.js";
-import { useDashboardRuntimeData } from "../../hooks/use-dashboard-runtime-data.js";
 import { useOverviewTelemetry } from "../../hooks/use-overview-telemetry.js";
-import { useSprints } from "../../hooks/useSprints.js";
 import { formatTime } from "../../lib/time.js";
 import { buildProjectLookup, getEventStyle, getInterventionContent } from "../lib/overview-telemetry-view-models.js";
 import { useProjectData } from "../context/project-data.js";
 import { AttentionQueueItemsList } from "./AttentionLedger.js";
+import type { ExecutionDashboardSnapshot } from "../../types.js";
 
+const EMPTY_EXECUTION: ExecutionDashboardSnapshot = {
+  projectId: null,
+  projectName: null,
+  sprintRuns: [],
+  taskDispatches: [],
+  connections: [],
+  primaryAssignedWorker: null,
+  overflowAssignedWorkers: [],
+  attentionItems: [],
+  recentEvents: [],
+  updatedAt: null,
+};
 
-export const OverviewTelemetry: FunctionComponent = () => {
+export const OverviewTelemetry: FunctionComponent<{ execution?: ExecutionDashboardSnapshot }> = ({ execution }) => {
   const { telemetry, loading: telemetryLoading, error } = useOverviewTelemetry();
   const { selectedProject, selectedProjectId, loading: projectsLoading } = useProjectData();
-  const { selectedSprintId } = useSprints(selectedProjectId);
-  const { execution: selectedProjectExecution } = useDashboardRuntimeData(
-    selectedProjectId,
-    Boolean(selectedProjectId),
-    { selectedSprintId },
-  );
+  const selectedProjectExecution = execution ?? EMPTY_EXECUTION;
   const isLoading = telemetryLoading || projectsLoading;
 
   const hasActiveProjects = telemetry?.activeProjects?.length > 0;

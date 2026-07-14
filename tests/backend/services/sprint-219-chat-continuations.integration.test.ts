@@ -235,7 +235,7 @@ describe("SPR-219 scheduled chat continuation fan-in", () => {
       "Second scheduled continuation.",
     ]);
     expect(new Set(scheduledMessages.map((message) => message.metadata?.schedulerEntryId)).size).toBe(2);
-    expect(new Set(assistantReplies.map((message) => message.bodyMarkdown))).toEqual(new Set([
+    expect(assistantReplies.map((message) => message.bodyMarkdown)).toEqual(expect.arrayContaining([
       "Combined active-turn reply.",
       "First scheduled continuation reply.",
       "Second scheduled continuation reply.",

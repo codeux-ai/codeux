@@ -7,6 +7,7 @@ import { useInteractionTokens } from "../../lib/motion/index.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 import { ModelCard } from "./ModelCard.js";
+import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 
 interface ModelBrowserProps {
   models: EmbeddingModelWithStatus[];
@@ -559,28 +560,46 @@ export const ModelBrowser: FunctionComponent<ModelBrowserProps> = ({
             </div>
             <label className="min-w-0 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
               Install state
-              <select value={installFilter} onChange={(event) => setInstallFilter(event.currentTarget.value as InstallFilter)} className={`${formFieldClass(false)} mt-1.5 w-full min-w-0 normal-case tracking-normal`}>
-                <option value="all">All states</option>
-                <option value="available">Available</option>
-                <option value="downloaded">Downloaded</option>
-                <option value="downloading">Downloading</option>
-                <option value="unavailable">Unavailable</option>
-              </select>
+              <AvantgardeSelect
+                value={installFilter}
+                onChange={(value) => setInstallFilter(value as InstallFilter)}
+                className="mt-1.5 w-full min-w-0"
+                variant="card"
+                options={[
+                  { value: "all", label: "All states" },
+                  { value: "available", label: "Available" },
+                  { value: "downloaded", label: "Downloaded" },
+                  { value: "downloading", label: "Downloading" },
+                  { value: "unavailable", label: "Unavailable" },
+                ]}
+              />
             </label>
             <label className="min-w-0 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
               Language
-              <select value={languageFilter} onChange={(event) => setLanguageFilter(event.currentTarget.value)} className={`${formFieldClass(false)} mt-1.5 w-full min-w-0 normal-case tracking-normal`}>
-                <option value="all">All languages</option>
-                {languageOptions.map((language) => <option key={language} value={language}>{language}</option>)}
-              </select>
+              <AvantgardeSelect
+                value={languageFilter}
+                onChange={setLanguageFilter}
+                className="mt-1.5 w-full min-w-0"
+                variant="card"
+                options={[
+                  { value: "all", label: "All languages" },
+                  ...languageOptions.map((language) => ({ value: language, label: language })),
+                ]}
+              />
             </label>
             <label className="min-w-0 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
               Source
-              <select value={sourceFilter} onChange={(event) => setSourceFilter(event.currentTarget.value as SourceFilter)} className={`${formFieldClass(false)} mt-1.5 w-full min-w-0 normal-case tracking-normal`}>
-                <option value="all">All sources</option>
-                <option value="built_in">Built-in</option>
-                <option value="custom">Custom</option>
-              </select>
+              <AvantgardeSelect
+                value={sourceFilter}
+                onChange={(value) => setSourceFilter(value as SourceFilter)}
+                className="mt-1.5 w-full min-w-0"
+                variant="card"
+                options={[
+                  { value: "all", label: "All sources" },
+                  { value: "built_in", label: "Built-in" },
+                  { value: "custom", label: "Custom" },
+                ]}
+              />
             </label>
           </div>
 

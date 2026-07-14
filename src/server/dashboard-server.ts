@@ -147,6 +147,7 @@ import type { SpeechModelManager } from "../services/speech-model-manager.js";
 import type { NodeFlowService } from "../services/node-flow-service.js";
 import type { CustomDashboardRepository } from "../repositories/custom-dashboard-repository.js";
 import type { CustomDashboardValidationService } from "../services/custom-dashboard-validation-service.js";
+import type { CustomDashboardCredentialBindingService } from "../services/custom-dashboard-credential-binding-service.js";
 import type { SkillService } from "../services/skill-service.js";
 import type { CredentialBroker } from "../services/credentials/credential-broker.js";
 import type { ApprovalService } from "../services/node-flows/approval-service.js";
@@ -178,7 +179,7 @@ export type DashboardDependencies = Omit<
   getLocalMcpSetup: () => LocalMcpSetupInfo;
   regenerateLocalMcpAuthToken: () => LocalMcpSetupInfo;
   installLocalMcpProvider: (provider: LocalMcpCliProvider) => Promise<LocalMcpInstallResult> | LocalMcpInstallResult;
-  getDashboardNotifications: () => DashboardNotificationFeed;
+  getDashboardNotifications: (limit?: number) => DashboardNotificationFeed;
 };
 
 export interface DashboardServerOptions {
@@ -207,6 +208,7 @@ export interface DashboardServerOptions {
   approvalService?: ApprovalService;
   automationWebhookTriggerRepository?: AutomationWebhookTriggerRepository;
   customDashboardRepository?: CustomDashboardRepository;
+  customDashboardCredentialBindingService?: CustomDashboardCredentialBindingService;
   customDashboardValidationService?: CustomDashboardValidationService;
   skillService?: SkillService;
   credentialBroker?: CredentialBroker;
@@ -247,7 +249,7 @@ export interface DashboardServerOptions {
     input?: { status?: "resolved" | "dismissed"; reason?: string; resolutionSummaryMarkdown?: string },
   ) => ExecutionAttentionItemSummary;
   getOverviewTelemetrySnapshot: () => OverviewTelemetrySnapshot;
-  getDashboardNotifications?: () => DashboardNotificationFeed;
+  getDashboardNotifications?: (limit?: number) => DashboardNotificationFeed;
   getLiveActivities: () => Promise<Record<string, JulesActivity[]>>;
   getGitStatus: () => Promise<GitTrackingStatus>;
   getExternalSettingsHints: () => ExternalSettingsHints;
@@ -280,6 +282,7 @@ export interface DashboardServerOptions {
   getSprint: (sprintId: string) => SprintRecord | null;
   createSprint: (projectId: string, input: CreateSprintInput) => SprintRecord;
   updateSprint: (sprintId: string, input: UpdateSprintInput) => SprintRecord;
+  updateSprintBranch?: (projectId: string, sprintId: string) => Promise<import("../contracts/project-management-types.js").SprintBranchUpdateResult>;
   markSprintCompleted?: (sprintId: string) => Promise<SprintRecord>;
   markSprintQaPassed?: (sprintId: string) => Promise<SprintRecord> | SprintRecord;
   deleteSprint: (sprintId: string) => void;
@@ -288,6 +291,7 @@ export interface DashboardServerOptions {
   importSprintFromMarkdown: (projectId: string, input: SprintMarkdownImportInput) => SprintRecord;
   exportSprintToMarkdown: (projectId: string, sprintId: string) => SprintMarkdownExportBundle;
   listTasks: (projectId: string, sprintId?: string) => TaskRecord[];
+  listTaskOverviews?: (projectId: string) => TaskRecord[];
   getTask: (taskId: string) => TaskRecord | null;
   createTask: (projectId: string, input: CreateTaskInput) => TaskRecord;
   createImportedTasks?: (projectId: string, sprintId: string, inputs: SprintImportedTaskInput[]) => TaskRecord[];
@@ -567,10 +571,13 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     const browser = options.playwrightBrowserManager ?? playwrightBrowserManager;
     const settings = options.getSystemSettings();
     const runtimeLogger = dashboardLogger.child({ component: "managed-runtime-prewarm" });
+    const automaticAssetCheckIntervalMs = 6 * 60 * 60 * 1_000;
     void (async () => {
       let browserPreload: Promise<unknown> = Promise.resolve();
       if (settings.defaults.cliWorkflow.containerImageMode !== "custom") {
-        await runtime.checkForUpdates(runtimeLogger);
+        await runtime.checkForUpdates(runtimeLogger, {
+          minimumIntervalMs: automaticAssetCheckIntervalMs,
+        });
         if (settings.defaults.cliWorkflow.containerInstallPlaywrightBrowsers !== false) {
           browserPreload = browser.prepare(settings.defaults.cliWorkflow, { logger: runtimeLogger }).catch((error: unknown) => {
             runtimeLogger.warn("Playwright browser preload failed; provider CLI preparation will continue.", {
@@ -585,6 +592,7 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
           getActiveProviderTypes(settings),
           settings.defaults.cliWorkflow,
           runtimeLogger,
+          { minimumUpdateIntervalMs: automaticAssetCheckIntervalMs },
         ),
       ]);
     })().catch((error: unknown) => {

@@ -251,20 +251,25 @@ The restricted tool intentionally does not expose due-entry execution, arbitrary
 - `publish_revision` publishes only a revision that is already marked passed with a valid report or a revision accompanied by a passed `validationSessionId`.
 - `archive` clears any active publication and marks the dashboard archived. It follows the normal destructive-action approval fingerprint flow.
 - `data_catalog` returns project dashboard summaries and declared source nodes for agents building or inspecting generated dashboards.
+- `list_credential_slots` returns a bounded metadata-only review of declared slots, current bindings, backend health, and compatible credential candidates for the owning project. An optional `revisionId` reviews an immutable revision.
+- `bind_credential` binds or replaces one declared slot by credential ID with `expectedBindingRevision`; `unbind_credential` removes one slot binding with the same optimistic guard. Both mutations require the stateful human-confirmation handshake. Their arguments are strictly validated and reduced to the allowed metadata fields before an approval fingerprint is built, so secret-bearing or unsupported fields cannot enter pending approval state.
 
 Payload fields:
 
-- `projectId` is required for `list`, `create`, `validate_revision`, and `data_catalog`.
-- `dashboardId` is required for `get`, `update`, `create_revision`, `validate_revision`, `publish_revision`, and `archive`.
+- `projectId` is required for `list`, `create`, `validate_revision`, `data_catalog`, and every credential-binding action.
+- `dashboardId` is required for `get`, `update`, `create_revision`, `validate_revision`, `publish_revision`, `archive`, and every credential-binding action.
 - `revisionId` is required for `validate_revision` and `publish_revision`.
 - `sessionId` is required for `validation_status` and `validation_logs`.
 - `validationSessionId` is optional for `publish_revision` and, when supplied, must identify a passed session for the same dashboard, revision, and project.
 - `manifest`, `fileBundle`, `sourceNodeGraph`, `styleguide`, and `runtimeMetadata` are accepted by `create`, `update`, and `create_revision` according to each action's required fields.
 - `tail` limits validation log output.
+- `slotId`, `credentialId`, and `expectedBindingRevision` identify a metadata-only bind/replace operation; unbind omits `credentialId`. Secret-bearing and undeclared fields are rejected.
 
 Validation sessions move through `queued`, `building`, `running`, `passed`, `failed`, or `cancelled`. `validate_revision` starts the detached Docker validation runtime; it does not publish the revision. A passed session means install, build, detached preview startup, and root health checks completed successfully.
 
-`publish_revision` is gated by repository state. The revision must belong to the dashboard, have `validationStatus: "passed"`, have `validatedAt`, and have `validationReport.valid === true`. Failed, queued, running, cancelled, missing, or cross-revision validation sessions are rejected before publication state changes, so the prior published revision remains active.
+`validate_revision` and `publish_revision` perform a fresh metadata-only credential compatibility review. Required unbound slots and missing, revoked, inaccessible, unconfigured, wrong-kind, insufficient-capability, or unavailable-backend bindings fail closed with slot-specific validation issues. Optional unbound slots remain valid. A rejected publication returns the sanitized slot-specific `issues` array in the error result without credential IDs or values. Only after that review does `publish_revision` apply the repository validation-state gate, so the prior published revision remains active on any denial.
+
+Generic custom-dashboard MCP responses recursively redact known binding IDs from dashboard, revision, source, runtime-metadata, validation-report, file, and viewer-artifact content. Only `list_credential_slots`, `bind_credential`, and `unbind_credential` may return binding IDs and non-secret credential metadata. These actions never accept or return plaintext and never call credential secret resolution.
 
 The generated dashboard data-source graph is user-declared JSON with `nodes`, `edges`, and optional `metadata`. Runtime viewer source types currently map to Code UX project execution data, project stats, overview telemetry, non-secret integration metadata, and unavailable `external_api` placeholders. Do not claim arbitrary external API connectors are available through this surface until a dedicated sanitized proxy contract exists.
 
@@ -803,13 +808,28 @@ The first call returns `approvalRequired: true`. To execute the deprecation afte
 }
 ```
 
-For sprint create/update calls:
+For sprint create/followup/update calls:
 - `name` is the canonical repository field.
 - `title` is accepted as a public MCP alias for `name`.
 - `goal` is the canonical repository field.
 - `goalMarkdown` is accepted as a public MCP alias for `goal`.
 - `linkedIssues` can include imported issue body and conversation markdown. Sprint create merges that context into the goal under `## Linked Issues`; sprint update does the same when a replacement goal is provided. Prompt-only issue body and conversation content are not stored in linked issue repository rows.
 - Missing or blank `projectId`, `sprintId`, `sprintRunId`, `name`, and `title` values are rejected before repository calls so MCP clients receive a validation error instead of a low-level `.trim()` failure.
+
+### `manage_sprints followup`
+
+Use `manage_sprints` with `action: "followup"` when a later sprint should be captured now but must not be planned until its scheduled start. The action accepts the same draft fields and public aliases as sprint creation, requires `projectId`, creates a sprint with `status: "idle"`, and returns the saved sprint record synchronously.
+
+```json
+{
+  "action": "followup",
+  "projectId": "project-123",
+  "title": "Post-migration follow-up",
+  "goalMarkdown": "Apply the findings from the migration sprint."
+}
+```
+
+`followup` does not call the Planning agent, create tasks, start orchestration, or create a scheduler entry. To run it after another sprint, pass the returned sprint id to `manage_scheduler` with `action: "schedule_sprint"`, `scheduleMode: "after_sprint_end"`, and the source sprint id. Never call `manage_sprints plan` for that follow-up first: when the scheduled entry starts the still-unplanned sprint, Code UX plans it with auto-start at that time, after the source sprint has completed.
 
 ### `manage_sprints plan`
 

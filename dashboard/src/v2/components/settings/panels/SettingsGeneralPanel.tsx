@@ -566,7 +566,7 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
             highlights={[
               { label: "Pruning", value: (systemSettings?.runtime.dbPruningEnabled ?? true) ? "Enabled" : "Off", tone: (systemSettings?.runtime.dbPruningEnabled ?? true) ? "active" : "warning" },
               { label: "Retention", value: `${systemSettings?.runtime.dbRetentionDays ?? 14} days` },
-              { label: "Startup vacuum", value: (systemSettings?.runtime.dbAutoVacuumOnStartup ?? true) ? "Enabled" : "Off" },
+              { label: "Startup vacuum", value: (systemSettings?.runtime.dbAutoVacuumOnStartup ?? false) ? "Enabled" : "Off" },
             ]}
           >
             <Row label="Automatic pruning" description="Automatically prune completed task runs, VM activities, attention items, and realtime events on startup.">
@@ -596,8 +596,8 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
                 />
               </Row>
             )}
-            <Row label="Automatic vacuum on startup" description="Reclaim fragmented SQLite page storage space and shrink DB files on disk after pruning." last>
-              <Toggle aria-label="Toggle setting"                 value={systemSettings?.runtime.dbAutoVacuumOnStartup ?? true}
+            <Row label="Bounded vacuum on startup" description="Reclaim up to 256 free SQLite pages without a full-file rewrite. Legacy databases that predate incremental vacuum require separate offline maintenance to shrink." last>
+              <Toggle aria-label="Toggle setting"                 value={systemSettings?.runtime.dbAutoVacuumOnStartup ?? false}
                 onChange={() => updateSystem((current) => ({
                   ...current,
                   runtime: {

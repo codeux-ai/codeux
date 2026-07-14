@@ -9,11 +9,6 @@ import { getChatWidgetData } from "../../../lib/chat-widget-view-models.js";
 import { PlanningRequestWidget } from "../widgets/PlanningRequestWidget.js";
 import { ExternalReferenceWidget } from "../widgets/ExternalReferenceWidget.js";
 import { LazyAgentAvatarScene } from "../../agents/LazyAgentAvatarScene.js";
-import {
-  AGENT_SCENE_TOOL_IDS,
-  isAgentSceneTool,
-  type AgentSceneTool,
-} from "../../../lib/agent-scene-tools.js";
 import { DEFAULT_AGENT_AVATAR_CONFIG } from "../../../lib/agent-avatar.js";
 import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
 import { resolveDisplayDeliveryStatus } from "../../../hooks/use-chat-thread-data.js";
@@ -35,6 +30,9 @@ import {
 import { STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS } from "../../../lib/agent-humor-messages.js";
 import { resolveCinematicActivityDisplayState } from "../../../lib/cinematic-activity.js";
 import { StageActivityStrip } from "./StageActivityStrip.js";
+import { useCinematicWorkTool } from "./use-cinematic-work-tool.js";
+import { useCinematicInvocationFeedback } from "../../../hooks/use-cinematic-invocation-feedback.js";
+import { CinematicInvocationProgressBubble } from "./CinematicInvocationProgressBubble.js";
 
 /* ════════════════════════════════════════════════════════════════════════
  *  CinematicStage — the default "3D Chat" view of the chat page.
@@ -79,10 +77,6 @@ export interface CinematicStageProps {
   agentPreset?: AgentPresetRecord;
   onOpenThreads: () => void;
 }
-
-/** The bot cycles through its toolbox while the runtime is executing. */
-const WORK_TOOLS: readonly AgentSceneTool[] = AGENT_SCENE_TOOL_IDS;
-const TOOL_SWAP_MS = 7_000;
 
 const CREATE_APP_ACTION_ICONS: Record<DashboardCreateAppQuickactionKind, typeof Monitor> = {
   web_app: Globe2,
@@ -141,13 +135,6 @@ const QUICK_ACTION_GROUPS = [
   { zone: "workflow", label: "Workflows" },
 ] as const;
 
-/** Debug override: /chat?stageTool=wrench pins a specific tool on the stage. */
-const readForcedTool = (): AgentSceneTool | null => {
-  if (typeof window === "undefined") return null;
-  const value = new URLSearchParams(window.location.search).get("stageTool");
-  return isAgentSceneTool(value) ? value : null;
-};
-
 const canSpeakAgentMessage = (message: ChatMessageRecord): boolean => (
   !getChatWidgetData(message).suppressBodyMarkdown
   && speechTextFromMarkdown(message.bodyMarkdown || "").length > 0
@@ -194,13 +181,16 @@ const AgentSpeechBubble: FunctionComponent<{
   const segments = parseBubbleSegments(message.bodyMarkdown || "");
 
   return (
-    <div ref={ref} className="relative flex min-h-0 justify-start">
+    <div ref={ref} className="relative ml-auto flex min-h-0 w-full max-w-[620px] justify-end lg:max-w-[560px] xl:max-w-[620px] 2xl:max-w-[680px]">
       {/* Tail — points left toward the bot on desktop */}
       <span
         aria-hidden="true"
         className="absolute -left-1.5 top-7 hidden h-3.5 w-3.5 rotate-45 border-b border-l border-signal-500/25 bg-white/95 dark:bg-void-800/95 md:block"
       />
-      <div className="flex min-h-0 w-full max-w-[720px] flex-col rounded-3xl rounded-tl-lg border border-signal-500/25 bg-white/95 p-5 shadow-[0_12px_48px_rgba(0,224,160,0.10),0_4px_24px_rgba(0,0,0,0.06)] backdrop-blur-md dark:bg-void-800/95 dark:shadow-[0_12px_48px_rgba(0,224,160,0.08),0_8px_32px_rgba(0,0,0,0.35)]">
+      <div
+        data-testid="cinematic-agent-reply"
+        className="flex min-h-0 w-full max-w-[620px] flex-col rounded-3xl rounded-tl-lg border border-signal-500/25 bg-white/95 p-5 shadow-[0_12px_48px_rgba(0,224,160,0.10),0_4px_24px_rgba(0,0,0,0.06)] backdrop-blur-md dark:bg-void-800/95 dark:shadow-[0_12px_48px_rgba(0,224,160,0.08),0_8px_32px_rgba(0,0,0,0.35)] lg:max-w-[560px] xl:max-w-[620px] 2xl:max-w-[680px]"
+      >
         <div className="mb-2 flex shrink-0 items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
           <span className="text-signal-600 dark:text-signal-400">{agentName}</span>
           {createdAtLabel && <span className="font-mono font-normal tracking-normal">{createdAtLabel}</span>}
@@ -220,7 +210,7 @@ const AgentSpeechBubble: FunctionComponent<{
               !widgetData.suppressBodyMarkdown && (
                 <div
                   key={index}
-                  className={`${BUBBLE_MARKDOWN_CLASSES} prose-base text-[15px] leading-8`}
+                  className={`${BUBBLE_MARKDOWN_CLASSES} prose-sm text-[12px] leading-5 xl:text-[13px] xl:leading-6`}
                   dangerouslySetInnerHTML={{ __html: renderMarkdown(segment.markdown) }}
                 />
               )
@@ -256,7 +246,7 @@ const UserBubble: FunctionComponent<{
 
   if (isScheduledWakeup) {
     return (
-      <div ref={ref} className="flex justify-end">
+      <div ref={ref} className="flex shrink-0 justify-end">
         <div className="w-full max-w-[560px]">
           <ScheduledWakeupWidget
             instruction={message.bodyMarkdown}
@@ -270,7 +260,7 @@ const UserBubble: FunctionComponent<{
   }
 
   return (
-    <div ref={ref} className={`flex justify-end ${status === "pending" || status === "failed" ? "opacity-60" : ""}`}>
+    <div ref={ref} className={`flex shrink-0 justify-end ${status === "pending" || status === "failed" ? "opacity-60" : ""}`}>
       <div className="max-w-[560px] rounded-3xl rounded-br-lg border border-signal-500/20 bg-signal-500/[0.08] px-4 py-3 backdrop-blur-md dark:bg-signal-500/[0.1]">
         <div
           className="prose prose-sm max-w-none break-words text-[14px] leading-6 text-slate-800 prose-p:text-inherit dark:text-slate-200"
@@ -360,6 +350,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   onOpenThreads,
 }) => {
   const floatRef = useRef<HTMLDivElement>(null);
+  const exchangeLogRef = useRef<HTMLDivElement>(null);
   const reducedMotion = useReducedMotion();
   const [composerFocused, setComposerFocused] = useState(false);
   const [activityNowMs, setActivityNowMs] = useState(Date.now);
@@ -388,6 +379,45 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     projectManagerAgentPresetId: agentPreset?.id,
     selectedThread,
   });
+  const invocationFeedback = useCinematicInvocationFeedback({
+    invocations,
+    projectId: selectedProject?.id,
+    projectManagerAgentPresetId: agentPreset?.id,
+  });
+  const invocationFeedbackContextRef = useRef<{
+    contextKey: string;
+    invocationKey: string;
+  } | null>(null);
+  const stageContextKey = `${selectedProject?.id ?? "no-project"}:${selectedThread?.id ?? "new-thread"}`;
+  const invocationKey = invocationFeedback.activeInvocation
+    ? `${invocationFeedback.activeInvocation.projectId}:${invocationFeedback.activeInvocation.id}`
+    : null;
+  if (!invocationKey) {
+    invocationFeedbackContextRef.current = null;
+  } else if (invocationFeedbackContextRef.current?.invocationKey !== invocationKey) {
+    invocationFeedbackContextRef.current = { contextKey: stageContextKey, invocationKey };
+  } else if (
+    selectedThread
+    && invocationFeedbackContextRef.current.contextKey === `${selectedProject?.id ?? "no-project"}:new-thread`
+  ) {
+    // The first send creates and selects its thread after invocation startup;
+    // retain that one logical context transition without following later
+    // user-driven thread changes.
+    invocationFeedbackContextRef.current.contextKey = stageContextKey;
+  }
+  const matchingInvocationFeedback = invocationFeedback.activeInvocation
+    && invocationFeedbackContextRef.current?.invocationKey === invocationKey
+    && invocationFeedbackContextRef.current.contextKey === stageContextKey
+    ? invocationFeedback.activeInvocation
+    : null;
+  useLayoutEffect(() => {
+    if (!matchingInvocationFeedback || !exchangeLogRef.current) return;
+    exchangeLogRef.current.scrollTop = exchangeLogRef.current.scrollHeight;
+  }, [
+    matchingInvocationFeedback?.id,
+    invocationFeedback.message,
+    invocationFeedback.toolCount,
+  ]);
   // The runtime stores agent replies with authorType "system", so speech vs.
   // user bubbles are decided by direction alone — never filter on authorType.
   const visibleMessages = messages;
@@ -544,23 +574,14 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     }
   };
 
-  /* Work tools — while the runtime is executing, the bot pulls a tool from
-     its toolbox and swaps to a fresh one every few seconds. */
-  const [activeTool, setActiveTool] = useState<AgentSceneTool | null>(readForcedTool);
-  useEffect(() => {
-    if (readForcedTool()) return; // pinned via ?stageTool= for design review
-    if (workingPhase !== "working") {
-      setActiveTool(null);
-      return;
-    }
-    let index = Math.floor(Math.random() * WORK_TOOLS.length);
-    setActiveTool(WORK_TOOLS[index]);
-    const timer = window.setInterval(() => {
-      index = (index + 1) % WORK_TOOLS.length;
-      setActiveTool(WORK_TOOLS[index]);
-    }, TOOL_SWAP_MS);
-    return () => window.clearInterval(timer);
-  }, [workingPhase]);
+  const activeTool = useCinematicWorkTool({
+    active: runtimeBusy,
+    activityKey: activityState.foregroundCue?.id
+      ?? matchingInvocationFeedback?.id
+      ?? selectedThread?.id
+      ?? "active-project-manager-reply",
+    reducedMotion,
+  });
 
   const mood: AgentMoodState = useAgentMood({
     error,
@@ -605,7 +626,9 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     });
   };
 
-  const showGreeting = !threadMessagesLoading && visibleMessages.length === 0;
+  const showGreeting = !threadMessagesLoading
+    && visibleMessages.length === 0
+    && !matchingInvocationFeedback;
 
   return (
     <div
@@ -704,7 +727,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
             ))}
           </div>
         )}
-        <div className={`relative flex w-full flex-col items-center px-6 ${!runtimeBusy && !sending && !error && quickActions.length > 0 ? "pt-28 md:pt-0" : ""}`}>
+        <div className={`relative flex w-full flex-col items-center px-6 ${runtimeBusy ? "md:-translate-x-[10%] xl:-translate-x-[12%] 2xl:-translate-x-[10%]" : ""} ${!runtimeBusy && !sending && !error && quickActions.length > 0 ? "pt-28 md:pt-0" : ""}`}>
           <StageActivityStrip
             foregroundCue={activityState.foregroundCue}
             backgroundCue={activityState.backgroundCue}
@@ -715,7 +738,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
               even at the extremes of the float/lean drift. */}
           <div
             ref={floatRef}
-            className="pointer-events-auto h-[28vh] w-[28vh] max-w-full will-change-transform md:h-[min(48vh,520px)] md:w-[min(48vh,520px)]"
+            className="pointer-events-auto h-[28vh] w-[28vh] max-w-full will-change-transform md:h-[min(30vh,340px)] md:w-[min(30vh,340px)] lg:h-[min(30vh,360px)] lg:w-[min(30vh,360px)] xl:h-[min(30vh,380px)] xl:w-[min(30vh,380px)] 2xl:h-[min(36vh,440px)] 2xl:w-[min(36vh,440px)]"
             role="img"
             aria-label={`${agentName}, project manager. ${stageCaption}`}
           >
@@ -732,7 +755,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
 
           {/* Name plate + truthful mood caption — tucked up into the canvas's
               empty lower margin so it never collides with the composer. */}
-          <div className="pointer-events-auto -mt-4 text-center md:-mt-12">
+          <div className="pointer-events-auto -mt-4 text-center md:-mt-10 lg:-mt-12 2xl:-mt-14">
             <div className="font-display text-lg font-black tracking-tight text-slate-900 dark:text-white">
               {agentName}
             </div>
@@ -780,13 +803,17 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
       {/* ── Latest exchange — only the current beat of the conversation is
              staged: the newest agent reply plus any user messages sent after
              it. History lives one click away in Threads. ── */}
-      <div className="absolute inset-x-0 bottom-36 top-[40vh] z-20 flex flex-col justify-end px-4 md:inset-y-0 md:bottom-0 md:left-auto md:right-0 md:w-[46%] md:justify-center md:px-8 md:pb-32 md:pt-16 lg:w-[42%]">
+      <div
+        data-testid="cinematic-exchange"
+        className="absolute inset-x-0 bottom-32 top-[48%] z-20 flex min-h-0 flex-col justify-end px-4 pb-2 pt-3 md:inset-y-0 md:bottom-0 md:left-auto md:right-0 md:top-0 md:w-[42%] md:justify-end md:px-6 md:py-0 md:pb-36 md:pt-4 lg:w-[40%] lg:px-8 lg:pt-6 xl:w-[42%] xl:px-10 xl:pt-8 2xl:w-[42%] 2xl:justify-center 2xl:px-12 2xl:pb-32 2xl:pt-12"
+      >
         <div
+          ref={exchangeLogRef}
           role="log"
           aria-label="Latest exchange with the project manager"
-          aria-live={visibleMessages.length > 0 ? "polite" : "off"}
+          aria-live={matchingInvocationFeedback ? "off" : visibleMessages.length > 0 ? "polite" : "off"}
           aria-relevant="additions text"
-          className="flex min-h-0 flex-col gap-4"
+          className="flex max-h-full min-h-0 flex-col gap-4 overflow-y-auto overscroll-contain pr-1"
         >
           {showGreeting ? (
             <GreetingBubble
@@ -813,6 +840,14 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
               {pendingUserMessages.map((message) => (
                 <UserBubble key={message.id} message={message} allMessages={visibleMessages} />
               ))}
+              {matchingInvocationFeedback && (
+                <CinematicInvocationProgressBubble
+                  key={matchingInvocationFeedback.id}
+                  invocationId={matchingInvocationFeedback.id}
+                  message={invocationFeedback.message}
+                  toolCount={invocationFeedback.toolCount}
+                />
+              )}
               {earlierMessageCount > 0 && (
                 <button
                   type="button"

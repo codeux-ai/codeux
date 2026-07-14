@@ -18,7 +18,7 @@ import type {
 } from "../../contracts/node-flow-types.js";
 import { NODE_FLOW_SCHEMA_VERSION } from "../../contracts/node-flow-types.js";
 import { migrateNodeFlowGraph } from "./node-flow-migrators.js";
-import { resolveNodeDefinition } from "./node-definition-registry.js";
+import { resolveNodeDefinition, validateNodeDefinitionCredentialPolicy } from "./node-definition-registry.js";
 
 const MAX_GRAPH_NODES = 250;
 const MAX_GRAPH_EDGES = 1_000;
@@ -630,6 +630,11 @@ function normalizeNode(rawNode: unknown, index: number, issues: NodeFlowValidati
   }
   if (validDefinitionRef && !definition) {
     issues.push(issue(`${nodePath}.definition`, "unknown_node_definition", `Unknown node definition: ${definitionRef.type}@${definitionRef.version}`));
+  }
+  if (definition) {
+    for (const message of validateNodeDefinitionCredentialPolicy(definition)) {
+      issues.push(issue(`${nodePath}.definition`, "invalid_credential_policy", message));
+    }
   }
   if (definition && rawNode.sideEffect !== undefined && rawNode.sideEffect !== definition.sideEffect) {
     issues.push(issue(`${nodePath}.sideEffect`, "definition_metadata_mismatch", "Node side effect must match its definition."));

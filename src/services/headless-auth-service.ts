@@ -110,6 +110,7 @@ function isCredentialManagementRequest(req: Request): boolean {
   return pathname.startsWith("/api/credentials")
     || pathname.startsWith("/credentials")
     || /\/credentials(?:\/|$)/.test(pathname)
+    || /\/custom-dashboards\/[^/]+\/credential-bindings(?:\/|$)/.test(pathname)
     || isChatProviderCredentialManagementRequest(req.method, pathname);
 }
 

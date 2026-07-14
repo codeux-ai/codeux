@@ -169,6 +169,7 @@ export function createDashboardDependencies(
   const managementToolHandler = new ManagementToolHandler({
     sprintPreviewService: coreDeps.sprintPreviewService,
     customDashboardRepository: coreDeps.customDashboardRepository,
+    customDashboardCredentialBindingService: coreDeps.customDashboardCredentialBindingService,
     customDashboardValidationService: coreDeps.customDashboardValidationService,
     executionRepository: coreDeps.executionRepository,
     getDashboardSettings: () => resolveDashboardSettings(),
@@ -587,6 +588,12 @@ export function createDashboardDependencies(
   });
 
   planningAgentServiceRef.set(planningAgentService);
+  sprintOrchestrator.setUnplannedSprintPlanner((projectId, sprintId) => (
+    planningAgentService.startPlanSprint(projectId, sprintId, {
+      autoStart: true,
+      replan: false,
+    })
+  ));
 
   const agentBaseUpdateService = new AgentBaseUpdateService({
     projectManagementRepository,
@@ -636,7 +643,6 @@ export function createDashboardDependencies(
     quicksprintService,
     chatThreadRuntimeService,
     executionControlService,
-    planningAgentService,
     taskRerunService,
     memoryRemediationService,
     nodeFlowRuntimeService,

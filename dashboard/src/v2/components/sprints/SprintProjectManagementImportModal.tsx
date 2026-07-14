@@ -455,12 +455,9 @@ export const SprintProjectManagementImportModal: FunctionComponent<SprintProject
                     provider={providerMetadata}
                     aria-label={`${providerMetadata.label} status`}
                     value={filters.status}
-                    onChange={(event) => updateFilters((current) => ({ ...current, status: (event.target as HTMLSelectElement).value as ProjectManagementFilters["status"] }))}
-                  >
-                    {STATUS_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </IssueImportSelect>
+                    onChange={(value) => updateFilters((current) => ({ ...current, status: value as ProjectManagementFilters["status"] }))}
+                    options={STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                  />
                 </IssueImportField>
               )}
 

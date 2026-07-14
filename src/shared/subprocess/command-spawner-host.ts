@@ -11,6 +11,7 @@ import type {
   SpawnerRunMessage,
   SpawnerRawResult,
 } from "./command-spawner-protocol.js";
+import { BoundedTextBuffer } from "./bounded-text-buffer.js";
 
 const KILL_GRACE_MS = 2_000;
 
@@ -74,10 +75,10 @@ function runJob(message: SpawnerRunMessage): void {
   const control: JobControl = { child, aborted: false };
   activeJobs.set(id, control);
 
-  let stdout = "";
-  let stderr = "";
-  let stdoutLineBuffer = "";
-  let stderrLineBuffer = "";
+  const stdout = new BoundedTextBuffer(options.maxStdoutChars ?? 5 * 1024 * 1024);
+  const stderr = new BoundedTextBuffer(options.maxStderrChars ?? 4096);
+  const stdoutLineBuffer = new BoundedTextBuffer(options.maxStdoutChars ?? 5 * 1024 * 1024);
+  const stderrLineBuffer = new BoundedTextBuffer(options.maxStderrChars ?? 4096);
   let stdoutClipped = false;
   let stderrClipped = false;
   let timedOut = false;
@@ -96,8 +97,8 @@ function runJob(message: SpawnerRunMessage): void {
       }, options.timeout)
     : null;
 
-  const flushLineBuffer = (buffer: string, stream: "stdoutLine" | "stderrLine"): void => {
-    const trimmed = buffer.trim();
+  const flushLineBuffer = (buffer: BoundedTextBuffer, stream: "stdoutLine" | "stderrLine"): void => {
+    const trimmed = buffer.takeString().trim();
     if (trimmed.length > 0) {
       send({ type: stream, id, line: trimmed });
     }
@@ -111,35 +112,29 @@ function runJob(message: SpawnerRunMessage): void {
   ): void => {
     const text = data.toString();
     if (appendTo === "stdout") {
-      stdout += text;
-      if (options.maxStdoutChars !== undefined && stdout.length > options.maxStdoutChars) {
-        stdout = stdout.slice(-options.maxStdoutChars);
-        stdoutClipped = true;
-      }
+      stdout.append(text);
+      stdoutClipped = stdout.clipped;
     } else {
-      stderr += text;
-      if (options.maxStderrChars !== undefined && stderr.length > options.maxStderrChars) {
-        stderr = stderr.slice(-options.maxStderrChars);
-        stderrClipped = true;
-      }
+      stderr.append(text);
+      stderrClipped = stderr.clipped;
     }
     if (!streamLines) {
       return;
     }
-    let pending = (appendTo === "stdout" ? stdoutLineBuffer : stderrLineBuffer) + text;
-    const lines = pending.split("\n");
-    pending = lines.pop() ?? "";
-    if (appendTo === "stdout") {
-      stdoutLineBuffer = pending;
-    } else {
-      stderrLineBuffer = pending;
+    const pending = appendTo === "stdout" ? stdoutLineBuffer : stderrLineBuffer;
+    const lastNewline = text.lastIndexOf("\n");
+    if (lastNewline < 0) {
+      pending.append(text);
+      return;
     }
-    for (const line of lines) {
+    const completed = `${pending.takeString()}${text.slice(0, lastNewline)}`;
+    for (const line of completed.split("\n")) {
       const trimmed = line.trim();
       if (trimmed.length > 0) {
         send({ type: stream, id, line: trimmed });
       }
     }
+    pending.append(text.slice(lastNewline + 1));
   };
 
   child.stdout?.on("data", (data: Buffer) => handleData(data, "stdout", "stdoutLine", options.streamStdoutLines));
@@ -161,8 +156,8 @@ function runJob(message: SpawnerRunMessage): void {
   child.on("error", (error: Error) => {
     finish({
       code: null,
-      stdout,
-      stderr,
+      stdout: stdout.takeString(),
+      stderr: stderr.takeString(),
       timedOut,
       aborted: control.aborted,
       spawnError: error.message,
@@ -172,14 +167,14 @@ function runJob(message: SpawnerRunMessage): void {
   child.on("close", (code: number | null) => {
     if (options.streamStdoutLines) flushLineBuffer(stdoutLineBuffer, "stdoutLine");
     if (options.streamStderrLines) flushLineBuffer(stderrLineBuffer, "stderrLine");
-    finish({ code, stdout, stderr, timedOut, aborted: control.aborted });
+    finish({ code, stdout: stdout.takeString(), stderr: stderr.takeString(), timedOut, aborted: control.aborted });
   });
 
   if (options.stdinFile) {
     const stdinStream = createReadStream(options.stdinFile);
     stdinStream.on("error", (error: Error) => {
       child.kill("SIGTERM");
-      finish({ code: null, stdout, stderr, timedOut, aborted: control.aborted, spawnError: error.message });
+      finish({ code: null, stdout: stdout.takeString(), stderr: stderr.takeString(), timedOut, aborted: control.aborted, spawnError: error.message });
     });
     child.stdin?.on("error", () => {
       // The child may exit before consuming all input; the close handler reports the result.
@@ -187,7 +182,7 @@ function runJob(message: SpawnerRunMessage): void {
     if (child.stdin) {
       stdinStream.pipe(child.stdin);
     } else {
-      finish({ code: null, stdout, stderr, timedOut, aborted: control.aborted, spawnError: "Command stdin is unavailable" });
+      finish({ code: null, stdout: stdout.takeString(), stderr: stderr.takeString(), timedOut, aborted: control.aborted, spawnError: "Command stdin is unavailable" });
     }
   }
 }

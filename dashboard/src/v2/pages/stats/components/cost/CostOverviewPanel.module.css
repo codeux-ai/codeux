@@ -1,0 +1,410 @@
+@reference "../../../../../styles.css";
+
+.panel {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.header,
+.chartHeader {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.header > div,
+.chartHeader > div {
+  min-width: 0;
+}
+
+.eyebrow,
+.metric h3,
+.detailLabel,
+.bucketDetail dt {
+  margin: 0;
+  color: var(--stats-label-color);
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.eyebrow {
+  color: var(--stats-signal-text);
+}
+
+.header h2,
+.chartTitle {
+  margin: 0.35rem 0 0;
+  color: var(--stats-value-color);
+  font-family: var(--font-display);
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  font-weight: 630;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.header > div > p:last-child,
+.chartSummary {
+  max-width: 46rem;
+  margin: 0.4rem 0 0;
+  color: var(--stats-detail-color);
+  font-size: 0.875rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.statusBadge {
+  flex: 0 0 auto;
+  border-width: 1px;
+  border-style: solid;
+  border-radius: var(--stats-chip-radius);
+  padding: 0.4rem 0.7rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.metricGrid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.metric {
+  min-width: 0;
+}
+
+.metricValue {
+  margin: 0.7rem 0 0;
+  color: var(--stats-value-color);
+  font-family: var(--font-mono);
+  font-size: clamp(1.2rem, 2.4vw, 1.65rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.metricDetail {
+  margin: 0.45rem 0 0;
+  color: var(--stats-detail-color);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.coverageMetric {
+  border-left: 2px solid var(--stats-accent-signal);
+}
+
+.coverageMetric .metricValue {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  letter-spacing: -0.01em;
+}
+
+.chartSection {
+  min-width: 0;
+  margin-top: 2rem;
+  border-top: 1px solid var(--stats-border-hairline);
+  padding-top: 1.5rem;
+}
+
+.chartKey {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  color: var(--stats-detail-color);
+  font-size: 0.6875rem;
+}
+
+.chartKey > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.peakCue {
+  color: var(--stats-warning-text);
+}
+
+.selectedCue {
+  color: var(--stats-signal-text);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.emptyState {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 1.25rem;
+  border: 1px dashed var(--stats-card-border);
+  border-radius: var(--stats-subpanel-radius);
+  padding: 2rem 1rem;
+  color: var(--stats-detail-color);
+  text-align: center;
+}
+
+.emptyState strong {
+  color: var(--stats-value-color);
+  font-size: 0.875rem;
+}
+
+.emptyState span {
+  max-width: 36rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.chartFrame {
+  display: grid;
+  min-width: 0;
+  max-width: 100%;
+  grid-template-columns: minmax(4.75rem, auto) minmax(0, 1fr);
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.yAxis {
+  display: flex;
+  min-width: 0;
+  height: clamp(13rem, 31vw, 17rem);
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0.2rem 0 2.45rem;
+  color: var(--stats-label-color);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.plot {
+  position: relative;
+  min-width: 0;
+  height: clamp(13rem, 31vw, 17rem);
+  border-radius: var(--stats-subpanel-radius);
+  background: var(--stats-surface-subpanel);
+  overflow: hidden;
+}
+
+.svg,
+.bucketTargets {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.gridLine,
+.axisLine {
+  stroke: var(--stats-border-hairline);
+  stroke-width: 1;
+}
+
+.gridLine {
+  stroke-dasharray: 4 7;
+}
+
+.axisLine {
+  stroke: var(--stats-border-strong);
+}
+
+.spendLine {
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pointGlyph {
+  fill: var(--stats-surface-panel);
+  stroke: var(--stats-accent-signal);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.peakGlyph {
+  stroke: var(--stats-surface-panel);
+  stroke-width: 2;
+}
+
+.unpricedGlyph {
+  stroke: var(--stats-detail-color);
+  stroke-width: 2;
+}
+
+.bucketTargets {
+  pointer-events: none;
+}
+
+.bucketTarget {
+  position: absolute;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  pointer-events: auto;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+}
+
+.bucketTarget > span {
+  position: absolute;
+  inset: 0.25rem;
+  border: 1px solid transparent;
+  border-radius: inherit;
+  transition: border-color var(--stats-motion-fast), transform var(--stats-motion-fast);
+}
+
+.bucketTarget[aria-pressed="true"] > span {
+  border-color: var(--stats-focus-ring);
+  box-shadow: 0 0 0 2px var(--stats-focus-ring-offset);
+  transform: scale(1.15);
+}
+
+.bucketTarget[data-peak="true"] > span {
+  border-radius: 0.15rem;
+  transform: rotate(45deg);
+}
+
+.bucketTarget[data-peak="true"][aria-pressed="true"] > span {
+  transform: rotate(45deg) scale(1.15);
+}
+
+.bucketTarget[data-unpriced="true"] > span {
+  border-style: dashed;
+}
+
+.xAxis {
+  position: absolute;
+  right: 0.7rem;
+  bottom: 0.45rem;
+  left: 0.7rem;
+  display: flex;
+  min-width: 0;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--stats-label-color);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+
+.xAxis span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.xAxis span:last-child {
+  text-align: right;
+}
+
+.bucketDetail {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(7rem, 0.65fr) minmax(0, 2fr);
+  gap: 0.75rem 1.25rem;
+  margin-top: 0.75rem;
+}
+
+.bucketDetail > div > strong {
+  display: block;
+  margin-top: 0.3rem;
+  color: var(--stats-value-color);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.bucketDetail dl {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.bucketDetail dl > div {
+  min-width: 0;
+}
+
+.bucketDetail dd {
+  margin: 0.25rem 0 0;
+  color: var(--stats-value-color);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.bucketDetail > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  border-top: 1px solid var(--stats-border-hairline);
+  padding-top: 0.65rem;
+  color: var(--stats-detail-color);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 56rem) {
+  .metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bucketDetail {
+    grid-template-columns: 1fr;
+  }
+
+  .bucketDetail dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 36rem) {
+  .panel {
+    padding: 1rem;
+  }
+
+  .metricGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .chartFrame {
+    grid-template-columns: minmax(3.75rem, auto) minmax(0, 1fr);
+  }
+
+  .yAxis,
+  .xAxis {
+    font-size: 0.5625rem;
+  }
+
+  .bucketDetail dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bucketTarget,
+  .bucketTarget > span {
+    transition: none;
+  }
+}

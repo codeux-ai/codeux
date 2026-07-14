@@ -11,7 +11,7 @@ The runtime is published from `containers/runtime/Dockerfile` to `ghcr.io/codeux
 
 The publish workflow builds both targets, smoke-tests their tool inventory, emits SBOM and provenance attestations, and signs each published digest with Sigstore. Channel tags are discovery pointers only. `ManagedRuntimeService` pulls the channel, resolves the local `RepoDigest`, verifies Node 24 in a network-isolated smoke container, and stores only immutable digests as the active runtime.
 
-At application startup, managed-mode installations check both image targets for updates in the background. Running containers are not replaced. A new digest becomes active only after pull and verification; the previous digest is retained for rollback. Registry or Docker failures leave the last verified digest active and are exposed through runtime status instead of blocking dashboard readiness.
+At application startup, managed-mode installations check both image targets for updates in the background when the persisted update watermark is older than six hours. A restart inside that freshness window reuses the immutable digests without issuing registry pulls. Running containers are not replaced. A new digest becomes active only after pull and verification; the previous digest is retained for rollback. Registry or Docker failures leave the last verified digest active and are exposed through runtime status instead of blocking dashboard readiness.
 
 State is stored atomically under `~/.code-ux/runtime/managed-runtime.json`. Set `CODE_UX_MANAGED_RUNTIME_REPOSITORY`, `CODE_UX_MANAGED_RUNTIME_CHANNEL`, `CODE_UX_MANAGED_BASE_IMAGE`, or `CODE_UX_MANAGED_BROWSER_IMAGE` only for controlled development or registry mirrors.
 
@@ -38,7 +38,17 @@ Provider binaries are installed on the user's Docker host rather than baked into
 
 Jules is hosted and Mockup CLI is internal, so neither creates a provider-tool volume.
 
-Every Code UX startup resolves the stable version of each activated provider. Checks run with bounded concurrency and never delay readiness. Onboarding selection, settings saves, Login, and provider invocation all call the same singleflight preparation path. Easy onboarding begins preparation when its radio selection changes, before the user presses Login.
+Code UX resolves the stable version of each activated provider in the background when its persisted provider-asset state is older than six hours. Restarts inside that window verify and mount the cached immutable volume without another release-registry request. Checks run with bounded concurrency and never delay readiness. Onboarding selection, settings saves, Login, and provider invocation all call the same singleflight preparation path. Easy onboarding begins preparation when its radio selection changes, before the user presses Login.
+
+Preparation results are shared process-wide. After a managed image digest, provider-tool volume, or
+browser volume has passed its first verification, warm invocations reuse that immutable identity
+without launching another inspection or provider `--version` container. Provider bootstrap still
+checks the cheap completion/ownership markers inside the invocation container. If Docker assets were
+removed or recreated externally, the first affected launch invalidates only that asset's cache,
+repairs it through the normal singleflight preparation path, and retries once. Managed launches use
+`--pull never`, so a missing local digest cannot silently turn one invocation into an image pull.
+An already-verified provider volume remains immediately usable while its background stable-channel
+update check runs; invocations do not queue behind registry metadata or staging of a future version.
 
 Installation happens in a dedicated container with a writable versioned volume. npm metadata supplies version and integrity information; Antigravity's official manifest supplies the platform version and SHA-512 checksum, and its installer verifies the downloaded artifact. Code UX then runs the binary's version command and writes `.codeux-provider-tool.json`. Failed or incomplete volumes are removed before retry.
 

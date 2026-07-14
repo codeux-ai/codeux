@@ -28,6 +28,21 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
     }
   }));
 
+  router.post("/api/projects/:projectId/sprints/:sprintId/update-branch", asyncRoute(async (req, res) => {
+    if (!deps.updateSprintBranch) {
+      res.status(501).json({ error: "Sprint branch updates are not available." });
+      return;
+    }
+    try {
+      res.json(await deps.updateSprintBranch(
+        requireTrimmedString(req.params.projectId, "projectId"),
+        requireTrimmedString(req.params.sprintId, "sprintId"),
+      ));
+    } catch (error) {
+      res.status(409).json(toErrorResponse(error, "Failed to update sprint branch"));
+    }
+  }));
+
   router.get("/api/projects/:projectId/sprints/:sprintId/rollback/assessment", asyncRoute(async (req, res) => {
     try {
       res.json(await deps.assessSprintRollback(

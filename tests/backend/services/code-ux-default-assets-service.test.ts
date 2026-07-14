@@ -88,6 +88,9 @@ describe("Code UX default assets service", () => {
       "present missing tasks as an error",
       "list and cancel every obsolete pending planning-status wakeup created by you",
       "Never use a recurring schedule for planning status",
+      "`action: \"followup\"` to save an unplanned idle draft",
+      "`manage_scheduler` using `after_sprint_end`",
+      "Never call `plan` for that follow-up before its scheduled start",
     ]) {
       expect(instructions).toContain(requiredPlanningGuidance);
     }
@@ -130,7 +133,13 @@ describe("Code UX default assets service", () => {
     await fs.mkdir(path.join(homeDir, ".code-ux", "agents"), { recursive: true });
     await fs.writeFile(path.join(homeDir, ".code-ux", "agents", "worker.md"), "custom worker\n", "utf8");
 
-    const result = await ensureDefaultCodeUxAssetsInstalled({ projectRoot });
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+    };
+    const [result] = await Promise.all(Array.from({ length: 12 }, async () =>
+      await ensureDefaultCodeUxAssetsInstalled({ projectRoot, logger })
+    ));
 
     expect(result.sourceDir).toBe(path.join(projectRoot, ".code-ux"));
     expect(result.installed.map((asset) =>
@@ -146,5 +155,84 @@ describe("Code UX default assets service", () => {
     await expect(fs.readFile(path.join(homeDir, ".code-ux", "agents", "planning_agent.md"), "utf8")).resolves.toBe("default planning_agent.md\n");
     await expect(fs.readFile(path.join(homeDir, ".code-ux", "container", "setup.sh"), "utf8")).resolves.toContain("echo setup");
     await expect(fs.readFile(path.join(homeDir, ".code-ux", "quicksprints", "templates", "qs-default.md"), "utf8")).resolves.toContain("Default Quicksprint");
+    expect(logger.info).toHaveBeenCalledTimes(1);
+
+    const repeated = await ensureDefaultCodeUxAssetsInstalled({
+      projectRoot,
+      logger,
+      skipDefaultAgentFiles: true,
+    });
+    expect(repeated.installed).toEqual([]);
+    expect(logger.info).toHaveBeenCalledTimes(1);
+
+    const restoredAgentPath = path.join(homeDir, ".code-ux", "agents", "planning_agent.md");
+    await fs.rm(restoredAgentPath);
+    const restored = await Promise.all(Array.from({ length: 12 }, async () =>
+      await ensureDefaultCodeUxAssetsInstalled({ projectRoot, logger })
+    ));
+    expect(restored.filter((entry) => entry.installed.length > 0)).toHaveLength(12);
+    await expect(fs.readFile(restoredAgentPath, "utf8")).resolves.toBe("default planning_agent.md\n");
+    expect(logger.info).toHaveBeenCalledTimes(2);
+  });
+
+  it("migrates the known legacy bootstrap once while preserving user-authored setup scripts", async () => {
+    vi.stubEnv("CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS", "1");
+
+    for (const fixture of [
+      {
+        name: "legacy",
+        existingSetup: [
+          "#!/usr/bin/env bash",
+          'echo "[setup] Starting container bootstrap..."',
+          'echo "[setup] Installing @openai/codex..."',
+          'if [ "${CODE_UX_INSTALL_PLAYWRIGHT:-0}" = "1" ]; then echo playwright; fi',
+        ].join("\n"),
+        expectedSetup: "#!/usr/bin/env bash\necho managed baseline\n",
+        expectedInstalled: true,
+      },
+      {
+        name: "custom",
+        existingSetup: "#!/usr/bin/env bash\necho custom project bootstrap\n",
+        expectedSetup: "#!/usr/bin/env bash\necho custom project bootstrap\n",
+        expectedInstalled: false,
+      },
+    ]) {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), `code-ux-default-assets-${fixture.name}-`));
+      tempDirs.push(dir);
+      const projectRoot = path.join(dir, "app");
+      const homeDir = path.join(dir, "home");
+      vi.stubEnv("HOME", homeDir);
+      vi.stubEnv("USERPROFILE", homeDir);
+
+      await fs.mkdir(path.join(projectRoot, ".code-ux", "agents"), { recursive: true });
+      await fs.mkdir(path.join(projectRoot, ".code-ux", "container"), { recursive: true });
+      await fs.mkdir(path.join(projectRoot, ".code-ux", "quicksprints", "templates"), { recursive: true });
+      await Promise.all(["planning_agent.md", "project_manager.md", "quality_assurance_agent.md", "worker.md"].map(
+        async (fileName) => await fs.writeFile(
+          path.join(projectRoot, ".code-ux", "agents", fileName),
+          `default ${fileName}\n`,
+          "utf8",
+        ),
+      ));
+      await fs.writeFile(
+        path.join(projectRoot, ".code-ux", "container", "setup.sh"),
+        "#!/usr/bin/env bash\necho managed baseline\n",
+        "utf8",
+      );
+      await fs.mkdir(path.join(homeDir, ".code-ux", "container"), { recursive: true });
+      const targetSetupPath = path.join(homeDir, ".code-ux", "container", "setup.sh");
+      await fs.writeFile(targetSetupPath, fixture.existingSetup, "utf8");
+
+      const first = await ensureDefaultCodeUxAssetsInstalled({ projectRoot });
+      expect(first.installed.some((asset) => asset.targetPath === targetSetupPath)).toBe(fixture.expectedInstalled);
+      await expect(fs.readFile(targetSetupPath, "utf8")).resolves.toBe(fixture.expectedSetup);
+
+      const second = await ensureDefaultCodeUxAssetsInstalled({
+        projectRoot,
+        skipDefaultAgentFiles: true,
+      });
+      expect(second.installed).toEqual([]);
+      await expect(fs.readFile(targetSetupPath, "utf8")).resolves.toBe(fixture.expectedSetup);
+    }
   });
 });

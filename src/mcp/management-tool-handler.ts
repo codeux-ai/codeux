@@ -62,7 +62,10 @@ import { initializeProject } from "../domain/projects/project-initializer.js";
 import { prepareGitProjectCreateInput } from "../services/project-git-clone-service.js";
 
 import { PreviewActions } from "./management/preview-actions.js";
-import { CustomDashboardActions } from "./management/custom-dashboard-actions.js";
+import {
+  CustomDashboardActions,
+  normalizeCustomDashboardCredentialMutationArgs,
+} from "./management/custom-dashboard-actions.js";
 import { handleTelemetryActions } from "./management/telemetry-actions.js";
 import { handleProjectAction } from "./management/project-actions.js";
 import { SprintActions } from "./management/sprint-actions.js";
@@ -84,10 +87,12 @@ import type { HeadlessAuthService } from "../services/headless-auth-service.js";
 import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
 import { buildMcpApprovalFingerprint, formatManagementErrorEnvelope } from "./management/payload-parsers.js";
 import { resolveLateBoundDependency, type LateBoundOrValue } from "../shared/late-bound-dependency.js";
+import type { CustomDashboardCredentialBindingService } from "../services/custom-dashboard-credential-binding-service.js";
 
 export interface ManagementToolHandlerDeps {
   sprintPreviewService: SprintPreviewService;
   customDashboardRepository: CustomDashboardRepository;
+  customDashboardCredentialBindingService: CustomDashboardCredentialBindingService;
   customDashboardValidationService: CustomDashboardValidationService;
   executionRepository: ExecutionRepository;
   getDashboardSettings: () => DashboardSettings;
@@ -147,6 +152,7 @@ export class ManagementToolHandler {
     this.previewActions = new PreviewActions(deps.sprintPreviewService);
     this.customDashboardActions = new CustomDashboardActions(
       deps.customDashboardRepository,
+      deps.customDashboardCredentialBindingService,
       deps.customDashboardValidationService,
     );
     this.chatProviderActions = new ChatProviderActions(deps.chatProviderRepository, deps.chatProviderSecretService, {
@@ -267,6 +273,8 @@ export class ManagementToolHandler {
       || args.action.startsWith("replace_")
       || args.action === "remove_session"
       || args.action === "archive"
+      || args.action === "bind_credential"
+      || args.action === "unbind_credential"
       || args.action === "publish"
       || args.action === "rollback"
       || args.action === "retry_delivery"
@@ -566,8 +574,15 @@ export class ManagementToolHandler {
 
   async handleManageCustomDashboards(args: ManageCustomDashboardsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
-      const managementArgs = { domain: "custom_dashboards", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval };
-      const dispatch = (approval = args.approval) => this.customDashboardActions.handleCustomDashboardAction({ ...managementArgs, approval });
+      const normalizedArgs = normalizeCustomDashboardCredentialMutationArgs(args);
+      const managementArgs = {
+        domain: "custom_dashboards",
+        action: normalizedArgs.action,
+        payload: normalizedArgs as unknown as Record<string, unknown>,
+        approval: normalizedArgs.approval,
+      };
+      const dispatch = (approval = normalizedArgs.approval) =>
+        this.customDashboardActions.handleCustomDashboardAction({ ...managementArgs, approval });
       const approvalGate = await this.requireStatefulApproval(managementArgs, () => dispatch({ confirmed: false }));
       const envelope = approvalGate ?? this.recordStatefulApprovalRequirement(managementArgs, await dispatch());
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };

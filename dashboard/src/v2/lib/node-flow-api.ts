@@ -44,9 +44,18 @@ export interface NodeDefinitionSummary {
   ports: NodeDefinitionManifest["ports"];
 }
 
-export interface PatchNodeFlowDraftResponse {
-  draft?: NodeFlowDraftReview;
-  conflict?: NodeFlowConcurrencyConflict;
+export type PatchNodeFlowDraftResponse =
+  | { draft: NodeFlowDraftReview; conflict?: never }
+  | { draft?: never; conflict: NodeFlowConcurrencyConflict };
+
+export class NodeFlowDraftSaveError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "NodeFlowDraftSaveError";
+  }
 }
 
 export interface NodeFlowDryRunResponse {
@@ -84,10 +93,27 @@ export const createNodeFlowDraft = async (projectId: string, input: CreateNodeFl
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
   });
 
-export const patchNodeFlowDraft = async (flowId: string, input: PatchNodeFlowDraftInput): Promise<PatchNodeFlowDraftResponse> =>
-  fetchJson<PatchNodeFlowDraftResponse>(`/api/node-flow-drafts/${encodeURIComponent(flowId)}`, {
-    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
+export const patchNodeFlowDraft = async (flowId: string, input: PatchNodeFlowDraftInput): Promise<PatchNodeFlowDraftResponse> => {
+  const path = `/api/node-flow-drafts/${encodeURIComponent(flowId)}`;
+  const response = await fetch(path, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+    cache: "no-store",
   });
+  const body = await response.json().catch(() => ({})) as Partial<PatchNodeFlowDraftResponse> & { error?: unknown; message?: unknown };
+  if (response.status === 409 && body.conflict) return { conflict: body.conflict };
+  if (!response.ok) {
+    const message = typeof body.error === "string"
+      ? body.error
+      : typeof body.message === "string"
+        ? body.message
+        : `Request failed: ${path}`;
+    throw new NodeFlowDraftSaveError(response.status, message);
+  }
+  if (!body.draft) throw new NodeFlowDraftSaveError(response.status, "The draft save response did not include a review.");
+  return { draft: body.draft };
+};
 
 export const validateNodeFlowDraft = async (projectId: string, flowId: string, signal?: AbortSignal): Promise<NodeFlowDraftReview> =>
   fetchJson<NodeFlowDraftReview>(`/api/node-flow-drafts/${encodeURIComponent(flowId)}/validate`, {
@@ -97,11 +123,6 @@ export const validateNodeFlowDraft = async (projectId: string, flowId: string, s
 export const dryRunNodeFlowDraft = async (projectId: string, flowId: string, input: NodeFlowJsonObject = {}): Promise<NodeFlowDryRunResponse> =>
   fetchJson<NodeFlowDryRunResponse>(`/api/node-flow-drafts/${encodeURIComponent(flowId)}/dry-run`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, input }),
-  });
-
-export const requestNodeFlowCredential = async (projectId: string, flowId: string, nodeId: string, slot: string): Promise<Record<string, unknown>> =>
-  fetchJson<Record<string, unknown>>(`/api/node-flow-drafts/${encodeURIComponent(flowId)}/credential-requests`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, nodeId, slot }),
   });
 
 export const publishNodeFlowDraft = async (projectId: string, flowId: string, draftRevision: number): Promise<NodeFlowDraftReview> =>

@@ -126,6 +126,7 @@ export const clearLivePayloadCacheForTests = (): void => {
   overviewTelemetryInflight = null;
   dashboardNotificationsInflight = null;
   onboardingReadinessInflight = null;
+  onboardingReadinessCache = null;
 };
 
 export const invalidateLivePayloadCache = (projectId?: string | null): void => {
@@ -212,7 +213,7 @@ export const fetchOverviewTelemetry = async (): Promise<OverviewTelemetrySnapsho
 
 export const fetchDashboardNotifications = async (): Promise<DashboardNotificationFeed> => {
   if (!dashboardNotificationsInflight) {
-    dashboardNotificationsInflight = fetchJson<DashboardNotificationFeed>("/api/notifications").finally(() => {
+    dashboardNotificationsInflight = fetchJson<DashboardNotificationFeed>("/api/notifications?limit=20").finally(() => {
       dashboardNotificationsInflight = null;
     });
   }
@@ -224,12 +225,27 @@ export const fetchGitTrackingStatus = async (): Promise<GitTrackingStatus> => {
 };
 
 let onboardingReadinessInflight: Promise<OnboardingRuntimeReadiness> | null = null;
+let onboardingReadinessCache: { value: OnboardingRuntimeReadiness; expiresAt: number } | null = null;
+const ONBOARDING_READINESS_CACHE_MS = 15_000;
 
-export const fetchOnboardingReadiness = async (): Promise<OnboardingRuntimeReadiness> => {
-  if (!onboardingReadinessInflight) {
-    onboardingReadinessInflight = fetchJson<OnboardingRuntimeReadiness>("/api/onboarding/readiness").finally(() => {
-      onboardingReadinessInflight = null;
-    });
+export const fetchOnboardingReadiness = async (options?: { force?: boolean }): Promise<OnboardingRuntimeReadiness> => {
+  if (!options?.force && onboardingReadinessCache && onboardingReadinessCache.expiresAt > Date.now()) {
+    return onboardingReadinessCache.value;
+  }
+  if (!onboardingReadinessInflight || options?.force) {
+    const request = fetchJson<OnboardingRuntimeReadiness>("/api/onboarding/readiness")
+      .then((value) => {
+        if (onboardingReadinessInflight === request) {
+          onboardingReadinessCache = { value, expiresAt: Date.now() + ONBOARDING_READINESS_CACHE_MS };
+        }
+        return value;
+      })
+      .finally(() => {
+        if (onboardingReadinessInflight === request) {
+          onboardingReadinessInflight = null;
+        }
+      });
+    onboardingReadinessInflight = request;
   }
   return onboardingReadinessInflight;
 };
@@ -243,6 +259,7 @@ export const installOnboardingDependencies = async (
     body: JSON.stringify({ mode, confirmInstall: true }),
   });
   onboardingReadinessInflight = null;
+  onboardingReadinessCache = null;
   return result;
 };
 

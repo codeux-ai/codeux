@@ -7,6 +7,7 @@ import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadge
 import { BookOpen, Brain, CalendarClock, Gauge } from "lucide-preact";
 import { fetchMemoryRemediationSchedule, saveMemoryRemediationSchedule } from "../../../lib/scheduler-api.js";
 import type { MemoryRemediationScheduleCadence } from "../../../types.js";
+import { AvantgardeSelect } from "../../ui/AvantgardeSelect.js";
 
   export const SettingsMemoryPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
   const {
@@ -139,22 +140,23 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
             />
           </Row>
           <Row label="Post-sprint remediation" description="Curate sprint memories after completion. AI mode uses the Remediation route and guardrail." badge={getFieldBadge("memory.remediationMode")} last>
-            <select
+            <AvantgardeSelect
+              aria-label="Post-sprint remediation"
               value={editableSettings.memory.remediationMode}
               disabled={!editableSettings.memory.enabled}
-              onChange={(event) => {
-                const value = (event.currentTarget as HTMLSelectElement).value as typeof editableSettings.memory.remediationMode;
+              onChange={(value) => {
                 updateEditableSettings((current) => ({
                   ...current,
-                  memory: { ...current.memory, remediationMode: value },
+                  memory: { ...current.memory, remediationMode: value as typeof editableSettings.memory.remediationMode },
                 }));
               }}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 dark:border-white/10 dark:bg-void-900 dark:text-slate-100"
-            >
-              <option value="off">Off</option>
-              <option value="deterministic">Deterministic</option>
-              <option value="ai">AI remediation</option>
-            </select>
+              className="min-w-[12rem]"
+              options={[
+                { value: "off", label: "Off" },
+                { value: "deterministic", label: "Deterministic" },
+                { value: "ai", label: "AI remediation" },
+              ]}
+            />
           </Row>
         </SectionCard>
 
@@ -176,27 +178,31 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
           ) : (
             <>
               <Row label="Schedule cadence" description="Create or update the scheduler entry that runs project-scoped long-term memory remediation." badge={getFieldBadge("memory.remediationMode")}>
-                <select
+                <AvantgardeSelect
+                  aria-label="Schedule cadence"
                   value={scheduleCadence}
                   disabled={scheduleLoading || scheduleSaving || !editableSettings.memory.enabled}
-                  onChange={(event) => setScheduleCadence((event.currentTarget as HTMLSelectElement).value as MemoryRemediationScheduleCadence)}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 dark:border-white/10 dark:bg-void-900 dark:text-slate-100"
-                >
-                  <option value="off">Off</option>
-                  <option value="daily">Every day</option>
-                  <option value="weekly">Every week</option>
-                </select>
+                  onChange={(value) => setScheduleCadence(value as MemoryRemediationScheduleCadence)}
+                  className="min-w-[12rem]"
+                  options={[
+                    { value: "off", label: "Off" },
+                    { value: "daily", label: "Every day" },
+                    { value: "weekly", label: "Every week" },
+                  ]}
+                />
               </Row>
               <Row label="Remediation mode" description="Deterministic mode applies safe cleanup heuristics. AI mode routes candidates through the Remediation provider route." badge={getFieldBadge("memory.remediationMode")}>
-                <select
+                <AvantgardeSelect
+                  aria-label="Scheduled remediation mode"
                   value={scheduleMode}
                   disabled={scheduleLoading || scheduleSaving || !editableSettings.memory.enabled || scheduleCadence === "off"}
-                  onChange={(event) => setScheduleMode((event.currentTarget as HTMLSelectElement).value as "deterministic" | "ai")}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 dark:border-white/10 dark:bg-void-900 dark:text-slate-100"
-                >
-                  <option value="deterministic">Deterministic</option>
-                  <option value="ai">AI remediation</option>
-                </select>
+                  onChange={(value) => setScheduleMode(value as "deterministic" | "ai")}
+                  className="min-w-[12rem]"
+                  options={[
+                    { value: "deterministic", label: "Deterministic" },
+                    { value: "ai", label: "AI remediation" },
+                  ]}
+                />
               </Row>
               <Row label="Run time" description="The next scheduler occurrence is calculated in your local timezone." badge={getFieldBadge("memory.remediationMode")} last>
                 <div className="flex flex-wrap items-center justify-end gap-2">
@@ -316,21 +322,22 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
           ]}
         >
           <Row label="Embedding backend" description="Use downloaded in-app ONNX models or an external OpenAI-compatible embeddings API." badge={getFieldBadge("memory.embeddingProvider")}>
-            <select
+            <AvantgardeSelect
+              aria-label="Embedding backend"
               value={editableSettings.memory.embeddingProvider}
               disabled={!editableSettings.memory.enabled}
-              onChange={(event) => {
-                const value = (event.currentTarget as HTMLSelectElement).value as typeof editableSettings.memory.embeddingProvider;
+              onChange={(value) => {
                 updateEditableSettings((current) => ({
                   ...current,
-                  memory: { ...current.memory, embeddingProvider: value },
+                  memory: { ...current.memory, embeddingProvider: value as typeof editableSettings.memory.embeddingProvider },
                 }));
               }}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 dark:border-white/10 dark:bg-void-900 dark:text-slate-100"
-            >
-              <option value="in_app">In-app models</option>
-              <option value="external_api">External API</option>
-            </select>
+              className="min-w-[12rem]"
+              options={[
+                { value: "in_app", label: "In-app models" },
+                { value: "external_api", label: "External API" },
+              ]}
+            />
           </Row>
           {editableSettings.memory.embeddingProvider === "external_api" && (
             <>

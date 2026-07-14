@@ -6,6 +6,7 @@ import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CustomDashboardViewer } from "../CustomDashboardViewer.js";
 import type { CustomDashboardRecord, CustomDashboardRevisionRecord } from "../../../types.js";
+import { resolvePublishedCustomDashboardRuntime } from "../../../lib/custom-dashboard-runtime.js";
 import { createDefaultCustomDashboardDraft } from "../../../lib/custom-dashboard-view-models.js";
 
 vi.mock("../../../lib/motion/tokens.js", () => ({
@@ -56,10 +57,14 @@ const dashboard: CustomDashboardRecord = {
   },
   styleguide: { tone: "operational" },
   runtimeMetadata: {},
+  credentialBindings: [{ slotId: "metrics_api", credentialId: "viewer-binding-id-canary" }],
+  credentialBindingRevision: 2,
   publishedRevisionId: "revision-1",
   createdAt: "2026-07-07T00:00:00.000Z",
   updatedAt: "2026-07-07T00:00:00.000Z",
 };
+
+const STORED_CREDENTIAL_PLAINTEXT_CANARY = "CUSTOM_DASHBOARD_REAL_SECRET_CANARY_7f8d9a";
 
 const revision: CustomDashboardRevisionRecord = {
   id: "revision-1",
@@ -73,6 +78,7 @@ const revision: CustomDashboardRevisionRecord = {
   validationStatus: "passed",
   validationReport: { valid: true, summary: "Passed", issues: [] },
   runtimeMetadata: {},
+  credentialBindings: [{ slotId: "metrics_api", credentialId: "viewer-binding-id-canary" }],
   validatedAt: "2026-07-07T00:00:00.000Z",
   createdAt: "2026-07-07T00:00:00.000Z",
   updatedAt: "2026-07-07T00:00:00.000Z",
@@ -109,6 +115,8 @@ describe("CustomDashboardViewer", () => {
     const iframe = screen.getByTitle("Published custom dashboard: Delivery Pulse");
     expect(iframe).toHaveAttribute("sandbox", "allow-forms allow-popups allow-scripts");
     expect(iframe).toHaveAttribute("srcdoc", expect.stringContaining("Published dashboard"));
+    expect(iframe).not.toHaveAttribute("srcdoc", expect.stringContaining("viewer-binding-id-canary"));
+    expect(iframe).not.toHaveAttribute("srcdoc", expect.stringContaining(STORED_CREDENTIAL_PLAINTEXT_CANARY));
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh published dashboard" }));
     expect(onRefresh).toHaveBeenCalledTimes(1);
@@ -182,6 +190,88 @@ describe("CustomDashboardViewer", () => {
     expect(iframe).not.toHaveAttribute("srcdoc", expect.stringContaining("not directly executable"));
   });
 
+  it("recursively removes binding IDs from viewer records, sources, metadata, and artifacts", async () => {
+    const credentialId = "viewer-nested-binding-id-canary";
+    const nestedDashboard: CustomDashboardRecord = {
+      ...dashboard,
+      manifest: {
+        ...dashboard.manifest,
+        metadata: { nested: { credentialId, value: `prefix-${credentialId}-suffix` } },
+      },
+      runtimeMetadata: { nested: { credentialId, value: credentialId } },
+      credentialBindings: [{ slotId: "metrics_api", credentialId }],
+    };
+    const nestedRevision: CustomDashboardRevisionRecord = {
+      ...revision,
+      manifest: nestedDashboard.manifest,
+      fileBundle: {
+        files: [{
+          path: "index.html",
+          content: `<main data-binding="${credentialId}">Nested dashboard</main>`,
+          contentType: "text/html",
+        }],
+        metadata: { nested: { credentialId, value: credentialId } },
+      },
+      sourceNodeGraph: {
+        nodes: [{
+          id: "metrics",
+          type: "integrations_metadata",
+          title: "Metrics",
+          config: { nested: { credentialId, value: credentialId } },
+        }],
+        edges: [],
+        metadata: { nested: { value: credentialId } },
+      },
+      styleguide: { [credentialId]: "binding-shaped-key", nested: { value: credentialId } },
+      validationReport: {
+        valid: true,
+        summary: `Passed without ${credentialId}`,
+        issues: [],
+        metadata: { nested: { credentialId, value: credentialId } },
+      },
+      runtimeMetadata: {
+        validation: {
+          viewerArtifact: {
+            kind: "vite-dist",
+            entryFile: "index.html",
+            files: [{
+              path: "index.html",
+              content: `<main data-artifact-binding="${credentialId}">Nested artifact</main>`,
+              contentType: "text/html",
+            }],
+          },
+        },
+        nested: { credentialId, value: credentialId },
+      },
+      credentialBindings: [{ slotId: "metrics_api", credentialId }],
+    };
+
+    const resolution = resolvePublishedCustomDashboardRuntime(nestedDashboard, [nestedRevision]);
+    expect(resolution.status).toBe("ready");
+    expect(JSON.stringify(resolution)).not.toContain(credentialId);
+
+    render(
+      <CustomDashboardViewer
+        dashboard={nestedDashboard}
+        revisions={[nestedRevision]}
+        onRefresh={onRefresh}
+        onReturnToEditor={onReturnToEditor}
+      />,
+    );
+    const iframe = screen.getByTitle("Published custom dashboard: Delivery Pulse") as HTMLIFrameElement;
+    expect(iframe).not.toHaveAttribute("srcdoc", expect.stringContaining(credentialId));
+    const postMessage = vi.spyOn(iframe.contentWindow!, "postMessage").mockImplementation(() => undefined);
+
+    window.dispatchEvent(new MessageEvent("message", {
+      data: { type: "codeux-custom-dashboard:source-request", requestId: "request-nested", sourceId: "metrics" },
+      source: iframe.contentWindow,
+    }));
+
+    await waitFor(() => expect(postMessage).toHaveBeenCalled());
+    expect(JSON.stringify(postMessage.mock.calls)).not.toContain(credentialId);
+    expect(JSON.stringify(postMessage.mock.calls)).not.toContain(STORED_CREDENTIAL_PLAINTEXT_CANARY);
+  });
+
   it("blocks drafts and shows the validation report with a validate/publish action", () => {
     render(
       <CustomDashboardViewer
@@ -219,6 +309,25 @@ describe("CustomDashboardViewer", () => {
     expect(await screen.findByRole("alert", { name: "Custom dashboard runtime failure" })).toHaveTextContent("Frame exploded");
   });
 
+  it("ignores runtime messages from any window other than the isolated dashboard frame", async () => {
+    render(
+      <CustomDashboardViewer
+        dashboard={dashboard}
+        revisions={[revision]}
+        onRefresh={onRefresh}
+        onReturnToEditor={onReturnToEditor}
+      />,
+    );
+
+    window.dispatchEvent(new MessageEvent("message", {
+      data: { type: "codeux-custom-dashboard:runtime-error", message: "Hostile message" },
+      source: window,
+    }));
+
+    await Promise.resolve();
+    expect(screen.queryByRole("alert", { name: "Custom dashboard runtime failure" })).not.toBeInTheDocument();
+  });
+
   it("returns source errors to the isolated frame without throwing in the app shell", async () => {
     render(
       <CustomDashboardViewer
@@ -247,5 +356,7 @@ describe("CustomDashboardViewer", () => {
         "*",
       );
     });
+    expect(JSON.stringify(postMessage.mock.calls)).not.toContain("viewer-binding-id-canary");
+    expect(JSON.stringify(postMessage.mock.calls)).not.toContain(STORED_CREDENTIAL_PLAINTEXT_CANARY);
   });
 });

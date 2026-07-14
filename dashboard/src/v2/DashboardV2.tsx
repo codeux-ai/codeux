@@ -81,7 +81,7 @@ export const DashboardV2: FunctionComponent = () => {
                 {/* Live Telemetry */}
                 <aside aria-label="Live Telemetry" className="xl:col-span-4 h-full relative order-last xl:order-none mt-12 xl:mt-0">
                     <Suspense fallback={<SkeletonPanel />}>
-                        <OverviewTelemetry />
+                        <OverviewTelemetry execution={pageData.execution} />
                     </Suspense>
                 </aside>
             </div>

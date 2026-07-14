@@ -28,6 +28,7 @@ export const WINDOW_PRESETS = ["1h", "24h", "7d", "30d", "all", "custom"] as con
 export const MODE_DESCRIPTIONS: Record<StatsVisualMode, string> = {
   trend: "Token, invocation, and runtime movement across the selected range.",
   composition: "Provider, token, purpose, and source mix for the current telemetry window.",
+  cost: "Spend, pricing coverage, allocation, and entity-level cost detail for the selected range.",
   models: "Model activity, latency, cache behavior, and reliability signals.",
   reliability: "Provider health, source confidence, failures, and integrity notes.",
   ledgers: "Dense task, sprint, and git telemetry rows for audit-style review.",
@@ -37,6 +38,7 @@ export const MODE_DESCRIPTIONS: Record<StatsVisualMode, string> = {
 const MODE_LABELS: Record<StatsVisualMode, string> = {
   trend: "Trend",
   composition: "Composition",
+  cost: "Cost",
   models: "Models",
   reliability: "Providers",
   ledgers: "Ledgers",

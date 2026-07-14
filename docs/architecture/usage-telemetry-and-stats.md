@@ -199,7 +199,7 @@ The JSON stream parser accepts both flattened `run --format json` events and wra
 
 `opencode export` reports totals **cumulative for the whole session**, and resuming a session (follow-up task runs, QA-reopened runs, provider retries, and dashboard chat replies that continue an earlier turn) all pass `--session <id>` to keep using it. Without correction this means every resumed invocation would re-report all of the session's prior tokens on top of its own, inflating that invocation's persisted usage each time it happens (compounding further on longer follow-up chains). `subtractOpenCodeBaseline` (`opencode-log-parser.ts`) corrects for this: callers that resume a session look up the previous invocation's raw `{ tokens, cost }` export snapshot for that same session/purpose and pass it through `collectProviderUsageTelemetry`'s `opencodeBaselineUsage`, which is subtracted from the freshly exported cumulative totals so only the current run's own tokens are recorded. The stored `raw_usage_json` itself is left as the fresh, unadjusted snapshot so it can serve as the baseline for the *next* follow-up. This baseline is threaded through every known session-resuming call path: `execute-provider-stage.ts` (task coding), `quality-assurance-service.ts` (QA follow-up implementation passes), the in-process retry loops inside `ProviderExecutionService.executeProvider` and `StructuredProviderResponseService.executeAndParse`, and dashboard chat continuations (`chat-thread-runtime-service.ts` → `chat-management-action-service.ts`).
 
-Stats pricing still prefers configured model-pricing overrides and catalogue token rates. If those are unavailable for an OpenCode model, the stats aggregation falls back to the provider-reported `raw_usage_json.cost` total so OpenCode runs with gateway-specific or hosted model ids do not display as zero-cost when the provider reported a cost.
+Stats pricing still prefers configured model-pricing overrides and catalogue token rates. If those are unavailable for an OpenCode model, the stats aggregation falls back to the provider-reported `raw_usage_json.cost` total so OpenCode runs with gateway-specific or hosted model ids do not display as zero-cost when the provider reported a cost. The Stats response exposes only normalized cost and coverage totals; it never includes the raw provider payload.
 
 ### Jules
 
@@ -272,7 +272,9 @@ Historical provider-reported rows created before the v2 token-accounting contrac
 
 The stats snapshot includes:
 
-- project totals (including dynamic cost rollups based on typed token-pricing configurations which calculate non-cached input, output, and cached input costs in USD based on per-million token rates, defaulting to zero if unset or unconfigured. This relies on a per-snapshot pricing cache to prevent redundant provider/model lookups)
+- project totals (including dynamic cost rollups based on typed token-pricing configurations which calculate non-cached input, output, and cached input costs in USD based on per-million token rates. This relies on a per-snapshot pricing cache to prevent redundant provider/model lookups)
+- additive `costCoverage` provenance on project, bucket, task, sprint-run, provider, purpose, model, and canonical sprint usage totals
+- `costAnalytics.sprints`, which groups cost by canonical `sprint_id` so retries, resumes, and multiple runs of one conceptual sprint produce one Cost row while the existing top-level `sprints` ledger remains sprint-run-oriented
 - total provider cost totals (e.g. `providerCost` map)
 - total model cost totals (e.g. `modelCost` map)
 - usage cost chart series for historical visualization (e.g. `core_total_cost`, `provider_cost_*`)
@@ -293,7 +295,15 @@ The stats snapshot includes:
 - the usage chart summary surfaces selected-window peak tokens, peak active time, average tokens, peak invocations, invocation density, and total cost directly from bucket telemetry so the analysis surface reads like a telemetry panel instead of a single-scale line graph
 - the focused-bucket panel shows date, cost, tokens, active time, invocations, and enabled-series values in wrapping rows so compact viewports preserve exact values without clipping labels or pushing the chart edge
 - chart-series grouping and reset state are frontend view-model concerns: the full-width switch band and graph filter menu share ordered sections with active, total, and default-enabled counts. Reset restores snapshot defaults through the same enabled-series state used by individual switches, enable-defaults re-enables default series without hiding other selected series, and the last enabled series is guarded so the chart never collapses to an empty state.
-- the stats refactor did not change the snapshot contract or route shape; it only changed how the frontend composes the same project stats payload
+- Cost analytics extend the existing snapshot additively without changing the Stats route, query parameters, range behavior, chart series, or existing sprint-run ledger
+
+### Cost provenance and recalculation
+
+Cost is a read model over the existing project/range-bounded `provider_invocations` query. No Cost-specific route or persistence table is involved. For every provider/model group, configured model pricing is authoritative and recalculates historical input, cached-input, and output cost using the pricing settings that are current when the snapshot is requested. Changing current pricing therefore changes historical Stats cost projections; it does not rewrite invocation telemetry.
+
+When configured pricing cannot be resolved, a valid non-negative numeric `raw_usage_json.cost` is used as the fallback. Coverage reports `configuredPricingInvocationCount`, `providerReportedCostInvocationCount`, `unpricedInvocationCount`, and the `providerReportedCostUsd` amount actually included as fallback. Provider-reported cost is not added when configured pricing exists, even if the configured formula produces zero.
+
+A valid provider-reported cost of `0` is covered telemetry: it increments `providerReportedCostInvocationCount` and does not increment `unpricedInvocationCount`. An invocation is unpriced only when neither configured pricing nor a valid provider-reported fallback exists. Consequently, `totalCostUsd: 0` can mean a legitimate zero-dollar run, a fully unpriced aggregate, or a no-usage window; consumers must use `costCoverage` to distinguish those states. Empty windows return all four coverage values as zero.
 
 ## PR Description Rollups
 

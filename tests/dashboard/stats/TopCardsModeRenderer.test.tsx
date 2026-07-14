@@ -33,6 +33,12 @@ const usage = {
   outputCostUsd: 7.59,
   cachedInputCostUsd: 0.5,
   totalCostUsd: 12.34,
+  costCoverage: {
+    configuredPricingInvocationCount: 10,
+    providerReportedCostInvocationCount: 4,
+    unpricedInvocationCount: 0,
+    providerReportedCostUsd: 2.5,
+  },
   reportedInvocationCount: 9,
   estimatedInvocationCount: 1,
   unavailableInvocationCount: 0,
@@ -57,9 +63,9 @@ const stats = {
   generatedAt: "2026-07-03T00:00:00.000Z",
   usage,
   buckets: [
-    { usage: { ...usage, invocationCount: 4, totalTokens: 10_000, activeTimeMs: 600_000, wallTimeMs: 900_000, cachedInputTokens: 1_000, inputTokens: 5_000 } },
-    { usage: { ...usage, invocationCount: 5, totalTokens: 15_000, activeTimeMs: 700_000, wallTimeMs: 1_100_000, cachedInputTokens: 2_000, inputTokens: 8_000 } },
-    { usage: { ...usage, invocationCount: 5, totalTokens: 25_000, activeTimeMs: 500_000, wallTimeMs: 1_600_000, cachedInputTokens: 2_000, inputTokens: 12_000 } },
+    { bucketStart: "2026-07-01T00:00:00.000Z", bucketEnd: "2026-07-02T00:00:00.000Z", label: "Jul 1", usage: { ...usage, invocationCount: 4, totalTokens: 10_000, activeTimeMs: 600_000, wallTimeMs: 900_000, cachedInputTokens: 1_000, inputTokens: 5_000 } },
+    { bucketStart: "2026-07-02T00:00:00.000Z", bucketEnd: "2026-07-03T00:00:00.000Z", label: "Jul 2", usage: { ...usage, invocationCount: 5, totalTokens: 15_000, activeTimeMs: 700_000, wallTimeMs: 1_100_000, cachedInputTokens: 2_000, inputTokens: 8_000 } },
+    { bucketStart: "2026-07-03T00:00:00.000Z", bucketEnd: "2026-07-04T00:00:00.000Z", label: "Jul 3", usage: { ...usage, invocationCount: 5, totalTokens: 25_000, activeTimeMs: 500_000, wallTimeMs: 1_600_000, cachedInputTokens: 2_000, inputTokens: 12_000 } },
   ],
   chartSeries: [
     { id: "core_total_tokens", data: [10_000, 15_000, 25_000] },
@@ -156,6 +162,18 @@ describe("TopCardsModeRenderer", () => {
     expect(screen.getByRole("article", { name: /Provider Share: 60%/ })).toHaveTextContent("Codex leads 2 provider rows by tokens");
     expect(screen.getByRole("article", { name: /Token Anatomy: 50.0k/ })).toHaveTextContent("Input leads at 50%");
     expect(screen.getByRole("article", { name: /Source Mix: 90%/ })).toHaveTextContent("reported is the dominant telemetry source");
+  });
+
+  it("renders a provenance-aware cost deck with normalized averages and coverage", () => {
+    render(<TopCardsModeRenderer mode="cost" {...baseProps} />);
+
+    const cards = screen.getAllByRole("article");
+    expect(cards).toHaveLength(5);
+    expect(cards[0]).toHaveAccessibleName(/Total Spend: \$12\.34/);
+    expect(screen.getByRole("article", { name: /Average per Task: \$3\.38/ })).toHaveTextContent("Across 2 tasks");
+    expect(screen.getByRole("article", { name: /Average per Sprint: \$12\.34/ })).toHaveTextContent("canonical sprint");
+    expect(screen.getByRole("article", { name: /Blended Cost \/ 1M Tokens: \$246\.80/ })).toHaveTextContent("50,000 tracked tokens");
+    expect(screen.getByRole("article", { name: /Pricing Coverage: 100\.0%/ })).toHaveTextContent("All 14 calls");
   });
 
   it("prioritizes active model health, ledger volume, and live system health", () => {

@@ -20,7 +20,7 @@ Switch scope with the selector at the top:
 
 The sticky command/status bar keeps the System/Project selector, project availability or inheritance context, active panel, and the Reset Project / Save Changes actions visible together while you scroll. Smart Find stays compact by showing only the search field until you type; active searches then show result status and match-preview chips while the exact category total remains available to assistive technology.
 
-On desktop, categories stay visible in the left rail. On smaller screens, the command bar shows one compact current-category button instead of the full rail. Open it to use the same Smart Find-filtered category list and match previews in a drawer. Arrow keys move between categories, Enter or Space selects one, and Escape closes the drawer and restores focus to the category button.
+On desktop, categories stay visible in the left rail and the active settings content starts at the top of the right workspace. Labels and linked controls within a setting row also align from the top when either side wraps onto multiple lines. On smaller screens, the command bar shows one compact current-category button instead of the full rail. Open it to use the same Smart Find-filtered category list and match previews in a drawer. Arrow keys move between categories, Enter or Space selects one, and Escape closes the drawer and restores focus to the category button.
 
 The last selected **System** or **Project** scope is remembered in the local database as part of system runtime settings. Changing only that selector is saved immediately and does not save unrelated draft edits in the active settings form.
 

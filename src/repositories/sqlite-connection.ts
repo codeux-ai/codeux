@@ -39,6 +39,7 @@ export function openSqliteDatabase(dbPath: string): DatabaseSync {
         enableForeignKeyConstraints: true,
       });
       db.exec(`
+        PRAGMA auto_vacuum = INCREMENTAL;
         PRAGMA journal_mode = WAL;
         PRAGMA synchronous = NORMAL;
         PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS};

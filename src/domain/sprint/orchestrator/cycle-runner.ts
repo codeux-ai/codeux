@@ -33,7 +33,7 @@ import { matchPrForTask } from "../ci/feature-pr/pr-matcher.js";
 import { resolveCiEscalationOwner } from "../ci/feature-pr/ci-autofix-policy.js";
 import type { MemoryCategory, CreateMemoryInput } from "../../../contracts/memory-types.js";
 import { isTaskCodeComplete } from "../task-merge-state.js";
-import { shouldVerifyContinuedQaFix } from "../../qa-review/qa-review-budget.js";
+import { isPendingQaContinuation, shouldVerifyContinuedQaFix } from "../../qa-review/qa-review-budget.js";
 import pLimit from "p-limit";
 import { workerBranchHasMergeWork } from "../../../infrastructure/git/local-merge.js";
 import { PROVIDER_IDS } from "../../../repositories/settings-defaults.js";
@@ -1339,6 +1339,7 @@ export class CycleRunner {
       const taskIsCodeComplete = isTaskCodeComplete(task);
       const hasSameSessionFollowUpAfterLatestQaRequest = taskIsCodeComplete
         && this.hasCompletedTaskFollowUpAfterLatestQaRequest(task, qaGate, args.sprintRunId);
+      const hasPendingQaFollowUp = isPendingQaContinuation(qaGate.latestRun);
 
       // QA spent its budget without ever clearing this task (no pass — either
       // changes still outstanding at the cap or the reviewer kept failing for
@@ -1346,7 +1347,7 @@ export class CycleRunner {
       // it quietly settle as completed or loop forever.
       const qaNeedsExhaustionPolicy = qaGate.reason === "retries_exhausted"
         || qaGate.reason === "follow_up_no_progress";
-      if (taskIsCodeComplete && qaNeedsExhaustionPolicy && !hasSameSessionFollowUpAfterLatestQaRequest) {
+      if (taskIsCodeComplete && qaNeedsExhaustionPolicy && !hasSameSessionFollowUpAfterLatestQaRequest && !hasPendingQaFollowUp) {
         const policy = settings.agents.qualityAssurance.exhaustionPolicy;
         if (this.applyQaExhaustionPolicy(task, qaGate, args, policy)) {
           if (policy === "FINISH_TASK") {
@@ -1357,7 +1358,8 @@ export class CycleRunner {
       }
 
       const newlyCodeComplete = taskIsCodeComplete && !isTaskCodeComplete({ status: prev });
-      const shouldRunQaReview = taskIsCodeComplete
+      const shouldRunQaReview = hasPendingQaFollowUp
+        || (taskIsCodeComplete
         && (
           qaGate.reason === "pending_review"
           || qaGate.reason === "review_failed"
@@ -1366,7 +1368,7 @@ export class CycleRunner {
             newlyCodeComplete
             || hasSameSessionFollowUpAfterLatestQaRequest
           ))
-        );
+        ));
 
       if (!shouldRunQaReview) {
         continue;

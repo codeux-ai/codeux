@@ -22,7 +22,8 @@ import {
 } from "lucide-preact";
 import { useState, useRef, useEffect } from "preact/hooks";
 import { HumanInterventionBadge } from "../ui/HumanInterventionBadge.js";
-import { SprintReviewBadge } from "./SprintReviewBadge.js";
+import { WorkflowStatusBadge } from "../ui/WorkflowStatusBadge.js";
+import type { CiStatusPresentation } from "../../lib/ci-status-presentation.js";
 import { SprintActionMenu } from "./SprintActionMenu.js";
 import {
   resolveSprintAttentionIndicatorState,
@@ -102,6 +103,7 @@ export interface SprintLedgerRowProps {
   activeRun: { id: string; status: string } | undefined;
   pauseResumeRun: { id: string; status: string } | undefined;
   humanIntervention: ExecutionHumanInterventionSummary | null;
+  ciStatus?: CiStatusPresentation | null;
   sprintKeyPrefix?: string;
   pendingActionIds: Set<string>;
   isAnyBulkPending?: boolean;
@@ -116,6 +118,7 @@ export interface SprintLedgerRowProps {
   onEdit: () => void;
   onExport: () => void;
   onOverrides: () => void;
+  onUpdateBranch?: () => void;
   onMarkCompleted: () => void;
   onMarkQaPassed?: () => void;
   onRollback?: () => void;
@@ -129,6 +132,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   activeRun,
   pauseResumeRun,
   humanIntervention,
+  ciStatus = null,
   sprintKeyPrefix = "SPR",
   pendingActionIds,
   isAnyBulkPending,
@@ -143,6 +147,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   onEdit,
   onExport,
   onOverrides,
+  onUpdateBranch,
   onMarkCompleted,
   onMarkQaPassed,
   onRollback,
@@ -230,6 +235,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   const routeSearch = { projectId: sprint.projectId, sprintId: sprint.id } as any;
 
   const attentionOverride = humanIntervention?.attentionType
+    && !(ciStatus && humanIntervention.attentionType === "ci_fix_required")
     ? ATTENTION_BADGE_OVERRIDES[humanIntervention.attentionType]
     : undefined;
 
@@ -388,9 +394,6 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
               {pendingLabel}
             </span>
           ) : null}
-          {sprint.latestReview && (
-            <SprintReviewBadge summary={sprint.latestReview} compact align="left" />
-          )}
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-mono text-slate-400">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.05] bg-black/[0.025] px-2 py-1 dark:border-white/[0.06] dark:bg-white/[0.03]">
@@ -424,6 +427,15 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           <span className={`inline-flex rounded-full border px-4 py-1.5 text-[11px] font-bold ${badgeTone}`}>
             {badgeLabel}
           </span>
+          <WorkflowStatusBadge
+            scope="sprint"
+            status={sprint.status}
+            review={sprint.latestReview}
+            ciPresentation={ciStatus}
+            humanIntervention={humanIntervention}
+            compact
+            align="left"
+          />
           {isDeletePending ? (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-status-red/25 bg-status-red/10 px-3 py-1.5 text-[11px] font-bold text-status-red">
               <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" strokeWidth={2.2} /> Deleting
@@ -601,6 +613,8 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
                   onExport={onExport}
                   onToggleShowcase={() => onToggleShowcase(sprint)}
                   onOverrides={onOverrides}
+                  onUpdateBranch={onUpdateBranch}
+                  updateBranchBusy={pendingActionIds.has(`sprint-update-branch:${sprint.id}`)}
                   onMarkCompleted={onMarkCompleted}
                   onMarkQaPassed={onMarkQaPassed}
                   onRollback={onRollback}

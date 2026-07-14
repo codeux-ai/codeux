@@ -23,6 +23,8 @@ const STALE_SPRINT_RUN_MS = 15 * 60 * 1000;
 const TERMINAL_TASK_RUN_STATES: TaskRunState[] = ["COMPLETED", "FAILED", "BLOCKED"];
 
 export class RuntimeCleanupService {
+  private cleanupInFlight: Promise<RuntimeCleanupResult> | null = null;
+
   constructor(
     private readonly connectionChatRepository: ConnectionChatRepository,
     private readonly executionRepository: ExecutionRepository,
@@ -33,9 +35,25 @@ export class RuntimeCleanupService {
     private readonly logger?: Logger,
   ) {}
 
-  cleanup(now = new Date()): RuntimeCleanupResult {
+  cleanup(now = new Date()): Promise<RuntimeCleanupResult> {
+    if (this.cleanupInFlight) {
+      return this.cleanupInFlight;
+    }
+
+    const cleanup = this.performCleanup(now);
+    this.cleanupInFlight = cleanup;
+    void cleanup.then(
+      () => this.clearCleanup(cleanup),
+      () => this.clearCleanup(cleanup),
+    );
+    return cleanup;
+  }
+
+  private async performCleanup(now: Date): Promise<RuntimeCleanupResult> {
     const connectionResult = this.connectionChatRepository.cleanupConnectionLifecycle(now);
-    const dockerRuntimeResult = this.dockerRuntimePruneService?.cleanup(now) || { prunedPaths: [] };
+    const dockerRuntimeResultPromise = this.dockerRuntimePruneService
+      ? this.dockerRuntimePruneService.cleanup(now)
+      : Promise.resolve({ prunedPaths: [] });
     const blockedDispatchIds: string[] = [];
     const forceCancelledDispatchIds: string[] = [];
     const reconciledDispatchIds = this.reconcileTerminalDispatches(now);
@@ -159,6 +177,7 @@ export class RuntimeCleanupService {
       }
     }
 
+    const dockerRuntimeResult = await dockerRuntimeResultPromise;
     if (
       connectionResult.staleConnectionIds.length > 0
       || connectionResult.offlineConnectionIds.length > 0
@@ -189,6 +208,12 @@ export class RuntimeCleanupService {
       reconciledDispatchIds,
       failedSprintRunIds,
     };
+  }
+
+  private clearCleanup(cleanup: Promise<RuntimeCleanupResult>): void {
+    if (this.cleanupInFlight === cleanup) {
+      this.cleanupInFlight = null;
+    }
   }
 
   private reconcileTerminalDispatches(now: Date): string[] {

@@ -83,20 +83,30 @@ describe("getSprintStatusPresentation", () => {
     expect(result.title).toBe("Sprint in QA Gate");
   });
 
-  it("maps merge conflict attention or block to Merge Conflict state", () => {
+  it("maps merge conflicts without requesting human attention unless ownership is human", () => {
     const result1 = getSprintStatusPresentation({
       state: "paused",
       attentionType: "merge_conflict",
+      humanInterventionOwnerType: "worker",
     });
     expect(result1.statusLabel).toBe("Merge Conflict");
-    expect(result1.showHumanInterventionBadge).toBe(true);
+    expect(result1.showHumanInterventionBadge).toBe(false);
 
     const result2 = getSprintStatusPresentation({
       state: "paused",
       pauseReason: "main_merge_blocked",
+      humanInterventionOwnerType: "system",
     });
     expect(result2.statusLabel).toBe("Merge Conflict");
-    expect(result2.showHumanInterventionBadge).toBe(true);
+    expect(result2.showHumanInterventionBadge).toBe(false);
+
+    const result3 = getSprintStatusPresentation({
+      state: "paused",
+      attentionType: "merge_conflict",
+      humanInterventionOwnerType: "human",
+    });
+    expect(result3.statusLabel).toBe("Merge Conflict");
+    expect(result3.showHumanInterventionBadge).toBe(true);
   });
 
   it("maps idle state to Draft", () => {

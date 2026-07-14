@@ -4,6 +4,7 @@ import type { ExecutionInvocationRecord } from "./invocation-types.js";
 import type { MemorySettings } from "./memory-types.js";
 import type { SpeechSettings } from "./speech-types.js";
 import type { TaskSelfReflectionRating } from "./task-self-reflection-types.js";
+import type { SprintReviewSummary } from "./qa-review-summary.js";
 
 export interface JulesSource {
   name: string;
@@ -80,6 +81,7 @@ export interface JulesActivity {
 
 export type SubtaskStatus = "PENDING" | "RUNNING" | "CODING_COMPLETED" | "COMPLETED" | "FAILED" | "BLOCKED" | "QUOTA" | "QA_REVIEW_FAILED";
 export type SubtaskMergeIndicator = "CI" | "AUTOMERGE" | "MERGED" | "MERGE_BLOCKED" | "MERGE_CONFLICT" | "PR_ONLY" | "QA_PENDING";
+export type CardCiStatus = "pending" | "running" | "failed";
 export type ProviderId = "jules" | "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity" | "mockup-cli";
 export type ProviderConfigId = string;
 export type ProviderStrategy = "MANUAL" | "WEIGHTED" | "AGENT";
@@ -142,17 +144,11 @@ export interface Subtask {
     error_reason?: string;
     [key: string]: any;
   };
-  latestReview?: {
-    status: string;
-    outcome: string | null;
-    summary: string | null;
-    findings: string[];
-    reviewer: string | null;
-    finishedAt: string | null;
-  };
+  latestReview?: SprintReviewSummary;
   selfReflectionRating?: TaskSelfReflectionRating;
   is_merged?: boolean;
   merge_indicator?: SubtaskMergeIndicator;
+  ciStatus?: CardCiStatus | null;
   intervention_owner?: InterventionOwner;
   intervention_hint?: string;
 }
@@ -418,6 +414,19 @@ export interface ExecutionUsageTotals {
   estimatedInvocationCount: number;
   unavailableInvocationCount: number;
   unsupportedInvocationCount: number;
+  /** Explains which source made the aggregate cost trustworthy. Optional for
+   * compatibility with snapshots persisted or constructed before cost coverage
+   * was added; project Stats snapshots always populate it. */
+  costCoverage?: ExecutionCostCoverage;
+}
+
+export interface ExecutionCostCoverage {
+  configuredPricingInvocationCount: number;
+  providerReportedCostInvocationCount: number;
+  unpricedInvocationCount: number;
+  /** Provider-reported USD included in totalCostUsd only when configured model
+   * pricing was unavailable. A reported zero remains covered with amount 0. */
+  providerReportedCostUsd: number;
 }
 
 export interface ExecutionInvocationStatusCounts {
@@ -529,6 +538,11 @@ export interface ProjectExecutionStatsChartSeries {
   formatter?: 'tokens' | 'duration' | 'number' | 'percent';
 }
 
+export interface ProjectCostAnalyticsSummary {
+  /** Cost rows grouped by conceptual sprint rather than individual sprint run. */
+  sprints: ExecutionStatsEntitySummary[];
+}
+
 export interface ProjectExecutionStatsSnapshot {
   projectId: string;
   projectName: string;
@@ -537,6 +551,8 @@ export interface ProjectExecutionStatsSnapshot {
   range: ProjectStatsRangeSummary;
   generatedAt: string;
   usage: ExecutionUsageTotals;
+  /** Additive cost-specific projections that must not change existing ledgers. */
+  costAnalytics?: ProjectCostAnalyticsSummary;
   git: ExecutionGitStatsSummary;
   mergeConflictCount?: number;
   activeSprint: {

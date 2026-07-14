@@ -6,8 +6,8 @@ import { validateSafeRepoName, validateSafeClonePath, validateNonEmptyDir } from
 import type { CreateProjectInput, ProjectSummary } from "../../contracts/project-management-types.js";
 import { getHomeCodeUxPath } from "../../shared/config/code-ux-paths.js";
 import {
-  CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
   DEFAULT_DESIGN_GUIDANCE_SETTINGS,
+  DESIGN_GUIDANCE_NONE_ID,
 } from "../settings/design-guidance-catalog.js";
 
 function resolveCloneParentDir(cloneDir?: string): string {
@@ -42,7 +42,12 @@ function resolveNewLocalProjectDir(sourceRef: string, cloneDir?: string): { targ
   };
 }
 
-function withNewProjectDesignGuidance(input: CreateProjectInput): CreateProjectInput {
+/**
+ * Project creation always starts with both reusable guidance catalogs disabled.
+ * Keep unrelated catalog and visibility overrides, but do not let a caller's
+ * create-time selections bypass the explicit None baseline.
+ */
+function withProjectCreationDesignGuidance(input: CreateProjectInput): CreateProjectInput {
   const existingGuidance = input.settingsOverrides?.designGuidance;
   return {
     ...input,
@@ -51,7 +56,8 @@ function withNewProjectDesignGuidance(input: CreateProjectInput): CreateProjectI
       designGuidance: {
         ...DEFAULT_DESIGN_GUIDANCE_SETTINGS,
         ...existingGuidance,
-        selectedStyleguideId: existingGuidance?.selectedStyleguideId || CODE_UX_AWARD_WINNING_STYLEGUIDE_ID,
+        selectedTechStackId: DESIGN_GUIDANCE_NONE_ID,
+        selectedStyleguideId: DESIGN_GUIDANCE_NONE_ID,
       },
     },
   };
@@ -80,8 +86,8 @@ function withProjectManagerDashboardDefault(input: CreateProjectInput): CreatePr
   };
 }
 
-function withNewProjectDefaults(input: CreateProjectInput): CreateProjectInput {
-  return withProjectManagerDashboardDefault(withNewProjectDesignGuidance(input));
+function withProjectCreationDefaults(input: CreateProjectInput): CreateProjectInput {
+  return withProjectManagerDashboardDefault(withProjectCreationDesignGuidance(input));
 }
 
 export async function initializeProject(
@@ -101,7 +107,7 @@ export async function initializeProject(
     const safeSourceRef = validateSafeClonePath(targetDir, allowedRoot);
     validateNonEmptyDir(safeSourceRef, allowedRoot);
     await initLocalRepo(safeSourceRef, input.defaultBranch ?? "main", input.name);
-    return deps.createProject(withNewProjectDefaults({
+    return deps.createProject(withProjectCreationDefaults({
       ...input,
       sourceType: "local",
       sourceRef: safeSourceRef,
@@ -136,7 +142,7 @@ export async function initializeProject(
         defaultBranch: input.defaultBranch,
       });
     }
-    return deps.createProject(withNewProjectDefaults({
+    return deps.createProject(withProjectCreationDefaults({
       ...input,
       sourceType: "git",
       sourceRef: result.remoteUrl,
@@ -146,5 +152,5 @@ export async function initializeProject(
   }
 
   // "existing" or absent — original behavior
-  return deps.createProject(withProjectManagerDashboardDefault({ ...input, initMode: "existing" }));
+  return deps.createProject(withProjectCreationDefaults({ ...input, initMode: "existing" }));
 }

@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppDbStorage } from "../../../../src/repositories/app-db-storage.js";
 import { SqliteDatabaseAdapter } from "../../../../src/repositories/db/sqlite-database-adapter.js";
-import { APP_DB_SCHEMA_TABLES } from "../../../../src/repositories/db/app-db-schema.js";
+import {
+  APP_DB_SCHEMA_READ_INDEXES,
+  APP_DB_SCHEMA_TABLES,
+} from "../../../../src/repositories/db/app-db-schema.js";
 import { runMigrations } from "../../../../src/repositories/db/app-db-migrations.js";
 import * as fs from "fs/promises";
 import * as os from "os";
@@ -113,6 +116,8 @@ describe("AppDbSchema", () => {
     const adapter = new SqliteDatabaseAdapter(path.join(dir, "app.db"));
     try {
       adapter.exec(APP_DB_SCHEMA_TABLES);
+      adapter.exec(APP_DB_SCHEMA_READ_INDEXES);
+      runMigrations(adapter);
 
       const getIndex = (name: string) => {
         return adapter.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name=?").get(name);
@@ -256,6 +261,7 @@ describe("AppDbSchema", () => {
     const first = new SqliteDatabaseAdapter(dbPath);
     try {
       first.exec(APP_DB_SCHEMA_TABLES);
+      first.exec(APP_DB_SCHEMA_READ_INDEXES);
       runMigrations(first);
       first.prepare(`
         INSERT INTO projects (id, slug, name, base_dir, status, created_at, updated_at)
@@ -293,6 +299,7 @@ describe("AppDbSchema", () => {
     try {
       const before = getSchemaSignature(second);
       second.exec(APP_DB_SCHEMA_TABLES);
+      second.exec(APP_DB_SCHEMA_READ_INDEXES);
       runMigrations(second);
       const after = getSchemaSignature(second);
 

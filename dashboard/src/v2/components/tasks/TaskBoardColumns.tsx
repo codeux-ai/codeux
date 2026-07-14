@@ -15,16 +15,24 @@ const ColumnHeader: FunctionComponent<{ status: TaskStatus; count: number }> = m
   const headingId = `task-lane-heading-${status}`;
 
   return (
-    <div className="flex items-center justify-between mb-6" id={headingId}>
-      <div className="flex items-center gap-2.5">
-        <Icon className={`w-5 h-5 ${cfg.color}`} strokeWidth={2} />
-        <h2 className={`font-display text-lg font-bold tracking-tight ${cfg.color}`}>{cfg.label}</h2>
+    <header className="flex min-w-0 items-center justify-between gap-3 px-2 pb-3 pt-1">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-black/[0.05] bg-white/65 dark:border-white/[0.05] dark:bg-white/[0.035]">
+          <Icon className={`h-4 w-4 ${cfg.color}`} strokeWidth={2} aria-hidden="true" />
+        </div>
+        <h2
+          id={headingId}
+          aria-label={`${cfg.label} lane, ${count} ${count === 1 ? "task" : "tasks"}`}
+          className={`truncate font-display text-base font-bold tracking-tight ${cfg.color}`}
+        >
+          {cfg.label}
+          <span className="sr-only"> lane, {count} {count === 1 ? "task" : "tasks"}</span>
+        </h2>
       </div>
-      <span className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg bg-black/[0.03] dark:bg-white/[0.03] ${cfg.color}`}>
-        <span aria-hidden="true">{count}</span>
-        <span className="sr-only">{count} {count === 1 ? "task" : "tasks"}</span>
+      <span aria-hidden="true" className={`min-w-8 rounded-lg border border-black/[0.05] bg-black/[0.025] px-2.5 py-1 text-center font-mono text-[10px] font-bold dark:border-white/[0.05] dark:bg-white/[0.03] ${cfg.color}`}>
+        {count}
       </span>
-    </div>
+    </header>
   );
 });
 
@@ -159,7 +167,8 @@ const TaskBoardColumnsComponent: FunctionComponent<TaskBoardColumnsProps> = ({
     style={listTransitionStyle}
     data-motion-list-reorder="listReorder"
     data-motion-list-reveal="listReveal"
-    className={`grid gap-6 transition-opacity ${filterTransitionPending ? "opacity-80" : "opacity-100"} ${
+    data-board-column-count={columns.length}
+    className={`grid min-w-0 grid-cols-1 gap-4 transition-opacity motion-reduce:transition-none sm:gap-5 ${filterTransitionPending ? "opacity-80" : "opacity-100"} ${
       columns.length === 1 ? "grid-cols-1" :
       columns.length === 2 ? "grid-cols-1 lg:grid-cols-2" :
       "grid-cols-1 lg:grid-cols-2 xl:grid-cols-3"
@@ -168,21 +177,24 @@ const TaskBoardColumnsComponent: FunctionComponent<TaskBoardColumnsProps> = ({
     {columns.map(({ status, count, tasks: columnTasks }) => (
       <section
         key={status}
-        className="flex flex-col"
+        className="flex min-w-0 flex-col overflow-hidden rounded-[1.65rem] border border-black/[0.06] bg-white/45 p-3 shadow-[0_2px_16px_rgba(0,0,0,0.025)] dark:border-white/[0.06] dark:bg-void-800/38 sm:p-4"
         role="region"
         aria-labelledby={`task-lane-heading-${status}`}
         aria-describedby={`task-lane-summary-${status}`}
         aria-busy={loading || showSkeletons || filterTransitionPending}
+        data-task-lane={status}
+        data-reduced-motion={reducedMotion ? "true" : "false"}
       >
         <ColumnHeader status={status} count={count} />
         <p id={`task-lane-summary-${status}`} className="sr-only" aria-live="polite" aria-atomic="true">
           {STATUS_CFG[status].label} lane contains {count} {count === 1 ? "task" : "tasks"} after current filters.
         </p>
         <div
-          className={`flex-1 grid grid-cols-1 grid-rows-1 p-4 rounded-[1.5rem] min-h-[200px] bg-black/[0.015] dark:bg-white/[0.015] border relative transition-colors motion-reduce:transition-none ${dropTargetContext?.status === status ? "border-signal-500/50 bg-signal-500/5" : "border-black/[0.03] dark:border-white/[0.03]"} ${reducedMotion ? "border-dashed" : ""}`}
+          className={`relative grid min-h-[22rem] flex-1 grid-cols-1 grid-rows-1 rounded-[1.3rem] border p-3 transition-colors motion-reduce:transition-none sm:p-4 ${dropTargetContext?.status === status ? "border-signal-500/50 bg-signal-500/[0.05]" : "border-black/[0.04] bg-black/[0.012] dark:border-white/[0.04] dark:bg-white/[0.012]"} ${reducedMotion ? "border-dashed" : ""}`}
           onDragOver={(event) => onDragOver(status, columnTasks.length, event as DragEvent)}
           onDrop={(event) => onDrop(status, event as DragEvent)}
           aria-describedby={`task-lane-summary-${status} task-lane-drop-${status}`}
+          data-drop-active={dropTargetContext?.status === status ? "true" : "false"}
         >
           <p id={`task-lane-drop-${status}`} className="sr-only" aria-live="polite" aria-atomic="true">
             {getTaskDropFeedback({
@@ -201,7 +213,7 @@ const TaskBoardColumnsComponent: FunctionComponent<TaskBoardColumnsProps> = ({
             show={showSkeletons}
             className="col-start-1 row-start-1"
             skeleton={(
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-3" aria-hidden="true">
                 <SkeletonCard />
                 <SkeletonCard />
                 <SkeletonCard />
@@ -209,13 +221,14 @@ const TaskBoardColumnsComponent: FunctionComponent<TaskBoardColumnsProps> = ({
             )}
           >
             {!loading && columnTasks.length === 0 ? (
-              <div role="status" aria-live="polite" aria-atomic="true" className={`col-start-1 row-start-1 flex min-h-36 items-center justify-center text-center p-6 text-xs font-medium text-slate-400 dark:text-slate-500 border-2 border-dashed rounded-[1.5rem] bg-black/[0.015] dark:bg-white/[0.015] transition-colors motion-reduce:transition-none ${dropTargetContext?.status === status ? "border-signal-500/30" : "border-black/[0.05] dark:border-white/[0.05]"}`}>
-                No {status.replace("_", " ")} tasks
-                <br />
-                {statusFilter !== "all" || priorityFilter !== "all" ? "matching current filters" : taskScopeSprintId ? "in this sprint" : "in this project"}.
+              <div role="status" aria-live="polite" aria-atomic="true" className={`col-start-1 row-start-1 flex min-h-[18rem] flex-col items-center justify-center rounded-[1.1rem] border border-dashed p-6 text-center transition-colors motion-reduce:transition-none ${dropTargetContext?.status === status ? "border-signal-500/30 bg-signal-500/[0.035]" : "border-black/[0.06] bg-black/[0.012] dark:border-white/[0.06] dark:bg-white/[0.012]"}`}>
+                <span className="font-display text-sm font-semibold text-slate-500 dark:text-slate-400">No {STATUS_CFG[status].label.toLowerCase()} tasks</span>
+                <span className="mt-1 max-w-52 text-xs font-medium leading-relaxed text-slate-400 dark:text-slate-500">
+                  {statusFilter !== "all" || priorityFilter !== "all" ? "Nothing matches the current filters." : taskScopeSprintId ? "This sprint has no work in this lane." : "This project has no work in this lane."}
+                </span>
               </div>
             ) : !loading ? (
-              <div className="col-start-1 row-start-1 flex flex-col gap-4" data-motion-contract="listReorder">
+              <div className="col-start-1 row-start-1 flex min-w-0 flex-col gap-3" data-motion-contract="listReorder">
                 {columnTasks.map((task, index) => {
                   const isDraggedOver = dropTargetContext?.status === status && dropTargetContext?.index === index;
                   const viewModel = taskViewModels.get(task.recordId);
@@ -224,7 +237,7 @@ const TaskBoardColumnsComponent: FunctionComponent<TaskBoardColumnsProps> = ({
                   return (
                     <div key={task.recordId} className="contents">
                       {isDraggedOver && draggedTaskId !== task.recordId && (
-                        <div className="h-24 mb-4 rounded-[1.5rem] border-2 border-dashed border-signal-500/50 bg-signal-500/10 transition-all motion-reduce:transition-none" />
+                        <div aria-hidden="true" className="mb-3 h-24 rounded-[1.2rem] border-2 border-dashed border-signal-500/50 bg-signal-500/[0.08] transition-colors motion-reduce:transition-none" />
                       )}
                       <div
                         className="task-card-entry"
@@ -254,7 +267,7 @@ const TaskBoardColumnsComponent: FunctionComponent<TaskBoardColumnsProps> = ({
                   );
                 })}
                 {dropTargetContext?.status === status && dropTargetContext?.index === columnTasks.length && (
-                  <div className="h-24 mt-4 rounded-[1.5rem] border-2 border-dashed border-signal-500/50 bg-signal-500/10 transition-all motion-reduce:transition-none" />
+                  <div aria-hidden="true" className="mt-3 h-24 rounded-[1.2rem] border-2 border-dashed border-signal-500/50 bg-signal-500/[0.08] transition-colors motion-reduce:transition-none" />
                 )}
               </div>
             ) : null}

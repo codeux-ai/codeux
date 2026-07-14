@@ -44,11 +44,14 @@ const createStatus = (): PlaywrightBrowserStatus => ({
 
 export class PlaywrightBrowserManager {
   private readonly inFlight = new Map<string, Promise<PreparedPlaywrightBrowser>>();
+  private readonly verificationInFlight = new Map<string, Promise<boolean>>();
+  private readonly failedVerificationsInProcess = new Set<string>();
   private readonly active = new Map<string, PreparedPlaywrightBrowser>();
   private readonly verifiedInProcess = new Set<string>();
   private readonly versionByImage = new Map<string, string>();
+  private readonly versionLookupsInFlight = new Map<string, Promise<string>>();
   private readonly statePath: string;
-  private stateLoaded = false;
+  private stateLoadPromise?: Promise<void>;
   private persistQueue: Promise<void> = Promise.resolve();
   private status = createStatus();
 
@@ -64,9 +67,13 @@ export class PlaywrightBrowserManager {
     return { ...this.status };
   }
 
+  invalidatePreparedVolume(volumeName: string): void {
+    this.forgetVolumeVerification(volumeName);
+  }
+
   async prepare(
     workflow: CliWorkflowSettings,
-    options: { logger?: Logger } = {},
+    options: { logger?: Logger; resolvedImage?: string } = {},
   ): Promise<PreparedPlaywrightBrowser> {
     if (workflow.containerImageMode === "custom") {
       throw new Error("Custom images manage their own Playwright browser installation.");
@@ -78,7 +85,7 @@ export class PlaywrightBrowserManager {
     });
     let image: string;
     try {
-      image = await this.runtime.resolveImage(workflow, "browser");
+      image = options.resolvedImage ?? await this.runtime.resolveImage(workflow, "browser");
     } catch (error) {
       this.fail("The managed browser runtime is unavailable.", error);
       throw error;
@@ -135,6 +142,7 @@ export class PlaywrightBrowserManager {
       }
 
       this.updateStatus({ state: "queued", progressPercent: 20, stepText: `Preparing Playwright browser ${version}.` });
+      this.forgetVolumeVerification(volumeName);
       await this.commands.run("docker", ["volume", "rm", "-f", volumeName]);
       const created = await this.commands.run("docker", [
         "volume", "create",
@@ -177,6 +185,7 @@ export class PlaywrightBrowserManager {
 
       this.updateStatus({ state: "verifying", progressPercent: 90, stepText: `Verifying Playwright browser ${version}.` });
       if (!await this.isVerifiedVolume(volumeName, version, compatibilityKey, image)) {
+        this.forgetVolumeVerification(volumeName);
         await this.commands.run("docker", ["volume", "rm", "-f", volumeName]);
         throw new Error("Playwright browser verification failed.");
       }
@@ -197,6 +206,16 @@ export class PlaywrightBrowserManager {
   private async resolvePlaywrightVersion(image: string): Promise<string> {
     const cached = this.versionByImage.get(image);
     if (cached) return cached;
+    const existing = this.versionLookupsInFlight.get(image);
+    if (existing) return await existing;
+    const lookup = this.inspectPlaywrightVersion(image).finally(() => {
+      if (this.versionLookupsInFlight.get(image) === lookup) this.versionLookupsInFlight.delete(image);
+    });
+    this.versionLookupsInFlight.set(image, lookup);
+    return await lookup;
+  }
+
+  private async inspectPlaywrightVersion(image: string): Promise<string> {
     const inspected = await this.commands.run("docker", [
       "image", "inspect", "--format",
       "{{index .Config.Labels \"ai.codeux.playwright-version\"}}",
@@ -217,8 +236,32 @@ export class PlaywrightBrowserManager {
     compatibilityKey: string,
     image: string,
   ): Promise<boolean> {
+    if (this.verifiedInProcess.has(volumeName)) return true;
+    const verificationKey = `${volumeName}\0${version}\0${compatibilityKey}\0${image}`;
+    if (this.failedVerificationsInProcess.has(verificationKey)) return false;
+    const existing = this.verificationInFlight.get(verificationKey);
+    if (existing) return await existing;
+    const verification = this.verifyVolume(volumeName, version, compatibilityKey, image).finally(() => {
+      if (this.verificationInFlight.get(verificationKey) === verification) {
+        this.verificationInFlight.delete(verificationKey);
+      }
+    });
+    this.verificationInFlight.set(verificationKey, verification);
+    return await verification;
+  }
+
+  private async verifyVolume(
+    volumeName: string,
+    version: string,
+    compatibilityKey: string,
+    image: string,
+  ): Promise<boolean> {
+    const verificationKey = `${volumeName}\0${version}\0${compatibilityKey}\0${image}`;
     const inspect = await this.commands.run("docker", ["volume", "inspect", volumeName]).catch(() => null);
-    if (!inspect?.ok) return false;
+    if (!inspect?.ok) {
+      this.failedVerificationsInProcess.add(verificationKey);
+      return false;
+    }
     const markerCheck = [
       "const fs=require('fs')",
       `const marker=JSON.parse(fs.readFileSync('${PLAYWRIGHT_BROWSERS_MOUNT}/.codeux-playwright-browser.json','utf8'))`,
@@ -236,23 +279,39 @@ export class PlaywrightBrowserManager {
         "test -s /tmp/codeux-browser-check.png",
       ].join(" && "),
     ]);
-    if (verified.ok) this.verifiedInProcess.add(volumeName);
+    if (verified.ok) {
+      this.verifiedInProcess.add(volumeName);
+      this.failedVerificationsInProcess.delete(verificationKey);
+    } else {
+      this.failedVerificationsInProcess.add(verificationKey);
+    }
     return verified.ok;
   }
 
-  private async loadState(): Promise<void> {
-    if (this.stateLoaded) return;
-    this.stateLoaded = true;
-    try {
-      const parsed = JSON.parse(await fs.readFile(this.statePath, "utf8")) as Record<string, PreparedPlaywrightBrowser>;
-      for (const [key, browser] of Object.entries(parsed)) {
-        if (!browser || typeof browser.volumeName !== "string" || typeof browser.version !== "string") continue;
-        this.active.set(key, browser);
-        this.markReady(browser);
-      }
-    } catch {
-      // The first successful preparation creates the state file.
+  private forgetVolumeVerification(volumeName: string): void {
+    this.verifiedInProcess.delete(volumeName);
+    const prefix = `${volumeName}\0`;
+    for (const key of this.failedVerificationsInProcess) {
+      if (key.startsWith(prefix)) this.failedVerificationsInProcess.delete(key);
     }
+  }
+
+  private async loadState(): Promise<void> {
+    if (!this.stateLoadPromise) {
+      this.stateLoadPromise = (async () => {
+        try {
+          const parsed = JSON.parse(await fs.readFile(this.statePath, "utf8")) as Record<string, PreparedPlaywrightBrowser>;
+          for (const [key, browser] of Object.entries(parsed)) {
+            if (!browser || typeof browser.volumeName !== "string" || typeof browser.version !== "string") continue;
+            this.active.set(key, browser);
+            this.markReady(browser);
+          }
+        } catch {
+          // The first successful preparation creates the state file.
+        }
+      })();
+    }
+    await this.stateLoadPromise;
   }
 
   private persistState(): Promise<void> {

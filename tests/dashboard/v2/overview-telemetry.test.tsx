@@ -9,9 +9,7 @@ import { renderHook, act } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 
 import { OverviewTelemetry } from "../../../dashboard/src/v2/components/OverviewTelemetry.js";
-import { useDashboardRuntimeData } from "../../../dashboard/src/hooks/use-dashboard-runtime-data.js";
 import { useOverviewTelemetry } from "../../../dashboard/src/hooks/use-overview-telemetry.js";
-import { useSprints } from "../../../dashboard/src/hooks/useSprints.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
 import type { ExecutionAttentionItemSummary, OverviewTelemetrySnapshot } from "../../../dashboard/src/types.js";
 import * as api from "../../../dashboard/src/lib/api/dashboard-api.js";
@@ -30,9 +28,6 @@ vi.mock("gsap", () => ({
     context: vi.fn(() => ({ revert: vi.fn() })),
   },
 }));
-
-vi.mock("../../../dashboard/src/hooks/use-dashboard-runtime-data.js");
-vi.mock("../../../dashboard/src/hooks/useSprints.js");
 
 vi.mock("../../../dashboard/src/hooks/use-overview-telemetry.js", async (importOriginal) => {
   const actual = await importOriginal<any>();
@@ -101,8 +96,6 @@ describe("OverviewTelemetry Component", () => {
     cleanup();
     vi.clearAllMocks();
     vi.mocked(useProjectData).mockReturnValue({ selectedProjectId: null, selectedProject: null, loading: false } as any);
-    vi.mocked(useSprints).mockReturnValue({ selectedSprintId: null, selectedSprint: null, data: [], selectSprint: vi.fn(), loading: false, error: null, refetch: vi.fn() } as any);
-    vi.mocked(useDashboardRuntimeData).mockReturnValue(makeRuntimeData([]) as any);
   });
 
   it("renders skeletons when loading", () => {
@@ -148,8 +141,6 @@ describe("OverviewTelemetry Component", () => {
       selectedProject: { id: "p1", name: "Selected Project" },
       loading: false,
     } as any);
-    vi.mocked(useSprints).mockReturnValue({ selectedSprintId: "sprint-selected", selectedSprint: null, data: [], selectSprint: vi.fn(), loading: false, error: null, refetch: vi.fn() } as any);
-    vi.mocked(useDashboardRuntimeData).mockReturnValue(makeRuntimeData([makeAttentionItem()]) as any);
     vi.mocked(useOverviewTelemetry).mockReturnValue({
       telemetry: {
         activeProjects: [],
@@ -162,9 +153,7 @@ describe("OverviewTelemetry Component", () => {
       refresh: vi.fn(),
     });
 
-    render(<OverviewTelemetry />);
-
-    expect(useDashboardRuntimeData).toHaveBeenCalledWith("p1", true, { selectedSprintId: "sprint-selected" });
+    render(<OverviewTelemetry execution={makeRuntimeData([makeAttentionItem()]).execution} />);
     expect(screen.getByText("Selected Sprint Attention Queue")).toBeInTheDocument();
     expect(screen.getByText("Resolve selected sprint blocker")).toBeInTheDocument();
     expect(screen.getByText("Selected sprint needs operator review.")).toBeInTheDocument();
@@ -177,10 +166,6 @@ describe("OverviewTelemetry Component", () => {
       selectedProject: { id: "p1", name: "Selected Project" },
       loading: false,
     } as any);
-    vi.mocked(useSprints).mockReturnValue({ selectedSprintId: "sprint-selected", selectedSprint: null, data: [], selectSprint: vi.fn(), loading: false, error: null, refetch: vi.fn() } as any);
-    vi.mocked(useDashboardRuntimeData).mockReturnValue(makeRuntimeData([
-      makeAttentionItem({ title: "Scoped sprint blocker", summaryMarkdown: "Only selected sprint data is present." }),
-    ]) as any);
     vi.mocked(useOverviewTelemetry).mockReturnValue({
       telemetry: {
         activeProjects: [],
@@ -214,7 +199,9 @@ describe("OverviewTelemetry Component", () => {
       refresh: vi.fn(),
     });
 
-    render(<OverviewTelemetry />);
+    render(<OverviewTelemetry execution={makeRuntimeData([
+      makeAttentionItem({ title: "Scoped sprint blocker", summaryMarkdown: "Only selected sprint data is present." }),
+    ]).execution} />);
 
     const selectedQueue = screen.getByRole("list", { name: "Selected sprint attention items" });
     expect(within(selectedQueue).getByText("Scoped sprint blocker")).toBeInTheDocument();

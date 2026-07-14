@@ -109,6 +109,7 @@ export type DocsSlug =
   | 'operations-server-mode'
   | 'settings-google-drive-mount'
   | 'user-dashboard-custom-dashboards'
+  | 'architecture-card-ci-status-projection'
   | 'architecture-chat-connector-runtime-reliability'
   | 'architecture-chat-connectors-discord'
   | 'architecture-chat-connectors-imessage'
@@ -119,6 +120,7 @@ export type DocsSlug =
   | 'architecture-chat-connectors-whatsapp'
   | 'architecture-custom-dashboard-foundation'
   | 'architecture-custom-nodes'
+  | 'architecture-high-concurrency-orchestration'
   | 'architecture-managed-container-runtime'
   | 'architecture-node-flow-builtins-and-security'
   | 'architecture-node-flow-durable-execution'
@@ -126,6 +128,7 @@ export type DocsSlug =
   | 'architecture-node-flows'
   | 'architecture-speech-input'
   | 'architecture-speech-output'
+  | 'architecture-sprint-rollbacks'
   | 'architecture-worker-clarification-contract'
 
 export interface DocsRegistryEntry extends Partial<Omit<PageMeta, 'title' | 'description'>> {
@@ -240,7 +243,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/user-dashboard-tasks',
     section: 'User Guide',
     title: "Tasks",
-    description: "The Tasks page (/tasks) is a Kanban-style task board for the active project. It organizes tasks into Queued, In Progress, and Completed lanes, with sprint scope, status, priority, and search controls above the board.",
+    description: "The Tasks page (/tasks) is a Kanban-style task board for the active project. It organizes tasks into Queued, In Progress, and Completed lanes, with sprint scope, status, priority, and visible-card controls above the b...",
   },
   'user-dashboard-live-session': {
     id: 'user-dashboard-live-session',
@@ -281,7 +284,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     id: 'user-dashboard-node-flows',
     path: '/docs/user-dashboard-node-flows',
     section: 'User Guide',
-    title: "Node Flows",
+    title: "Node Flows Dashboard",
     description: "The Nodes page (/nodes) is the project-scoped backend authoring, publication, and operations surface for canonical node flows. No selected project means no flow library, credential metadata, publications, or durable r...",
   },
   'user-dashboard-scheduler': {
@@ -569,7 +572,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/settings-integrations',
     section: 'User Guide',
     title: "Integrations",
-    description: "Lists provider, git-host, issue-tracker, and read-only importer integrations and exposes manage/add actions.",
+    description: "Lists automation credentials, providers, git hosts, issue trackers, and read-only importer integrations and exposes manage/add actions.",
   },
   'settings-jules-automation': {
     id: 'settings-jules-automation',
@@ -842,7 +845,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/operations-credential-security',
     section: 'User Guide',
     title: "Automation Credential Security",
-    description: "Code UX resolves canonical node credential IDs and named project binding keys through the credential broker. Stored values are not exposed to nodes, dashboard reads, MCP payloads, agent context, run inspection records...",
+    description: "Code UX stores automation credentials through a broker rather than exposing secret values to node definitions, dashboard reads, MCP payloads, agent context, or run inspection records. Canonical node bindings reference...",
   },
   'operations-runbook': {
     id: 'operations-runbook',
@@ -862,8 +865,8 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     id: 'operations-server-mode',
     path: '/docs/operations-server-mode',
     section: 'User Guide',
-    title: "Authenticated Headless Server Mode",
-    description: "Code UX separates MCP bearer access from the authenticated dashboard administrative API. Remote dashboard/API deployments must use digest-backed service identities or terminate OIDC at a trusted reverse proxy; loopbac...",
+    title: "Secure Headless Server Mode",
+    description: "Server mode runs Code UX as an authenticated MCP HTTP control plane without binding the dashboard UI, dashboard REST routes, dashboard realtime websocket, terminal websocket, or static dashboard assets. Use it for hea...",
   },
   'settings-google-drive-mount': {
     id: 'settings-google-drive-mount',
@@ -878,6 +881,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     section: 'User Guide',
     title: "Custom Dashboards",
     description: "Custom dashboards are project-scoped dashboard apps generated and revised by agents, then validated in a detached Docker runtime before publication. Use them when the built-in dashboard pages do not match the operatio...",
+  },
+  'architecture-card-ci-status-projection': {
+    id: 'architecture-card-ci-status-projection',
+    path: '/docs/architecture-card-ci-status-projection',
+    section: 'Architecture',
+    title: "Card CI Status Projection",
+    description: "Task, Sprint, and Live cards expose one compact persisted ciStatus: pending, running, failed, or null after settlement. The projection does not load the large remote Git status snapshot and does not poll GitHub or Git...",
   },
   'architecture-chat-connector-runtime-reliability': {
     id: 'architecture-chat-connector-runtime-reliability',
@@ -949,6 +959,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Custom Node Architecture and Security",
     description: "Custom nodes are project-owned TypeScript packages that pass explicit validation and publication gates before Code UX can execute them. Generated code is never imported or evaluated by the Code UX server.",
   },
+  'architecture-high-concurrency-orchestration': {
+    id: 'architecture-high-concurrency-orchestration',
+    path: '/docs/architecture-high-concurrency-orchestration',
+    section: 'Architecture',
+    title: "High-Concurrency Docker Orchestration",
+    description: "Code UX keeps local provider and CI work parallel while reserving host capacity for Docker, SQLite, the dashboard, and interactive replies.",
+  },
   'architecture-managed-container-runtime': {
     id: 'architecture-managed-container-runtime',
     path: '/docs/architecture-managed-container-runtime',
@@ -961,7 +978,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/architecture-node-flow-builtins-and-security',
     section: 'Architecture',
     title: "Node Flow Built-ins and External-Effect Security",
-    description: "The governed catalog adds deterministic branches, bounded collection processing, durable approvals, and replay-safe external effects while keeping the versioned definition registry as the executable authority.",
+    description: "The governed built-in catalog extends publication-based node-flow execution with deterministic control nodes and durable boundaries for external effects. The definition registry remains the executable authority; a gra...",
   },
   'architecture-node-flow-durable-execution': {
     id: 'architecture-node-flow-durable-execution',
@@ -982,7 +999,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/architecture-node-flows',
     section: 'Architecture',
     title: "Node Flows",
-    description: "Node flows are project-owned, versioned Graph v2 workflows.",
+    description: "Node flows are project-scoped, repeatable workflow graphs for turning an operator or agent-defined procedure into a saved Code UX workflow. They are not a generic n8n compatibility layer. A good flow uses Code UX conc...",
   },
   'architecture-speech-input': {
     id: 'architecture-speech-input',
@@ -997,6 +1014,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     section: 'Architecture',
     title: "Speech Output Architecture",
     description: "Speech output turns project-manager replies into audio through POST /api/speech/synthesis. Code UX supports local ONNX synthesis and OpenAI-compatible TTS APIs, and 3D Chat provides playback plus a voice on/off control.",
+  },
+  'architecture-sprint-rollbacks': {
+    id: 'architecture-sprint-rollbacks',
+    path: '/docs/architecture-sprint-rollbacks',
+    section: 'Architecture',
+    title: "Sprint Rollbacks",
+    description: "Code UX models a rollback as a new sprint, not as destructive history editing. The original sprint remains auditable, while the rollback receives its own branch, tasks, execution history, and visual identity. Remote p...",
   },
   'architecture-worker-clarification-contract': {
     id: 'architecture-worker-clarification-contract',
@@ -1114,6 +1138,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['operations-server-mode'],
   docsRegistry['settings-google-drive-mount'],
   docsRegistry['user-dashboard-custom-dashboards'],
+  docsRegistry['architecture-card-ci-status-projection'],
   docsRegistry['architecture-chat-connector-runtime-reliability'],
   docsRegistry['architecture-chat-connectors-discord'],
   docsRegistry['architecture-chat-connectors-imessage'],
@@ -1124,6 +1149,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-chat-connectors-whatsapp'],
   docsRegistry['architecture-custom-dashboard-foundation'],
   docsRegistry['architecture-custom-nodes'],
+  docsRegistry['architecture-high-concurrency-orchestration'],
   docsRegistry['architecture-managed-container-runtime'],
   docsRegistry['architecture-node-flow-builtins-and-security'],
   docsRegistry['architecture-node-flow-durable-execution'],
@@ -1131,6 +1157,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-node-flows'],
   docsRegistry['architecture-speech-input'],
   docsRegistry['architecture-speech-output'],
+  docsRegistry['architecture-sprint-rollbacks'],
   docsRegistry['architecture-worker-clarification-contract'],
 ]
 
