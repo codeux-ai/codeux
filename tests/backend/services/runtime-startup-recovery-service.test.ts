@@ -129,10 +129,26 @@ describe("RuntimeStartupRecoveryService", () => {
     expect(taskCodingOrder).toBeLessThan(providerOrder);
   });
 
-  it("stops and requeues interrupted virtual repair attention while preserving its checkpoint", async () => {
+  it.each([
+    {
+      attentionType: "ci_fix_required" as const,
+      purpose: "ci_fix" as const,
+      sessionId: "virtual-cifix-codex-repair-1",
+    },
+    {
+      attentionType: "merge_conflict" as const,
+      purpose: "merge_conflict" as const,
+      sessionId: "virtual-merge-codex-repair-1",
+    },
+  ])("stops and requeues interrupted $attentionType attention while preserving its checkpoint and releasing capacity", async ({
+    attentionType,
+    purpose,
+    sessionId,
+  }) => {
     const removeContainers = vi.fn().mockResolvedValue(undefined);
     const {
       projectRepository,
+      executionRepository,
       projectAttentionService,
       workerEndpointRepository,
       service,
@@ -140,7 +156,7 @@ describe("RuntimeStartupRecoveryService", () => {
       dockerService: {
         listContainers: vi.fn().mockResolvedValue([{
           id: "repair-container",
-          labels: { "code-ux.session-id": "virtual-merge-codex-repair-1" },
+          labels: { "code-ux.session-id": sessionId },
         }]),
         removeContainers,
       },
@@ -159,7 +175,7 @@ describe("RuntimeStartupRecoveryService", () => {
     });
     const item = projectAttentionService.openItem({
       projectId: project.id,
-      attentionType: "merge_conflict",
+      attentionType,
       severity: "high",
       ownerType: "worker",
       title: "Repair conflict",
@@ -167,9 +183,9 @@ describe("RuntimeStartupRecoveryService", () => {
       payload: {
         repoPath: "/workspace/repair-recovery",
         repairRuntime: {
-          purpose: "merge_conflict",
-          sessionId: "virtual-merge-codex-repair-1",
-          workspaceSessionId: "virtual-merge-codex-repair-1",
+          purpose,
+          sessionId,
+          workspaceSessionId: sessionId,
           provider: "codex",
           providerConfigId: "codex",
           model: "codex-model",
@@ -182,17 +198,81 @@ describe("RuntimeStartupRecoveryService", () => {
       },
     });
     projectAttentionService.claimItem(item.id, endpoint.id, "virtual_worker_test");
+    const providerInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      attentionItemId: item.id,
+      sessionId,
+      provider: "codex",
+      purpose,
+      status: "running",
+      startedAt: "2026-07-14T10:00:00.000Z",
+    });
+    const legacyProviderInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sessionId,
+      provider: "codex",
+      purpose,
+      status: "running",
+      startedAt: "2026-07-14T10:00:01.000Z",
+    });
+    const unrelatedProject = projectRepository.createProject({
+      name: "Unrelated Repair Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/unrelated-repair-recovery",
+    });
+    const unrelatedProviderInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: unrelatedProject.id,
+      sessionId,
+      provider: "codex",
+      purpose,
+      status: "running",
+      startedAt: "2026-07-14T10:00:02.000Z",
+    });
+    const executionInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      attentionItemId: item.id,
+      providerInvocationId: providerInvocation.id,
+      type: purpose,
+      provider: "codex",
+      status: "running",
+      startedAt: "2026-07-14T10:00:00.000Z",
+    });
 
     const result = await service.recover();
 
     expect(removeContainers).toHaveBeenCalledWith(["repair-container"], { removeVolumes: false });
+    expect(result.reconciledInterruptedRepairProviderInvocationIds).toHaveLength(2);
+    expect(result.reconciledInterruptedRepairProviderInvocationIds).toEqual(expect.arrayContaining([
+      providerInvocation.id,
+      legacyProviderInvocation.id,
+    ]));
     expect(result.requeuedInterruptedRepairAttentionItemIds).toEqual([item.id]);
+    expect(executionRepository.getProviderInvocationUsage(providerInvocation.id)).toMatchObject({
+      status: "cancelled",
+      finishedAt: expect.any(String),
+    });
+    expect(executionRepository.getProviderInvocationUsage(legacyProviderInvocation.id)).toMatchObject({
+      status: "cancelled",
+      finishedAt: expect.any(String),
+    });
+    expect(executionRepository.getExecutionInvocation(executionInvocation.id)).toMatchObject({
+      status: "cancelled",
+      finishedAt: expect.any(String),
+      errorMessage: null,
+    });
+    expect(executionRepository.getProviderInvocationUsage(unrelatedProviderInvocation.id)).toMatchObject({
+      status: "running",
+      finishedAt: null,
+    });
+    expect(executionRepository.listRunningProviderInvocationUsages(["codex"]).map((invocation) => invocation.id)).toEqual([
+      unrelatedProviderInvocation.id,
+    ]);
     expect(projectAttentionService.getItem(item.id)).toMatchObject({
       status: "open",
       assignedWorkerEndpointId: null,
       payload: expect.objectContaining({
         repairRuntime: expect.objectContaining({
-          sessionId: "virtual-merge-codex-repair-1",
+          sessionId,
           nativeSessionId: "native-repair-1",
           activeAttemptId: "attempt-1",
           attemptRecorded: true,
@@ -599,6 +679,94 @@ describe("RuntimeStartupRecoveryService", () => {
       status: "cancelled",
       errorMessage: null,
     });
+  });
+
+  it("reuses one Docker inventory while cancelling multiple interrupted QA reviewers", async () => {
+    const listContainers = vi.fn().mockResolvedValue([
+      { id: "qa-container-1", labels: { "code-ux.session-id": "qa-review-session-1" } },
+      { id: "qa-container-2", labels: { "code-ux.session-id": "qa-review-session-2" } },
+    ]);
+    const removeContainers = vi.fn().mockResolvedValue(undefined);
+    const {
+      projectRepository,
+      executionRepository,
+      qaReviewRepository,
+    } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Batched QA Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/batched-qa-recovery",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Batched QA Recovery Sprint",
+      number: 9,
+      status: "running",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "docker_cli",
+      status: "running",
+    });
+
+    const qaRunIds: string[] = [];
+    const providerInvocationIds: string[] = [];
+    for (const index of [1, 2]) {
+      const sessionId = `qa-review-session-${index}`;
+      const providerInvocation = executionRepository.createProviderInvocationUsage({
+        projectId: project.id,
+        sprintId: sprint.id,
+        sprintRunId: sprintRun.id,
+        sessionId,
+        provider: "codex",
+        purpose: "qa_review",
+        executionMode: "DOCKER",
+        status: "running",
+        startedAt: `2026-07-14T10:00:0${index}.000Z`,
+      });
+      const executionInvocation = executionRepository.createExecutionInvocation({
+        projectId: project.id,
+        sprintId: sprint.id,
+        sprintRunId: sprintRun.id,
+        providerInvocationId: providerInvocation.id,
+        type: "qa_review",
+        provider: "codex",
+        status: "running",
+        startedAt: `2026-07-14T10:00:0${index}.000Z`,
+      });
+      const qaRun = qaReviewRepository.createRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+        sprintRunId: sprintRun.id,
+        triggerType: "sprint_completion",
+        runIndex: index,
+        payload: { reviewExecutionInvocationId: executionInvocation.id },
+        startedAt: `2026-07-14T10:00:0${index}.000Z`,
+      });
+      qaRunIds.push(qaRun.id);
+      providerInvocationIds.push(providerInvocation.id);
+    }
+
+    const qaRecovery = new QaReviewRecoveryService({
+      executionRepository,
+      qaReviewRepository,
+      dockerService: { listContainers, removeContainers },
+    });
+    const reconciledRunIds = await qaRecovery.reconcileInterruptedQaReviewRuns(new Set([
+      "qa-review-session-1",
+      "qa-review-session-2",
+    ]));
+
+    expect(reconciledRunIds).toHaveLength(2);
+    expect(reconciledRunIds).toEqual(expect.arrayContaining(qaRunIds));
+    expect(listContainers).toHaveBeenCalledTimes(1);
+    expect(removeContainers).toHaveBeenCalledTimes(2);
+    expect(removeContainers).toHaveBeenCalledWith(["qa-container-1"], { removeVolumes: false });
+    expect(removeContainers).toHaveBeenCalledWith(["qa-container-2"], { removeVolumes: false });
+    expect(providerInvocationIds.map((id) => executionRepository.getProviderInvocationUsage(id)?.status)).toEqual([
+      "cancelled",
+      "cancelled",
+    ]);
   });
 
   it("immediately cancels a fresh QA review row with no backing invocation after restart", async () => {

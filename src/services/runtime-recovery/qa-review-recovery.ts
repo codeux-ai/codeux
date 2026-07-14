@@ -17,6 +17,9 @@ interface QaReviewRecoveryServiceDeps {
 }
 
 export class QaReviewRecoveryService {
+  private providerContainerInventory: Promise<DockerContainer[]> | null = null;
+  private readonly removedProviderContainerIds = new Set<string>();
+
   constructor(private readonly deps: QaReviewRecoveryServiceDeps) {}
 
   async reconcileInterruptedQaReviewRuns(activeContainerSessionIds: ReadonlySet<string>): Promise<string[]> {
@@ -91,13 +94,22 @@ export class QaReviewRecoveryService {
     if (!this.deps.dockerService?.removeContainers) {
       return;
     }
-    const containers = await this.deps.dockerService.listContainers().catch(() => []);
+    this.providerContainerInventory ??= this.deps.dockerService.listContainers().catch(() => []);
+    const containers = await this.providerContainerInventory;
     const containerIds = containers
       .filter((container) => container.labels?.["code-ux.session-id"]?.trim() === sessionId)
       .map((container) => container.id || container.names)
-      .filter((containerId): containerId is string => Boolean(containerId));
+      .filter((containerId): containerId is string => (
+        Boolean(containerId) && !this.removedProviderContainerIds.has(containerId as string)
+      ));
     if (containerIds.length > 0) {
-      await this.deps.dockerService.removeContainers(containerIds, { removeVolumes: false }).catch(() => undefined);
+      await this.deps.dockerService.removeContainers(containerIds, { removeVolumes: false })
+        .then(() => {
+          for (const containerId of containerIds) {
+            this.removedProviderContainerIds.add(containerId);
+          }
+        })
+        .catch(() => undefined);
     }
   }
 
