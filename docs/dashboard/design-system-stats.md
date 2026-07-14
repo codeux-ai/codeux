@@ -195,6 +195,8 @@ Cost allocation panels pair separate token and spend graphics with exact textual
 
 Task and canonical sprint averages use distinct rows that contain provider invocations. Covered zero-cost rows remain in the denominator, while an empty collection produces an unavailable amount. Canonical sprint rows come from `costAnalytics.sprints`; legacy snapshots fall back to the run-oriented `sprints` ledger only when the additive projection is absent.
 
+The Cost task/sprint ledger consumes those prepared detail rows directly. Its Task and Sprint tabs support roving Arrow/Home/End navigation, and its Cost-local controls sort by spend, tokens, calls, cost per call, recency, or name without changing the general telemetry-ledger contract. Search totals include every matching row even when only an initial progressive batch is mounted; the displayed per-entity average remains the full conceptual task or canonical-sprint average so filtering cannot silently redefine the comparison baseline. Rows expose spend share, token mix, status, secondary context, recency, and full/partial/unpriced/unknown pricing provenance as wrapping semantic articles.
+
 ## Responsive Behavior
 
 - The hero uses a two-zone command band on wide screens and stacks project context, time controls, and mode navigation on narrow screens.

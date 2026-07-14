@@ -81,6 +81,7 @@ Cost data is visualized directly within the Usage Graph and Composition views, f
 - Allocation patterns and text labels duplicate color meaning, rows support keyboard scanning and long provider/model names, and empty, unpriced, partial, covered zero-dollar, and unknown-coverage windows remain visibly different.
 - Cost totals, per-call and per-token rates, task/sprint averages, breakdowns, and detail rows share one deterministic calculation model. Invalid negative or non-finite telemetry is treated as zero, breakdowns reconcile to the normalized totals, and equal rankings use stable labels and identities.
 - Small proven costs retain sub-cent precision. Fully covered zero-price usage displays as `$0.00`; partially priced, unpriced, legacy unknown-coverage, and empty telemetry use distinct states so missing pricing is never presented as free usage.
+- The Cost ledger switches between task and canonical-sprint views, searches status and context, and sorts in either direction by spend, tokens, calls, cost per call, recency, or name. Each row includes spend share, token mix, status, activity, and pricing provenance; large result sets load progressively while totals use every filtered match and the comparison average stays anchored to the complete task or canonical-sprint collection.
 
 ## Underlying telemetry
 
