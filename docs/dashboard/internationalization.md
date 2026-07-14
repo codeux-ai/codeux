@@ -47,10 +47,12 @@ Interpolation replaces only named `{variable}` tokens through literal string sub
 
 ## Translation scope
 
-The initial application bundle translates only root-owned shell copy: the skip link, main landmark label, route loading announcement, and hidden footer. Route catalogs should be imported with their route when those features are localized.
+The application shell and Memory route have feature-owned English and German catalogs. The Memory catalog covers the map, tier and scope filters, search, cards, inspector, add and delete flows, batch actions, empty/loading/error states, accessible announcements, and the embedding-model catalog and custom-model form. Counts, percentages, dates, strengths, file sizes, and plural forms use the active locale without changing their underlying numeric values or sort/filter behavior.
 
-Localization applies only to dashboard-authored interface copy. API responses, provider output, stored instructions, project and sprint data, runtime diagnostics, and all other user-authored content must remain unchanged.
+Memory category labels participate in localized text search, but their stored category keys remain unchanged. The route imports its catalog with the feature rather than adding it to the eager shell bundle.
+
+Localization applies only to dashboard-authored interface copy. Memory titles and content, claims, evidence, tags, agent names, model IDs, catalog descriptions, languages, licenses, URLs, filenames, server errors, API responses, provider output, stored instructions, and project or sprint data remain unchanged.
 
 ## Verification
 
-Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. It exercises startup defaults, stored German restoration, live switching, invalid and unavailable storage, cross-tab events, interpolation, plural rules, all formatter families, and HTML `lang` synchronization.
+Foundation coverage is in `tests/dashboard/v2/i18n-foundation.test.tsx`. Memory route coverage lives with the page, filter, search, list, inspector, batch-delete, model-browser, and model-card tests. Together they exercise German controls and announcements while asserting persisted knowledge, catalog metadata, identifiers, and API diagnostics remain verbatim.

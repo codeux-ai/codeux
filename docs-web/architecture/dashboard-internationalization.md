@@ -34,3 +34,9 @@ const { translate, translatePlural, formatNumber } = useDashboardI18n();
 English and German must declare exactly the same top-level keys. Interpolation treats replacement values as literal text, plural messages require an `other` form, and locale-aware formatting delegates to the browser's native `Intl` implementation.
 
 Keep each catalog with its owning feature and import it only where the feature is loaded. Translate dashboard-authored interface copy only. Never translate provider output, API responses, stored instructions, project data, runtime diagnostics, or user-authored content.
+
+## Memory route boundary
+
+The Memory route has a feature-owned English and German catalog covering map controls, tier and scope filters, search, cards, the inspector, add/delete and batch actions, accessible announcements, and the embedding-model catalog and custom-model form. Locale-aware `Intl` formatting handles counts, plurals, percentages, dates, strengths, and file sizes without changing numeric values or filter/sort behavior. Localized category labels can be searched while the persisted category keys remain stable.
+
+The localization boundary deliberately excludes memory titles and content, claims, evidence, tags, agent names, model IDs, catalog descriptions, languages, licenses, URLs, filenames, and server/API diagnostics. Those values are rendered exactly as supplied.

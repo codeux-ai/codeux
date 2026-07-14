@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { h } from "preact";
-import { render } from "@testing-library/preact";
+import { renderWithDashboardI18n as render } from "../../../../../../tests/dashboard/helpers/dashboard-i18n-test-utils.js";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { Inspector } from "../Inspector.js";
@@ -99,5 +99,28 @@ describe("Inspector", () => {
         getByRole("button", { name: "Close inspector" }).click();
 
         expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    test("localizes German inspector chrome and preserves stored memory content", () => {
+        const { getByRole, getByText } = render(
+            <Inspector
+                node={buildNode({ content: "Do not translate API claim v2" })}
+                allNodes={[
+                    buildNode({ content: "Do not translate API claim v2" }),
+                    buildNode({ id: "memory-2", content: "Evidence filename report-en.md", category: "codebase" }),
+                ]}
+                edges={edges}
+                lobotomize={false}
+                onClose={vi.fn()}
+                onDelete={vi.fn()}
+            />,
+            "de",
+        );
+
+        expect(getByRole("region", { name: "Details der ausgewählten Erinnerung" })).toBeInTheDocument();
+        expect(getByRole("button", { name: "Erinnerung-Inspektor schließen" })).toBeInTheDocument();
+        expect(getByText("Do not translate API claim v2")).toBeInTheDocument();
+        expect(getByText("Evidence filename report-en.md")).toBeInTheDocument();
+        expect(getByText("Codebasis")).toBeInTheDocument();
     });
 });
