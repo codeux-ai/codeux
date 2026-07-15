@@ -61,4 +61,3 @@ export const StatsI18nProvider: FunctionComponent<{
 };
 
 export const useStatsI18n = (): StatsI18nValue => useContext(StatsI18nContext);
-

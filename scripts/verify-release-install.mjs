@@ -15,6 +15,27 @@ const packDir = path.join(tempRoot, "pack");
 const installDir = path.join(tempRoot, "install");
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+const ALLOWED_PACKAGED_CODE_UX_FILES = new Set([
+  ".code-ux/agents/planning_agent.md",
+  ".code-ux/agents/project_manager.md",
+  ".code-ux/agents/project_setup_agent.md",
+  ".code-ux/agents/quality_assurance_agent.md",
+  ".code-ux/agents/worker.md",
+  ".code-ux/container/setup.sh",
+  ".code-ux/embeddings/codeux-internaldocs.bge-small-en-v1.5.json",
+  ".code-ux/nodes/README.md",
+  ".code-ux/quicksprints/templates/qs-code-quality.md",
+  ".code-ux/quicksprints/templates/qs-create-desktop-app.md",
+  ".code-ux/quicksprints/templates/qs-create-game.md",
+  ".code-ux/quicksprints/templates/qs-create-online-shop.md",
+  ".code-ux/quicksprints/templates/qs-create-portfolio.md",
+  ".code-ux/quicksprints/templates/qs-create-web-app.md",
+  ".code-ux/quicksprints/templates/qs-security.md",
+  ".code-ux/quicksprints/templates/qs-ui-a11y.md",
+  ".code-ux/quicksprints/templates/qs-ui-design.md",
+  ".code-ux/quicksprints/templates/qs-ui-interactions.md",
+  ".code-ux/quicksprints/templates/qs-ui-responsive.md",
+]);
 
 function existingPath(...parts) {
   const candidate = path.resolve(...parts);
@@ -45,6 +66,25 @@ function resolveWindowsPackageManager(command, args) {
 
 function installedPackagePath(...parts) {
   return path.join(installDir, "node_modules", "@codeuxai", "codeux", ...parts);
+}
+
+async function assertPackageFileAllowlist() {
+  const packageJson = JSON.parse(await readFile(path.join(projectRoot, "package.json"), "utf8"));
+  const packageFileEntries = Array.isArray(packageJson?.files) ? packageJson.files : [];
+  const configuredCodeUxFiles = packageFileEntries
+    .filter((filePath) => typeof filePath === "string" && filePath.startsWith(".code-ux"));
+  const missingBundledFiles = [...ALLOWED_PACKAGED_CODE_UX_FILES]
+    .filter((filePath) => !configuredCodeUxFiles.includes(filePath));
+  const broadOrUnexpectedEntries = configuredCodeUxFiles
+    .filter((filePath) => !ALLOWED_PACKAGED_CODE_UX_FILES.has(filePath));
+
+  if (missingBundledFiles.length > 0 || broadOrUnexpectedEntries.length > 0) {
+    throw new Error([
+      "package.json must use the explicit bundled .code-ux file allowlist.",
+      ...missingBundledFiles.map((filePath) => `Missing package allowlist entry: ${filePath}`),
+      ...broadOrUnexpectedEntries.map((filePath) => `Broad or unexpected package entry: ${filePath}`),
+    ].join("\n"));
+  }
 }
 
 function requireExistingBuildArtifacts() {
@@ -167,10 +207,38 @@ async function npmPack() {
 
   try {
     const packed = JSON.parse(stdout);
-    const filename = packed?.[0]?.filename;
+    const packEntry = packed?.[0];
+    const filename = packEntry?.filename;
     if (typeof filename !== "string" || filename.length === 0) {
       throw new Error("npm pack JSON did not include a tarball filename.");
     }
+
+    const packedFilePaths = new Set(
+      Array.isArray(packEntry?.files)
+        ? packEntry.files
+          .map((file) => file?.path)
+          .filter((filePath) => typeof filePath === "string")
+        : [],
+    );
+    const missingBundledFiles = [...ALLOWED_PACKAGED_CODE_UX_FILES]
+      .filter((filePath) => !packedFilePaths.has(filePath));
+    const unexpectedCodeUxFiles = [...packedFilePaths]
+      .filter((filePath) => filePath.startsWith(".code-ux/") && !ALLOWED_PACKAGED_CODE_UX_FILES.has(filePath));
+    const runtimeArtifacts = [...packedFilePaths].filter((filePath) => (
+      /(^|\/)debug\.log$/.test(filePath)
+      || /(^|\/)data\.db(?:-shm|-wal)?$/.test(filePath)
+      || /(^|\/)\.env(?:\.|$)/.test(filePath)
+    ));
+
+    if (missingBundledFiles.length > 0 || unexpectedCodeUxFiles.length > 0 || runtimeArtifacts.length > 0) {
+      throw new Error([
+        "npm package contents failed the runtime-artifact allowlist.",
+        ...missingBundledFiles.map((filePath) => `Missing bundled file: ${filePath}`),
+        ...unexpectedCodeUxFiles.map((filePath) => `Unexpected .code-ux file: ${filePath}`),
+        ...runtimeArtifacts.map((filePath) => `Forbidden runtime artifact: ${filePath}`),
+      ].join("\n"));
+    }
+
     return path.join(packDir, filename);
   } catch (error) {
     throw new Error(`Unable to parse npm pack output as JSON: ${error instanceof Error ? error.message : String(error)}`);
@@ -198,6 +266,7 @@ try {
 
   await mkdir(packDir, { recursive: true });
   await prepareInstallDir();
+  await assertPackageFileAllowlist();
 
   const tarballPath = await npmPack();
   console.log(`Packed tarball: ${tarballPath}`);
