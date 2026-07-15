@@ -32,6 +32,8 @@ All panels update via the WebSocket connection to `/api/realtime`. Update latenc
 
 If the WebSocket disconnects (network blip, page sleep), the client automatically reconnects with exponential backoff and replays missed events using the sequence number.
 
+Runtime update times accept the current ISO/Unix formats and the legacy 12-hour time-only format. An invalid optional timestamp is omitted instead of interrupting the Live page. Animated dashboard backgrounds remain enabled on Live, with their paint loop bounded so software-rendered or no-vsync browsers stay responsive while the task pipeline and DAG render.
+
 ## Self-reflection ratings
 
 Live task cards can show a compact 5-star self-reflection badge when the task snapshot includes `selfReflectionRating`. The badge uses the task's overall rating for the visible score, and hover or keyboard focus opens a viewport-positioned panel with the individual section ratings and any notes the worker recorded. Live tasks without a captured rating do not show a placeholder badge.

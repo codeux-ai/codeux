@@ -478,6 +478,44 @@ describe("CommandRunner", () => {
     }
   });
 
+  it("does not widen helper mounts for an invalid ancestor Git marker", async () => {
+    const tempDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "code-ux-invalid-git-ancestor-"));
+    const repoDir = path.join(tempDir, "repo");
+    const indexDir = path.join(tempDir, "index");
+    await fsPromises.mkdir(path.join(tempDir, ".git"));
+    await fsPromises.mkdir(repoDir);
+    await fsPromises.mkdir(indexDir);
+
+    const previous = process.env.CODE_UX_CONTAINERIZED_GIT;
+    process.env.CODE_UX_CONTAINERIZED_GIT = "1";
+    try {
+      const containerized = (runner as unknown as {
+        resolveCommand: (command: string, args: string[], options: { cwd?: string; env?: NodeJS.ProcessEnv }) => { args: string[] };
+      }).resolveCommand("git", ["read-tree", "HEAD"], {
+        cwd: repoDir,
+        env: {
+          ...process.env,
+          GIT_INDEX_FILE: path.join(indexDir, "workspace.index"),
+        },
+      });
+
+      expect(containerized.args).toEqual(expect.arrayContaining([
+        "--mount",
+        `type=bind,source=${repoDir},target=/workspace`,
+        "--mount",
+        `type=bind,source=${indexDir},target=/mnt/code-ux/git-paths/0`,
+      ]));
+      expect(containerized.args).not.toContain(`type=bind,source=${tempDir},target=/workspace`);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.CODE_UX_CONTAINERIZED_GIT;
+      } else {
+        process.env.CODE_UX_CONTAINERIZED_GIT = previous;
+      }
+      await fsPromises.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("keeps Windows Git bundle paths out of Docker mount targets", () => {
     const repoDir = "C:\\Users\\pierr\\Projects\\repo";
     const bundleDir = "C:\\Users\\pierr\\AppData\\Local\\Temp\\code-ux-bundle-Zh27Uz";
@@ -518,6 +556,8 @@ describe("CommandRunner", () => {
     try {
       await fsPromises.mkdir(worktreeGitDir, { recursive: true });
       await fsPromises.mkdir(worktreeDir, { recursive: true });
+      await fsPromises.writeFile(path.join(gitDir, "HEAD"), "ref: refs/heads/main\n", "utf8");
+      await fsPromises.writeFile(path.join(worktreeGitDir, "HEAD"), "ref: refs/heads/session-1\n", "utf8");
       await fsPromises.writeFile(path.join(worktreeDir, ".git"), `gitdir: ${worktreeGitDir}\n`, "utf8");
       await fsPromises.writeFile(path.join(worktreeGitDir, "commondir"), "../..\n", "utf8");
 
@@ -554,6 +594,8 @@ describe("CommandRunner", () => {
     try {
       await fsPromises.mkdir(worktreeGitDir, { recursive: true });
       await fsPromises.mkdir(worktreeDir, { recursive: true });
+      await fsPromises.writeFile(path.join(gitDir, "HEAD"), "ref: refs/heads/main\n", "utf8");
+      await fsPromises.writeFile(path.join(worktreeGitDir, "HEAD"), "ref: refs/heads/session-1\n", "utf8");
       await fsPromises.writeFile(path.join(worktreeDir, ".git"), `gitdir: ${worktreeGitDir}\n`, "utf8");
       await fsPromises.writeFile(path.join(worktreeGitDir, "commondir"), "../..\n", "utf8");
       await fsPromises.writeFile(stdinFile, "test-1.md\0", "utf8");

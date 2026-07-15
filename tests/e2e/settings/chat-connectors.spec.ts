@@ -21,8 +21,10 @@ async function openIntegrations(page: Page): Promise<void> {
 
 test.describe("settings chat connector acceptance", () => {
   let project: ProjectSummary;
+  let connectionId: string | null = null;
 
   test.beforeEach(async ({ page, request }, testInfo) => {
+    connectionId = null;
     await completeOnboarding(request);
     project = await ensureSelectedProject(request, { testInfo, fixtureKey: "chat-connectors" });
     const settingsResponse = await request.get("/api/system-settings");
@@ -35,9 +37,17 @@ test.describe("settings chat connector acceptance", () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
   });
 
+  test.afterEach(async ({ request }) => {
+    if (!connectionId) return;
+    const response = await request.delete(`/api/chat-providers/connections/${encodeURIComponent(connectionId)}`);
+    expect(response.ok() || response.status() === 404, await response.text()).toBe(true);
+    connectionId = null;
+  });
+
   test("loads every provider and completes validation, verification, binding, delivery controls, focus, and mobile flows", async ({ page, request }) => {
     expect(project.id).toBeTruthy();
     const connection = await createSlackFixtureConnection(request);
+    connectionId = connection.id;
     await page.route(`**/api/projects/${project.id}/settings/effective`, async (route) => {
       const response = await route.fetch();
       const body = await response.json() as { settings?: { appearance?: { reducedMotion?: string } } };

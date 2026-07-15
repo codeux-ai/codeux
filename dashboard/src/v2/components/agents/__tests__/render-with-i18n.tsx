@@ -8,4 +8,3 @@ export const renderWithI18n = (ui: VNode, locale: DashboardLocale = "en"): Rende
     <DashboardI18nProvider initialLocale={locale} storage={null}>{children}</DashboardI18nProvider>
   ),
 });
-

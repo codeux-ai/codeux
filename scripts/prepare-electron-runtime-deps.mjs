@@ -27,6 +27,7 @@ const pruneVersion = 4;
 const targetPlatform = process.env.CODE_UX_ELECTRON_TARGET_PLATFORM || process.platform;
 const targetArch = process.env.CODE_UX_ELECTRON_TARGET_ARCH || process.arch;
 const keepAllNativeBinaries = process.env.CODE_UX_ELECTRON_KEEP_ALL_NATIVE_BINARIES === "1";
+const onnxRuntimeInstallMode = "skip";
 
 const fingerprint = crypto
   .createHash("sha256")
@@ -37,6 +38,7 @@ const fingerprint = crypto
     targetPlatform,
     targetArch,
     keepAllNativeBinaries,
+    onnxRuntimeInstallMode,
   }))
   .update(lockfile)
   .update(workspace)
@@ -82,7 +84,10 @@ execFileSync(
   {
     cwd: runtimeDir,
     stdio: "inherit",
-    env: process.env,
+    env: {
+      ...process.env,
+      ONNXRUNTIME_NODE_INSTALL: onnxRuntimeInstallMode,
+    },
     shell: process.platform === "win32",
   },
 );

@@ -67,4 +67,3 @@ describe("Overview route localization", () => {
     expect(await screen.findByText("localized telemetry")).toBeInTheDocument();
   });
 });
-

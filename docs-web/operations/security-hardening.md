@@ -6,7 +6,7 @@ The proxy must remove client-supplied identity headers and inject its own princi
 
 Encrypted credential data has no plaintext fallback. Missing mounted/KMS/Vault key versions fail startup and `/ready`; `/health` remains useful for liveness. Backups are incomplete without the referenced key versions. Audit export is recursively secret-redacted but still restricted operational data.
 
-Shared subprocess execution validates command names, arguments, stdin files, and working directories immediately before spawning. Working directories must resolve to existing real directories inside the user home, application directory, OS temporary directory, or an explicit `CODE_UX_DIRECTORY_BROWSER_ROOTS` entry before either the inline or helper-process boundary. `shell: false` prevents argument values from being reinterpreted as shell syntax.
+Shared subprocess execution validates command names, arguments, stdin files, and working directories immediately before spawning. Working directories must resolve to existing real directories inside the user home, application directory, OS temporary directory, or an explicit `CODE_UX_DIRECTORY_BROWSER_ROOTS` entry before either the inline or helper-process boundary. Git helper repository discovery accepts only `.git` directories and worktree targets with a valid `HEAD`, so stale ancestor markers cannot widen host bind mounts. `shell: false` prevents argument values from being reinterpreted as shell syntax.
 
 See [Authenticated Headless Server Mode](./server-mode.md) for deployment, recovery, rotation, SLOs, and limitations.
 

@@ -304,4 +304,3 @@ export const overviewMessages = defineDashboardMessages({
     taskTimeActive: "Aktiv",
   },
 });
-

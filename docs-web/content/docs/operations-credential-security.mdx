@@ -77,7 +77,7 @@ Credential security is verified against an isolated normal local runtime. A comp
 
 Credentialed automation tests require missing, revoked, cross-project, wrong-kind, insufficient-capability, and unavailable-backend bindings to fail before provider or custom-node invocation. A distinctive disclosure canary is scanned across public responses, structured records, SQLite text columns, workspaces, Docker inputs, validation artifacts, graph/dashboard records, and browser or iframe state; only encrypted binary envelopes may contain it.
 
-Production-bundle browser coverage enables the documented Nodes and Custom Dashboards gates in an isolated Playwright runtime. It exercises Settings lifecycle feedback, node binding through publication and a local mock-provider run, custom-dashboard build/runtime slots and publication blocking, keyboard focus restoration, and narrow-viewport operation without external providers or network access.
+Production-bundle browser coverage enables the documented Nodes and Custom Dashboards gates in an isolated loopback Playwright runtime. The shared runtime uses normal automatic local-file custody under a temporary home, including platform-specific POSIX ownership or Windows profile-ACL behavior. It exercises Settings lifecycle feedback, node binding through publication and a local mock-provider run, custom-dashboard build/runtime slots and publication blocking, keyboard focus restoration, and narrow-viewport operation without external providers or network access. A second independently homed runtime explicitly selects an unavailable mounted-file provider to verify fail-closed guidance and disabled mutation controls.
 
 ## Troubleshooting without disclosure
 

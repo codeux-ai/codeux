@@ -66,6 +66,8 @@ Outbound replies exist only for turns sourced from connector ingress. Provider p
 
 Workers use expiring compare-and-set leases. Restart recovery reclaims expired work; shutdown aborts HTTP/native/session work and releases owned leases safely. Manual retry requires explicit approval because it can duplicate a message. Provider-declared ambiguous outcomes are terminal so an automatic retry does not blindly resend.
 
+The connector detail view reports health refreshes, verification progress/success, delivery inspection, retry, and cancellation through a localized polite status region. A failed action instead keeps the redacted provider error in an assertive alert, so operators receive durable feedback without exposing secret-bearing diagnostics.
+
 ## Secret migration and verification invalidation
 
 Connector credentials are encrypted in a dedicated envelope table. Startup seals legacy plaintext rows only after secure key-provider readiness, commits with secret-version compare-and-set, and clears the legacy column only after success. Partial/failing migrations remain resumable. Restore the original key material and restart/rerun until the migration reports no pending rows; do not copy credentials back into plaintext as rollback.
