@@ -3,6 +3,7 @@ import type { Sprint } from "../../types.js";
 import type {
   ExecutionAttentionItemSummary,
   ExecutionRuntimeEventSummary,
+  ExecutionSprintRunSummary,
   ExecutionTaskDispatchSummary,
 } from "../../../../../src/contracts/app-types.js";
 import { filterShowcaseSprints, sortSprintsByRecency } from "../../lib/sprint-gallery.js";
@@ -67,12 +68,25 @@ export function buildCiStatusBySprintId(
   taskDispatches: readonly ExecutionTaskDispatchSummary[],
   events: readonly ExecutionRuntimeEventSummary[],
   attentionItems: readonly ExecutionAttentionItemSummary[],
+  sprintRuns: readonly ExecutionSprintRunSummary[] = [],
 ): Map<string, CiStatusPresentation> {
   const sprintIds = new Set(sprints.map((sprint) => sprint.id));
+  const latestRunBySprintId = new Map<string, ExecutionSprintRunSummary>();
+  for (const run of sprintRuns) {
+    if (!sprintIds.has(run.sprintId)) continue;
+    const current = latestRunBySprintId.get(run.sprintId);
+    const runTime = Date.parse(run.startedAt ?? run.createdAt);
+    const currentTime = current ? Date.parse(current.startedAt ?? current.createdAt) : Number.NEGATIVE_INFINITY;
+    if (!current || runTime > currentTime || (runTime === currentTime && run.id.localeCompare(current.id) > 0)) {
+      latestRunBySprintId.set(run.sprintId, run);
+    }
+  }
   const taskEvidenceBySprintId = new Map<string, Map<string, CiTaskMergeEvidence>>();
 
   for (const dispatch of taskDispatches) {
     if (!sprintIds.has(dispatch.sprintId)) continue;
+    const latestRun = latestRunBySprintId.get(dispatch.sprintId);
+    if (latestRun && dispatch.sprintRunId !== latestRun.id) continue;
     const sprintTasks = taskEvidenceBySprintId.get(dispatch.sprintId)
       ?? new Map<string, CiTaskMergeEvidence>();
     sprintTasks.set(dispatch.taskId, {
@@ -86,8 +100,10 @@ export function buildCiStatusBySprintId(
 
   const result = new Map<string, CiStatusPresentation>();
   for (const sprint of sprints) {
+    const sprintRunId = latestRunBySprintId.get(sprint.id)?.id;
     const presentation = deriveSprintCiStatusPresentation({
       sprintId: sprint.id,
+      sprintRunId,
       events,
       attentionItems,
       tasks: [...(taskEvidenceBySprintId.get(sprint.id)?.values() ?? [])],

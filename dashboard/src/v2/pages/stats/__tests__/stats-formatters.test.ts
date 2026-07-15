@@ -30,6 +30,10 @@ describe("stats-formatters", () => {
     it("returns original value on invalid date", () => {
       expect(formatHourTick("invalid")).toBe("invalid");
     });
+
+    it("formats German UTC buckets without changing their hour", () => {
+      expect(formatHourTick("2023-10-15T14:30:00Z", "de")).toBe("14:00");
+    });
   });
 
   describe("formatMinuteTick", () => {

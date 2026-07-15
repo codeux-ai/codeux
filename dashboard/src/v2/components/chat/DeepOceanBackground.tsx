@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "preact/hooks";
 import * as THREE from "../../../lib/three-lite.js";
+import { startPacedAnimationLoop } from "../../lib/paced-animation-loop.js";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * DeepOceanBackground
@@ -12,7 +13,7 @@ import * as THREE from "../../../lib/three-lite.js";
  * Performance budget:
  *  - Renders at 0.5× device resolution
  *  - 1 fullscreen quad (caustic shader) + 1 points draw (particles)
- *  - Targets 60 fps on integrated GPUs; gracefully degrades
+ *  - Timer-paced at 20 fps so software/no-vsync renderers stay bounded
  * ───────────────────────────────────────────────────────────────────────────── */
 
 const RENDER_SCALE = 0.35;
@@ -263,19 +264,12 @@ export const DeepOceanBackground = ({ forceDark = false, className = "" }: { for
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
 
     /* ── animation loop ── */
-    let animId = 0;
     const startTime = performance.now() - 200_000;
-    const FRAME_INTERVAL = 1000 / 20;
-    let lastFrame = 0;
     const darkClear = new THREE.Color(0x060a0d);
     const lightClear = new THREE.Color(0xdbe8f8);
     const lerpTarget = new THREE.Color();
 
-    const animate = () => {
-      animId = requestAnimationFrame(animate);
-      const now = performance.now();
-      if (now - lastFrame < FRAME_INTERVAL) return;
-      lastFrame = now;
+    const stopAnimation = startPacedAnimationLoop((now) => {
       const elapsed = (now - startTime) * 0.001;
 
       currentDark += (targetDark - currentDark) * 0.03;
@@ -293,8 +287,7 @@ export const DeepOceanBackground = ({ forceDark = false, className = "" }: { for
       renderer.render(scene, camera);
       renderer.autoClear = false;
       renderer.render(particleScene, pCam);
-    };
-    animate();
+    });
 
     /* ── resize ── */
     const ro = new ResizeObserver((entries) => {
@@ -309,7 +302,7 @@ export const DeepOceanBackground = ({ forceDark = false, className = "" }: { for
 
     /* ── cleanup ── */
     return () => {
-      cancelAnimationFrame(animId);
+      stopAnimation();
       mo.disconnect();
       ro.disconnect();
       renderer.dispose();

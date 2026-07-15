@@ -113,9 +113,9 @@ describe("useNotifications", () => {
     });
     expect(projected?.icon).toBe(HelpCircle);
     expect(projected?.details).toEqual(expect.arrayContaining([
-      { label: "Project", value: "Other Project" },
-      { label: "Sprint", value: "SPR-10 (Migration Sprint)" },
-      { label: "Task", value: "T01 (Migrate storage)" },
+      { kind: "project", label: "Project", value: "Other Project" },
+      { kind: "sprint", label: "Sprint", value: "SPR-10 (Migration Sprint)" },
+      { kind: "task", label: "Task", value: "T01 (Migrate storage)" },
     ]));
     expect(result.current.notifications.some((notification) => notification.id === "4")).toBe(false);
     expect(dashboardApi.fetchOnboardingReadiness).toHaveBeenCalledTimes(1);

@@ -453,7 +453,7 @@ GitHub validation is split by signal:
 - Backend coverage, dashboard tests, npm install smoke, and the cross-OS orchestration DAG matrix reuse that build artifact and run in parallel after the prerequisite stage. Release-candidate packaging starts after package smoke and can run beside the main-only E2E matrix. Matrix bounds are `08 Orchestration` at three shards, `09 E2E` at ten shards, and `10 Release Candidate` at three shards; GitHub's runner quota queues any excess work across the parallel lanes.
 - `Playwright Diagnostics`, `Release Candidate Diagnostics`, and `Mockup Sprint Diagnostics` are manual-only workflows for focused reruns. They no longer run automatically on every PR.
 - Superseded runs for the same branch or pull request are cancelled by workflow concurrency groups.
-- Security validation is intentionally separated from build and Playwright lanes. The `04 Security / dependency audit` job runs `pnpm run audit`, which is `pnpm audit --audit-level=high`; high-severity dependency findings fail that job without preventing typecheck, tests, build, or Playwright artifacts from reporting their own status.
+- Security validation is intentionally separated from build and Playwright lanes. The `04 Security / dependency audit` job runs the standard `pnpm run audit`, which is `pnpm audit --audit-level=high`; high-severity dependency findings fail that job without preventing typecheck, tests, build, or Playwright artifacts from reporting their own status. The repository pins pnpm 11.13.0 so the native audit command uses npm's supported bulk-advisory API.
 
 Local equivalents:
 - `pnpm run lint` mirrors the TypeScript validation portion of `Typecheck & Lint`.
@@ -466,7 +466,7 @@ Local equivalents:
 
 Dependency and cache behavior:
 - CI restores `node_modules` only as a speed hint and still runs `pnpm install --frozen-lockfile --ignore-scripts` in every job.
-- Vitest, Vite, TypeScript, Playwright browser, Electron binary, Electron Builder, and release-candidate caches are keyed to the runner OS, Node 22, pnpm 10.33.0, and dependency/config files that affect the cached output.
+- Vitest, Vite, TypeScript, Playwright browser, Electron binary, Electron Builder, and release-candidate caches are keyed to the runner OS, Node 22, pnpm 11.13.0, and dependency/config files that affect the cached output.
 - Playwright restores the browser cache before running `pnpm exec playwright install chromium`; Linux runners also run `pnpm exec playwright install-deps chromium` so cached browser binaries cannot hide missing OS dependencies.
 - The build artifact, not repeated source builds, feeds package smoke, orchestration, Playwright, and release-candidate jobs.
 - `tests/backend/ci/workflow-health.test.ts` audits these workflow invariants so accidental drift in package manager version, Node version, install mode, artifact reuse, audit separation, concurrency cancellation, Playwright artifacts, manual diagnostics, or release-lane separation fails a focused backend test.

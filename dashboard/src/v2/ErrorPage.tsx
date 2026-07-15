@@ -3,13 +3,17 @@ import { useRef, useEffect } from 'preact/hooks';
 import { Link } from '@tanstack/react-router';
 import { gsap } from 'gsap';
 import { CanvasBackground } from './components/CanvasBackground.js';
+import { useOptionalDashboardI18n } from './i18n/context.js';
+import { shellMessages } from './i18n/messages/shell.js';
 
 interface ErrorPageProps {
   errorCode?: number;
   message?: string;
 }
 
-export function ErrorPage({ errorCode = 404, message = 'Page not found' }: ErrorPageProps) {
+export function ErrorPage({ errorCode = 404, message }: ErrorPageProps) {
+  const { translate } = useOptionalDashboardI18n();
+  const resolvedMessage = message ?? translate(shellMessages, "pageNotFound");
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -32,13 +36,13 @@ export function ErrorPage({ errorCode = 404, message = 'Page not found' }: Error
           {errorCode}
         </h1>
         <p className="text-xl text-slate-400 dark:text-slate-400 mt-4 mb-8">
-          {message}
+          {resolvedMessage}
         </p>
         <Link
           to="/"
           className="bg-[#00E0A0] text-[#0d0f12] font-semibold px-6 py-3 rounded-[1.25rem] hover:opacity-90 transition-opacity"
         >
-          Go Home
+          {translate(shellMessages, "goHome")}
         </Link>
       </div>
     </div>

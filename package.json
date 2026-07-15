@@ -12,7 +12,7 @@
     "url": "https://github.com/codeux-ai/codeux/issues"
   },
   "homepage": "https://github.com/codeux-ai/codeux#readme",
-  "packageManager": "pnpm@10.33.0",
+  "packageManager": "pnpm@11.13.0",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -30,7 +30,7 @@
     "README.md"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13"
   },
   "publishConfig": {
     "access": "public",
@@ -73,6 +73,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:backend:coverage": "vitest run tests/backend --coverage",
+    "check:dashboard-i18n": "node scripts/check-dashboard-i18n.mjs",
     "quality:guardrails": "node scripts/check-quality-guardrails.mjs",
     "sync:docs-web": "node scripts/sync-docs-web.mjs",
     "check:docs-web": "node scripts/sync-docs-web.mjs --check",

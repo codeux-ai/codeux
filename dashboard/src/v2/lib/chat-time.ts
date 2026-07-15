@@ -1,3 +1,6 @@
+import type { DashboardLocale } from "../i18n/locales.js";
+import { translateChatMessage } from "../i18n/messages/chat.js";
+
 const parseChatTime = (iso: string | null | undefined): Date | null => {
   if (!iso) {
     return null;
@@ -12,39 +15,47 @@ export const toChatTimestampMs = (iso: string | null | undefined, fallback = 0):
   return date ? date.getTime() : fallback;
 };
 
-export const formatChatTime = (iso: string | null | undefined): string => {
+export const formatChatTime = (
+  iso: string | null | undefined,
+  locale: DashboardLocale = "en",
+): string => {
   const date = parseChatTime(iso);
   if (!date) {
     return "";
   }
 
-  return date.toLocaleTimeString("en-US", {
+  return new Intl.DateTimeFormat(locale, {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-  });
+  }).format(date);
 };
 
-export const formatRelativeChatTime = (iso: string | null | undefined): string => {
+export const formatRelativeChatTime = (
+  iso: string | null | undefined,
+  locale: DashboardLocale = "en",
+  nowMs = Date.now(),
+): string => {
   if (!iso) {
-    return "No messages";
+    return translateChatMessage(locale, "noMessagesYet");
   }
 
   const timestamp = toChatTimestampMs(iso, Number.NaN);
   if (Number.isNaN(timestamp)) {
-    return "Just now";
+    return locale === "de" ? "Gerade eben" : "Just now";
   }
 
-  const diffMs = Math.max(0, Date.now() - timestamp);
+  const diffMs = Math.max(0, nowMs - timestamp);
   const mins = Math.floor(diffMs / 60000);
   if (mins < 60) {
-    return `${mins}m ago`;
+    return locale === "de" ? `vor ${new Intl.NumberFormat(locale).format(mins)} Min.` : `${mins}m ago`;
   }
 
   const hours = Math.floor(mins / 60);
   if (hours < 24) {
-    return `${hours}h ago`;
+    return locale === "de" ? `vor ${new Intl.NumberFormat(locale).format(hours)} Std.` : `${hours}h ago`;
   }
 
-  return `${Math.floor(hours / 24)}d ago`;
+  const days = Math.floor(hours / 24);
+  return locale === "de" ? `vor ${new Intl.NumberFormat(locale).format(days)} T.` : `${days}d ago`;
 };

@@ -1,8 +1,9 @@
 /**
  * @vitest-environment jsdom
  */
-import { fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { fireEvent, render as testingRender, screen, waitFor } from "@testing-library/preact";
 import { cleanup } from "@testing-library/preact";
+import type { ComponentChild } from "preact";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, afterEach, beforeEach } from "vitest";
 import { useOnboardingState } from "../../../dashboard/src/v2/hooks/useOnboardingState.js";
@@ -27,6 +28,12 @@ import {
   easyOnboardingSteps,
   onboardingFlowReducer,
 } from "../../../dashboard/src/v2/components/onboarding/use-onboarding-step-flow.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+import type { DashboardLocale } from "../../../dashboard/src/v2/i18n/locales.js";
+
+const render = (ui: ComponentChild, locale: DashboardLocale = "en") => testingRender(
+  <DashboardI18nProvider initialLocale={locale} storage={null}>{ui}</DashboardI18nProvider>,
+);
 
 const { navigateMock } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
@@ -350,6 +357,34 @@ describe("GuidedDashboardTour integration", () => {
     expect(queryByRole("dialog")).toBeNull();
   });
 
+  it("dismisses the German tour from the narrow layout", async () => {
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(390);
+    createTourTarget("project-selector");
+
+    render(<GuidedDashboardTour />, "de");
+    window.dispatchEvent(new CustomEvent(DASHBOARD_TOUR_START_EVENT));
+
+    expect(await screen.findByRole("dialog", { name: "Projekte" })).not.toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Geführte Tour bei Projekte überspringen" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(window.localStorage.getItem("codeux:dashboard-tour-hidden:v1")).toBe("true");
+  });
+
+  it("supports German keyboard navigation and Escape dismissal on desktop", async () => {
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(1280);
+    createTourTarget("project-selector");
+    createTourTarget("docker-containers");
+
+    render(<GuidedDashboardTour />, "de");
+    window.dispatchEvent(new CustomEvent(DASHBOARD_TOUR_START_EVENT));
+
+    expect(await screen.findByRole("dialog", { name: "Projekte" })).not.toBeNull();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(await screen.findByRole("dialog", { name: "Docker-Container" })).not.toBeNull();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
   it("restores focus after Escape closes the tour", async () => {
     const launcher = document.createElement("button");
     launcher.textContent = "Start tour";
@@ -452,6 +487,7 @@ describe("GuidedDashboardTour integration", () => {
 
 describe("OnboardingExperience integration", () => {
   afterEach(() => {
+    vi.clearAllMocks();
     vi.restoreAllMocks();
     clearLivePayloadCacheForTests();
     cleanup();
@@ -504,6 +540,76 @@ describe("OnboardingExperience integration", () => {
     await userEvent.click(screen.getByRole("button", { name: "Go to Installation" }));
 
     expect(await screen.findByRole("button", { name: /Installation/i, current: "step" })).not.toBeNull();
+  });
+
+  it("supports German provider selection and Jira validation without changing draft values", async () => {
+    const systemSettings = createSystemSettings();
+    vi.mocked(settingsApi.fetchSystemSettings).mockResolvedValue(systemSettings);
+    vi.mocked(settingsApi.saveSystemSettings).mockResolvedValue(systemSettings);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("/api/user/onboarding")) {
+        return new Response(JSON.stringify({ completed: false, onboardingCompletedAt: null }), { status: 200 });
+      }
+      if (url.endsWith("/api/onboarding/readiness")) {
+        return new Response(JSON.stringify({
+          checkedAt: "2026-06-01T00:00:00.000Z",
+          cluster: { status: "ready", label: "Healthy API label", detail: "Runtime API detail." },
+          dependencies: [],
+          providers: [],
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+
+    render(<OnboardingExperience />, "de");
+
+    await userEvent.click(await screen.findByRole("button", { name: "Zu Anbieter auswählen" }));
+    const codex = screen.getByRole("button", { name: "Anbieter Codex auswählen" });
+    await userEvent.click(codex);
+    expect(codex.getAttribute("aria-pressed")).toBe("true");
+    await userEvent.click(screen.getByRole("button", { name: "Zu Jira" }));
+    await userEvent.type(screen.getByLabelText("Jira-Website-URL"), "https://example.atlassian.net");
+    await userEvent.click(screen.getByRole("button", { name: "Weiter" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Gib ein Jira-API-Token ein");
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Jira-API-Token")));
+    expect(systemSettings.integrations.jira?.host).toBe("");
+  });
+
+  it("announces German completion progress while preventing duplicate submission", async () => {
+    const systemSettings = createSystemSettings();
+    let resolveSave: (value: SystemSettings) => void = () => {};
+    vi.mocked(settingsApi.fetchSystemSettings).mockResolvedValue(systemSettings);
+    vi.mocked(settingsApi.saveSystemSettings).mockReturnValue(new Promise((resolve) => {
+      resolveSave = resolve;
+    }));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("/api/user/onboarding")) {
+        return new Response(JSON.stringify({ completed: false, onboardingCompletedAt: null }), { status: 200 });
+      }
+      if (url.endsWith("/api/onboarding/readiness")) {
+        return new Response(JSON.stringify({
+          checkedAt: "2026-06-01T00:00:00.000Z",
+          cluster: { status: "ready", label: "Healthy", detail: "Runtime environment is ready." },
+          dependencies: [], providers: [],
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+
+    render(<OnboardingExperience />, "de");
+
+    await userEvent.click(await screen.findByRole("button", { name: "Zu Darstellung" }));
+    const finish = screen.getByRole("button", { name: "Abschließen" });
+    await userEvent.dblClick(finish);
+
+    expect(await screen.findByRole("button", { name: "Wird gespeichert" })).toHaveProperty("disabled", true);
+    expect(screen.getByText("Einrichtungseinstellungen werden gespeichert")).not.toBeNull();
+    expect(settingsApi.saveSystemSettings).toHaveBeenCalledTimes(1);
+    resolveSave(systemSettings);
   });
 
   it("runs the recommended dependency installer and refreshes readiness after completion", async () => {

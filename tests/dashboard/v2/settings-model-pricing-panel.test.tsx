@@ -1,8 +1,14 @@
 /** @vitest-environment happy-dom */
-import { h } from "preact";
+import { h, type ComponentChildren } from "preact";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/preact";
+import { render as renderTestingLibrary, screen, fireEvent, cleanup } from "@testing-library/preact";
 import { SettingsModelPricingPanel } from "../../../dashboard/src/v2/components/settings/panels/SettingsModelPricingPanel.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
+import type { DashboardLocale } from "../../../dashboard/src/v2/i18n/locales.js";
+
+const render = (ui: ComponentChildren, locale: DashboardLocale = "en") => renderTestingLibrary(
+  <DashboardI18nProvider initialLocale={locale} storage={null}>{ui}</DashboardI18nProvider>,
+);
 
 const CATALOG = [
   {
@@ -299,5 +305,14 @@ describe("SettingsModelPricingPanel", () => {
     expect(screen.getByText("Antigravity GPT OSS")).toBeDefined();
     expect(screen.queryByText("custom — gemini-3.5-flash")).toBeNull();
     expect(screen.queryByText("Google — Claude Sonnet 4.6")).toBeNull();
+  });
+
+  it("formats German catalogue prices without changing model ids", async () => {
+    const systemSettings = buildSystemSettings();
+    render(<SettingsModelPricingPanel state={{ systemSettings, updateSystem: vi.fn() } as any} />, "de");
+
+    expect(await screen.findByText("OpenAI — GPT-5.5")).toBeDefined();
+    expect(screen.getByText("$5/M Eingabe • $30/M Ausgabe • $0,5/M Cache")).toBeDefined();
+    expect(systemSettings.integrations.providers.codex.customModel).toBe("gpt-5.5");
   });
 });

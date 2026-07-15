@@ -4,6 +4,14 @@ The **Tasks** page (`/tasks`) is a Kanban-style task board for the active projec
 
 Use it when you want to review planned work, create or edit a task, check dependency blockers, or choose how a specific task should be executed.
 
+## Language and task content
+
+The Tasks page follows the dashboard language setting and is fully available in English and German. This includes board headings, filters, lanes, task actions, dependency and review labels, editor validation, confirmations, loading and empty states, and screen-reader announcements. Counts (including thousands separators), dates, elapsed durations, and rating values use the conventions of the selected language.
+
+Localization never rewrites task data or worker output. Task keys, titles, descriptions, Markdown prompts, project and sprint names, branch and pull-request details, provider and agent names, QA and review text, execution messages, and backend error details remain exactly as stored or received. Switching the dashboard language therefore changes only the surrounding interface, not the content sent to a worker or persisted through create, edit, rerun, dependency, and delete operations.
+
+Sprint schedules on this page are formatted in the selected language directly from their start and end dates. Sprints without valid dates show a localized open-schedule fallback. The task-time labels produced by the dashboard for completed, review, active, not-started, and optimistic states are also localized, while provider and API runtime values remain verbatim.
+
 ## Project and sprint scope
 
 The global project selector in the navbar owns the active project. Changing projects while you are on `/tasks` updates the router to the new project and resets any stale sprint filter that belonged to the previous project. A project-aware deep link is consumed once when it opens; it is not continuously enforced afterward. An older mounted Tasks tab therefore follows later project changes instead of switching the selector back, including when another dashboard tab changes the active project.
@@ -46,7 +54,7 @@ Task cards use the shared bright delivery workflow badge in place of the standal
 | Blue pencil, **QA edits** / **QA changes requested** | QA completed successfully and requested changes. This is an actionable review outcome, not a provider failure. |
 | Red X, **QA failed** | The QA provider run failed, errored, or was cancelled before returning a usable verdict. It does not mean QA requested code changes. |
 
-Hovering, focusing, or activating the badge opens one viewport-positioned interaction region without a visible outer card. Its opaque Delivery flow card contains six circles connected by motion-safe animated dots. When review data exists, a floating responsive arrow points to an independent opaque QA review card with the outcome, summary, findings, fix instructions, target task key, reviewer, reviewed time, and generated follow-up tasks. `Escape` closes the region and restores focus to the exact workflow or QA trigger that opened it; outside pointer or touch input dismisses it.
+Hovering, focusing, or activating the badge opens one viewport-positioned interaction region on a lightly translucent, blurred outer surface. Its opaque Delivery flow card contains six vertically centered circles connected by motion-safe animated dots. When review data exists, a floating responsive arrow points to the opaque QA review card with the outcome, summary, findings, fix instructions, target task key, reviewer, reviewed time, and generated follow-up tasks. `Escape` closes the region and restores focus to the exact workflow or QA trigger that opened it; outside pointer or touch input dismisses it.
 
 Generated follow-up task specifications are collapsed initially, so long prompts do not dominate the review. Each **Follow-up task N** button exposes `aria-expanded` and can be toggled with the keyboard or touch. Expansion reveals the generated title, description, priority, dependency task keys (or **None**), and full Markdown prompt in a bounded scrolling area. The card uses one column on constrained screens, may split summary and findings on wider screens, clamps to the viewport, and scrolls vertically when needed. Reduced motion removes spinner, pulse, rotation, and transition movement without removing labels, borders, focus rings, expanded content, or state semantics.
 

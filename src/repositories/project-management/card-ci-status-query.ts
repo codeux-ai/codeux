@@ -52,6 +52,22 @@ export function loadCardCiStatusEvidence(
 
   const taskGateRows = storage.executeChunkedInQuery<LatestTaskGateRow>({
     sqlPrefix: `
+      WITH latest_sprint_runs AS (
+        SELECT sprint_id, id, started_at, created_at
+        FROM (
+          SELECT
+            sr.sprint_id,
+            sr.id,
+            sr.started_at,
+            sr.created_at,
+            ROW_NUMBER() OVER (
+              PARTITION BY sr.sprint_id
+              ORDER BY COALESCE(sr.started_at, sr.created_at) DESC, sr.created_at DESC, sr.rowid DESC
+            ) AS row_number
+          FROM sprint_runs sr
+        )
+        WHERE row_number = 1
+      )
       SELECT task_id, event_id, payload_json, created_at
       FROM (
         SELECT
@@ -65,9 +81,18 @@ export function loadCardCiStatusEvidence(
           ) AS row_number
         FROM task_run_events tre
         INNER JOIN task_runs tr ON tr.id = tre.task_run_id
+        LEFT JOIN latest_sprint_runs lsr ON lsr.sprint_id = tr.sprint_id
         WHERE tr.task_id`,
     sqlSuffix: `
           AND tre.event_type = 'ci_gate_status'
+          AND (
+            lsr.id IS NULL
+            OR tr.sprint_run_id = lsr.id
+            OR (
+              tr.sprint_run_id IS NULL
+              AND tre.created_at >= COALESCE(lsr.started_at, lsr.created_at)
+            )
+          )
       )
       WHERE row_number = 1
       ORDER BY task_id ASC
@@ -83,6 +108,20 @@ export function loadCardCiStatusEvidence(
 
   const mainGateRows = storage.executeChunkedInQuery<LatestMainMergeGateRow>({
     sqlPrefix: `
+      WITH latest_sprint_runs AS (
+        SELECT sprint_id, id
+        FROM (
+          SELECT
+            sr.sprint_id,
+            sr.id,
+            ROW_NUMBER() OVER (
+              PARTITION BY sr.sprint_id
+              ORDER BY COALESCE(sr.started_at, sr.created_at) DESC, sr.created_at DESC, sr.rowid DESC
+            ) AS row_number
+          FROM sprint_runs sr
+        )
+        WHERE row_number = 1
+      )
       SELECT sprint_id, event_id, payload_json, created_at
       FROM (
         SELECT
@@ -96,6 +135,7 @@ export function loadCardCiStatusEvidence(
           ) AS row_number
         FROM sprint_run_events sre
         INNER JOIN sprint_runs sr ON sr.id = sre.sprint_run_id
+        INNER JOIN latest_sprint_runs lsr ON lsr.id = sr.id
         WHERE sr.sprint_id`,
     sqlSuffix: `
           AND sre.event_type = 'main_merge_gate_status'
@@ -112,17 +152,42 @@ export function loadCardCiStatusEvidence(
     });
   }
 
-  const attentionSqlSuffix = `
+  const activeAttentionSql = `
       AND pai.status IN ('open', 'claimed')
       AND pai.attention_type IN ('ci_fix_required', 'human_escalation_required', 'dashboard_reply_required')
-    ORDER BY pai.updated_at DESC, pai.opened_at DESC, pai.id DESC
   `;
   const taskAttentionRows = storage.executeChunkedInQuery<ActiveCiAttentionRow>({
     sqlPrefix: `
-      SELECT pai.id, pai.sprint_id, pai.task_id, pai.attention_type, pai.payload_json
+      SELECT
+        pai.id,
+        COALESCE(pai.sprint_id, attention_run.sprint_id, attention_task.sprint_id) AS sprint_id,
+        pai.task_id,
+        pai.attention_type,
+        pai.payload_json
       FROM project_attention_items pai
+      LEFT JOIN sprint_runs attention_run ON attention_run.id = pai.sprint_run_id
+      LEFT JOIN tasks attention_task ON attention_task.id = pai.task_id
       WHERE pai.task_id`,
-    sqlSuffix: attentionSqlSuffix,
+    sqlSuffix: `
+      ${activeAttentionSql}
+      AND (
+        pai.sprint_run_id IS NULL
+        OR pai.sprint_run_id = (
+          SELECT latest_run.id
+          FROM sprint_runs latest_run
+          WHERE latest_run.sprint_id = COALESCE(
+            pai.sprint_id,
+            attention_run.sprint_id,
+            attention_task.sprint_id
+          )
+          ORDER BY COALESCE(latest_run.started_at, latest_run.created_at) DESC,
+            latest_run.created_at DESC,
+            latest_run.rowid DESC
+          LIMIT 1
+        )
+      )
+      ORDER BY pai.updated_at DESC, pai.opened_at DESC, pai.id DESC
+    `,
     items: taskIds,
   });
   const sprintAttentionRows = storage.executeChunkedInQuery<ActiveCiAttentionRow>({
@@ -136,7 +201,22 @@ export function loadCardCiStatusEvidence(
       FROM project_attention_items pai
       LEFT JOIN sprint_runs sr ON sr.id = pai.sprint_run_id
       WHERE COALESCE(pai.sprint_id, sr.sprint_id)`,
-    sqlSuffix: attentionSqlSuffix,
+    sqlSuffix: `
+      ${activeAttentionSql}
+      AND (
+        pai.sprint_run_id IS NULL
+        OR pai.sprint_run_id = (
+          SELECT latest_run.id
+          FROM sprint_runs latest_run
+          WHERE latest_run.sprint_id = COALESCE(pai.sprint_id, sr.sprint_id)
+          ORDER BY COALESCE(latest_run.started_at, latest_run.created_at) DESC,
+            latest_run.created_at DESC,
+            latest_run.rowid DESC
+          LIMIT 1
+        )
+      )
+      ORDER BY pai.updated_at DESC, pai.opened_at DESC, pai.id DESC
+    `,
     items: sprintIds,
   });
   const attentionRows = [...new Map(

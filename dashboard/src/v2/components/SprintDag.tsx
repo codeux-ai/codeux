@@ -7,6 +7,7 @@ import type { ExecutionTaskDispatchSummary, Subtask } from "../../types.js";
 import { buildSprintDagModel, type SprintDagEdgeModel, type SprintDagNodeModel } from "../lib/sprint-dag.js";
 import { WaveFluid } from "./ui/WaveFluid.js";
 import { BorderTrace } from "./ui/BorderTrace.js";
+import { useLiveI18n } from "../i18n/messages/live.js";
 
 interface SprintDagProps {
   tasks?: Subtask[];
@@ -29,7 +30,6 @@ type Tone = {
   glow: string;
   badge: string;
   card: string;
-  label: string;
   dim: string;
   icon: FunctionComponent<any>;
 };
@@ -51,7 +51,6 @@ function getNodeTone(node: SprintDagNodeModel): Tone {
         glow: "drop-shadow-[0_18px_34px_rgba(0,224,160,0.08)]",
         badge: "border-signal-500/25 bg-signal-500/12 text-signal-600 dark:text-signal-300",
         card: "border-signal-500/20 bg-white/80 dark:bg-void-800/78",
-        label: "Running",
         dim: "",
         icon: Activity,
       };
@@ -62,7 +61,6 @@ function getNodeTone(node: SprintDagNodeModel): Tone {
         glow: "drop-shadow-[0_16px_30px_rgba(15,159,168,0.08)]",
         badge: "border-cyan-500/25 bg-cyan-500/12 text-cyan-600 dark:text-cyan-300",
         card: "border-cyan-500/18 bg-white/78 dark:bg-void-800/76",
-        label: "Coding Completed",
         dim: "",
         icon: Code2,
       };
@@ -73,7 +71,6 @@ function getNodeTone(node: SprintDagNodeModel): Tone {
         glow: "drop-shadow-[0_16px_30px_rgba(0,171,132,0.07)]",
         badge: "border-status-green/20 bg-status-green/12 text-status-green",
         card: "border-status-green/18 bg-white/78 dark:bg-void-800/76",
-        label: "Completed",
         dim: "",
         icon: CheckCircle2,
       };
@@ -84,7 +81,6 @@ function getNodeTone(node: SprintDagNodeModel): Tone {
         glow: "drop-shadow-[0_14px_26px_rgba(227,0,15,0.06)]",
         badge: "border-status-red/20 bg-status-red/12 text-status-red",
         card: "border-status-red/16 bg-white/72 dark:bg-void-800/72",
-        label: "Failed",
         dim: "opacity-85",
         icon: XCircle,
       };
@@ -96,7 +92,6 @@ function getNodeTone(node: SprintDagNodeModel): Tone {
         glow: "drop-shadow-[0_14px_26px_rgba(245,158,11,0.06)]",
         badge: "border-status-amber/20 bg-status-amber/12 text-status-amber",
         card: "border-status-amber/16 bg-white/72 dark:bg-void-800/72",
-        label: node.phase === "QUOTA" ? "Quota" : "Blocked",
         dim: "opacity-90",
         icon: AlertTriangle,
       };
@@ -108,25 +103,24 @@ function getNodeTone(node: SprintDagNodeModel): Tone {
         glow: "shadow-none",
         badge: "border-black/[0.07] bg-black/[0.04] text-slate-500 dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-slate-400",
         card: "border-black/[0.06] bg-white/70 dark:border-white/[0.06] dark:bg-void-800/68",
-        label: node.isReady ? "Ready" : "Pending",
         dim: "opacity-92",
         icon: Hourglass,
       };
   }
 }
 
-function getMergeLabel(task: Subtask): string | null {
+function getMergeLabel(task: Subtask, t: ReturnType<typeof useLiveI18n>["t"]): string | null {
   switch (task.merge_indicator) {
     case "MERGED":
-      return "Merged";
+      return t("merged");
     case "CI":
       return "CI";
     case "AUTOMERGE":
-      return "Automerge";
+      return t("automerge");
     case "MERGE_CONFLICT":
-      return "Conflict";
+      return t("conflict");
     case "MERGE_BLOCKED":
-      return "Blocked";
+      return t("blocked");
     default:
       return null;
   }
@@ -146,23 +140,23 @@ function getEdgeTone(edge: SprintDagEdgeModel): { stroke: string; opacity: numbe
   }
 }
 
-function getColumnLabel(depth: number, maxDepth: number): string {
+function getColumnLabel(depth: number, maxDepth: number, t: ReturnType<typeof useLiveI18n>["t"], formatNumber: ReturnType<typeof useLiveI18n>["formatNumber"]): string {
   if (depth === 0) {
-    return "Roots";
+    return t("roots");
   }
   if (depth === maxDepth) {
-    return "Finish";
+    return t("finish");
   }
   if (depth === 1) {
-    return "Build";
+    return t("build");
   }
   if (depth === maxDepth - 1) {
-    return "Integration";
+    return t("integration");
   }
-  return `Layer ${depth + 1}`;
+  return t("layer", { count: formatNumber(depth + 1) });
 }
 
-function formatExecutor(dispatch?: ExecutionTaskDispatchSummary): string | null {
+function formatExecutor(dispatch: ExecutionTaskDispatchSummary | undefined, t: ReturnType<typeof useLiveI18n>["t"]): string | null {
   if (!dispatch?.executorType) {
     return null;
   }
@@ -172,14 +166,14 @@ function formatExecutor(dispatch?: ExecutionTaskDispatchSummary): string | null 
     case "jules":
       return "Jules";
     default:
-      return "Auto";
+      return t("automatic");
   }
 }
 
 
-function renderDagNodeTooltipContent(node: SprintDagNodeModel) {
+function renderDagNodeTooltipContent(node: SprintDagNodeModel, t: ReturnType<typeof useLiveI18n>["t"], formatNumber: ReturnType<typeof useLiveI18n>["formatNumber"]) {
   const hover = node.hover;
-  const phaseLabel = node.phase === "CODING_COMPLETED" ? "Coding Done" : node.phase.toLowerCase();
+  const phaseLabel = t(node.phase === "CODING_COMPLETED" ? "codingDone" : node.phase === "RUNNING" ? "running" : node.phase === "COMPLETED" ? "completed" : node.phase === "FAILED" ? "failed" : node.phase === "BLOCKED" ? "blocked" : node.phase === "QUOTA" ? "quota" : "pending");
   const dependencies = hover?.dependencies || [];
 
   return (
@@ -199,17 +193,17 @@ function renderDagNodeTooltipContent(node: SprintDagNodeModel) {
 
         <div className="rounded-[1rem] border border-black/[0.06] bg-black/[0.025] p-3 dark:border-white/[0.07] dark:bg-white/[0.035]">
           <div className="mb-2 flex items-center justify-between gap-3">
-            <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Prompt</div>
-            <div className="font-mono text-[9px] text-slate-400">{hover?.prompt?.length || 0} chars</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{t("prompt")}</div>
+            <div className="font-mono text-[9px] text-slate-400">{t("characters", { count: formatNumber(hover?.prompt?.length || 0) })}</div>
           </div>
           <div className="max-h-32 overflow-y-auto pr-1 font-mono text-xs leading-relaxed text-slate-600 break-words whitespace-pre-wrap dark:text-slate-300 dropdown-scrollbar">
-            {hover?.prompt || "No prompt available."}
+            {hover?.prompt || t("noPrompt")}
           </div>
         </div>
 
         {dependencies.length > 0 && (
           <div className="rounded-[1rem] border border-black/[0.06] bg-white/70 p-3 dark:border-white/[0.07] dark:bg-white/[0.035]">
-            <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Waiting on</div>
+            <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{t("waitingOn")}</div>
             <ul className="flex max-h-24 flex-col gap-1 overflow-y-auto pr-1 dropdown-scrollbar">
               {dependencies.map((dep) => (
                 <li key={dep.id} className="flex items-center gap-2 rounded-lg bg-black/[0.025] px-2 py-1.5 text-[11px] text-slate-600 dark:bg-white/[0.035] dark:text-slate-300">
@@ -223,9 +217,9 @@ function renderDagNodeTooltipContent(node: SprintDagNodeModel) {
 
         <div className="grid grid-cols-3 gap-2">
           {[
-            ["Depth", String(node.depth + 1)],
-            ["In", String(hover?.counters.incoming || 0)],
-            ["Out", String(hover?.counters.outgoing || 0)],
+            [t("depth"), formatNumber(node.depth + 1)],
+            [t("incoming"), formatNumber(hover?.counters.incoming || 0)],
+            [t("out"), formatNumber(hover?.counters.outgoing || 0)],
           ].map(([label, value]) => (
             <div key={label} className="rounded-[0.9rem] border border-black/[0.06] bg-white/75 px-3 py-2 dark:border-white/[0.07] dark:bg-white/[0.04]">
               <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{label}</div>
@@ -258,10 +252,11 @@ const areDagNodePropsEqual = (
 };
 
 const DagNode = memo(({ node, dispatch, onNodeClick }: { node: SprintDagNodeModel & { x: number; y: number; }, dispatch?: ExecutionTaskDispatchSummary, onNodeClick?: (node: SprintDagNodeModel & { x: number; y: number; }) => void }) => {
+  const { t, tp, formatNumber } = useLiveI18n();
   const tone = getNodeTone(node);
-  const executorLabel = formatExecutor(dispatch);
-  const mergeLabel = getMergeLabel(node.task);
-  const phaseLabel = node.phase === "CODING_COMPLETED" ? "Coding Done" : tone.label;
+  const executorLabel = formatExecutor(dispatch, t);
+  const mergeLabel = getMergeLabel(node.task, t);
+  const phaseLabel = t(node.phase === "CODING_COMPLETED" ? "codingDone" : node.phase === "RUNNING" ? "running" : node.phase === "COMPLETED" ? "completed" : node.phase === "FAILED" ? "failed" : node.phase === "BLOCKED" ? "blocked" : node.phase === "QUOTA" ? "quota" : "pending");
 
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [tooltipSide, setTooltipSide] = useState<"right" | "left">("right");
@@ -313,7 +308,7 @@ const DagNode = memo(({ node, dispatch, onNodeClick }: { node: SprintDagNodeMode
           className={`pointer-events-none absolute ${tooltipSide === "right" ? "left-[calc(100%+14px)]" : "right-[calc(100%+14px)] left-auto"} top-0 z-50 w-[22rem] max-w-[calc(100vw-2rem)] ${tooltipSide === "right" ? "translate-x-2" : "-translate-x-2"} scale-[0.98] overflow-hidden rounded-[1.45rem] border border-black/[0.08] bg-white/98 p-4 text-slate-700 opacity-0 drop-shadow-[0_18px_34px_rgba(15,23,42,0.18)] backdrop-blur-sm transition-all duration-180 ease-out group-hover/dag-node:pointer-events-auto group-hover/dag-node:translate-x-0 group-hover/dag-node:scale-100 group-hover/dag-node:opacity-100 group-focus-within/dag-node:pointer-events-auto group-focus-within/dag-node:translate-x-0 group-focus-within/dag-node:scale-100 group-focus-within/dag-node:opacity-100 dark:border-white/[0.09] dark:bg-void-800/98 dark:text-slate-200 dark:drop-shadow-[0_22px_44px_rgba(0,0,0,0.42)]`}
           role="tooltip"
         >
-          {renderDagNodeTooltipContent(node)}
+          {renderDagNodeTooltipContent(node, t, formatNumber)}
         </div>
 
         <div className={`relative isolate flex h-full w-full flex-col overflow-hidden rounded-[1.4rem] border ${tone.card} p-4.5 backdrop-blur-sm transition-all duration-500 group-hover/dag-node:scale-[1.02]`}>
@@ -342,12 +337,12 @@ const DagNode = memo(({ node, dispatch, onNodeClick }: { node: SprintDagNodeMode
                   </span>
                   {node.incoming.length === 0 && (
                     <span className="shrink-0 rounded-full border border-ember-500/20 bg-ember-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.08em] text-ember-600 dark:text-ember-400">
-                      Root
+                      {t("root")}
                     </span>
                   )}
                   {node.isReady && (
                     <span className="shrink-0 rounded-full border border-signal-500/20 bg-signal-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.08em] text-signal-600 dark:text-signal-300">
-                      Ready
+                      {t("ready")}
                     </span>
                   )}
                 </div>
@@ -381,8 +376,8 @@ const DagNode = memo(({ node, dispatch, onNodeClick }: { node: SprintDagNodeMode
 
             <div className="mt-auto grid grid-cols-[1fr_auto] items-end gap-3 pt-3">
               <div className="min-w-0 rounded-2xl border border-black/[0.045] bg-white/38 px-3 py-2 font-mono text-[10px] leading-tight text-slate-500 dark:border-white/[0.055] dark:bg-white/[0.035] dark:text-slate-400">
-                <div className="truncate">{node.incoming.length} deps in</div>
-                <div className="truncate">{node.outgoing.length} deps out</div>
+                <div className="truncate">{tp("dependenciesIn", node.incoming.length, { count: formatNumber(node.incoming.length) })}</div>
+                <div className="truncate">{tp("dependenciesOut", node.outgoing.length, { count: formatNumber(node.outgoing.length) })}</div>
               </div>
               <div className="flex min-w-0 max-w-[7.5rem] flex-col items-end rounded-2xl border border-black/[0.045] bg-white/38 px-3 py-2 text-right font-mono text-[10px] leading-tight text-slate-500 dark:border-white/[0.055] dark:bg-white/[0.035] dark:text-slate-400">
                 {executorLabel && <span className="max-w-full truncate">{executorLabel}</span>}
@@ -398,6 +393,7 @@ const DagNode = memo(({ node, dispatch, onNodeClick }: { node: SprintDagNodeMode
 }, areDagNodePropsEqual);
 
 export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches, hasSprintContext }) => {
+  const { locale, t, formatNumber } = useLiveI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
   const startPosRef = useRef({ x: 0, y: 0 });
@@ -406,7 +402,7 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
   const safeTasks = Array.isArray(tasks) ? tasks : [];
   const safeDispatches = Array.isArray(dispatches) ? dispatches : [];
 
-  const model = useMemo(() => buildSprintDagModel(safeTasks), [safeTasks]);
+  const model = useMemo(() => buildSprintDagModel(safeTasks, locale), [locale, safeTasks]);
 
   const dispatchByTaskId = useMemo(() => {
     const map = new Map<string, ExecutionTaskDispatchSummary>();
@@ -444,10 +440,10 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
       depth,
       x: PAD_X + depth * COL_GAP + NODE_W / 2,
       y: 40,
-      label: getColumnLabel(depth, maxDepth),
+      label: getColumnLabel(depth, maxDepth, t, formatNumber),
       count: column.length,
     }));
-  }, [model.columns, maxDepth]);
+  }, [formatNumber, model.columns, maxDepth, t]);
 
   const handleNodeClick = (node: SprintDagNodeModel & { x: number; y: number; }) => {
     if (!scrollRef.current) return;
@@ -512,12 +508,12 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
           <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-[1.3rem] border border-signal-500/20 bg-signal-500/10 text-signal-500 shadow-[0_0_24px_rgba(0,224,160,0.16)]">
             <Workflow className="h-8 w-8" strokeWidth={1.4} />
           </div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">Dependency Graph</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">{t("dependencyGraph")}</div>
           <h3 className="mt-3 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
-            The DAG wakes up with the sprint.
+            {t("dagWakes")}
           </h3>
           <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-            Start a sprint to visualize task dependencies, live execution flow, and which parts of the graph are still waiting on code, merge work, or final completion.
+            {t("dagStartDescription")}
           </p>
         </div>
       </div>
@@ -543,24 +539,24 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
           <div>
             <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
               <Workflow className="h-4 w-4" strokeWidth={1.6} />
-              Dependency Constellation
+              {t("dependencyConstellation")}
             </div>
             <h3 className="mt-2 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white md:text-[2rem]">
-              Live sprint DAG, rendered as motion.
+              {t("liveDagRendered")}
             </h3>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-              Each node is a task on the current sprint. Flow moves left to right through real dependency edges, while color and motion show what is running, merge-waiting, blocked, or fully complete.
+              {t("dagDescription")}
             </p>
           </div>
 
           <div className="w-full overflow-x-auto pb-1 xl:max-w-[58rem] xl:justify-end">
             <div className="grid min-w-[52rem] grid-cols-5 gap-2.5">
               {[
-                { label: "Roots", value: model.metrics.rootCount, icon: GitBranch, accent: "text-signal-500" },
-                { label: "Running", value: model.metrics.runningCount, icon: Activity, accent: "text-signal-500" },
-                { label: "Ready", value: model.metrics.readyCount, icon: Sparkles, accent: "text-ember-500" },
-                { label: "Longest Chain", value: model.metrics.longestChain, icon: Timer, accent: "text-cyan-500" },
-                { label: "Completed", value: model.metrics.completedCount, icon: CheckCircle2, accent: "text-status-green" },
+                { label: t("roots"), value: model.metrics.rootCount, icon: GitBranch, accent: "text-signal-500" },
+                { label: t("running"), value: model.metrics.runningCount, icon: Activity, accent: "text-signal-500" },
+                { label: t("ready"), value: model.metrics.readyCount, icon: Sparkles, accent: "text-ember-500" },
+                { label: t("longestChain"), value: model.metrics.longestChain, icon: Timer, accent: "text-cyan-500" },
+                { label: t("completed"), value: model.metrics.completedCount, icon: CheckCircle2, accent: "text-status-green" },
               ].map(({ label, value, icon: Icon, accent }) => (
                 <div
                   key={label}
@@ -570,7 +566,7 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
                     <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />
                     <span className="leading-tight">{label}</span>
                   </div>
-                  <div className="font-mono text-xl font-semibold tracking-tight text-slate-900 dark:text-white">{value}</div>
+                  <div className="font-mono text-xl font-semibold tracking-tight text-slate-900 dark:text-white">{formatNumber(value)}</div>
                 </div>
               ))}
             </div>
@@ -580,22 +576,22 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
         <div className="rounded-[1.6rem] border border-black/[0.05] bg-black/[0.02] p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3 px-2">
             <div className="flex flex-wrap items-center gap-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-              <span className="rounded-full border border-black/[0.06] bg-white/70 px-3 py-1 dark:border-white/[0.06] dark:bg-void-900/55">Scrollable canvas</span>
-              <span className="rounded-full border border-black/[0.06] bg-white/70 px-3 py-1 dark:border-white/[0.06] dark:bg-void-900/55">Dependency depth {Math.max(1, model.columns.length)}</span>
-              <span className="rounded-full border border-black/[0.06] bg-white/70 px-3 py-1 dark:border-white/[0.06] dark:bg-void-900/55">{model.metrics.codingCompletedCount} merge-stage nodes</span>
+              <span className="rounded-full border border-black/[0.06] bg-white/70 px-3 py-1 dark:border-white/[0.06] dark:bg-void-900/55">{t("scrollableCanvas")}</span>
+              <span className="rounded-full border border-black/[0.06] bg-white/70 px-3 py-1 dark:border-white/[0.06] dark:bg-void-900/55">{t("dependencyDepth", { count: formatNumber(Math.max(1, model.columns.length)) })}</span>
+              <span className="rounded-full border border-black/[0.06] bg-white/70 px-3 py-1 dark:border-white/[0.06] dark:bg-void-900/55">{t("mergeStageNodes", { count: formatNumber(model.metrics.codingCompletedCount) })}</span>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-signal-600 dark:text-signal-300">
                 <span className="h-2 w-2 rounded-full bg-signal-500 motion-safe:animate-pulse" />
-                Running
+                {t("running")}
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-cyan-600 dark:text-cyan-300">
                 <span className="h-2 w-2 rounded-full bg-cyan-500" />
-                Coding Completed
+                {t("codingCompleted")}
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-status-green/20 bg-status-green/10 px-3 py-1 text-status-green">
                 <span className="h-2 w-2 rounded-full bg-status-green" />
-                Completed
+                {t("completed")}
               </span>
             </div>
           </div>

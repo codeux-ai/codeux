@@ -52,6 +52,8 @@ import { PageContainer } from "../../components/layout/PageContainer.js";
 import { PageHeader } from "../../components/layout/PageHeader.js";
 import type { Sprint, SprintLinkedIssueInput } from "../../types.js";
 import type { SprintImportedTaskInput } from "../../types.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import { sprintsMessages } from "../../i18n/messages/sprints.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
 const SPRINT_GALLERY_VISIBILITY_STORAGE_KEY = "code_ux_sprints_show_gallery";
@@ -100,7 +102,9 @@ const storeSprintGalleryVisibility = (visible: boolean): void => {
 const SprintsProjectPlaceholder: FunctionComponent<{
   hasProjects: boolean;
   onAddProject: () => void;
-}> = ({ hasProjects, onAddProject }) => (
+}> = ({ hasProjects, onAddProject }) => {
+  const { translate } = useDashboardI18n();
+  return (
   <div className="relative overflow-hidden rounded-[2.2rem] border border-black/[0.06] bg-white/72 p-8 shadow-[0_18px_48px_rgba(15,23,42,0.07)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62 dark:shadow-[0_18px_48px_rgba(0,0,0,0.28)] md:p-10">
     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_55%_at_50%_30%,rgba(0,224,160,0.09),transparent_62%)] dark:bg-[radial-gradient(ellipse_70%_55%_at_50%_30%,rgba(0,224,160,0.13),transparent_62%)]" />
     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -115,13 +119,13 @@ const SprintsProjectPlaceholder: FunctionComponent<{
           <Layers className="h-7 w-7" strokeWidth={1.7} />
         </div>
         <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-signal-500">
-          Sprint Workspace Standby
+          {translate(sprintsMessages, "sprintWorkspaceStandby")}
         </div>
         <h2 className="mt-3 max-w-3xl font-display text-2xl font-semibold leading-[0.98] tracking-tight text-slate-900 dark:text-white md:text-5xl">
-          Project scope comes first.
+          {translate(sprintsMessages, "projectScopeFirst")}
         </h2>
         <p className="mt-5 max-w-2xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400 md:text-base">
-          Projects scope the sprint gallery. Select a project from the top navigation before creating or planning sprints.
+          {translate(sprintsMessages, "selectProjectDescription")}
         </p>
 
         <div className="mt-8 flex flex-wrap gap-3">
@@ -131,14 +135,14 @@ const SprintsProjectPlaceholder: FunctionComponent<{
             className="inline-flex min-h-[44px] items-center gap-2.5 rounded-full bg-signal-500 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white dark:text-void-900 shadow-[0_10px_30px_rgba(0,224,160,0.22)] transition-all hover:-translate-y-px hover:bg-signal-400 focus-visible:ring-2 focus-visible:ring-signal-500/40"
           >
             <Plus className="h-3.5 w-3.5" strokeWidth={2.3} />
-            {hasProjects ? "Add Project" : "Add First Project"}
+            {translate(sprintsMessages, hasProjects ? "addProject" : "addFirstProject")}
           </button>
           <Link
             to="/projects"
             className="inline-flex min-h-[44px] items-center gap-2.5 rounded-full border border-black/[0.06] bg-white/75 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-all hover:-translate-y-px hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/40 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:text-white"
           >
             <FolderOpen className="h-3.5 w-3.5 text-ember-500" strokeWidth={2.1} />
-            Manage Projects
+            {translate(sprintsMessages, "manageProjects")}
             <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.1} />
           </Link>
         </div>
@@ -148,9 +152,9 @@ const SprintsProjectPlaceholder: FunctionComponent<{
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_85%_65%_at_50%_0%,rgba(255,184,0,0.12),transparent_68%)]" />
         <div className="relative z-10 space-y-3">
           {[
-            { label: "Project", value: hasProjects ? "selectable" : "required", tone: "text-ember-500" },
-            { label: "Gallery", value: "waiting", tone: "text-signal-500" },
-            { label: "Planning", value: "locked", tone: "text-slate-500 dark:text-slate-400" },
+            { label: translate(sprintsMessages, "project"), value: translate(sprintsMessages, hasProjects ? "selectable" : "required"), tone: "text-ember-500" },
+            { label: translate(sprintsMessages, "gallery"), value: translate(sprintsMessages, "waiting"), tone: "text-signal-500" },
+            { label: translate(sprintsMessages, "planning"), value: translate(sprintsMessages, "locked"), tone: "text-slate-500 dark:text-slate-400" },
           ].map((item, index) => (
             <div
               key={item.label}
@@ -171,9 +175,11 @@ const SprintsProjectPlaceholder: FunctionComponent<{
       </div>
     </div>
   </div>
-);
+  );
+};
 
 export const SprintsPage: FunctionComponent = () => {
+  const { formatNumber, translate, translatePlural } = useDashboardI18n();
   const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
   const searchParams = useSearch({ strict: false });
   const headerRef = useRef<HTMLDivElement>(null);
@@ -498,18 +504,17 @@ export const SprintsPage: FunctionComponent = () => {
     const importedTaskCallbacks = importedTasks.length > 0
       ? {
         onPending: (count: number) => {
-          setImportedTaskFeedbackPending(
-            `Adding ${count} special imported task${count === 1 ? "" : "s"}...`,
-          );
+          setImportedTaskFeedbackPending(translatePlural(sprintsMessages, "specialTasksAdding", count, {
+            count: formatNumber(count),
+          }));
         },
         onSuccess: () => {
           clearImportedTaskFeedback();
         },
         onError: (message: string) => {
-          setImportedTaskFeedbackError(
-            `Special imported tasks were not added: ${message}`,
-            { autoDismiss: false },
-          );
+          setImportedTaskFeedbackError(translate(sprintsMessages, "specialTasksFailed", { message }), {
+            autoDismiss: false,
+          });
         },
       }
       : undefined;
@@ -523,7 +528,7 @@ export const SprintsPage: FunctionComponent = () => {
     }
     setLinkedIssues([]);
     clearImportedTaskDrafts();
-  }, [animateLatestCell, clearImportedTaskDrafts, editingSprint, handleSubmitSprint, pendingImportedTasks, clearImportedTaskFeedback, setImportedTaskFeedbackError, setImportedTaskFeedbackPending]);
+  }, [animateLatestCell, clearImportedTaskDrafts, editingSprint, formatNumber, handleSubmitSprint, pendingImportedTasks, clearImportedTaskFeedback, setImportedTaskFeedbackError, setImportedTaskFeedbackPending, translate, translatePlural]);
 
   useEffect(() => {
     setLinkedIssues(editingSprint?.linkedIssues || []);
@@ -609,17 +614,17 @@ export const SprintsPage: FunctionComponent = () => {
 
   const handleDeleteSprintFromLedger = useCallback((sprintId: string) => {
     void requestConfirm({
-      title: "Delete Sprint?",
-      body: "Are you sure you want to delete this sprint? All associated tasks and execution history will be permanently removed.",
-      confirmLabel: "Delete Sprint",
-      cancelLabel: "Cancel",
+      title: translate(sprintsMessages, "deleteSprintQuestion"),
+      body: translate(sprintsMessages, "deleteSprintBody"),
+      confirmLabel: translate(sprintsMessages, "deleteSprint"),
+      cancelLabel: translate(sprintsMessages, "cancel"),
       destructive: true,
     }).then((confirmed) => {
       if (confirmed) {
         void handleDeleteSprint(sprintId);
       }
     });
-  }, [requestConfirm, handleDeleteSprint]);
+  }, [requestConfirm, handleDeleteSprint, translate]);
 
   return (
     <ExecutionTimelineProvider
@@ -633,16 +638,16 @@ export const SprintsPage: FunctionComponent = () => {
         onCancel={handleCancel}
       />
 
-      <PageContainer aria-label="Sprints" padding={selectedProject ? "standard" : "sprintsEmpty"} className={selectedProject ? "gap-20" : "gap-4"}>
+      <PageContainer aria-label={translate(sprintsMessages, "sprints")} padding={selectedProject ? "standard" : "sprintsEmpty"} className={selectedProject ? "gap-20" : "gap-4"}>
         <div ref={headerRef} className="flex flex-col gap-5">
           <PageHeader
             icon={Target}
-            eyebrow="Iteration Cycles"
-            title="Active Sprints"
+            eyebrow={translate(sprintsMessages, "iterationCycles")}
+            title={translate(sprintsMessages, "activeSprints")}
             subtitle={
               selectedProject
-                ? `Define the sprint once for ${selectedProject.name}. The Planning agent can improve the prompt, plan subtasks, and launch the sprint without manual task entry.`
-                : "Select a project to manage sprint structure."
+                ? translate(sprintsMessages, "selectedProjectSubtitle", { project: selectedProject.name })
+                : translate(sprintsMessages, "selectProjectSubtitle")
             }
             actions={
               <div className="flex w-full min-w-0 flex-col gap-2 lg:w-auto lg:items-end">
@@ -652,7 +657,7 @@ export const SprintsPage: FunctionComponent = () => {
                     onClick={() => setShowSprintGallery((current) => !current)}
                     disabled={!selectedProject}
                     aria-pressed={showSprintGallery}
-                    aria-label={showSprintGallery ? "Hide Gallery" : "Show Gallery"}
+                    aria-label={translate(sprintsMessages, showSprintGallery ? "hideGallery" : "showGallery")}
                     className="inline-flex min-w-0 items-center justify-center gap-2 rounded-full px-2 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/40 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-400 dark:hover:bg-white/[0.05] dark:hover:text-white sm:px-3 sm:tracking-[0.14em]"
                   >
                     {showSprintGallery ? (
@@ -660,13 +665,13 @@ export const SprintsPage: FunctionComponent = () => {
                     ) : (
                       <Eye className="h-3.5 w-3.5 shrink-0 text-signal-500" strokeWidth={2.2} />
                     )}
-                    <span className="hidden sm:inline">{showSprintGallery ? "Hide Gallery" : "Show Gallery"}</span>
-                    <span className="min-w-0 truncate sm:hidden">Gallery</span>
+                    <span className="hidden sm:inline">{translate(sprintsMessages, showSprintGallery ? "hideGallery" : "showGallery")}</span>
+                    <span className="min-w-0 truncate sm:hidden">{translate(sprintsMessages, "gallery")}</span>
                   </button>
                   {[
-                    { label: "Total", value: sortedSprints.length, icon: Target },
-                    { label: "Completed", value: completedCount, icon: CheckCircle2 },
-                    { label: "In Work", value: inWorkCount, icon: Activity },
+                    { label: translate(sprintsMessages, "total"), value: sortedSprints.length, icon: Target },
+                    { label: translate(sprintsMessages, "completed"), value: completedCount, icon: CheckCircle2 },
+                    { label: translate(sprintsMessages, "inWork"), value: inWorkCount, icon: Activity },
                   ].map(({ label, value, icon: Icon }) => (
                     <div
                       key={label}
@@ -674,7 +679,7 @@ export const SprintsPage: FunctionComponent = () => {
                     >
                       <Icon className="h-3.5 w-3.5 shrink-0 text-signal-500" strokeWidth={2} />
                       <span className="min-w-0 truncate">{label}</span>
-                      <span className="shrink-0 font-mono text-slate-700 dark:text-white">{value}</span>
+                      <span className="shrink-0 font-mono text-slate-700 dark:text-white">{formatNumber(value)}</span>
                     </div>
                   ))}
                 </div>
@@ -709,7 +714,7 @@ export const SprintsPage: FunctionComponent = () => {
                       setShowQuicksprint(!showQuicksprint);
                     }}
                     disabled={!selectedProject}
-                    aria-label={showQuicksprint ? "Close Quicksprint" : "Quicksprint"}
+                    aria-label={translate(sprintsMessages, showQuicksprint ? "closeQuicksprint" : "quicksprint")}
                     className={`inline-flex min-w-0 items-center justify-center gap-2 rounded-full px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:opacity-50 sm:px-5 ${
                       showQuicksprint
                         ? "border border-black/[0.06] bg-white/72 text-slate-600 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
@@ -717,8 +722,8 @@ export const SprintsPage: FunctionComponent = () => {
                     }`}
                   >
                     {showQuicksprint ? <X className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} /> : <Zap className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />}
-                    <span className="hidden sm:inline">{showQuicksprint ? "Close Quicksprint" : "Quicksprint"}</span>
-                    <span className="sm:hidden">{showQuicksprint ? "Close" : "Quick"}</span>
+                    <span className="hidden sm:inline">{translate(sprintsMessages, showQuicksprint ? "closeQuicksprint" : "quicksprint")}</span>
+                    <span className="sm:hidden">{translate(sprintsMessages, showQuicksprint ? "close" : "quick")}</span>
                   </button>
                   <button
                     type="button"
@@ -738,7 +743,7 @@ export const SprintsPage: FunctionComponent = () => {
                       setShowCreateComposer(true);
                     }}
                     disabled={!selectedProject}
-                    aria-label={(showCreateComposer || editingSprint) ? "Close Composer" : "New Sprint"}
+                    aria-label={translate(sprintsMessages, (showCreateComposer || editingSprint) ? "closeComposer" : "newSprint")}
                     className={`inline-flex min-w-0 items-center justify-center gap-2 rounded-full px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:opacity-50 sm:px-5 ${
                       showCreateComposer
                         ? "border border-black/[0.06] bg-white/72 text-slate-600 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
@@ -746,8 +751,8 @@ export const SprintsPage: FunctionComponent = () => {
                     }`}
                   >
                     {(showCreateComposer || editingSprint) ? <X className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} /> : <Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />}
-                    <span className="hidden sm:inline">{(showCreateComposer || editingSprint) ? "Close Composer" : "New Sprint"}</span>
-                    <span className="sm:hidden">{(showCreateComposer || editingSprint) ? "Close" : "New"}</span>
+                    <span className="hidden sm:inline">{translate(sprintsMessages, (showCreateComposer || editingSprint) ? "closeComposer" : "newSprint")}</span>
+                    <span className="sm:hidden">{translate(sprintsMessages, (showCreateComposer || editingSprint) ? "close" : "new")}</span>
                   </button>
                 </div>
               </div>
@@ -766,7 +771,7 @@ export const SprintsPage: FunctionComponent = () => {
                 : "border-status-red/20 bg-status-red/10 text-status-red"
             }`}>
               <Radio className="h-3.5 w-3.5" strokeWidth={2.1} />
-              {planningRoute.available ? `Planning via ${planningRoute.label}` : "No planning worker available"}
+              {planningRoute.available ? translate(sprintsMessages, "planningVia", { provider: planningRoute.label }) : translate(sprintsMessages, "noPlanningWorker")}
             </div>
           )}
         </div>
@@ -795,7 +800,7 @@ export const SprintsPage: FunctionComponent = () => {
                       || pendingActionIds.has(`sprint-resume:${pauseResumeRun.id}`)
                     );
 
-  return (
+                    return (
                       <SprintCell
                         key={sprint.id}
                         sprint={sprint}
@@ -818,17 +823,17 @@ export const SprintsPage: FunctionComponent = () => {
                         onMarkQaPassed={() => { void handleMarkQaPassed(sprint.id); }}
                         onRollback={() => setRollbackSprint(sprint)}
                         onEdit={() => {
-                      setEditingSprint(sprint);
-                      setShowCreateComposer(false);
-                      setLinkedIssues(sprint.linkedIssues || []);
-                      clearImportedTaskDrafts();
-                    }}
+                          setEditingSprint(sprint);
+                          setShowCreateComposer(false);
+                          setLinkedIssues(sprint.linkedIssues || []);
+                          clearImportedTaskDrafts();
+                        }}
                         onDelete={() => {
                           void requestConfirm({
-                            title: "Delete Sprint?",
-                            body: "Are you sure you want to delete this sprint? All associated tasks and execution history will be permanently removed.",
-                            confirmLabel: "Delete Sprint",
-                            cancelLabel: "Cancel",
+                            title: translate(sprintsMessages, "deleteSprintQuestion"),
+                            body: translate(sprintsMessages, "deleteSprintBody"),
+                            confirmLabel: translate(sprintsMessages, "deleteSprint"),
+                            cancelLabel: translate(sprintsMessages, "cancel"),
                             destructive: true,
                           }).then((confirmed) => {
                             if (confirmed) {
@@ -869,7 +874,7 @@ export const SprintsPage: FunctionComponent = () => {
                       </div>
                       <div className="flex flex-col items-center gap-1">
                         <span className="text-xs font-bold uppercase tracking-[0.2em] text-slate-300 transition-colors duration-300 group-hover:text-signal-500 dark:text-slate-600">
-                          New Sprint
+                          {translate(sprintsMessages, "newSprint")}
                         </span>
                         <span className="font-mono text-[9px] text-slate-200 transition-colors duration-300 group-hover:text-slate-400 dark:text-slate-700">
                           {nextId.toUpperCase()}
@@ -1181,10 +1186,10 @@ export const SprintsPage: FunctionComponent = () => {
               onRollback={() => setRollbackSprint(activeRowMenuSprint)}
               onDelete={() => {
                 void requestConfirm({
-                  title: "Delete Sprint?",
-                  body: "Are you sure you want to delete this sprint? All associated tasks and execution history will be permanently removed.",
-                  confirmLabel: "Delete Sprint",
-                  cancelLabel: "Cancel",
+                  title: translate(sprintsMessages, "deleteSprintQuestion"),
+                  body: translate(sprintsMessages, "deleteSprintBody"),
+                  confirmLabel: translate(sprintsMessages, "deleteSprint"),
+                  cancelLabel: translate(sprintsMessages, "cancel"),
                   destructive: true,
                 }).then((confirmed) => {
                   if (confirmed) {

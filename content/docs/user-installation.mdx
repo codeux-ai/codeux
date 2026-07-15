@@ -8,7 +8,7 @@ install and start Code UX with **no configuration**; providers are set up later 
 
 | Requirement | Needed for | Notes |
 | --- | --- | --- |
-| **Node.js 22+** | Source installs | Not required for the desktop app, which bundles its own runtime. |
+| **Node.js 22.13+** | Source installs | Not required for the desktop app, which bundles its own runtime. |
 | **Docker** | Containerized execution, helper Git, and preview containers | Required for normal runtime operation. Backend Git commands run through containerized helpers, so host Git is not required. |
 | **An agent provider** | Dispatching work | At least one of Jules, Claude Code, Codex, Gemini, Qwen Code, OpenCode, or Antigravity. See [Providers and models](/docs/user-providers-and-models). |
 | **GitHub CLI (`gh`)** | Remote merge protocol *(optional)* | Used when GitHub operations run in remote mode. |
@@ -100,8 +100,8 @@ Platform notes:
 
 ## Option 2 — From source
 
-Use a source build to develop Code UX itself or inspect the runtime. Requires Node.js 22+ and
-pnpm 10.33+.
+Use a source build to develop Code UX itself or inspect the runtime. Requires Node.js 22.13+ and
+pnpm 11.13.0.
 
 ```bash
 git clone https://github.com/codeux-ai/codeux.git

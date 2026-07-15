@@ -203,7 +203,7 @@ describe("InvocationsTable", () => {
     );
 
     const root = container as HTMLElement;
-    expect(root.textContent).toContain("provider with unusually long gateway identifier");
+    expect(root.textContent).toContain("provider_with_unusually_long_gateway_identifier");
     expect(root.textContent).toContain(longModel);
     expect(root.textContent).toContain(longError);
     expect(root.textContent).toContain(longTaskKey);

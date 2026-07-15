@@ -240,6 +240,186 @@ describe("QA review summary query", () => {
     });
   });
 
+  it("projects a later recovery verdict instead of a cancelled attempt from the same reviewer cycle", async () => {
+    const { storage, repository } = await createFixture();
+    const project = repository.createProject({ name: "Recovered QA", sourceType: "local", sourceRef: "/workspace/recovered-qa" });
+    const sprint = repository.createSprint(project.id, { name: "Recovered review" });
+    const task = repository.createTask(project.id, { sprintId: sprint.id, taskKey: "T01", title: "Recovered task" });
+    const db = storage.getDatabase();
+    const insert = db.prepare(`
+      INSERT INTO qa_review_runs (
+        id, project_id, sprint_id, task_id, trigger_type, status, outcome, run_index,
+        summary_markdown, agent_name, started_at, finished_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, 'Recovery reviewer', ?, ?, ?, ?)
+    `);
+    insert.run(
+      "task-review-cancelled",
+      project.id,
+      sprint.id,
+      task.id,
+      "task_completion",
+      "cancelled",
+      null,
+      "Interrupted before restart.",
+      "2026-07-13T11:00:00.000Z",
+      "2026-07-13T11:01:00.000Z",
+      "2026-07-13T11:00:00.000Z",
+      "2026-07-13T11:01:00.000Z",
+    );
+    insert.run(
+      "task-review-recovered",
+      project.id,
+      sprint.id,
+      task.id,
+      "task_completion",
+      "completed",
+      "pass",
+      "Recovered task review passed.",
+      "2026-07-13T11:02:00.000Z",
+      "2026-07-13T11:03:00.000Z",
+      "2026-07-13T11:02:00.000Z",
+      "2026-07-13T11:03:00.000Z",
+    );
+    insert.run(
+      "sprint-review-cancelled",
+      project.id,
+      sprint.id,
+      null,
+      "sprint_completion",
+      "cancelled",
+      null,
+      "Interrupted sprint review.",
+      "2026-07-13T12:00:00.000Z",
+      "2026-07-13T12:01:00.000Z",
+      "2026-07-13T12:00:00.000Z",
+      "2026-07-13T12:01:00.000Z",
+    );
+    insert.run(
+      "sprint-review-recovered",
+      project.id,
+      sprint.id,
+      null,
+      "sprint_completion",
+      "completed",
+      "pass",
+      "Recovered sprint review passed.",
+      "2026-07-13T12:02:00.000Z",
+      "2026-07-13T12:03:00.000Z",
+      "2026-07-13T12:02:00.000Z",
+      "2026-07-13T12:03:00.000Z",
+    );
+
+    expect(loadLatestTaskReviewSummaryMap(storage, [task.id]).get(task.id)).toMatchObject({
+      status: "completed",
+      outcome: "pass",
+      summary: "Recovered task review passed.",
+    });
+    expect(loadLatestSprintReviewSummaryMap(storage, [sprint.id]).get(sprint.id)).toMatchObject({
+      status: "completed",
+      outcome: "pass",
+      summary: "Recovered sprint review passed.",
+    });
+  });
+
+  it("does not project a prior sprint attempt task review onto the latest run", async () => {
+    const { storage, repository } = await createFixture();
+    const project = repository.createProject({ name: "Run-scoped task QA", sourceType: "local", sourceRef: "/workspace/run-scoped-task-qa" });
+    const sprint = repository.createSprint(project.id, { name: "Run-scoped task review" });
+    const scopedTask = repository.createTask(project.id, { sprintId: sprint.id, taskKey: "T01", title: "Scoped task" });
+    const legacyTask = repository.createTask(project.id, { sprintId: sprint.id, taskKey: "T02", title: "Legacy task" });
+    const db = storage.getDatabase();
+    const insertRun = db.prepare(`
+      INSERT INTO sprint_runs (
+        id, project_id, sprint_id, status, trigger_type, executor_mode,
+        started_at, finished_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 'manual', 'mixed', ?, ?, ?, ?)
+    `);
+    insertRun.run(
+      "task-qa-old-run",
+      project.id,
+      sprint.id,
+      "completed",
+      "2026-07-13T08:00:00.000Z",
+      "2026-07-13T08:30:00.000Z",
+      "2026-07-13T08:00:00.000Z",
+      "2026-07-13T08:30:00.000Z",
+    );
+    insertRun.run(
+      "task-qa-current-run",
+      project.id,
+      sprint.id,
+      "paused",
+      "2026-07-13T10:00:00.000Z",
+      null,
+      "2026-07-13T10:00:00.000Z",
+      "2026-07-13T10:00:00.000Z",
+    );
+    const insertReview = db.prepare(`
+      INSERT INTO qa_review_runs (
+        id, project_id, sprint_id, sprint_run_id, task_id, trigger_type, status, outcome, run_index,
+        summary_markdown, agent_name, started_at, finished_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 'task_completion', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    insertReview.run(
+      "task-qa-old-review",
+      project.id,
+      sprint.id,
+      "task-qa-old-run",
+      scopedTask.id,
+      "completed",
+      "pass",
+      7,
+      "Prior attempt passed.",
+      "Scoped reviewer",
+      "2026-07-13T08:20:00.000Z",
+      "2026-07-13T08:25:00.000Z",
+      "2026-07-13T08:20:00.000Z",
+      "2026-07-13T08:25:00.000Z",
+    );
+    insertReview.run(
+      "task-qa-current-legacy-review",
+      project.id,
+      sprint.id,
+      null,
+      legacyTask.id,
+      "completed",
+      "pass",
+      1,
+      "Current unlinked review passed.",
+      "Legacy reviewer",
+      "2026-07-13T10:05:00.000Z",
+      "2026-07-13T10:06:00.000Z",
+      "2026-07-13T10:05:00.000Z",
+      "2026-07-13T10:06:00.000Z",
+    );
+
+    let summaries = loadLatestTaskReviewSummaryMap(storage, [scopedTask.id, legacyTask.id]);
+    expect(summaries.has(scopedTask.id)).toBe(false);
+    expect(summaries.get(legacyTask.id)?.summary).toBe("Current unlinked review passed.");
+
+    insertReview.run(
+      "task-qa-current-review",
+      project.id,
+      sprint.id,
+      "task-qa-current-run",
+      scopedTask.id,
+      "running",
+      null,
+      1,
+      "Current attempt review in progress.",
+      "Scoped reviewer",
+      "2026-07-13T10:07:00.000Z",
+      null,
+      "2026-07-13T10:07:00.000Z",
+      "2026-07-13T10:07:00.000Z",
+    );
+    summaries = loadLatestTaskReviewSummaryMap(storage, [scopedTask.id]);
+    expect(summaries.get(scopedTask.id)).toMatchObject({
+      status: "running",
+      summary: "Current attempt review in progress.",
+    });
+  });
+
   it("uses blocking-state precedence for sprint reviewers in the latest run index", async () => {
     const { storage, repository } = await createFixture();
     const project = repository.createProject({ name: "Sprint QA", sourceType: "local", sourceRef: "/workspace/sprint-qa" });
@@ -267,5 +447,113 @@ describe("QA review summary query", () => {
     expect(summaries.get(failedSprint.id)?.reviewer).toBe("Failed reviewer");
     expect(summaries.get(erroredSprint.id)?.status).toBe("errored");
     expect(summaries.get(erroredSprint.id)?.reviewer).toBe("Errored reviewer");
+  });
+
+  it("does not project a prior sprint run review onto the latest run", async () => {
+    const { storage, repository } = await createFixture();
+    const project = repository.createProject({ name: "Run-scoped QA", sourceType: "local", sourceRef: "/workspace/run-scoped-qa" });
+    const scopedSprint = repository.createSprint(project.id, { name: "Scoped review" });
+    const manualSprint = repository.createSprint(project.id, { name: "Manual review" });
+    const db = storage.getDatabase();
+    const insertRun = db.prepare(`
+      INSERT INTO sprint_runs (
+        id, project_id, sprint_id, status, trigger_type, executor_mode,
+        started_at, finished_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 'manual', 'mixed', ?, ?, ?, ?)
+    `);
+    insertRun.run(
+      "scoped-old-run",
+      project.id,
+      scopedSprint.id,
+      "completed",
+      "2026-07-13T08:00:00.000Z",
+      "2026-07-13T08:30:00.000Z",
+      "2026-07-13T08:00:00.000Z",
+      "2026-07-13T08:30:00.000Z",
+    );
+    insertRun.run(
+      "scoped-current-run",
+      project.id,
+      scopedSprint.id,
+      "paused",
+      "2026-07-13T10:00:00.000Z",
+      null,
+      "2026-07-13T10:00:00.000Z",
+      "2026-07-13T10:00:00.000Z",
+    );
+    insertRun.run(
+      "manual-current-run",
+      project.id,
+      manualSprint.id,
+      "completed",
+      "2026-07-13T09:00:00.000Z",
+      "2026-07-13T09:30:00.000Z",
+      "2026-07-13T09:00:00.000Z",
+      "2026-07-13T09:30:00.000Z",
+    );
+
+    const insertReview = db.prepare(`
+      INSERT INTO qa_review_runs (
+        id, project_id, sprint_id, sprint_run_id, trigger_type, status, outcome, run_index,
+        summary_markdown, agent_name, started_at, finished_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 'sprint_completion', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    insertReview.run(
+      "scoped-old-review",
+      project.id,
+      scopedSprint.id,
+      "scoped-old-run",
+      "completed",
+      "pass",
+      7,
+      "Prior run passed.",
+      "Prior reviewer",
+      "2026-07-13T08:20:00.000Z",
+      "2026-07-13T08:25:00.000Z",
+      "2026-07-13T08:20:00.000Z",
+      "2026-07-13T08:25:00.000Z",
+    );
+    insertReview.run(
+      "manual-latest-review",
+      project.id,
+      manualSprint.id,
+      null,
+      "completed",
+      "pass",
+      2,
+      "Manually approved after the run.",
+      "Manual QA",
+      "2026-07-13T09:35:00.000Z",
+      "2026-07-13T09:35:00.000Z",
+      "2026-07-13T09:35:00.000Z",
+      "2026-07-13T09:35:00.000Z",
+    );
+
+    let summaries = loadLatestSprintReviewSummaryMap(storage, [scopedSprint.id, manualSprint.id]);
+    expect(summaries.has(scopedSprint.id)).toBe(false);
+    expect(summaries.get(manualSprint.id)?.summary).toBe("Manually approved after the run.");
+
+    insertReview.run(
+      "scoped-current-review",
+      project.id,
+      scopedSprint.id,
+      "scoped-current-run",
+      "running",
+      null,
+      1,
+      "Current run review in progress.",
+      "Current reviewer",
+      "2026-07-13T10:05:00.000Z",
+      null,
+      "2026-07-13T10:05:00.000Z",
+      "2026-07-13T10:05:00.000Z",
+    );
+
+    summaries = loadLatestSprintReviewSummaryMap(storage, [scopedSprint.id]);
+    expect(summaries.get(scopedSprint.id)).toMatchObject({
+      status: "running",
+      summary: "Current run review in progress.",
+      reviewer: "Current reviewer",
+    });
   });
 });

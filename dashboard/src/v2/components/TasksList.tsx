@@ -11,26 +11,34 @@ import {
     deriveOverviewTaskHumanInterventions,
     deriveOverviewTaskCiPresentations,
     filterTasksToActiveSprints,
+    filterOverviewTasks,
+    type OverviewTaskFilter,
 } from "../lib/overview-streams.js";
 import { useOverviewStreamActions } from "../hooks/use-overview-stream-actions.js";
 import { useListReorder } from "../lib/motion/use-list-reorder.js";
 import { useProgressiveList } from "../hooks/use-progressive-list.js";
 import { DEFAULT_LIST_WINDOW } from "../lib/list-window.js";
-
-type TaskFilter = "All Tasks" | "Running" | "Queued" | "Completed";
-
-const FILTER_OPTIONS = ["All Tasks", "Running", "Queued", "Completed"] as const;
+import { useDashboardI18n } from "../i18n/index.js";
+import { overviewMessages } from "../i18n/messages/overview.js";
 
 export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("../hooks/use-overview-page-data.js").useOverviewPageData> }> = ({ pageData }) => {
     const listRef = useRef<HTMLDivElement>(null);
-    const [activeFilter, setActiveFilter] = useState<TaskFilter>("All Tasks");
+    const [activeFilter, setActiveFilter] = useState<OverviewTaskFilter>("all");
+    const { formatNumber, locale, translate, translatePlural } = useDashboardI18n();
 
-    const handleFilterChange = (newFilter: TaskFilter) => {
+    const filterOptions = useMemo(() => [
+        { value: "all", label: translate(overviewMessages, "filterAllTasks") },
+        { value: "running", label: translate(overviewMessages, "filterRunning") },
+        { value: "queued", label: translate(overviewMessages, "filterQueued") },
+        { value: "completed", label: translate(overviewMessages, "filterCompleted") },
+    ] as const, [translate]);
+
+    const handleFilterChange = (newFilter: OverviewTaskFilter) => {
         setActiveFilter(newFilter);
     };
 
     const handleClearFilter = () => {
-        setActiveFilter("All Tasks");
+        setActiveFilter("all");
     };
 
     const { sprints, tasks, execution, selectedProject, isLoading } = pageData;
@@ -49,13 +57,7 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
         [activeTasks, execution],
     );
 
-    const filteredTasks = useMemo(() => activeTasks.filter(task => {
-        if (activeFilter === "All Tasks") return true;
-        if (activeFilter === "Running") return task.status === "in_progress";
-        if (activeFilter === "Queued") return task.status === "pending";
-        if (activeFilter === "Completed") return task.status === "completed";
-        return true;
-    }), [activeTasks, activeFilter]);
+    const filteredTasks = useMemo(() => filterOverviewTasks(activeTasks, activeFilter), [activeTasks, activeFilter]);
     const visibleTasks = useProgressiveList(filteredTasks, {
         initialCount: DEFAULT_LIST_WINDOW,
         incrementCount: DEFAULT_LIST_WINDOW,
@@ -100,26 +102,29 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
             {/* Section Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 md:mb-12 gap-6 sm:gap-8">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
-                    <h2 className="text-lg md:text-xl font-bold tracking-tight text-slate-900 dark:text-white font-display">Active Streams</h2>
+                    <h2 className="text-lg md:text-xl font-bold tracking-tight text-slate-900 dark:text-white font-display">{translate(overviewMessages, "activeStreams")}</h2>
                     <div className="w-full sm:w-auto">
                         <FilterStrip
-                            options={FILTER_OPTIONS}
+                            options={filterOptions}
                             active={activeFilter}
                             onChange={handleFilterChange}
-                            showClear={activeFilter !== "All Tasks"}
+                            showClear={activeFilter !== "all"}
                             onClear={handleClearFilter}
+                            ariaLabel={translate(overviewMessages, "activeStreamFilters")}
+                            clearLabel={translate(overviewMessages, "clearFilters")}
+                            clearAriaLabel={translate(overviewMessages, "clearFilters")}
                         />
                     </div>
                 </div>
                 <div className="text-xs font-semibold text-slate-400 dark:text-slate-600 font-mono hidden sm:block">
-                    {filteredTasks.length} active
+                    {translatePlural(overviewMessages, "activeCount", filteredTasks.length, { formattedCount: formatNumber(filteredTasks.length) })}
                 </div>
             </div>
 
             {/* Task rows */}
-            <div ref={listRef} className="flex flex-col w-full space-y-3" role="region" aria-label="Active stream tasks" aria-busy={isLoading ? "true" : undefined}>
+            <div ref={listRef} className="flex flex-col w-full space-y-3" role="region" aria-label={translate(overviewMessages, "activeStreamTasks")} aria-busy={isLoading ? "true" : undefined}>
                 {isLoading ? (
-                    <div role="status" aria-live="polite" aria-busy="true" aria-label="Loading active stream tasks">
+                    <div role="status" aria-live="polite" aria-busy="true" aria-label={translate(overviewMessages, "loadingActiveStreamTasks")}>
                         <SkeletonRow />
                         <SkeletonRow />
                         <SkeletonRow />
@@ -152,10 +157,10 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                         )),
                     ])
                 ) : (
-                    <div data-flip-id="empty-state" role="status" aria-label="No Active Streams" aria-live="polite">
+                    <div data-flip-id="empty-state" role="status" aria-label={translate(overviewMessages, "noActiveStreams")} aria-live="polite">
                         <EmptyState
-                            title="No Active Streams"
-                            description="There are no tasks currently matching the selected filter in active sprints."
+                            title={translate(overviewMessages, "noActiveStreams")}
+                            description={translate(overviewMessages, "noActiveStreamsDescription")}
                             icon={
                                 <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />

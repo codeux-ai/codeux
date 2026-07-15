@@ -367,8 +367,9 @@ export function useSprintsPageData() {
         execution.taskDispatches ?? [],
         execution.recentEvents ?? [],
         execution.attentionItems ?? [],
+        execution.sprintRuns ?? [],
       ),
-      [execution.attentionItems, execution.recentEvents, execution.taskDispatches, sprints],
+      [execution.attentionItems, execution.recentEvents, execution.sprintRuns, execution.taskDispatches, sprints],
     ),
     areCiStatusPresentationsEqual,
   );

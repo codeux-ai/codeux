@@ -33,6 +33,8 @@ import { StageActivityStrip } from "./StageActivityStrip.js";
 import { useCinematicWorkTool } from "./use-cinematic-work-tool.js";
 import { useCinematicInvocationFeedback } from "../../../hooks/use-cinematic-invocation-feedback.js";
 import { CinematicInvocationProgressBubble } from "./CinematicInvocationProgressBubble.js";
+import { useDashboardI18n } from "../../../i18n/context.js";
+import { chatMessages, type ChatTextMessageKey } from "../../../i18n/messages/chat.js";
 
 /* ════════════════════════════════════════════════════════════════════════
  *  CinematicStage — the default "3D Chat" view of the chat page.
@@ -130,9 +132,9 @@ const QUICK_ACTION_SCATTER_STYLES: Record<string, string> = {
 };
 
 const QUICK_ACTION_GROUPS = [
-  { zone: "create", label: "Create" },
-  { zone: "insight", label: "Project pulse" },
-  { zone: "workflow", label: "Workflows" },
+  { zone: "create", labelKey: "createZone" },
+  { zone: "insight", labelKey: "projectPulseZone" },
+  { zone: "workflow", labelKey: "workflowsZone" },
 ] as const;
 
 const canSpeakAgentMessage = (message: ChatMessageRecord): boolean => (
@@ -173,11 +175,12 @@ const AgentSpeechBubble: FunctionComponent<{
   onReplay: (message: ChatMessageRecord) => void;
   replaying: boolean;
 }> = ({ message, agentName, onAction, onReplay, replaying }) => {
+  const { locale, translate } = useDashboardI18n();
   const ref = useRef<HTMLDivElement>(null);
   const reducedMotion = useReducedMotion();
   useBubbleEnter(ref, reducedMotion);
-  const widgetData = getChatWidgetData(message);
-  const createdAtLabel = formatChatTime(message.createdAt);
+  const widgetData = getChatWidgetData(message, undefined, locale);
+  const createdAtLabel = formatChatTime(message.createdAt, locale);
   const segments = parseBubbleSegments(message.bodyMarkdown || "");
 
   return (
@@ -197,7 +200,7 @@ const AgentSpeechBubble: FunctionComponent<{
           {canSpeakAgentMessage(message) && (
             <SpeechReplayButton
               busy={replaying}
-              label={`Replay message from ${agentName}`}
+              label={translate(chatMessages, "replayMessageFrom", { sender: agentName })}
               onReplay={() => onReplay(message)}
             />
           )}
@@ -237,11 +240,12 @@ const UserBubble: FunctionComponent<{
   message: ChatMessageRecord;
   allMessages: ChatMessageRecord[];
 }> = ({ message, allMessages }) => {
+  const { locale, translate } = useDashboardI18n();
   const ref = useRef<HTMLDivElement>(null);
   const reducedMotion = useReducedMotion();
   useBubbleEnter(ref, reducedMotion);
   const status = resolveDisplayDeliveryStatus(message, allMessages);
-  const createdAtLabel = formatChatTime(message.createdAt);
+  const createdAtLabel = formatChatTime(message.createdAt, locale);
   const isScheduledWakeup = isAgentScheduledWakeup(message.metadata);
 
   if (isScheduledWakeup) {
@@ -269,7 +273,7 @@ const UserBubble: FunctionComponent<{
         <div className="mt-1 flex items-center justify-end gap-1.5 font-mono text-[9px] uppercase tracking-[0.1em] text-slate-400 dark:text-slate-500">
           {createdAtLabel && <span>{createdAtLabel}</span>}
           <span className={status === "failed" ? "text-status-red" : status === "processed" ? "text-signal-500" : ""}>
-            {status === "pending" ? "queued" : status}
+            {translate(chatMessages, status === "pending" ? "queued" : status === "delivered" ? "delivered" : status === "processed" ? "processed" : "failed")}
           </span>
         </div>
       </div>
@@ -279,9 +283,9 @@ const UserBubble: FunctionComponent<{
 
 /* ── Scripted greeting + suggestion chips (rich empty state) ── */
 const SUGGESTIONS = [
-  { icon: ListTodo, label: "Plan the next sprint", prompt: "Plan our next sprint: look at the open work and propose a task breakdown." },
-  { icon: Radar, label: "Status report", prompt: "Give me a status report on this project — what is running, what is blocked, and what needs me?" },
-  { icon: Wrench, label: "Fix what's failing", prompt: "Investigate the most recent failure in this project and propose a fix." },
+  { icon: ListTodo, labelKey: "planNextSprint", prompt: "Plan our next sprint: look at the open work and propose a task breakdown." },
+  { icon: Radar, labelKey: "statusReportLower", prompt: "Give me a status report on this project — what is running, what is blocked, and what needs me?" },
+  { icon: Wrench, labelKey: "fixWhatsFailing", prompt: "Investigate the most recent failure in this project and propose a fix." },
 ] as const;
 
 const GreetingBubble: FunctionComponent<{
@@ -289,6 +293,7 @@ const GreetingBubble: FunctionComponent<{
   projectName: string | null;
   onSuggestion: (prompt: string) => void;
 }> = ({ agentName, projectName, onSuggestion }) => {
+  const { translate } = useDashboardI18n();
   const ref = useRef<HTMLDivElement>(null);
   const reducedMotion = useReducedMotion();
   useBubbleEnter(ref, reducedMotion);
@@ -301,14 +306,17 @@ const GreetingBubble: FunctionComponent<{
           <span className="text-signal-600 dark:text-signal-400">{agentName}</span>
         </div>
         <p className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-          What are we building today?
+          {translate(chatMessages, "whatBuildingToday")}
         </p>
         <p className="mt-2 text-[14px] leading-7 text-slate-600 dark:text-slate-300">
-          I'm your project manager{projectName ? <> for <span className="font-semibold text-slate-900 dark:text-white">{projectName}</span></> : null}.
-          Ask me anything, or start from one of these:
+          {projectName
+            ? translate(chatMessages, "projectManagerForProject", { project: projectName })
+            : translate(chatMessages, "projectManagerGeneric")} {translate(chatMessages, "askOrStart")}
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
-          {SUGGESTIONS.map(({ icon: Icon, label, prompt }) => (
+          {SUGGESTIONS.map(({ icon: Icon, labelKey, prompt }) => {
+            const label = translate(chatMessages, labelKey as ChatTextMessageKey);
+            return (
             <button
               key={label}
               type="button"
@@ -318,7 +326,8 @@ const GreetingBubble: FunctionComponent<{
               <Icon className="h-3.5 w-3.5" aria-hidden="true" />
               {label}
             </button>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
@@ -349,6 +358,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   agentPreset,
   onOpenThreads,
 }) => {
+  const { formatNumber, locale, translate } = useDashboardI18n();
   const floatRef = useRef<HTMLDivElement>(null);
   const exchangeLogRef = useRef<HTMLDivElement>(null);
   const reducedMotion = useReducedMotion();
@@ -364,7 +374,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
   const pendingAutoPlayMessageRef = useRef<ChatMessageRecord | null>(null);
   const expectingFreshAgentReplyRef = useRef(false);
 
-  const agentName = agentPreset?.name || activeConnection?.displayName || "Project Manager";
+  const agentName = agentPreset?.name || activeConnection?.displayName || translate(chatMessages, "projectManager");
   const avatarConfig = agentPreset?.avatarConfig || DEFAULT_AGENT_AVATAR_CONFIG;
   useEffect(() => {
     const timer = window.setInterval(() => setActivityNowMs(Date.now()), STAGE_ACTIVITY_MESSAGE_MIN_INTERVAL_MS);
@@ -378,6 +388,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     nowMs: activityNowMs,
     projectManagerAgentPresetId: agentPreset?.id,
     selectedThread,
+    locale,
   });
   const invocationFeedback = useCinematicInvocationFeedback({
     invocations,
@@ -465,10 +476,11 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
     hasProject: Boolean(selectedProject),
     initialEligibilityLoaded,
     canCreateInitialAppQuickactions,
-  });
+  }, locale);
   const quickActionGroups = QUICK_ACTION_GROUPS
     .map((group) => ({
       ...group,
+      label: translate(chatMessages, group.labelKey),
       actions: quickActions.filter((action) => action.zone === group.zone),
     }))
     .filter((group) => group.actions.length > 0);
@@ -647,11 +659,11 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
         <div className="flex min-w-0 items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-3.5 py-1.5 backdrop-blur-md dark:border-white/[0.08] dark:bg-void-800/70">
           <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${runtimeBusy ? "animate-pulse bg-signal-500 motion-reduce:animate-none" : "bg-signal-500/60"}`} />
           <span className="truncate text-[11px] font-semibold text-slate-700 dark:text-slate-200">
-            {selectedThread?.title || "New conversation"}
+            {selectedThread?.title || translate(chatMessages, "newConversation")}
           </span>
           {selectedThread && (
             <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.1em] text-slate-400">
-              {selectedThread.messageCount} msg
+              {translate(chatMessages, "shortMessageCount", { count: formatNumber(selectedThread.messageCount) })}
             </span>
           )}
         </div>
@@ -661,7 +673,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
           className="inline-flex shrink-0 items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 backdrop-blur-md transition hover:text-slate-900 dark:border-white/[0.08] dark:bg-void-800/70 dark:text-slate-400 dark:hover:text-white"
         >
           <History className="h-3.5 w-3.5" aria-hidden="true" />
-          <span className="hidden sm:inline">All threads</span>
+          <span className="hidden sm:inline">{translate(chatMessages, "allThreads")}</span>
         </button>
       </div>
 
@@ -671,7 +683,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
             a lightly scattered action constellation left of the avatar. */}
         {!runtimeBusy && !sending && !error && quickActions.length > 0 && (
           <div
-            aria-label="Project quick actions"
+            aria-label={translate(chatMessages, "projectQuickActions")}
             role="group"
             className="pointer-events-auto absolute inset-x-4 top-14 z-20 flex max-h-24 gap-4 overflow-x-auto overscroll-x-contain py-1.5 md:bottom-24 md:left-0 md:right-auto md:top-20 md:max-h-none md:w-[min(21rem,calc(50%-1.5rem))] md:flex-col md:justify-center md:gap-3 md:overflow-visible md:px-1.5 md:py-4"
           >
@@ -679,7 +691,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
               <div
                 key={group.zone}
                 role="group"
-                aria-label={`${group.label} quick actions`}
+                aria-label={translate(chatMessages, "quickActionsGroup", { group: group.label })}
                 className="shrink-0 md:w-full"
               >
                 <div className="mb-1.5 hidden items-center gap-2 px-2 md:flex" aria-hidden="true">
@@ -740,7 +752,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
             ref={floatRef}
             className="pointer-events-auto h-[28vh] w-[28vh] max-w-full will-change-transform md:h-[min(30vh,340px)] md:w-[min(30vh,340px)] lg:h-[min(30vh,360px)] lg:w-[min(30vh,360px)] xl:h-[min(30vh,380px)] xl:w-[min(30vh,380px)] 2xl:h-[min(36vh,440px)] 2xl:w-[min(36vh,440px)]"
             role="img"
-            aria-label={`${agentName}, project manager. ${stageCaption}`}
+            aria-label={translate(chatMessages, "projectManagerAria", { name: agentName, caption: stageCaption })}
           >
             <LazyAgentAvatarScene
               eager
@@ -764,11 +776,11 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
             </div>
             <div className="mt-1.5 flex items-center justify-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
               <span className={`h-1 w-1 rounded-full ${activeConnection ? "bg-signal-500" : "bg-slate-300 dark:bg-slate-600"}`} aria-hidden="true" />
-              {activeConnection ? `${activeConnection.displayName} · ${activeConnection.status}` : "queued routing"}
+              {activeConnection ? `${activeConnection.displayName} · ${activeConnection.status}` : translate(chatMessages, "queuedRouting")}
             </div>
             <div
               role="group"
-              aria-label="3D chat voice controls"
+              aria-label={translate(chatMessages, "voiceControls")}
               className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-black/[0.07] bg-white/80 p-1.5 shadow-[0_8px_28px_rgba(0,0,0,0.09)] backdrop-blur-xl dark:border-white/[0.09] dark:bg-void-800/80 dark:shadow-[0_8px_30px_rgba(0,0,0,0.35)]"
             >
               <SpeechInputButton
@@ -784,8 +796,8 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
                 onClick={toggleVoice}
                 disabled={!voiceAvailable}
                 aria-pressed={voiceEnabled}
-                aria-label={!voiceAvailable ? "Voice unavailable; activate a TTS model in AI Models settings" : voiceEnabled ? "Mute project manager" : "Unmute project manager"}
-                title={!voiceAvailable ? "Activate a TTS model in Settings → AI Models" : voiceEnabled ? "Mute agent" : "Unmute agent"}
+                aria-label={translate(chatMessages, !voiceAvailable ? "voiceUnavailable" : voiceEnabled ? "muteProjectManager" : "unmuteProjectManager")}
+                title={translate(chatMessages, !voiceAvailable ? "activateTtsModel" : voiceEnabled ? "muteAgent" : "unmuteAgent")}
                 className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 ${voiceEnabled ? "bg-signal-500/[0.12] text-signal-600 dark:text-signal-300" : "bg-black/[0.03] text-slate-400 dark:bg-white/[0.04]"} disabled:cursor-not-allowed disabled:opacity-45`}
               >
                 {voiceEnabled ? <Volume2 className={`h-5 w-5 ${speechPlayback.activeMessageId ? "animate-pulse motion-reduce:animate-none" : ""}`} aria-hidden="true" /> : <VolumeX className="h-5 w-5" aria-hidden="true" />}
@@ -793,7 +805,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
             </div>
             {speechPlayback.error ? (
               <div role="status" className="mx-auto mt-2 max-w-xs rounded-xl border border-rose-500/20 bg-rose-500/[0.08] px-3 py-2 text-[11px] font-medium text-rose-700 shadow-sm dark:text-rose-200">
-                Voice error: {speechPlayback.error}
+                {translate(chatMessages, "voiceError", { error: speechPlayback.error })}
               </div>
             ) : null}
           </div>
@@ -810,7 +822,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
         <div
           ref={exchangeLogRef}
           role="log"
-          aria-label="Latest exchange with the project manager"
+          aria-label={translate(chatMessages, "latestExchange")}
           aria-live={matchingInvocationFeedback ? "off" : visibleMessages.length > 0 ? "polite" : "off"}
           aria-relevant="additions text"
           className="flex max-h-full min-h-0 flex-col gap-4 overflow-y-auto overscroll-contain pr-1"
@@ -855,7 +867,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
                   className="inline-flex items-center gap-1.5 self-start rounded-full px-2 py-1 text-[11px] font-semibold text-slate-400 transition hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-200"
                 >
                   <History className="h-3 w-3" aria-hidden="true" />
-                  Full conversation · {visibleMessages.length} messages
+                  {translate(chatMessages, "fullConversation", { count: formatNumber(visibleMessages.length) })}
                 </button>
               )}
             </>
@@ -871,13 +883,13 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
             error ? "border-status-red/50" : "border-black/[0.08] dark:border-white/[0.1]"
           }`}>
             <div className="flex items-end gap-2">
-              <label htmlFor="stage-composer" className="sr-only">Message the project manager</label>
+              <label htmlFor="stage-composer" className="sr-only">{translate(chatMessages, "messageProjectManager")}</label>
               <textarea
                 id="stage-composer"
                 ref={composerRef}
                 value={input}
                 rows={1}
-                placeholder={`Ask ${agentName} anything…`}
+                placeholder={translate(chatMessages, "askAgentAnything", { name: agentName })}
                 className="max-h-[200px] min-h-[56px] w-full min-w-0 resize-none bg-transparent px-3.5 py-3.5 text-[15px] leading-relaxed text-slate-900 outline-none placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-500"
                 onFocus={() => setComposerFocused(true)}
                 onBlur={() => setComposerFocused(false)}
@@ -915,7 +927,7 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
                 }}
               />
               <button
-                aria-label={sending ? "Sending message" : "Send message"}
+                aria-label={translate(chatMessages, sending ? "sendingMessageLabel" : "sendMessage")}
                 aria-busy={sending}
                 type="button"
                 onClick={() => void sendStageMessage()}
@@ -932,10 +944,10 @@ export const CinematicStage: FunctionComponent<CinematicStageProps> = ({
               </button>
             </div>
             <div className="px-3 pb-1 text-[10px] font-mono text-slate-400 dark:text-slate-500">
-              Enter sends · Shift+Enter newline
+              {translate(chatMessages, "enterSendsNewline")}
               <span className="sr-only" aria-live="polite">
-                {sending ? "Sending message…" : ""}
-                {error ? `Failed: ${error}` : ""}
+                {sending ? translate(chatMessages, "sendingMessageToCodeUx") : ""}
+                {error ? translate(chatMessages, "failedWithError", { error }) : ""}
               </span>
             </div>
           </div>

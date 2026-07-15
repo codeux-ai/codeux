@@ -12,6 +12,8 @@ import { BUILTIN_CODE_UX_TECHSTACK_ID } from "../../../../../src/domain/settings
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { projectMessages } from "../../i18n/messages/projects.js";
 
 export type SourceType = 'local' | 'git' | 'new_project';
 
@@ -83,6 +85,7 @@ function focusFirstInvalidField(formId: string, scrollContainerId: string, reduc
 }
 
 export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClose, onAdd, initialSourceType, quickActionDefaults }) => {
+    const { translate, translatePlural } = useDashboardI18n();
     const fieldsRef   = useRef<HTMLFormElement>(null);
     const transitionSurfaceRef = useRef<HTMLDivElement>(null);
     const previousTransitionKeyRef = useRef<string | null>(null);
@@ -126,23 +129,23 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         ?? BUILTIN_CODE_UX_TECHSTACK_ID;
     const newProjectApplicationKind = quickActionDefaults?.applicationKind ?? null;
     const quickActionContextLabel = quickActionDefaults?.applicationKind === 'web'
-        ? 'Web App'
+        ? translate(projectMessages, "webApp")
         : quickActionDefaults?.applicationKind === 'desktop'
-            ? 'Desktop App'
+            ? translate(projectMessages, "desktopApp")
             : null;
 
     const validationErrors = useMemo(() => {
         const errors: Record<string, string> = {};
-        if (!name.trim()) errors.name = "Project Name is required.";
+        if (!name.trim()) errors.name = translate(projectMessages, "projectNameRequired");
 
         if (sourceType === 'git' && !gitUrl.trim()) {
-            errors.path = "Repository URL is required.";
+            errors.path = translate(projectMessages, "repositoryUrlRequired");
         }
         if (sourceType === 'new_project' && newInitMode === 'new-remote' && !gitUrlSlug.trim()) {
-            errors.slug = "Git URL Slug is required.";
+            errors.slug = translate(projectMessages, "gitUrlSlugRequired");
         }
         return errors;
-    }, [gitUrl, gitUrlSlug, localPath, name, newInitMode, sourceType]);
+    }, [gitUrl, gitUrlSlug, localPath, name, newInitMode, sourceType, translate]);
 
     const sourceTransitionKey = `${sourceType}:${newInitMode}:${showSetupOptions ? 'setup' : 'details'}`;
 
@@ -236,7 +239,9 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
 
         if (Object.keys(validationErrors).length > 0) {
             setTouched({ name: true, path: sourceType === 'git', slug: sourceType === 'new_project' && newInitMode === 'new-remote' });
-            setValidationSummary(`Review required fields: ${Object.values(validationErrors).join(" ")}`);
+            setValidationSummary(translate(projectMessages, "reviewRequiredFields", {
+                errors: Object.values(validationErrors).join(" "),
+            }));
             setSubmitError(null);
             setTimeout(() => focusFirstInvalidField('add-project-form', 'add-project-form-body', reducedMotion), 0);
             return;
@@ -288,7 +293,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     setCloneDir(result.filePath);
                 }
                 clearFeedback();
-                setDirectorySelectionMessage(`Selected directory: ${result.filePath}`);
+                setDirectorySelectionMessage(translate(projectMessages, "selectedDirectory", { path: result.filePath }));
                 setActiveDirectoryPickerTarget(null);
                 return;
             } catch (err) {
@@ -308,7 +313,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
             setCloneDir(directoryListing.currentPath);
         }
         clearFeedback();
-        setDirectorySelectionMessage(`Selected directory: ${directoryListing.currentPath}`);
+        setDirectorySelectionMessage(translate(projectMessages, "selectedDirectory", { path: directoryListing.currentPath }));
         setActiveDirectoryPickerTarget(null);
     };
 
@@ -323,15 +328,22 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         const pickerId = target === 'localPath' ? "add-project-directory-picker" : "add-project-clone-directory-picker";
         const currentPath = directoryListing?.currentPath || pendingDirectoryPath || "";
         const loadingLabel = pendingDirectoryPath
-            ? `Loading ${pendingDirectoryPath}`
-            : "Loading directories";
+            ? translate(projectMessages, "loadingPath", { path: pendingDirectoryPath })
+            : translate(projectMessages, "loadingDirectories");
         const statusMessage = directoryPickerError
-            ? `Directory load failed: ${directoryPickerError}`
+            ? translate(projectMessages, "directoryLoadFailed", { message: directoryPickerError })
             : isDirectoryPickerLoading
                 ? loadingLabel
                 : directoryListing
-                    ? `${directoryListing.directories.length} child director${directoryListing.directories.length === 1 ? "y" : "ies"} in ${directoryListing.currentPath}.`
-                    : "Directory picker ready.";
+                    ? translatePlural(
+                        projectMessages,
+                        "childDirectories",
+                        directoryListing.directories.length,
+                        {
+                            path: directoryListing.currentPath,
+                        },
+                    )
+                    : translate(projectMessages, "directoryPickerReady");
 
         return (
             <div
@@ -344,8 +356,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                         onClick={() => directoryListing?.parentPath && void loadDirectory(target, directoryListing.parentPath)}
                         disabled={!directoryListing?.parentPath || isDirectoryPickerLoading}
                         className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-slate-500 shadow-sm transition-all hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white/[0.06] dark:text-slate-300 dark:hover:text-white"
-                        aria-label="Go to parent directory"
-                        title="Go up"
+                        aria-label={translate(projectMessages, "goToParentDirectory")}
+                        title={translate(projectMessages, "goUp")}
                     >
                         <ChevronUp className="h-4 w-4" />
                     </button>
@@ -354,8 +366,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                         onClick={() => void loadDirectory(target, directoryListing?.homePath)}
                         disabled={isDirectoryPickerLoading}
                         className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-slate-500 shadow-sm transition-all hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white/[0.06] dark:text-slate-300 dark:hover:text-white"
-                        aria-label="Go to home directory"
-                        title="Home"
+                        aria-label={translate(projectMessages, "goToHomeDirectory")}
+                        title={translate(projectMessages, "home")}
                     >
                         <Home className="h-4 w-4" />
                     </button>
@@ -368,16 +380,20 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                         disabled={isDirectoryPickerLoading}
                         aria-busy={isDirectoryPickerLoading}
                         className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-slate-500 shadow-sm transition-all hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white/[0.06] dark:text-slate-300 dark:hover:text-white"
-                        aria-label="Refresh directories"
-                        title="Refresh"
+                        aria-label={translate(projectMessages, "refreshDirectories")}
+                        title={translate(projectMessages, "refresh")}
                     >
-                        <><RefreshCw aria-hidden="true" className={`h-4 w-4 ${isDirectoryPickerLoading ? "animate-spin" : ""}`} />{isDirectoryPickerLoading && <span className="sr-only">Loading</span>}</>
+                        <><RefreshCw aria-hidden="true" className={`h-4 w-4 ${isDirectoryPickerLoading ? "animate-spin" : ""}`} />{isDirectoryPickerLoading && <span className="sr-only">{translate(projectMessages, "loading")}</span>}</>
                     </button>
                     <div
                         className="min-w-0 flex-1 truncate rounded-xl bg-white px-3 py-2 font-mono text-xs font-semibold text-slate-600 dark:bg-white/[0.055] dark:text-slate-300"
-                        aria-label={isDirectoryPickerLoading ? loadingLabel : currentPath ? `Current path ${currentPath}` : "Directory picker path"}
+                        aria-label={isDirectoryPickerLoading
+                            ? loadingLabel
+                            : currentPath
+                                ? translate(projectMessages, "currentPath", { path: currentPath })
+                                : translate(projectMessages, "directoryPickerPath")}
                     >
-                        {isDirectoryPickerLoading && pendingDirectoryPath ? loadingLabel : currentPath || "Loading directories..."}
+                        {isDirectoryPickerLoading && pendingDirectoryPath ? loadingLabel : currentPath || `${translate(projectMessages, "loadingDirectories")}...`}
                     </div>
                     <button
                         type="button"
@@ -386,7 +402,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                         className="flex h-8 items-center gap-1.5 rounded-xl bg-ember-500 px-3 text-xs font-black uppercase tracking-[0.12em] text-void-900 transition-all hover:bg-ember-400 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-700 dark:disabled:text-slate-400"
                     >
                         <Check aria-hidden="true" className="h-3.5 w-3.5" />
-                        Use
+                        {translate(projectMessages, "use")}
                     </button>
                 </div>
                 <div
@@ -425,7 +441,9 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                             </div>
                         ) : (
                             <div className="px-2 py-3 text-xs font-semibold text-slate-400">
-                                No child directories in {directoryListing?.currentPath || "the current path"}
+                                {translate(projectMessages, "noChildDirectories", {
+                                    path: directoryListing?.currentPath || translate(projectMessages, "directoryPickerPath"),
+                                })}
                             </div>
                         )}
                     </div>
@@ -435,12 +453,12 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     };
 
     const setupOptionRows = [
-        { key: "agents", label: "Agents", description: "Specialist agents and orchestrator routing.", icon: Bot },
-        { key: "quicksprints", label: "Quicksprints", description: "Repository-specific sprint templates.", icon: Workflow },
-        { key: "previewScript", label: "Preview Script", description: "Container startup script for browser previews.", icon: PlaySquare },
-        { key: "ci", label: "CI", description: "Basic GitHub/GitLab error-checking pipelines.", icon: ShieldCheck },
-        { key: "techstack", label: "Techstack", description: "Detect and assign a project stack from manifests.", icon: Layers3 },
-        { key: "docs", label: "Docs", description: "Embed repository docs into Knowledge docs.", icon: BookOpen },
+        { key: "agents", label: translate(projectMessages, "setupAgents"), description: translate(projectMessages, "setupAgentsLongDescription"), icon: Bot },
+        { key: "quicksprints", label: translate(projectMessages, "setupQuicksprints"), description: translate(projectMessages, "setupQuicksprintsLongDescription"), icon: Workflow },
+        { key: "previewScript", label: translate(projectMessages, "setupPreviewScript"), description: translate(projectMessages, "setupPreviewScriptLongDescription"), icon: PlaySquare },
+        { key: "ci", label: translate(projectMessages, "setupCi"), description: translate(projectMessages, "setupCiLongDescription"), icon: ShieldCheck },
+        { key: "techstack", label: translate(projectMessages, "setupTechstack"), description: translate(projectMessages, "setupTechstackLongDescription"), icon: Layers3 },
+        { key: "docs", label: translate(projectMessages, "setupDocs"), description: translate(projectMessages, "setupDocsDescription"), icon: BookOpen },
     ] as const;
 
     return (
@@ -458,7 +476,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                 {/* ── Left decorative panel ── */}
                 <div className="relative hidden sm:flex w-52 shrink-0 bg-void-900 dark:bg-void-950 flex-col justify-between p-8 overflow-hidden">
                     <span className="absolute -top-2 -left-4 text-[7.5rem] font-black text-white/[0.035] font-display leading-none pointer-events-none select-none tracking-tighter">
-                        ADD
+                        {translate(projectMessages, "addProject")}
                     </span>
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="w-44 h-44 bg-ember-500/[0.08] animate-organic" style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%' }} />
@@ -467,12 +485,16 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     </div>
                     <div className="relative z-10 flex items-center gap-2 text-ember-500 font-mono font-bold text-[10px] tracking-[0.2em] uppercase">
                         <FolderOpen className="w-3.5 h-3.5" strokeWidth={2.5} />
-                        New Project
+                        {translate(projectMessages, "newProject")}
                     </div>
                     <div className="relative z-10">
-                        <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/25 font-mono mb-1.5">Source</div>
+                        <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/25 font-mono mb-1.5">{translate(projectMessages, "source")}</div>
                         <div className="text-base font-semibold text-white font-mono tracking-tight leading-snug">
-                            {sourceType === 'new_project' ? 'New Project' : sourceType === 'git' ? 'Git Repo' : 'Local Project'}
+                            {sourceType === 'new_project'
+                                ? translate(projectMessages, "newProject")
+                                : sourceType === 'git'
+                                    ? translate(projectMessages, "gitRepo")
+                                    : translate(projectMessages, "localProject")}
                             {quickActionContextLabel ? `: ${quickActionContextLabel}` : ''}
                         </div>
                         <div className="mt-3 w-8 h-[2px] bg-ember-500/50" />
@@ -485,22 +507,32 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     <div className="flex items-start justify-between shrink-0 p-5 sm:p-7 lg:px-8 lg:pt-8 lg:pb-6 border-b border-black/[0.04] dark:border-white/[0.04]">
                         <div>
                             <h2 id="add-project-modal-title" className="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight font-display leading-none">
-                                {quickActionContextLabel ? `Create ${quickActionContextLabel}.` : 'Add Project.'}
+                                {quickActionDefaults?.applicationKind === "web"
+                                    ? translate(projectMessages, "createWebApp")
+                                    : quickActionDefaults?.applicationKind === "desktop"
+                                        ? translate(projectMessages, "createDesktopApp")
+                                        : `${translate(projectMessages, "addProject")}.`}
                             </h2>
                             <p className="text-xs font-medium text-slate-400 mt-2 tracking-wide">
                                 {quickActionContextLabel
-                                    ? `Initialize a new ${quickActionContextLabel.toLowerCase()} repository with explicit project techstack settings`
-                                    : 'Connect a local directory or remote repository'}
+                                    ? translate(projectMessages, "initializeNewAppDescription", { kind: quickActionContextLabel })
+                                    : translate(projectMessages, "connectRepositoryDescription")}
                             </p>
                         </div>
                         <div className="sr-only" aria-live="polite" role="status">
-                            {sourceType === 'new_project' ? 'New Project selected' : sourceType === 'git' ? 'Git Repo selected' : 'Local Project selected'}
-                            {quickActionContextLabel ? `. ${quickActionContextLabel} context selected.` : ''}
-                            {showSetupOptions ? '. Setup Options step.' : ''}
+                            {translate(projectMessages, "sourceSelected", {
+                                source: sourceType === 'new_project'
+                                    ? translate(projectMessages, "newProject")
+                                    : sourceType === 'git'
+                                        ? translate(projectMessages, "gitRepo")
+                                        : translate(projectMessages, "localProject"),
+                            })}
+                            {quickActionContextLabel ? `. ${translate(projectMessages, "contextSelected", { context: quickActionContextLabel })}` : ''}
+                            {showSetupOptions ? `. ${translate(projectMessages, "setupOptionsStep")}` : ''}
                         </div>
                         <button
                             onClick={handleClose}
-                            aria-label="Close dialog"
+                            aria-label={translate(projectMessages, "closeDialog")}
                             disabled={isSubmitting}
                             aria-describedby={isSubmitting ? "add-project-submit-disabled-reason" : undefined}
                             className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all active:scale-95 shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
@@ -522,14 +554,14 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                     message={submitError}
                                     onDismiss={() => setSubmitError(null)}
                                     retryAction={() => fieldsRef.current?.requestSubmit()}
-                                    retryLabel="Retry"
+                                    retryLabel={translate(projectMessages, "retry")}
                                 />
                             )}
 
                             {/* Project Name */}
                             <div className="group/field">
                                 <label htmlFor="add-project-name" className={fieldLabelClass}>
-                                    Project Name <span className="sr-only">(required)</span>
+                                    {translate(projectMessages, "projectName")} <span className="sr-only">({translate(projectMessages, "required")})</span>
                                 </label>
                                 <input
                                     id="add-project-name"
@@ -545,7 +577,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                         setTouched(prev => ({ ...prev, name: true }));
                                         clearFeedback();
                                     }}
-                                    placeholder="My Awesome Project"
+                                    placeholder={translate(projectMessages, "projectNamePlaceholder")}
                                     className={projectNameInputClass}
                                     autoComplete="off"
                                     aria-invalid={validationErrors.name && touched.name ? "true" : undefined}
@@ -560,7 +592,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                             {/* Source Type Toggle */}
                             <fieldset>
                                 <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">
-                                    Source Type
+                                    {translate(projectMessages, "sourceType")}
                                 </legend>
                                 <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
                                     {(['local', 'git', 'new_project'] as SourceType[]).map((type) => (
@@ -580,7 +612,11 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                     ? <GitBranch className="w-3.5 h-3.5" strokeWidth={2} />
                                                     : <Sparkles className="w-3.5 h-3.5" strokeWidth={2} />
                                             }
-                                            {type === 'local' ? 'Local Project' : type === 'git' ? 'Git URL' : 'New Project'}
+                                            {type === 'local'
+                                                ? translate(projectMessages, "localProject")
+                                                : type === 'git'
+                                                    ? translate(projectMessages, "gitUrl")
+                                                    : translate(projectMessages, "newProject")}
                                         </button>
                                     ))}
                                 </div>
@@ -596,8 +632,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                             {sourceType === 'local' && (
                                 <div className="group/field">
                                     <label htmlFor="add-project-path" className={`${fieldLabelClass} flex items-center gap-1.5`}>
-                                        <FolderInput className="w-3 h-3" /> Directory Path
-                                        <span className="ml-1 text-slate-300 dark:text-slate-600 normal-case font-medium tracking-normal">(optional)</span>
+                                        <FolderInput className="w-3 h-3" /> {translate(projectMessages, "directoryPath")}
+                                        <span className="ml-1 text-slate-300 dark:text-slate-600 normal-case font-medium tracking-normal">({translate(projectMessages, "optional")})</span>
                                     </label>
                                     <div className="mt-2.5 flex flex-col gap-2 sm:flex-row sm:items-stretch">
                                         <input
@@ -623,10 +659,10 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             className="flex shrink-0 items-center justify-center gap-2 rounded-[1.15rem] border border-black/[0.06] bg-void-900 px-4 py-3 text-xs font-black uppercase tracking-[0.14em] text-white transition-all duration-250 hover:-translate-y-px hover:bg-void-800 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 dark:border-white/[0.08] dark:bg-white/[0.08] dark:text-white dark:hover:bg-white/[0.12]"
                                             aria-expanded={activeDirectoryPickerTarget === 'localPath'}
                                             aria-controls="add-project-directory-picker"
-                                            title="Browse directories"
+                                            title={translate(projectMessages, "browseDirectories")}
                                         >
                                             <FolderOpen className="h-4 w-4" />
-                                            Browse
+                                            {translate(projectMessages, "browse")}
                                         </button>
                                     </div>
                                     {renderDirectoryPicker('localPath')}
@@ -643,7 +679,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 <>
                                     <div className="group/field">
                                         <label htmlFor="add-project-git-url" className={`${fieldLabelClass} flex items-center gap-1.5`}>
-                                            <Link2 className="w-3 h-3" /> Repository URL <span className="sr-only">(required)</span>
+                                            <Link2 className="w-3 h-3" /> {translate(projectMessages, "repositoryUrl")} <span className="sr-only">({translate(projectMessages, "required")})</span>
                                         </label>
                                         <input
                                             id="add-project-git-url"
@@ -668,8 +704,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                     </div>
                                     <div className="group/field">
                                         <label htmlFor="add-project-clone-dir" className={`${fieldLabelClass} flex items-center gap-1.5`}>
-                                            <FolderInput className="w-3 h-3" /> Clone Into Directory
-                                            <span className="ml-1 text-slate-300 dark:text-slate-600 normal-case font-medium tracking-normal">(optional)</span>
+                                            <FolderInput className="w-3 h-3" /> {translate(projectMessages, "cloneIntoDirectory")}
+                                            <span className="ml-1 text-slate-300 dark:text-slate-600 normal-case font-medium tracking-normal">({translate(projectMessages, "optional")})</span>
                                         </label>
                                         <div className="mt-2.5 flex flex-col gap-2 sm:flex-row sm:items-stretch">
                                             <input
@@ -687,10 +723,10 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                 className="flex shrink-0 items-center justify-center gap-2 rounded-[1.15rem] border border-black/[0.06] bg-void-900 px-4 py-3 text-xs font-black uppercase tracking-[0.14em] text-white transition-all duration-250 hover:-translate-y-px hover:bg-void-800 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 dark:border-white/[0.08] dark:bg-white/[0.08] dark:text-white dark:hover:bg-white/[0.12]"
                                                 aria-expanded={activeDirectoryPickerTarget === 'cloneDir'}
                                                 aria-controls="add-project-clone-directory-picker"
-                                                title="Browse clone directory"
+                                                title={translate(projectMessages, "browseCloneDirectory")}
                                             >
                                                 <FolderOpen className="h-4 w-4" />
-                                                Browse
+                                                {translate(projectMessages, "browse")}
                                             </button>
                                         </div>
                                         {renderDirectoryPicker('cloneDir')}
@@ -727,10 +763,10 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             <span className="min-w-0">
                                                 <span className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
                                                     <Sparkles className="h-4 w-4 text-ember-500" />
-                                                    Initialize with Project Setup Agent
+                                                    {translate(projectMessages, "initializeWithSetup")}
                                                 </span>
                                                 <span className="mt-1 block text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
-                                                    Research the codebase after creation and generate project-specific agents, routing, quicksprints, preview startup, basic CI, and a detected techstack.
+                                                    {translate(projectMessages, "initializeWithSetupDescription")}
                                                 </span>
                                             </span>
                                         </label>
@@ -741,10 +777,10 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             <div className="mb-3 flex items-center justify-between gap-4">
                                                 <div>
                                                     <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-ember-600 dark:text-ember-400">
-                                                        Setup Scope
+                                                        {translate(projectMessages, "setupScope")}
                                                     </div>
                                                     <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
-                                                        Choose project assets
+                                                        {translate(projectMessages, "chooseProjectAssets")}
                                                     </div>
                                                 </div>
                                                 <button
@@ -752,7 +788,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                     onClick={() => setSetupOptions({ agents: true, quicksprints: true, previewScript: true, ci: true, techstack: true, docs: true })}
                                                     className="rounded-xl bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 shadow-sm transition-colors hover:text-slate-900 dark:bg-white/[0.08] dark:text-slate-300 dark:hover:text-white"
                                                 >
-                                                    All
+                                                    {translate(projectMessages, "all")}
                                                 </button>
                                             </div>
                                             <div className="grid gap-2 sm:grid-cols-2">
@@ -782,7 +818,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                                     {key === "previewScript" && (
                                                                         <Info 
                                                                             className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 cursor-help" 
-                                                                            title="This is only needed when the container struggles to startup with the default script"
+                                                                            title={translate(projectMessages, "previewScriptHelp")}
                                                                             onClick={(e) => e.stopPropagation()} 
                                                                         />
                                                                     )}
@@ -802,7 +838,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 <>
                                     <fieldset>
                                         <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">
-                                            Init Mode
+                                            {translate(projectMessages, "initMode")}
                                         </legend>
                                         <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
                                             <button
@@ -818,7 +854,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                 }`}
                                             >
                                                 <FolderInput className="w-3.5 h-3.5" strokeWidth={2} />
-                                                Local Repo
+                                                {translate(projectMessages, "localRepo")}
                                             </button>
                                             <button
                                                 type="button"
@@ -833,7 +869,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                 }`}
                                             >
                                                 <Cloud className="w-3.5 h-3.5" strokeWidth={2} />
-                                                Remote Repo
+                                                {translate(projectMessages, "remoteRepo")}
                                             </button>
                                         </div>
                                     </fieldset>
@@ -841,8 +877,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                     {newInitMode === 'new-local' ? (
                                         <div className="group/field">
                                             <label htmlFor="add-project-new-path" className={`${fieldLabelClass} flex items-center gap-1.5`}>
-                                                <FolderInput className="w-3 h-3" /> Directory Path
-                                                <span className="ml-1 text-slate-300 dark:text-slate-600 normal-case font-medium tracking-normal">(optional)</span>
+                                                <FolderInput className="w-3 h-3" /> {translate(projectMessages, "directoryPath")}
+                                                <span className="ml-1 text-slate-300 dark:text-slate-600 normal-case font-medium tracking-normal">({translate(projectMessages, "optional")})</span>
                                             </label>
                                             <div className="mt-2.5 flex flex-col gap-2 sm:flex-row sm:items-stretch">
                                                 <input
@@ -867,10 +903,10 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                     className="flex shrink-0 items-center justify-center gap-2 rounded-[1.15rem] border border-black/[0.06] bg-void-900 px-4 py-3 text-xs font-black uppercase tracking-[0.14em] text-white transition-all duration-250 hover:-translate-y-px hover:bg-void-800 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 dark:border-white/[0.08] dark:bg-white/[0.08] dark:text-white dark:hover:bg-white/[0.12]"
                                                     aria-expanded={activeDirectoryPickerTarget === 'localPath'}
                                                     aria-controls="add-project-directory-picker"
-                                                    title="Browse directories"
+                                                    title={translate(projectMessages, "browseDirectories")}
                                                 >
                                                     <FolderOpen className="h-4 w-4" />
-                                                    Browse
+                                                    {translate(projectMessages, "browse")}
                                                 </button>
                                             </div>
                                             {renderDirectoryPicker('localPath')}
@@ -885,7 +921,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                         <>
                                             <div className="group/field">
                                                 <label htmlFor="add-project-git-slug" className={`${fieldLabelClass} flex items-center gap-1.5`}>
-                                                    <GitBranch className="w-3.5 h-3.5" /> Git URL Slug
+                                                    <GitBranch className="w-3.5 h-3.5" /> {translate(projectMessages, "gitUrlSlug")}
                                                 </label>
                                                 <input
                                                     id="add-project-git-slug"
@@ -911,10 +947,10 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             <div className="group/field">
                                                 <div className="flex items-center justify-between gap-3">
                                                     <label className={fieldLabelClass}>
-                                                        Provider
+                                                        {translate(projectMessages, "provider")}
                                                     </label>
                                                     <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
-                                                        Provider detection is optional here; both buttons are shown.
+                                                        {translate(projectMessages, "providerDetectionHint")}
                                                     </span>
                                                 </div>
                                                 <div className="mt-2.5 inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
@@ -945,7 +981,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
 
                                             <fieldset>
                                                 <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">
-                                                    Visibility
+                                                    {translate(projectMessages, "visibility")}
                                                 </legend>
                                                 <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
                                                     <button
@@ -958,7 +994,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                         }`}
                                                     >
                                                         <Lock className="w-3.5 h-3.5" strokeWidth={2} />
-                                                        Private
+                                                        {translate(projectMessages, "private")}
                                                     </button>
                                                     <button
                                                         type="button"
@@ -970,7 +1006,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                         }`}
                                                     >
                                                         <Globe className="w-3.5 h-3.5" strokeWidth={2} />
-                                                        Public
+                                                        {translate(projectMessages, "public")}
                                                     </button>
                                                 </div>
                                             </fieldset>
@@ -990,26 +1026,28 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                     onClick={handleClose}
                                     disabled={isSubmitting}
                                     aria-describedby={isSubmitting ? "add-project-submit-disabled-reason" : undefined}
-                                    title={isSubmitting ? "Project creation is in progress." : undefined}
+                                    title={isSubmitting ? translate(projectMessages, "projectCreationInProgress") : undefined}
                                     className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 rounded w-full sm:w-auto py-2 sm:py-0 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                    Cancel
+                                    {translate(projectMessages, "cancel")}
                                 </button>
                                 <button type="submit" form="add-project-form" disabled={isSubmitting}
                                     aria-busy={isSubmitting}
                                     aria-describedby={isSubmitting ? "add-project-submit-disabled-reason" : undefined}
-                                    title={isSubmitting ? "Project creation is in progress." : undefined}
+                                    title={isSubmitting ? translate(projectMessages, "projectCreationInProgress") : undefined}
                                     className="group/btn flex items-center justify-center gap-2.5 px-6 py-3 bg-ember-500 w-full sm:w-auto  hover:bg-ember-400 disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-700 dark:disabled:text-slate-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] disabled:shadow-none active:scale-95 disabled:active:scale-100 hover:-translate-y-px disabled:hover:-translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
                                 >
                                     {isSubmitting ? (
-                                        <><Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /><span className="sr-only">Loading</span></>
+                                        <><Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /><span className="sr-only">{translate(projectMessages, "loading")}</span></>
                                     ) : (
                                         <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
                                     )}
-                                    {isSubmitting ? (sourceType !== 'new_project' && initializeProject ? "Setting up..." : "Adding...") : (sourceType !== 'new_project' && initializeProject && !showSetupOptions ? "Continue" : "Add Project")}
+                                    {isSubmitting
+                                        ? translate(projectMessages, sourceType !== 'new_project' && initializeProject ? "settingUp" : "adding")
+                                        : translate(projectMessages, sourceType !== 'new_project' && initializeProject && !showSetupOptions ? "continue" : "addProject")}
                                 </button>
                                 <span id="add-project-submit-disabled-reason" className="sr-only">
-                                    Project creation is in progress. Wait for it to finish or retry if it fails.
+                                    {translate(projectMessages, "projectCreationDisabledReason")}
                                 </span>
                             </div>
                 </div>

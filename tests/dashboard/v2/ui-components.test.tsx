@@ -7,7 +7,7 @@ import { h } from "preact";
 import { useReducedMotion } from "../../../dashboard/src/v2/hooks/use-reduced-motion.js";
 
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/preact";
+import { render as testingLibraryRender, screen, fireEvent, cleanup, waitFor } from "@testing-library/preact";
 import { PlanningProgressOverlay } from "../../../dashboard/src/v2/components/ui/PlanningProgressOverlay.js";
 import { getPlanningFeedback, SHIP_LOOP_MS } from "../../../dashboard/src/v2/lib/sprint-planning-feedback.js";
 import { ToastProvider, useToast } from "../../../dashboard/src/v2/components/feedback/ToastProvider.js";
@@ -28,8 +28,17 @@ import { RerunTaskModal } from "../../../dashboard/src/v2/components/ui/RerunTas
 import { Button } from "../../../dashboard/src/v2/components/ui/Button.js";
 import { ActionButton } from "../../../dashboard/src/v2/components/settings/SettingsSurface.js";
 import { PageContainer } from "../../../dashboard/src/v2/components/layout/PageContainer.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
 import * as matchers from '@testing-library/jest-dom/matchers';
 expect.extend(matchers);
+
+const render = (ui: Parameters<typeof testingLibraryRender>[0]) => {
+  const wrap = (content: Parameters<typeof testingLibraryRender>[0]) => (
+    <DashboardI18nProvider initialLocale="en" storage={null}>{content}</DashboardI18nProvider>
+  );
+  const result = testingLibraryRender(wrap(ui));
+  return { ...result, rerender: (nextUi: Parameters<typeof testingLibraryRender>[0]) => result.rerender(wrap(nextUi)) };
+};
 
 afterEach(() => {
   cleanup();

@@ -9,6 +9,8 @@ import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { ActionFeedbackRegion } from "../ui/ActionFeedbackRegion.js";
 import { PageContainer } from "../layout/PageContainer.js";
 import { PageHeader } from "../layout/PageHeader.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { chatMessages } from "../../i18n/messages/chat.js";
 
 const CHAT_MODE_ORDER: ChatMode[] = ["stage", "threads", "invocations"];
 
@@ -39,10 +41,12 @@ export const ChatPageShell: FunctionComponent<{
   error,
   railSlot,
   detailSlot,
-  title = "Project Conversations",
+  title,
   subtitle,
   showProjectControls = true,
 }) => {
+  const { formatNumber, translate, translatePlural } = useDashboardI18n();
+  const resolvedTitle = title ?? translate(chatMessages, "projectConversations");
   const headerRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
   const interactionTokens = useInteractionTokens();
@@ -75,14 +79,14 @@ export const ChatPageShell: FunctionComponent<{
   };
 
   const threadsStatusCopy = pendingDashboardMessages > 0
-    ? `${pendingDashboardMessages} pending`
-    : `${threadCount} ${threadCount === 1 ? "thread" : "threads"}`;
+    ? translate(chatMessages, "pendingCount", { count: formatNumber(pendingDashboardMessages) })
+    : translatePlural(chatMessages, "threadCount", threadCount, { count: formatNumber(threadCount) });
   const threadsTabDisplayCopy = pendingDashboardMessages > 0
-    ? `${pendingDashboardMessages} queued`
+    ? translate(chatMessages, "queuedCount", { count: formatNumber(pendingDashboardMessages) })
     : threadsStatusCopy;
   const invocationsStatusCopy = runningInvocationCount > 0
-    ? `${runningInvocationCount} running`
-    : `${invocationCount} ${invocationCount === 1 ? "invocation" : "invocations"}`;
+    ? translate(chatMessages, "runningCount", { count: formatNumber(runningInvocationCount) })
+    : translatePlural(chatMessages, "invocationCount", invocationCount, { count: formatNumber(invocationCount) });
   /** Threads-backed conversational modes share the composer + inbox affordances. */
   const isConversational = chatMode === "stage" || chatMode === "threads";
 
@@ -102,7 +106,7 @@ export const ChatPageShell: FunctionComponent<{
   const actions = showProjectControls ? (
     <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end">
 
-      <div role="tablist" aria-label="Chat Mode" className="relative flex flex-wrap items-center rounded-full border border-black/[0.06] bg-white/70 p-1 dark:border-white/[0.06] dark:bg-white/[0.03]"
+      <div role="tablist" aria-label={translate(chatMessages, "chatMode")} className="relative flex flex-wrap items-center rounded-full border border-black/[0.06] bg-white/70 p-1 dark:border-white/[0.06] dark:bg-white/[0.03]"
         onKeyDown={(e) => {
           if (e.key === "ArrowRight" || e.key === "ArrowDown") {
             e.preventDefault();
@@ -138,7 +142,7 @@ export const ChatPageShell: FunctionComponent<{
           role="tab"
           aria-selected={chatMode === "stage"}
           aria-controls="chat-panel"
-          aria-label={`3D Chat, animated project manager, ${threadsStatusCopy}`}
+          aria-label={translate(chatMessages, "cinematicChatAria", { status: threadsStatusCopy })}
           tabIndex={chatMode === "stage" ? 0 : -1}
           type="button"
           onClick={() => onSetChatMode("stage")}
@@ -147,7 +151,7 @@ export const ChatPageShell: FunctionComponent<{
         >
           <span className="inline-flex items-center gap-2">
             <Bot aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2.4} />
-            <span>3D Chat</span>
+            <span>{translate(chatMessages, "cinematicChat")}</span>
           </span>
         </button>
         <button
@@ -156,7 +160,7 @@ export const ChatPageShell: FunctionComponent<{
           role="tab"
           aria-selected={chatMode === "threads"}
           aria-controls="chat-panel"
-          aria-label={`Threads, ${threadsStatusCopy}`}
+          aria-label={`${translate(chatMessages, "threads")}, ${threadsStatusCopy}`}
           tabIndex={chatMode === "threads" ? 0 : -1}
           type="button"
           onClick={() => onSetChatMode("threads")}
@@ -165,7 +169,7 @@ export const ChatPageShell: FunctionComponent<{
         >
           <span className="inline-flex items-center gap-2">
             <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${chatMode === "threads" ? "bg-current" : "bg-transparent motion-reduce:bg-slate-300 dark:motion-reduce:bg-slate-600"}`} />
-            <span>Threads</span>
+            <span>{translate(chatMessages, "threads")}</span>
             <span className="rounded-full bg-black/5 px-1.5 py-0.5 font-mono text-[9px] tracking-normal dark:bg-white/10">{threadsTabDisplayCopy}</span>
           </span>
         </button>
@@ -175,7 +179,7 @@ export const ChatPageShell: FunctionComponent<{
           role="tab"
           aria-selected={chatMode === "invocations"}
           aria-controls="chat-panel"
-          aria-label={`Invocations, ${invocationsStatusCopy}`}
+          aria-label={`${translate(chatMessages, "invocations")}, ${invocationsStatusCopy}`}
           tabIndex={chatMode === "invocations" ? 0 : -1}
           type="button"
           onClick={() => onSetChatMode("invocations")}
@@ -184,7 +188,7 @@ export const ChatPageShell: FunctionComponent<{
         >
           <span className="inline-flex items-center gap-2">
             <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${chatMode === "invocations" ? "bg-current" : "bg-transparent motion-reduce:bg-slate-300 dark:motion-reduce:bg-slate-600"}`} />
-            <span>Invocations</span>
+            <span>{translate(chatMessages, "invocations")}</span>
             <span className="rounded-full bg-black/5 px-1.5 py-0.5 font-mono text-[9px] tracking-normal dark:bg-white/10">{invocationsStatusCopy}</span>
           </span>
         </button>
@@ -209,7 +213,9 @@ export const ChatPageShell: FunctionComponent<{
             <span className="relative inline-flex h-2 w-2 rounded-full bg-status-amber"></span>
           </span>
         )}
-        {isConversational && pendingDashboardMessages > 0 ? <>{pendingDashboardMessages} pending<span className="sr-only"> messages</span></> : "Inbox clear"}
+        {isConversational && pendingDashboardMessages > 0
+          ? translate(chatMessages, "pendingCount", { count: formatNumber(pendingDashboardMessages) })
+          : translate(chatMessages, "inboxClear")}
       </span>
       <button
         type="button"
@@ -227,7 +233,7 @@ export const ChatPageShell: FunctionComponent<{
         }`}
       >
         <Plus className="h-3.5 w-3.5" strokeWidth={2.3} />
-        New Thread
+        {translate(chatMessages, "newThread")}
       </button>
     </div>
   ) : null;
@@ -249,13 +255,13 @@ export const ChatPageShell: FunctionComponent<{
   }, [prefersReducedMotion]);
 
   return (
-    <PageContainer aria-label="Chat" padding="chat" className="min-h-0 flex-1 flex flex-col gap-6 lg:gap-8 h-full overflow-hidden">
+    <PageContainer aria-label={translate(chatMessages, "chat")} padding="chat" className="min-h-0 flex-1 flex flex-col gap-6 lg:gap-8 h-full overflow-hidden">
       <PageHeader
         containerRef={headerRef}
         className="shrink-0"
         icon={MessageCircle}
-        eyebrow="Dashboard Chat"
-        title={title}
+        eyebrow={translate(chatMessages, "dashboardChat")}
+        title={resolvedTitle}
         subtitle={subtitle}
         actions={actions}
       />

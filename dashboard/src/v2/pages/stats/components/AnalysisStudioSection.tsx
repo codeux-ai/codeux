@@ -13,6 +13,7 @@ import {
 import { SystemStudio } from "./system/SystemStudio.js";
 import { ModelsStudio } from "./ModelsStudio.js";
 import { TelemetryLedgerTabs } from "./TelemetryLedgerTabs.js";
+import { useStatsI18n } from "../stats-i18n.js";
 import { CostStudio } from "./cost/CostStudio.js";
 
 interface StudioMetadata {
@@ -95,7 +96,17 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
   visualMode,
   chartState,
 }) => {
-  const activeMetadata = STUDIO_METADATA[visualMode];
+  const { locale } = useStatsI18n();
+  const localizedMetadata: Record<StatsVisualMode, StudioMetadata> = locale === "de" ? {
+    trend: { label: "Trend", eyebrow: "Zeitreihenansicht", description: "Token-, Aufruf- und Laufzeitverlauf im ausgewählten Zeitraum.", emptyMessage: "Wählen Sie einen Zeitraum aus, um Trenddaten zu sehen." },
+    composition: { label: "Zusammensetzung", eyebrow: "Nutzungsmix", description: "Anbieter-, Token-, Zweck- und Quellenmix im aktuellen Telemetriezeitraum.", emptyMessage: "Wählen Sie einen Zeitraum aus, um Zusammensetzungsdaten zu sehen." },
+    cost: { label: "Kosten", eyebrow: "Kostenstudio", description: "Kosten, Preisabdeckung und Nutzung nach Anbieter, Modell und Projektaktivität.", emptyMessage: "Wählen Sie einen Zeitraum aus, um Kostendaten zu sehen." },
+    models: { label: "Modelle", eyebrow: "Modellleistung", description: "Modellaktivität, Latenz, Cache-Verhalten und Zuverlässigkeitssignale.", emptyMessage: "Wählen Sie einen Zeitraum aus, um Modelldaten zu sehen." },
+    reliability: { label: "Anbieter", eyebrow: "Zuverlässigkeitsansicht", description: "Anbieterzustand, Quellenvertrauen, Fehler und Integritätshinweise.", emptyMessage: "Wählen Sie einen Zeitraum aus, um Anbieterdaten zu sehen." },
+    ledgers: { label: "Protokolle", eyebrow: "Prüfzeilen", description: "Detaillierte Aufgaben-, Sprint- und Git-Telemetriezeilen für prüfungsartige Analysen.", emptyMessage: "Wählen Sie einen Zeitraum aus, um Protokolldaten zu sehen." },
+    system: { label: "System", eyebrow: "Aufruf-Arbeitsbereich", description: "Aufrufzustand, Filter, Transkriptdetails und Debugging-Kontext.", emptyMessage: "Wählen Sie einen Zeitraum aus, um Systemdaten zu sehen." },
+  } : STUDIO_METADATA;
+  const activeMetadata = localizedMetadata[visualMode];
   const metadataDescriptionId = `stats-analysis-${visualMode}-description`;
 
   const renderSectionMetadata = (metadata: StudioMetadata) => (
@@ -114,7 +125,7 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
       <div className={`mx-auto mb-4 flex h-12 w-12 items-center justify-center border border-[color:var(--stats-border-hairline)] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
         <Layers3 className="h-5 w-5" strokeWidth={2} aria-hidden="true" />
       </div>
-      <div className="text-base font-bold text-[color:var(--stats-value-color)]">Waiting for Telemetry</div>
+      <div className="text-base font-bold text-[color:var(--stats-value-color)]">{locale === "de" ? "Warten auf Telemetrie" : "Waiting for Telemetry"}</div>
       <div className="mt-2 text-sm text-[color:var(--stats-detail-color)]">{metadata.emptyMessage}</div>
     </div>
   );
@@ -124,7 +135,7 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
       key={visualMode}
       id="stats-analysis-panel"
       role="region"
-      aria-label="Stats analysis panel"
+      aria-label={locale === "de" ? "Statistik-Analysebereich" : "Stats analysis panel"}
       aria-describedby={metadataDescriptionId}
       aria-busy={loading ? "true" : undefined}
       className="animate-in fade-in duration-200 motion-reduce:animate-none"
@@ -132,7 +143,7 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
       {renderSectionMetadata(activeMetadata)}
       {loading && stats ? (
         <div role="status" aria-live="polite" aria-atomic="true" className={`mb-3 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
-          Updating analytics from cached data. Current values remain visible while the latest snapshot loads.
+          {locale === "de" ? "Analysen werden aus zwischengespeicherten Daten aktualisiert. Aktuelle Werte bleiben sichtbar, während der neueste Snapshot geladen wird." : "Updating analytics from cached data. Current values remain visible while the latest snapshot loads."}
         </div>
       ) : null}
       {visualMode === "trend" ? (
@@ -145,7 +156,7 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
             planningUsage={planningUsage}
             chartState={chartState}
           />
-        ) : renderEmptyState(STUDIO_METADATA.trend)
+        ) : renderEmptyState(localizedMetadata.trend)
       ) : null}
 
       {visualMode === "composition" ? (
@@ -153,7 +164,7 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
           <div className={loading ? "pointer-events-none opacity-60 transition-opacity motion-reduce:transition-none" : "transition-opacity motion-reduce:transition-none"}>
             <CompositionStudio stats={stats} providerSegments={providerSegments} tokenSegments={tokenSegments} />
           </div>
-        ) : renderEmptyState(STUDIO_METADATA.composition)
+        ) : renderEmptyState(localizedMetadata.composition)
       ) : null}
 
       {visualMode === "cost" ? (
@@ -169,7 +180,7 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
           <div className={loading ? "pointer-events-none opacity-60 transition-opacity motion-reduce:transition-none" : "transition-opacity motion-reduce:transition-none"}>
             <ModelsStudio stats={stats} />
           </div>
-        ) : renderEmptyState(STUDIO_METADATA.models)
+        ) : renderEmptyState(localizedMetadata.models)
       ) : null}
 
       {visualMode === "reliability" ? (
@@ -177,7 +188,7 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
           <div className={loading ? "pointer-events-none opacity-60 transition-opacity motion-reduce:transition-none" : "transition-opacity motion-reduce:transition-none"}>
             <ReliabilityStudio stats={stats} providerSegments={providerSegments} sourceSegments={sourceSegments} />
           </div>
-        ) : renderEmptyState(STUDIO_METADATA.reliability)
+        ) : renderEmptyState(localizedMetadata.reliability)
       ) : null}
 
       {visualMode === "ledgers" ? (
@@ -185,13 +196,13 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
           <section className={`space-y-6 ${loading ? "pointer-events-none opacity-60 transition-opacity motion-reduce:transition-none" : "transition-opacity motion-reduce:transition-none"}`}>
             <TelemetryLedgerTabs stats={stats} />
           </section>
-        ) : renderEmptyState(STUDIO_METADATA.ledgers)
+        ) : renderEmptyState(localizedMetadata.ledgers)
       ) : null}
 
       {visualMode === "system" ? (
         stats ? (
           <SystemStudio projectId={projectId} />
-        ) : renderEmptyState(STUDIO_METADATA.system)
+        ) : renderEmptyState(localizedMetadata.system)
       ) : null}
     </div>
   );

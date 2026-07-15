@@ -5,6 +5,8 @@ import { Bot, FileDown, FileUp, Loader2, Plus, Sparkles } from "lucide-preact";
 
 import type { Source, AgentPreset } from "../../types.js";
 import { PageHeader } from "../layout/PageHeader.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import { agentsMessages } from "../../i18n/messages/agents.js";
 
 export const AgentsHero: FunctionComponent<{
   selectedProject: Source | null;
@@ -29,6 +31,7 @@ export const AgentsHero: FunctionComponent<{
   pushingToFiles,
   fileSyncDisabled = false,
 }) => {
+  const { formatNumber, translate } = useDashboardI18n();
   const heroRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -49,9 +52,9 @@ export const AgentsHero: FunctionComponent<{
       <PageHeader
         data-hero-anim
         icon={Sparkles}
-        eyebrow="Agent Workshop"
-        title="Your Workforce"
-        subtitle="Design, customize, and deploy AI specialists. Each agent ships with a distinct personality, an expressive avatar, and operator-grade system instructions."
+        eyebrow={translate(agentsMessages, "agentWorkshop")}
+        title={translate(agentsMessages, "yourWorkforce")}
+        subtitle={translate(agentsMessages, "heroSubtitle")}
         actions={
           <>
             <button
@@ -65,7 +68,7 @@ export const AgentsHero: FunctionComponent<{
               ) : (
                 <FileDown className="h-3.5 w-3.5" strokeWidth={2.3} />
               )}
-              Pull from files
+              {translate(agentsMessages, "pullFromFiles")}
             </button>
             <button
               type="button"
@@ -78,7 +81,7 @@ export const AgentsHero: FunctionComponent<{
               ) : (
                 <FileUp className="h-3.5 w-3.5" strokeWidth={2.3} />
               )}
-              Push to files
+              {translate(agentsMessages, "pushToFiles")}
             </button>
             {extraActions}
             <button
@@ -88,7 +91,7 @@ export const AgentsHero: FunctionComponent<{
               className="group/btn inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white dark:text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:scale-[1.03] hover:bg-signal-400 hover:shadow-[0_0_32px_rgba(0,224,160,0.36)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
             >
               <Plus className="h-3.5 w-3.5 transition-transform group-hover/btn:rotate-90" strokeWidth={2.5} />
-              New Agent
+              {translate(agentsMessages, "newAgent")}
             </button>
           </>
         }
@@ -100,12 +103,12 @@ export const AgentsHero: FunctionComponent<{
             <span className="flex h-4 w-4 items-center justify-center rounded-full bg-signal-500 font-mono text-[9px] font-black text-white dark:text-void-900">
               {total}
             </span>
-            Active
+            {translate(agentsMessages, "active")}
           </span>
           {synced > 0 && (
             <span className="inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/80 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 shadow-sm backdrop-blur-md dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-400">
               <span className="h-1.5 w-1.5 rounded-full bg-signal-500 shadow-[0_0_8px_rgba(0,224,160,0.6)]" />
-              {synced} synced
+              {translate(agentsMessages, "syncedCount", { count: formatNumber(synced) })}
             </span>
           )}
           {selectedProject && (

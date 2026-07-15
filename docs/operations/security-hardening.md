@@ -16,7 +16,7 @@ This page documents the concrete security posture of Code UX. Code UX operates a
 
 Dependency vulnerability scanning is enforced via our CI/CD pipeline.
 
-During the CI process, dependencies are evaluated with `pnpm run audit` (which enforces `pnpm audit --audit-level=high`) alongside normal tests and builds. The process respects the frozen lockfile installation structure and blocks builds with high-severity risks.
+During the CI process, dependencies are evaluated with the standard `pnpm run audit` command (which enforces `pnpm audit --audit-level=high`) alongside normal tests and builds. The repository pins pnpm 11.13.0, whose native audit implementation uses npm's supported bulk-advisory API. The process respects the frozen lockfile installation structure and blocks builds with high-severity risks.
 
 Release publishing, release checks, and desktop packaging workflows also run `pnpm run audit` after dependency installation and before packaging or publishing artifacts. This keeps dependency risk evaluation on every artifact-producing path, not only on pull request CI.
 

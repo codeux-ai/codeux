@@ -1,9 +1,11 @@
 /** @vitest-environment jsdom */
 /** @jsx h */
 import { h } from "preact";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { DashboardLocale } from "../../../i18n/locales.js";
+import { DashboardI18nProvider } from "../../../i18n/context.js";
 import { CustomDashboardsPage } from "../../../CustomDashboardsPage.js";
 import { ProjectDataContext } from "../../../context/project-data.js";
 import type {
@@ -324,6 +326,13 @@ const passedSession: CustomDashboardValidationSessionRecord = {
   updatedAt: "2026-07-07T00:00:01.000Z",
 };
 
+const passedRevision: CustomDashboardRevisionRecord = {
+  ...revision,
+  validationStatus: "passed",
+  validationReport: { valid: true, summary: "Passed", issues: [] },
+  validatedAt: "2026-07-07T00:00:01.000Z",
+};
+
 const projectContext = {
   projects: [{ id: "project-1", name: "Approved Test Project", status: "ready" }],
   selectedProjectId: "project-1",
@@ -337,10 +346,15 @@ const projectContext = {
   deleteProject: vi.fn(),
 };
 
-const renderPage = (context: typeof projectContext | any = projectContext) => render(
-  <ProjectDataContext.Provider value={context}>
-    <CustomDashboardsPage />
-  </ProjectDataContext.Provider>,
+const renderPage = (
+  context: typeof projectContext | any = projectContext,
+  locale: DashboardLocale = "en",
+) => render(
+  <DashboardI18nProvider initialLocale={locale} storage={null}>
+    <ProjectDataContext.Provider value={context}>
+      <CustomDashboardsPage />
+    </ProjectDataContext.Provider>
+  </DashboardI18nProvider>,
 );
 
 const openCredentialPanel = async () => {

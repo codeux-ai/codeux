@@ -11,6 +11,7 @@ import {
   createInitialNodeCanvasGraph,
   nodesCanvasReducer,
 } from "../../../dashboard/src/v2/lib/nodes-canvas-state.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
 
 expect.extend(matchers);
 
@@ -34,7 +35,7 @@ afterEach(() => {
 
 describe("NodeCanvas", () => {
   it("renders seed graph nodes, selectable cards, handles, edges, toolbar, and minimap", () => {
-    render(<NodeCanvas graph={createInitialNodeCanvasGraph()} />);
+    render(<DashboardI18nProvider storage={null}><NodeCanvas graph={createInitialNodeCanvasGraph()} /></DashboardI18nProvider>);
 
     expect(screen.getByRole("application", { name: "Node canvas" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Project Trigger trigger node/i })).toHaveAttribute("aria-pressed", "true");
@@ -44,7 +45,7 @@ describe("NodeCanvas", () => {
     expect(screen.getByRole("button", { name: "Zoom in node canvas" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Node canvas minimap" })).toBeInTheDocument();
     expect(screen.getAllByText("Valid")).toHaveLength(5);
-    expect(screen.getAllByText("1 handles")).toHaveLength(2);
+    expect(screen.getAllByText("1 handle")).toHaveLength(2);
   });
 
   it("uses controlled callbacks for node and edge selection", () => {
@@ -52,11 +53,11 @@ describe("NodeCanvas", () => {
     const onSelectEdge = vi.fn();
 
     render(
-      <NodeCanvas
+      <DashboardI18nProvider storage={null}><NodeCanvas
         graph={createInitialNodeCanvasGraph()}
         onSelectNode={onSelectNode}
         onSelectEdge={onSelectEdge}
-      />,
+      /></DashboardI18nProvider>,
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Task Draft task node/i }));
@@ -67,7 +68,7 @@ describe("NodeCanvas", () => {
   });
 
   it("updates viewport controls without depending on route integration", () => {
-    render(<NodeCanvas graph={createInitialNodeCanvasGraph()} />);
+    render(<DashboardI18nProvider storage={null}><NodeCanvas graph={createInitialNodeCanvasGraph()} /></DashboardI18nProvider>);
 
     fireEvent.click(screen.getByRole("button", { name: "Zoom in node canvas" }));
     expect(screen.getByText("110%")).toBeInTheDocument();
@@ -86,11 +87,11 @@ describe("NodeCanvas", () => {
     const onDeleteNode = vi.fn();
     const onSelectNode = vi.fn();
     render(
-      <NodeCanvas
+      <DashboardI18nProvider storage={null}><NodeCanvas
         graph={createInitialNodeCanvasGraph()}
         onSelectNode={onSelectNode}
         onDeleteNode={onDeleteNode}
-      />,
+      /></DashboardI18nProvider>,
     );
 
     const canvas = screen.getByRole("application", { name: "Node canvas" });
@@ -103,7 +104,7 @@ describe("NodeCanvas", () => {
 
   it("can be wired as a controlled graph and delete selected edges", () => {
     const onDeleteEdge = vi.fn();
-    render(<ControlledCanvas onDeleteEdge={onDeleteEdge} />);
+    render(<DashboardI18nProvider storage={null}><ControlledCanvas onDeleteEdge={onDeleteEdge} /></DashboardI18nProvider>);
 
     fireEvent.click(screen.getByRole("button", { name: /Select edge trigger-1 to agent-1/i }));
     expect(screen.getByRole("button", { name: /Select edge trigger-1 to agent-1/i })).toHaveAttribute("aria-pressed", "true");
@@ -120,9 +121,9 @@ describe("NodeCanvas", () => {
       label: "ManualTriggerWithAnExtremelyLongUnbrokenWorkflowNameThatShouldNotBreakTheCanvas",
     });
     render(
-      <div style={{ width: "320px" }}>
+      <DashboardI18nProvider storage={null}><div style={{ width: "320px" }}>
         <NodeCanvas graph={graph} />
-      </div>,
+      </div></DashboardI18nProvider>,
     );
 
     const node = screen.getByRole("button", { name: /ManualTriggerWithAnExtremelyLongUnbrokenWorkflowNameThatShouldNotBreakTheCanvas/i });
@@ -133,15 +134,39 @@ describe("NodeCanvas", () => {
 
   it("renders loading and empty states", () => {
     const graph = createInitialNodeCanvasGraph();
-    const { rerender } = render(<NodeCanvas graph={graph} loading />);
+    const { rerender } = render(<DashboardI18nProvider storage={null}><NodeCanvas graph={graph} loading /></DashboardI18nProvider>);
 
     expect(screen.getByRole("region", { name: "Node canvas loading" })).toBeInTheDocument();
     expect(screen.getByText("Loading node canvas")).toBeInTheDocument();
 
-    rerender(<NodeCanvas graph={{ nodes: [], edges: [], selection: { nodeIds: [], edgeIds: [] } }} />);
+    rerender(<DashboardI18nProvider storage={null}><NodeCanvas graph={{ nodes: [], edges: [], selection: { nodeIds: [], edgeIds: [] } }} /></DashboardI18nProvider>);
 
     expect(screen.getByRole("region", { name: "Empty node canvas" })).toBeInTheDocument();
     expect(screen.getByText("No nodes on this canvas")).toBeInTheDocument();
+  });
+
+  it("keeps German mobile and keyboard controls accessible with long stored labels", () => {
+    const onSelectNode = vi.fn();
+    const longLabel = "SehrLangeUnveränderteNodeBezeichnungOhneLeerzeichenFürMobileAnsichten";
+    const graph = nodesCanvasReducer(createInitialNodeCanvasGraph(), {
+      type: "update_node_label",
+      nodeId: "trigger-1",
+      label: longLabel,
+    });
+    render(
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <div style={{ width: "320px" }}>
+          <NodeCanvas graph={graph} onSelectNode={onSelectNode} />
+        </div>
+      </DashboardI18nProvider>,
+    );
+
+    const canvas = screen.getByRole("application", { name: "Node-Canvas" });
+    expect(screen.getByRole("button", { name: "Node-Canvas vergrößern" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: new RegExp(longLabel) })).toHaveStyle({ width: "248px" });
+
+    fireEvent.keyDown(canvas, { key: "ArrowRight" });
+    expect(onSelectNode).toHaveBeenCalledWith("agent-1", false);
   });
 });
 

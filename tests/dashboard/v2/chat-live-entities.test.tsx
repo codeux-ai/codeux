@@ -1,13 +1,15 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, render, screen } from "@testing-library/preact";
+import { cleanup, render, screen, within } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatPage } from "../../../dashboard/src/v2/ChatPage.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
 import type {
   ChatMessageRecord,
   ChatThread,
+  ExecutionInvocationRecord,
   Source,
   Sprint,
   Task,
@@ -83,6 +85,33 @@ const createMessage = (): ChatMessageRecord => ({
   deliveryStatus: "processed",
   createdAt: "2026-03-10T12:00:00.000Z",
   metadata: null,
+});
+
+const createInvocation = (): ExecutionInvocationRecord => ({
+  id: "invocation-1",
+  projectId: "project-1",
+  sprintId: null,
+  taskId: null,
+  sprintRunId: null,
+  dispatchId: null,
+  taskRunId: null,
+  attentionItemId: null,
+  providerInvocationId: null,
+  type: "planning",
+  status: "running",
+  provider: "mock-provider",
+  model: "provider-model",
+  systemPrompt: null,
+  startedAt: "2026-03-10T12:00:00.000Z",
+  finishedAt: null,
+  errorMessage: null,
+  lastErrorCategory: null,
+  lastErrorMessage: null,
+  lastRetryAfterIso: null,
+  messageCount: 1,
+  lastMessageAt: "2026-03-10T12:01:00.000Z",
+  createdAt: "2026-03-10T12:00:00.000Z",
+  updatedAt: "2026-03-10T12:01:00.000Z",
 });
 
 const createSprint = (): Sprint => ({
@@ -239,5 +268,32 @@ describe("ChatPage live entity integration", () => {
     expect(screen.queryByRole("link", {
       name: "Open task T01: Connect live chat entities. Live status: In Progress.",
     })).not.toBeInTheDocument();
+  });
+
+  it("translates the active invocation header status in German", () => {
+    const invocation = createInvocation();
+    mocks.data = {
+      ...createChatPageData("in_progress"),
+      chatMode: "invocations",
+      invocations: [invocation],
+      invocationTotalCount: 1,
+      selectedThreadId: null,
+      selectedThread: null,
+      selectedInvocationId: invocation.id,
+      selectedInvocation: invocation,
+      invocationIndex: new Map([[invocation.id, invocation]]),
+    };
+
+    render(
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <ChatPage />
+      </DashboardI18nProvider>,
+    );
+
+    const activeInvocation = screen.getByRole("heading", { level: 1, name: "Planung" }).parentElement;
+    expect(activeInvocation).not.toBeNull();
+    expect(within(activeInvocation as HTMLElement).getByText("Aktiver Aufruf")).toBeInTheDocument();
+    expect(within(activeInvocation as HTMLElement).getByText("Wird ausgeführt")).toBeInTheDocument();
+    expect(within(activeInvocation as HTMLElement).queryByText("running")).not.toBeInTheDocument();
   });
 });

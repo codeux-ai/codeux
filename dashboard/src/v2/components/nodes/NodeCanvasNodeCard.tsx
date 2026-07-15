@@ -4,6 +4,7 @@ import type {
   NodeCanvasPortDirection,
   NodeCanvasValidationIssue,
 } from "../../lib/nodes-canvas-state.js";
+import { useNodesI18n } from "../../i18n/messages/nodes.js";
 
 export const NODE_CANVAS_NODE_WIDTH = 248;
 export const NODE_CANVAS_NODE_HEIGHT = 156;
@@ -49,6 +50,7 @@ export const NodeCanvasNodeCard: FunctionComponent<NodeCanvasNodeCardProps> = ({
   onPointerDown,
   setNodeRef,
 }) => {
+  const { t, tp } = useNodesI18n();
   const hasIssues = validationIssues.length > 0;
   const configCount = node.config.length;
   const portCount = node.inputPorts.length + node.outputPorts.length;
@@ -59,7 +61,9 @@ export const NodeCanvasNodeCard: FunctionComponent<NodeCanvasNodeCardProps> = ({
       type="button"
       data-node-canvas-interactive="true"
       data-node-id={node.id}
-      aria-label={`${node.label} ${node.kind} node${hasIssues ? ` with ${validationIssues.length} validation issue${validationIssues.length === 1 ? "" : "s"}` : ""}`}
+      aria-label={hasIssues
+        ? t("canvasNodeLabelWithIssues", { label: node.label, kind: node.kind, count: validationIssues.length })
+        : t("canvasNodeLabel", { label: node.label, kind: node.kind })}
       aria-pressed={selected}
       className={`absolute group/node flex flex-col rounded-[1rem] border p-3 text-left shadow-[0_18px_42px_rgba(15,23,42,0.12)] transition-[border-color,box-shadow,transform,background-color] motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
         selected
@@ -78,7 +82,7 @@ export const NodeCanvasNodeCard: FunctionComponent<NodeCanvasNodeCardProps> = ({
         {node.inputPorts.map((port, index) => (
           <span
             key={port.id}
-            aria-label={`${node.label} target handle ${port.label}`}
+            aria-label={t("targetHandle", { label: node.label, port: port.label })}
             className="absolute left-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-slate-500 shadow-[0_0_0_1px_rgba(15,23,42,0.25)] dark:border-void-800 dark:bg-slate-300"
             style={{ top: `${getNodeCanvasPortOffsetY("input", index, node.inputPorts.length) - 7}px` }}
           />
@@ -89,7 +93,7 @@ export const NodeCanvasNodeCard: FunctionComponent<NodeCanvasNodeCardProps> = ({
         {node.outputPorts.map((port, index) => (
           <span
             key={port.id}
-            aria-label={`${node.label} source handle ${port.label}`}
+            aria-label={t("sourceHandle", { label: node.label, port: port.label })}
             className="absolute right-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-signal-500 shadow-[0_0_0_1px_rgba(0,224,160,0.34)] dark:border-void-800"
             style={{ top: `${getNodeCanvasPortOffsetY("output", index, node.outputPorts.length) - 7}px` }}
           />
@@ -107,7 +111,7 @@ export const NodeCanvasNodeCard: FunctionComponent<NodeCanvasNodeCardProps> = ({
               : "bg-status-green/10 text-status-green ring-1 ring-status-green/25"
           }`}
         >
-          {hasIssues ? "Issue" : "Valid"}
+          {hasIssues ? t("issue") : t("valid")}
         </span>
       </span>
 
@@ -120,8 +124,8 @@ export const NodeCanvasNodeCard: FunctionComponent<NodeCanvasNodeCardProps> = ({
       </span>
 
       <span className="mt-auto flex min-w-0 items-center justify-between gap-2 pt-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-        <span className="truncate">{portCount} handles</span>
-        <span className="truncate">{configCount} fields</span>
+        <span className="truncate">{tp("handleCount", portCount)}</span>
+        <span className="truncate">{tp("fieldCount", configCount)}</span>
       </span>
     </button>
   );

@@ -15,6 +15,7 @@ export type DocsSlug =
   | 'user-quicksprints'
   | 'user-troubleshooting'
   | 'user-dashboard-overview'
+  | 'user-dashboard-internationalization'
   | 'user-dashboard-projects'
   | 'user-dashboard-sprints'
   | 'user-dashboard-tasks'
@@ -120,6 +121,7 @@ export type DocsSlug =
   | 'architecture-chat-connectors-whatsapp'
   | 'architecture-custom-dashboard-foundation'
   | 'architecture-custom-nodes'
+  | 'architecture-dashboard-internationalization'
   | 'architecture-high-concurrency-orchestration'
   | 'architecture-managed-container-runtime'
   | 'architecture-node-flow-builtins-and-security'
@@ -223,6 +225,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     section: 'User Guide',
     title: "The Dashboard",
     description: "The Code UX dashboard is a real-time Preact application served at http://localhost:4444 (configurable with DASHBOARD_PORT). It is the primary interface for humans operating Code UX.",
+  },
+  'user-dashboard-internationalization': {
+    id: 'user-dashboard-internationalization',
+    path: '/docs/user-dashboard-internationalization',
+    section: 'User Guide',
+    title: "Dashboard Language and Internationalization",
+    description: "The Code UX dashboard supports English and German interface copy. English is the default when no valid saved preference exists. Code UX does not detect a language from your browser, synchronize the choice to the backe...",
   },
   'user-dashboard-projects': {
     id: 'user-dashboard-projects',
@@ -404,7 +413,7 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     path: '/docs/settings-display-settings',
     section: 'User Guide',
     title: "Display Settings",
-    description: "Controls the dashboard shell layout, theme, accent color, motion preference, and desktop zoom when available.",
+    description: "Controls the dashboard shell layout, language, theme, accent color, motion preference, and desktop zoom when available.",
   },
   'settings-background': {
     id: 'settings-background',
@@ -959,6 +968,13 @@ export const docsRegistry: Record<DocsSlug, DocsRegistryEntry> = {
     title: "Custom Node Architecture and Security",
     description: "Custom nodes are project-owned TypeScript packages that pass explicit validation and publication gates before Code UX can execute them. Generated code is never imported or evaluated by the Code UX server.",
   },
+  'architecture-dashboard-internationalization': {
+    id: 'architecture-dashboard-internationalization',
+    path: '/docs/architecture-dashboard-internationalization',
+    section: 'Architecture',
+    title: "Dashboard internationalization",
+    description: "The v2 dashboard includes a dependency-free internationalization foundation for English (en) and German (de). English is the compatibility default, and the dashboard does not infer a locale from browser preferences.",
+  },
   'architecture-high-concurrency-orchestration': {
     id: 'architecture-high-concurrency-orchestration',
     path: '/docs/architecture-high-concurrency-orchestration',
@@ -1044,6 +1060,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['user-quicksprints'],
   docsRegistry['user-troubleshooting'],
   docsRegistry['user-dashboard-overview'],
+  docsRegistry['user-dashboard-internationalization'],
   docsRegistry['user-dashboard-projects'],
   docsRegistry['user-dashboard-sprints'],
   docsRegistry['user-dashboard-tasks'],
@@ -1149,6 +1166,7 @@ export const orderedDocs: DocsRegistryEntry[] = [
   docsRegistry['architecture-chat-connectors-whatsapp'],
   docsRegistry['architecture-custom-dashboard-foundation'],
   docsRegistry['architecture-custom-nodes'],
+  docsRegistry['architecture-dashboard-internationalization'],
   docsRegistry['architecture-high-concurrency-orchestration'],
   docsRegistry['architecture-managed-container-runtime'],
   docsRegistry['architecture-node-flow-builtins-and-security'],

@@ -33,7 +33,6 @@ vi.mock("../../../lib/automation-credential-api.js", async (importOriginal) => {
     revokeAutomationCredential: vi.fn(),
   };
 });
-
 const credential = (overrides: Partial<AutomationCredentialMetadata> = {}): AutomationCredentialMetadata => ({
   id: "credential-1",
   name: "Deployment token",

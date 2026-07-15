@@ -6,6 +6,7 @@ import { render, screen, cleanup, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TopCardsModeRenderer } from "../../../dashboard/src/v2/components/stats/TopCardsModeRenderer.js";
+import { StatsI18nProvider } from "../../../dashboard/src/v2/pages/stats/stats-i18n.js";
 
 expect.extend(matchers);
 
@@ -174,6 +175,34 @@ describe("TopCardsModeRenderer", () => {
     expect(screen.getByRole("article", { name: /Average per Sprint: \$12\.34/ })).toHaveTextContent("canonical sprint");
     expect(screen.getByRole("article", { name: /Blended Cost \/ 1M Tokens: \$246\.80/ })).toHaveTextContent("50,000 tracked tokens");
     expect(screen.getByRole("article", { name: /Pricing Coverage: 100\.0%/ })).toHaveTextContent("All 14 calls");
+  });
+
+  it("localizes cost coverage and provenance copy in German", () => {
+    render(
+      <StatsI18nProvider locale="de">
+        <TopCardsModeRenderer mode="cost" {...baseProps} />
+      </StatsI18nProvider>,
+    );
+
+    const cards = screen.getAllByRole("article");
+    expect(cards[0]).toHaveTextContent("Alle 14 Aufrufe verwenden konfigurierte oder vom Anbieter gemeldete Preise");
+    expect(cards[0]).toHaveTextContent("14 Anbieteraufrufe · 50,0k Tokens");
+    expect(cards[0]).toHaveTextContent("Vollständig bepreist");
+    expect(cards[4]).toHaveTextContent("10 konfiguriert · 4 vom Anbieter gemeldet");
+    expect(cards[4]).toHaveTextContent(/100,0\s*%/);
+    expect(screen.queryByText("All 14 calls use configured or provider-reported pricing")).not.toBeInTheDocument();
+  });
+
+  it("localizes the estimated data-quality hint in German", () => {
+    render(
+      <StatsI18nProvider locale="de">
+        <TopCardsModeRenderer mode="trend" {...baseProps} />
+      </StatsI18nProvider>,
+    );
+
+    const tokenCard = screen.getByRole("article", { name: /Tokens gesamt/ });
+    expect(tokenCard).toHaveTextContent("Geschätzter Mix");
+    expect(screen.queryByText("Estimated mix")).not.toBeInTheDocument();
   });
 
   it("prioritizes active model health, ledger volume, and live system health", () => {

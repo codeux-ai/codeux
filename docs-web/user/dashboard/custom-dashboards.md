@@ -18,6 +18,13 @@ The source of truth is the Code UX database. Drafts stay mutable, revisions are 
 
 If validation fails, use the report and logs to create a new revision. Do not publish around the failure; the repository rejects failed, queued, running, cancelled, missing, or mismatched validation sessions before publication state changes. When a dashboard is already published, validating later drafts keeps the active published dashboard open, and validation sessions for the active published revision do not replace its published validation snapshot.
 
+## Language and Generated Content
+
+The workspace management interface follows the dashboard's English or German language setting. Editor labels, validation stages, publication controls, confirmations, states, and accessibility labels are translated.
+
+Your dashboard data and generated assets are not translated or changed. Names, descriptions, manifests, filenames, code, HTML, source graphs, styleguides, revision IDs, validation logs, preview output, API errors, runtime errors, and build diagnostics remain verbatim. Only recognized Code UX validation explanations with stable issue codes receive translated wording.
+
+## Data Sources
 The Credentials tab appears only when the saved manifest declares slots. Secure-backend failures and empty compatible lists link to credential management in Settings. Binding, replacement, and unbinding use the current optimistic binding revision; a concurrent edit refreshes the dashboard and requires an explicit retry instead of overwriting the other operator. Required unbinding immediately shows the draft as not ready for its next revision, while optional unbound slots remain valid. Every successful binding change refreshes validation and publication readiness.
 
 Credential selection and actions are keyboard accessible, restore focus after completion, and announce saving or error state. Credential IDs remain confined to the dedicated metadata-management request state and never enter manifest, generated-file, source-graph, styleguide, runtime-text, or secret-value fields.

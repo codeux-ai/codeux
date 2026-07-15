@@ -6,6 +6,9 @@ import { openOnboarding } from "../lib/onboarding-control.js";
 import { subscribeToDashboardRealtime } from "../../lib/realtime/dashboard-realtime-client.js";
 import { fetchActiveAgentSchedulerEntries, type AgentSchedulerSummaryEntry } from "../lib/scheduler-api.js";
 import { isDeepEqual } from "../lib/resource-equality.js";
+import { useOptionalDashboardI18n } from "../i18n/context.js";
+import { translateDashboardMessage, type DashboardLocale, type DashboardTextMessageKey } from "../i18n/locales.js";
+import { shellMessages } from "../i18n/messages/shell.js";
 import {
   toNotificationViewModel,
   type NotificationSeverity,
@@ -47,33 +50,40 @@ const writeStoredState = (state: StoredNotificationState): void => {
   }));
 };
 
-const getRelativeTime = (checkedAt: string): string => {
+const shellText = (
+  locale: DashboardLocale,
+  key: DashboardTextMessageKey<typeof shellMessages>,
+  variables?: Record<string, string | number>,
+): string => translateDashboardMessage(shellMessages, locale, key, variables);
+
+const getRelativeTime = (checkedAt: string, locale: DashboardLocale): string => {
   if (!checkedAt) {
-    return "just now";
+    return shellText(locale, "justNow");
   }
   const elapsedMs = Math.max(0, Date.now() - new Date(checkedAt).getTime());
   const elapsedMinutes = Math.floor(elapsedMs / 60_000);
   if (elapsedMinutes < 1) {
-    return "just now";
+    return shellText(locale, "justNow");
   }
   if (elapsedMinutes < 60) {
-    return `${elapsedMinutes}m ago`;
+    return shellText(locale, "minutesAgo", { count: elapsedMinutes });
   }
   const elapsedHours = Math.floor(elapsedMinutes / 60);
-  return `${elapsedHours}h ago`;
+  return shellText(locale, "hoursAgo", { count: elapsedHours });
 };
 
 const deriveStartupNotifications = (
   readiness: OnboardingRuntimeReadiness | null,
   markAction: () => void,
+  locale: DashboardLocale,
 ): Array<Omit<DashboardNotification, "unread">> => {
   if (!readiness) {
     return [{
       id: "startup-checks-loading",
       severity: "info",
-      title: "Startup checks loading",
-      body: "Code UX is checking Docker, Git, and provider credentials.",
-      time: "just now",
+      title: shellText(locale, "startupChecksLoading"),
+      body: shellText(locale, "startupChecksLoadingBody"),
+      time: shellText(locale, "justNow"),
       dismissible: false,
       icon: Info,
     }];
@@ -88,21 +98,21 @@ const deriveStartupNotifications = (
     notifications.push({
       id: "startup-cluster-not-ready",
       severity: "critical",
-      title: "Cluster not ready",
-      body: `${missingRequired.map((dependency) => dependency.label).join(", ")} must be available before containerized provider CLIs can run.`,
-      time: getRelativeTime(readiness.checkedAt),
+      title: shellText(locale, "clusterNotReady"),
+      body: shellText(locale, "clusterNotReadyBody", { dependencies: missingRequired.map((dependency) => dependency.label).join(", ") }),
+      time: getRelativeTime(readiness.checkedAt, locale),
       dismissible: false,
       icon: AlertTriangle,
-      actionLabel: "Open onboarding",
+      actionLabel: shellText(locale, "openOnboarding"),
       onAction: markAction,
     });
   } else {
     notifications.push({
       id: "startup-cluster-ready",
       severity: "success",
-      title: "Startup checks passed",
-      body: "Docker, Git, and required runtime checks are ready for local container execution.",
-      time: getRelativeTime(readiness.checkedAt),
+      title: shellText(locale, "startupChecksPassed"),
+      body: shellText(locale, "startupChecksPassedBody"),
+      time: getRelativeTime(readiness.checkedAt, locale),
       dismissible: true,
       icon: CheckCircle,
     });
@@ -112,9 +122,9 @@ const deriveStartupNotifications = (
     notifications.push({
       id: "startup-dependency-warnings",
       severity: "warning",
-      title: "Startup warnings",
+      title: shellText(locale, "startupWarnings"),
       body: warningDependencies.map((dependency) => dependency.resolution).join(" "),
-      time: getRelativeTime(readiness.checkedAt),
+      time: getRelativeTime(readiness.checkedAt, locale),
       dismissible: true,
       icon: AlertTriangle,
     });
@@ -124,24 +134,24 @@ const deriveStartupNotifications = (
     notifications.push({
       id: "startup-provider-auth-detected",
       severity: "info",
-      title: "Provider auth detected",
-      body: `${detectedProviders.map((provider) => provider.label).join(", ")} local auth can be activated for container runs.`,
-      time: getRelativeTime(readiness.checkedAt),
+      title: shellText(locale, "providerAuthDetected"),
+      body: shellText(locale, "providerAuthDetectedBody", { providers: detectedProviders.map((provider) => provider.label).join(", ") }),
+      time: getRelativeTime(readiness.checkedAt, locale),
       dismissible: true,
       icon: KeyRound,
-      actionLabel: "Configure",
+      actionLabel: shellText(locale, "configure"),
       onAction: markAction,
     });
   } else {
     notifications.push({
       id: "startup-provider-auth-missing",
       severity: "warning",
-      title: "Provider configuration required",
-      body: "No usable provider authentication was detected. Configure at least one provider before starting agent work.",
-      time: getRelativeTime(readiness.checkedAt),
+      title: shellText(locale, "providerConfigurationRequired"),
+      body: shellText(locale, "providerConfigurationRequiredBody"),
+      time: getRelativeTime(readiness.checkedAt, locale),
       dismissible: false,
       icon: KeyRound,
-      actionLabel: "Open onboarding",
+      actionLabel: shellText(locale, "openOnboarding"),
       onAction: markAction,
     });
   }
@@ -151,13 +161,14 @@ const deriveStartupNotifications = (
 
 const deriveAgentSchedulerNotifications = (
   entries: AgentSchedulerSummaryEntry[],
+  locale: DashboardLocale,
 ): Array<Omit<DashboardNotification, "unread">> => (
   entries.map((entry) => ({
     id: `scheduler-agent-${entry.id}`,
     severity: "info",
-    title: `${entry.label} scheduled`,
-    body: `${entry.title}. ${entry.targetSummary}. ${entry.timingSummary}. Status: ${entry.statusLabel}.`,
-    time: "Scheduled",
+    title: shellText(locale, "scheduledTitle", { label: entry.label }),
+    body: shellText(locale, "scheduledBody", { title: entry.title, target: entry.targetSummary, timing: entry.timingSummary, status: entry.statusLabel }),
+    time: shellText(locale, "scheduled"),
     dismissible: true,
     icon: CalendarClock,
   }))
@@ -173,6 +184,7 @@ export const useNotifications = (projectId?: string | null): {
   markRead: (id: string) => void;
   dismiss: (id: string) => void;
 } => {
+  const { locale } = useOptionalDashboardI18n();
   const [readiness, setReadiness] = useState<OnboardingRuntimeReadiness | null>(null);
   const [interventionFeed, setInterventionFeed] = useState<DashboardNotificationFeed>({
     notifications: [],
@@ -287,9 +299,9 @@ export const useNotifications = (projectId?: string | null): {
 
   const notifications = useMemo(() => {
     const base = [
-      ...deriveStartupNotifications(readiness, openOnboarding),
-      ...interventionFeed.notifications.map((notification) => toNotificationViewModel(notification)),
-      ...deriveAgentSchedulerNotifications(agentSchedules),
+      ...deriveStartupNotifications(readiness, openOnboarding, locale),
+      ...interventionFeed.notifications.map((notification) => toNotificationViewModel(notification, Date.now(), locale)),
+      ...deriveAgentSchedulerNotifications(agentSchedules, locale),
     ];
     return base
       .filter((notification) => !storedState.dismissedIds.includes(notification.id))
@@ -297,7 +309,7 @@ export const useNotifications = (projectId?: string | null): {
         ...notification,
         unread: !storedState.readIds.includes(notification.id),
       }));
-  }, [agentSchedules, interventionFeed, readiness, storedState.dismissedIds, storedState.readIds]);
+  }, [agentSchedules, interventionFeed, locale, readiness, storedState.dismissedIds, storedState.readIds]);
 
   const markRead = useCallback((id: string): void => {
     updateStoredState((current) => current.readIds.includes(id) ? current : {

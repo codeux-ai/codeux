@@ -6,6 +6,7 @@ import { h, Fragment } from "preact";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
+import { renderWithI18n } from "../render-with-i18n.js";
 expect.extend(matchers);
 
 import { TasksList } from "../../../dashboard/src/v2/components/TasksList.js";
@@ -80,7 +81,7 @@ describe("TasksList", () => {
     };
 
     it("renders and filters tasks correctly", async () => {
-        render(
+        renderWithI18n(
             <ProjectDataProvider initialProject={null}>
                 <TasksList pageData={pageData} />
             </ProjectDataProvider>
@@ -106,7 +107,7 @@ describe("TasksList", () => {
     });
 
     it("exposes loading active streams as a named busy status", () => {
-        render(
+        renderWithI18n(
             <ProjectDataProvider initialProject={null}>
                 <TasksList pageData={{ ...pageData, isLoading: true, tasks: [] }} />
             </ProjectDataProvider>
@@ -123,7 +124,7 @@ describe("TasksList", () => {
             tasks: [mockTask],
             isLoading: false
         };
-        render(
+        renderWithI18n(
             <ProjectDataProvider initialProject={null}>
                 <TasksList pageData={noSprintPageData} />
             </ProjectDataProvider>
@@ -135,7 +136,7 @@ describe("TasksList", () => {
 
     it("handles reduced motion correctly", () => {
         vi.mocked(gsap.fromTo).mockClear();
-        render(
+        renderWithI18n(
             <ProjectDataProvider initialProject={null}>
                 <TasksList pageData={pageData} />
             </ProjectDataProvider>
@@ -152,7 +153,7 @@ describe("TasksList", () => {
             status: "in_progress",
         }));
 
-        render(
+        renderWithI18n(
             <ProjectDataProvider initialProject={null}>
                 <TasksList pageData={{ ...pageData, tasks: largeTasks }} />
             </ProjectDataProvider>
@@ -181,7 +182,7 @@ describe("TasksList", () => {
             })),
         ];
 
-        render(
+        renderWithI18n(
             <ProjectDataProvider initialProject={null}>
                 <TasksList pageData={{ ...pageData, tasks: mixedTasks }} />
             </ProjectDataProvider>
@@ -237,7 +238,7 @@ const baseProps: any = {
 
     it("bypasses GSAP Flip animation when reduced motion is true", () => {
         vi.spyOn(useReducedMotionModule, 'useReducedMotion').mockReturnValue(true);
-        const { rerender } = render(
+        const { rerender } = renderWithI18n(
             <TasksList {...baseProps} />
         );
 
@@ -266,7 +267,7 @@ const baseProps: any = {
              vi.mocked(Flip.default.getState).mockClear();
         }
 
-        render(
+        renderWithI18n(
             <TasksList {...baseProps} />
         );
 
@@ -277,7 +278,7 @@ const baseProps: any = {
     });
 
     it("keeps compact active stream actions accessible and keyboard focusable", () => {
-        render(<ProjectDataProvider initialData={null as any}><TasksList pageData={pageData} /></ProjectDataProvider>);
+        renderWithI18n(<ProjectDataProvider initialData={null as any}><TasksList pageData={pageData} /></ProjectDataProvider>);
 
         const stopButton = screen.getByRole("button", { name: /Stop task task-1: Test Task/i });
         const configureLink = screen.getByRole("link", { name: /Configure task task-1: Test Task/i });
@@ -296,7 +297,7 @@ const baseProps: any = {
 
     it("keeps pending active stream actions visible, target-labelled, and inert", async () => {
         vi.mocked(dashboardApi.cancelTaskDispatch).mockReturnValueOnce(new Promise(() => {}));
-        render(<ProjectDataProvider initialData={null as any}><TasksList pageData={pageData} /></ProjectDataProvider>);
+        renderWithI18n(<ProjectDataProvider initialData={null as any}><TasksList pageData={pageData} /></ProjectDataProvider>);
 
         const stopButton = screen.getByRole("button", { name: /Stop task task-1: Test Task/i });
         await act(async () => {
@@ -318,7 +319,7 @@ const baseProps: any = {
     });
 
     it("labels sprint stream status and progress for assistive technology", () => {
-        render(<ProjectDataProvider initialData={null as any}><TasksList pageData={pageData} /></ProjectDataProvider>);
+        renderWithI18n(<ProjectDataProvider initialData={null as any}><TasksList pageData={pageData} /></ProjectDataProvider>);
 
         const sprintRegion = screen.getByRole("region", { name: /Sprint One active stream. Running. 7.5% complete./i });
         expect(sprintRegion).toBeInTheDocument();
@@ -376,7 +377,7 @@ const baseProps: any = {
             goal: "Exercise reduced-motion sprint scope status",
             status: "running",
             showcasePinned: false,
-            startDate: null,
+            startDate: "2026-07-05",
             endDate: null,
             featureBranch: null,
             baseCommitSha: null,
@@ -387,7 +388,7 @@ const baseProps: any = {
             updatedAt: "2026-07-05T00:00:00Z",
             date: "2026-07-05",
         } as any;
-        const { container } = render(
+        const { container } = renderWithI18n(
             <TaskBoardSprintSelector
                 sprints={[sprint]}
                 selectedId={null}
@@ -402,7 +403,7 @@ const baseProps: any = {
         const runningDot = container.querySelector('[data-sprint-status-dot="running"]');
         expect(runningDot).toBeVisible();
         expect(screen.getByRole("option", { name: /SPR-7: Runtime Scope/i })).toBeInTheDocument();
-        expect(screen.getByText("2026-07-05")).toBeInTheDocument();
+        expect(screen.getByText("Jul 5")).toBeInTheDocument();
         expect(screen.getByText(/10 tasks, 5% complete/)).toBeInTheDocument();
 
         const tokens = (runningDot?.getAttribute("class") ?? "").split(/\s+/).filter(Boolean);

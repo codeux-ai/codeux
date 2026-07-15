@@ -14,6 +14,7 @@ import {
   searchProjectIssues,
   type RemoteIssueSummary,
 } from "../../../../../dashboard/src/v2/lib/project-api";
+import { renderWithI18n } from "../../../render-with-i18n.js";
 import { fetchProjectEffectiveSettings } from "../../../../../dashboard/src/v2/lib/settings-api";
 
 expect.extend(matchers);
@@ -78,7 +79,7 @@ const makeResult = (provider: ProjectManagementImportProvider): RemoteIssueSumma
   issueCommentCount: provider === "notion" ? null : 2,
 });
 
-const renderModal = (provider: ProjectManagementImportProvider, onImport = vi.fn()) => render(
+const renderModal = (provider: ProjectManagementImportProvider, onImport = vi.fn()) => renderWithI18n(
   <SprintProjectManagementImportModal
     projectId="project-1"
     provider={provider}
@@ -191,7 +192,7 @@ describe("SprintProjectManagementImportModal", () => {
     await user.type(screen.getByPlaceholderText("LIN-42, issue-id"), "LIN-99");
     await user.keyboard("{Enter}");
     await user.click(screen.getByLabelText("Linear status"));
-    await user.click(screen.getByRole("option", { name: "In Progress" }));
+    await user.click(screen.getByRole("option", { name: "In progress" }));
     fireEvent.click(screen.getByRole("button", { name: /^search linear$/i }));
 
     await waitFor(() => {

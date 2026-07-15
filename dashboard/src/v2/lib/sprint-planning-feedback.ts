@@ -1,4 +1,7 @@
 
+import { sprintAuthoringMessages } from "../i18n/messages/sprint-authoring.js";
+import { DEFAULT_DASHBOARD_LOCALE, translateDashboardMessage, type DashboardLocale } from "../i18n/locales.js";
+
 export type PlanningActionType = "improve" | "plan_only" | "plan_and_start" | "replan" | "draft" | "append_tasks" | "schedule";
 
 export interface PlanningFeedback {
@@ -18,45 +21,47 @@ export interface PlanningShipVisual {
   phase: PlanningShipVisualPhase;
 }
 
-const STAGES: Record<PlanningActionType, Array<{ text: string; threshold: number }>> = {
+type SprintAuthoringMessageKey = keyof typeof sprintAuthoringMessages.en;
+
+const STAGES: Record<PlanningActionType, Array<{ key: SprintAuthoringMessageKey; threshold: number }>> = {
   improve: [
-    { text: "Researching codebase context...", threshold: 0.10 },
-    { text: "Analyzing codebase...", threshold: 0.30 },
-    { text: "Refining technical requirements...", threshold: 0.60 },
-    { text: "Synthesizing improved plan...", threshold: 0.90 },
+    { key: "stageResearching", threshold: 0.10 },
+    { key: "stageAnalyzingCodebase", threshold: 0.30 },
+    { key: "stageRefiningRequirements", threshold: 0.60 },
+    { key: "stageSynthesizingPlan", threshold: 0.90 },
   ],
   plan_only: [
-    { text: "Registering sprint definition...", threshold: 0.10 },
-    { text: "Analyzing codebase...", threshold: 0.30 },
-    { text: "Resolving dependencies...", threshold: 0.50 },
-    { text: "Orchestrating subtask generation...", threshold: 0.70 },
-    { text: "Finalizing sprint structure...", threshold: 0.90 },
+    { key: "stageRegisteringSprint", threshold: 0.10 },
+    { key: "stageAnalyzingCodebase", threshold: 0.30 },
+    { key: "stageResolvingDependencies", threshold: 0.50 },
+    { key: "stageGeneratingSubtasks", threshold: 0.70 },
+    { key: "stageFinalizingSprint", threshold: 0.90 },
   ],
   plan_and_start: [
-    { text: "Registering sprint definition...", threshold: 0.10 },
-    { text: "Analyzing codebase...", threshold: 0.30 },
-    { text: "Resolving dependencies...", threshold: 0.50 },
-    { text: "Orchestrating subtask generation...", threshold: 0.70 },
-    { text: "Preparing launch sequence...", threshold: 0.90 },
+    { key: "stageRegisteringSprint", threshold: 0.10 },
+    { key: "stageAnalyzingCodebase", threshold: 0.30 },
+    { key: "stageResolvingDependencies", threshold: 0.50 },
+    { key: "stageGeneratingSubtasks", threshold: 0.70 },
+    { key: "stagePreparingLaunch", threshold: 0.90 },
   ],
   replan: [
-    { text: "Analyzing existing tasks...", threshold: 0.10 },
-    { text: "Discarding outdated plan...", threshold: 0.30 },
-    { text: "Analyzing codebase...", threshold: 0.50 },
-    { text: "Generating new subtasks...", threshold: 0.75 },
-    { text: "Finalizing new structure...", threshold: 0.95 },
+    { key: "stageAnalyzingTasks", threshold: 0.10 },
+    { key: "stageDiscardingPlan", threshold: 0.30 },
+    { key: "stageAnalyzingCodebase", threshold: 0.50 },
+    { key: "stageGeneratingNewSubtasks", threshold: 0.75 },
+    { key: "stageFinalizingNewPlan", threshold: 0.95 },
   ],
   draft: [
-    { text: "Saving draft...", threshold: 0.10 },
-    { text: "Finalizing draft...", threshold: 0.80 },
+    { key: "stageSavingDraft", threshold: 0.10 },
+    { key: "stageFinalizingDraft", threshold: 0.80 },
   ],
   append_tasks: [
-    { text: "Appending tasks...", threshold: 0.10 },
-    { text: "Finalizing sprint...", threshold: 0.80 },
+    { key: "stageAppendingTasks", threshold: 0.10 },
+    { key: "stageFinalizingAppend", threshold: 0.80 },
   ],
   schedule: [
-    { text: "Saving sprint definition...", threshold: 0.10 },
-    { text: "Creating scheduler entry...", threshold: 0.70 },
+    { key: "stageSavingSprint", threshold: 0.10 },
+    { key: "stageCreatingSchedule", threshold: 0.70 },
   ],
 };
 
@@ -122,15 +127,43 @@ export const PLANNING_CANCELLED_MESSAGES: Record<PlanningActionType, string> = {
   schedule: "Schedule request cancelled. The sprint was not scheduled, and you can retry when ready.",
 };
 
-export function getPlanningPendingMessage(actionType: PlanningActionType): string {
-  return PLANNING_PENDING_MESSAGES[actionType];
+const ACTION_LABEL_KEYS: Record<PlanningActionType, SprintAuthoringMessageKey> = {
+  improve: "actionRefining", plan_only: "actionGeneratingSubtasks", plan_and_start: "actionPlanningStarting",
+  replan: "actionReplanning", draft: "actionSavingDraft", append_tasks: "actionAppendingTasks", schedule: "actionScheduling",
+};
+const PENDING_KEYS: Record<PlanningActionType, SprintAuthoringMessageKey> = {
+  improve: "pendingImprove", plan_only: "pendingPlanOnly", plan_and_start: "pendingPlanStart",
+  replan: "pendingReplan", draft: "pendingDraft", append_tasks: "pendingAppend", schedule: "pendingSchedule",
+};
+const CANCELLED_KEYS: Record<PlanningActionType, SprintAuthoringMessageKey> = {
+  improve: "cancelledImprove", plan_only: "cancelledPlanOnly", plan_and_start: "cancelledPlanStart",
+  replan: "cancelledReplan", draft: "cancelledDraft", append_tasks: "cancelledAppend", schedule: "cancelledSchedule",
+};
+
+const translate = (locale: DashboardLocale, key: SprintAuthoringMessageKey): string => (
+  translateDashboardMessage(sprintAuthoringMessages, locale, key)
+);
+
+export function getPlanningActionLabel(
+  actionType: PlanningActionType,
+  locale: DashboardLocale = DEFAULT_DASHBOARD_LOCALE,
+): string {
+  return translate(locale, ACTION_LABEL_KEYS[actionType]);
 }
 
-export function getPlanningCancelledMessage(actionType: PlanningActionType): string {
-  return PLANNING_CANCELLED_MESSAGES[actionType];
+export function getPlanningPendingMessage(actionType: PlanningActionType, locale: DashboardLocale = DEFAULT_DASHBOARD_LOCALE): string {
+  return translate(locale, PENDING_KEYS[actionType]);
 }
 
-export function getPlanningFeedback(actionType: PlanningActionType, elapsedMs: number): PlanningFeedback {
+export function getPlanningCancelledMessage(actionType: PlanningActionType, locale: DashboardLocale = DEFAULT_DASHBOARD_LOCALE): string {
+  return translate(locale, CANCELLED_KEYS[actionType]);
+}
+
+export function getPlanningFeedback(
+  actionType: PlanningActionType,
+  elapsedMs: number,
+  locale: DashboardLocale = DEFAULT_DASHBOARD_LOCALE,
+): PlanningFeedback {
   // Use a Zeno-like curve for progress so it never actually reaches 1 until it's done
   // progress = 1 - e^(-elapsed / halfLife)
   const halfLife = 8000; // 8 seconds to reach 50%
@@ -140,11 +173,11 @@ export function getPlanningFeedback(actionType: PlanningActionType, elapsedMs: n
   const shipProgress = (elapsedMs % SHIP_LOOP_MS) / SHIP_LOOP_MS;
 
   const stages = STAGES[actionType];
-  let text = stages[0].text;
+  let text = translate(locale, stages[0].key);
 
   for (const stage of stages) {
     if (progress >= stage.threshold) {
-      text = stage.text;
+      text = translate(locale, stage.key);
     } else {
       break;
     }

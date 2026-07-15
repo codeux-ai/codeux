@@ -23,7 +23,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 10.33.0
+          version: 11.13.0
           run_install: false
 
       - name: Setup Node.js
@@ -68,7 +68,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 10.33.0
+          version: 11.13.0
           run_install: false
 
       - name: Setup Node.js
@@ -86,15 +86,15 @@ jobs:
             .cache/vitest
             .cache/tsc
             .cache/electron-runtime
-          key: ${{ runner.os }}-node22-pnpm10.33.0-electron-ci-dag-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json', 'electron-builder.config.cjs', 'scripts/e2e/run-mockup-sprint-pentest.mjs', 'scripts/e2e/mockup-sprint-pentest-scenarios.mjs', 'scripts/prepare-electron-runtime-deps.mjs') }}
+          key: ${{ runner.os }}-node22-pnpm11.13.0-electron-ci-dag-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json', 'electron-builder.config.cjs', 'scripts/e2e/run-mockup-sprint-pentest.mjs', 'scripts/e2e/mockup-sprint-pentest-scenarios.mjs', 'scripts/prepare-electron-runtime-deps.mjs') }}
 
       - name: Restore Electron binary cache
         uses: actions/cache@v5
         with:
           path: .cache/electron-downloads
-          key: ${{ runner.os }}-node22-pnpm10.33.0-electron-binary-${{ hashFiles('pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-node22-pnpm11.13.0-electron-binary-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-node22-pnpm10.33.0-electron-binary-
+            ${{ runner.os }}-node22-pnpm11.13.0-electron-binary-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts

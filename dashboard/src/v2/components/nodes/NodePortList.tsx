@@ -6,38 +6,29 @@ import type {
   NodeCanvasPortDirection,
   NodeCanvasPortType,
 } from "../../lib/nodes-canvas-state.js";
+import { useNodesI18n, type NodesTextMessageKey } from "../../i18n/messages/nodes.js";
 
 interface NodePortListProps {
   node: NodeCanvasNode;
   className?: string;
 }
 
-const PORT_TYPE_HINTS: Record<NodeCanvasPortType, string> = {
-  control: "control-flow handoff",
-  agent: "agent routing context",
-  task: "task draft context",
-  condition: "gate result branch",
-  result: "final result payload",
-  data: "structured data payload",
+const PORT_TYPE_HINT_KEYS: Record<NodeCanvasPortType, NodesTextMessageKey> = {
+  control: "portTypeControl",
+  agent: "portTypeAgent",
+  task: "portTypeTask",
+  condition: "portTypeCondition",
+  result: "portTypeResult",
+  data: "portTypeData",
 };
-
-const compatibleHint = (port: NodeCanvasPort): string => {
-  const readableType = PORT_TYPE_HINTS[port.type];
-  if (port.direction === "input") {
-    return `Requires an upstream output that provides ${readableType}.`;
-  }
-  return `Can wire into downstream inputs that accept ${readableType}.`;
-};
-
-const directionLabel = (direction: NodeCanvasPortDirection): string => (
-  direction === "input" ? "Inputs" : "Outputs"
-);
 
 const PortSection: FunctionComponent<{
   direction: NodeCanvasPortDirection;
   ports: readonly NodeCanvasPort[];
 }> = ({ direction, ports }) => {
+  const { t } = useNodesI18n();
   const Icon = direction === "input" ? LogIn : LogOut;
+  const readableType = (port: NodeCanvasPort): string => t(PORT_TYPE_HINT_KEYS[port.type]);
   return (
     <section className="flex flex-col gap-2" aria-labelledby={`node-port-list-${direction}`}>
       <div className="flex items-center gap-2">
@@ -45,12 +36,12 @@ const PortSection: FunctionComponent<{
           <Icon className="h-3.5 w-3.5" aria-hidden="true" />
         </span>
         <h4 id={`node-port-list-${direction}`} className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-          {directionLabel(direction)}
+          {direction === "input" ? t("inputs") : t("outputs")}
         </h4>
       </div>
       {ports.length === 0 ? (
         <p className="rounded-[var(--radius-ui)] border border-dashed border-black/[0.08] bg-white/45 px-3 py-2 text-xs text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-400">
-          No {direction} ports.
+          {direction === "input" ? t("noInputPorts") : t("noOutputPorts")}
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
@@ -66,7 +57,7 @@ const PortSection: FunctionComponent<{
                     <span className="truncate">{port.label}</span>
                   </p>
                   <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                    {compatibleHint(port)}
+                    {t(port.direction === "input" ? "inputCompatibility" : "outputCompatibility", { type: readableType(port) })}
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
@@ -75,7 +66,7 @@ const PortSection: FunctionComponent<{
                   </span>
                   {port.required ? (
                     <span className="rounded-full bg-status-red/[0.08] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-status-red">
-                      Required
+                      {t("required")}
                     </span>
                   ) : null}
                 </div>
@@ -88,15 +79,16 @@ const PortSection: FunctionComponent<{
   );
 };
 
-export const NodePortList: FunctionComponent<NodePortListProps> = ({ node, className = "" }) => (
-  <section className={`flex flex-col gap-3 ${className}`} aria-labelledby="node-port-list-heading">
+export const NodePortList: FunctionComponent<NodePortListProps> = ({ node, className = "" }) => {
+  const { t } = useNodesI18n();
+  return <section className={`flex flex-col gap-3 ${className}`} aria-labelledby="node-port-list-heading">
     <div className="flex items-center gap-2">
       <Cable className="h-4 w-4 text-signal-500" aria-hidden="true" />
       <h3 id="node-port-list-heading" className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
-        Wiring
+        {t("wiring")}
       </h3>
     </div>
     <PortSection direction="input" ports={node.inputPorts} />
     <PortSection direction="output" ports={node.outputPorts} />
-  </section>
-);
+  </section>;
+};

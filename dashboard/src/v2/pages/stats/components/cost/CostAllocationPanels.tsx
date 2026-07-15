@@ -8,7 +8,7 @@ import type {
   CostTokenSegment,
 } from "../../cost-insights.js";
 import { formatAdaptiveCurrency } from "../../cost-insights.js";
-import { NUMBER_FORMATTER } from "../../stats-utils.js";
+import { useStatsI18n, type StatsI18nValue } from "../../stats-i18n.js";
 import {
   CHIP_CLASS,
   CONTROL_FOCUS_CLASS,
@@ -36,16 +36,16 @@ interface GroupedDimensionRow extends CostDimensionRow {
   groupedRows?: CostDimensionRow[];
 }
 
-function formatShare(share: number): string {
+function formatShare(share: number, locale: StatsI18nValue["locale"]): string {
   const percentage = Math.max(0, share) * 100;
-  return `${percentage.toLocaleString("en-US", {
+  return `${percentage.toLocaleString(locale, {
     minimumFractionDigits: percentage > 0 && percentage < 0.1 ? 2 : 1,
     maximumFractionDigits: percentage > 0 && percentage < 0.1 ? 2 : 1,
   })}%`;
 }
 
-function formatExactTokens(tokens: number): string {
-  return `${NUMBER_FORMATTER.format(tokens)} tokens`;
+function formatExactTokens(tokens: number, i18n: StatsI18nValue): string {
+  return i18n.text("exactTokens", { count: i18n.formatNumber(tokens) });
 }
 
 function sumProvenance(rows: CostDimensionRow[]): CostProvenance {
@@ -79,7 +79,7 @@ function sumProvenance(rows: CostDimensionRow[]): CostProvenance {
   return totals;
 }
 
-function groupDimensionRows(rows: CostDimensionRow[]): GroupedDimensionRow[] {
+function groupDimensionRows(rows: CostDimensionRow[], otherLabel: string): GroupedDimensionRow[] {
   if (rows.length <= TOP_ROW_COUNT) return rows;
 
   const groupedRows = rows.slice(TOP_ROW_COUNT);
@@ -100,7 +100,7 @@ function groupDimensionRows(rows: CostDimensionRow[]): GroupedDimensionRow[] {
     ...rows.slice(0, TOP_ROW_COUNT),
     {
       id: "__other__",
-      label: "Other",
+      label: otherLabel,
       amount,
       spendShare: groupedRows.reduce((sum, row) => sum + row.spendShare, 0),
       tokenShare: groupedRows.reduce((sum, row) => sum + row.tokenShare, 0),
@@ -112,38 +112,38 @@ function groupDimensionRows(rows: CostDimensionRow[]): GroupedDimensionRow[] {
   ];
 }
 
-function humanizePurpose(label: string): string {
+function humanizePurpose(label: string, fallback: string): string {
   const normalized = label.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
   return normalized.length > 0
     ? `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`
-    : "Unclassified purpose";
+    : fallback;
 }
 
-function coverageMessage(totalSpend: CostAmount, totalTokens: number): string {
+function coverageMessage(totalSpend: CostAmount, totalTokens: number, i18n: StatsI18nValue): string {
   const provenance = totalSpend.provenance;
   if (provenance.invocationCount === 0 && totalTokens === 0) {
-    return "Empty window — no calls or token usage were recorded.";
+    return i18n.text("costCoverageEmpty");
   }
   if (provenance.state === "unpriced") {
-    return `Unpriced usage — ${NUMBER_FORMATTER.format(provenance.unpricedInvocationCount)} calls have usage telemetry but no usable price.`;
+    return i18n.text("costCoverageUnpriced", { count: i18n.formatNumber(provenance.unpricedInvocationCount) });
   }
   if (provenance.state === "partial") {
-    return `Partial cost coverage — ${NUMBER_FORMATTER.format(provenance.unpricedInvocationCount)} of ${NUMBER_FORMATTER.format(provenance.invocationCount)} calls remain unpriced; shown spend is a minimum.`;
+    return i18n.text("costCoveragePartial", { unpriced: i18n.formatNumber(provenance.unpricedInvocationCount), total: i18n.formatNumber(provenance.invocationCount) });
   }
   if (provenance.state === "unknown") {
-    return `Coverage unknown — ${NUMBER_FORMATTER.format(provenance.unknownInvocationCount)} of ${NUMBER_FORMATTER.format(provenance.invocationCount)} calls lack cost-source metadata.`;
+    return i18n.text("costCoverageUnknown", { unknown: i18n.formatNumber(provenance.unknownInvocationCount), total: i18n.formatNumber(provenance.invocationCount) });
   }
   if (provenance.state === "unavailable") {
-    return "Spend unavailable — this window does not contain enough cost data to price usage.";
+    return i18n.text("costCoverageUnavailable");
   }
   if (totalSpend.usd === 0) {
     const configuredOnly = provenance.configuredPricingInvocationCount > 0
       && provenance.providerReportedCostInvocationCount === 0;
     return configuredOnly
-      ? "Configured free usage — covered calls reconcile to $0.00 and are not unpriced."
-      : "Covered zero-cost usage — covered calls reconcile to $0.00 and are not unpriced.";
+      ? i18n.text("configuredFreeUsage")
+      : i18n.text("coveredZeroCostUsage");
   }
-  return `Complete cost coverage — all ${NUMBER_FORMATTER.format(provenance.invocationCount)} calls have a usable cost source.`;
+  return i18n.text("costCoverageComplete", { count: i18n.formatNumber(provenance.invocationCount) });
 }
 
 function coverageTone(
@@ -178,6 +178,7 @@ const TokenAllocation: FunctionComponent<{
   totalTokens: number;
   segments: CostTokenSegment[];
 }> = ({ totalTokens, segments }) => {
+  const i18n = useStatsI18n();
   const byId = new Map(segments.map((segment) => [segment.id, segment]));
   const getTokens = (id: CostTokenSegment["id"]): number => byId.get(id)?.tokens ?? 0;
 
@@ -185,13 +186,13 @@ const TokenAllocation: FunctionComponent<{
     <article className={`${PANEL_CLASS} ${styles.allocationPanel}`} aria-labelledby="cost-token-allocation-title">
       <AllocationHeading
         id="cost-token-allocation-title"
-        eyebrow="Token allocation"
-        title="What consumed tokens"
-        description="Prompt, cache, generation, and reasoning lanes reconcile to the selected snapshot."
+        eyebrow={i18n.text("tokenAllocation")}
+        title={i18n.text("whatConsumedTokens")}
+        description={i18n.text("tokenAllocationDescription")}
       />
       <div className={styles.totalLine}>
-        <span>Total token volume</span>
-        <strong>{formatExactTokens(totalTokens)}</strong>
+        <span>{i18n.text("totalTokenVolume")}</span>
+        <strong>{formatExactTokens(totalTokens, i18n)}</strong>
       </div>
       <TokenFlowBar
         input={getTokens("input")}
@@ -201,13 +202,13 @@ const TokenAllocation: FunctionComponent<{
         total={totalTokens}
       />
       {totalTokens === 0 ? (
-        <p className={styles.allocationSummary} role="status">Zero total tokens — no token allocation is available.</p>
+        <p className={styles.allocationSummary} role="status">{i18n.text("zeroTokenAllocation")}</p>
       ) : (
         <p className={styles.allocationSummary}>
-          {segments[0]?.label ?? "Token lanes"} accounts for {formatShare(segments[0]?.share ?? 0)} of recorded volume.
+          {i18n.text("leadingTokenLane", { lane: segments[0]?.label ?? i18n.text("tokenLanes"), share: formatShare(segments[0]?.share ?? 0, i18n.locale) })}
         </p>
       )}
-      <ul className={styles.legend} aria-label="Exact token allocation values">
+      <ul className={styles.legend} aria-label={i18n.text("exactTokenAllocationValues")}>
         {segments.map((segment) => (
           <li
             key={segment.id}
@@ -216,8 +217,8 @@ const TokenAllocation: FunctionComponent<{
           >
             <span className={`${styles.swatch} ${styles[`segment_${segment.id}`]}`} aria-hidden="true" />
             <span className={styles.legendLabel}>{segment.label}</span>
-            <strong className={styles.legendValue}>{formatExactTokens(segment.tokens)}</strong>
-            <span className={styles.legendShare}>{formatShare(segment.share)}</span>
+            <strong className={styles.legendValue}>{formatExactTokens(segment.tokens, i18n)}</strong>
+            <span className={styles.legendShare}>{formatShare(segment.share, i18n.locale)}</span>
           </li>
         ))}
       </ul>
@@ -230,25 +231,26 @@ const SpendAllocation: FunctionComponent<{
   totalTokens: number;
   segments: CostSpendSegment[];
 }> = ({ totalSpend, totalTokens, segments }) => {
+  const i18n = useStatsI18n();
   const hasVisualSpend = totalSpend.usd !== null && totalSpend.usd > 0;
   const leadingSegment = segments.reduce<CostSpendSegment | null>((leader, segment) => (
     leader === null || segment.share > leader.share ? segment : leader
   ), null);
   const chartLabel = `Spend allocation. ${segments.map((segment) => (
-    `${segment.label}: ${formatAdaptiveCurrency(segment.amount)}, ${formatShare(segment.share)}`
-  )).join("; ")}. Total: ${formatAdaptiveCurrency(totalSpend)}.${hasVisualSpend ? "" : " No positive spend lanes."}`;
+    `${segment.label}: ${formatAdaptiveCurrency(segment.amount, i18n.locale)}, ${formatShare(segment.share, i18n.locale)}`
+  )).join("; ")}. ${i18n.text("totalValue", { value: formatAdaptiveCurrency(totalSpend, i18n.locale) })}.${hasVisualSpend ? "" : ` ${i18n.text("noPositiveSpendLanes")}`}`;
 
   return (
     <article className={`${PANEL_CLASS} ${styles.allocationPanel}`} aria-labelledby="cost-spend-allocation-title">
       <AllocationHeading
         id="cost-spend-allocation-title"
-        eyebrow="Spend allocation"
-        title="Where spend landed"
-        description="Token-priced input, output, cache, and provider-reported fallback remain distinct."
+        eyebrow={i18n.text("spendAllocation")}
+        title={i18n.text("whereSpendLanded")}
+        description={i18n.text("spendAllocationDescription")}
       />
       <div className={styles.totalLine}>
-        <span>Total recorded spend</span>
-        <strong>{formatAdaptiveCurrency(totalSpend)}</strong>
+        <span>{i18n.text("totalRecordedSpend")}</span>
+        <strong>{formatAdaptiveCurrency(totalSpend, i18n.locale)}</strong>
       </div>
       <div className={`${styles.spendBar} ${TRACK_CLASS}`} role="img" aria-label={chartLabel}>
         {hasVisualSpend ? segments.map((segment) => (
@@ -264,12 +266,12 @@ const SpendAllocation: FunctionComponent<{
       </div>
       <p className={styles.allocationSummary}>
         {hasVisualSpend && leadingSegment
-          ? `${leadingSegment.label} accounts for ${formatShare(leadingSegment.share)} of recorded spend.`
+          ? i18n.text("leadingSpendLane", { lane: leadingSegment.label, share: formatShare(leadingSegment.share, i18n.locale) })
           : totalTokens > 0
-            ? "No positive priced spend lanes are available; consult the coverage state above."
-            : "No spend allocation is available for this empty window."}
+            ? i18n.text("noPositivePricedSpendLanes")
+            : i18n.text("noSpendAllocation")}
       </p>
-      <ul className={styles.legend} aria-label="Exact spend allocation values">
+      <ul className={styles.legend} aria-label={i18n.text("exactSpendAllocationValues")}>
         {segments.map((segment) => (
           <li
             key={segment.id}
@@ -278,8 +280,8 @@ const SpendAllocation: FunctionComponent<{
           >
             <span className={`${styles.swatch} ${styles[`segment_${segment.id}`]}`} aria-hidden="true" />
             <span className={styles.legendLabel}>{segment.label}</span>
-            <strong className={styles.legendValue}>{formatAdaptiveCurrency(segment.amount)}</strong>
-            <span className={styles.legendShare}>{formatShare(segment.share)}</span>
+            <strong className={styles.legendValue}>{formatAdaptiveCurrency(segment.amount, i18n.locale)}</strong>
+            <span className={styles.legendShare}>{formatShare(segment.share, i18n.locale)}</span>
           </li>
         ))}
       </ul>
@@ -287,31 +289,32 @@ const SpendAllocation: FunctionComponent<{
   );
 };
 
-const DimensionMetrics: FunctionComponent<{ row: CostDimensionRow }> = ({ row }) => (
-  <dl className={styles.metrics}>
-    <div><dt>Total cost</dt><dd>{formatAdaptiveCurrency(row.amount)}</dd></div>
-    <div><dt>Spend share</dt><dd>{formatShare(row.spendShare)}</dd></div>
-    <div><dt>Tokens</dt><dd>{NUMBER_FORMATTER.format(row.tokens)}</dd></div>
-    <div><dt>Token share</dt><dd>{formatShare(row.tokenShare)}</dd></div>
-    <div><dt>Calls</dt><dd>{NUMBER_FORMATTER.format(row.calls)}</dd></div>
-    <div><dt>Cost / call</dt><dd>{formatAdaptiveCurrency(row.costPerCall)}</dd></div>
-  </dl>
-);
-
-function modelIdentity(row: CostModelRow): string {
-  return `${row.provider} · ${row.model ?? "Model not reported"}`;
-}
+const DimensionMetrics: FunctionComponent<{ row: CostDimensionRow }> = ({ row }) => {
+  const i18n = useStatsI18n();
+  return (
+    <dl className={styles.metrics}>
+      <div><dt>{i18n.text("totalCost")}</dt><dd>{formatAdaptiveCurrency(row.amount, i18n.locale)}</dd></div>
+      <div><dt>{i18n.text("spendShare")}</dt><dd>{formatShare(row.spendShare, i18n.locale)}</dd></div>
+      <div><dt>{i18n.text("tokens")}</dt><dd>{i18n.formatNumber(row.tokens)}</dd></div>
+      <div><dt>{i18n.text("tokenShare")}</dt><dd>{formatShare(row.tokenShare, i18n.locale)}</dd></div>
+      <div><dt>{i18n.text("calls")}</dt><dd>{i18n.formatNumber(row.calls)}</dd></div>
+      <div><dt>{i18n.text("costPerCall")}</dt><dd>{formatAdaptiveCurrency(row.costPerCall, i18n.locale)}</dd></div>
+    </dl>
+  );
+};
 
 const DimensionRow: FunctionComponent<{
   row: GroupedDimensionRow;
   rank: number;
   kind: "model" | "purpose";
 }> = ({ row, rank, kind }) => {
+  const i18n = useStatsI18n();
+  const kindLabel = i18n.text(kind === "model" ? "dimensionModel" : "dimensionPurpose");
   const model = kind === "model" && row.id !== "__other__" ? row as CostModelRow : null;
   const title = row.id === "__other__"
-    ? `Other (${row.groupedRows?.length ?? 0})`
-    : kind === "purpose" ? humanizePurpose(row.label) : model?.model ?? "Model not reported";
-  const identity = model ? modelIdentity(model) : null;
+    ? i18n.text("otherCount", { count: i18n.formatNumber(row.groupedRows?.length ?? 0) })
+    : kind === "purpose" ? humanizePurpose(row.label, i18n.text("unclassifiedPurpose")) : model?.model ?? i18n.text("modelNotReported");
+  const identity = model ? `${model.provider} · ${model.model ?? i18n.text("modelNotReported")}` : null;
   const content = (
     <>
       <div className={styles.rowHeading}>
@@ -330,7 +333,7 @@ const DimensionRow: FunctionComponent<{
       <li
         className={`${SUBPANEL_CLASS} ${styles.dimensionRow} ${CONTROL_FOCUS_CLASS}`}
         tabIndex={0}
-        aria-label={`${title} ranked ${rank}`}
+        aria-label={i18n.text("rankedEntry", { title, rank: i18n.formatNumber(rank) })}
       >
         {content}
       </li>
@@ -341,7 +344,7 @@ const DimensionRow: FunctionComponent<{
     <li
       className={`${SUBPANEL_CLASS} ${styles.dimensionRow} ${CONTROL_FOCUS_CLASS}`}
       tabIndex={0}
-      aria-label={`Other ${kind} entries, ${row.groupedRows.length} rows, ranked ${rank}`}
+      aria-label={i18n.text("otherRankedEntries", { kind: kindLabel, count: i18n.formatNumber(row.groupedRows.length), rank: i18n.formatNumber(rank) })}
     >
       {content}
     </li>
@@ -354,18 +357,20 @@ const DimensionBreakdown: FunctionComponent<{
   rows: CostDimensionRow[];
   kind: "model" | "purpose";
 }> = ({ title, description, rows, kind }) => {
-  const groupedRows = groupDimensionRows(rows);
+  const i18n = useStatsI18n();
+  const kindLabel = i18n.text(kind === "model" ? "dimensionModel" : "dimensionPurpose");
+  const groupedRows = groupDimensionRows(rows, i18n.text("other"));
   const titleId = `cost-${kind}-breakdown-title`;
 
   return (
     <section className={`${PANEL_CLASS} ${styles.breakdownPanel}`} aria-labelledby={titleId}>
-      <AllocationHeading id={titleId} eyebrow={`${kind} ranking`} title={title} description={description} />
+      <AllocationHeading id={titleId} eyebrow={i18n.text("dimensionRanking", { kind: kindLabel })} title={title} description={description} />
       {rows.length === 0 ? (
         <div className={DASHED_EMPTY_CLASS} role="status">
-          No {kind} cost allocation is available for this window.
+          {i18n.text("noDimensionCostAllocation", { kind: kindLabel })}
         </div>
       ) : (
-        <ol className={styles.dimensionList} aria-label={`Ranked ${kind} cost allocation`}>
+        <ol className={styles.dimensionList} aria-label={i18n.text("rankedDimensionCostAllocation", { kind: kindLabel })}>
           {groupedRows.map((row, index) => (
             <DimensionRow key={row.id} row={row} rank={index + 1} kind={kind} />
           ))}
@@ -382,13 +387,15 @@ export const CostAllocationPanels: FunctionComponent<CostAllocationPanelsProps> 
   spendSegments,
   models,
   purposes,
-}) => (
-  <section className={styles.root} aria-label="Cost allocation">
+}) => {
+  const i18n = useStatsI18n();
+  return (
+  <section className={styles.root} aria-label={i18n.text("costAllocation")}>
     <div
       className={`${CHIP_CLASS} ${STATUS_TONE_CLASS[coverageTone(totalSpend, totalTokens)]} ${styles.coverageNotice}`}
       role="status"
     >
-      {coverageMessage(totalSpend, totalTokens)}
+      {coverageMessage(totalSpend, totalTokens, i18n)}
     </div>
     <div className={styles.allocationGrid}>
       <TokenAllocation totalTokens={totalTokens} segments={tokenSegments} />
@@ -396,17 +403,18 @@ export const CostAllocationPanels: FunctionComponent<CostAllocationPanelsProps> 
     </div>
     <div className={styles.breakdownGrid}>
       <DimensionBreakdown
-        title="Models driving spend"
-        description="Provider and model identities stay separate while cost and token shares remain comparable."
+        title={i18n.text("modelsDrivingSpend")}
+        description={i18n.text("modelsDrivingSpendDescription")}
         rows={models}
         kind="model"
       />
       <DimensionBreakdown
-        title="Execution purposes driving spend"
-        description="Human-readable workflow intent with cost, volume, call count, and per-call context."
+        title={i18n.text("purposesDrivingSpend")}
+        description={i18n.text("purposesDrivingSpendDescription")}
         rows={purposes}
         kind="purpose"
       />
     </div>
   </section>
-);
+  );
+};

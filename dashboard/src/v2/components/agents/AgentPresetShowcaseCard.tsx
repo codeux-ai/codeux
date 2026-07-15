@@ -6,6 +6,9 @@ import type { AgentPreset } from "../../types.js";
 import { AgentAvatarSvg } from "./AgentAvatarSvg.js";
 import { getAccentHex } from "../../lib/agent-avatar.js";
 import { INTERACTION_CSS_VARIABLES } from "../../lib/motion/tokens.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import { agentsMessages } from "../../i18n/messages/agents.js";
+import type { DashboardTextMessageKey } from "../../i18n/index.js";
 
 const syncBadge = (preset: AgentPreset) => {
   switch (preset.syncStatus) {
@@ -26,9 +29,21 @@ export const AgentPresetShowcaseCard: FunctionComponent<{
   isSelected: boolean;
   onClick: () => void;
 }> = ({ preset, routeTags, isSelected, onClick }) => {
+  const { translate } = useDashboardI18n();
   const cardRef = useRef<HTMLButtonElement>(null);
   const accentHex = getAccentHex(preset.avatarConfig?.accent);
   const badge = syncBadge(preset);
+  const localizedRouteTag = (tag: string): string => {
+    const keys: Record<string, DashboardTextMessageKey<typeof agentsMessages>> = {
+      Planning: "routePlanning", "Coding Roster": "routeCodingRoster", Coding: "routeCoding", "CI Fix": "routeCiFix",
+      "Merge Conflict": "routeMergeConflict", "Dashboard Reply": "routeDashboardReply", "Clarification Reply": "routeClarificationReply",
+      "QA Task": "routeQaTask", "QA Sprint": "routeQaSprint", "QA No PR": "routeQaNoPr",
+    };
+    return keys[tag] ? translate(agentsMessages, keys[tag]) : tag;
+  };
+  const badgeKeys: Record<string, DashboardTextMessageKey<typeof agentsMessages>> = {
+    "Out of Sync": "outOfSync", Missing: "missing", Synced: "synced", Local: "local",
+  };
 
   useLayoutEffect(() => {
     if (!cardRef.current) return;
@@ -92,7 +107,7 @@ export const AgentPresetShowcaseCard: FunctionComponent<{
                 className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em]"
                 style={{ backgroundColor: `${accentHex}10`, color: accentHex }}
               >
-                {tag}
+                {localizedRouteTag(tag)}
               </span>
             ))}
             {routeTags.length > 2 && (
@@ -100,11 +115,11 @@ export const AgentPresetShowcaseCard: FunctionComponent<{
             )}
             <span className={`ml-auto inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.1em] ${badge.cls}`}>
               {badge.icon && <AlertTriangle className="h-2.5 w-2.5" strokeWidth={2.5} />}
-              {badge.label}
+              {translate(agentsMessages, badgeKeys[badge.label] ?? "local")}
             </span>
             {isSelected && (
               <span className="inline-flex items-center rounded-md border border-signal-500/25 bg-signal-500/[0.08] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.1em] text-signal-600 dark:text-signal-400">
-                Selected
+                {translate(agentsMessages, "selected")}
               </span>
             )}
           </div>

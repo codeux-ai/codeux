@@ -4,14 +4,16 @@ import { AlertCircle, Zap, Activity, XCircle, PencilLine, Check, X, RefreshCw } 
 import type { ChatThread } from "../../types.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import type { ActionFeedbackStatus } from "../../hooks/use-action-feedback.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { chatMessages } from "../../i18n/messages/chat.js";
 
-const resolveAssignedLabel = (thread: ChatThread | null): string => {
+const resolveAssignedLabel = (thread: ChatThread | null, unassigned: string, virtualLabel: (provider: string) => string): string => {
   if (!thread) {
-    return "Unassigned";
+    return unassigned;
   }
 
   if (thread.runtimeState?.routeKind === "virtual" && thread.runtimeState.virtualProvider) {
-    return `Virtual ${thread.runtimeState.virtualProvider}`;
+    return virtualLabel(thread.runtimeState.virtualProvider);
   }
 
   if (thread.runtimeState?.routeKind === "worker") {
@@ -27,7 +29,7 @@ const resolveAssignedLabel = (thread: ChatThread | null): string => {
     return thread.connectionId;
   }
 
-  return "Unassigned";
+  return unassigned;
 };
 
 interface ChatThreadHeaderProps {
@@ -69,7 +71,12 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
   actionFeedbackMessage = null,
   error = null,
 }) => {
-  const assignedLabel = resolveAssignedLabel(thread);
+  const { formatNumber, translate, translatePlural } = useDashboardI18n();
+  const assignedLabel = resolveAssignedLabel(
+    thread,
+    translate(chatMessages, "unassigned"),
+    (provider) => translate(chatMessages, "virtualProvider", { provider }),
+  );
   const interactionTokens = useInteractionTokens();
   const inputRef = useRef<HTMLInputElement>(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -82,14 +89,14 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
   const titleErrorId = thread ? `thread-title-error-${thread.id}` : undefined;
   const compactFeedbackId = thread ? `thread-compact-feedback-${thread.id}` : undefined;
   const sessionTone: ThreadSessionTone = isReplayRequired ? "replay" : hasActiveSession ? "active" : "new";
-  const sessionLabel = isReplayRequired ? "Replay Required" : hasActiveSession ? "Active Session" : "New/Compacted";
+  const sessionLabel = translate(chatMessages, isReplayRequired ? "replayRequiredTitle" : hasActiveSession ? "activeSessionTitle" : "newCompacted");
   const SessionIcon = isReplayRequired ? AlertCircle : hasActiveSession ? Activity : Check;
   const compactFeedback = isCompacting
-    ? { tone: "pending" as const, message: "Compacting conversation. The transcript stays available while Code UX writes the compacted session." }
-    : actionFeedbackStatus === "success" && actionFeedbackMessage === "Thread compacted."
-      ? { tone: "success" as const, message: "Thread compacted. Future replies will start from the compacted session." }
+    ? { tone: "pending" as const, message: translate(chatMessages, "compactingConversation") }
+    : actionFeedbackStatus === "success" && actionFeedbackMessage === translate(chatMessages, "threadCompacted")
+      ? { tone: "success" as const, message: translate(chatMessages, "compactedFutureReplies") }
       : error
-        ? { tone: "error" as const, message: `Compaction or thread action failed: ${error}` }
+        ? { tone: "error" as const, message: translate(chatMessages, "threadActionFailed", { error }) }
         : null;
 
   useEffect(() => {
@@ -119,7 +126,7 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
 
     const trimmedTitle = titleDraft.trim();
     if (!trimmedTitle) {
-      setRenameError("Thread title is required.");
+      setRenameError(translate(chatMessages, "threadTitleRequired"));
       return;
     }
 
@@ -146,7 +153,7 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
       <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-4 sm:gap-6">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500">Active Thread</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500">{translate(chatMessages, "activeThread")}</div>
             <span
               role="status"
               aria-live="polite"
@@ -154,12 +161,12 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
               className={`inline-flex min-w-[9.5rem] items-center justify-center gap-1 rounded-sm border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider shadow-sm ${SESSION_BADGE_CLASS[sessionTone]}`}
             >
               <SessionIcon className="h-3 w-3" />
-              <span className="sr-only">Status: </span>{sessionLabel}
+              <span className="sr-only">{translate(chatMessages, "statusPrefix")} </span>{sessionLabel}
             </span>
           </div>
           {isEditingTitle && thread ? (
             <div className="mt-2 min-w-0">
-              <label htmlFor="thread-title-input" className="sr-only">Thread title</label>
+              <label htmlFor="thread-title-input" className="sr-only">{translate(chatMessages, "threadTitle")}</label>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <input
                   id="thread-title-input"
@@ -193,9 +200,9 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
                     onClick={() => void saveRename()}
                     disabled={renamePending}
                     aria-busy={renamePending}
-                    aria-label={renamePending ? "Saving thread title" : "Save thread title"}
+                    aria-label={translate(chatMessages, renamePending ? "savingThreadTitle" : "saveThreadTitle")}
                     className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-signal-500/25 bg-signal-500/15 text-signal-700 transition hover:border-signal-500/40 hover:bg-signal-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 dark:text-signal-400 dark:focus-visible:ring-offset-void-900"
-                    title="Save thread title"
+                    title={translate(chatMessages, "saveThreadTitle")}
                   >
                     {renamePending ? <RefreshCw className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <Check className="h-4 w-4" />}
                   </button>
@@ -203,9 +210,9 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
                     type="button"
                     onClick={cancelRename}
                     disabled={renamePending}
-                    aria-label="Cancel thread title edit"
+                    aria-label={translate(chatMessages, "cancelThreadTitleEdit")}
                     className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-black/[0.08] bg-white/70 text-slate-500 transition hover:bg-black/[0.03] hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white dark:focus-visible:ring-offset-void-900"
-                    title="Cancel thread title edit"
+                    title={translate(chatMessages, "cancelThreadTitleEdit")}
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -221,7 +228,7 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
           ) : (
             <div className="mt-2 flex min-w-0 items-start gap-2">
               <h2 className="min-w-0 flex-1 break-words font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                {thread?.title || "No Thread Selected"}
+                {thread?.title || translate(chatMessages, "noThreadSelected")}
               </h2>
               {thread && (
                 <button
@@ -231,9 +238,9 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
                     setRenameError(null);
                     setIsEditingTitle(true);
                   }}
-                  aria-label={`Rename ${thread.title}`}
+                  aria-label={translate(chatMessages, "renameThread", { title: thread.title })}
                   className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-black/[0.08] bg-white/70 text-slate-500 transition hover:bg-black/[0.03] hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white dark:focus-visible:ring-offset-void-900"
-                  title="Rename thread"
+                  title={translate(chatMessages, "renameThreadTitle")}
                 >
                   <PencilLine className="h-4 w-4" />
                 </button>
@@ -243,7 +250,7 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
         </div>
         <div className="text-left sm:text-right text-[10px] font-mono text-slate-400 w-full sm:w-auto min-w-0">
           <div className="mb-2 w-full">
-            {thread ? `${thread.messageCount} messages` : "0 messages"}
+            {translatePlural(chatMessages, "messageCount", thread?.messageCount ?? 0, { count: formatNumber(thread?.messageCount ?? 0) })}
           </div>
           <div className="flex flex-wrap items-center sm:justify-end gap-2 min-w-0">
             {thread && thread.pendingMessageCount > 0 && (
@@ -257,12 +264,12 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
                   transitionDuration: interactionTokens.controlFeedback.duration,
                   transitionTimingFunction: interactionTokens.controlFeedback.ease,
                 }}
-                aria-label={isCancelling ? "Cancelling..." : "Cancel Request"}
+                aria-label={translate(chatMessages, isCancelling ? "cancelling" : "cancelRequest")}
                 className={`inline-flex min-w-[160px] justify-center items-center gap-1.5 rounded-full border border-status-red/30 bg-status-red/[0.06] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-status-red hover:bg-status-red/[0.12] dark:border-status-red/30 dark:bg-status-red/[0.08] dark:hover:bg-status-red/[0.16] ${isCancelling ? 'cursor-wait opacity-70' : ''}`}
-                title="Cancel Request"
+                title={translate(chatMessages, "cancelRequest")}
               >
                 <XCircle className={`h-3.5 w-3.5 ${isCancelling ? "animate-pulse text-status-red motion-reduce:animate-none" : ""}`} />
-                {isCancelling ? "Cancelling..." : "Cancel Request"}
+                {translate(chatMessages, isCancelling ? "cancelling" : "cancelRequest")}
               </button>
             )}
             {thread && thread.messageCount > 0 && (
@@ -272,21 +279,21 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
                 disabled={isCompacting}
                 aria-busy={isCompacting}
                 aria-describedby={compactFeedbackId}
-                aria-label={isCompacting ? "Compacting conversation" : "Compact"}
+                aria-label={translate(chatMessages, isCompacting ? "compactingConversationShort" : "compact")}
                 style={{
                   transitionProperty: "color, background-color, border-color, text-decoration-color, fill, stroke",
                   transitionDuration: interactionTokens.controlFeedback.duration,
                   transitionTimingFunction: interactionTokens.controlFeedback.ease,
                 }}
                 className={`inline-flex min-w-[160px] justify-center items-center gap-1.5 rounded-full border border-black/[0.08] bg-white/70 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 hover:bg-black/[0.03] hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white ${isCompacting ? 'cursor-wait opacity-70' : ''}`}
-                title="Compact Conversation"
+                title={translate(chatMessages, "compactConversation")}
               >
                 <Zap className={`h-3.5 w-3.5 ${isCompacting ? "animate-pulse text-signal-500 motion-reduce:animate-none" : ""}`} />
-                {isCompacting ? "Compacting session..." : "Compact"}
+                {translate(chatMessages, isCompacting ? "compactingSession" : "compact")}
               </button>
             )}
             <div className="inline-flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Worker:</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(chatMessages, "worker")}</span>
               <span className="rounded-full border border-black/[0.08] bg-white/70 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 transition-colors duration-300">
                 {assignedLabel}
               </span>
@@ -303,7 +310,7 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
                 : "border-transparent bg-transparent text-slate-400"
             }`}
           >
-            {compactFeedback?.message ?? <span className="sr-only">No compaction in progress.</span>}
+            {compactFeedback?.message ?? <span className="sr-only">{translate(chatMessages, "noCompactionProgress")}</span>}
           </div>
         </div>
       </div>

@@ -23,19 +23,16 @@ import {
   type KnowledgeDocument,
   type KnowledgeSearchResult,
 } from "./lib/knowledge-api.js";
+import { useDashboardI18n } from "./i18n/context.js";
+import { knowledgeMessages } from "./i18n/messages/knowledge.js";
+import {
+  formatKnowledgeDate,
+  formatKnowledgeFileSize,
+  formatKnowledgeProgress,
+  getKnowledgeStatusMessageKey,
+} from "./lib/knowledge-presentation.js";
 
 type AddMode = "upload" | "paste" | "repo" | "project" | null;
-
-const formatBytes = (bytes: number): string => {
-  if (!bytes) return "0 KB";
-  if (bytes < 1e6) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / 1e6).toFixed(1)} MB`;
-};
-
-const formatTokens = (tokens: number): string => {
-  if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}k`;
-  return String(tokens);
-};
 
 const docIcon = (doc: KnowledgeDocument) => {
   const ref = (doc.sourceRef || doc.title || "").toLowerCase();
@@ -49,31 +46,37 @@ const docIcon = (doc: KnowledgeDocument) => {
 };
 
 const StatusPill: FunctionComponent<{ doc: KnowledgeDocument }> = ({ doc }) => {
+  const { formatNumber, translate, translatePlural } = useDashboardI18n();
   if (doc.status === "ready") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full border border-signal-500/20 bg-signal-500/8 px-2 py-0.5 text-[10px] font-bold text-signal-600 dark:text-signal-400">
         <Check className="h-3 w-3" strokeWidth={2.6} />
-        {doc.chunkCount} chunk{doc.chunkCount === 1 ? "" : "s"}
+        {translatePlural(knowledgeMessages, "statusChunkCount", doc.chunkCount, {
+          formattedCount: formatNumber(doc.chunkCount),
+        })}
       </span>
     );
   }
   if (doc.status === "error") {
     return (
-      <span title={doc.errorMessage || "Failed"} className="inline-flex items-center gap-1 rounded-full border border-status-red/20 bg-status-red/8 px-2 py-0.5 text-[10px] font-bold text-status-red">
+      <span title={doc.errorMessage || translate(knowledgeMessages, "statusFailed")} className="inline-flex items-center gap-1 rounded-full border border-status-red/20 bg-status-red/8 px-2 py-0.5 text-[10px] font-bold text-status-red">
         <AlertTriangle className="h-3 w-3" strokeWidth={2.4} />
-        Error
+        {translate(knowledgeMessages, "statusError")}
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/20 bg-amber-400/8 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
       <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.4} />
-      {doc.status === "pending" ? "Queued" : "Embedding"}
+      {translate(knowledgeMessages, getKnowledgeStatusMessageKey(doc.status))}
     </span>
   );
 };
 
 export const KnowledgePage: FunctionComponent = () => {
+  const { locale, formatNumber, translate, translatePlural } = useDashboardI18n();
+  const translateRef = useRef(translate);
+  translateRef.current = translate;
   const { selectedProject, projects } = useProjectData();
   const pid = selectedProject?.id || "";
 
@@ -85,6 +88,8 @@ export const KnowledgePage: FunctionComponent = () => {
   const [busy, setBusy] = useState(false);
   const [addMode, setAddMode] = useState<AddMode>(null);
   const [dragging, setDragging] = useState(false);
+  const [announcement, setAnnouncement] = useState("");
+  const ingestionInFlight = useRef(false);
 
   const agentNameById = useMemo(() => {
     const map = new Map<string, AgentPreset>();
@@ -109,7 +114,7 @@ export const KnowledgePage: FunctionComponent = () => {
       setModelActive(models.some((m) => m.active));
       setAgentPresets(presets);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load knowledge base");
+      setError(err instanceof Error ? err.message : translateRef.current(knowledgeMessages, "loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -130,23 +135,37 @@ export const KnowledgePage: FunctionComponent = () => {
     return () => clearInterval(interval);
   }, [pid]);
 
-  const handleUpload = useCallback(async (files: File[]) => {
-    if (!pid || files.length === 0) return;
+  const runIngestion = useCallback(async (
+    operation: () => Promise<void>,
+    fallbackMessage: string,
+  ): Promise<void> => {
+    if (ingestionInFlight.current) return;
+    ingestionInFlight.current = true;
     setBusy(true);
     setError(null);
     try {
-      const result = await uploadKnowledgeFiles(pid, files);
-      if (result.errors.length > 0) {
-        setError(result.errors.map((e) => `${e.fileName}: ${e.error}`).join(" · "));
-      }
-      await loadData();
-      setAddMode(null);
+      await operation();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      setError(err instanceof Error ? err.message : fallbackMessage);
     } finally {
+      ingestionInFlight.current = false;
       setBusy(false);
     }
-  }, [pid, loadData]);
+  }, []);
+
+  const handleUpload = useCallback(async (files: File[]) => {
+    if (!pid || files.length === 0) return;
+    await runIngestion(async () => {
+      const result = await uploadKnowledgeFiles(pid, files);
+      const diagnostics = result.errors.map((e) => `${e.fileName}: ${e.error}`).join(" · ");
+      await loadData();
+      if (diagnostics) setError(diagnostics);
+      setAnnouncement(translatePlural(knowledgeMessages, "uploadComplete", result.documents.length, {
+        formattedCount: formatNumber(result.documents.length),
+      }));
+      setAddMode(null);
+    }, translate(knowledgeMessages, "uploadFailed"));
+  }, [formatNumber, loadData, pid, runIngestion, translate, translatePlural]);
 
   const onDrop = useCallback((e: DragEvent) => {
     e.preventDefault();
@@ -155,48 +174,51 @@ export const KnowledgePage: FunctionComponent = () => {
     if (files.length > 0) void handleUpload(files);
   }, [handleUpload]);
 
-  const removeDocument = useCallback(async (documentId: string) => {
+  const removeDocument = useCallback(async (doc: KnowledgeDocument) => {
     if (!pid) return;
-    setDocuments((prev) => prev.filter((d) => d.id !== documentId));
+    if (!window.confirm(translate(knowledgeMessages, "deleteConfirmation", { title: doc.title }))) return;
+    setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
     try {
-      await deleteKnowledgeDocument(pid, documentId);
-    } catch {
-      await loadData();
-    }
-  }, [loadData, pid]);
-
-  const reembed = useCallback(async (documentId: string) => {
-    if (!pid) return;
-    try {
-      const updated = await reembedKnowledgeDocument(pid, documentId);
-      setDocuments((prev) => prev.map((d) => (d.id === documentId ? updated : d)));
+      await deleteKnowledgeDocument(pid, doc.id);
+      setAnnouncement(translate(knowledgeMessages, "documentDeleted", { title: doc.title }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Re-embed failed");
+      await loadData();
+      setError(err instanceof Error ? err.message : translate(knowledgeMessages, "deleteFailed"));
     }
-  }, [pid]);
+  }, [loadData, pid, translate]);
+
+  const reembed = useCallback(async (doc: KnowledgeDocument) => {
+    if (!pid) return;
+    try {
+      const updated = await reembedKnowledgeDocument(pid, doc.id);
+      setDocuments((prev) => prev.map((d) => (d.id === doc.id ? updated : d)));
+      setAnnouncement(translate(knowledgeMessages, "embeddingRetried", { title: doc.title }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : translate(knowledgeMessages, "reembedFailed"));
+    }
+  }, [pid, translate]);
 
   const totalChunks = documents.reduce((sum, d) => sum + d.chunkCount, 0);
   const readyCount = documents.filter((d) => d.status === "ready").length;
 
   return (
-    <PageContainer aria-label="Knowledge" padding="section" className="gap-8">
+    <PageContainer aria-label={translate(knowledgeMessages, "pageLabel")} padding="section" className="gap-8">
+      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</p>
       {/* Header */}
       <PageHeader
         icon={Library}
-        eyebrow="Knowledge Base"
-        title="Documents"
+        eyebrow={translate(knowledgeMessages, "eyebrow")}
+        title={translate(knowledgeMessages, "title")}
         subtitle={
           <>
-            Upload specs, docs, and code into a shared library. Each document is embedded once with your
-            local model, and agents subscribe to the ones they should know. They retrieve passages on
-            demand via <code className="rounded bg-black/[0.05] px-1 py-0.5 font-mono text-[11px] dark:bg-white/[0.06]">search_knowledge</code>.
+            {translate(knowledgeMessages, "subtitleBeforeTool")} <code className="rounded bg-black/[0.05] px-1 py-0.5 font-mono text-[11px] dark:bg-white/[0.06]">search_knowledge</code>{translate(knowledgeMessages, "subtitleAfterTool")}
             {documents.length > 0 && (
               <span className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-400 dark:text-slate-500">
-                <span>{documents.length} document{documents.length === 1 ? "" : "s"}</span>
+                <span>{translatePlural(knowledgeMessages, "documentCount", documents.length, { formattedCount: formatNumber(documents.length) })}</span>
                 <span>·</span>
-                <span>{readyCount} ready</span>
+                <span>{translatePlural(knowledgeMessages, "readyCount", readyCount, { formattedCount: formatNumber(readyCount) })}</span>
                 <span>·</span>
-                <span>{totalChunks} embedded chunks</span>
+                <span>{translatePlural(knowledgeMessages, "chunkCount", totalChunks, { formattedCount: formatNumber(totalChunks) })}</span>
               </span>
             )}
           </>
@@ -210,7 +232,7 @@ export const KnowledgePage: FunctionComponent = () => {
             className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-signal-500/15 transition-all hover:scale-[1.03] hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50 dark:text-void-900"
           >
             <Upload className="h-4 w-4" strokeWidth={2.5} />
-            Upload
+            {translate(knowledgeMessages, "upload")}
           </button>
           <button
             type="button"
@@ -219,7 +241,7 @@ export const KnowledgePage: FunctionComponent = () => {
             className="inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/60 px-4 py-2.5 text-sm font-bold text-slate-600 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-200 dark:hover:bg-white/[0.08]"
           >
             <StickyNote className="h-4 w-4" strokeWidth={2.4} />
-            Paste
+            {translate(knowledgeMessages, "paste")}
           </button>
           <button
             type="button"
@@ -228,7 +250,7 @@ export const KnowledgePage: FunctionComponent = () => {
             className="inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/60 px-4 py-2.5 text-sm font-bold text-slate-600 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-200 dark:hover:bg-white/[0.08]"
           >
             <FolderGit2 className="h-4 w-4" strokeWidth={2.4} />
-            From repo
+            {translate(knowledgeMessages, "fromRepo")}
           </button>
           <button
             type="button"
@@ -237,7 +259,17 @@ export const KnowledgePage: FunctionComponent = () => {
             className="inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/60 px-4 py-2.5 text-sm font-bold text-slate-600 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-200 dark:hover:bg-white/[0.08]"
           >
             <Copy className="h-4 w-4" strokeWidth={2.4} />
-            From project
+            {translate(knowledgeMessages, "fromProject")}
+          </button>
+          <button
+            type="button"
+            onClick={() => void loadData()}
+            disabled={!pid || loading}
+            aria-label={translate(knowledgeMessages, loading ? "refreshing" : "refresh")}
+            title={translate(knowledgeMessages, "refresh")}
+            className="inline-flex items-center justify-center rounded-full border border-black/[0.08] bg-white/60 p-2.5 text-slate-500 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08]"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} strokeWidth={2.4} />
           </button>
         </div>
         }
@@ -245,20 +277,21 @@ export const KnowledgePage: FunctionComponent = () => {
 
       {/* Embedding model gate */}
       {modelActive === false && (
-        <div className="flex items-center gap-3 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] px-5 py-4 text-sm text-amber-700 dark:text-amber-300">
+        <div role="status" className="flex items-center gap-3 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] px-5 py-4 text-sm text-amber-700 dark:text-amber-300">
           <AlertTriangle className="h-5 w-5 shrink-0" strokeWidth={2.2} />
           <span>
-            No embedding model is active. Download and select one on the{" "}
-            <a href="/memory" className="font-bold underline">Memory</a> page before adding documents.
+            {translate(knowledgeMessages, "noModelBeforeLink")} {" "}
+            <a href="/memory" className="font-bold underline">{translate(knowledgeMessages, "memoryPage")}</a>{" "}
+            {translate(knowledgeMessages, "noModelAfterLink")}
           </span>
         </div>
       )}
 
       {error && (
-        <div className="flex items-start gap-3 rounded-2xl border border-status-red/25 bg-status-red/[0.06] px-5 py-3 text-sm text-status-red">
+        <div role="alert" className="flex items-start gap-3 rounded-2xl border border-status-red/25 bg-status-red/[0.06] px-5 py-3 text-sm text-status-red">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.2} />
           <span className="flex-1">{error}</span>
-          <button type="button" onClick={() => setError(null)} aria-label="Dismiss"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={() => setError(null)} aria-label={translate(knowledgeMessages, "dismiss")}><X className="h-4 w-4" /></button>
         </div>
       )}
 
@@ -267,9 +300,9 @@ export const KnowledgePage: FunctionComponent = () => {
 
       {/* Library grid */}
       {!pid ? (
-        <EmptyState icon={BookOpen} title="Select a project" body="Choose a project to manage its knowledge base." />
+        <EmptyState icon={BookOpen} title={translate(knowledgeMessages, "selectProject")} body={translate(knowledgeMessages, "selectProjectBody")} />
       ) : loading && documents.length === 0 ? (
-        <div className="flex items-center justify-center py-24 text-slate-400">
+        <div role="status" aria-label={translate(knowledgeMessages, "loadingDocuments")} className="flex items-center justify-center py-24 text-slate-400">
           <Loader2 className="h-6 w-6 animate-spin" />
         </div>
       ) : documents.length === 0 ? (
@@ -283,8 +316,8 @@ export const KnowledgePage: FunctionComponent = () => {
             <Sparkles className="h-7 w-7" strokeWidth={2} />
           </div>
           <div className="flex flex-col gap-1">
-            <p className="text-lg font-bold text-slate-700 dark:text-slate-200">Build your knowledge base</p>
-            <p className="text-sm text-slate-400 dark:text-slate-500">Drag files here, or use Upload / Paste / From repo above.</p>
+            <p className="text-lg font-bold text-slate-700 dark:text-slate-200">{translate(knowledgeMessages, "buildKnowledgeBase")}</p>
+            <p className="text-sm text-slate-400 dark:text-slate-500">{translate(knowledgeMessages, "emptyLibraryBody")}</p>
           </div>
         </div>
       ) : (
@@ -322,16 +355,22 @@ export const KnowledgePage: FunctionComponent = () => {
                   <div className="flex items-center gap-2">
                     <StatusPill doc={doc} />
                     <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">
-                      {formatBytes(doc.byteSize)} · ~{formatTokens(doc.tokenCount)} tok
+                      {translate(knowledgeMessages, "documentDetails", {
+                        size: formatKnowledgeFileSize(doc.byteSize, locale),
+                        tokens: formatNumber(doc.tokenCount),
+                        date: translate(knowledgeMessages, "updatedDate", {
+                          date: formatKnowledgeDate(doc.updatedAt, locale),
+                        }),
+                      })}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                     {doc.status === "error" && (
-                      <button type="button" onClick={() => reembed(doc.id)} title="Retry embedding" className="rounded-lg p-1.5 text-slate-400 hover:bg-black/[0.05] hover:text-signal-500 dark:hover:bg-white/[0.06]">
+                      <button type="button" onClick={() => reembed(doc)} aria-label={translate(knowledgeMessages, "retryEmbedding", { title: doc.title })} title={translate(knowledgeMessages, "retryEmbedding", { title: doc.title })} className="rounded-lg p-1.5 text-slate-400 hover:bg-black/[0.05] hover:text-signal-500 dark:hover:bg-white/[0.06]">
                         <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.2} />
                       </button>
                     )}
-                    <button type="button" onClick={() => removeDocument(doc.id)} title="Delete" className="rounded-lg p-1.5 text-slate-400 hover:bg-status-red/10 hover:text-status-red">
+                    <button type="button" onClick={() => removeDocument(doc)} aria-label={translate(knowledgeMessages, "deleteDocument", { title: doc.title })} title={translate(knowledgeMessages, "deleteDocument", { title: doc.title })} className="rounded-lg p-1.5 text-slate-400 hover:bg-status-red/10 hover:text-status-red">
                       <Trash2 className="h-3.5 w-3.5" strokeWidth={2.2} />
                     </button>
                   </div>
@@ -342,7 +381,7 @@ export const KnowledgePage: FunctionComponent = () => {
                     {subscribers.slice(0, 4).map((name) => (
                       <span key={name} className="inline-flex items-center rounded-full bg-signal-500/[0.08] px-2 py-0.5 text-[10px] font-bold text-signal-600 dark:text-signal-400">{name}</span>
                     ))}
-                    {subscribers.length > 4 && <span className="text-[10px] font-bold text-slate-400">+{subscribers.length - 4}</span>}
+                    {subscribers.length > 4 && <span className="text-[10px] font-bold text-slate-400">{translate(knowledgeMessages, "subscriberOverflow", { formattedCount: formatNumber(subscribers.length - 4) })}</span>}
                   </div>
                 )}
               </div>
@@ -353,22 +392,25 @@ export const KnowledgePage: FunctionComponent = () => {
 
       {addMode === "upload" && <UploadModal busy={busy} onClose={() => setAddMode(null)} onFiles={handleUpload} />}
       {addMode === "paste" && <PasteModal busy={busy} onClose={() => setAddMode(null)} onSubmit={async (title, text) => {
-        setBusy(true);
-        setError(null);
-        try { await addPastedDocument(pid, { title, text }); await loadData(); setAddMode(null); }
-        catch (err) { setError(err instanceof Error ? err.message : "Failed to add note"); }
-        finally { setBusy(false); }
+        await runIngestion(async () => {
+          await addPastedDocument(pid, { title, text });
+          await loadData();
+          setAnnouncement(translate(knowledgeMessages, "pasteComplete", { title }));
+          setAddMode(null);
+        }, translate(knowledgeMessages, "pasteFailed"));
       }} />}
       {addMode === "repo" && <RepoPathModal busy={busy} onClose={() => setAddMode(null)} onSubmit={async (repoPath) => {
-        setBusy(true);
-        setError(null);
-        try {
+        await runIngestion(async () => {
           const result = await addRepoPathDocuments(pid, repoPath);
-          if (result.errors.length > 0) setError(result.errors.map((e) => `${e.fileName}: ${e.error}`).join(" · "));
+          const diagnostics = result.errors.map((e) => `${e.fileName}: ${e.error}`).join(" · ");
           await loadData();
+          if (diagnostics) setError(diagnostics);
+          setAnnouncement(translatePlural(knowledgeMessages, "repoIngestComplete", result.documents.length, {
+            formattedCount: formatNumber(result.documents.length),
+            path: repoPath,
+          }));
           setAddMode(null);
-        } catch (err) { setError(err instanceof Error ? err.message : "Failed to ingest path"); }
-        finally { setBusy(false); }
+        }, translate(knowledgeMessages, "repoIngestFailed"));
       }} />}
       {addMode === "project" && <ProjectKnowledgeModal
         busy={busy}
@@ -376,15 +418,16 @@ export const KnowledgePage: FunctionComponent = () => {
         projects={projects}
         onClose={() => setAddMode(null)}
         onSubmit={async (sourceProjectId, documentIds) => {
-          setBusy(true);
-          setError(null);
-          try {
+          await runIngestion(async () => {
             const result = await importKnowledgeFromProject(pid, { sourceProjectId, documentIds });
-            if (result.errors.length > 0) setError(result.errors.map((e) => `${e.fileName}: ${e.error}`).join(" · "));
+            const diagnostics = result.errors.map((e) => `${e.fileName}: ${e.error}`).join(" · ");
             await loadData();
+            if (diagnostics) setError(diagnostics);
+            setAnnouncement(translatePlural(knowledgeMessages, "projectImportComplete", result.documents.length, {
+              formattedCount: formatNumber(result.documents.length),
+            }));
             setAddMode(null);
-          } catch (err) { setError(err instanceof Error ? err.message : "Failed to import project knowledge"); }
-          finally { setBusy(false); }
+          }, translate(knowledgeMessages, "projectImportFailed"));
         }}
       />}
     </PageContainer>
@@ -393,23 +436,30 @@ export const KnowledgePage: FunctionComponent = () => {
 
 /* ── Search test box ── */
 const KnowledgeSearchBox: FunctionComponent<{ projectId: string; agentPresets: AgentPreset[] }> = ({ projectId, agentPresets }) => {
+  const { locale, formatNumber, translate, translatePlural } = useDashboardI18n();
   const [query, setQuery] = useState("");
   const [agentId, setAgentId] = useState("");
   const [results, setResults] = useState<KnowledgeSearchResult[] | null>(null);
   const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const searchInFlight = useRef(false);
 
   const run = useCallback(async () => {
-    if (!query.trim()) return;
+    if (!query.trim() || searchInFlight.current) return;
+    searchInFlight.current = true;
     setSearching(true);
+    setSearchError(null);
     try {
       const found = await searchKnowledge(projectId, { query, agentPresetId: agentId || undefined, limit: 6 });
       setResults(found);
-    } catch {
+    } catch (err) {
+      setSearchError(err instanceof Error ? err.message : translate(knowledgeMessages, "searchFailed"));
       setResults([]);
     } finally {
+      searchInFlight.current = false;
       setSearching(false);
     }
-  }, [projectId, query, agentId]);
+  }, [projectId, query, agentId, translate]);
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-black/[0.06] bg-white/50 p-4 backdrop-blur-xl dark:border-white/[0.06] dark:bg-white/[0.02]">
@@ -420,7 +470,8 @@ const KnowledgeSearchBox: FunctionComponent<{ projectId: string; agentPresets: A
             value={query}
             onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
             onKeyDown={(e) => { if (e.key === "Enter") void run(); }}
-            placeholder="Test what an agent would retrieve…"
+            placeholder={translate(knowledgeMessages, "searchPlaceholder")}
+            aria-label={translate(knowledgeMessages, "searchInputLabel")}
             className="w-full rounded-xl border border-black/[0.08] bg-white/70 py-2.5 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-200"
           />
         </div>
@@ -428,28 +479,36 @@ const KnowledgeSearchBox: FunctionComponent<{ projectId: string; agentPresets: A
           value={agentId}
           onChange={setAgentId}
           className="min-w-[12rem]"
-          aria-label="Knowledge owner"
+          aria-label={translate(knowledgeMessages, "agentSelectorLabel")}
           options={[
-            { value: "", label: "Whole library" },
-            ...agentPresets.map((preset) => ({ value: preset.id, label: `${preset.name}'s docs` })),
+            { value: "", label: translate(knowledgeMessages, "wholeLibrary") },
+            ...agentPresets.map((preset) => ({ value: preset.id, label: translate(knowledgeMessages, "agentDocuments", { agentName: preset.name }) })),
           ]}
         />
         <button type="button" onClick={run} disabled={searching || !query.trim()} className="inline-flex items-center gap-2 rounded-xl bg-signal-500/90 px-4 py-2.5 text-sm font-bold text-white hover:bg-signal-400 disabled:opacity-50 dark:text-void-900">
           {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" strokeWidth={2.5} />}
-          Search
+          {translate(knowledgeMessages, "search")}
         </button>
       </div>
+      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {searching
+          ? translate(knowledgeMessages, "searching")
+          : results
+            ? translatePlural(knowledgeMessages, "resultCount", results.length, { formattedCount: formatNumber(results.length) })
+            : ""}
+      </p>
+      {searchError && <p role="alert" className="px-1 text-sm text-status-red">{searchError}</p>}
       {results && (
         <div className="flex flex-col gap-2">
           {results.length === 0 ? (
-            <p className="px-1 py-2 text-sm text-slate-400">No relevant passages found.</p>
+            <p className="px-1 py-2 text-sm text-slate-400">{translate(knowledgeMessages, "noResults")}</p>
           ) : results.map((r, i) => (
             <div key={i} className="rounded-xl border border-black/[0.05] bg-white/40 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
               <div className="mb-1 flex items-center justify-between gap-2">
                 <span className="truncate text-[11px] font-bold text-signal-600 dark:text-signal-400">
                   {r.documentTitle}{r.heading ? ` › ${r.heading}` : ""}
                 </span>
-                <span className="shrink-0 font-mono text-[10px] text-slate-400">{Math.round(r.similarity * 100)}%</span>
+                <span className="shrink-0 font-mono text-[10px] text-slate-400">{formatKnowledgeProgress(r.similarity, locale)}</span>
               </div>
               <p className="line-clamp-3 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">{r.content}</p>
             </div>
@@ -462,21 +521,31 @@ const KnowledgeSearchBox: FunctionComponent<{ projectId: string; agentPresets: A
 
 /* ── Modals ── */
 const ModalShell: FunctionComponent<{ title: string; onClose: () => void; children: preact.ComponentChildren }> = ({ title, onClose, children }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={onClose}>
-    <div className="w-full max-w-lg rounded-3xl border border-black/[0.08] bg-white p-6 shadow-2xl dark:border-white/[0.08] dark:bg-void-800" onClick={(e) => e.stopPropagation()}>
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={onClose} onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
+    <div role="dialog" aria-modal="true" aria-label={title} className="w-full max-w-lg rounded-3xl border border-black/[0.08] bg-white p-6 shadow-2xl dark:border-white/[0.08] dark:bg-void-800" onClick={(e) => e.stopPropagation()}>
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">{title}</h3>
-        <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-black/[0.05] dark:hover:bg-white/[0.06]"><X className="h-5 w-5" /></button>
+        <ModalCloseButton title={title} onClose={onClose} />
       </div>
       {children}
     </div>
   </div>
 );
 
+const ModalCloseButton: FunctionComponent<{ title: string; onClose: () => void }> = ({ title, onClose }) => {
+  const { translate } = useDashboardI18n();
+  return (
+    <button type="button" onClick={onClose} aria-label={translate(knowledgeMessages, "closeDialog", { title })} className="rounded-lg p-1.5 text-slate-400 hover:bg-black/[0.05] dark:hover:bg-white/[0.06]">
+      <X className="h-5 w-5" />
+    </button>
+  );
+};
+
 const UploadModal: FunctionComponent<{ busy: boolean; onClose: () => void; onFiles: (files: File[]) => void }> = ({ busy, onClose, onFiles }) => {
+  const { translate } = useDashboardI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   return (
-    <ModalShell title="Upload documents" onClose={onClose}>
+    <ModalShell title={translate(knowledgeMessages, "uploadDocuments")} onClose={onClose}>
       <div className="flex flex-col gap-4">
         <button
           type="button"
@@ -485,13 +554,14 @@ const UploadModal: FunctionComponent<{ busy: boolean; onClose: () => void; onFil
           className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-black/[0.1] py-12 transition-colors hover:border-signal-500/50 hover:bg-signal-500/[0.03] disabled:opacity-50 dark:border-white/[0.1]"
         >
           {busy ? <Loader2 className="h-8 w-8 animate-spin text-signal-500" /> : <Upload className="h-8 w-8 text-signal-500" strokeWidth={1.8} />}
-          <span className="text-sm font-bold text-slate-600 dark:text-slate-300">{busy ? "Uploading…" : "Choose files"}</span>
-          <span className="text-[11px] text-slate-400">Text, Markdown, code, JSON/CSV, HTML, PDF, DOCX</span>
+          <span className="text-sm font-bold text-slate-600 dark:text-slate-300">{translate(knowledgeMessages, busy ? "uploading" : "chooseFiles")}</span>
+          <span className="text-[11px] text-slate-400">{translate(knowledgeMessages, "supportedFiles")}</span>
         </button>
         <input
           ref={inputRef}
           type="file"
           multiple
+          aria-label={translate(knowledgeMessages, "chooseFilesLabel")}
           className="hidden"
           onChange={(e) => {
             const files = Array.from((e.target as HTMLInputElement).files || []);
@@ -504,32 +574,36 @@ const UploadModal: FunctionComponent<{ busy: boolean; onClose: () => void; onFil
 };
 
 const PasteModal: FunctionComponent<{ busy: boolean; onClose: () => void; onSubmit: (title: string, text: string) => void }> = ({ busy, onClose, onSubmit }) => {
+  const { translate } = useDashboardI18n();
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   return (
-    <ModalShell title="Paste a note" onClose={onClose}>
+    <ModalShell title={translate(knowledgeMessages, "pasteNote")} onClose={onClose}>
       <div className="flex flex-col gap-3">
         <input
           value={title}
           onInput={(e) => setTitle((e.target as HTMLInputElement).value)}
-          placeholder="Title"
+          placeholder={translate(knowledgeMessages, "noteTitle")}
+          aria-label={translate(knowledgeMessages, "noteTitleLabel")}
           className="rounded-xl border border-black/[0.08] bg-white/70 px-3 py-2.5 text-sm outline-none focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-200"
         />
         <textarea
           value={text}
           onInput={(e) => setText((e.target as HTMLTextAreaElement).value)}
-          placeholder="Paste documentation, conventions, runbooks…"
+          placeholder={translate(knowledgeMessages, "noteBody")}
+          aria-label={translate(knowledgeMessages, "noteBodyLabel")}
           rows={10}
           className="resize-y rounded-xl border border-black/[0.08] bg-white/70 px-3 py-2.5 font-mono text-[12px] outline-none focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-200"
         />
         <button
           type="button"
           disabled={busy || !title.trim() || !text.trim()}
+          aria-label={translate(knowledgeMessages, busy ? "addingToLibrary" : "addToLibrary")}
           onClick={() => onSubmit(title.trim(), text)}
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-signal-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-signal-400 disabled:opacity-50 dark:text-void-900"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" strokeWidth={2.5} />}
-          Add to library
+          {translate(knowledgeMessages, "addToLibrary")}
         </button>
       </div>
     </ModalShell>
@@ -537,29 +611,31 @@ const PasteModal: FunctionComponent<{ busy: boolean; onClose: () => void; onSubm
 };
 
 const RepoPathModal: FunctionComponent<{ busy: boolean; onClose: () => void; onSubmit: (path: string) => void }> = ({ busy, onClose, onSubmit }) => {
+  const { translate } = useDashboardI18n();
   const [repoPath, setRepoPath] = useState("");
   return (
-    <ModalShell title="Ingest from the repo" onClose={onClose}>
+    <ModalShell title={translate(knowledgeMessages, "ingestFromRepo")} onClose={onClose}>
       <div className="flex flex-col gap-3">
         <p className="text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
-          Enter a file or directory path relative to the project root. Directories are walked for
-          text-extractable files (build output and dependencies are skipped).
+          {translate(knowledgeMessages, "repoInstructions")}
         </p>
         <input
           value={repoPath}
           onInput={(e) => setRepoPath((e.target as HTMLInputElement).value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && repoPath.trim()) onSubmit(repoPath.trim()); }}
-          placeholder="docs/ or README.md"
+          onKeyDown={(e) => { if (e.key === "Enter" && !busy && repoPath.trim()) onSubmit(repoPath.trim()); }}
+          placeholder={translate(knowledgeMessages, "repoPathPlaceholder")}
+          aria-label={translate(knowledgeMessages, "repoPathLabel")}
           className="rounded-xl border border-black/[0.08] bg-white/70 px-3 py-2.5 font-mono text-sm outline-none focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-200"
         />
         <button
           type="button"
           disabled={busy || !repoPath.trim()}
+          aria-label={translate(knowledgeMessages, busy ? "ingesting" : "ingest")}
           onClick={() => onSubmit(repoPath.trim())}
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-signal-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-signal-400 disabled:opacity-50 dark:text-void-900"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderGit2 className="h-4 w-4" strokeWidth={2.4} />}
-          Ingest
+          {translate(knowledgeMessages, "ingest")}
         </button>
       </div>
     </ModalShell>
@@ -573,6 +649,9 @@ const ProjectKnowledgeModal: FunctionComponent<{
   onClose: () => void;
   onSubmit: (sourceProjectId: string, documentIds: string[]) => void;
 }> = ({ busy, currentProjectId, projects, onClose, onSubmit }) => {
+  const { formatNumber, translate } = useDashboardI18n();
+  const translateRef = useRef(translate);
+  translateRef.current = translate;
   const sourceProjects = projects.filter((project) => project.id !== currentProjectId);
   const [sourceProjectId, setSourceProjectId] = useState(sourceProjects[0]?.id || "");
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
@@ -599,7 +678,7 @@ const ProjectKnowledgeModal: FunctionComponent<{
         if (cancelled) return;
         setDocuments([]);
         setSelectedIds(new Set());
-        setLoadError(err instanceof Error ? err.message : "Failed to load project documents");
+        setLoadError(err instanceof Error ? err.message : translateRef.current(knowledgeMessages, "projectDocumentsLoadFailed"));
       })
       .finally(() => {
         if (!cancelled) setLoadingDocs(false);
@@ -617,22 +696,22 @@ const ProjectKnowledgeModal: FunctionComponent<{
   };
 
   return (
-    <ModalShell title="Import from project" onClose={onClose}>
+    <ModalShell title={translate(knowledgeMessages, "importFromProject")} onClose={onClose}>
       <div className="flex flex-col gap-4">
         <AvantgardeSelect
           value={sourceProjectId}
           onChange={setSourceProjectId}
-          aria-label="Project to import knowledge from"
+          aria-label={translate(knowledgeMessages, "sourceProjectLabel")}
           options={sourceProjects.map((project) => ({ value: project.id, label: project.name }))}
         />
 
         <div className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-2xl border border-black/[0.06] bg-black/[0.02] p-2 dark:border-white/[0.06] dark:bg-white/[0.02]">
           {loadingDocs ? (
-            <div className="flex items-center justify-center py-10 text-slate-400"><Loader2 className="h-5 w-5 animate-spin" /></div>
+            <div role="status" aria-label={translate(knowledgeMessages, "loadingProjectDocuments")} className="flex items-center justify-center py-10 text-slate-400"><Loader2 className="h-5 w-5 animate-spin" /></div>
           ) : loadError ? (
-            <p className="px-2 py-8 text-center text-sm text-status-red">{loadError}</p>
+            <p role="alert" className="px-2 py-8 text-center text-sm text-status-red">{loadError}</p>
           ) : documents.length === 0 ? (
-            <p className="px-2 py-8 text-center text-sm text-slate-400">No knowledge documents in this project.</p>
+            <p className="px-2 py-8 text-center text-sm text-slate-400">{translate(knowledgeMessages, "noProjectDocuments")}</p>
           ) : documents.map((doc) => {
             const checked = selectedIds.has(doc.id);
             return (
@@ -640,6 +719,8 @@ const ProjectKnowledgeModal: FunctionComponent<{
                 key={doc.id}
                 type="button"
                 onClick={() => toggle(doc.id)}
+                aria-pressed={checked}
+                aria-label={translate(knowledgeMessages, "selectDocument", { title: doc.title })}
                 className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${checked ? "bg-signal-500/[0.08]" : "hover:bg-white/60 dark:hover:bg-white/[0.04]"}`}
               >
                 <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${checked ? "bg-signal-500 text-white dark:text-void-900" : "bg-black/[0.05] text-slate-400 dark:bg-white/[0.06]"}`}>
@@ -661,16 +742,17 @@ const ProjectKnowledgeModal: FunctionComponent<{
             onClick={() => setSelectedIds(selectedIds.size === documents.length ? new Set() : new Set(documents.map((doc) => doc.id)))}
             className="rounded-xl border border-black/[0.08] px-3 py-2 text-[12px] font-bold text-slate-500 hover:bg-white disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:bg-white/[0.06]"
           >
-            {selectedIds.size === documents.length ? "Clear" : "Select all"}
+            {translate(knowledgeMessages, selectedIds.size === documents.length ? "clear" : "selectAll")}
           </button>
           <button
             type="button"
             disabled={busy || !sourceProjectId || selectedIds.size === 0}
             onClick={() => onSubmit(sourceProjectId, [...selectedIds])}
+            aria-label={translate(knowledgeMessages, busy ? "importing" : "importSelected", { formattedCount: formatNumber(selectedIds.size) })}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-signal-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-signal-400 disabled:opacity-50 dark:text-void-900"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Copy className="h-4 w-4" strokeWidth={2.4} />}
-            Import {selectedIds.size || ""}
+            {translate(knowledgeMessages, "importSelected", { formattedCount: selectedIds.size ? formatNumber(selectedIds.size) : "" })}
           </button>
         </div>
       </div>

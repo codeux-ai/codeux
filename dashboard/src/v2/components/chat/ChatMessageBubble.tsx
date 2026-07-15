@@ -23,6 +23,8 @@ import type { ChatLiveEntityWidget } from "../../lib/chat-live-entities.js";
 import { getPromptSuggestionViewModels } from "../../lib/chat-suggestion-view-models.js";
 import { isAgentScheduledWakeup, ScheduledWakeupWidget } from "./widgets/ScheduledWakeupWidget.js";
 import { SpeechReplayButton } from "../speech/SpeechReplayButton.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { chatMessages } from "../../i18n/messages/chat.js";
 
 export interface ChatMessageBubbleProps {
   message: ChatMessageRecord;
@@ -49,13 +51,15 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
   onReplay,
   replaying = false,
 }) => {
+  const { locale, translate } = useDashboardI18n();
   const fromDashboard = message.direction === "dashboard_to_connection";
   const isScheduledWakeup = fromDashboard && isAgentScheduledWakeup(message.metadata);
-  const widgetData = getChatWidgetData(message, widgetLiveData);
+  const widgetData = getChatWidgetData(message, widgetLiveData, locale);
   const richWidget = resolveRichWidget({
     metadata: message.metadata,
     content: message.bodyMarkdown,
     toolCallsJson: (message.metadata?.toolCallsJson as Record<string, unknown> | undefined) ?? null,
+    locale,
   });
   const planningWidget: Extract<RichWidgetDescriptor, { kind: "planning" }> | null =
     richWidget.kind === "planning" ? richWidget : null;
@@ -123,14 +127,15 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
   }
 
   const senderName = fromDashboard
-    ? isScheduledWakeup ? "Project Manager" : "User"
-    : agentName || (message.metadata?.agentName as string) || "Assistant";
+    ? isScheduledWakeup ? translate(chatMessages, "projectManager") : translate(chatMessages, "user")
+    : agentName || (message.metadata?.agentName as string) || translate(chatMessages, "assistant");
   const providerLabel = message.metadata?.provider as string | undefined;
-  const createdAtLabel = formatChatTime(message.createdAt);
+  const createdAtLabel = formatChatTime(message.createdAt, locale);
   const moodAsideText = (!fromDashboard && message.authorType === "connection")
     ? resolveAgentMoodAsideText({
         metadata: message.metadata,
         seed: buildAgentMoodAsideSeed([message.id, message.bodyMarkdown, senderName]),
+        locale,
       })
     : null;
 
@@ -143,7 +148,11 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
   return (
     <div ref={bubbleRef} className={`flex ${fromDashboard ? "justify-end" : "justify-start"} ${opacityClass}`}>
       <span className="sr-only">
-        From {senderName} at {createdAtLabel}. Status: {displayDeliveryStatus}.
+        {translate(chatMessages, "fromSenderAtTime", {
+          sender: senderName,
+          time: createdAtLabel,
+          status: translate(chatMessages, displayDeliveryStatus === "pending" ? "queuedLabel" : displayDeliveryStatus),
+        })}
       </span>
       <div className={`flex max-w-[760px] items-start gap-3 w-full ${fromDashboard ? "flex-row-reverse" : "flex-row"}`}>
         <div className="mt-1 shrink-0 w-8 h-8 flex items-center justify-center">
@@ -174,7 +183,7 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
             {!fromDashboard && onReplay && !widgetData.suppressBodyMarkdown && message.bodyMarkdown.trim() && (
               <SpeechReplayButton
                 busy={replaying}
-                label={`Replay message from ${senderName}`}
+                label={translate(chatMessages, "replayMessageFrom", { sender: senderName })}
                 onReplay={() => onReplay(message)}
               />
             )}
@@ -235,25 +244,25 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
                {displayDeliveryStatus === "pending" && (
                  <>
                    <Loader2 className="h-3 w-3 animate-spin text-slate-400" />
-                   <span className="text-slate-400">Queued</span>
+                   <span className="text-slate-400">{translate(chatMessages, "queuedLabel")}</span>
                  </>
                )}
                {displayDeliveryStatus === "delivered" && (
                  <>
                    <Check className="h-3 w-3 text-slate-400" />
-                   <span className="text-slate-400">Delivered</span>
+                   <span className="text-slate-400">{translate(chatMessages, "delivered")}</span>
                  </>
                )}
                {displayDeliveryStatus === "processed" && (
                  <>
                    <CheckCheck className="h-3 w-3 text-signal-500" />
-                   <span className="text-signal-500">Processed</span>
+                   <span className="text-signal-500">{translate(chatMessages, "processed")}</span>
                  </>
                )}
                {displayDeliveryStatus === "failed" && (
                  <>
                    <XCircle className="h-3 w-3 text-status-red" />
-                   <span className="text-status-red">Failed</span>
+                   <span className="text-status-red">{translate(chatMessages, "failed")}</span>
                  </>
                )}
              </div>

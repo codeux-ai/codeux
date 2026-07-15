@@ -6,6 +6,7 @@ import { cleanup, render, screen, fireEvent, waitFor } from "@testing-library/pr
 import { within } from "@testing-library/preact";
 import { SprintControls } from "../../../dashboard/src/v2/components/sprints/SprintControls.js";
 import { SprintActionMenu } from "../../../dashboard/src/v2/components/sprints/SprintActionMenu.js";
+import { renderWithI18n } from "../render-with-i18n.js";
 
 vi.mock("gsap", () => {
   const gsap = {
@@ -32,7 +33,7 @@ afterEach(() => {
 describe("SprintControls pause and resume actions", () => {
   it("fires pause action for active runs", () => {
     const onPauseResume = vi.fn();
-    render(
+    renderWithI18n(
       <SprintControls
         isActive={true}
         isPaused={false}
@@ -49,7 +50,7 @@ describe("SprintControls pause and resume actions", () => {
 
   it("fires resume action for paused runs", () => {
     const onPauseResume = vi.fn();
-    render(
+    renderWithI18n(
       <SprintControls
         isActive={false}
         isPaused={true}
@@ -65,7 +66,7 @@ describe("SprintControls pause and resume actions", () => {
   });
 
   it("disables pause-resume while pending", () => {
-    render(
+    renderWithI18n(
       <SprintControls
         isActive={true}
         isPaused={false}
@@ -80,7 +81,7 @@ describe("SprintControls pause and resume actions", () => {
   });
 
   it("keeps inactive pause guidance out of the visible control row", () => {
-    render(
+    renderWithI18n(
       <SprintControls
         isActive={false}
         isPaused={false}
@@ -117,7 +118,7 @@ describe("SprintActionMenu confirmation gates", () => {
   it("requires dialog confirmation before pausing a running sprint from the menu", async () => {
     const onPauseResume = vi.fn();
 
-    render(
+    renderWithI18n(
       <SprintActionMenu
         sprint={sprint as any}
         isRunning={true}
@@ -142,7 +143,7 @@ describe("SprintActionMenu confirmation gates", () => {
   });
 
   it("removes link underlines from menu actions rendered as buttons", () => {
-    render(
+    renderWithI18n(
       <SprintActionMenu
         sprint={sprint as any}
         isRunning={true}
@@ -157,7 +158,7 @@ describe("SprintActionMenu confirmation gates", () => {
     const onPrimaryAction = vi.fn();
     const onDelete = vi.fn();
 
-    render(
+    renderWithI18n(
       <SprintActionMenu
         sprint={sprint as any}
         isRunning={true}

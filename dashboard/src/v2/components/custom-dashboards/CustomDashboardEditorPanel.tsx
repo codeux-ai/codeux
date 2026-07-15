@@ -10,6 +10,8 @@ import type {
 } from "../../types.js";
 import type { CustomDashboardDataCatalogResponse, CustomDashboardCatalogSource } from "../../lib/custom-dashboard-api.js";
 import { parseJsonDraft, stableJsonStringify } from "../../lib/custom-dashboard-view-models.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { customDashboardMessages } from "../../i18n/messages/custom-dashboards.js";
 
 export type CustomDashboardEditorTab = "manifest" | "files" | "sources" | "styleguide" | "catalog" | "credentials";
 
@@ -33,14 +35,6 @@ interface CustomDashboardEditorPanelProps {
   credentialPanel?: ComponentChildren;
 }
 
-const tabs: Array<{ id: CustomDashboardEditorTab; label: string; icon: typeof ScrollText }> = [
-  { id: "manifest", label: "Manifest", icon: ScrollText },
-  { id: "files", label: "Files", icon: FileCode2 },
-  { id: "sources", label: "Sources", icon: Layers3 },
-  { id: "styleguide", label: "Styleguide", icon: Palette },
-  { id: "catalog", label: "Catalog", icon: Database },
-];
-
 export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditorPanelProps> = ({
   draft,
   onDraftChange,
@@ -51,11 +45,23 @@ export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditor
   catalog,
   credentialPanel,
 }) => {
-  const parsedBundle = parseJsonDraft<CustomDashboardFileBundle>(draft.fileBundleText, "File bundle");
+  const { locale, translate } = useDashboardI18n();
+  const tabs: Array<{ id: CustomDashboardEditorTab; label: string; icon: typeof ScrollText }> = [
+    { id: "manifest", label: translate(customDashboardMessages, "manifestTab"), icon: ScrollText },
+    { id: "files", label: translate(customDashboardMessages, "filesTab"), icon: FileCode2 },
+    { id: "sources", label: translate(customDashboardMessages, "sourcesTab"), icon: Layers3 },
+    { id: "styleguide", label: translate(customDashboardMessages, "styleguideTab"), icon: Palette },
+    { id: "catalog", label: translate(customDashboardMessages, "catalogTab"), icon: Database },
+  ];
+  const parsedBundle = parseJsonDraft<CustomDashboardFileBundle>(
+    draft.fileBundleText,
+    translate(customDashboardMessages, "fileBundleFieldName"),
+    locale,
+  );
   const files = parsedBundle.ok && Array.isArray(parsedBundle.value.files) ? parsedBundle.value.files : [];
   const selectedFile = files.find((file) => file.path === selectedFilePath) ?? files[0] ?? null;
   const visibleTabs = credentialPanel
-    ? [...tabs, { id: "credentials" as const, label: "Credentials", icon: KeyRound }]
+    ? [...tabs, { id: "credentials" as const, label: translate(customDashboardMessages, "credentialsTab"), icon: KeyRound }]
     : tabs;
   const effectiveActiveTab = activeTab === "credentials" && !credentialPanel ? "manifest" : activeTab;
 
@@ -99,7 +105,11 @@ export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditor
   };
 
   const addCatalogSource = (source: CustomDashboardCatalogSource) => {
-    const parsedGraph = parseJsonDraft<CustomDashboardDataSourceNodeGraph>(draft.sourceGraphText, "Source graph");
+    const parsedGraph = parseJsonDraft<CustomDashboardDataSourceNodeGraph>(
+      draft.sourceGraphText,
+      translate(customDashboardMessages, "sourceGraphFieldName"),
+      locale,
+    );
     if (!parsedGraph.ok) {
       return;
     }
@@ -117,12 +127,12 @@ export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditor
 
   return (
     <section
-      aria-label="Custom dashboard editor"
+      aria-label={translate(customDashboardMessages, "editorAriaLabel")}
       className="flex min-h-[34rem] min-w-0 flex-col rounded-[1.4rem] border border-black/[0.08] bg-white/70 p-4 shadow-[0_18px_52px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.05]"
     >
       <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <label className="flex min-w-0 flex-col gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-          Title
+          {translate(customDashboardMessages, "titleField")}
           <input
             value={draft.title}
             onInput={(event) => setDraftField("title", event.currentTarget.value)}
@@ -130,7 +140,7 @@ export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditor
           />
         </label>
         <label className="flex min-w-0 flex-col gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-          Description
+          {translate(customDashboardMessages, "descriptionField")}
           <input
             value={draft.description}
             onInput={(event) => setDraftField("description", event.currentTarget.value)}
@@ -139,7 +149,7 @@ export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditor
         </label>
       </div>
 
-      <div className="mt-4 flex min-w-0 gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Custom dashboard draft sections">
+      <div className="mt-4 flex min-w-0 gap-2 overflow-x-auto pb-1" role="tablist" aria-label={translate(customDashboardMessages, "draftSectionsAriaLabel")}>
         {visibleTabs.map((tab) => {
           const Icon = tab.icon;
           const selected = effectiveActiveTab === tab.id;
@@ -166,7 +176,7 @@ export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditor
       <div className="mt-4 min-h-0 flex-1">
         {effectiveActiveTab === "manifest" ? (
           <JsonTextarea
-            label="Manifest JSON"
+            label={translate(customDashboardMessages, "manifestJson")}
             value={draft.manifestText}
             onInput={(value) => setDraftField("manifestText", value)}
             rows={18}
@@ -177,8 +187,8 @@ export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditor
           <div className="grid min-h-0 gap-3 lg:grid-cols-[minmax(11rem,0.45fr)_minmax(0,1fr)]">
             <div className="flex min-h-[16rem] flex-col gap-2 rounded-[1rem] border border-black/[0.06] bg-slate-900/[0.03] p-2 dark:border-white/[0.06] dark:bg-white/[0.03]">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Bundle</span>
-                <Button size="sm" variant="ghost" onClick={addFile}>Add</Button>
+                <span className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">{translate(customDashboardMessages, "bundle")}</span>
+                <Button size="sm" variant="ghost" onClick={addFile}>{translate(customDashboardMessages, "add")}</Button>
               </div>
               <div className="flex flex-col gap-1 overflow-y-auto">
                 {files.map((file) => (
@@ -202,17 +212,17 @@ export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditor
               <div className="flex min-w-0 flex-col gap-3">
                 <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                   <input
-                    aria-label="Selected file path"
+                    aria-label={translate(customDashboardMessages, "selectedFilePath")}
                     value={selectedFile.path}
                     onInput={(event) => updateSelectedFile({ path: event.currentTarget.value })}
                     className="min-h-[2.5rem] min-w-0 rounded-[0.85rem] border border-black/[0.08] bg-white/80 px-3 text-sm font-semibold text-slate-900 outline-none focus:border-signal-500 focus:ring-2 focus:ring-signal-500/20 dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white"
                   />
                   <Button size="sm" variant="danger" disabled={files.length <= 1} onClick={removeSelectedFile}>
-                    Remove
+                    {translate(customDashboardMessages, "remove")}
                   </Button>
                 </div>
                 <textarea
-                  aria-label="Selected file content"
+                  aria-label={translate(customDashboardMessages, "selectedFileContent")}
                   value={selectedFile.content}
                   rows={18}
                   spellcheck={false}
@@ -221,14 +231,14 @@ export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditor
                 />
               </div>
             ) : (
-              <JsonTextarea label="File bundle JSON" value={draft.fileBundleText} onInput={(value) => setDraftField("fileBundleText", value)} rows={18} />
+              <JsonTextarea label={translate(customDashboardMessages, "fileBundleJson")} value={draft.fileBundleText} onInput={(value) => setDraftField("fileBundleText", value)} rows={18} />
             )}
           </div>
         ) : null}
 
         {effectiveActiveTab === "sources" ? (
           <JsonTextarea
-            label="Source node graph JSON"
+            label={translate(customDashboardMessages, "sourceGraphJson")}
             value={draft.sourceGraphText}
             onInput={(value) => setDraftField("sourceGraphText", value)}
             rows={18}
@@ -237,7 +247,7 @@ export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditor
 
         {effectiveActiveTab === "styleguide" ? (
           <JsonTextarea
-            label="Styleguide JSON"
+            label={translate(customDashboardMessages, "styleguideJson")}
             value={draft.styleguideText}
             onInput={(value) => setDraftField("styleguideText", value)}
             rows={18}
@@ -250,16 +260,18 @@ export const CustomDashboardEditorPanel: FunctionComponent<CustomDashboardEditor
               <article key={`${source.dashboardId}:${source.id}`} className="rounded-[1rem] border border-black/[0.08] bg-white/70 p-3 dark:border-white/[0.08] dark:bg-white/[0.04]">
                 <div className="min-w-0">
                   <h3 className="truncate text-sm font-bold text-slate-900 dark:text-white">{source.title}</h3>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{source.type} from {source.dashboardTitle}</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    {translate(customDashboardMessages, "catalogSourceOrigin", { type: source.type, dashboardTitle: source.dashboardTitle })}
+                  </p>
                 </div>
                 <Button className="mt-3 w-full" size="sm" variant="secondary" onClick={() => addCatalogSource(source)}>
-                  Add to graph
+                  {translate(customDashboardMessages, "addToGraph")}
                 </Button>
               </article>
             ))}
             {(!catalog || catalog.sources.length === 0) ? (
               <div className="rounded-[1rem] border border-dashed border-black/[0.12] p-6 text-sm text-slate-500 dark:border-white/[0.12] dark:text-slate-400">
-                No catalog sources are available for this project yet.
+                {translate(customDashboardMessages, "noCatalogSources")}
               </div>
             ) : null}
           </div>

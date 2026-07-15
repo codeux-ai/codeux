@@ -58,29 +58,57 @@ describe("getSprintStatusPresentation", () => {
     expect(result.showHumanInterventionBadge).toBe(false);
   });
 
-  it("maps running sprint with 100% completion or merge_required attention to Merge state", () => {
-    const result1 = getSprintStatusPresentation({
+  it("does not infer a merge stage from task completion alone", () => {
+    const result = getSprintStatusPresentation({
       state: "running",
       completion: 100,
     });
-    expect(result1.statusLabel).toBe("Merge");
-    expect(result1.title).toBe("Attempting Base Branch Merge");
 
-    const result2 = getSprintStatusPresentation({
+    expect(result.statusLabel).toBe("Running");
+    expect(result.title).toBe("Sprint Running");
+  });
+
+  it("maps explicit merge_required attention to Merge state", () => {
+    const result = getSprintStatusPresentation({
       state: "paused",
       attentionType: "merge_required",
     });
-    expect(result2.statusLabel).toBe("Merge");
-    expect(result2.title).toBe("Attempting Base Branch Merge");
+
+    expect(result.statusLabel).toBe("Merge");
+    expect(result.title).toBe("Attempting Base Branch Merge");
   });
 
   it("maps sprint with active review status to QA state", () => {
     const result = getSprintStatusPresentation({
       state: "running",
+      completion: 100,
       latestReviewStatus: "running",
     });
     expect(result.statusLabel).toBe("QA");
     expect(result.title).toBe("Sprint in QA Gate");
+  });
+
+  it("localizes active QA status without changing the underlying review field", () => {
+    const result = getSprintStatusPresentation({
+      state: "running",
+      completion: 100,
+      latestReviewStatus: "in_progress",
+    }, "de");
+
+    expect(result.statusLabel).toBe("QA");
+    expect(result.title).toBe("Sprint in der QA-Prüfung");
+  });
+
+  it("keeps terminal lifecycle status authoritative over stale stage evidence", () => {
+    const result = getSprintStatusPresentation({
+      state: "completed",
+      latestReviewStatus: "running",
+      attentionType: "merge_required",
+      completion: 100,
+    });
+
+    expect(result.statusLabel).toBe("Completed");
+    expect(result.title).toBe("Sprint Completed");
   });
 
   it("maps merge conflicts without requesting human attention unless ownership is human", () => {
@@ -114,5 +142,17 @@ describe("getSprintStatusPresentation", () => {
       state: "idle",
     });
     expect(result.statusLabel).toBe("Draft");
+  });
+
+  it("localizes dashboard fallbacks without rewriting supplied server detail", () => {
+    const result = getSprintStatusPresentation({
+      state: "paused",
+      pauseSource: "manual",
+      humanInterventionReason: "Operator-authored reason",
+    }, "de");
+
+    expect(result.statusLabel).toBe("Pausiert");
+    expect(result.title).toBe("Sprint für manuellen Eingriff pausiert");
+    expect(result.reason).toBe("Operator-authored reason");
   });
 });

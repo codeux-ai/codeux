@@ -3,6 +3,31 @@ import type {
   SprintStatusPresentationInput,
   SprintPauseSource,
 } from "../types/sprint.js";
+import type { DashboardLocale } from "../i18n/locales.js";
+import { translateDashboardMessage } from "../i18n/locales.js";
+import { shellMessages } from "../i18n/messages/shell.js";
+
+const SPRINT_MESSAGE_KEYS = {
+  "Merge Conflict": "sprintMergeConflictLabel", "Merge Conflict exists in base branch": "sprintMergeConflictTitle",
+  "A merge conflict exists into the base branch.": "sprintMergeConflictReason", "Resolve the merge conflicts in the base branch to complete the sprint.": "sprintMergeConflictDetail",
+  QA: "sprintQaLabel", "Sprint in QA Gate": "sprintQaTitle", "The sprint is undergoing automated and/or manual QA checks.": "sprintQaReason", "Awaiting QA approval before merge into the base branch.": "sprintQaDetail",
+  Merge: "sprintMergeLabel", "Attempting Base Branch Merge": "sprintMergeTitle", "Sprint has completed all execution tasks and is merging into the base branch.": "sprintMergeReason", "Final verification and integration into the base branch are in progress.": "sprintMergeDetail",
+  Unknown: "sprintUnknownLabel", Draft: "sprintDraftLabel", Paused: "sprintPausedLabel", "Sprint Paused For Manual Attention": "sprintManualPauseTitle", "A team member paused this sprint.": "sprintManualPauseReason", "Review the blocker and resume the sprint when ready.": "sprintManualPauseDetail",
+  Stopped: "sprintStoppedLabel", "Sprint Stopped By System": "sprintSystemStopTitle", "The orchestrator stopped this sprint.": "sprintSystemStopReason", "Resolve the stop condition and restart when ready.": "sprintSystemStopDetail",
+  Running: "sprintRunningLabel", "Sprint Running": "sprintRunningTitle", "Sprint execution is active.": "sprintRunningReason", "Live telemetry is updating as tasks run.": "sprintRunningDetail", "Sprint Status Unknown": "sprintUnknownTitle", "Sprint status is available.": "sprintStatusAvailable", "No additional status details are available yet.": "sprintNoStatusDetails",
+} as const;
+
+function localizePresentation(input: SprintStatusPresentationInput, presentation: SprintStatusPresentation, locale: DashboardLocale): SprintStatusPresentation {
+  const serverCopy = new Set([input.humanInterventionTitle, input.humanInterventionReason, input.humanInterventionInstructions, input.stopReasonTitle, input.stopReason, input.stopReasonDetail, input.pauseReason].filter((value): value is string => typeof value === "string" && value.trim().length > 0));
+  const localize = (value: string): string => {
+    if (serverCopy.has(value)) return value;
+    const key = SPRINT_MESSAGE_KEYS[value as keyof typeof SPRINT_MESSAGE_KEYS];
+    if (key) return translateDashboardMessage(shellMessages, locale, key);
+    if (value.startsWith("Sprint ")) return translateDashboardMessage(shellMessages, locale, "sprintStatusTitle", { status: localize(value.slice(7)) });
+    return value;
+  };
+  return { ...presentation, statusLabel: localize(presentation.statusLabel), title: localize(presentation.title), reason: localize(presentation.reason), detail: localize(presentation.detail) };
+}
 
 function toReadableStatus(value: string): string {
   return value
@@ -47,16 +72,19 @@ function resolvePauseSource(input: SprintStatusPresentationInput): SprintPauseSo
   return "unknown";
 }
 
-export function getSprintStatusPresentation(input: SprintStatusPresentationInput): SprintStatusPresentation {
+function buildSprintStatusPresentation(input: SprintStatusPresentationInput): SprintStatusPresentation {
   const rawState = (input.state || "").toString().trim().toLowerCase();
   const state = rawState || "unknown";
   const pauseSource = resolvePauseSource(input);
+  const isActiveLifecycle = state === "running" || state === "queued" || state === "paused";
+  const isExecuting = state === "running" || state === "queued";
+  const reviewStatus = (input.latestReviewStatus || "").trim().toLowerCase().replaceAll("-", "_").replaceAll(" ", "_");
+  const isReviewActive = reviewStatus === "running" || reviewStatus === "pending" || reviewStatus === "in_progress";
 
   // 1. Merge Conflict Check (Base branch merge conflict)
   if (
-    input.attentionType === "merge_conflict" ||
-    input.pauseReason === "main_merge_blocked" ||
-    (state === "paused" && input.attentionType === "merge_conflict")
+    isActiveLifecycle
+    && (input.attentionType === "merge_conflict" || input.pauseReason === "main_merge_blocked")
   ) {
     return {
       statusLabel: "Merge Conflict",
@@ -71,7 +99,7 @@ export function getSprintStatusPresentation(input: SprintStatusPresentationInput
   }
 
   // 2. QA Gate Check
-  if (input.latestReviewStatus === "running") {
+  if (isExecuting && input.completion === 100 && isReviewActive) {
     return {
       statusLabel: "QA",
       title: "Sprint in QA Gate",
@@ -85,7 +113,7 @@ export function getSprintStatusPresentation(input: SprintStatusPresentationInput
   }
 
   // 3. Base Branch Merge (Attempting Merge) Check
-  const isAttemptingMerge = (state === "running" && input.completion === 100) || input.attentionType === "merge_required";
+  const isAttemptingMerge = isActiveLifecycle && input.attentionType === "merge_required";
   if (isAttemptingMerge) {
     return {
       statusLabel: "Merge",
@@ -153,4 +181,8 @@ export function getSprintStatusPresentation(input: SprintStatusPresentationInput
     isManualPause: false,
     isSystemStop: false,
   };
+}
+
+export function getSprintStatusPresentation(input: SprintStatusPresentationInput, locale: DashboardLocale = "en"): SprintStatusPresentation {
+  return localizePresentation(input, buildSprintStatusPresentation(input), locale);
 }

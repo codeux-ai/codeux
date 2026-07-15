@@ -32,10 +32,7 @@ import {
   type LiveTaskStageKey,
   type LiveTaskTimingSummary,
 } from "../lib/live-stats.js";
-import { formatTime } from "../../lib/time.js";
-
-
-import { formatTokens } from "../pages/stats/stats-utils.js";
+import { useLiveI18n, type LiveMessageKey } from "../i18n/messages/live.js";
 
 export interface Tone {
   accent: string;
@@ -99,9 +96,14 @@ const STAGE_META: Record<LiveTaskStageKey, {
   },
 };
 
-function formatPercent(value: number): string {
-  return `${Math.max(0, Math.min(100, Math.round(value)))}%`;
-}
+const STAGE_LABEL_KEYS: Record<LiveTaskStageKey, { label: LiveMessageKey; shortLabel: LiveMessageKey }> = {
+  queued: { label: "queued", shortLabel: "queue" },
+  coding: { label: "coding", shortLabel: "code" },
+  ci: { label: "ciReview", shortLabel: "ci" },
+  qa: { label: "qaGate", shortLabel: "qa" },
+  autofix: { label: "autofix", shortLabel: "fix" },
+  merge: { label: "merge", shortLabel: "merge" },
+};
 
 function buildTaskTimingMap(timings: LiveTaskTimingSummary[]): Map<string, LiveTaskTimingSummary> {
   const map = new Map<string, LiveTaskTimingSummary>();
@@ -116,6 +118,7 @@ const DeltaValue: FunctionComponent<{
   value: number;
   compact?: boolean;
 }> = ({ value, compact = false }) => {
+  const { formatNumber } = useLiveI18n();
   const previousRef = useRef<number | null>(null);
   const timeoutRef = useRef<number | null>(null);
   const [delta, setDelta] = useState<number | null>(null);
@@ -147,12 +150,12 @@ const DeltaValue: FunctionComponent<{
   return (
     <div className="flex items-center gap-2">
       <span className={`${compact ? "text-lg" : "text-2xl"} font-semibold tracking-tight text-slate-900 dark:text-white`}>
-        {value}
+        {formatNumber(value)}
       </span>
       {delta !== null && delta !== 0 && (
         <span className={`stats-delta-chip ${positive ? "stats-delta-chip-positive" : "stats-delta-chip-negative"}`}>
           {positive ? <TrendingUp className="h-3 w-3" strokeWidth={2.4} /> : <TrendingDown className="h-3 w-3" strokeWidth={2.4} />}
-          {positive ? `+${delta}` : `${delta}`}
+          {positive ? `+${formatNumber(delta)}` : formatNumber(delta)}
         </span>
       )}
     </div>
@@ -187,21 +190,24 @@ const StageBand: FunctionComponent<{
   totalSeconds: number;
   activeCount: number;
 }> = ({ stage, seconds, totalSeconds, activeCount }) => {
+  const { locale, t, formatNumber } = useLiveI18n();
   const meta = STAGE_META[stage];
   const share = totalSeconds > 0 ? (seconds / totalSeconds) * 100 : 0;
+  const localizedShare = formatNumber(share / 100, { style: "percent", maximumFractionDigits: 0 });
+  const stageLabel = t(STAGE_LABEL_KEYS[stage].label);
 
   return (
     <div className="rounded-[1.75rem] border border-black/[0.05] bg-white/65 p-7 shadow-sm backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className={`text-[9px] font-bold uppercase tracking-[0.14em] ${meta.tone}`}>{meta.label}</div>
+          <div className={`text-[9px] font-bold uppercase tracking-[0.14em] ${meta.tone}`}>{stageLabel}</div>
           <div className="mt-2 text-lg font-semibold tracking-tight text-slate-900 dark:text-white">
-            {formatDurationTight(seconds)}
+            {formatDurationTight(seconds, locale)}
           </div>
         </div>
         <div className="text-right">
-          <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Share</div>
-          <div className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-200">{formatPercent(share)}</div>
+          <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("share")}</div>
+          <div className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-200">{localizedShare}</div>
         </div>
       </div>
       <div 
@@ -210,7 +216,7 @@ const StageBand: FunctionComponent<{
         aria-valuenow={Math.round(share)}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-label={`${meta.label} stage share: ${formatPercent(share)}`}
+        aria-label={t("stageShare", { stage: stageLabel, share: localizedShare })}
       >
         <div
           className="h-full rounded-full"
@@ -222,8 +228,8 @@ const StageBand: FunctionComponent<{
         />
       </div>
       <div className="mt-3 flex items-center justify-between gap-3 text-[10px] font-mono text-slate-500 dark:text-slate-400">
-        <span>{activeCount} active</span>
-        <span>{seconds > 0 ? `${Math.round(seconds / Math.max(activeCount, 1))}s / active` : "idle"}</span>
+        <span>{t("activeCount", { count: formatNumber(activeCount) })}</span>
+        <span>{seconds > 0 ? t("perActive", { duration: formatDurationTight(Math.round(seconds / Math.max(activeCount, 1)), locale) }) : t("idle")}</span>
       </div>
     </div>
   );
@@ -264,6 +270,7 @@ export function useLiveTaskTimingSummaries(args: {
 export const TaskStagePills: FunctionComponent<{
   timing: LiveTaskTimingSummary | null | undefined;
 }> = ({ timing }) => {
+  const { locale, t } = useLiveI18n();
   if (!timing || timing.totalSeconds <= 0) {
     return null;
   }
@@ -289,18 +296,18 @@ export const TaskStagePills: FunctionComponent<{
                 boxShadow: active ? `0 0 10px ${meta.accent}` : "none",
               }}
             />
-            <span className="sr-only">{active ? "Active stage:" : "Stage:"}</span>
-            {meta.shortLabel}
+            <span className="sr-only">{t(active ? "activeStage" : "stage")}</span>
+            {t(STAGE_LABEL_KEYS[stage].shortLabel)}
             <span className="font-mono normal-case tracking-normal text-slate-600 dark:text-slate-300">
-              {formatDurationTight(timing.stageTotals[stage])}
+              {formatDurationTight(timing.stageTotals[stage], locale)}
             </span>
           </span>
         );
       })}
       <span className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300">
         <Timer className="h-3 w-3" strokeWidth={2.2} aria-hidden="true" />
-        Total
-        <span className="font-mono normal-case tracking-normal text-slate-700 dark:text-white">{formatDurationTight(timing.totalSeconds)}</span>
+        {t("total")}
+        <span className="font-mono normal-case tracking-normal text-slate-700 dark:text-white">{formatDurationTight(timing.totalSeconds, locale)}</span>
       </span>
     </div>
   );
@@ -312,9 +319,14 @@ export const SprintStatsDeck: FunctionComponent<{
   tasks: Subtask[];
   sprintTiming: LiveSprintTimingSummary;
 }> = ({ hasSprintContext, stats, tasks, sprintTiming }) => {
+  const { locale, t, formatNumber, formatTime } = useLiveI18n();
   const totalTrackedStageSeconds = LIVE_TASK_STAGE_ORDER.reduce((sum, stage) => sum + sprintTiming.stageTotals[stage], 0);
   const completionRate = tasks.length > 0 ? (stats.completed / tasks.length) * 100 : 0;
   const mergePressure = stats.ci + stats.qa + stats.mergeBlocked + stats.mergeConflicts;
+  const formatCompactTokens = (value: number): string => formatNumber(value, {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).toLocaleLowerCase(locale);
 
   if (!hasSprintContext) {
     return (
@@ -325,12 +337,12 @@ export const SprintStatsDeck: FunctionComponent<{
           <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-[1.3rem] border border-signal-500/20 bg-signal-500/10 text-signal-500 shadow-[0_0_24px_rgba(0,224,160,0.16)]">
             <Timer className="h-8 w-8" strokeWidth={1.4} aria-hidden="true" />
           </div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">Sprint Stats</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">{t("sprintStats")}</div>
           <h3 className="mt-3 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
-            The telemetry field wakes up with the sprint.
+            {t("telemetryWakes")}
           </h3>
           <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-            Start a sprint to visualize elapsed time, stage timing, merge pressure, and live task-state deltas in the same view language as the DAG.
+            {t("telemetryStartDescription")}
           </p>
         </div>
       </div>
@@ -338,7 +350,7 @@ export const SprintStatsDeck: FunctionComponent<{
   }
 
   return (
-    <div role="region" aria-label="Live sprint stats" className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white p-7 shadow-sm dark:border-white/[0.08] dark:bg-void-800">
+    <div role="region" aria-label={t("liveSprintStats")} className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white p-7 shadow-sm dark:border-white/[0.08] dark:bg-void-800">
 
 
 
@@ -359,23 +371,23 @@ export const SprintStatsDeck: FunctionComponent<{
           <div>
             <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
               <Timer className="h-4 w-4" strokeWidth={1.6} aria-hidden="true" />
-              Telemetry Field
+              {t("telemetryField")}
             </div>
             <h3 className="mt-2 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white md:text-[2rem]">
-              Live sprint stats, rendered in the same surface.
+              {t("liveStatsRendered")}
             </h3>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-              Elapsed sprint time, task-state deltas, merge pressure, and stage durations are projected from runtime events without leaving the Live page visual language.
+              {t("telemetryDescription")}
             </p>
           </div>
 
           <div className="w-full overflow-x-auto pb-1 xl:max-w-[62rem] xl:justify-end">
-            <div className="grid min-w-[60rem] grid-cols-5 gap-2.5" role="group" aria-label="Sprint stat summary">
-              <SummaryPill label="Elapsed" value={formatDuration(sprintTiming.sprintElapsedSeconds)} icon={Timer} accent="text-signal-500" />
-              <SummaryPill label="Completion" value={formatPercent(completionRate)} icon={CheckCircle2} accent="text-status-green" />
-              <SummaryPill label="Avg Finish" value={formatDurationTight(sprintTiming.averageCompletedTaskSeconds)} icon={Sparkles} accent="text-ember-500" />
-              <SummaryPill label="Longest" value={sprintTiming.longestTask ? `${sprintTiming.longestTask.taskKey} · ${formatDurationTight(sprintTiming.longestTask.totalSeconds)}` : "No runtime"} icon={Layers} accent="text-slate-500" />
-              <SummaryPill label="Pressure" value={String(mergePressure)} icon={GitPullRequest} accent="text-ember-500" />
+            <div className="grid min-w-[60rem] grid-cols-5 gap-2.5" role="group" aria-label={t("sprintStatSummary")}>
+              <SummaryPill label={t("elapsed")} value={formatDuration(sprintTiming.sprintElapsedSeconds, locale)} icon={Timer} accent="text-signal-500" />
+              <SummaryPill label={t("completion")} value={formatNumber(completionRate / 100, { style: "percent", maximumFractionDigits: 0 })} icon={CheckCircle2} accent="text-status-green" />
+              <SummaryPill label={t("averageFinish")} value={formatDurationTight(sprintTiming.averageCompletedTaskSeconds, locale)} icon={Sparkles} accent="text-ember-500" />
+              <SummaryPill label={t("longest")} value={sprintTiming.longestTask ? `${sprintTiming.longestTask.taskKey} · ${formatDurationTight(sprintTiming.longestTask.totalSeconds, locale)}` : t("noRuntime")} icon={Layers} accent="text-slate-500" />
+              <SummaryPill label={t("pressure")} value={formatNumber(mergePressure)} icon={GitPullRequest} accent="text-ember-500" />
             </div>
           </div>
         </div>
@@ -385,50 +397,50 @@ export const SprintStatsDeck: FunctionComponent<{
             <div className="xl:col-span-7 rounded-[1.75rem] border border-black/[0.06] bg-white/68 p-7 shadow-sm backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/35">
               <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
                 <Clock3 className="h-3.5 w-3.5" strokeWidth={1.9} aria-hidden="true" />
-                Sprint Clock
+                {t("sprintClock")}
               </div>
               <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
                 <div>
                   <div className="break-words text-4xl font-semibold leading-none tracking-tight text-slate-900 dark:text-white md:text-5xl">
-                    {formatDuration(sprintTiming.sprintElapsedSeconds)}
+                    {formatDuration(sprintTiming.sprintElapsedSeconds, locale)}
                   </div>
                   <div className="mt-3 text-sm text-slate-500 dark:text-slate-400">
                     {sprintTiming.sprintStartedAt
-                      ? `Started ${formatTime(sprintTiming.sprintStartedAt)}`
-                      : "Awaiting first task start"}
+                      ? t("startedAt", { time: formatTime(new Date(sprintTiming.sprintStartedAt)) })
+                      : t("awaitingFirstTask")}
                   </div>
                 </div>
                 <div className="rounded-[1rem] border border-signal-500/15 bg-signal-500/8 px-4 py-3 text-right dark:bg-signal-500/10">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-signal-500">Tracked Tasks</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-signal-500">{t("trackedTasks")}</div>
                   <div className="mt-2 text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                    {sprintTiming.trackedTaskCount}
+                    {formatNumber(sprintTiming.trackedTaskCount)}
                   </div>
                 </div>
               </div>
               <div className="mt-5 grid gap-3 md:grid-cols-3">
                 <div className="rounded-[1.75rem] border border-black/[0.06] bg-black/[0.025] p-7 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.03]">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Finished</div>
-                  <div className="mt-2 text-base font-semibold tracking-tight text-slate-900 dark:text-white">{sprintTiming.completedTaskCount}</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("finished")}</div>
+                  <div className="mt-2 text-base font-semibold tracking-tight text-slate-900 dark:text-white">{formatNumber(sprintTiming.completedTaskCount)}</div>
                 </div>
                 <div className="rounded-[1.75rem] border border-black/[0.06] bg-black/[0.025] p-7 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.03]">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Avg Finish</div>
-                  <div className="mt-2 text-base font-semibold tracking-tight text-slate-900 dark:text-white">{formatDurationTight(sprintTiming.averageCompletedTaskSeconds)}</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("averageFinish")}</div>
+                  <div className="mt-2 text-base font-semibold tracking-tight text-slate-900 dark:text-white">{formatDurationTight(sprintTiming.averageCompletedTaskSeconds, locale)}</div>
                 </div>
                 <div className="rounded-[1.75rem] border border-black/[0.06] bg-black/[0.025] p-7 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.03]">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Accumulated</div>
-                  <div className="mt-2 text-base font-semibold tracking-tight text-slate-900 dark:text-white">{formatDuration(totalTrackedStageSeconds)}</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("accumulated")}</div>
+                  <div className="mt-2 text-base font-semibold tracking-tight text-slate-900 dark:text-white">{formatDuration(totalTrackedStageSeconds, locale)}</div>
                 </div>
                 <div className="rounded-[1.75rem] border border-black/[0.06] bg-black/[0.025] p-7 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.03]">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Input</div>
-                  <div className="mt-2 text-base font-semibold tracking-tight text-slate-900 dark:text-white">{formatTokens(sprintTiming.tokenTotals.inputTokens)}</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("input")}</div>
+                  <div className="mt-2 text-base font-semibold tracking-tight text-slate-900 dark:text-white">{formatCompactTokens(sprintTiming.tokenTotals.inputTokens)}</div>
                 </div>
                 <div className="rounded-[1.75rem] border border-black/[0.06] bg-black/[0.025] p-7 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.03]">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Output</div>
-                  <div className="mt-2 text-base font-semibold tracking-tight text-slate-900 dark:text-white">{formatTokens(sprintTiming.tokenTotals.outputTokens)}</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("output")}</div>
+                  <div className="mt-2 text-base font-semibold tracking-tight text-slate-900 dark:text-white">{formatCompactTokens(sprintTiming.tokenTotals.outputTokens)}</div>
                 </div>
                 <div className="rounded-[1.75rem] border border-black/[0.06] bg-black/[0.025] p-7 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.03]">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Cached</div>
-                  <div className="mt-2 text-base font-semibold tracking-tight text-slate-900 dark:text-white">{formatTokens(sprintTiming.tokenTotals.cachedInputTokens)}</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("cached")}</div>
+                  <div className="mt-2 text-base font-semibold tracking-tight text-slate-900 dark:text-white">{formatCompactTokens(sprintTiming.tokenTotals.cachedInputTokens)}</div>
                 </div>
               </div>
             </div>
@@ -437,27 +449,27 @@ export const SprintStatsDeck: FunctionComponent<{
               <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/68 p-7 shadow-sm backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/35">
                 <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
                   <Activity className="h-3.5 w-3.5 text-signal-500" strokeWidth={1.9} aria-hidden="true" />
-                  Flow State
+                  {t("flowState")}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <CounterTile label="Running" value={stats.running} icon={Activity} accent="text-signal-500" />
-                  <CounterTile label="Coding Done" value={stats.codingCompleted} icon={CircleDot} accent="text-ember-500" />
-                  <CounterTile label="Completed" value={stats.completed} icon={CheckCircle2} accent="text-status-green" />
-                  <CounterTile label="Failed" value={stats.failed} icon={XCircle} accent="text-status-red" />
+                  <CounterTile label={t("running")} value={stats.running} icon={Activity} accent="text-signal-500" />
+                  <CounterTile label={t("codingDone")} value={stats.codingCompleted} icon={CircleDot} accent="text-ember-500" />
+                  <CounterTile label={t("completed")} value={stats.completed} icon={CheckCircle2} accent="text-status-green" />
+                  <CounterTile label={t("failed")} value={stats.failed} icon={XCircle} accent="text-status-red" />
                 </div>
               </div>
 
               <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/68 p-7 shadow-sm backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/35">
                 <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
                   <WandSparkles className="h-3.5 w-3.5 text-ember-500" strokeWidth={1.9} aria-hidden="true" />
-                  Merge Surface
+                  {t("mergeSurface")}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <CounterTile label="CI Lane" value={stats.ci} icon={GitPullRequest} accent="text-ember-500" />
-                  <CounterTile label="QA Gate" value={stats.qa} icon={Timer} accent="text-status-amber" />
-                  <CounterTile label="Automerge" value={stats.automerge} icon={Sparkles} accent="text-status-green" />
-                  <CounterTile label="Merged" value={stats.merged} icon={CheckCircle2} accent="text-status-green" />
-                  <CounterTile label="Blocked" value={stats.mergeBlocked + stats.mergeConflicts} icon={WandSparkles} accent="text-status-amber" className="col-span-2" />
+                  <CounterTile label={t("ciLane")} value={stats.ci} icon={GitPullRequest} accent="text-ember-500" />
+                  <CounterTile label={t("qaGate")} value={stats.qa} icon={Timer} accent="text-status-amber" />
+                  <CounterTile label={t("automerge")} value={stats.automerge} icon={Sparkles} accent="text-status-green" />
+                  <CounterTile label={t("merged")} value={stats.merged} icon={CheckCircle2} accent="text-status-green" />
+                  <CounterTile label={t("blocked")} value={stats.mergeBlocked + stats.mergeConflicts} icon={WandSparkles} accent="text-status-amber" className="col-span-2" />
                 </div>
               </div>
             </div>
@@ -467,10 +479,10 @@ export const SprintStatsDeck: FunctionComponent<{
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
                 <Sparkles className="h-3.5 w-3.5 text-signal-500" strokeWidth={1.9} aria-hidden="true" />
-                Stage Ledger
+                {t("stageLedger")}
               </div>
               <div className="text-[10px] font-mono uppercase tracking-[0.14em] text-slate-400">
-                Split from runtime milestones
+                {t("runtimeMilestones")}
               </div>
             </div>
             <div className="grid gap-3 xl:grid-cols-5">

@@ -127,4 +127,10 @@ describe("getPlanningFeedback", () => {
     expect(getPlanningCancelledMessage("plan_only")).toContain("was not started");
     expect(getPlanningCancelledMessage("replan")).toContain("Existing tasks were left unchanged");
   });
+
+  it("localizes progress and cancellation feedback without changing action modes", () => {
+    expect(getPlanningFeedback("plan_only", 0, "de").text).toBe("Sprintdefinition wird registriert...");
+    expect(getPlanningPendingMessage("plan_and_start", "de")).toContain("startet erst nach erfolgreicher Planung");
+    expect(getPlanningCancelledMessage("replan", "de")).toContain("Bestehende Aufgaben blieben unverändert");
+  });
 });

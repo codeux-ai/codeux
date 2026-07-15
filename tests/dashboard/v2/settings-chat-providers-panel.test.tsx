@@ -2,7 +2,8 @@
 /** @jsx h */
 /** @jsxFrag Fragment */
 import { h, Fragment } from "preact";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { cleanup, fireEvent, render as testingLibraryRender, screen, waitFor, within } from "@testing-library/preact";
+import type { ComponentChildren } from "preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import gsap from "gsap";
 import { SettingsIntegrationsPanel } from "../../../dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.js";
@@ -15,6 +16,12 @@ import type {
   DashboardChatProviderConnectionRecord,
   DashboardChatProviderSetupDefinition,
 } from "../../../dashboard/src/v2/lib/chat-provider-api.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+import type { DashboardLocale } from "../../../dashboard/src/v2/i18n/locales.js";
+
+const render = (children: ComponentChildren, locale: DashboardLocale = "en") => testingLibraryRender(
+  <DashboardI18nProvider initialLocale={locale} storage={null}>{children}</DashboardI18nProvider>,
+);
 
 const reducedMotionPreference = vi.hoisted(() => ({ enabled: false }));
 
@@ -56,7 +63,6 @@ vi.mock("gsap", () => {
     },
   };
 });
-
 const providerDefinitions: DashboardChatProviderSetupDefinition[] = [
   "whatsapp",
   "imessage",
@@ -275,7 +281,7 @@ describe("SettingsIntegrationsPanel chat connectors", () => {
     for (const label of ["WhatsApp", "iMessage", "Telegram", "Slack", "Microsoft Teams", "Discord"]) {
       expect(screen.getByText(label)).not.toBeNull();
     }
-    expect(screen.getAllByRole("article", { name: /chat connector/ })[0]?.getAttribute("aria-label")).toBe("Discord chat connector");
+    expect(screen.getByRole("article", { name: "Discord chat connector" })).not.toBeNull();
     expect(screen.getByText("1 connections")).not.toBeNull();
     expect(screen.getByText("1 channels")).not.toBeNull();
     expect(screen.getByText("Replies on")).not.toBeNull();
@@ -287,15 +293,15 @@ describe("SettingsIntegrationsPanel chat connectors", () => {
 
     await waitFor(() => expect(screen.getByText("Slack Connector")).not.toBeNull());
     expect(screen.getByText("Slack setup guidance")).not.toBeNull();
-    expect((screen.getByLabelText("Slack Bridge display name") as HTMLInputElement).value).toBe("Slack Bridge");
-    expect(screen.getByRole("radiogroup", { name: "Slack Bridge bridge mode" })).not.toBeNull();
+    expect((screen.getByLabelText("Slack Bridge Display name") as HTMLInputElement).value).toBe("Slack Bridge");
+    expect(screen.getByRole("radiogroup", { name: "Slack Bridge Connection mode" })).not.toBeNull();
     expect(screen.getByRole("radio", { name: /Provider-native API/ })).not.toBeNull();
-    expect(screen.getByRole("radio", { name: /Custom webhook/ })).not.toBeNull();
+    expect(screen.getByRole("radio", { name: /Webhook/ })).not.toBeNull();
     expect(screen.getByText("slack documentation")).not.toBeNull();
     expect(screen.getByText("Provider delivery limits apply.")).not.toBeNull();
-    expect((screen.getByLabelText("Slack Bridge ingress URL") as HTMLInputElement).value).toBe("http://localhost/api/chat-providers/ingress/conn-slack");
+    expect((screen.getByLabelText("Slack Bridge Ingress URL") as HTMLInputElement).value).toBe("http://localhost/api/chat-providers/ingress/conn-slack");
     expect((screen.getByLabelText("Slack Bridge Bridge API key") as HTMLInputElement).value).toBe("");
-    expect(screen.getByText(/Configured\. Enter a replacement only to rotate it\./i)).not.toBeNull();
+    expect(screen.getByText(/configured\. Enter a replacement only when rotating it\./i)).not.toBeNull();
     expect(screen.getByRole("button", { name: "Test connection" })).not.toBeNull();
     expect(screen.getByRole("region", { name: "Slack Bridge verification result" })).not.toBeNull();
 
@@ -317,13 +323,27 @@ describe("SettingsIntegrationsPanel chat connectors", () => {
     }));
   });
 
+  it("renders German connector success and keeps provider failures verbatim", async () => {
+    const state = createState("slack");
+    (state.chatProviders as typeof state.chatProviders & { error: string | null }).error = "Provider gateway unavailable: ECONNREFUSED";
+    render(<SettingsIntegrationsPanel state={state as any} />, "de");
+
+    await waitFor(() => expect(screen.getByText("Slack Konnektor")).not.toBeNull());
+    expect(screen.getByText("Chat-Konnektor-Einstellungen nicht verfügbar")).not.toBeNull();
+    expect(screen.getByText("Provider gateway unavailable: ECONNREFUSED")).not.toBeNull();
+    expect(screen.getByText("Zustellverlauf")).not.toBeNull();
+    expect(screen.getByRole("radiogroup", { name: "Slack Bridge Verbindungsmodus" })).not.toBeNull();
+    expect((screen.getByLabelText("Slack Bridge Bridge API key") as HTMLInputElement).value).toBe("");
+    expect(screen.getByText("Bearer [redacted] failed")).not.toBeNull();
+  });
+
   it("supports keyboard mode selection and persistent assertive errors", async () => {
     const state = createState("slack");
-    state.chatProviders.error = "Delivery history could not be refreshed.";
+    (state.chatProviders as typeof state.chatProviders & { error: string | null }).error = "Delivery history could not be refreshed.";
     render(<SettingsIntegrationsPanel state={state as any} />);
     const managed = await screen.findByRole("radio", { name: /Managed bridge/ });
     fireEvent.keyDown(managed, { key: "ArrowRight" });
-    expect(screen.getByRole("radio", { name: /Custom webhook/ }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("radio", { name: /Webhook/ }).getAttribute("aria-checked")).toBe("true");
     expect(screen.getByText("Verification stale")).not.toBeNull();
     const error = screen.getByRole("alert");
     expect(error.getAttribute("aria-live")).toBe("assertive");

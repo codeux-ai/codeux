@@ -815,6 +815,10 @@ describe("ProjectManagementRepository", () => {
       "2026-03-09T13:00:00.000Z",
       "2026-03-09T13:05:00.000Z",
     );
+    db.prepare("UPDATE sprints SET updated_at = ? WHERE id = ?").run(
+      "2026-03-09T09:00:00.000Z",
+      sprintA1.id,
+    );
 
     const executeSpy = vi.spyOn(storage, "executeChunkedInQuery");
 
@@ -1394,6 +1398,93 @@ describe("ProjectManagementRepository", () => {
     expect(repository.listSprints(project.id).sprints[0]).toMatchObject({
       status: "cancelled",
     });
+  });
+
+  it("keeps cancellation-pending sprints active in summary and overview projections", async () => {
+    const { repository, executionRepository } = await createRepository();
+    const project = repository.createProject({
+      name: "Cancellation Projection Project",
+      sourceType: "local",
+      sourceRef: "/workspace/cancellation-projection",
+    });
+    const sprint = repository.createSprint(project.id, {
+      name: "Cancellation Projection Sprint",
+      status: "running",
+    });
+    const task = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Shutting down task",
+      status: "in_progress",
+    });
+
+    executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "cancel_requested",
+    });
+
+    expect(repository.getSprint(sprint.id)?.status).toBe("running");
+    expect(repository.listSprints(project.id).sprints[0]?.status).toBe("running");
+    expect(repository.getProject(project.id)).toMatchObject({
+      status: "running",
+      isRunning: true,
+    });
+    expect(repository.listTaskOverviews(project.id).map((record) => record.id)).toEqual([task.id]);
+  });
+
+  it("honors a newer explicit sprint status over an older terminal run projection", async () => {
+    const { repository, executionRepository, storage } = await createRepository();
+    const project = repository.createProject({
+      name: "Explicit Status Project",
+      sourceType: "local",
+      sourceRef: "/workspace/explicit-status",
+    });
+    const cancelledSprint = repository.createSprint(project.id, {
+      name: "Cancelled Runtime Sprint",
+      status: "running",
+    });
+    const completedSprint = repository.createSprint(project.id, {
+      name: "Completed Runtime Sprint",
+      status: "running",
+    });
+    const activeSprint = repository.createSprint(project.id, {
+      name: "Active Runtime Sprint",
+      status: "running",
+    });
+
+    executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: cancelledSprint.id,
+      status: "cancelled",
+    });
+    executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: completedSprint.id,
+      status: "completed",
+    });
+    executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: activeSprint.id,
+      status: "paused",
+    });
+
+    storage.getDatabase().prepare(`
+      UPDATE sprints SET status = ?, updated_at = '2099-01-01T00:00:00.000Z' WHERE id = ?
+    `).run("completed", cancelledSprint.id);
+    storage.getDatabase().prepare(`
+      UPDATE sprints SET status = ?, updated_at = '2099-01-01T00:00:00.000Z' WHERE id = ?
+    `).run("paused", completedSprint.id);
+    storage.getDatabase().prepare(`
+      UPDATE sprints SET status = ?, updated_at = '2099-01-01T00:00:00.000Z' WHERE id = ?
+    `).run("completed", activeSprint.id);
+
+    expect(repository.getSprint(cancelledSprint.id)?.status).toBe("completed");
+    expect(repository.getSprint(completedSprint.id)?.status).toBe("paused");
+    expect(repository.getSprint(activeSprint.id)?.status).toBe("paused");
+    const listed = repository.listSprints(project.id).sprints;
+    expect(listed.find((record) => record.id === cancelledSprint.id)?.status).toBe("completed");
+    expect(listed.find((record) => record.id === completedSprint.id)?.status).toBe("paused");
+    expect(listed.find((record) => record.id === activeSprint.id)?.status).toBe("paused");
   });
 
   it("loads task records by id through the chunked IN helper", async () => {
@@ -2223,5 +2314,156 @@ describe("ProjectManagementRepository", () => {
     expect(restartedTasks.find((task) => task.id === runningTask.id)?.ciStatus).toBeNull();
     expect(restartedTasks.find((task) => task.id === malformedTask.id)?.ciStatus).toBe("pending");
     expect(restartedRepository.listSprints(project.id).sprints[0]?.ciStatus).toBe("pending");
+  });
+
+  it("does not project a prior sprint run main-merge gate onto the latest run", async () => {
+    const { storage, repository, executionRepository } = await createRepository();
+    const project = repository.createProject({
+      name: "Run Scoped CI Project",
+      sourceType: "local",
+      sourceRef: "/workspace/run-scoped-ci",
+    });
+    const sprint = repository.createSprint(project.id, { name: "Run Scoped CI Sprint" });
+    const previousRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "failed",
+    });
+    executionRepository.appendSprintRunEvent(previousRun.id, "main_merge_gate_status", "system", {
+      state: "failed_checks",
+      hasFailedChecks: true,
+    });
+    const currentRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "paused",
+    });
+    const now = "2026-07-14T10:00:00.000Z";
+    storage.getDatabase().prepare(`
+      INSERT INTO project_attention_items (
+        id, project_id, sprint_id, task_id, sprint_run_id, dispatch_id,
+        attention_type, severity, owner_type, status, assigned_worker_endpoint_id,
+        title, summary_markdown, payload_json, opened_at, claimed_at, resolved_at, updated_at
+      ) VALUES (?, ?, ?, NULL, ?, NULL, 'ci_fix_required', 'high', 'worker', 'open', NULL, ?, ?, ?, ?, NULL, NULL, ?)
+    `).run(
+      "prior-run-main-ci-attention",
+      project.id,
+      sprint.id,
+      previousRun.id,
+      "Prior run main CI failure",
+      "The prior run failed main-merge CI.",
+      JSON.stringify({ mergeStage: "main" }),
+      now,
+      now,
+    );
+
+    expect(repository.listSprints(project.id).sprints[0]?.ciStatus).toBeNull();
+
+    executionRepository.appendSprintRunEvent(currentRun.id, "main_merge_gate_status", "system", {
+      state: "pending_checks",
+      hasPendingChecks: true,
+    });
+    expect(repository.listSprints(project.id).sprints[0]?.ciStatus).toBe("running");
+  });
+
+  it("does not project a prior sprint run task gate or attention onto the latest run", async () => {
+    const { storage, repository, executionRepository } = await createRepository();
+    const project = repository.createProject({
+      name: "Run Scoped Task CI Project",
+      sourceType: "local",
+      sourceRef: "/workspace/run-scoped-task-ci",
+    });
+    const sprint = repository.createSprint(project.id, { name: "Run Scoped Task CI Sprint" });
+    const task = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Retry checks",
+      status: "in_progress",
+      mergeIndicator: "CI",
+    });
+    const previousRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "failed",
+    });
+    const previousTaskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: previousRun.id,
+      taskId: task.id,
+      state: "FAILED",
+    });
+    executionRepository.appendTaskRunEvent(previousTaskRun.id, "ci_gate_status", "system", {
+      state: "failed_checks",
+      hasFailedChecks: true,
+    });
+    const now = "2026-07-14T11:00:00.000Z";
+    storage.getDatabase().prepare(`
+      INSERT INTO project_attention_items (
+        id, project_id, sprint_id, task_id, sprint_run_id, dispatch_id,
+        attention_type, severity, owner_type, status, assigned_worker_endpoint_id,
+        title, summary_markdown, payload_json, opened_at, claimed_at, resolved_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, NULL, 'ci_fix_required', 'high', 'worker', 'open', NULL, ?, ?, ?, ?, NULL, NULL, ?)
+    `).run(
+      "prior-run-task-ci-attention",
+      project.id,
+      sprint.id,
+      task.id,
+      previousRun.id,
+      "Prior run task CI failure",
+      "The prior run failed task CI.",
+      JSON.stringify({ failedChecks: ["test"] }),
+      now,
+      now,
+    );
+    const currentRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "paused",
+    });
+
+    expect(repository.listTasks(project.id, sprint.id)[0]?.ciStatus).toBe("pending");
+    expect(repository.listSprints(project.id).sprints[0]?.ciStatus).toBe("pending");
+
+    storage.getDatabase().prepare(`
+      INSERT INTO project_attention_items (
+        id, project_id, sprint_id, task_id, sprint_run_id, dispatch_id,
+        attention_type, severity, owner_type, status, assigned_worker_endpoint_id,
+        title, summary_markdown, payload_json, opened_at, claimed_at, resolved_at, updated_at
+      ) VALUES (?, ?, NULL, ?, ?, NULL, 'ci_fix_required', 'high', 'worker', 'open', NULL, ?, ?, ?, ?, NULL, NULL, ?)
+    `).run(
+      "current-run-null-sprint-task-ci-attention",
+      project.id,
+      task.id,
+      currentRun.id,
+      "Current run task CI failure",
+      "Current task CI attention omits its redundant sprint ID.",
+      JSON.stringify({ failedChecks: ["test"] }),
+      now,
+      now,
+    );
+    expect(repository.listTasks(project.id, sprint.id)[0]?.ciStatus).toBe("failed");
+    expect(repository.listSprints(project.id).sprints[0]?.ciStatus).toBe("failed");
+
+    storage.getDatabase().prepare(`
+      UPDATE project_attention_items
+      SET status = 'resolved', resolved_at = ?, updated_at = ?
+      WHERE id = 'current-run-null-sprint-task-ci-attention'
+    `).run(now, now);
+
+    const currentTaskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: currentRun.id,
+      taskId: task.id,
+      state: "RUNNING",
+    });
+    executionRepository.appendTaskRunEvent(currentTaskRun.id, "ci_gate_status", "system", {
+      state: "waiting_checks",
+      hasPendingChecks: true,
+    });
+
+    expect(repository.listTasks(project.id, sprint.id)[0]?.ciStatus).toBe("running");
+    expect(repository.listSprints(project.id).sprints[0]?.ciStatus).toBe("running");
   });
 });

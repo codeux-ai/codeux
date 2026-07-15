@@ -7,6 +7,7 @@ import { h } from "preact";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/preact";
 import { SprintCell } from "../../../dashboard/src/v2/components/sprints/SprintCell";
+import { renderWithI18n } from "../render-with-i18n.js";
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children, search, to, ...props }: any) => (
@@ -30,13 +31,13 @@ describe("SprintCell", () => {
   };
 
   it("renders sprint details correctly", () => {
-    render(<SprintCell sprint={defaultSprint} isEven={true} accentColor="text-blue-500" />);
+    renderWithI18n(<SprintCell sprint={defaultSprint} isEven={true} accentColor="text-blue-500" />);
     expect(screen.getByText("Feature Alpha")).toBeDefined();
     expect(screen.getByText("5")).toBeDefined();
   });
 
   it("renders whole and fractional completion without rounding", () => {
-    render(
+    renderWithI18n(
       <>
         <SprintCell sprint={{ ...defaultSprint, id: "sprint-5", tasksCount: 10, completion: 5 }} isEven={true} accentColor="text-blue-500" />
         <SprintCell sprint={{ ...defaultSprint, id: "sprint-7-5", tasksCount: 10, completion: 7.5 }} isEven={false} accentColor="text-blue-500" />
@@ -49,7 +50,7 @@ describe("SprintCell", () => {
   });
 
   it("links to project-aware tasks and live routes", () => {
-    render(<SprintCell sprint={defaultSprint} isEven={true} accentColor="text-blue-500" />);
+    renderWithI18n(<SprintCell sprint={defaultSprint} isEven={true} accentColor="text-blue-500" />);
 
     const tasksLink = screen.getByRole("link", { name: "Open tasks for sprint Feature Alpha" });
     const liveLink = screen.getByRole("link", { name: "Open live session for sprint Feature Alpha" });
@@ -62,7 +63,7 @@ describe("SprintCell", () => {
 
   it("calls onMarkCompleted when menu action is clicked", async () => {
     const onMarkCompleted = vi.fn();
-    render(
+    renderWithI18n(
       <SprintCell
         sprint={defaultSprint}
         isEven={true}
@@ -85,7 +86,7 @@ describe("SprintCell", () => {
 
   it("calls onMarkQaPassed and hides the action after a passing verdict", async () => {
     const onMarkQaPassed = vi.fn();
-    const { rerender } = render(
+    const { rerender } = renderWithI18n(
       <SprintCell
         sprint={defaultSprint}
         isEven={true}
@@ -133,7 +134,7 @@ describe("SprintCell", () => {
       }
     };
 
-    render(
+    renderWithI18n(
       <SprintCell
         sprint={sprintWithReview}
         isEven={true}
@@ -156,7 +157,7 @@ describe("SprintCell", () => {
 
   it("does not show Mark Completed if sprint is already completed", async () => {
     const completedSprint = { ...defaultSprint, status: "completed" as const };
-    render(
+    renderWithI18n(
       <SprintCell
         sprint={completedSprint}
         isEven={true}
@@ -185,7 +186,7 @@ describe("SprintCell", () => {
     // Note: status must be 'paused' for the canonical badge to show via the mapper
     const pausedSprint = { ...defaultSprint, status: "paused" as const };
 
-    render(
+    renderWithI18n(
       <SprintCell
         sprint={pausedSprint}
         isEven={true}
@@ -204,7 +205,7 @@ describe("SprintCell", () => {
   });
 
   it("does not label a worker-owned pause as human intervention", () => {
-    render(
+    renderWithI18n(
       <SprintCell
         sprint={{ ...defaultSprint, status: "paused" }}
         isEven={true}

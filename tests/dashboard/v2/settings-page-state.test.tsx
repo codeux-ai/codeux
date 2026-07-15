@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor, cleanup, render, screen, fireEvent } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { useSettingsPageState } from "../../../dashboard/src/v2/hooks/use-settings-page-state.js";
-import { SettingsCategoryRail, CATEGORIES } from "../../../dashboard/src/v2/components/settings/SettingsCategoryRail.js";
+import { SettingsCategoryRail, CATEGORIES, getLocalizedSettingsCategories } from "../../../dashboard/src/v2/components/settings/SettingsCategoryRail.js";
 import { ActionFeedbackRegion } from "../../../dashboard/src/v2/components/ui/ActionFeedbackRegion.js";
 import { focusFirstInvalidSettingsControl, SettingsPage } from "../../../dashboard/src/v2/SettingsPage.js";
 import { applyEffectiveProjectSettings } from "../../../dashboard/src/v2/lib/settings-view-models.js";
@@ -568,6 +568,20 @@ describe("useSettingsPageState", () => {
       result.current.setSettingsSearch("");
     });
     expect(result.current.filteredCategories.length).toBe(CATEGORIES.length);
+  });
+
+  it("keeps stable category navigation while filtering localized German search terms", async () => {
+    const germanCategories = getLocalizedSettingsCategories("de");
+    const { result } = renderHook(() => useSettingsPageState(germanCategories, "de"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.setSettingsSearch("Sprache"));
+    expect(result.current.filteredCategories.map((category) => category.id)).toContain("appearance");
+    expect(result.current.filteredCategories.find((category) => category.id === "appearance")?.label).toBe("Darstellung");
+
+    act(() => result.current.setActiveCategory("appearance"));
+    expect(result.current.activeCategory).toBe("appearance");
+    expect(result.current.activeCategoryConfig.label).toBe("Darstellung");
   });
 
   it("renders self-reflection controls default off and supports criteria add/remove", async () => {

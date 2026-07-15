@@ -71,5 +71,6 @@ describe("formatDeltaPercent", () => {
     expect(formatDeltaPercent({ current: 100, previous: 0, changePercent: null, direction: "up" })).toBe("new");
     expect(formatDeltaPercent({ current: 0, previous: 0, changePercent: null, direction: "flat" })).toBe("—");
     expect(formatDeltaPercent({ current: 200, previous: 200, changePercent: 0, direction: "flat" })).toBe("flat");
+    expect(formatDeltaPercent({ current: 200, previous: 200, changePercent: 0, direction: "flat" }, "de")).toBe("unverändert");
   });
 });

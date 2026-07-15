@@ -11,6 +11,7 @@ expect.extend(matchers);
 import gsap from "gsap";
 import { ConnectionRuntimePanel, ExecutionRuntimePanel } from "../../../../../dashboard/src/v2/components/live-session/ExecutionRuntimePanel.js";
 import { useExecutionTimeline } from "../../../../../dashboard/src/hooks/ExecutionTimelineContext.js";
+import { DashboardI18nProvider } from "../../../../../dashboard/src/v2/i18n/context.js";
 import type { ExecutionDashboardSnapshot, ExecutionRuntimeEventSummary } from "../../../../../dashboard/src/types.js";
 
 vi.mock("../../../../../dashboard/src/hooks/ExecutionTimelineContext.js", () => ({
@@ -202,6 +203,47 @@ describe("ConnectionRuntimePanel", () => {
         expect(document.getElementById(panelId ?? "")).not.toHaveAttribute("aria-hidden");
     });
 
+    it("localizes German connection roles while preserving runtime-authored connection details", () => {
+        vi.mocked(useExecutionTimeline).mockReturnValue({
+            execution: {
+                ...createExecutionSnapshot(),
+                connections: [{
+                    id: "conn-listener",
+                    role: "listener",
+                    status: "listening",
+                    listenMode: true,
+                    displayName: "KEEP connection name verbatim",
+                    transport: "KEEP_transport_verbatim",
+                    model: "KEEP-model-verbatim",
+                    connectionKey: "KEEP-connection-key-verbatim",
+                    lastHeartbeatAt: null,
+                    pendingInboxCount: 0,
+                    activeDispatchCount: 0,
+                    threadCount: 0,
+                    tasksRunCount: 0,
+                    labels: [],
+                    instruction: "KEEP runtime instruction verbatim",
+                    machineName: null,
+                    platform: null,
+                    arch: null,
+                    localExecutionRuntime: null,
+                }],
+            },
+        } as never);
+
+        render(
+            <DashboardI18nProvider initialLocale="de" storage={null}>
+                <ConnectionRuntimePanel />
+            </DashboardI18nProvider>,
+        );
+
+        expect(screen.getByText("Live-Verbindungen")).toBeInTheDocument();
+        expect(screen.getByText("Empfänger")).toBeInTheDocument();
+        expect(screen.getByText("KEEP connection name verbatim")).toBeInTheDocument();
+        expect(screen.getByText("KEEP_transport_verbatim")).toBeInTheDocument();
+        expect(screen.getByText("KEEP runtime instruction verbatim")).toBeInTheDocument();
+    });
+
     it("renders pending runtime action labels with busy state", () => {
         vi.mocked(useExecutionTimeline).mockReturnValue({
             execution: {
@@ -332,6 +374,110 @@ describe("ConnectionRuntimePanel", () => {
         expect(screen.getByText("Progress is not available yet.")).toBeInTheDocument();
         expect(screen.getByRole("progressbar", { name: "setup-cache image build progress" }))
             .not.toHaveAttribute("aria-valuenow");
+    });
+
+    it("localizes known German sprint-run, dispatch, and task-run status rows", () => {
+        const sprintRun = {
+            id: "run-running",
+            projectId: "project-1",
+            sprintId: "sprint-1",
+            sprintName: "KEEP sprint name verbatim",
+            sprintNumber: 1,
+            status: "running",
+            triggerType: "manual",
+            triggeredBy: null,
+            executorMode: "docker_cli",
+            startedAt: "2024-01-01T10:00:00.000Z",
+            finishedAt: null,
+            lastHeartbeatAt: "2024-01-01T10:01:00.000Z",
+            createdAt: "2024-01-01T10:00:00.000Z",
+            activeLeaseOwnerKey: null,
+            activeLeaseExpiresAt: null,
+            humanIntervention: null,
+        };
+        const dispatch = {
+            id: "dispatch-queued",
+            projectId: "project-1",
+            sprintId: "sprint-1",
+            sprintRunId: "run-running",
+            sprintName: "KEEP sprint name verbatim",
+            sprintNumber: 1,
+            taskId: "task-queued",
+            taskKey: "T-QUEUED",
+            taskTitle: "KEEP queued task title verbatim",
+            status: "queued",
+            executorType: "docker_cli",
+            priority: 0,
+            connectionId: null,
+            connectionDisplayName: null,
+            connectionRole: null,
+            taskRunId: "task-run-queued",
+            taskRunState: "RUNNING",
+            provider: "codex",
+            sessionId: null,
+            sessionName: null,
+            workerBranch: null,
+            prUrl: null,
+            queuedAt: "2024-01-01T10:00:00.000Z",
+            claimedAt: null,
+            startedAt: null,
+            finishedAt: null,
+            lastHeartbeatAt: null,
+            errorMessage: null,
+            activeLeaseOwnerKey: null,
+            activeLeaseExpiresAt: null,
+        };
+        vi.mocked(useExecutionTimeline).mockReturnValue({
+            execution: {
+                ...createExecutionSnapshot(),
+                sprintRuns: [
+                    sprintRun,
+                    {
+                        ...sprintRun,
+                        id: "run-cancelled",
+                        sprintId: "sprint-2",
+                        sprintName: "KEEP cancelled sprint name verbatim",
+                        status: "cancelled",
+                        finishedAt: "2024-01-01T10:02:00.000Z",
+                    },
+                ],
+                taskDispatches: [
+                    dispatch,
+                    {
+                        ...dispatch,
+                        id: "dispatch-failed",
+                        taskId: "task-failed",
+                        taskKey: "T-FAILED",
+                        taskTitle: "KEEP failed task title verbatim",
+                        status: "failed",
+                        taskRunId: "task-run-failed",
+                        taskRunState: "FAILED",
+                        finishedAt: "2024-01-01T10:02:00.000Z",
+                    },
+                ],
+            },
+            onOrchestrateSprint: vi.fn(),
+            onPauseSprintRun: vi.fn(),
+            onCancelSprintRun: vi.fn(),
+            onForceCancelSprintRun: vi.fn(),
+            onCancelTaskDispatch: vi.fn(),
+            onForceCancelTaskDispatch: vi.fn(),
+            onRetryTaskDispatch: vi.fn(),
+            pendingActionIds: new Set(),
+        } as never);
+
+        render(
+            <DashboardI18nProvider initialLocale="de" storage={null}>
+                <ExecutionRuntimePanel />
+            </DashboardI18nProvider>,
+        );
+
+        expect(screen.getAllByText("Laufend")).toHaveLength(2);
+        expect(screen.getByText("Eingereiht")).toBeInTheDocument();
+        expect(screen.getAllByText("Fehlgeschlagen")).toHaveLength(2);
+        expect(screen.getByText("Abgebrochen")).toBeInTheDocument();
+        expect(screen.getAllByText("KEEP sprint name verbatim").length).toBeGreaterThan(0);
+        expect(screen.getByText(/KEEP queued task title verbatim/)).toBeInTheDocument();
     });
 
     it("does not render a build infobox when cached images are reused", () => {

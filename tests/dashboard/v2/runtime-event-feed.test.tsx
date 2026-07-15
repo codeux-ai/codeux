@@ -9,6 +9,7 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
 
 import { RuntimeEventFeed } from "../../../dashboard/src/v2/components/RuntimeEventFeed.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
 import gsap from "gsap";
 
 vi.mock("gsap", () => ({
@@ -93,6 +94,25 @@ describe("RuntimeEventFeed", () => {
         render(<RuntimeEventFeed events={undefined} />);
         expect(gsap.fromTo).not.toHaveBeenCalled();
         expect(screen.getByRole("status")).toHaveTextContent("Runtime feed status remains available while activity loads.");
+    });
+
+    it("localizes German feed chrome without translating runtime-authored event content", () => {
+        const event = {
+            id: "event-verbatim",
+            originator: "provider",
+            eventType: "provider_activity",
+            createdAt: "2026-07-14T12:34:00.000Z",
+            payload: { description: "Provider says: keep THIS payload unchanged" },
+        };
+        render(
+            <DashboardI18nProvider initialLocale="de" storage={null}>
+                <RuntimeEventFeed events={[event] as any} />
+            </DashboardI18nProvider>,
+        );
+
+        expect(screen.getByRole("log", { name: "Laufzeit-Feed" })).toBeInTheDocument();
+        expect(screen.getByText("Provider says: keep THIS payload unchanged")).toBeInTheDocument();
+        expect(screen.getByLabelText(/Laufzeitereignis: provider activity von Anbieter/)).toBeInTheDocument();
     });
 
 });

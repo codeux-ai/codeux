@@ -5,13 +5,46 @@ import { PillChoiceGroup, SelectInput } from "../SettingsFormFields.js";
 import { SectionCard, Row, getFieldBadge } from "./SharedPanelComponents.js";
 import { Check, Image, Monitor } from "lucide-preact";
 import { applyAppearanceSettings } from "../../../lib/apply-appearance.js";
-import type { BackgroundPattern } from "../../../../types.js";
+import type { BackgroundPattern, DashboardAccentColor } from "../../../../types.js";
 import { useThemeSetting } from "../../../hooks/useThemeSetting.js";
 import { ACCENT_COLOR_PRESETS, getAccentColorPreset } from "../../../lib/accent-colors.js";
+import { useDashboardI18n } from "../../../i18n/context.js";
+import {
+  settingsShellMessages,
+  type SettingsShellMessageKey,
+} from "../../../i18n/messages/settings-shell.js";
+
+interface AccentPresetMessageKeys {
+  label: SettingsShellMessageKey;
+  description: SettingsShellMessageKey;
+}
+
+const ACCENT_PRESET_MESSAGE_KEYS = {
+  CODEUX: { label: "accentCodeUx", description: "accentCodeUxDescription" },
+  OCEAN: { label: "accentOcean", description: "accentOceanDescription" },
+  VIOLET: { label: "accentViolet", description: "accentVioletDescription" },
+  CYAN: { label: "accentCyan", description: "accentCyanDescription" },
+  MAGENTA: { label: "accentMagenta", description: "accentMagentaDescription" },
+  GRAPHITE: { label: "accentGraphite", description: "accentGraphiteDescription" },
+} as const satisfies Readonly<Record<DashboardAccentColor, AccentPresetMessageKeys>>;
+
+const ANIMATED_BACKGROUND_OPTIONS = [
+  { value: "deep-ocean", label: "animatedBackgroundDeepOcean" },
+  { value: "neon-dreams", label: "animatedBackgroundNeonDreams" },
+  { value: "aurora-borealis", label: "animatedBackgroundAuroraBorealis" },
+  { value: "cosmic-dust", label: "animatedBackgroundCosmicDust" },
+  { value: "ethereal-mist", label: "animatedBackgroundEtherealMist" },
+  { value: "quantum-field", label: "animatedBackgroundQuantumField" },
+] as const satisfies ReadonlyArray<{
+  value: string;
+  label: SettingsShellMessageKey;
+}>;
 
 export const SettingsAppearancePanel: FunctionComponent<{
   state: SettingsPageState;
 }> = ({ state }) => {
+  const { locale, setLocale, translate } = useDashboardI18n();
+  const [localeAnnouncement, setLocaleAnnouncement] = useState<string | null>(null);
   const settings = state.editableSettings;
   if (!settings) {
     return null;
@@ -23,23 +56,28 @@ export const SettingsAppearancePanel: FunctionComponent<{
   const [showSizeWarning, setShowSizeWarning] = useState(false);
   const supportsNativeZoom = typeof window !== "undefined" && Boolean(window.codeUxDesktop?.setZoom);
   const activeAccent = getAccentColorPreset(appearance.accentColor);
+  const activeAccentLabel = translate(
+    settingsShellMessages,
+    ACCENT_PRESET_MESSAGE_KEYS[activeAccent.id].label,
+  );
 
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
       <SectionCard
-        title="Display Settings"
+        sectionId="display-settings"
+        title={translate(settingsShellMessages, "displaySettings")}
         watermark="UI"
         icon={<Monitor strokeWidth={2.4} />}
         accent="violet"
         highlights={[
-          { label: "Theme", value: (activeScope === "system" ? persistedTheme : appearance.theme).toLowerCase(), tone: "active" },
-          { label: "Navigation", value: appearance.navigationMode === "DOCK" ? "Floating dock" : "Sidebar" },
-          { label: "Accent", value: activeAccent.label },
+          { label: translate(settingsShellMessages, "theme"), value: (activeScope === "system" ? persistedTheme : appearance.theme).toLowerCase(), tone: "active" },
+          { label: translate(settingsShellMessages, "navigation"), value: appearance.navigationMode === "DOCK" ? translate(settingsShellMessages, "floatingDock") : translate(settingsShellMessages, "sidebar") },
+          { label: translate(settingsShellMessages, "accent"), value: activeAccentLabel },
         ]}
       >
         <Row
-          label="Navigation Mode"
-          description="Choose between a floating dock or a traditional sidebar."
+          label={translate(settingsShellMessages, "navigationMode")}
+          description={translate(settingsShellMessages, "navigationModeHelp")}
           badge={getFieldBadge(activeScope, projectSources, "appearance.navigationMode")}
         >
           <PillChoiceGroup
@@ -54,15 +92,15 @@ export const SettingsAppearancePanel: FunctionComponent<{
               }));
             }}
             options={[
-              { value: "DOCK", label: "Dock" },
-              { value: "SIDEBAR", label: "Sidebar" },
+              { value: "DOCK", label: translate(settingsShellMessages, "dock") },
+              { value: "SIDEBAR", label: translate(settingsShellMessages, "sidebar") },
             ]}
           />
         </Row>
 
         <Row
-          label="Theme"
-          description="Select light, dark, or sync with your system preferences."
+          label={translate(settingsShellMessages, "theme")}
+          description={translate(settingsShellMessages, "themeHelp")}
           badge={getFieldBadge(activeScope, projectSources, "appearance.theme")}
         >
           <PillChoiceGroup
@@ -82,28 +120,61 @@ export const SettingsAppearancePanel: FunctionComponent<{
               applyAppearanceSettings({ theme: newTheme });
             }}
             options={[
-              { value: "LIGHT", label: "Light" },
-              { value: "DARK", label: "Dark" },
-              { value: "SYSTEM", label: "System" },
+              { value: "LIGHT", label: translate(settingsShellMessages, "light") },
+              { value: "DARK", label: translate(settingsShellMessages, "dark") },
+              { value: "SYSTEM", label: translate(settingsShellMessages, "system") },
             ]}
           />
         </Row>
 
         <Row
-          label="Accent Color"
-          description="Personalize primary actions, active navigation, links, selection, and focus states. Provider and status colors remain unchanged."
+          label={translate(settingsShellMessages, "language")}
+          description={translate(settingsShellMessages, "languageHelp")}
+        >
+          <div className="flex min-w-0 flex-col gap-2">
+            <PillChoiceGroup
+              value={locale}
+              onChange={(value) => {
+                const nextLocale = value === "de" ? "de" : "en";
+                setLocale(nextLocale);
+                setLocaleAnnouncement(translate(
+                  settingsShellMessages,
+                  nextLocale === "de" ? "languageChangedGerman" : "languageChangedEnglish",
+                ));
+              }}
+              aria-label={translate(settingsShellMessages, "languageChoices")}
+              options={[
+                { value: "en", label: translate(settingsShellMessages, "english") },
+                { value: "de", label: translate(settingsShellMessages, "german") },
+              ]}
+            />
+            <p className="max-w-xl text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+              {translate(settingsShellMessages, "languageScopeHelp")}
+            </p>
+            <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+              {localeAnnouncement}
+            </span>
+          </div>
+        </Row>
+
+        <Row
+          label={translate(settingsShellMessages, "accentColor")}
+          description={translate(settingsShellMessages, "accentColorHelp")}
           badge={getFieldBadge(activeScope, projectSources, "appearance.accentColor")}
         >
-          <div role="radiogroup" aria-label="Accent color" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <div role="radiogroup" aria-label={translate(settingsShellMessages, "accentColorLabel")} className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {ACCENT_COLOR_PRESETS.map((preset) => {
               const selected = preset.id === (appearance.accentColor || "CODEUX");
+              const messageKeys = ACCENT_PRESET_MESSAGE_KEYS[preset.id];
+              const presetLabel = translate(settingsShellMessages, messageKeys.label);
+              const presetDescription = translate(settingsShellMessages, messageKeys.description);
               return (
                 <button
                   key={preset.id}
                   type="button"
                   role="radio"
                   aria-checked={selected}
-                  aria-label={`${preset.label}. ${preset.description}`}
+                  aria-label={`${presetLabel}. ${presetDescription}`}
                   onClick={() => {
                     state.updateEditableSettings((current) => ({
                       ...current,
@@ -129,7 +200,7 @@ export const SettingsAppearancePanel: FunctionComponent<{
                       <Check aria-hidden="true" className="h-3 w-3" strokeWidth={3} />
                     </span>
                   </span>
-                  <span className="mt-2 block text-xs font-bold text-slate-800 dark:text-slate-100">{preset.label}</span>
+                  <span className="mt-2 block text-xs font-bold text-slate-800 dark:text-slate-100">{presetLabel}</span>
                 </button>
               );
             })}
@@ -137,8 +208,8 @@ export const SettingsAppearancePanel: FunctionComponent<{
         </Row>
 
         <Row
-          label="Reduced Motion"
-          description="Limit interface animations and transitions."
+          label={translate(settingsShellMessages, "reducedMotion")}
+          description={translate(settingsShellMessages, "reducedMotionHelp")}
           badge={getFieldBadge(activeScope, projectSources, "appearance.reducedMotion")}
           last={!supportsNativeZoom}
         >
@@ -156,17 +227,17 @@ export const SettingsAppearancePanel: FunctionComponent<{
               applyAppearanceSettings({ reducedMotion: newReducedMotion });
             }}
             options={[
-              { value: "AUTO", label: "Auto" },
-              { value: "REDUCE", label: "Reduce" },
-              { value: "NONE", label: "None" },
+              { value: "AUTO", label: translate(settingsShellMessages, "auto") },
+              { value: "REDUCE", label: translate(settingsShellMessages, "reduce") },
+              { value: "NONE", label: translate(settingsShellMessages, "noReduction") },
             ]}
           />
         </Row>
 
         {supportsNativeZoom && (
           <Row
-            label="Zoom Level"
-            description="Scale the entire desktop window up or down."
+            label={translate(settingsShellMessages, "zoomLevel")}
+            description={translate(settingsShellMessages, "zoomLevelHelp")}
             badge={getFieldBadge(activeScope, projectSources, "appearance.zoomLevel")}
             last
           >
@@ -201,26 +272,26 @@ export const SettingsAppearancePanel: FunctionComponent<{
       </SectionCard>
 
       <SectionCard
-        title="Background"
+        title={translate(settingsShellMessages, "background")}
         watermark="BG"
         icon={<Image strokeWidth={2.4} />}
         accent="fuchsia"
         highlights={[
-          { label: "Mode", value: appearance.backgroundMode === "STATIC" ? "Static" : "Animated", tone: "active" },
-          { label: "Custom image", value: appearance.backgroundImage ? "Applied" : "None" },
-          { label: "Pattern", value: appearance.backgroundPattern === "NONE" ? "None" : appearance.backgroundPattern || "Grid" },
+          { label: translate(settingsShellMessages, "mode"), value: appearance.backgroundMode === "STATIC" ? translate(settingsShellMessages, "static") : translate(settingsShellMessages, "animated"), tone: "active" },
+          { label: translate(settingsShellMessages, "customImage"), value: appearance.backgroundImage ? translate(settingsShellMessages, "applied") : translate(settingsShellMessages, "none") },
+          { label: translate(settingsShellMessages, "pattern"), value: appearance.backgroundPattern === "NONE" ? translate(settingsShellMessages, "none") : appearance.backgroundPattern || "Grid" },
         ]}
       >
         <Row
-          label="Background Image"
-          description="Upload a custom background image."
+          label={translate(settingsShellMessages, "backgroundImage")}
+          description={translate(settingsShellMessages, "backgroundImageHelp")}
           badge={getFieldBadge(activeScope, projectSources, "appearance.backgroundImage")}
         >
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-4">
               {appearance.backgroundImage ? (
                 <>
-                  <img src={appearance.backgroundImage} alt="Background Thumbnail" className="h-16 w-16 rounded-lg object-cover border border-black/10 dark:border-white/10" />
+                  <img src={appearance.backgroundImage} alt={translate(settingsShellMessages, "backgroundThumbnail")} className="h-16 w-16 rounded-lg object-cover border border-black/10 dark:border-white/10" />
                   <button
                     type="button"
                     onClick={() => {
@@ -235,7 +306,7 @@ export const SettingsAppearancePanel: FunctionComponent<{
                     }}
                     className="rounded-lg px-3 py-1.5 text-sm font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-void-800"
                   >
-                    Remove
+                    {translate(settingsShellMessages, "remove")}
                   </button>
                 </>
               ) : (
@@ -271,22 +342,22 @@ export const SettingsAppearancePanel: FunctionComponent<{
                     onClick={() => document.getElementById('bg-image-input')?.click()}
                     className="rounded-lg border border-black/10 bg-white px-4 py-2 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-white/10 dark:bg-void-800 dark:text-slate-200 dark:hover:bg-void-700"
                   >
-                    Upload Image
+                    {translate(settingsShellMessages, "uploadImage")}
                   </button>
                 </>
               )}
             </div>
             {showSizeWarning && (
               <p className="text-xs text-amber-600 dark:text-amber-400">
-                Large images may slow down the settings page.
+                {translate(settingsShellMessages, "largeImageWarning")}
               </p>
             )}
           </div>
         </Row>
 
         <Row
-          label="Background Mode"
-          description="Choose between animated backgrounds or a static solid color."
+          label={translate(settingsShellMessages, "backgroundMode")}
+          description={translate(settingsShellMessages, "backgroundModeHelp")}
           badge={getFieldBadge(activeScope, projectSources, "appearance.backgroundMode")}
         >
           <PillChoiceGroup
@@ -301,16 +372,16 @@ export const SettingsAppearancePanel: FunctionComponent<{
               }));
             }}
             options={[
-              { value: "ANIMATED", label: "Animated" },
-              { value: "STATIC", label: "Static" },
+              { value: "ANIMATED", label: translate(settingsShellMessages, "animated") },
+              { value: "STATIC", label: translate(settingsShellMessages, "static") },
             ]}
           />
         </Row>
 
         {(appearance.backgroundMode || "ANIMATED") === "ANIMATED" ? (
           <Row
-            label="Animation Style"
-            description="Select an award-winning background animation."
+            label={translate(settingsShellMessages, "animationStyle")}
+            description={translate(settingsShellMessages, "animationStyleHelp")}
             badge={getFieldBadge(activeScope, projectSources, "appearance.animatedBackground")}
           >
             <PillChoiceGroup
@@ -324,25 +395,22 @@ export const SettingsAppearancePanel: FunctionComponent<{
                   },
                 }));
               }}
-              options={[
-                { value: "deep-ocean", label: "Deep Ocean" },
-                { value: "neon-dreams", label: "Neon Dreams" },
-                { value: "aurora-borealis", label: "Aurora Borealis" },
-                { value: "cosmic-dust", label: "Cosmic Dust" },
-                { value: "ethereal-mist", label: "Ethereal Mist" },
-                { value: "quantum-field", label: "Quantum Field" },
-              ]}
+              options={ANIMATED_BACKGROUND_OPTIONS.map((option) => ({
+                value: option.value,
+                label: translate(settingsShellMessages, option.label),
+              }))}
             />
           </Row>
         ) : (
           <Row
-            label="Static Color"
-            description="Choose a solid background color."
+            label={translate(settingsShellMessages, "staticColor")}
+            description={translate(settingsShellMessages, "staticColorHelp")}
             badge={getFieldBadge(activeScope, projectSources, "appearance.staticBackgroundColor")}
           >
             <div className="flex items-center gap-3">
               <input
                 type="color"
+                aria-label={translate(settingsShellMessages, "staticColorLabel")}
                 value={appearance.staticBackgroundColor || "#0d0f12"}
                 onInput={(e) => {
                   state.updateEditableSettings((current) => ({
@@ -363,8 +431,8 @@ export const SettingsAppearancePanel: FunctionComponent<{
         )}
 
         <Row
-          label="Pattern Overlay"
-          description="Stack a pattern over your background."
+          label={translate(settingsShellMessages, "patternOverlay")}
+          description={translate(settingsShellMessages, "patternOverlayHelp")}
           badge={getFieldBadge(activeScope, projectSources, "appearance.backgroundPattern")}
           last
         >
@@ -382,17 +450,17 @@ export const SettingsAppearancePanel: FunctionComponent<{
               applyAppearanceSettings({ backgroundPattern: newPattern });
             }}
             options={[
-              { value: "NONE", label: "None" },
-              { value: "DIAGONAL_LINES", label: "Diagonal Lines" },
-              { value: "HORIZONTAL_LINES", label: "Horizontal Lines" },
-              { value: "VERTICAL_LINES", label: "Vertical Lines" },
-              { value: "CROSSHATCH", label: "Crosshatch" },
-              { value: "DOTS", label: "Dots" },
-              { value: "DIAMONDS", label: "Diamonds" },
-              { value: "HEXAGONS", label: "Hexagons" },
-              { value: "TRIANGLES", label: "Triangles" },
-              { value: "WAVES", label: "Waves" },
-              { value: "NOISE", label: "Noise" },
+              { value: "NONE", label: translate(settingsShellMessages, "none") },
+              { value: "DIAGONAL_LINES", label: translate(settingsShellMessages, "diagonalLines") },
+              { value: "HORIZONTAL_LINES", label: translate(settingsShellMessages, "horizontalLines") },
+              { value: "VERTICAL_LINES", label: translate(settingsShellMessages, "verticalLines") },
+              { value: "CROSSHATCH", label: translate(settingsShellMessages, "crosshatch") },
+              { value: "DOTS", label: translate(settingsShellMessages, "dots") },
+              { value: "DIAMONDS", label: translate(settingsShellMessages, "diamonds") },
+              { value: "HEXAGONS", label: translate(settingsShellMessages, "hexagons") },
+              { value: "TRIANGLES", label: translate(settingsShellMessages, "triangles") },
+              { value: "WAVES", label: translate(settingsShellMessages, "waves") },
+              { value: "NOISE", label: translate(settingsShellMessages, "noise") },
             ]}
           />
         </Row>

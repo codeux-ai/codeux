@@ -5,6 +5,7 @@ import type {
   IntegrationDefinition,
 } from "../hooks/use-settings-page-state.js";
 import type { InvocationRoutingId, ProviderId, ThinkingMode } from "../../types.js";
+import type { DashboardLocale } from "../i18n/locales.js";
 
 type SearchTermRole = "label" | "description" | "term";
 
@@ -31,6 +32,7 @@ export type SettingsSearchMatches = Partial<Record<CategoryId, SettingsSearchMat
 
 export interface SettingsSearchIndexInput {
   categories: Category[];
+  locale?: DashboardLocale;
   providerLabels: Record<ProviderId, string>;
   integrations: IntegrationDefinition[];
   invocationRouteDefinitions: Array<{
@@ -322,6 +324,21 @@ const BASE_CATEGORY_TERMS: Record<CategoryId, string[]> = {
   ],
 };
 
+const GERMAN_CATEGORY_TERMS: Record<CategoryId, string[]> = {
+  general: ["allgemein", "bereich", "laufzeit", "automatisierung", "pausieren", "fortsetzen", "neustart", "protokoll", "aufbewahrung"],
+  appearance: ["darstellung", "anzeige", "sprache", "deutsch", "englisch", "design", "hell", "dunkel", "bewegung", "akzentfarbe", "seitenleiste", "hintergrund", "zoom"],
+  models: ["ki modelle", "anbieter", "routing", "modell", "gewichtung", "kosten", "preis", "spracheingabe", "sprachausgabe", "stimme", "download"],
+  agents: ["agenten", "anweisung", "vorlage", "fähigkeiten", "skill speicher", "selbstreflexion", "planung", "qualität"],
+  memory: ["speicher", "erinnerungen", "einbettung", "erfassung", "übernahme", "langzeit", "kurzzeit", "bereinigung", "belege"],
+  techstacks: ["technologie stack", "technologie stacks", "katalog", "anwendungstyp", "webanwendung", "desktopanwendung", "paketscan"],
+  guidance: ["vorgaben", "styleguide", "stilvorgaben", "technologievorgaben", "benutzerdefinierte anweisungen"],
+  sprint: ["sprint", "bereitstellung", "branch", "zweig", "zusammenführen", "merge", "qualitätssicherung", "ausführung", "docker"],
+  browser: ["browser vorschau", "vorschau", "container", "port", "sichtbarkeit", "neu bauen", "starten"],
+  integrations: ["integrationen", "anbieter", "zugangsdaten", "anmeldung", "api schlüssel", "verbindung", "repository", "pull request", "kanal"],
+  mcp: ["mcp", "server", "werkzeug", "werkzeuge", "model context protocol", "integriert", "eingebunden"],
+  danger: ["gefahrenbereich", "zurücksetzen", "löschen", "datenbank", "bereinigen", "destruktiv", "projektüberschreibungen"],
+};
+
 const INTEGRATION_FIELD_TERMS: Record<string, string[]> = {
   "google-drive": [
     "google drive",
@@ -409,7 +426,7 @@ const addTerms = (entry: SettingsSearchIndexEntry | undefined, values: string[],
   entry.terms.push(...toSearchTerms(values, role));
 };
 
-const buildEmptyIndex = (categories: Category[]): SettingsSearchIndex => (
+const buildEmptyIndex = (categories: Category[], locale: DashboardLocale): SettingsSearchIndex => (
   Object.fromEntries(
     categories.map((category) => [
       category.id,
@@ -419,6 +436,7 @@ const buildEmptyIndex = (categories: Category[]): SettingsSearchIndex => (
           { value: category.label, role: "label" },
           { value: category.description, role: "description" },
           ...toSearchTerms(BASE_CATEGORY_TERMS[category.id] || [], "term"),
+          ...toSearchTerms(locale === "de" ? GERMAN_CATEGORY_TERMS[category.id] || [] : [], "term"),
         ],
       },
     ]),
@@ -427,13 +445,14 @@ const buildEmptyIndex = (categories: Category[]): SettingsSearchIndex => (
 
 export const buildSettingsSearchIndex = ({
   categories,
+  locale = "en",
   providerLabels,
   integrations,
   invocationRouteDefinitions,
   agentInstructionTemplateOptions,
   thinkingModeOptions,
 }: SettingsSearchIndexInput): SettingsSearchIndex => {
-  const index = buildEmptyIndex(categories);
+  const index = buildEmptyIndex(categories, locale);
   const providerLabelValues = Object.values(providerLabels);
 
   addTerms(index.models, providerLabelValues, "label");

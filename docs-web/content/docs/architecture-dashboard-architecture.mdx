@@ -117,6 +117,8 @@ State is managed with a mix of:
 
 Hooks own their own subscription lifecycle — they subscribe on mount, unsubscribe on unmount.
 
+Locale state is owned by the dependency-free root internationalization provider. English and German catalogs remain feature-scoped, locale selection is browser-local, and formatting uses native `Intl` APIs. See [Dashboard internationalization](/docs/architecture-dashboard-internationalization) for the catalog, persistence, and translation boundaries.
+
 ## API client
 
 `dashboard/src/lib/api/dashboard-api.ts` is a thin fetch wrapper that:

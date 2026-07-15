@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SprintJiraImportModal } from "../../../../../dashboard/src/v2/components/sprints/SprintJiraImportModal";
 import { fetchProjectEffectiveSettings } from "../../../../../dashboard/src/v2/lib/settings-api";
 import { fetchJiraProjectStatuses, fetchProjectIssuePromptContexts, searchJiraIssues } from "../../../../../dashboard/src/v2/lib/project-api";
+import { renderWithI18n } from "../../../render-with-i18n.js";
 
 expect.extend(matchers);
 
@@ -68,7 +69,7 @@ describe("SprintJiraImportModal", () => {
     vi.mocked(searchJiraIssues).mockResolvedValue([baseIssue]);
     vi.mocked(fetchProjectIssuePromptContexts).mockResolvedValue([] as never);
 
-    render(<SprintJiraImportModal projectId="project-1" onClose={vi.fn()} onImport={vi.fn()} />);
+    renderWithI18n(<SprintJiraImportModal projectId="project-1" onClose={vi.fn()} onImport={vi.fn()} />);
 
     const dialog = screen.getByRole("dialog", { name: /import backlog scope/i });
     expect(dialog).toHaveAccessibleDescription(/search jira with exact keys/i);
@@ -123,7 +124,7 @@ describe("SprintJiraImportModal", () => {
     } as never);
     vi.mocked(searchJiraIssues).mockResolvedValue([baseIssue]);
 
-    render(<SprintJiraImportModal projectId="project-1" onClose={vi.fn()} onImport={vi.fn()} />);
+    renderWithI18n(<SprintJiraImportModal projectId="project-1" onClose={vi.fn()} onImport={vi.fn()} />);
 
     const statusSelect = await screen.findByRole("button", { name: "Jira status" });
     fireEvent.click(statusSelect);
@@ -154,7 +155,7 @@ describe("SprintJiraImportModal", () => {
     vi.mocked(fetchJiraProjectStatuses).mockRejectedValue(new Error("Jira status endpoint unavailable"));
     vi.mocked(searchJiraIssues).mockResolvedValue([baseIssue]);
 
-    render(<SprintJiraImportModal projectId="project-1" onClose={vi.fn()} onImport={vi.fn()} />);
+    renderWithI18n(<SprintJiraImportModal projectId="project-1" onClose={vi.fn()} onImport={vi.fn()} />);
 
     await waitFor(() => {
       expect(searchJiraIssues).toHaveBeenCalled();
@@ -202,7 +203,7 @@ describe("SprintJiraImportModal", () => {
     ] as never);
     const onImport = vi.fn();
 
-    render(<SprintJiraImportModal projectId="project-1" onClose={vi.fn()} onImport={onImport} />);
+    renderWithI18n(<SprintJiraImportModal projectId="project-1" onClose={vi.fn()} onImport={onImport} />);
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Jira status" })).toHaveTextContent("Open");
@@ -252,7 +253,7 @@ describe("SprintJiraImportModal", () => {
     } as never);
     vi.mocked(searchJiraIssues).mockResolvedValue([baseIssue, inWorkIssue]);
 
-    render(<SprintJiraImportModal projectId="project-1" onClose={vi.fn()} onImport={vi.fn()} />);
+    renderWithI18n(<SprintJiraImportModal projectId="project-1" onClose={vi.fn()} onImport={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText("Import Jira backlog")).toBeInTheDocument();
@@ -268,7 +269,7 @@ describe("SprintJiraImportModal", () => {
     } as never);
     vi.mocked(searchJiraIssues).mockResolvedValue([baseIssue, inWorkIssue]);
 
-    render(<SprintJiraImportModal projectId="project-1" onClose={vi.fn()} onImport={vi.fn()} />);
+    renderWithI18n(<SprintJiraImportModal projectId="project-1" onClose={vi.fn()} onImport={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText("Import Jira backlog")).toBeInTheDocument();
@@ -286,7 +287,7 @@ describe("SprintJiraImportModal", () => {
     } as never);
     vi.mocked(searchJiraIssues).mockResolvedValue([baseIssue, inWorkIssue]);
 
-    render(
+    renderWithI18n(
       <SprintJiraImportModal
         projectId="project-1"
         onClose={vi.fn()}
@@ -319,7 +320,7 @@ describe("SprintJiraImportModal", () => {
     } as never);
     vi.mocked(searchJiraIssues).mockResolvedValue([baseIssue]);
 
-    render(<SprintJiraImportModal projectId="project-1" onClose={vi.fn()} onImport={vi.fn()} />);
+    renderWithI18n(<SprintJiraImportModal projectId="project-1" onClose={vi.fn()} onImport={vi.fn()} />);
 
     await waitFor(() => {
       expect(searchJiraIssues).toHaveBeenCalled();
@@ -396,7 +397,7 @@ describe("SprintJiraImportModal", () => {
     ]);
     const onImport = vi.fn();
 
-    render(
+    renderWithI18n(
       <SprintJiraImportModal
         projectId="project-1"
         onClose={vi.fn()}
@@ -411,7 +412,7 @@ describe("SprintJiraImportModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /select all visible/i }));
     expect(screen.getByText(/2 selected issues will be imported/i)).toBeInTheDocument();
-    expect(screen.getByText(/2 of 2 visible results selected/i)).toBeInTheDocument();
+    expect(screen.getByText(/Selected 2 of 2 results/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /import jira backlog/i })).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(screen.getByLabelText(/append conversation to all selected/i));
@@ -513,7 +514,7 @@ describe("SprintJiraImportModal", () => {
     const onImport = vi.fn();
     const onImportSpecialTasks = vi.fn();
 
-    render(
+    renderWithI18n(
       <SprintJiraImportModal
         projectId="project-1"
         onClose={vi.fn()}

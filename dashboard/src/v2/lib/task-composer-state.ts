@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from "preact/hooks";
 import type { Task, TaskExecutorType, TaskPriority, TaskStatus, Sprint } from "../types.js";
+import type { DashboardLocale } from "../i18n/locales.js";
+import { translateTask } from "../i18n/messages/tasks.js";
 
 export interface TaskDraft {
   sprintId: string;
@@ -68,7 +70,8 @@ export const useTaskComposerState = (
   sprints: Sprint[],
   availableTasks: Task[],
   initialTask?: Task | null,
-  initialSprintId?: string | null
+  initialSprintId?: string | null,
+  locale: DashboardLocale = "en",
 ): TaskComposerState => {
   const defaultSprintId = initialTask?.sprintId || initialSprintId || sprints[0]?.id || "";
 
@@ -97,29 +100,29 @@ export const useTaskComposerState = (
 
   const validationErrors = useMemo(() => {
     const errors: Record<string, string> = {};
-    if (!sprintId) errors.sprintId = "Sprint selection is required.";
+    if (!sprintId) errors.sprintId = translateTask(locale, "validationSprint");
     if (!title.trim()) {
-      errors.title = "Task title is required.";
+      errors.title = translateTask(locale, "validationTitle");
     } else if (title.trim().length < 3) {
-      errors.title = "Task title must be at least 3 characters long.";
+      errors.title = translateTask(locale, "validationTitleLength");
     }
     if (!description.trim()) {
-      errors.description = "Task details are required.";
+      errors.description = translateTask(locale, "validationDescription");
     }
     if (!promptMarkdown.trim()) {
-      errors.promptMarkdown = "Execution prompt is required.";
+      errors.promptMarkdown = translateTask(locale, "validationPrompt");
     }
     if (!executorType) {
-      errors.executorType = "Executor selection is required.";
+      errors.executorType = translateTask(locale, "validationExecutor");
     }
     if (!priority) {
-      errors.priority = "Priority selection is required.";
+      errors.priority = translateTask(locale, "validationPriority");
     }
     if (!status) {
-      errors.status = "Status selection is required.";
+      errors.status = translateTask(locale, "validationStatus");
     }
     return errors;
-  }, [sprintId, title, description, promptMarkdown, executorType, priority, status]);
+  }, [sprintId, title, description, promptMarkdown, executorType, priority, status, locale]);
 
   useEffect(() => {
     if (initialTask) {

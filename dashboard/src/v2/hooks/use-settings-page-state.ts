@@ -76,6 +76,8 @@ import { redactChatProviderError } from "../lib/chat-provider-view-models.js";
 import type { AgentAvatarConfig, AgentPreset } from "../types.js";
 import type { SettingsDomainAccent } from "../lib/settings-domain-accents.js";
 import { AlertTriangle, Bot, BrainCircuit, Cpu, Plug, Settings, SlidersHorizontal, Target } from "lucide-preact";
+import type { DashboardLocale } from "../i18n/locales.js";
+import { getSettingsShellMessage, type SettingsShellMessageKey } from "../i18n/messages/settings-shell.js";
 
 type SettingsScope = "system" | "project";
 type CategoryId = "general" | "appearance" | "models" | "sprint" | "browser" | "techstacks" | "guidance" | "agents" | "memory" | "integrations" | "mcp" | "danger";
@@ -224,7 +226,11 @@ const sortAgentPresetOptions = (
 
 export const useSettingsPageState = (
   categories: Category[],
+  locale: DashboardLocale = "en",
 ) => {
+  const t = useCallback((key: SettingsShellMessageKey, variables?: Parameters<typeof getSettingsShellMessage>[2]): string => (
+    getSettingsShellMessage(locale, key, variables)
+  ), [locale]);
   const { deleteProject, projects, selectedProject, selectedProjectId } = useProjectData();
 
   const isDirtyRef = useRef(false);
@@ -571,7 +577,7 @@ export const useSettingsPageState = (
         }
         return cloneSystemSettings(normalizedSaved);
       });
-      setError((current) => current === "Failed to persist Settings scope selection." ? null : current);
+      setError((current) => current === getSettingsShellMessage("en", "scopePersistFailed") || current === getSettingsShellMessage("de", "scopePersistFailed") ? null : current);
     } catch {
       if (scopePersistenceRequestRef.current !== requestId) {
         return;
@@ -586,9 +592,9 @@ export const useSettingsPageState = (
             },
           }
         : current);
-      setError("Failed to persist Settings scope selection.");
+      setError(t("scopePersistFailed"));
     }
-  }, [savedSystemSettings, systemSettings]);
+  }, [savedSystemSettings, systemSettings, t]);
 
   useEffect(() => {
     if (!selectedProject && activeScope === "project") {
@@ -610,12 +616,13 @@ export const useSettingsPageState = (
   const normalizedSearch = settingsSearch.trim().toLowerCase();
   const settingsSearchIndex = useMemo(() => buildSettingsSearchIndex({
     categories,
+    locale,
     providerLabels,
     integrations: INTEGRATIONS,
     invocationRouteDefinitions,
     agentInstructionTemplateOptions: AGENT_INSTRUCTION_TEMPLATE_OPTIONS,
     thinkingModeOptions,
-  }), [categories]);
+  }), [categories, locale]);
   const settingsSearchMatches = useMemo(
     () => searchSettingsCategories(settingsSearchIndex, normalizedSearch),
     [normalizedSearch, settingsSearchIndex],
@@ -662,14 +669,14 @@ export const useSettingsPageState = (
       const hints = await fetchExternalSettingsHints();
       const nextSettings = applyExternalHintsToSystemSettings(systemSettings, hints);
       setSystemSettings(nextSettings);
-      setSaveMessage("Imported missing integration secrets from env/settings.json.");
+      setSaveMessage(t("importedHints"));
       setError(null);
     } catch (hintError) {
       setError(hintError instanceof Error ? hintError.message : String(hintError));
     } finally {
       setImportingHints(false);
     }
-  }, [systemSettings]);
+  }, [systemSettings, t]);
 
   const handleSave = useCallback(async (): Promise<boolean> => {
     let systemSaved = true;
@@ -724,17 +731,17 @@ export const useSettingsPageState = (
 
     if (systemSaved && projectSaved) {
       const scopeMsg = systemDirty && projectDirty
-        ? "All settings saved."
+        ? t("allSettingsSaved")
         : systemDirty
-          ? "System settings saved."
+          ? t("systemSettingsSaved")
           : projectDirty && selectedProject
-            ? `Project settings saved for ${selectedProject.name}.`
-            : "Settings saved.";
+            ? t("projectSettingsSaved", { project: selectedProject.name })
+            : t("settingsSaved");
       setSaveMessage(scopeMsg);
       return true;
     }
     return false;
-  }, [systemDirty, projectDirty, systemSettings, selectedProject, projectSettings]);
+  }, [systemDirty, projectDirty, systemSettings, selectedProject, projectSettings, t]);
 
   const handleResetProject = useCallback(async (): Promise<void> => {
     if (!selectedProject) {
@@ -749,13 +756,13 @@ export const useSettingsPageState = (
       setSavedProjectSettings(cloneProjectSettings(nextProject));
       setProjectSources(effectiveProject.sources);
       setError(null);
-      setSaveMessage(`Project overrides reset for ${selectedProject.name}.`);
+      setSaveMessage(t("projectOverridesReset", { project: selectedProject.name }));
     } catch (resetError) {
       setError(resetError instanceof Error ? resetError.message : String(resetError));
     } finally {
       setResettingProject(false);
     }
-  }, [selectedProject]);
+  }, [selectedProject, t]);
 
   const handleDeleteProject = useCallback(async (): Promise<void> => {
     if (!selectedProject) {
@@ -768,14 +775,14 @@ export const useSettingsPageState = (
       await deleteProject(selectedProject.id);
       await setPersistedActiveScope("system");
       setActiveCategory("general");
-      setSaveMessage(`Project ${selectedProject.name} deleted.`);
+      setSaveMessage(t("projectDeleted", { project: selectedProject.name }));
       setError(null);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : String(deleteError));
     } finally {
       setDeletingProject(false);
     }
-  }, [selectedProject, deleteProject, setPersistedActiveScope]);
+  }, [selectedProject, deleteProject, setPersistedActiveScope, t]);
 
   const handleResetDatabase = useCallback(async (): Promise<void> => {
 
@@ -786,14 +793,14 @@ export const useSettingsPageState = (
       setActiveScopeState("system");
       setActiveCategory("general");
       await loadSettings();
-      setSaveMessage("Database reset to a clean state.");
+      setSaveMessage(t("databaseReset"));
       setError(null);
     } catch (resetError) {
       setError(resetError instanceof Error ? resetError.message : String(resetError));
     } finally {
       setResettingDatabase(false);
     }
-  }, [loadSettings]);
+  }, [loadSettings, t]);
 
   const handleClearMemory = useCallback(async (
     scope: "project" | "system",
@@ -860,7 +867,7 @@ export const useSettingsPageState = (
         setChatProvidersStatusMessage("Connection verified. Activation is now available.");
       } else {
         setChatProvidersError(outcome.issues.length > 0
-          ? outcome.issues.map(redactChatProviderError).join(" ")
+          ? outcome.issues.map((issue) => redactChatProviderError(issue)).join(" ")
           : "Connection verification failed.");
       }
       return outcome;

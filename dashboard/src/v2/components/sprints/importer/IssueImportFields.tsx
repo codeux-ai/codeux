@@ -1,5 +1,7 @@
 import type { ComponentChildren, ComponentProps, FunctionComponent } from "preact";
 import type { IssueImportProviderMetadata } from "../../../lib/issue-import-view-models.js";
+import { useDashboardI18n } from "../../../i18n/index.js";
+import { sprintsMessages } from "../../../i18n/messages/sprints.js";
 import { AvantgardeSelect, type SelectOption } from "../../ui/AvantgardeSelect.js";
 
 interface IssueImportFilterSectionProps {
@@ -94,21 +96,24 @@ export const IssueImportField: FunctionComponent<IssueImportFieldProps> = ({
   disabled = false,
   required = false,
   className = "",
-}) => (
-  <label className={`grid min-w-0 gap-1.5 ${disabled ? "opacity-50" : ""} ${className}`}>
+}) => {
+  const { translate } = useDashboardI18n();
+  return (
+    <label className={`grid min-w-0 gap-1.5 ${disabled ? "opacity-50" : ""} ${className}`}>
     <span className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
       {label}
       {required && (
         <>
           <span className="text-status-red" aria-hidden="true"> *</span>
-          <span className="sr-only"> Required</span>
+          <span className="sr-only"> {translate(sprintsMessages, "required")}</span>
         </>
       )}
     </span>
     {children}
     {hint && <span className="text-xs leading-relaxed text-slate-400 dark:text-slate-500">{hint}</span>}
-  </label>
-);
+    </label>
+  );
+};
 
 export const IssueImportMultiSelectField: FunctionComponent<IssueImportFieldProps> = (props) => (
   <IssueImportField {...props} />

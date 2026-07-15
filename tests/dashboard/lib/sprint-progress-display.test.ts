@@ -17,5 +17,6 @@ describe("sprint progress display", () => {
     expect(formatSprintCompletion(5)).toBe("5%");
     expect(formatSprintCompletion(7.5)).toBe("7.5%");
     expect(formatSprintCompletion(100.04)).toBe("100%");
+    expect(formatSprintCompletion(7.5, "de")).toBe("7,5 %");
   });
 });

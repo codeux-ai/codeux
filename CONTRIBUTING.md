@@ -18,8 +18,8 @@ By participating you agree to abide by our [Code of Conduct](./CODE_OF_CONDUCT.m
 
 ## Prerequisites
 
-- **Node.js 22+**
-- **pnpm `10.33.0`** (the repo pins `packageManager`; use `pnpm`, not `npm`)
+- **Node.js 22.13+**
+- **pnpm `11.13.0`** (the repo pins `packageManager`; use `pnpm`, not `npm`)
 - **Docker** — provider CLIs execute in short-lived Docker workspaces
 
 ## Local setup

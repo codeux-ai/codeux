@@ -3,6 +3,8 @@ import { BriefcaseBusiness, Gamepad2, Globe2, Monitor, ShoppingCart } from "luci
 import type { DashboardCreateAppQuickactionKind } from "../../types.js";
 import { CREATE_APP_QUICKACTION_CATALOG } from "../../../../../src/domain/chat/create-app-quickaction-catalog.js";
 import { isInitialProjectCreateAppQuickaction } from "../../lib/cinematic-quick-actions.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { chatMessages, type ChatTextMessageKey } from "../../i18n/messages/chat.js";
 
 const CREATE_APP_ACTION_ICONS: Record<DashboardCreateAppQuickactionKind, typeof Monitor> = {
   web_app: Globe2,
@@ -19,22 +21,32 @@ export const ChatCreateAppQuickActions: FunctionComponent<{
   showInitialCreateActions: boolean;
   onSelect: (kind: DashboardCreateAppQuickactionKind) => void;
 }> = ({ disabled = false, sending = false, hasProject, showInitialCreateActions, onSelect }) => {
+  const { locale, translate } = useDashboardI18n();
   const isDisabled = disabled || sending || !hasProject;
   const status = !hasProject
-    ? "Create app quick actions are unavailable until a project is selected."
+    ? translate(chatMessages, "createActionsNoProject")
     : sending
-      ? "Create app quick actions are disabled while a message is sending."
-      : "Create app quick actions are available.";
+      ? translate(chatMessages, "createActionsSending")
+      : translate(chatMessages, "createActionsAvailable");
+  const labelKeys: Record<DashboardCreateAppQuickactionKind, ChatTextMessageKey> = {
+    web_app: "createWebApp", desktop_app: "createDesktopApp", online_shop: "createOnlineShop", portfolio: "createPortfolio", game: "createGame",
+  };
+  const appKindLabelKeys: Record<DashboardCreateAppQuickactionKind, ChatTextMessageKey> = {
+    web_app: "webApp", desktop_app: "desktopApp", online_shop: "onlineShop", portfolio: "portfolio", game: "game",
+  };
 
   return (
-    <div className="min-w-0" aria-label="Create app quick actions">
+    <div className="min-w-0" aria-label={translate(chatMessages, "createAppQuickActions")}>
       <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
         {CREATE_APP_QUICKACTION_CATALOG.filter(({ kind }) => (
           showInitialCreateActions || !isInitialProjectCreateAppQuickaction(kind)
         )).map(({ kind, displayLabel, appKindLabel }) => {
           const Icon = CREATE_APP_ACTION_ICONS[kind];
-          const label = displayLabel;
-          const description = `Launch ${kind === "online_shop" ? "an" : "a"} ${appKindLabel.toLowerCase()} sprint`;
+          const label = locale === "en" ? displayLabel : translate(chatMessages, labelKeys[kind]);
+          const localizedAppKindLabel = locale === "en"
+            ? appKindLabel.toLowerCase()
+            : translate(chatMessages, appKindLabelKeys[kind]);
+          const description = translate(chatMessages, kind === "online_shop" ? "launchOnlineShopSprint" : "launchAppSprint", { appKind: localizedAppKindLabel });
           return (
             <button
               key={kind}

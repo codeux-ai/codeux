@@ -1,5 +1,8 @@
 import { AlertCircle, CheckCircle2, Circle, CircleDashed, Clock, PlayCircle } from "lucide-preact";
 import type { FunctionComponent } from "preact";
+import type { DashboardLocale } from "../i18n/locales.js";
+import { translateDashboardMessage } from "../i18n/locales.js";
+import { shellMessages } from "../i18n/messages/shell.js";
 
 export type StatusVariant = "default" | "success" | "warning" | "danger" | "muted";
 
@@ -37,18 +40,25 @@ export const TASK_STATUS_CONFIG: Record<string, StatusConfig> = {
   },
 };
 
-export function getStatusConfig(status?: string): StatusConfig {
-  if (!status) return TASK_STATUS_CONFIG.pending;
+const STATUS_MESSAGE_KEYS = {
+  pending: "taskPending", in_progress: "taskInProgress", coding_completed: "taskCodingDone",
+  completed: "taskCompleted", QA_REVIEW_FAILED: "taskQaFailed",
+} as const;
+
+export function getStatusConfig(status?: string, locale: DashboardLocale = "en"): StatusConfig {
+  if (!status) return { ...TASK_STATUS_CONFIG.pending, label: translateDashboardMessage(shellMessages, locale, "taskPending") };
   const lower = status.toLowerCase();
   if (lower.startsWith("pending_cap_")) {
     const match = status.match(/^PENDING_cap_(\d+)_(\d+)$/i);
     if (match) {
       return {
-        label: `Waiting for slot (${match[1]}/${match[2]})`,
+        label: translateDashboardMessage(shellMessages, locale, "taskWaitingSlot", { current: match[1], total: match[2] }),
         variant: "muted",
         icon: CircleDashed,
       };
     }
   }
-  return TASK_STATUS_CONFIG[status] || TASK_STATUS_CONFIG.pending;
+  const config = TASK_STATUS_CONFIG[status] || TASK_STATUS_CONFIG.pending;
+  const key = STATUS_MESSAGE_KEYS[status as keyof typeof STATUS_MESSAGE_KEYS] ?? "taskPending";
+  return { ...config, label: translateDashboardMessage(shellMessages, locale, key) };
 }

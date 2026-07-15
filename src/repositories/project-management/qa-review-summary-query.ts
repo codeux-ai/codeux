@@ -99,6 +99,22 @@ export function loadLatestTaskReviewSummaryMap(
 ): Map<string, SprintReviewSummary> {
   const rows = storage.executeChunkedInQuery<QaReviewSummaryRow>({
     sqlPrefix: `
+      WITH latest_sprint_runs AS (
+        SELECT sprint_id, id, started_at, created_at
+        FROM (
+          SELECT
+            sr.sprint_id,
+            sr.id,
+            sr.started_at,
+            sr.created_at,
+            ROW_NUMBER() OVER (
+              PARTITION BY sr.sprint_id
+              ORDER BY COALESCE(sr.started_at, sr.created_at) DESC, sr.created_at DESC, sr.rowid DESC
+            ) AS row_number
+          FROM sprint_runs sr
+        )
+        WHERE row_number = 1
+      )
       SELECT
         scope_id,
         status,
@@ -124,10 +140,31 @@ export function loadLatestTaskReviewSummaryMap(
             PARTITION BY q.task_id
             ORDER BY ${REPRESENTATIVE_REVIEW_ORDER}
           ) AS row_number
-        FROM qa_review_runs q
-        WHERE q.task_id`,
+        FROM (
+          SELECT
+            q.*,
+            ROW_NUMBER() OVER (
+              PARTITION BY
+                q.task_id,
+                q.run_index,
+                COALESCE(NULLIF(TRIM(q.agent_preset_id), ''), NULLIF(TRIM(q.agent_name), ''), q.id)
+              ORDER BY q.started_at DESC, q.created_at DESC, q.id DESC
+            ) AS reviewer_row_number
+          FROM qa_review_runs q
+          LEFT JOIN latest_sprint_runs lsr ON lsr.sprint_id = q.sprint_id
+          WHERE q.task_id`,
     sqlSuffix: `
-          AND q.trigger_type IN ('task_completion', 'completed_task_without_pr')
+            AND q.trigger_type IN ('task_completion', 'completed_task_without_pr')
+            AND (
+              lsr.id IS NULL
+              OR q.sprint_run_id = lsr.id
+              OR (
+                q.sprint_run_id IS NULL
+                AND q.created_at >= COALESCE(lsr.started_at, lsr.created_at)
+              )
+            )
+        ) q
+        WHERE q.reviewer_row_number = 1
       )
       WHERE row_number = 1
       ORDER BY scope_id ASC
@@ -143,6 +180,22 @@ export function loadLatestSprintReviewSummaryMap(
 ): Map<string, SprintReviewSummary> {
   const rows = storage.executeChunkedInQuery<QaReviewSummaryRow>({
     sqlPrefix: `
+      WITH latest_sprint_runs AS (
+        SELECT sprint_id, id, started_at, created_at
+        FROM (
+          SELECT
+            sr.sprint_id,
+            sr.id,
+            sr.started_at,
+            sr.created_at,
+            ROW_NUMBER() OVER (
+              PARTITION BY sr.sprint_id
+              ORDER BY COALESCE(sr.started_at, sr.created_at) DESC, sr.created_at DESC, sr.rowid DESC
+            ) AS row_number
+          FROM sprint_runs sr
+        )
+        WHERE row_number = 1
+      )
       SELECT
         scope_id,
         status,
@@ -168,10 +221,31 @@ export function loadLatestSprintReviewSummaryMap(
             PARTITION BY q.sprint_id
             ORDER BY ${REPRESENTATIVE_REVIEW_ORDER}
           ) AS row_number
-        FROM qa_review_runs q
-        WHERE q.sprint_id`,
+        FROM (
+          SELECT
+            q.*,
+            ROW_NUMBER() OVER (
+              PARTITION BY
+                q.sprint_id,
+                q.run_index,
+                COALESCE(NULLIF(TRIM(q.agent_preset_id), ''), NULLIF(TRIM(q.agent_name), ''), q.id)
+              ORDER BY q.started_at DESC, q.created_at DESC, q.id DESC
+            ) AS reviewer_row_number
+          FROM qa_review_runs q
+          LEFT JOIN latest_sprint_runs lsr ON lsr.sprint_id = q.sprint_id
+          WHERE q.sprint_id`,
     sqlSuffix: `
-          AND q.trigger_type = 'sprint_completion'
+            AND q.trigger_type = 'sprint_completion'
+            AND (
+              lsr.id IS NULL
+              OR q.sprint_run_id = lsr.id
+              OR (
+                q.sprint_run_id IS NULL
+                AND q.created_at >= COALESCE(lsr.started_at, lsr.created_at)
+              )
+            )
+        ) q
+        WHERE q.reviewer_row_number = 1
       )
       WHERE row_number = 1
       ORDER BY scope_id ASC

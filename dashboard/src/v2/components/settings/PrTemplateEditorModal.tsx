@@ -17,6 +17,7 @@ import {
   DEFAULT_SPRINT_SECTION_ORDER,
 } from "../../../../../src/domain/sprint/composer/pr-description-composer.js";
 import { DEFAULT_PR_DESCRIPTION_SETTINGS } from "../../../../../src/repositories/settings-defaults.js";
+import { useSettingsOperationsTranslations, type SettingsOperationsTranslate } from "../../i18n/messages/settings-operations.js";
 
 interface SectionMeta<TSections> {
   key: keyof TSections;
@@ -24,26 +25,26 @@ interface SectionMeta<TSections> {
   description: string;
 }
 
-const TASK_SECTIONS: SectionMeta<TaskPrTemplateSections>[] = [
-  { key: "summary", label: "Summary", description: "Task and sprint context blurb." },
-  { key: "modelAndProvider", label: "Model & Provider", description: "Which provider and model executed this task." },
-  { key: "timing", label: "Timing", description: "Started, finished, and duration." },
-  { key: "fullPrompt", label: "Full Prompt", description: "The task's full prompt, shown collapsed by default." },
-  { key: "tokenUsage", label: "Token Usage", description: "Token counts and estimated cost. Subscription (flat-fee login) usage is called out separately from metered API usage." },
-  { key: "qaFindings", label: "QA Review", description: "QA outcome and findings, once available. QA runs after this PR opens, so it shows a pending note until then." },
-  { key: "branchInfo", label: "Branch Info", description: "Base/head branch reference, shown collapsed." },
+const getTaskSections = (t: SettingsOperationsTranslate): SectionMeta<TaskPrTemplateSections>[] => [
+  { key: "summary", label: t("Summary"), description: t("Task and sprint context blurb.") },
+  { key: "modelAndProvider", label: t("Model & Provider"), description: t("Which provider and model executed this task.") },
+  { key: "timing", label: t("Timing"), description: t("Started, finished, and duration.") },
+  { key: "fullPrompt", label: t("Full Prompt"), description: t("The task's full prompt, shown collapsed by default.") },
+  { key: "tokenUsage", label: t("Token Usage"), description: t("Token counts and estimated cost. Subscription (flat-fee login) usage is called out separately from metered API usage.") },
+  { key: "qaFindings", label: t("QA Review"), description: t("QA outcome and findings, once available. QA runs after this PR opens, so it shows a pending note until then.") },
+  { key: "branchInfo", label: t("Branch Info"), description: t("Base/head branch reference, shown collapsed.") },
 ];
 
-const SPRINT_SECTIONS: SectionMeta<SprintPrTemplateSections>[] = [
-  { key: "summary", label: "Summary", description: "Task completion counts for the sprint." },
-  { key: "taskChecklist", label: "Task Checklist", description: "Per-task checklist with provider and PR links." },
-  { key: "providerBreakdown", label: "Provider Breakdown", description: "Count of completed tasks per provider." },
-  { key: "planningModel", label: "Planning", description: "Model/provider used to plan the sprint, plus its token usage." },
-  { key: "mainPrompt", label: "Original Prompt", description: "The sprint's original goal/prompt, shown collapsed." },
-  { key: "timing", label: "Sprint Timing", description: "Sprint start, finish, and duration." },
-  { key: "tokenUsage", label: "Aggregate Token Usage", description: "Total CLI token usage/cost across the whole sprint. Subscription usage is called out separately from metered API usage." },
-  { key: "qaFindings", label: "QA Review Summary", description: "Sprint-level QA outcome and findings." },
-  { key: "branchInfo", label: "Branch Info", description: "Base/head branch reference, shown collapsed." },
+const getSprintSections = (t: SettingsOperationsTranslate): SectionMeta<SprintPrTemplateSections>[] => [
+  { key: "summary", label: t("Summary"), description: t("Task completion counts for the sprint.") },
+  { key: "taskChecklist", label: t("Task Checklist"), description: t("Per-task checklist with provider and PR links.") },
+  { key: "providerBreakdown", label: t("Provider Breakdown"), description: t("Count of completed tasks per provider.") },
+  { key: "planningModel", label: t("Planning"), description: t("Model/provider used to plan the sprint, plus its token usage.") },
+  { key: "mainPrompt", label: t("Original Prompt"), description: t("The sprint's original goal/prompt, shown collapsed.") },
+  { key: "timing", label: t("Sprint Timing"), description: t("Sprint start, finish, and duration.") },
+  { key: "tokenUsage", label: t("Aggregate Token Usage"), description: t("Total CLI token usage/cost across the whole sprint. Subscription usage is called out separately from metered API usage.") },
+  { key: "qaFindings", label: t("QA Review Summary"), description: t("Sprint-level QA outcome and findings.") },
+  { key: "branchInfo", label: t("Branch Info"), description: t("Base/head branch reference, shown collapsed.") },
 ];
 
 interface PrTemplateEditorModalProps {
@@ -55,12 +56,13 @@ interface PrTemplateEditorModalProps {
 
 export const PrTemplateEditorModal: FunctionComponent<PrTemplateEditorModalProps> = ({ isOpen, onClose, kind, state }) => {
   const { editableSettings, updateEditableSettings } = state;
+  const { t } = useSettingsOperationsTranslations();
   const [draggedKey, setDraggedKey] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
   const orderFieldName = kind === "task" ? "taskSectionOrder" : "sprintSectionOrder";
   const defaultOrder = kind === "task" ? DEFAULT_TASK_SECTION_ORDER : DEFAULT_SPRINT_SECTION_ORDER;
-  const sectionMeta = kind === "task" ? TASK_SECTIONS : SPRINT_SECTIONS;
+  const sectionMeta = kind === "task" ? getTaskSections(t) : getSprintSections(t);
   const sectionMetaByKey = useMemo(
     () => new Map(sectionMeta.map((meta) => [String(meta.key), meta])),
     [sectionMeta],
@@ -166,12 +168,12 @@ export const PrTemplateEditorModal: FunctionComponent<PrTemplateEditorModalProps
             </div>
             <div className="min-w-0 flex-1">
               <h2 id={titleId} className="text-lg font-bold text-slate-900 dark:text-white">
-                {kind === "task" ? "Customize Task PR" : "Customize Sprint PR"}
+                {kind === "task" ? t("Customize Task PR") : t("Customize Sprint PR")}
               </h2>
               <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                 {kind === "task"
-                  ? "Choose what appears — and in what order — in the PR opened for each completed task. Preview updates live against sample data."
-                  : "Choose what appears — and in what order — in the PR opened when a sprint's feature branch merges to main. Preview updates live against sample data."}
+                  ? t("Choose what appears — and in what order — in the PR opened for each completed task. Preview updates live against sample data.")
+                  : t("Choose what appears — and in what order — in the PR opened when a sprint's feature branch merges to main. Preview updates live against sample data.")}
               </p>
             </div>
             <button
@@ -180,15 +182,15 @@ export const PrTemplateEditorModal: FunctionComponent<PrTemplateEditorModalProps
               className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.02] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-slate-600 transition-colors hover:bg-black/[0.05] dark:border-white/[0.06] dark:text-slate-300 dark:hover:bg-white/[0.08]"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              Reset to defaults
+              {t("Reset to defaults")}
             </button>
           </div>
 
           <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(0,23rem)_1fr]">
             <div className="flex flex-col gap-2 overflow-y-auto border-b border-black/[0.06] bg-black/[0.01] p-4 dark:border-white/[0.06] dark:bg-white/[0.01] md:border-b-0 md:border-r">
               <div className="mb-1 flex items-center justify-between px-1">
-                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Sections</span>
-                <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500">Drag to reorder</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">{t("Sections")}</span>
+                <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500">{t("Drag to reorder")}</span>
               </div>
               {order.map((key, index) => {
                 const meta = sectionMetaByKey.get(key);
@@ -246,7 +248,7 @@ export const PrTemplateEditorModal: FunctionComponent<PrTemplateEditorModalProps
                       </div>
                     </div>
                     <Toggle
-                      aria-label={`Toggle ${meta.label}`}
+                      aria-label={t("Toggle {label}", { label: meta.label })}
                       value={isEnabled}
                       onChange={(value) => setSection(key, value)}
                     />
@@ -265,7 +267,7 @@ export const PrTemplateEditorModal: FunctionComponent<PrTemplateEditorModalProps
               onClick={onClose}
               className="rounded-xl border border-[rgb(var(--accent-action-rgb)/0.22)] bg-[var(--accent-action)] px-4 py-2 text-sm font-bold text-[var(--accent-on-solid)] shadow-[0_10px_28px_rgb(var(--accent-action-rgb)/0.18)] transition-colors hover:border-[rgb(var(--accent-action-rgb)/0.34)] hover:bg-[var(--accent-action-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-focus-ring)]"
             >
-              Close
+              {t("Close")}
             </button>
           </div>
         </div>

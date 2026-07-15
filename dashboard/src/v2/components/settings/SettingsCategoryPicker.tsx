@@ -7,6 +7,7 @@ import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { SHARED_INTERACTION_CLASSES } from "../ui/Button.js";
 import { Drawer } from "../ui/Drawer.js";
 import { SettingsCategoryRail } from "./SettingsCategoryRail.js";
+import { getDocumentDashboardLocale, getSettingsShellMessage, type SettingsShellMessageKey } from "../../i18n/messages/settings-shell.js";
 
 export interface SettingsCategoryPickerProps {
   filteredCategories: Category[];
@@ -29,6 +30,10 @@ export const SettingsCategoryPicker: FunctionComponent<SettingsCategoryPickerPro
   pendingCategory = null,
   disabledCategoryReason = null,
 }) => {
+  const locale = getDocumentDashboardLocale();
+  const t = (key: SettingsShellMessageKey, variables?: Parameters<typeof getSettingsShellMessage>[2]): string => (
+    getSettingsShellMessage(locale, key, variables)
+  );
   const [isOpen, setIsOpen] = useState(false);
   const titleId = useId();
   const drawerDescriptionId = useId();
@@ -42,10 +47,10 @@ export const SettingsCategoryPicker: FunctionComponent<SettingsCategoryPickerPro
     ? filteredCategories.find((category) => category.id === pendingCategory)
     : null;
   const categoryStatus = pendingCategoryConfig
-    ? `Switching to ${pendingCategoryConfig.label}`
+    ? t("switchingCategory", { category: pendingCategoryConfig.label })
     : normalizedSearch
-      ? `${filteredCategories.length} ${filteredCategories.length === 1 ? "match" : "matches"}`
-      : "Change category";
+      ? t(filteredCategories.length === 1 ? "match" : "matches", { count: filteredCategories.length })
+      : t("changeCategory");
   const triggerDescriptionIds = [
     triggerDescriptionId,
     triggerStatusId,
@@ -78,7 +83,7 @@ export const SettingsCategoryPicker: FunctionComponent<SettingsCategoryPickerPro
     <div data-settings-accent={activeCategoryConfig.accent || "sky"} className="w-full lg:hidden">
       <button
         type="button"
-        aria-label={`Change settings category. Current category: ${activeCategoryConfig.label}`}
+        aria-label={t("changeCategoryLabel", { category: activeCategoryConfig.label })}
         aria-haspopup="dialog"
         aria-expanded={isOpen}
         aria-busy={pendingCategory ? "true" : undefined}
@@ -122,21 +127,25 @@ export const SettingsCategoryPicker: FunctionComponent<SettingsCategoryPickerPro
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-300">
-                Settings navigation
+                {t("settingsNavigation")}
               </div>
               <h2 id={titleId} className="mt-1 font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                Choose a category
+                {t("chooseCategory")}
               </h2>
               <p id={drawerDescriptionId} className="mt-1 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
                 {normalizedSearch
-                  ? `${filteredCategories.length} matching ${filteredCategories.length === 1 ? "category" : "categories"} for “${normalizedSearch}”.`
-                  : `${filteredCategories.length} settings categories available.`}
+                  ? t("drawerMatches", {
+                    count: filteredCategories.length,
+                    categoryWord: t(filteredCategories.length === 1 ? "categoryWord" : "categoriesWord"),
+                    searchTerm: normalizedSearch,
+                  })
+                  : t("drawerAvailable", { count: filteredCategories.length })}
               </p>
             </div>
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              aria-label="Close settings category picker"
+              aria-label={t("closeCategoryPicker")}
               className={`${SHARED_INTERACTION_CLASSES} grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[color:var(--border-hairline)] bg-[var(--fill-muted)] text-slate-500 hover:bg-[var(--fill-muted-hover)] hover:text-slate-900 dark:text-slate-300 dark:hover:text-white`}
             >
               <X className="h-4 w-4" strokeWidth={2.3} aria-hidden="true" />

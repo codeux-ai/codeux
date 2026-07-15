@@ -8,6 +8,8 @@ import type {
   LivePlanningWidgetState,
   PlanningExecutionPlanWidgetState,
 } from "../../../lib/chat-widget-view-models.js";
+import { useDashboardI18n } from "../../../i18n/context.js";
+import { chatMessages } from "../../../i18n/messages/chat.js";
 
 export interface PlanningRequestWidgetProps {
   status: ExecutionStatus;
@@ -50,6 +52,7 @@ const TaskStatusIcon: FunctionComponent<{ statusKind: LivePlanningTaskState["sta
 };
 
 const LivePlanningStatusCard: FunctionComponent<{ liveStatus: LivePlanningWidgetState }> = ({ liveStatus }) => {
+  const { formatNumber, translate, translatePlural } = useDashboardI18n();
   const visibleTasks = liveStatus.tasks.slice(0, 10);
   const hiddenTaskCount = Math.max(0, liveStatus.tasks.length - visibleTasks.length);
 
@@ -72,7 +75,7 @@ const LivePlanningStatusCard: FunctionComponent<{ liveStatus: LivePlanningWidget
       <div>
         <div
           role="progressbar"
-          aria-label={`Sprint progress for ${liveStatus.sprintName}`}
+          aria-label={translate(chatMessages, "sprintProgressFor", { name: liveStatus.sprintName })}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={liveStatus.percentComplete}
@@ -84,23 +87,23 @@ const LivePlanningStatusCard: FunctionComponent<{ liveStatus: LivePlanningWidget
           />
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
-          <span>{liveStatus.completedTasks} completed</span>
-          <span>{liveStatus.queuedTasks} queued</span>
-          <span>{liveStatus.totalTasks} total</span>
+          <span>{translate(chatMessages, "completedCount", { count: formatNumber(liveStatus.completedTasks) })}</span>
+          <span>{translate(chatMessages, "queuedCount", { count: formatNumber(liveStatus.queuedTasks) })}</span>
+          <span>{translate(chatMessages, "totalCount", { count: formatNumber(liveStatus.totalTasks) })}</span>
         </div>
       </div>
 
       <div className="grid gap-1.5 sm:grid-cols-3">
         <div className="rounded-lg border border-black/[0.05] bg-black/[0.025] px-2.5 py-2 dark:border-white/[0.06] dark:bg-white/[0.025]">
-          <div className="text-[9px] font-bold uppercase tracking-[0.13em] text-slate-400">Request</div>
+          <div className="text-[9px] font-bold uppercase tracking-[0.13em] text-slate-400">{translate(chatMessages, "request")}</div>
           <div className="mt-0.5 truncate text-[12px] font-semibold">{liveStatus.materialization.requestLabel}</div>
         </div>
         <div className="rounded-lg border border-black/[0.05] bg-black/[0.025] px-2.5 py-2 dark:border-white/[0.06] dark:bg-white/[0.025]">
-          <div className="text-[9px] font-bold uppercase tracking-[0.13em] text-slate-400">Tasks</div>
+          <div className="text-[9px] font-bold uppercase tracking-[0.13em] text-slate-400">{translate(chatMessages, "tasks")}</div>
           <div className="mt-0.5 truncate text-[12px] font-semibold">{liveStatus.materialization.taskRecordsLabel}</div>
         </div>
         <div className="rounded-lg border border-black/[0.05] bg-black/[0.025] px-2.5 py-2 dark:border-white/[0.06] dark:bg-white/[0.025]">
-          <div className="text-[9px] font-bold uppercase tracking-[0.13em] text-slate-400">Run</div>
+          <div className="text-[9px] font-bold uppercase tracking-[0.13em] text-slate-400">{translate(chatMessages, "run")}</div>
           <div className="mt-0.5 truncate text-[12px] font-semibold">{liveStatus.materialization.runLabel}</div>
         </div>
       </div>
@@ -124,7 +127,7 @@ const LivePlanningStatusCard: FunctionComponent<{ liveStatus: LivePlanningWidget
         ))}
         {hiddenTaskCount > 0 && (
           <div className="rounded-lg border border-dashed border-black/[0.08] px-2.5 py-2 text-[12px] font-medium text-slate-500 dark:border-white/[0.08] dark:text-slate-400">
-            {hiddenTaskCount} more task{hiddenTaskCount === 1 ? "" : "s"} in this sprint
+            {translatePlural(chatMessages, "moreTasksSprint", hiddenTaskCount, { count: formatNumber(hiddenTaskCount) })}
           </div>
         )}
       </div>
@@ -133,6 +136,7 @@ const LivePlanningStatusCard: FunctionComponent<{ liveStatus: LivePlanningWidget
 };
 
 const PersistedExecutionPlanCard: FunctionComponent<{ executionPlan: PlanningExecutionPlanWidgetState }> = ({ executionPlan }) => {
+  const { formatNumber, translate, translatePlural } = useDashboardI18n();
   const visibleTasks = executionPlan.tasks.slice(0, 5);
   const hiddenTaskCount = Math.max(0, executionPlan.tasks.length - visibleTasks.length);
   const visibleCreatedTaskIds = visibleTasks.length === 0 ? executionPlan.createdTaskIds.slice(0, 5) : [];
@@ -166,7 +170,7 @@ const PersistedExecutionPlanCard: FunctionComponent<{ executionPlan: PlanningExe
       ) : null}
 
       {visibleTasks.length > 0 ? (
-        <ul className="space-y-1.5" aria-label="Planned task summaries">
+        <ul className="space-y-1.5" aria-label={translate(chatMessages, "plannedTaskSummaries")}>
           {visibleTasks.map((task) => (
             <li
               key={task.id}
@@ -183,12 +187,12 @@ const PersistedExecutionPlanCard: FunctionComponent<{ executionPlan: PlanningExe
           ))}
           {hiddenTaskCount > 0 ? (
             <li className="rounded-lg border border-dashed border-black/[0.08] px-2.5 py-2 text-[12px] font-medium text-slate-500 dark:border-white/[0.08] dark:text-slate-400">
-              {hiddenTaskCount} more task{hiddenTaskCount === 1 ? "" : "s"} in this execution plan
+              {translatePlural(chatMessages, "moreTasksPlan", hiddenTaskCount, { count: formatNumber(hiddenTaskCount) })}
             </li>
           ) : null}
         </ul>
       ) : visibleCreatedTaskIds.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5" aria-label="Created task ids">
+        <div className="flex flex-wrap gap-1.5" aria-label={translate(chatMessages, "createdTaskIds")}>
           {visibleCreatedTaskIds.map((taskId) => (
             <span
               key={taskId}
@@ -199,7 +203,7 @@ const PersistedExecutionPlanCard: FunctionComponent<{ executionPlan: PlanningExe
           ))}
           {hiddenCreatedTaskCount > 0 ? (
             <span className="rounded-md border border-dashed border-black/[0.08] px-2 py-1 text-[11px] font-medium text-slate-500 dark:border-white/[0.08] dark:text-slate-400">
-              +{hiddenCreatedTaskCount} more
+              {translate(chatMessages, "moreCount", { count: formatNumber(hiddenCreatedTaskCount) })}
             </span>
           ) : null}
         </div>
@@ -215,12 +219,13 @@ export const PlanningRequestWidget: FunctionComponent<PlanningRequestWidgetProps
   liveStatus,
   executionPlan,
 }) => {
+  const { translate } = useDashboardI18n();
   return (
     <ChatWidgetFrame
       status={status}
       header={
         <div class="flex items-center gap-2">
-          <ChatRuntimeBadge status={status} label={`Planning: ${planName}`} />
+          <ChatRuntimeBadge status={status} label={translate(chatMessages, "planningLabel", { name: planName })} />
           <span>{planName}</span>
         </div>
       }
@@ -243,10 +248,10 @@ export const PlanningRequestWidget: FunctionComponent<PlanningRequestWidgetProps
         ) : null}
 
         <div class="text-center text-sm">
-          {status === 'queued' && <span class="text-slate-500">Preparing to plan...</span>}
-          {status === 'running' && <span class="text-signal-600 dark:text-signal-400 font-medium animate-pulse">Navigating solutions...</span>}
-          {status === 'completed' && <span class="text-slate-600 dark:text-slate-400">Plan formulated successfully.</span>}
-          {status === 'failed' && <span class="text-red-600 dark:text-red-400 font-medium">Failed to create a plan.</span>}
+          {status === 'queued' && <span class="text-slate-500">{translate(chatMessages, "preparingToPlan")}</span>}
+          {status === 'running' && <span class="text-signal-600 dark:text-signal-400 font-medium animate-pulse">{translate(chatMessages, "navigatingSolutions")}</span>}
+          {status === 'completed' && <span class="text-slate-600 dark:text-slate-400">{translate(chatMessages, "planFormulated")}</span>}
+          {status === 'failed' && <span class="text-red-600 dark:text-red-400 font-medium">{translate(chatMessages, "planCreationFailed")}</span>}
         </div>
       </div>
       )}

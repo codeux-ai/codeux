@@ -10,6 +10,8 @@ import type {
   DashboardChatProviderConnectionRecord,
   DashboardChatProviderSetupDefinition,
 } from "./chat-provider-api.js";
+import { settingsIntegrationsMessages } from "../i18n/messages/settings-integrations.js";
+import { translateDashboardMessage, type DashboardLocale, type DashboardTextMessageKey } from "../i18n/locales.js";
 
 export const CHAT_PROVIDER_KINDS: ChatProviderKind[] = [
   "discord",
@@ -20,32 +22,9 @@ export const CHAT_PROVIDER_KINDS: ChatProviderKind[] = [
   "microsoft-teams",
 ];
 
-const SETUP_NOTES: Record<ChatProviderKind, string[]> = {
-  whatsapp: [
-    "Use a managed WhatsApp bridge, or paste the generated ingress URL into a Meta webhook gateway.",
-    "Bind each WhatsApp group or business conversation by its external channel id before enabling inbound routing.",
-  ],
-  imessage: [
-    "Use a managed iMessage bridge on a trusted Apple device, or run the macOS native bridge command from a locked-down local account.",
-    "Native bridge mode accepts an optional bridge token; keep it in the secret field and rotate it if the host changes.",
-  ],
-  telegram: [
-    "Connect a managed Telegram bridge or configure a Telegram bot webhook with the generated ingress URL.",
-    "Use bot usernames and channel labels only for operator clarity; routing is based on the external channel id and binding hints.",
-  ],
-  slack: [
-    "Configure Slack Events API or a managed Slack bridge to send message events to the connection ingress URL.",
-    "Store Slack signing secrets or bot tokens only in the credential fields; saved values are returned as redacted metadata.",
-  ],
-  "microsoft-teams": [
-    "Use a managed Teams bridge or a Teams bot endpoint that posts normalized activity payloads to the ingress URL.",
-    "Tenant and bot identifiers belong in setup fields; bot passwords and signing material belong in secret fields.",
-  ],
-  discord: [
-    "Configure a Discord bot or gateway to forward messages into the generated ingress URL.",
-    "Enable outbound replies only after the bot token is stored and the target channels are explicitly bound.",
-  ],
-};
+const localized = (locale: DashboardLocale, key: DashboardTextMessageKey<typeof settingsIntegrationsMessages>): string => (
+  translateDashboardMessage(settingsIntegrationsMessages, locale, key)
+);
 
 export interface ChatProviderDeliveryViewModel {
   id: string;
@@ -95,40 +74,87 @@ export interface ChatProviderCardViewModel {
   connections: ChatProviderConnectionViewModel[];
 }
 
-export const getChatProviderSetupNotes = (providerKind: ChatProviderKind): string[] => SETUP_NOTES[providerKind];
+export const getChatProviderSetupNotes = (providerKind: ChatProviderKind, locale: DashboardLocale = "en"): string[] => {
+  const keys = providerKind === "microsoft-teams"
+    ? ["teamsNote1", "teamsNote2"] as const
+    : [`${providerKind}Note1`, `${providerKind}Note2`] as const;
+  return keys.map((key) => localized(locale, key));
+};
 
 export const isChatProviderKind = (value: unknown): value is ChatProviderKind => (
   typeof value === "string" && (CHAT_PROVIDER_KINDS as string[]).includes(value)
 );
 
-export const getChatProviderDescription = (providerKind: ChatProviderKind): string => {
+export const getChatProviderDescription = (providerKind: ChatProviderKind, locale: DashboardLocale = "en"): string => {
   switch (providerKind) {
     case "whatsapp":
-      return "WhatsApp bridge, webhook setup, and project/channel routing.";
+      return localized(locale, "whatsappDescription");
     case "imessage":
-      return "iMessage managed or native macOS bridge with command controls.";
+      return localized(locale, "imessageDescription");
     case "telegram":
-      return "Telegram bot and managed channel ingress for project chat.";
+      return localized(locale, "telegramDescription");
     case "slack":
-      return "Slack Events or managed bridge with signed inbound routing.";
+      return localized(locale, "slackDescription");
     case "microsoft-teams":
-      return "Teams bot and managed bridge bindings for project channels.";
+      return localized(locale, "teamsDescription");
     case "discord":
-      return "Discord bot or gateway connection with explicit channel bindings.";
+      return localized(locale, "discordDescription");
   }
 };
 
-export const getBridgeModeLabel = (bridgeMode: ChatProviderBridgeMode): string => {
+export const getBridgeModeLabel = (bridgeMode: ChatProviderBridgeMode, locale: DashboardLocale = "en"): string => {
   switch (bridgeMode) {
     case "managed_bridge":
-      return "Managed bridge";
+      return localized(locale, "managedBridge");
     case "webhook":
-      return "Custom webhook";
+      return localized(locale, "webhook");
     case "native_bridge":
-      return "Native bridge";
+      return localized(locale, "nativeBridge");
     case "official_api":
       return "Provider-native API";
   }
+};
+
+const CHAT_PROVIDER_FIELD_LABEL_KEYS = {
+  "Plugin name": "pluginName",
+  "Connector workspace": "connectorWorkspace",
+  "Bridge API key": "bridgeApiKey",
+  "Webhook URL": "webhookUrl",
+  "Verify token name": "verifyTokenName",
+  "Webhook signing secret": "webhookSigningSecret",
+  "Verify token": "verifyToken",
+  "Device label": "deviceLabel",
+  "Bridge command": "bridgeCommand",
+  "Working directory": "workingDirectory",
+  "Bridge token": "bridgeToken",
+  "Bot username": "botUsername",
+  "Bot token": "botToken",
+  "Webhook secret token": "webhookSecretToken",
+  "Events webhook URL": "eventsWebhookUrl",
+  "Slack app ID": "slackAppId",
+  "Signing secret": "signingSecret",
+  "Tenant ID": "tenantId",
+  "Bot endpoint URL": "botEndpointUrl",
+  "Bot app password": "botAppPassword",
+  "Gateway URL": "gatewayUrl",
+  "Application ID": "applicationId",
+} as const satisfies Record<string, DashboardTextMessageKey<typeof settingsIntegrationsMessages>>;
+
+export const getChatProviderFieldLabel = (
+  fieldLabel: string,
+  locale: DashboardLocale = "en",
+): string => {
+  const key = CHAT_PROVIDER_FIELD_LABEL_KEYS[fieldLabel as keyof typeof CHAT_PROVIDER_FIELD_LABEL_KEYS];
+  return key ? localized(locale, key) : fieldLabel;
+};
+
+export const getChatProviderBridgeSetupLabel = (
+  definition: DashboardChatProviderSetupDefinition,
+  bridgeMode: ChatProviderBridgeMode,
+  locale: DashboardLocale = "en",
+): string => {
+  const bridge = findBridgeSchema(definition, bridgeMode);
+  return locale === "en" ? bridge.label : `${definition.label}: ${getBridgeModeLabel(bridgeMode, locale)}`;
 };
 
 export const findBridgeSchema = (
@@ -150,9 +176,9 @@ export const createDefaultSetupForBridge = (
   );
 };
 
-export const redactChatProviderError = (value: string | null | undefined): string => {
+export const redactChatProviderError = (value: string | null | undefined, locale: DashboardLocale = "en"): string => {
   if (!value?.trim()) {
-    return "No error details were reported.";
+    return localized(locale, "noErrorDetails");
   }
 
   return value
@@ -165,24 +191,38 @@ export const redactChatProviderError = (value: string | null | undefined): strin
 
 const uniqueCount = (values: string[]): number => new Set(values.filter(Boolean)).size;
 
-const formatStatus = (value: string): string => (
-  value.split(/[-_]/g).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ")
-);
+const formatStatus = (value: string, locale: DashboardLocale): string => {
+  const knownStatus = {
+    draft: "statusDraft",
+    active: "statusActive",
+    disabled: "disabled",
+    error: "statusError",
+    pending: "statusPending",
+    sending: "statusSending",
+    failed: "statusFailed",
+    delivered: "statusDelivered",
+  } as const;
+  const key = knownStatus[value as keyof typeof knownStatus];
+  return key ? localized(locale, key) : value.split(/[-_]/g).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+};
 
-export const buildChatProviderDeliveryViewModel = (delivery: ChatProviderPublicDeliveryRecord): ChatProviderDeliveryViewModel => {
+export const buildChatProviderDeliveryViewModel = (
+  delivery: ChatProviderPublicDeliveryRecord,
+  locale: DashboardLocale = "en",
+): ChatProviderDeliveryViewModel => {
   const isRetryable = delivery.status === "failed" || delivery.status === "retryable_failure";
   const isCancellable = delivery.status === "pending" || delivery.status === "sending" || delivery.status === "retryable_failure";
   const isTerminal = ["delivered", "processed", "failed", "duplicate", "cancelled"].includes(delivery.status);
   const isAmbiguous = /ambiguous|may have been (?:accepted|sent)|unknown delivery/i.test(delivery.lastError ?? "");
   return {
     id: delivery.id,
-    statusLabel: formatStatus(delivery.status),
-    retryLabel: isAmbiguous ? "Ambiguous failure" : isRetryable ? "Retryable" : isTerminal ? "Terminal" : "In progress",
+    statusLabel: formatStatus(delivery.status, locale),
+    retryLabel: isAmbiguous ? localized(locale, "retryable") : localized(locale, isRetryable ? "retryable" : "terminal"),
     channelLabel: delivery.externalChannelId,
-    attemptLabel: `${delivery.attemptCount} attempt${delivery.attemptCount === 1 ? "" : "s"}`,
+    attemptLabel: `${delivery.attemptCount} ${localized(locale, delivery.attemptCount === 1 ? "attempt" : "attempts")}`,
     updatedAtLabel: delivery.updatedAt,
     nextRetryLabel: delivery.nextAttemptAt ? `Next retry ${delivery.nextAttemptAt}` : "No retry scheduled",
-    redactedError: redactChatProviderError(delivery.lastError),
+    redactedError: redactChatProviderError(delivery.lastError, locale),
     isRetryable,
     isCancellable,
     isTerminal,
@@ -193,18 +233,19 @@ export const buildChatProviderDeliveryViewModel = (delivery: ChatProviderPublicD
 const buildConnectionAuthLabel = (
   connection: DashboardChatProviderConnectionRecord,
   definition: DashboardChatProviderSetupDefinition,
+  locale: DashboardLocale,
 ): string => {
   const bridge = findBridgeSchema(definition, connection.bridgeMode);
   const requiredKeys = new Set(bridge.secretFields.filter((field) => field.required).map((field) => field.key));
   if (requiredKeys.size === 0) {
-    return "No required secrets";
+    return localized(locale, "noRequiredSecrets");
   }
   const configuredRequired = connection.credentials.filter((credential) => (
     requiredKeys.has(credential.key) && credential.configured
   )).length;
   return configuredRequired === requiredKeys.size
-    ? "Authenticated"
-    : `${configuredRequired}/${requiredKeys.size} secrets`;
+    ? localized(locale, "authenticated")
+    : `${configuredRequired}/${requiredKeys.size} ${localized(locale, "secrets")}`;
 };
 
 export const buildChatProviderCatalogViewModel = (input: {
@@ -212,25 +253,27 @@ export const buildChatProviderCatalogViewModel = (input: {
   connections: DashboardChatProviderConnectionRecord[];
   bindings: ChatProviderChannelBindingRecord[];
   deliveriesByConnection: Record<string, ChatProviderPublicDeliveryRecord[]>;
+  locale?: DashboardLocale;
 }): ChatProviderCardViewModel[] => (
   input.definitions.map((definition) => {
+    const locale = input.locale ?? "en";
     const connections = input.connections.filter((connection) => connection.providerKind === definition.kind);
     const connectionViewModels = connections.map((connection) => {
       const bindings = input.bindings.filter((binding) => binding.providerConnectionId === connection.id);
       const deliveries = input.deliveriesByConnection[connection.id] ?? [];
       const recentDeliveries = deliveries
         .slice(0, 5)
-        .map(buildChatProviderDeliveryViewModel);
-      const recentFailedDeliveries = recentDeliveries.filter((delivery) => delivery.statusLabel === "Failed" || delivery.statusLabel === "Retryable Failure");
+        .map((delivery) => buildChatProviderDeliveryViewModel(delivery, locale));
+      const recentFailedDeliveries = recentDeliveries.filter((delivery) => delivery.isRetryable || delivery.isAmbiguous);
       return {
         id: connection.id,
         providerKind: connection.providerKind,
         displayName: connection.displayName,
-        statusLabel: formatStatus(connection.status),
-        bridgeModeLabel: connection.setupHints?.bridgeModeLabel || getBridgeModeLabel(connection.bridgeMode),
+        statusLabel: formatStatus(connection.status, locale),
+        bridgeModeLabel: connection.setupHints?.bridgeModeLabel || getBridgeModeLabel(connection.bridgeMode, locale),
         ingressUrl: connection.ingressUrl,
-        enabledLabel: connection.enabled ? "Enabled" : "Disabled",
-        authStatusLabel: buildConnectionAuthLabel(connection, definition),
+        enabledLabel: localized(locale, connection.enabled ? "enabled" : "disabled"),
+        authStatusLabel: buildConnectionAuthLabel(connection, definition, locale),
         configuredChannelCount: uniqueCount(bindings.map((binding) => binding.externalChannelId)),
         boundProjectCount: uniqueCount(bindings.map((binding) => binding.projectId)),
         pendingOutboundCount: deliveries.filter((delivery) => delivery.status === "pending" || delivery.status === "sending").length,
@@ -244,8 +287,8 @@ export const buildChatProviderCatalogViewModel = (input: {
     return {
       providerKind: definition.kind,
       label: definition.label,
-      description: getChatProviderDescription(definition.kind),
-      setupNotes: getChatProviderSetupNotes(definition.kind),
+      description: getChatProviderDescription(definition.kind, locale),
+      setupNotes: getChatProviderSetupNotes(definition.kind, locale),
       connectionCount: connections.length,
       activeConnectionCount: connections.filter((connection) => (
         connection.enabled && connection.status === "active" && connection.verificationStatus === "verified"

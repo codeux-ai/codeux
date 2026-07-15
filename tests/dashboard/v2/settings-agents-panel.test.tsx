@@ -5,10 +5,12 @@ import { h, Fragment } from "preact";
 import { useState } from "preact/hooks";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { cloneDefaultSettings } from "../../../dashboard/src/lib/settings.js";
 import { SettingsAgentsPanel } from "../../../dashboard/src/v2/components/settings/panels/SettingsAgentsPanel.js";
 import { SettingsSprintPanel } from "../../../dashboard/src/v2/components/settings/panels/SettingsSprintPanel.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
 import type { ProjectSettings } from "../../../dashboard/src/types.js";
 
 expect.extend(matchers);
@@ -18,11 +20,49 @@ afterEach(() => {
 });
 
 describe("SettingsAgentsPanel", () => {
+  it("keeps long preset names and ids verbatim during German keyboard routing", async () => {
+    const user = userEvent.setup();
+    const longName = "Risk Reviewer With A Long Label That Wraps Unverändert";
+    const settings = cloneDefaultSettings();
+    settings.agents.routing.taskCoding.mode = "ORCHESTRATOR";
+    let latest = settings;
+    const Harness = () => {
+      const [projectSettings, setProjectSettings] = useState(latest);
+      latest = projectSettings;
+      return (
+        <SettingsAgentsPanel
+          state={{
+            activeScope: "project",
+            setActiveScope: vi.fn(),
+            selectedProject: { id: "proj-1", name: "Test Project" },
+            editableSettings: projectSettings,
+            projectSettings,
+            projectSources: {},
+            projectAgentPresets: [],
+            projectAgentPresetOptions: [{ value: "agent-risk_expert", label: longName }],
+            updateProject: (recipe: (current: ProjectSettings) => ProjectSettings) => setProjectSettings(recipe),
+            updateEditableSettings: vi.fn(),
+          } as never}
+        />
+      );
+    };
+
+    render(<DashboardI18nProvider initialLocale="de" storage={null}><Harness /></DashboardI18nProvider>);
+    const roster = screen.getByRole("group", { name: "Agentenauswahl des Orchestrators für Codierungsaufgaben" });
+    const option = within(roster).getByRole("checkbox", { name: longName });
+    option.focus();
+    await user.keyboard(" ");
+
+    await waitFor(() => expect(option).toHaveAttribute("aria-checked", "true"));
+    expect(screen.getByText("1 Orchestrator-Agent ausgewählt")).toBeInTheDocument();
+    expect(latest.agents.routing.taskCoding.orchestratorAgentPresetIds).toEqual(["agent-risk_expert"]);
+  });
+
   it("does not render Quality Assurance in the Agents panel", () => {
     const updateEditableSettings = vi.fn();
 
     render(
-      <SettingsAgentsPanel
+      <DashboardI18nProvider storage={null}><SettingsAgentsPanel
         state={{
           activeScope: "system",
           selectedProject: { id: "proj-1", name: "Test Project" },
@@ -45,7 +85,7 @@ describe("SettingsAgentsPanel", () => {
           ],
           updateEditableSettings,
         } as any}
-      />,
+      /></DashboardI18nProvider>,
     );
 
     expect(screen.queryByText("Quality Assurance")).not.toBeInTheDocument();
@@ -100,7 +140,7 @@ describe("SettingsAgentsPanel", () => {
         } as never}
       />
     );
-    const view = render(renderPanel());
+    const view = render(<DashboardI18nProvider storage={null}>{renderPanel()}</DashboardI18nProvider>);
 
     const roster = screen.getByRole("group", { name: "Orchestrator coding agent roster" });
     expect(screen.getByText("No orchestrator agents selected")).toBeInTheDocument();
@@ -110,7 +150,7 @@ describe("SettingsAgentsPanel", () => {
 
     expect(setActiveScope).toHaveBeenCalledWith("project");
     expect(updateProject).toHaveBeenCalled();
-    view.rerender(renderPanel());
+    view.rerender(<DashboardI18nProvider storage={null}>{renderPanel()}</DashboardI18nProvider>);
 
     await waitFor(() => {
       expect(screen.getByText("1 orchestrator agent selected")).toBeInTheDocument();
@@ -124,7 +164,7 @@ describe("SettingsAgentsPanel", () => {
     settings.agents.routing.taskCoding.mode = "ORCHESTRATOR";
 
     render(
-      <SettingsAgentsPanel
+      <DashboardI18nProvider storage={null}><SettingsAgentsPanel
         state={{
           activeScope: "system",
           setActiveScope: vi.fn(),
@@ -137,7 +177,7 @@ describe("SettingsAgentsPanel", () => {
           updateProject: vi.fn(),
           updateEditableSettings: vi.fn(),
         } as never}
-      />,
+      /></DashboardI18nProvider>,
     );
 
     expect(screen.getByText("No project agents are available. Create project agents first, then return here to expose coding specialists to the orchestrator.")).toBeInTheDocument();

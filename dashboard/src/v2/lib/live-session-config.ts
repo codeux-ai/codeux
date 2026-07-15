@@ -7,6 +7,8 @@ import {
     PauseCircle,
 } from "lucide-preact";
 import type { ExecutionRuntimeEventSummary } from "../../types.js";
+import type { DashboardLocale } from "../i18n/locales.js";
+import { translateLiveMessage, type LiveMessageKey } from "../i18n/messages/live.js";
 
 export const TASK_STATUS_CFG = {
     RUNNING:   { label: "Running",   hex: "#00E0A0", dot: "bg-status-green shadow-[0_0_10px_rgba(0,171,132,0.7)] animate-pulse", text: "text-signal-500",  bg: "bg-signal-500/8",  border: "border-signal-500/20", icon: Activity },
@@ -20,7 +22,17 @@ export const TASK_STATUS_CFG = {
 
 export type TaskStatusKey = keyof typeof TASK_STATUS_CFG;
 
-export const getTaskCfg = (status?: string) => {
+const TASK_STATUS_MESSAGE_KEYS: Record<TaskStatusKey, LiveMessageKey> = {
+    RUNNING: "running",
+    CODING_COMPLETED: "codingCompleted",
+    COMPLETED: "completed",
+    FAILED: "failed",
+    BLOCKED: "blocked",
+    PENDING: "pending",
+    QUOTA: "quota",
+};
+
+export const getTaskCfg = (status?: string, locale: DashboardLocale = "en") => {
     const baseCfg = TASK_STATUS_CFG.PENDING;
     if (status && status.startsWith("PENDING_cap_")) {
         const match = status.match(/^PENDING_cap_(\d+)_(\d+)$/);
@@ -29,11 +41,13 @@ export const getTaskCfg = (status?: string) => {
             const limit = match[2];
             return {
                 ...baseCfg,
-                label: `Waiting for slot (${current}/${limit})`,
+                label: translateLiveMessage(locale, "waitingForSlot", { current, limit }),
             };
         }
     }
-    return TASK_STATUS_CFG[(status as TaskStatusKey) ?? "PENDING"] ?? TASK_STATUS_CFG.PENDING;
+    const key = (status as TaskStatusKey) ?? "PENDING";
+    const config = TASK_STATUS_CFG[key] ?? TASK_STATUS_CFG.PENDING;
+    return { ...config, label: translateLiveMessage(locale, TASK_STATUS_MESSAGE_KEYS[key] ?? "pending") };
 };
 
 export const MERGE_INDICATOR_CFG: Record<string, { label: string; text: string; bg: string; border: string }> = {
@@ -52,9 +66,11 @@ export const ORIGINATOR_CFG: Record<string, { border: string; text: string; labe
     system:   { border: "border-white/[0.06]",  text: "text-slate-500",  label: "System" },
 };
 
-export const getOriginatorCfg = (originator?: string) => {
+export const getOriginatorCfg = (originator?: string, locale: DashboardLocale = "en") => {
     const key = (originator || "system").toLowerCase();
-    return ORIGINATOR_CFG[key] ?? ORIGINATOR_CFG.system;
+    const config = ORIGINATOR_CFG[key] ?? ORIGINATOR_CFG.system;
+    const messageKey = key === "agent" ? "originatorAgent" : key === "user" ? "originatorUser" : key === "provider" ? "originatorProvider" : "originatorSystem";
+    return { ...config, label: translateLiveMessage(locale, messageKey) };
 };
 
 export const EMPTY_RUNTIME_STATS = {

@@ -5,6 +5,9 @@ import type {
   SystemProviderCredentialSettings,
   SystemSettings,
 } from "../../../types.js";
+import { createDashboardFormatters } from "../../i18n/formatters.js";
+import { translateDashboardMessage, type DashboardLocale } from "../../i18n/locales.js";
+import { settingsModelsMessages } from "../../i18n/messages/settings-models.js";
 
 export const MAX_VISIBLE_MODEL_PRICING_RESULTS = 100;
 
@@ -43,11 +46,26 @@ export interface ModelUsageTag {
   provider: ProviderId | string;
 }
 
-export const formatModelPrice = (pricing: TokenPricing | undefined): string => (
-  pricing
-    ? `$${pricing.inputTokens}/M in • $${pricing.outputTokens}/M out${pricing.cachedInputTokens > 0 ? ` • $${pricing.cachedInputTokens}/M cached` : ""}`
-    : "No published pricing"
-);
+export const formatModelPrice = (
+  pricing: TokenPricing | undefined,
+  locale: DashboardLocale = "en",
+): string => {
+  if (!pricing) {
+    return translateDashboardMessage(settingsModelsMessages, locale, "noPublishedPricing");
+  }
+  const { formatNumber } = createDashboardFormatters(locale);
+  const formatUsd = (value: number): string => `$${formatNumber(value, { maximumFractionDigits: 20 })}`;
+  const cached = pricing.cachedInputTokens > 0
+    ? translateDashboardMessage(settingsModelsMessages, locale, "cachedPrice", {
+      price: formatUsd(pricing.cachedInputTokens),
+    })
+    : "";
+  return translateDashboardMessage(settingsModelsMessages, locale, "modelPrice", {
+    input: formatUsd(pricing.inputTokens),
+    output: formatUsd(pricing.outputTokens),
+    cached,
+  });
+};
 
 export const splitCanonicalModelId = (model: string): { providerId: string; modelId: string } | null => {
   const [providerId, ...modelParts] = model.split("/");
@@ -103,6 +121,7 @@ export const getRelevantModelPricingRefs = (
   systemSettings: SystemSettings | null,
   catalog: ModelCatalogEntry[],
   normalizedOverrides: Record<string, TokenPricing>,
+  locale: DashboardLocale = "en",
 ): Map<string, RelevantModelRef> => {
   const refs = new Map<string, RelevantModelRef>();
   if (!systemSettings) return refs;
@@ -172,7 +191,11 @@ export const getRelevantModelPricingRefs = (
   for (const id of Object.keys(normalizedOverrides)) {
     if (refs.has(id)) continue;
     const [providerId, ...modelParts] = id.split("/");
-    addRef(providerId, modelParts.join("/"), { id: `override:${id}`, label: "Override", provider: "custom" });
+    addRef(providerId, modelParts.join("/"), {
+      id: `override:${id}`,
+      label: translateDashboardMessage(settingsModelsMessages, locale, "overrideUsageLabel"),
+      provider: "custom",
+    });
   }
 
   return refs;

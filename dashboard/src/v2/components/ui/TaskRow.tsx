@@ -5,6 +5,10 @@ import type { Task } from "../../types.js";
 import type { TaskStreamState } from "../../hooks/use-overview-stream-actions.js";
 import { WorkflowStatusBadge } from "./WorkflowStatusBadge.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { taskMessages } from "../../i18n/messages/tasks.js";
+import { getTaskStatusLabel } from "../../lib/tasks-constants.js";
+import { formatTaskTimeState } from "../../lib/tasks/task-presentation.js";
 import type { CiStatusPresentation } from "../../lib/ci-status-presentation.js";
 import type { ExecutionAttentionItemSummary } from "../../../types.js";
 
@@ -20,11 +24,15 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, ciP
     const isRunning = state?.isRunning ?? task.status === "in_progress";
     const busy = state?.busy ?? false;
     const interactionTokens = useInteractionTokens();
-    const playStopLabel = isRunning ? "Stop" : "Rerun";
+    const { locale, translate } = useOptionalDashboardI18n();
+    const playStopLabel = translate(taskMessages, isRunning ? "stop" : "rerun");
+    const playStopTarget = translate(taskMessages, isRunning ? "stopTarget" : "rerunTarget", { id: task.id, title: task.title });
+    const statusLabel = getTaskStatusLabel(task.status, locale);
+    const taskTimeLabel = formatTaskTimeState(task.time, locale);
     const disabledReason = busy
-        ? `${playStopLabel} unavailable while task action is pending`
+        ? translate(taskMessages, "rerunUnavailablePending", { action: playStopLabel })
         : !onPlayStop
-            ? `${playStopLabel} unavailable for this task`
+            ? translate(taskMessages, "rerunUnavailableTask", { action: playStopLabel })
             : null;
     return (
     <div
@@ -67,7 +75,7 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, ciP
             {/* Source */}
             <div className="hidden lg:flex col-span-2 items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-400 min-w-0">
                 <FolderGit2 className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 group-hover:text-signal-600 dark:group-hover:text-signal-400 transition-colors shrink-0" strokeWidth={2} />
-                <span className="sr-only">Source: </span><span className="truncate group-hover:text-slate-800 dark:group-hover:text-slate-200 transition-colors font-mono">{task.source}</span>
+                <span className="sr-only">{translate(taskMessages, "source")}: </span><span className="truncate group-hover:text-slate-800 dark:group-hover:text-slate-200 transition-colors font-mono">{task.source}</span>
             </div>
 
             {/* Status */}
@@ -87,14 +95,14 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, ciP
                 )}
                 {task.status === 'pending' && <Circle className="w-4 h-4 text-slate-500 dark:text-slate-400" strokeWidth={2} aria-hidden="true" />}
 
-                <div aria-live="polite" className="sr-only">Task {task.id} status is now {task.status.replace('_', ' ')}</div>
+                <div aria-live="polite" className="sr-only">{translate(taskMessages, "taskStatusNow", { id: task.id, status: statusLabel })}</div>
                 <span className={`text-[9px] md:text-[10px] font-bold uppercase tracking-[0.14em] transition-colors duration-300 ease-in-out ${
                     task.status === 'completed'   ? 'text-status-green dark:text-status-green' :
                     task.status === 'coding_completed' ? 'text-cyan-700 dark:text-cyan-500' :
                     task.status === 'in_progress' ? 'text-signal-600 dark:text-signal-500' :
                     'text-slate-600 dark:text-slate-400'
                 }`}>
-                    {task.status.replace('_', ' ')}
+                    {statusLabel}
                 </span>
             </div>
 
@@ -102,8 +110,8 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, ciP
             <div className="flex md:col-span-2 items-center justify-start md:justify-end h-full relative w-full md:w-auto mt-2 md:mt-0">
                 <div className="flex min-h-9 items-center gap-2 rounded-full border border-black/[0.05] bg-black/[0.02] px-2 dark:border-white/[0.06] dark:bg-white/[0.03]">
                     <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" strokeWidth={2} aria-hidden="true" />
-                    <span className="sr-only">Duration: </span>
-                    <span className="text-xs font-mono text-slate-500 dark:text-slate-400">{task.time}</span>
+                    <span className="sr-only">{translate(taskMessages, "duration")}: </span>
+                    <span className="text-xs font-mono text-slate-500 dark:text-slate-400">{taskTimeLabel}</span>
                 </div>
 
                 {/* Quick actions */}
@@ -111,8 +119,8 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, ciP
                     <button
                         type="button"
                         className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-full transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
-                        title={disabledReason ?? `${playStopLabel} task ${task.id}`}
-                        aria-label={disabledReason ? `${playStopLabel} task ${task.id}: ${task.title}. ${disabledReason}` : `${playStopLabel} task ${task.id}: ${task.title}`}
+                        title={disabledReason ?? playStopTarget}
+                        aria-label={`${playStopTarget}${disabledReason ? `. ${disabledReason}` : ""}`}
                         aria-busy={busy}
                         aria-describedby={disabledReason ? `task-row-action-reason-${task.recordId}` : undefined}
                         disabled={busy || !onPlayStop}
@@ -124,14 +132,14 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, ciP
                             onPlayStop?.();
                         }}
                     >
-                        {busy ? <><Loader2 aria-hidden="true" className="w-3.5 h-3.5 animate-spin" /><span className="sr-only">Loading</span></> : isRunning ? <Square className="w-3.5 h-3.5" fill="currentColor" /> : <Play className="w-3.5 h-3.5" fill="currentColor" />}
+                        {busy ? <><Loader2 aria-hidden="true" className="w-3.5 h-3.5 animate-spin" /><span className="sr-only">{translate(taskMessages, "loadingAction")}</span></> : isRunning ? <Square className="w-3.5 h-3.5" fill="currentColor" /> : <Play className="w-3.5 h-3.5" fill="currentColor" />}
                         {disabledReason && <span id={`task-row-action-reason-${task.recordId}`} className="sr-only">{disabledReason}</span>}
                     </button>
                     <a
                         href={`/tasks?sprintId=${encodeURIComponent(task.sprintId)}`}
                         className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 rounded-full transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
-                        title="Configure task"
-                        aria-label={`Configure task ${task.id}: ${task.title}`}
+                        title={translate(taskMessages, "configureTask")}
+                        aria-label={translate(taskMessages, "configureTaskTarget", { id: task.id, title: task.title })}
                         onClick={(event: MouseEvent) => event.stopPropagation()}
                     >
                         <Settings className="w-3.5 h-3.5" />
@@ -139,8 +147,8 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, ciP
                     <a
                         href="/live"
                         className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-emerald-700 dark:hover:text-status-green bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 rounded-full transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
-                        title="Open live session"
-                        aria-label={`Open live session for task ${task.id}: ${task.title}`}
+                        title={translate(taskMessages, "openLiveSession")}
+                        aria-label={translate(taskMessages, "openLiveSessionTarget", { id: task.id, title: task.title })}
                         onClick={(event: MouseEvent) => event.stopPropagation()}
                     >
                         <Maximize2 className="w-3.5 h-3.5" />

@@ -67,6 +67,7 @@
 - [Sprint Rollbacks](./architecture/sprint-rollbacks.md)
 - [Instruction Template System](./instructions/markdown-template-system.md)
 - [Dashboard Guide](./dashboard/dashboard-guide.md)
+- [Dashboard Internationalization](./dashboard/internationalization.md) — Language selector, browser-local persistence, content boundaries, and contributor workflow
 - [Dashboard Accessibility Patterns](./dashboard/dashboard-guide.md#accessibility-patterns)
 - [Interaction Patterns](./dashboard/interaction-patterns.md)
 - [Dashboard Interaction Contracts](./dashboard/interaction-patterns.md#implemented-surface-contracts)

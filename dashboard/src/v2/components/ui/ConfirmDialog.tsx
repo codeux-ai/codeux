@@ -11,6 +11,8 @@ import type { ConfirmDialogOptions } from "../../hooks/use-confirm-dialog.js";
 
 import { Loader2, AlertTriangle, CheckCircle2, CircleAlert, Info, XCircle } from "lucide-preact";
 import { Overlay } from "./Overlay.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 type DestructiveConfirmState = "idle" | "holding" | "cancelled" | "complete";
 
@@ -37,6 +39,7 @@ function DestructiveConfirmButton({
   disabled?: boolean;
   disabledReason?: string;
 }) {
+  const { translate } = useOptionalDashboardI18n();
   const [confirmState, setConfirmState] = useState<DestructiveConfirmState>("idle");
   const [progress, setProgress] = useState(0);
   const reducedMotion = useReducedMotion();
@@ -204,7 +207,7 @@ function DestructiveConfirmButton({
       style={{ userSelect: 'none', WebkitUserSelect: 'none', transitionDuration: cssTokens.controlFeedback.duration, transitionTimingFunction: cssTokens.controlFeedback.ease }}
       aria-busy={isLoading ? "true" : undefined}
       disabled={isLoading || disabled}
-      aria-label={isLoading ? `Completing ${label}` : disabledReason || `Hold to ${label}`}
+      aria-label={isLoading ? translate(shellMessages, "completingLabel", { label }) : disabledReason || translate(shellMessages, "holdTo", { label })}
       aria-describedby={progressId}
     >
       {(confirmState === "holding" || confirmState === "complete") && (
@@ -212,7 +215,7 @@ function DestructiveConfirmButton({
           ref={barRef}
           id={progressBarId}
           role="progressbar"
-          aria-label="Hold confirmation progress"
+          aria-label={translate(shellMessages, "holdProgress")}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.round(progress)}
@@ -222,8 +225,8 @@ function DestructiveConfirmButton({
       )}
 
       <span className="relative z-10 flex items-center justify-center gap-2">
-        {isLoading && <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" /><span className="sr-only">Processing, please wait</span></>}
-        {isLoading ? "Completing..." : confirmState === "complete" ? "Confirmed" : confirmState === "cancelled" ? "Release canceled" : confirmState === "holding" ? `Hold to ${label}` : label}
+        {isLoading && <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" /><span className="sr-only">{translate(shellMessages, "processingPleaseWait")}</span></>}
+        {isLoading ? translate(shellMessages, "completing") : confirmState === "complete" ? translate(shellMessages, "confirmed") : confirmState === "cancelled" ? translate(shellMessages, "releaseCanceled") : confirmState === "holding" ? translate(shellMessages, "holdTo", { label }) : label}
         {confirmState === "holding" && (
           <span aria-hidden="true" className="tabular-nums opacity-85">
             {Math.round(progress)}%
@@ -232,19 +235,19 @@ function DestructiveConfirmButton({
       </span>
       <span id={progressId} className="sr-only">
         {confirmState === "holding"
-          ? "Keep holding until progress completes. Release before completion to cancel."
+          ? translate(shellMessages, "keepHoldingHelp")
           : confirmState === "cancelled"
-            ? "Confirmation canceled. Hold again to confirm."
+            ? translate(shellMessages, "confirmationCanceledHelp")
             : confirmState === "complete"
-              ? "Confirmation completed."
-              : "Hold until complete. Release before completion to cancel."}
+              ? translate(shellMessages, "confirmationCompleteHelp")
+              : translate(shellMessages, "holdHelp")}
       </span>
       <span id={progressTextId} className="sr-only">
         {confirmState === "holding"
-          ? `Hold confirmation progress is ${Math.round(progress)} percent.`
+          ? translate(shellMessages, "holdPercent", { percent: Math.round(progress) })
           : confirmState === "complete"
-            ? "Hold confirmation progress is complete."
-            : "Hold confirmation progress is not started."}
+            ? translate(shellMessages, "holdComplete")
+            : translate(shellMessages, "holdNotStarted")}
       </span>
     </button>
   );
@@ -259,6 +262,7 @@ interface ConfirmDialogProps {
 }
 
 export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFocus = true }: ConfirmDialogProps) {
+  const { translate } = useOptionalDashboardI18n();
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [isClosing, setIsClosing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -352,7 +356,10 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFoc
 
   if (!shouldRender || !options) return null;
 
-  const { title, body, confirmLabel = "Confirm", cancelLabel = "Cancel", destructive = false } = options;
+  const { title, body, destructive = false } = options;
+  const confirmLabel = options.confirmLabel ?? translate(shellMessages, "confirm");
+  const cancelLabel = options.cancelLabel ?? translate(shellMessages, "cancel");
+  const copy = options.copy;
   const requiredConfirmationText = options.requiredConfirmationText;
   const confirmationMatches = !requiredConfirmationText || confirmationText === requiredConfirmationText;
   const tone = destructive ? "danger" : options.tone || "default";
@@ -418,7 +425,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFoc
               <ToneIcon className="h-5 w-5" strokeWidth={1.8} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">Confirm Runtime Action</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">{copy?.eyebrow ?? translate(shellMessages, "confirmRuntimeAction")}</p>
               <h2 id="confirm-dialog-title" className="mt-1 text-base font-semibold leading-tight tracking-tight text-void-900 dark:text-slate-50">
                 {title}
               </h2>
@@ -434,14 +441,14 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFoc
           {destructive && (
             <div className="mt-4 rounded-xl border border-status-red/20 bg-status-red/10 p-3">
               <p className="text-xs font-medium text-status-red">
-                <span className="inline-flex items-start gap-1.5"><AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />This action is permanent and cannot be undone.</span>
+                <span className="inline-flex items-start gap-1.5"><AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />{copy?.destructiveWarning ?? translate(shellMessages, "permanentAction")}</span>
               </p>
             </div>
           )}
           {requiredConfirmationText ? (
             <label className="mt-4 block">
               <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
-                Type <span className="font-mono font-bold">{requiredConfirmationText}</span> to continue
+                {copy?.requiredConfirmationPrompt ?? translate(shellMessages, "typeToContinue", { text: requiredConfirmationText })}
               </span>
               <input
                 type="text"
@@ -450,7 +457,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFoc
                 disabled={isProcessing}
                 autoComplete="off"
                 spellcheck={false}
-                aria-label={`Type ${requiredConfirmationText} to confirm`}
+                aria-label={copy?.requiredConfirmationInputLabel ?? translate(shellMessages, "typeToConfirm", { text: requiredConfirmationText })}
                 className="mt-2 w-full rounded-xl border border-black/[0.1] bg-white px-3 py-2.5 text-sm text-void-900 outline-none focus:border-status-red/45 focus:ring-2 focus:ring-status-red/20 disabled:opacity-50 dark:border-white/[0.12] dark:bg-void-900 dark:text-slate-50"
               />
             </label>
@@ -472,7 +479,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFoc
               label={confirmLabel}
               isLoading={isProcessing}
               disabled={!confirmationMatches}
-              disabledReason={requiredConfirmationText ? `Type ${requiredConfirmationText} to enable ${confirmLabel}` : undefined}
+              disabledReason={requiredConfirmationText ? translate(shellMessages, "typeToEnable", { text: requiredConfirmationText, label: confirmLabel }) : undefined}
               className={`inline-flex min-h-10 items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-safe:active:scale-[0.98] motion-reduce:duration-0 motion-reduce:ease-none disabled:cursor-not-allowed disabled:opacity-50 ${toneStyles.confirm}`}
             />
           ) : (
@@ -481,12 +488,12 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, restoreFoc
               onClick={() => handleClose(onConfirm)}
               disabled={isProcessing || !confirmationMatches}
               aria-busy={isProcessing}
-              aria-label={!confirmationMatches && requiredConfirmationText ? `Type ${requiredConfirmationText} to enable ${confirmLabel}` : undefined}
+              aria-label={!confirmationMatches && requiredConfirmationText ? copy?.requiredConfirmationDisabledLabel ?? translate(shellMessages, "typeToEnable", { text: requiredConfirmationText, label: confirmLabel }) : undefined}
               style={controlTransitionStyle}
               className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-safe:active:scale-[0.98] motion-reduce:duration-0 motion-reduce:ease-none disabled:cursor-not-allowed disabled:opacity-50 ${toneStyles.confirm} ${confirmFlash ? '!bg-status-green !text-white !border-transparent' : ''}`}
             >
-              {isProcessing && <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" /><span className="sr-only">Processing, please wait</span></>}
-              {isProcessing ? "Processing..." : confirmLabel}
+              {isProcessing && <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" /><span className="sr-only">{copy?.processingWait ?? translate(shellMessages, "processingPleaseWait")}</span></>}
+              {isProcessing ? copy?.processing ?? translate(shellMessages, "processing") : confirmLabel}
             </button>
           )}
         </div>

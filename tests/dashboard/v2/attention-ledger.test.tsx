@@ -12,6 +12,7 @@ import { useExecutionTimeline } from "../../../dashboard/src/hooks/ExecutionTime
 import type { ExecutionAttentionItemSummary } from "../../../dashboard/src/types.js";
 import * as useReducedMotionModule from "../../../dashboard/src/v2/hooks/use-reduced-motion.js";
 import gsap from "gsap";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
 
 vi.mock("../../../dashboard/src/hooks/ExecutionTimelineContext.js", () => ({
     useExecutionTimeline: vi.fn(),
@@ -175,5 +176,35 @@ describe("AttentionLedger", () => {
         expect(screen.getByText("Read-only blocker")).toBeInTheDocument();
         expect(screen.getByText("Shared rendering without duplicate actions.")).toBeInTheDocument();
         expect(screen.queryByRole("button", { name: /attention item/i })).not.toBeInTheDocument();
+    });
+
+    it("localizes German queue controls and metadata without changing attention content", () => {
+        vi.mocked(useExecutionTimeline).mockReturnValue({
+            ...baseContext,
+            execution: {
+                ...baseContext.execution,
+                attentionItems: [{
+                    ...baseContext.execution.attentionItems[0],
+                    attentionType: "merge_required",
+                    severity: "high",
+                    title: "Keep THIS attention title verbatim",
+                    summaryMarkdown: "Keep THIS intervention summary verbatim.",
+                }],
+            },
+        } as never);
+
+        render(
+            <DashboardI18nProvider initialLocale="de" storage={null}>
+                <AttentionLedger />
+            </DashboardI18nProvider>,
+        );
+
+        expect(screen.getByText("Aufmerksamkeitswarteschlange")).toBeInTheDocument();
+        expect(screen.getByText("Hoch")).toBeInTheDocument();
+        expect(screen.getByText("Zusammenführung erforderlich")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Aufmerksamkeitseintrag übernehmen: Keep THIS attention title verbatim" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Aufmerksamkeitseintrag lösen: Keep THIS attention title verbatim" })).toBeInTheDocument();
+        expect(screen.getByText("Keep THIS attention title verbatim")).toBeInTheDocument();
+        expect(screen.getByText("Keep THIS intervention summary verbatim.")).toBeInTheDocument();
     });
 });

@@ -1,6 +1,7 @@
 /** @vitest-environment happy-dom */
 import { h } from "preact";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/preact";
+import { cleanup, screen, waitFor, within } from "@testing-library/preact";
+import { renderWithDashboardI18n as render } from "../../../../../../tests/dashboard/helpers/dashboard-i18n-test-utils.js";
 import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -52,7 +53,7 @@ const model = (overrides: Partial<EmbeddingModelWithStatus> = {}): EmbeddingMode
   ...overrides,
 });
 
-const renderBrowser = (overrides: Partial<Parameters<typeof ModelBrowser>[0]> = {}) => {
+const renderBrowser = (overrides: Partial<Parameters<typeof ModelBrowser>[0]> = {}, locale: "en" | "de" = "en") => {
   const props = {
     models: [
       model({ downloaded: false }),
@@ -78,7 +79,7 @@ const renderBrowser = (overrides: Partial<Parameters<typeof ModelBrowser>[0]> = 
     ...overrides,
   };
 
-  render(<ModelBrowser {...props} />);
+  render(<ModelBrowser {...props} />, locale);
   return props;
 };
 
@@ -213,6 +214,24 @@ describe("ModelBrowser", () => {
     expect(memoryApiMock.createCustomEmbeddingModel).not.toHaveBeenCalled();
   });
 
+  it("localizes German catalog filters and custom-model validation without translating metadata", async () => {
+    const user = userEvent.setup();
+    renderBrowser({}, "de");
+
+    expect(screen.getByRole("region", { name: "Einbettungsmodelle" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Modelle durchsuchen")).toBeInTheDocument();
+    expect(screen.getByText("Fast local English embeddings for responsive memory search.")).toBeInTheDocument();
+    expect(screen.getAllByText("French")).not.toHaveLength(0);
+    expect(screen.getByRole("link", { name: "Apache-2.0 · vom Betreiber angegeben" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Benutzerdefiniertes Modell hinzufügen" }));
+    await user.type(screen.getByLabelText("Anzeigename"), "Untranslated Model Name");
+    await user.click(screen.getByRole("button", { name: "Hinzufügen" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Hugging-Face-Repository oder URL ist erforderlich.");
+    expect(memoryApiMock.createCustomEmbeddingModel).not.toHaveBeenCalled();
+  });
+
   it("submits a custom Hugging Face model and refreshes the model list", async () => {
     const user = userEvent.setup();
     const created = {
@@ -264,4 +283,16 @@ describe("ModelBrowser", () => {
     expect(props.onModelsChanged).toHaveBeenCalledWith(refreshed);
     expect(await screen.findByRole("status", { name: "Custom model status" })).toHaveTextContent("Acme Custom Embed added to embedding models.");
   });
+  it("localizes German filters, validation, measurements, and metadata-safe results", async () => {
+    const user = userEvent.setup();
+    renderBrowser({ models: [model({ sizeBytes: 1_500_000_000, language: "German (Germany)" })] }, "de");
+
+    expect(screen.getByRole("region", { name: "Einbettungsmodelle" })).toHaveTextContent("1,5 GB");
+    expect(screen.getAllByText("German (Germany)")).toHaveLength(2);
+    expect(screen.getByLabelText("Installationsstatus")).toHaveValue("all");
+    await user.click(screen.getByRole("button", { name: "Benutzerdefiniertes Modell hinzufügen" }));
+    await user.click(screen.getByRole("button", { name: "Hinzufügen" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Anzeigename ist erforderlich.");
+  });
+
 });
