@@ -15,6 +15,7 @@ const packDir = path.join(tempRoot, "pack");
 const installDir = path.join(tempRoot, "install");
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+const onnxRuntimeInstallMode = "skip";
 const ALLOWED_PACKAGED_CODE_UX_FILES = new Set([
   ".code-ux/agents/planning_agent.md",
   ".code-ux/agents/project_manager.md",
@@ -276,7 +277,17 @@ try {
     "--no-audit",
     "--no-fund",
     tarballPath,
-  ], { cwd: installDir });
+  ], {
+    cwd: installDir,
+    env: { ONNXRUNTIME_NODE_INSTALL: onnxRuntimeInstallMode },
+  });
+
+  await runStep(
+    "Load installed ONNX CPU runtime",
+    process.execPath,
+    ["--input-type=module", "--eval", "await import('onnxruntime-node')"],
+    { cwd: installDir },
+  );
 
   await runInstalledBinStep("Run installed codeux --help", "codeux", ["--help"], { cwd: installDir });
 
