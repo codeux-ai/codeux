@@ -76,12 +76,15 @@ function buildSprintStatusPresentation(input: SprintStatusPresentationInput): Sp
   const rawState = (input.state || "").toString().trim().toLowerCase();
   const state = rawState || "unknown";
   const pauseSource = resolvePauseSource(input);
+  const isActiveLifecycle = state === "running" || state === "queued" || state === "paused";
+  const isExecuting = state === "running" || state === "queued";
+  const reviewStatus = (input.latestReviewStatus || "").trim().toLowerCase().replaceAll("-", "_").replaceAll(" ", "_");
+  const isReviewActive = reviewStatus === "running" || reviewStatus === "pending" || reviewStatus === "in_progress";
 
   // 1. Merge Conflict Check (Base branch merge conflict)
   if (
-    input.attentionType === "merge_conflict" ||
-    input.pauseReason === "main_merge_blocked" ||
-    (state === "paused" && input.attentionType === "merge_conflict")
+    isActiveLifecycle
+    && (input.attentionType === "merge_conflict" || input.pauseReason === "main_merge_blocked")
   ) {
     return {
       statusLabel: "Merge Conflict",
@@ -96,7 +99,7 @@ function buildSprintStatusPresentation(input: SprintStatusPresentationInput): Sp
   }
 
   // 2. QA Gate Check
-  if (input.latestReviewStatus === "running") {
+  if (isExecuting && input.completion === 100 && isReviewActive) {
     return {
       statusLabel: "QA",
       title: "Sprint in QA Gate",
@@ -110,7 +113,7 @@ function buildSprintStatusPresentation(input: SprintStatusPresentationInput): Sp
   }
 
   // 3. Base Branch Merge (Attempting Merge) Check
-  const isAttemptingMerge = (state === "running" && input.completion === 100) || input.attentionType === "merge_required";
+  const isAttemptingMerge = isActiveLifecycle && input.attentionType === "merge_required";
   if (isAttemptingMerge) {
     return {
       statusLabel: "Merge",

@@ -59,6 +59,7 @@ describe("deriveWorkflowStatusPresentation", () => {
     const presentation = deriveWorkflowStatusPresentation({
       scope: "sprint",
       status: "running",
+      completion: 60,
       ciPresentation: successfulCi,
       review: {
         status: "completed",
@@ -76,6 +77,48 @@ describe("deriveWorkflowStatusPresentation", () => {
     expect(presentation.stages[2]).toMatchObject({ state: "pending", statusLabel: "QA pending" });
     expect(presentation.stages[3]).toMatchObject({ state: "pending", statusLabel: "Checks pending" });
     expect(presentation.stages[4]).toMatchObject({ state: "pending", statusLabel: "Merge pending" });
+  });
+
+  it("uses an active sprint-completion review as the QA stage in German", () => {
+    const presentation = deriveWorkflowStatusPresentation({
+      scope: "sprint",
+      status: "running",
+      completion: 100,
+      ciPresentation: successfulCi,
+      review: {
+        status: "in_progress",
+        outcome: null,
+        summary: "Externally supplied review summary",
+        findings: [],
+        reviewer: "QA Worker",
+        finishedAt: null,
+      },
+    }, "de");
+
+    expect(presentation).toMatchObject({ state: "in_progress", label: "QA läuft" });
+    expect(presentation.stages[0]).toMatchObject({ state: "successful", statusLabel: "Implementierung abgeschlossen" });
+    expect(presentation.stages[2]).toMatchObject({ state: "in_progress", statusLabel: "Prüfung läuft" });
+    expect(presentation.stages[3]).toMatchObject({ state: "successful", statusLabel: "Checks passed" });
+  });
+
+  it("restores a completed QA outcome when remediation reaches 100%", () => {
+    const presentation = deriveWorkflowStatusPresentation({
+      scope: "sprint",
+      status: "running",
+      completion: 100,
+      review: {
+        status: "completed",
+        outcome: "changes_requested",
+        summary: "One final correction is required.",
+        findings: [],
+        reviewer: "QA Worker",
+        finishedAt: "2026-07-14T08:00:00.000Z",
+      },
+    });
+
+    expect(presentation).toMatchObject({ state: "failed", tone: "qa_changes", label: "QA changes" });
+    expect(presentation.stages[0]).toMatchObject({ state: "successful", statusLabel: "Coding complete" });
+    expect(presentation.stages[2]).toMatchObject({ state: "failed", statusLabel: "Changes requested" });
   });
 
   it("settles the complete workflow when status, QA, CI, and merge have succeeded", () => {

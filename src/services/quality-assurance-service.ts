@@ -316,7 +316,14 @@ export class QualityAssuranceService {
       : existingRuns + 1;
 
     const runs = effectiveRequests.map((request) => {
-      const resumeFromRun = this.findResumableQaReviewerRun(previousTaskCycleRuns, request.agentPresetId);
+      // Resume a reviewer only while filling an interrupted partial cycle. Once
+      // that cycle produced a decisive verdict, the next cycle must inspect a
+      // fresh snapshot of the worker branch. Reusing an older cancelled run here
+      // can preserve its pre-follow-up workspace and request the same fix again
+      // even though the coding continuation already published it.
+      const resumeFromRun = recoveringPartialReviewerCycle
+        ? this.findResumableQaReviewerRun(previousTaskCycleRuns, request.agentPresetId)
+        : null;
       const run = this.deps.qaReviewRepository.createRun({
         ...request.runPayload,
         runIndex,
@@ -788,7 +795,9 @@ export class QualityAssuranceService {
       })
       : sprintAgents;
     const preparedSprintRuns = agentsToRun.map((agent) => {
-      const resumeFromRun = this.findResumableQaReviewerRun(latestRuns, agent.id);
+      const resumeFromRun = recoveringPartialReviewerCycle
+        ? this.findResumableQaReviewerRun(latestRuns, agent.id)
+        : null;
       const run = this.deps.qaReviewRepository.createRun({
         projectId: args.projectId,
         sprintId: args.sprintId,

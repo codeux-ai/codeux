@@ -363,4 +363,32 @@ describe("SprintCell visuals", () => {
     expect(within(review).getByText("Add a deterministic timeout regression test.")).toBeVisible();
     expect(within(review).getByText("T02")).toBeVisible();
   });
+
+  it("shows active final QA on the sprint gallery card", () => {
+    const sprintName = "Provider supplied sprint name";
+    renderWithI18n(
+      <SprintCell
+        sprint={{
+          ...sprint,
+          name: sprintName,
+          status: "running",
+          completion: 100,
+          latestReview: {
+            status: "pending",
+            outcome: null,
+            summary: "Provider-authored QA summary stays verbatim.",
+            findings: [],
+            reviewer: "QA Worker",
+            finishedAt: null,
+          },
+        }}
+        isEven={false}
+        accentColor="text-signal-600 dark:text-signal-300"
+      />,
+    );
+
+    expect(screen.getByText(sprintName)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /CI status: QA running/i })).toHaveTextContent("QA running");
+    expect(screen.queryByText("Merge running")).not.toBeInTheDocument();
+  });
 });

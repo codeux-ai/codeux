@@ -227,7 +227,7 @@ describe("SettingsIntegrationsPanel", () => {
     const { container } = render(<Harness />);
     const card = await waitFor(() => container.querySelector('[data-integration-card="automation-credentials"]') as HTMLElement);
     expect(container.textContent?.indexOf("Automation Credentials")).toBeLessThan(container.textContent?.indexOf("GitHub") ?? -1);
-    expect(within(card).getByText("Ready · not configured")).toBeTruthy();
+    expect(within(card).getByText("Ready, not configured.")).toBeTruthy();
     expect(screen.queryByText("Automation credential management")).toBeNull();
 
     const manageButton = within(card).getByRole("button", { name: "Manage" });
@@ -240,6 +240,47 @@ describe("SettingsIntegrationsPanel", () => {
     await user.keyboard("{Enter}");
     await waitFor(() => expect(screen.queryByText("Automation credential management")).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(manageButton));
+  });
+
+  it("localizes the ready credential status while preserving integration data", async () => {
+    vi.mocked(fetchAutomationCredentials).mockResolvedValue([]);
+    vi.mocked(fetchCredentialHealth).mockResolvedValue({
+      available: true,
+      secure: true,
+      provider: "local-file",
+      keyId: "root",
+      keyVersion: 1,
+    });
+
+    const { container } = render(<SettingsIntegrationsPanel state={{
+      activeScope: "project",
+      selectedProject: { id: "project-1", name: "Selected project" },
+      projects: [{ id: "project-1", name: "Selected project" }],
+      editableSettings: {
+        cliWorkflow: { executionMode: "DOCKER" },
+        git: { githubMode: "REMOTE" },
+      },
+      systemSettings: {
+        integrations: { providers: {}, githubToken: "", gitlabToken: "" },
+      },
+      projectSources: {},
+      selectedIntegration: null,
+      setSelectedIntegration: vi.fn(),
+      integrations: [
+        { id: "automation-credentials", label: "Automation Credentials", description: "Write-only project automation secrets" },
+      ],
+      importingHints: false,
+      externalHints: { resolved: {} },
+      handleImportHints: vi.fn(),
+      updateEditableSettings: vi.fn(),
+      updateSystem: vi.fn(),
+      updateProject: vi.fn(),
+    } as any} />, "de");
+
+    const card = await waitFor(() => container.querySelector('[data-integration-card="automation-credentials"]') as HTMLElement);
+    expect(within(card).getByText("Bereit, nicht konfiguriert.")).toBeTruthy();
+    expect(within(card).getByText("Automation Credentials")).toBeTruthy();
+    expect(within(card).queryByText("Ready, not configured.")).toBeNull();
   });
 
   it("keeps the selected integration detail in flow so long forms are not clipped", async () => {

@@ -434,6 +434,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           <WorkflowStatusBadge
             scope="sprint"
             status={sprint.status}
+            completion={sprint.completion}
             review={sprint.latestReview}
             ciPresentation={ciStatus}
             humanIntervention={humanIntervention}

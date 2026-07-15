@@ -2026,7 +2026,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                         ? t(settingsIntegrationsMessages, "notAvailable")
                         : configuredCount > 0
                           ? `${configuredCount} ${t(settingsIntegrationsMessages, "configured")}`
-                          : "Ready · not configured";
+                          : t(settingsIntegrationsMessages, "readyNotConfigured");
                     return (
                       <div key={integration.id} data-integration-card="automation-credentials" className="group relative min-h-[156px] overflow-hidden rounded-[1.35rem] border border-black/[0.06] bg-white/88 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.035)] dark:border-white/[0.08] dark:bg-void-800/78">
                         <div className="flex h-full flex-col gap-4">

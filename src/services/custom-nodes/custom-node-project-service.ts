@@ -108,7 +108,7 @@ function projectFiles(manifest: CustomNodeManifest): Record<string, string> {
   return {
     "node.json": `${JSON.stringify(manifest, null, 2)}\n`,
     "package.json": `${JSON.stringify({
-      name: packageName, version: `${manifest.version}.0.0`, private: true, type: "module", packageManager: "pnpm@10.33.0",
+      name: packageName, version: `${manifest.version}.0.0`, private: true, type: "module", packageManager: "pnpm@11.13.0",
       scripts: { typecheck: "tsc --noEmit", build: "tsc", test: "node --test dist/tests/*.test.js" },
       devDependencies: { "@types/node": "25.6.0", typescript: "5.9.3" },
     }, null, 2)}\n`,

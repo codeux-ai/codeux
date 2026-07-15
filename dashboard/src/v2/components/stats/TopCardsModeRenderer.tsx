@@ -25,7 +25,7 @@ import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
-import { useStatsI18n } from "../../pages/stats/stats-i18n.js";
+import { useStatsI18n, type StatsI18nValue } from "../../pages/stats/stats-i18n.js";
 import type { DashboardLocale } from "../../i18n/index.js";
 import {
   deriveCostAnalyticsViewModel,
@@ -117,42 +117,47 @@ function getSegmentShare(segment: SegmentDefinition | null, total: number): numb
   return (segment.value / total) * 100;
 }
 
-function getDataQualityHint(usage: ProjectExecutionStatsSnapshot["usage"]): string {
-  const degraded = (usage.estimatedInvocationCount || 0) + (usage.unavailableInvocationCount || 0) + (usage.unsupportedInvocationCount || 0);
-  if ((usage.reportedInvocationCount || 0) === 0 && degraded === 0) return "No telemetry";
-  if (degraded === 0) return "Reported";
-  if ((usage.unavailableInvocationCount || 0) > 0 || (usage.unsupportedInvocationCount || 0) > 0) return "Partial";
-  return "Estimated mix";
-}
-
 function getCoveredInvocationCount(provenance: CostProvenance): number {
   return provenance.configuredPricingInvocationCount
     + provenance.providerReportedCostInvocationCount;
 }
 
-function formatPricingCoverage(provenance: CostProvenance): string {
-  if (provenance.state === "unavailable") return "No usage";
-  if (provenance.state === "unknown") return "Unknown";
-  if (provenance.invocationCount <= 0) return "No usage";
-  return `${((getCoveredInvocationCount(provenance) / provenance.invocationCount) * 100).toFixed(1)}%`;
+function formatPricingCoverage(
+  provenance: CostProvenance,
+  locale: DashboardLocale,
+  text: StatsI18nValue["text"],
+): string {
+  if (provenance.state === "unavailable") return text("noUsage");
+  if (provenance.state === "unknown") return text("unknown");
+  if (provenance.invocationCount <= 0) return text("noUsage");
+  return new Intl.NumberFormat(locale, {
+    style: "percent",
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(getCoveredInvocationCount(provenance) / provenance.invocationCount);
 }
 
-function getPricingCoverageDetail(provenance: CostProvenance): string {
-  const calls = formatCount(provenance.invocationCount);
-  const covered = formatCount(getCoveredInvocationCount(provenance));
-  if (provenance.state === "unavailable") return "No provider calls were recorded in this window";
-  if (provenance.state === "unknown") return `Pricing provenance is unavailable for ${calls} calls`;
-  if (provenance.state === "unpriced") return `${calls} calls have usage telemetry but no usable price`;
-  if (provenance.state === "partial") return `${covered} of ${calls} calls priced; shown spend is a minimum`;
-  return `All ${calls} calls use configured or provider-reported pricing`;
+function getPricingCoverageDetail(
+  provenance: CostProvenance,
+  locale: DashboardLocale,
+  text: StatsI18nValue["text"],
+  plural: StatsI18nValue["plural"],
+): string {
+  const calls = formatCount(provenance.invocationCount, locale);
+  const variables = { calls, covered: formatCount(getCoveredInvocationCount(provenance), locale) };
+  if (provenance.state === "unavailable") return text("pricingCoverageNoCalls");
+  if (provenance.state === "unknown") return plural("pricingCoverageUnknownCalls", provenance.invocationCount, variables);
+  if (provenance.state === "unpriced") return plural("pricingCoverageUnpricedCalls", provenance.invocationCount, variables);
+  if (provenance.state === "partial") return plural("pricingCoveragePartialCalls", provenance.invocationCount, variables);
+  return plural("pricingCoverageCompleteCalls", provenance.invocationCount, variables);
 }
 
-function getPricingCoverageLabel(provenance: CostProvenance): string {
-  if (provenance.state === "complete") return "Fully priced";
-  if (provenance.state === "partial") return "Partial";
-  if (provenance.state === "unpriced") return "Unpriced";
-  if (provenance.state === "unknown") return "Unknown";
-  return "No usage";
+function getPricingCoverageLabel(provenance: CostProvenance, text: StatsI18nValue["text"]): string {
+  if (provenance.state === "complete") return text("fullyPriced");
+  if (provenance.state === "partial") return text("partial");
+  if (provenance.state === "unpriced") return text("unpriced");
+  if (provenance.state === "unknown") return text("unknown");
+  return text("noUsage");
 }
 
 export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> = ({
@@ -238,7 +243,7 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
     if (usage.reportedInvocationCount === 0 && degraded === 0) return text("noTelemetry");
     if (degraded === 0) return text("reported");
     if (usage.unavailableInvocationCount > 0 || usage.unsupportedInvocationCount > 0) return text("partial");
-    return locale === "de" ? "Geschätzter Mix" : "Estimated mix";
+    return text("estimatedMix");
   })();
   const telemetrySummary = buildTelemetrySourceSummary(usage, locale);
 
@@ -362,8 +367,8 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
     const provenance = cost.totalSpend.provenance;
     const taskCount = cost.averageCostPerTask.entityCount;
     const sprintCount = cost.averageCostPerSprint.entityCount;
-    const coverageDetail = getPricingCoverageDetail(provenance);
-    const coverageLabel = getPricingCoverageLabel(provenance);
+    const coverageDetail = getPricingCoverageDetail(provenance, locale, text, plural);
+    const coverageLabel = getPricingCoverageLabel(provenance, text);
 
     return (
       <>
@@ -371,7 +376,7 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
           label={text("totalSpend")}
           value={formatAdaptiveCurrency(cost.totalSpend, locale)}
           detail={coverageDetail}
-          secondaryDetail={`${formatCount(cost.calls)} provider calls · ${formatTokens(cost.tokens)} tokens`}
+          secondaryDetail={plural("providerCallsAndTokens", cost.calls, { calls: formatCount(cost.calls, locale), tokens: formatTokens(cost.tokens, locale) })}
           qualityHint={coverageLabel}
           accentHex={STATS_COLORS.clay}
           sparkline={metricSeries.totalCost}
@@ -409,9 +414,12 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
         />
         <StatsMetricCard
           label={text("pricingCoverage")}
-          value={formatPricingCoverage(provenance)}
+          value={formatPricingCoverage(provenance, locale, text)}
           detail={coverageDetail}
-          secondaryDetail={`${formatCount(provenance.configuredPricingInvocationCount)} configured · ${formatCount(provenance.providerReportedCostInvocationCount)} provider reported`}
+          secondaryDetail={text("configuredProviderReported", {
+            configured: formatCount(provenance.configuredPricingInvocationCount, locale),
+            reported: formatCount(provenance.providerReportedCostInvocationCount, locale),
+          })}
           qualityHint={coverageLabel}
           accentHex={STATS_COLORS.cyanMuted}
           sparkline={[]}

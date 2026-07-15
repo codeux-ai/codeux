@@ -109,6 +109,53 @@ describe("SprintLedger Component", () => {
     onBulkDelete: vi.fn(),
   };
 
+  it("keeps 100% task completion at Running without explicit merge evidence", () => {
+    renderWithI18n(
+      <SprintLedger
+        {...defaultProps}
+        sprints={[{ ...mockSprints[0]!, completion: 100 }]}
+        listWindow="all"
+      />,
+    );
+
+    expect(screen.getByText("Running")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /CI status: Coding in progress/i })).toBeInTheDocument();
+    expect(screen.queryByText("Merge")).not.toBeInTheDocument();
+  });
+
+  it("shows final sprint QA in German while preserving sprint content", () => {
+    const sprintName = "Externally supplied sprint name";
+    const sprintGoal = "Provider-authored goal remains unchanged.";
+    renderWithI18n(
+      <SprintLedger
+        {...defaultProps}
+        sprints={[{
+          ...mockSprints[0]!,
+          name: sprintName,
+          goal: sprintGoal,
+          completion: 100,
+          latestReview: {
+            status: "in_progress",
+            outcome: null,
+            summary: "Provider-authored QA summary stays verbatim.",
+            findings: [],
+            reviewer: "QA Worker",
+            finishedAt: null,
+          },
+        }]}
+        listWindow="all"
+      />,
+      {},
+      "de",
+    );
+
+    expect(screen.getByText(sprintName)).toBeInTheDocument();
+    expect(screen.getByText(sprintGoal)).toBeInTheDocument();
+    expect(screen.getAllByText("QA").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /QA läuft/i })).toHaveTextContent("QA läuft");
+    expect(screen.queryByText("Zusammenführung")).not.toBeInTheDocument();
+  });
+
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();

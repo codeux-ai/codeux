@@ -29,7 +29,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 10.33.0
+          version: 11.13.0
           run_install: false
 
       - name: Setup Node.js
@@ -42,7 +42,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: node_modules
-          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-node22-pnpm11.13.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -85,7 +85,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 10.33.0
+          version: 11.13.0
           run_install: false
 
       - name: Setup Node.js
@@ -147,7 +147,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 10.33.0
+          version: 11.13.0
           run_install: false
 
       - name: Setup Node.js
@@ -170,9 +170,9 @@ jobs:
             ~/AppData/Local/electron-builder/Cache
             ~/Library/Caches/electron
             ~/Library/Caches/electron-builder
-          key: ${{ runner.os }}-node22-pnpm10.33.0-desktop-release-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json', 'electron-builder.config.cjs', 'scripts/prepare-electron-runtime-deps.mjs') }}
+          key: ${{ runner.os }}-node22-pnpm11.13.0-desktop-release-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json', 'electron-builder.config.cjs', 'scripts/prepare-electron-runtime-deps.mjs') }}
           restore-keys: |
-            ${{ runner.os }}-node22-pnpm10.33.0-desktop-release-
+            ${{ runner.os }}-node22-pnpm11.13.0-desktop-release-
 
       - name: Install Linux packaging dependencies
         if: runner.os == 'Linux'

@@ -25,7 +25,7 @@ Provider output, runtime and API messages, diagnostics, project and sprint recor
 
 The internal Docs viewer follows the same rule. Its dashboard-owned chrome—navigation, search, pagination, counts, landmarks, and empty or error states—is localized. English documentation bodies, document titles, descriptions, section names, source paths, and source content remain English.
 
-Feature-owned catalogs cover the task board and workflow-status presentation, Custom Dashboards, Nodes, Settings integrations and chat connectors, and Stats cost analysis. Known dashboard-generated state labels are localized, while unknown status text, provider and runtime messages, connection diagnostics, logs, paths, persisted identifiers, and authored dashboard or task content remain unchanged. Cost, count, percentage, and date presentation uses the active locale without changing analytics values or backend payloads.
+Feature-owned catalogs cover the task board and workflow-status presentation, Custom Dashboards, Nodes, Settings integrations and chat connectors, and Stats cost analysis. Known dashboard-generated state labels are localized, including integration readiness and Stats pricing-coverage, provenance, data-quality, provider-call, and token summaries. Unknown status text, provider and runtime messages, connection diagnostics, logs, paths, persisted identifiers, and authored dashboard or task content remain unchanged. Cost, count, percentage, and date presentation uses the active locale without changing analytics values or backend payloads.
 
 ## Runtime architecture
 

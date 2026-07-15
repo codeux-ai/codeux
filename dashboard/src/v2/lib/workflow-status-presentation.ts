@@ -44,6 +44,7 @@ export interface WorkflowTaskIdentity {
 export interface WorkflowStatusPresentationInput {
   scope: "task" | "sprint";
   status: string;
+  completion?: number;
   review?: SprintReviewSummary | null;
   ciPresentation?: CiStatusPresentation | null;
   humanIntervention?: WorkflowHumanInterventionEvidence | null;
@@ -259,7 +260,9 @@ export function deriveWorkflowStatusPresentation(
 ): WorkflowStatusPresentation {
   const status = normalizeStatus(input.status);
   const workflowCompleted = status === "completed";
-  const suppressRunningSprintTaskGates = input.scope === "sprint" && status === "running";
+  const suppressRunningSprintTaskGates = input.scope === "sprint"
+    && status === "running"
+    && input.completion !== 100;
   const ciPresentation = suppressRunningSprintTaskGates ? null : input.ciPresentation;
   const stageReview = suppressRunningSprintTaskGates ? null : input.review;
   const pullRequest = resolveCiStep("pull_request", ciPresentation?.steps[0], workflowCompleted);

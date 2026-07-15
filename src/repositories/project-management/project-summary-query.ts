@@ -138,7 +138,7 @@ export function loadProjectSummaryAggregationMap(
       SELECT ss.project_id, 1 AS has_active_runs
       FROM scoped_sprints ss
       LEFT JOIN latest_sprint_runs lsr ON lsr.sprint_id = ss.id
-      WHERE COALESCE(lsr.status, ss.status) IN ('running', 'queued')
+      WHERE COALESCE(lsr.status, ss.status) IN ('running', 'queued', 'cancel_requested')
       GROUP BY ss.project_id
     `,
     items: uniqueProjectIds,

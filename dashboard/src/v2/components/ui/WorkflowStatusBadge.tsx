@@ -33,6 +33,7 @@ import { taskMessages } from "../../i18n/messages/tasks.js";
 export interface WorkflowStatusBadgeProps {
   scope: "task" | "sprint";
   status: string;
+  completion?: number;
   review?: SprintReviewSummary | null;
   ciPresentation?: CiStatusPresentation | null;
   humanIntervention?: WorkflowHumanInterventionEvidence | null;
@@ -82,9 +83,9 @@ const BADGE_TONES = {
 } as const;
 
 function reviewState(summary: SprintReviewSummary): "running" | "passed" | "changes_requested" | "failed" {
-  const status = summary.status.toLowerCase();
+  const status = summary.status.toLowerCase().replaceAll("-", "_").replaceAll(" ", "_");
   const outcome = summary.outcome?.toLowerCase() ?? "";
-  if (status === "running" || status === "pending") return "running";
+  if (status === "running" || status === "in_progress" || status === "pending") return "running";
   if (outcome === "changes_requested") return "changes_requested";
   if (["failed", "errored", "cancelled"].includes(status) || ["failed", "rejected"].includes(outcome)) return "failed";
   return "passed";
@@ -149,21 +150,21 @@ const WorkflowStageRow: FunctionComponent<{ stage: WorkflowStage; isLast: boolea
   const StateIcon = stage.state === "successful" ? Check : stage.state === "failed" ? XCircle : stage.state === "in_progress" ? Loader2 : Circle;
   return (
     <li
-      className="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-2.5"
+      className="grid grid-cols-[1.25rem_minmax(0,1fr)] items-stretch gap-2.5 pb-1.5"
       data-workflow-stage={stage.id}
       data-workflow-stage-state={stage.state}
       data-ci-step={["pull_request", "checks", "merge"].includes(stage.id) ? stage.id : undefined}
       data-ci-step-state={["pull_request", "checks", "merge"].includes(stage.id) ? stage.state : undefined}
     >
-      <span className="relative flex min-h-12 items-start justify-center pt-2" aria-hidden={true}>
-        <span className={`relative z-10 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${tone.circle}`}>
+      <span className="relative flex items-center justify-center self-stretch" aria-hidden={true}>
+        <span data-workflow-stage-marker className={`relative z-10 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${tone.circle}`}>
           <StateIcon className={`h-2.5 w-2.5 ${stage.state === "in_progress" ? "motion-safe:animate-spin motion-reduce:animate-none" : ""}`} strokeWidth={2.8} />
         </span>
         {!isLast && (
-          <span className={`workflow-status__connector absolute -bottom-2 left-1/2 top-7 w-1 -translate-x-1/2 ${stage.state === "failed" ? stage.id === "qa" && stage.statusLabel === "Changes requested" ? "text-blue-400" : "text-status-red/55" : stage.state === "successful" ? "text-status-green/55" : stage.state === "in_progress" ? "text-signal-500/70" : "text-slate-300 dark:text-slate-600"}`} />
+          <span className={`workflow-status__connector absolute -bottom-2 left-1/2 top-[calc(50%+0.75rem)] w-1 -translate-x-1/2 ${stage.state === "failed" ? stage.id === "qa" && stage.statusLabel === "Changes requested" ? "text-blue-400" : "text-status-red/55" : stage.state === "successful" ? "text-status-green/55" : stage.state === "in_progress" ? "text-signal-500/70" : "text-slate-300 dark:text-slate-600"}`} />
         )}
       </span>
-      <span className={`mb-1.5 grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded-xl border px-2.5 py-2 ${tone.row}`}>
+      <span className={`grid min-h-12 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded-xl border px-2.5 py-2 ${tone.row}`}>
         <StageIcon className={`h-3.5 w-3.5 ${tone.icon}`} strokeWidth={2.15} aria-hidden={true} />
         <span className="min-w-0">
           <span className="block text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{stage.label}</span>
@@ -293,6 +294,7 @@ const QaReviewCard: FunctionComponent<{ summary: SprintReviewSummary; headingId:
 export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = ({
   scope,
   status,
+  completion,
   review = null,
   ciPresentation = null,
   humanIntervention = null,
@@ -313,7 +315,7 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
   const reviewHeadingId = useId();
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   const normalizedStatus = status.trim().toLowerCase().replaceAll("-", "_").replaceAll(" ", "_");
-  const effectiveCiPresentation = scope === "sprint" && normalizedStatus === "running"
+  const effectiveCiPresentation = scope === "sprint" && normalizedStatus === "running" && completion !== 100
     ? null
     : ciPresentation;
   const localizedCiPresentation = useMemo(
@@ -323,10 +325,11 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
   const presentation = useMemo(() => deriveWorkflowStatusPresentation({
     scope,
     status,
+    completion,
     review,
     ciPresentation: localizedCiPresentation,
     humanIntervention,
-  }, locale), [humanIntervention, locale, localizedCiPresentation, review, scope, status]);
+  }, locale), [completion, humanIntervention, locale, localizedCiPresentation, review, scope, status]);
   const MainIcon = presentation.tone === "qa_changes"
     ? PencilLine
     : presentation.state === "failed"
@@ -508,7 +511,9 @@ export const WorkflowStatusBadge: FunctionComponent<WorkflowStatusBadgeProps> = 
           aria-label={translate(taskMessages, "workflowCiDetails")}
           aria-describedby={review ? reviewHeadingId : undefined}
           tabIndex={-1}
-          className={`fixed z-[99999] grid max-h-[calc(100vh-1.5rem)] w-[min(52rem,calc(100vw-1.5rem))] gap-3 overflow-y-auto motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 ${review ? "md:grid-cols-[minmax(0,19rem)_2rem_minmax(0,1fr)] md:items-center" : "max-w-[20rem]"}`}
+          data-glass
+          data-workflow-overlay-surface="translucent"
+          className={`fixed z-[99999] grid max-h-[calc(100vh-1.5rem)] w-[min(52rem,calc(100vw-1.5rem))] gap-3 overflow-y-auto rounded-[1.65rem] border border-white/70 bg-white/[0.82] p-2.5 shadow-[0_24px_70px_rgba(15,23,42,0.18)] backdrop-blur-xl motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 dark:border-white/[0.10] dark:bg-void-900/[0.82] ${review ? "md:grid-cols-[minmax(0,19rem)_2rem_minmax(0,1fr)] md:items-center" : "max-w-[20rem]"}`}
           style={{ top: coords.top, left: coords.left }}
           onMouseEnter={() => {
             pointerInsideRef.current = true;

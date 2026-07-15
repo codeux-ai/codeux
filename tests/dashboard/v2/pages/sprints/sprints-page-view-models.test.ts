@@ -13,6 +13,7 @@ import type { ConnectionState, DashboardSettings } from "../../../../../dashboar
 import type {
   ExecutionAttentionItemSummary,
   ExecutionRuntimeEventSummary,
+  ExecutionSprintRunSummary,
   ExecutionTaskDispatchSummary,
 } from "../../../../../src/contracts/app-types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../../src/repositories/settings-defaults.js";
@@ -52,6 +53,30 @@ const dispatch = (
   errorMessage: null,
   activeLeaseOwnerKey: null,
   activeLeaseExpiresAt: null,
+});
+
+const sprintRun = (
+  id: string,
+  startedAt: string,
+  overrides: Partial<ExecutionSprintRunSummary> = {},
+): ExecutionSprintRunSummary => ({
+  id,
+  projectId: "project-1",
+  sprintId: "sprint-1",
+  sprintName: "Sprint",
+  sprintNumber: 1,
+  status: "completed",
+  triggerType: "manual",
+  triggeredBy: null,
+  executorMode: "virtual",
+  startedAt,
+  finishedAt: null,
+  lastHeartbeatAt: null,
+  createdAt: startedAt,
+  activeLeaseOwnerKey: null,
+  activeLeaseExpiresAt: null,
+  humanIntervention: null,
+  ...overrides,
 });
 
 const ciEvent = (
@@ -363,6 +388,50 @@ describe("Sprints Page View Models", () => {
 
       expect(statuses.has("sprint-1")).toBe(false);
       expect(statuses.get("sprint-2")).toMatchObject({ state: "failed", label: "CI failed" });
+    });
+
+    it("scopes CI evidence to the latest sprint rerun", () => {
+      const oldRun = sprintRun("run-old", "2026-07-13T09:00:00.000Z");
+      const currentRun = sprintRun("run-current", "2026-07-13T11:00:00.000Z", { status: "running" });
+      const oldFailure = ciEvent("old-failure", { state: "waiting_checks", prNumber: 1, hasFailedChecks: true }, {
+        sprintRunId: oldRun.id,
+      });
+      const currentProgress = ciEvent("current-progress", { state: "waiting_checks", prNumber: 2, hasPendingChecks: true }, {
+        sprintRunId: currentRun.id,
+        createdAt: "2026-07-13T11:05:00.000Z",
+      });
+      const oldAttention = ciAttention("open", { sprintRunId: oldRun.id });
+      const oldDispatch = { ...dispatch("task-1", "T01"), sprintRunId: oldRun.id };
+      const currentDispatch = { ...dispatch("task-1", "T01"), sprintRunId: currentRun.id };
+
+      const status = buildCiStatusBySprintId(
+        [{ id: "sprint-1" }],
+        [oldDispatch, currentDispatch],
+        [oldFailure, currentProgress],
+        [oldAttention],
+        [currentRun, oldRun],
+      ).get("sprint-1");
+
+      expect(status).toMatchObject({ state: "in_progress", label: "CI running" });
+      expect(status?.failureKind).toBeUndefined();
+    });
+
+    it("does not resurrect a previous run badge when the current rerun has no CI evidence", () => {
+      const oldRun = sprintRun("run-old", "2026-07-13T09:00:00.000Z");
+      const currentRun = sprintRun("run-current", "2026-07-13T11:00:00.000Z", { status: "running" });
+      const oldFailure = ciEvent("old-failure", { state: "waiting_checks", prNumber: 1, hasFailedChecks: true }, {
+        sprintRunId: oldRun.id,
+      });
+
+      const statuses = buildCiStatusBySprintId(
+        [{ id: "sprint-1" }],
+        [{ ...dispatch("task-1", "T01"), sprintRunId: oldRun.id }],
+        [oldFailure],
+        [ciAttention("open", { sprintRunId: oldRun.id })],
+        [oldRun, currentRun],
+      );
+
+      expect(statuses.has("sprint-1")).toBe(false);
     });
   });
 

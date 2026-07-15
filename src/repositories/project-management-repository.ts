@@ -633,7 +633,7 @@ export class ProjectManagementRepository {
       LEFT JOIN latest_sprint_runs ON latest_sprint_runs.sprint_id = tasks.sprint_id
       WHERE tasks.project_id = ?
         AND (
-          latest_sprint_runs.status IN ('queued', 'running')
+          latest_sprint_runs.status IN ('queued', 'running', 'cancel_requested')
           OR (latest_sprint_runs.status IS NULL AND sprints.status = 'running')
         )
       ORDER BY tasks.sort_order ASC, tasks.created_at ASC, tasks.task_key ASC
@@ -1392,7 +1392,12 @@ export class ProjectManagementRepository {
       isGeneratedName: toBoolean(row.is_generated_name),
       originalPrompt: row.original_prompt || null,
       goal: row.goal || "",
-      status: mapEffectiveSprintStatus(row.status, summaryAggregation.latestRunStatus),
+      status: mapEffectiveSprintStatus(
+        row.status,
+        row.updated_at,
+        summaryAggregation.latestRunStatus,
+        summaryAggregation.latestRunUpdatedAt,
+      ),
       showcasePinned: toBoolean(row.showcase_pinned),
       startDate: row.start_date,
       endDate: row.end_date,
@@ -1925,15 +1930,34 @@ function normalizeImportedTaskText(value?: string | null): string {
 
 function mapEffectiveSprintStatus(
   storedStatus: SprintRecord["status"],
+  storedUpdatedAt: string,
   latestRunStatus: string | null,
+  latestRunUpdatedAt: string | null,
 ): SprintRecord["status"] {
+  const storedStatusIsTerminal = storedStatus === "completed"
+    || storedStatus === "failed"
+    || storedStatus === "cancelled";
+  const latestRunStatusIsTerminal = latestRunStatus === "completed"
+    || latestRunStatus === "failed"
+    || latestRunStatus === "cancelled";
+  const storedStatusIsCurrent = latestRunStatusIsTerminal
+    && latestRunUpdatedAt !== null
+    && (
+      storedUpdatedAt > latestRunUpdatedAt
+      || (storedUpdatedAt === latestRunUpdatedAt && storedStatusIsTerminal)
+    );
+
+  if (storedStatusIsCurrent) {
+    return storedStatus;
+  }
+
   switch (latestRunStatus) {
     case "queued":
     case "running":
+    case "cancel_requested":
       return "running";
     case "paused":
       return "paused";
-    case "cancel_requested":
     case "cancelled":
       return "cancelled";
     case "completed":
@@ -1966,6 +1990,7 @@ function emptySprintSummaryAggregation(): SprintSummaryAggregation {
     completedTasks: 0,
     progressTasks: [],
     latestRunStatus: null,
+    latestRunUpdatedAt: null,
     ciStatus: null,
   };
 }

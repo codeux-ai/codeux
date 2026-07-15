@@ -5,8 +5,6 @@ import { RECOVERED_STALE_QA_SUMMARY_PREFIX } from "../../domain/qa-review/qa-rev
 import { calculateInvocationDurationMs } from "./recovery-utils.js";
 import type { DockerContainer } from "../../contracts/app-types.js";
 
-const QA_RUN_START_TIMEOUT_MS = 60_000;
-
 interface QaReviewRecoveryServiceDeps {
   executionRepository: ExecutionRepository;
   qaReviewRepository?: QaReviewRepository;
@@ -148,9 +146,6 @@ export class QaReviewRecoveryService {
     invocation: ExecutionInvocationRecord | null,
     activeContainerSessionIds: ReadonlySet<string>,
   ): string | null {
-    const referenceAt = Date.parse(invocation?.lastMessageAt || invocation?.startedAt || run.startedAt);
-    const ageMs = Number.isFinite(referenceAt) ? Date.now() - referenceAt : 0;
-
     if (!invocation) {
       // Startup is a process boundary: a running review left without a backing
       // invocation cannot still be making progress in this runtime. Recover it
@@ -163,17 +158,15 @@ export class QaReviewRecoveryService {
     }
 
     if (!invocation.providerInvocationId) {
-      if (ageMs < QA_RUN_START_TIMEOUT_MS) {
-        return null;
-      }
+      // Startup is already a process boundary. A structured invocation with no
+      // provider-runtime row cannot still start in the process that created it,
+      // so the normal in-process dispatch grace period would only leave QA
+      // blocked until the stale-run timeout expires.
       return `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after the backing invocation stayed running without provider runtime linkage. Code UX will retry the review.`;
     }
 
     const providerInvocation = this.deps.executionRepository.getProviderInvocationUsage(invocation.providerInvocationId);
     if (!providerInvocation) {
-      if (ageMs < QA_RUN_START_TIMEOUT_MS) {
-        return null;
-      }
       return `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after the backing provider invocation disappeared. Code UX will retry the review.`;
     }
 
