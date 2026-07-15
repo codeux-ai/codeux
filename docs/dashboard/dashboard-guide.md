@@ -673,6 +673,8 @@ Sprints, Tasks, and Live use the unified interactive workflow badge for persiste
 - Jules task dispatches now appear in the Live invocation feed and Chat invocation tab immediately with a running placeholder row; Jules live/terminal sync later replaces the placeholder transcript with the real remote conversation and estimated usage
 - The Live page now keeps the Git/CI/PR card in a dedicated `GitCIStatusPanel` component so the page shell stays focused on wiring runtime state, controls, and layout
 - Live task stats, filter counts, the active filtered task list, and per-card runtime payloads are memoized from the selected project's runtime snapshot so high-frequency realtime updates do not repeatedly recompute unchanged projections
+- Live status timestamps are normalized before localized formatting. ISO values, Unix seconds, Unix milliseconds, and the legacy 12-hour time-only value emitted by runtime status assembly render safely; malformed values hide the optional **Updated** label instead of failing the page render.
+- Animated shader backgrounds use a timer-paced 20 fps paint loop. The timer runs before requesting the next animation frame, preventing software and no-vsync renderers from busy-spinning while the Live page builds its task cards and DAG.
 - Live task cards, the DAG, and timing summaries now render from the same projected task model:
   - the task list now comes from the selected sprint inside the unified `/api/live` snapshot instead of being reconstructed from separate task, status, and activity endpoints in the browser
   - task ordering, dependency edges, visible phase, and task activities all come from that same selected-sprint snapshot

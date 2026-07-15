@@ -9,6 +9,7 @@ import {
   defineDashboardMessages,
   initializeDashboardLocale,
   interpolateDashboardMessage,
+  parseDashboardTimestamp,
   translateDashboardMessage,
   translateDashboardPlural,
   useDashboardI18n,
@@ -259,5 +260,22 @@ describe("dashboard i18n foundation", () => {
     expect(formatters.formatList(["Planen", "Bauen", "Prüfen"])).toBe(
       new Intl.ListFormat("de").format(["Planen", "Bauen", "Prüfen"]),
     );
+  });
+
+  it("normalizes ISO, Unix-second, and Unix-millisecond runtime timestamps safely", () => {
+    const expected = "2026-07-13T14:05:00.000Z";
+    const milliseconds = Date.parse(expected);
+    const seconds = Math.floor(milliseconds / 1_000);
+
+    expect(parseDashboardTimestamp(expected)?.toISOString()).toBe(expected);
+    expect(parseDashboardTimestamp(String(seconds))?.toISOString()).toBe(expected);
+    expect(parseDashboardTimestamp(milliseconds)?.toISOString()).toBe(expected);
+    const legacyTime = parseDashboardTimestamp("6:05:30 PM");
+    expect(legacyTime?.getHours()).toBe(18);
+    expect(legacyTime?.getMinutes()).toBe(5);
+    expect(legacyTime?.getSeconds()).toBe(30);
+    expect(parseDashboardTimestamp("not-a-timestamp")).toBeNull();
+    expect(parseDashboardTimestamp("13:05:30 PM")).toBeNull();
+    expect(parseDashboardTimestamp(null)).toBeNull();
   });
 });

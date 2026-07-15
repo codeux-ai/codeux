@@ -15,6 +15,7 @@ import { HumanInterventionBadge } from "./ui/HumanInterventionBadge.js";
 import { getSprintStatusPresentation } from "../lib/sprint-status-presentation.js";
 import { PageHeader } from "./layout/PageHeader.js";
 import { useLiveI18n } from "../i18n/messages/live.js";
+import { parseDashboardTimestamp } from "../i18n/formatters.js";
 
 type HeaderView = "stats" | "race" | "dag";
 
@@ -58,6 +59,7 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
       humanInterventionOwnerType: pausedIntervention?.ownerType ?? null,
     });
     const showStatusPanel = !hasLiveSprint && (sprintStatusPresentation.isManualPause || sprintStatusPresentation.isSystemStop);
+    const statusTimestampDate = parseDashboardTimestamp(statusTimestamp);
     const localizedStatus = {
       statusLabel: t(sprintStatusPresentation.isManualPause ? "paused" : "stopped"),
       title: sprintStatusPresentation.isManualPause
@@ -200,9 +202,9 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                             </div>
                         )}
                     </div>
-                    {statusTimestamp && hasSprintContext && (
+                    {statusTimestampDate && hasSprintContext && (
                         <span className="text-[10px] font-mono text-slate-400">
-                            {t("updatedAt", { time: formatTime(new Date(statusTimestamp)) })}
+                            {t("updatedAt", { time: formatTime(statusTimestampDate) })}
                         </span>
                     )}
                 </div>

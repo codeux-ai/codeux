@@ -315,6 +315,28 @@ describe("LiveSessionPage Status Regression", () => {
     expect(screen.getAllByRole("status").some((status) => status.textContent?.includes("DAG view selected."))).toBe(true);
   });
 
+  it("renders legacy time-only status timestamps without crashing the active Live page", () => {
+    const runtimeTimestamp = "6:05:30 PM";
+    const timestampDate = new Date(0);
+    timestampDate.setHours(18, 5, 30, 0);
+    const expectedTime = new Intl.DateTimeFormat("en", { hour: "numeric", minute: "2-digit" })
+      .format(timestampDate);
+    vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
+      status: {
+        subtasks: [],
+        timestamp: runtimeTimestamp,
+        project_id: "proj-1",
+        sprint_id: "sprint-1",
+      },
+      tasksWithLiveActivities: [liveTask({ status: "COMPLETED" })],
+    }));
+
+    renderWithI18n(<LiveSessionPage />);
+
+    expect(screen.getByText(`Updated ${expectedTime}`)).toBeInTheDocument();
+    expect(screen.getByText("Live implementation task")).toBeInTheDocument();
+  });
+
   it("updates persisted CI evidence live and ignores newer events from unrelated tasks", () => {
     vi.mocked(useDashboardRuntimeData).mockReturnValue(baseRuntimeData({
       tasksWithLiveActivities: [liveTask()],

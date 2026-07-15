@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "preact/hooks";
 import * as THREE from "../../../lib/three-lite.js";
+import { startPacedAnimationLoop } from "../../lib/paced-animation-loop.js";
 
 const RENDER_SCALE = 0.35;
 
@@ -141,16 +142,9 @@ export const QuantumFieldBackground = ({ forceDark = false, className = "" }: { 
     const mo = new MutationObserver(() => { targetDark = isDarkMode(forceDark) ? 1.0 : 0.0; });
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
 
-    let animId = 0;
     const startTime = performance.now();
-    const FRAME_INTERVAL = 1000 / 20;
-    let lastFrame = 0;
 
-    const animate = () => {
-      animId = requestAnimationFrame(animate);
-      const now = performance.now();
-      if (now - lastFrame < FRAME_INTERVAL) return;
-      lastFrame = now;
+    const stopAnimation = startPacedAnimationLoop((now) => {
       const elapsed = (now - startTime) * 0.001;
 
       currentDark += (targetDark - currentDark) * 0.05;
@@ -163,8 +157,7 @@ export const QuantumFieldBackground = ({ forceDark = false, className = "" }: { 
       mat.uniforms.uMouse.value.set(mouseX, mouseY);
 
       renderer.render(scene, camera);
-    };
-    animate();
+    });
 
     const ro = new ResizeObserver((entries) => {
       const { width, height } = entries[0]!.contentRect;
@@ -175,7 +168,7 @@ export const QuantumFieldBackground = ({ forceDark = false, className = "" }: { 
     ro.observe(el);
 
     return () => {
-      cancelAnimationFrame(animId);
+      stopAnimation();
       window.removeEventListener("mousemove", handleMouseMove);
       mo.disconnect();
       ro.disconnect();
