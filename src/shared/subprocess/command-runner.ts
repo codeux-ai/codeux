@@ -961,7 +961,7 @@ export class CommandRunner {
       const dotGit = path.join(current, ".git");
       if (fs.existsSync(dotGit)) {
         const projectRoot = CommandRunner.resolveProjectRootFromDotGit(current, dotGit);
-        return { projectRoot };
+        return projectRoot ? { projectRoot } : null;
       }
       const parent = path.dirname(current);
       if (parent === current) {
@@ -971,21 +971,24 @@ export class CommandRunner {
     }
   }
 
-  private static resolveProjectRootFromDotGit(worktreeRoot: string, dotGit: string): string {
+  private static resolveProjectRootFromDotGit(worktreeRoot: string, dotGit: string): string | null {
     try {
       const stat = fs.statSync(dotGit);
       if (stat.isDirectory()) {
-        return path.resolve(worktreeRoot);
+        return CommandRunner.isValidGitDirectory(dotGit) ? path.resolve(worktreeRoot) : null;
       }
       if (!stat.isFile()) {
-        return path.resolve(worktreeRoot);
+        return null;
       }
       const content = fs.readFileSync(dotGit, "utf8").trim();
       const match = /^gitdir:\s*(.+)$/i.exec(content);
       if (!match) {
-        return path.resolve(worktreeRoot);
+        return null;
       }
       const gitDir = path.resolve(worktreeRoot, match[1]);
+      if (!CommandRunner.isValidGitDirectory(gitDir)) {
+        return null;
+      }
       const commonDirFile = path.join(gitDir, "commondir");
       if (!fs.existsSync(commonDirFile)) {
         return path.resolve(worktreeRoot);
@@ -996,9 +999,21 @@ export class CommandRunner {
       }
       const resolvedCommonDir = path.resolve(gitDir, commonDir);
       const parent = path.dirname(resolvedCommonDir);
-      return fs.existsSync(path.join(parent, ".git")) ? parent : path.resolve(worktreeRoot);
+      const projectGitDir = path.join(parent, ".git");
+      return CommandRunner.pathIdentityStatic(resolvedCommonDir) === CommandRunner.pathIdentityStatic(projectGitDir)
+        && CommandRunner.isValidGitDirectory(projectGitDir)
+        ? parent
+        : path.resolve(worktreeRoot);
     } catch {
-      return path.resolve(worktreeRoot);
+      return null;
+    }
+  }
+
+  private static isValidGitDirectory(candidate: string): boolean {
+    try {
+      return fs.statSync(candidate).isDirectory() && fs.statSync(path.join(candidate, "HEAD")).isFile();
+    } catch {
+      return false;
     }
   }
 
