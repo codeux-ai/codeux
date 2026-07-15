@@ -241,21 +241,21 @@
     },
     {
       "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
-      "line": 1515,
+      "line": 1528,
       "kind": "jsx-text",
       "text": "/mnt/code-ux/google-drive",
       "rationale": "This is an exact technical path, command, identifier, or user-entered value example and must remain verbatim."
     },
     {
       "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
-      "line": 1688,
+      "line": 1701,
       "kind": "attribute:placeholder",
       "text": "agents@codeux.ai",
       "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."
     },
     {
       "path": "dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.tsx",
-      "line": 1864,
+      "line": 1877,
       "kind": "attribute:placeholder",
       "text": "https://api.example.com",
       "rationale": "This is an example runtime identifier or user-authored routing value and remains verbatim."

@@ -64,7 +64,7 @@ export const TaskCardActionMenu: FunctionComponent<{
       return;
     }
 
-    restoreTriggerFocus();
+    window.setTimeout(restoreTriggerFocus, 0);
   };
 
   return (

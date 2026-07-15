@@ -8,6 +8,7 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import { renderWithI18n } from "../render-with-i18n.js";
 import { useSprintsPageActions } from "../../../dashboard/src/v2/pages/sprints/use-sprints-page-actions.js";
 import { useSprintsPageData } from "../../../dashboard/src/v2/pages/sprints/use-sprints-page-data.js";
+import { fetchAgentPresets } from "../../../dashboard/src/v2/lib/agent-preset-api.js";
 
 expect.extend(matchers);
 
@@ -316,6 +317,25 @@ describe("useSprintsPageData sprint-number reservations", () => {
     await waitFor(() => {
       expect(screen.getByTestId("next-id")).toHaveTextContent("SPR-02");
     });
+  });
+
+  it("aborts the agent-preset request when the sprint page unmounts", async () => {
+    let requestSignal: AbortSignal | undefined;
+    vi.mocked(fetchAgentPresets).mockImplementationOnce((_projectId, signal) => {
+      requestSignal = signal;
+      return new Promise((_resolve, reject) => {
+        signal?.addEventListener("abort", () => reject(new Error("request aborted")), { once: true });
+      });
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const view = renderWithI18n(<HookHarness />);
+
+    await waitFor(() => expect(requestSignal).toBeDefined());
+    view.unmount();
+    await waitFor(() => expect(requestSignal?.aborted).toBe(true));
+
+    expect(consoleError).not.toHaveBeenCalledWith("Failed to fetch agent presets", expect.anything());
+    consoleError.mockRestore();
   });
 
   it("creates a sprint without passing imported tasks in the create payload and then adds them through the imported-task API", async () => {

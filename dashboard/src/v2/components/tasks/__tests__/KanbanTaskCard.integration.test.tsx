@@ -753,7 +753,7 @@ describe("KanbanTaskCard Integration", () => {
 
     expect(mockRequestConfirm).toHaveBeenCalled();
     expect(onDelete).not.toHaveBeenCalled();
-    expect(actionTrigger).toHaveFocus();
+    await waitFor(() => expect(actionTrigger).toHaveFocus());
   });
 
   it("provides accurate drag-and-drop screen-reader guidance", async () => {
@@ -896,7 +896,8 @@ describe("KanbanTaskCard Integration", () => {
 
     expect(screen.getByText("Keep persisted English title")).toBeInTheDocument();
     expect(screen.getByText("In Bearbeitung")).toBeInTheDocument();
-    const deleteButton = screen.getByRole("button", { name: /Aufgabe TASK_KEY_DE_1 löschen/i });
+    fireEvent.click(screen.getByRole("button", { name: /Aufgabenaktionen für Aufgabe TASK_KEY_DE_1 öffnen/i }));
+    const deleteButton = await screen.findByRole("menuitem", { name: /Aufgabe TASK_KEY_DE_1 löschen/i });
     expect(deleteButton).toHaveTextContent("Löschen");
     fireEvent.click(deleteButton);
 

@@ -1335,6 +1335,19 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
           {chatProviders.error ? (
             <NoticePanel tone="error" title={t(settingsIntegrationsMessages, "chatConnectorUnavailable")}>{chatProviders.error}</NoticePanel>
           ) : null}
+          {chatProviders.statusMessage ? (
+            <NoticePanel
+              tone={chatProviders.statusMessage === "testingChatConnector" ? "pending" : "success"}
+              title={t(
+                settingsIntegrationsMessages,
+                chatProviders.statusMessage === "testingChatConnector"
+                  ? "chatConnectorActionInProgress"
+                  : "chatConnectorActionCompleted",
+              )}
+            >
+              {t(settingsIntegrationsMessages, chatProviders.statusMessage)}
+            </NoticePanel>
+          ) : null}
           {definition ? (
             <NoticePanel title={`${definition.label} ${t(settingsIntegrationsMessages, "setupGuidance")}`}>
               <ul className="list-disc space-y-1 pl-4">
