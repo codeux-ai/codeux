@@ -4,7 +4,22 @@ import type {
   ChatProviderConnectionInternalRecord,
   ChatProviderMessageDeliveryRecord,
 } from "../contracts/chat-provider-types.js";
-import { redactMetadata, redactText } from "../shared/security/redaction.js";
+import {
+  CHAT_CONNECTOR_REGISTRY,
+  type ChatConnectorRegistry,
+} from "../domain/chat-connectors/registry.js";
+import type {
+  ChatConnectorCommandOutboundRequest,
+  ChatConnectorHttpOutboundRequest,
+  ChatConnectorProfile,
+} from "../domain/chat-connectors/types.js";
+import type { ImessageBridgeEnvelope } from "../domain/chat-connectors/providers/imessage.js";
+import { ChatConnectorOutboundResponseError } from "../domain/chat-connectors/types.js";
+import { redactText } from "../shared/security/redaction.js";
+import {
+  ImessageNativeBridge,
+  ImessageNativeBridgeError,
+} from "./chat-providers/imessage-native-bridge.js";
 
 export interface ChatProviderOutboundBridgePayload {
   providerKind: string;
@@ -23,11 +38,16 @@ export interface ChatProviderOutboundAdapterContext {
   delivery: ChatProviderMessageDeliveryRecord;
   payload: ChatProviderOutboundBridgePayload;
   correlationId: string;
+  signal?: AbortSignal;
 }
 
 export interface ChatProviderOutboundAdapterResult {
   externalMessageId?: string | null;
   responseMetadata?: Record<string, unknown>;
+  failure?: {
+    message: string;
+    retryable: boolean;
+  };
 }
 
 export interface ChatProviderOutboundAdapter {
@@ -39,6 +59,8 @@ export class ChatProviderOutboundAdapterError extends Error {
     message: string,
     readonly retryable: boolean,
     readonly statusCode?: number,
+    readonly retryAfterMs?: number,
+    readonly outcome: "rejected" | "ambiguous" | "cancelled" = "rejected",
   ) {
     super(redactText(message));
     this.name = "ChatProviderOutboundAdapterError";
@@ -51,91 +73,191 @@ interface NativeCommandResult {
   stderr: string;
 }
 
-const DEFAULT_TIMEOUT_MS = 15_000;
-
-export function createDefaultChatProviderOutboundAdapter(): ChatProviderOutboundAdapter {
-  return new ConfiguredChatProviderOutboundAdapter();
+export function createDefaultChatProviderOutboundAdapter(
+  registry: ChatConnectorRegistry = CHAT_CONNECTOR_REGISTRY,
+): ChatProviderOutboundAdapter {
+  return new ConfiguredChatProviderOutboundAdapter(registry);
 }
 
 export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutboundAdapter {
+  private readonly imessageNativeBridge = new ImessageNativeBridge();
+  private readonly rateLimitReadyAt = new Map<string, number>();
+
+  constructor(private readonly registry: ChatConnectorRegistry = CHAT_CONNECTOR_REGISTRY) {}
+
   async send(context: ChatProviderOutboundAdapterContext): Promise<ChatProviderOutboundAdapterResult> {
-    switch (context.connection.bridgeMode) {
-      case "managed_bridge":
-        return this.sendHttp(context, resolveManagedUrl(context.connection.setup), "managed_bridge");
-      case "webhook":
-        return this.sendHttp(context, resolveWebhookUrl(context.connection.setup), "webhook");
-      case "native_bridge":
-        return this.sendNative(context);
-      default:
-        throw new ChatProviderOutboundAdapterError("Unsupported chat provider bridge mode.", false);
+    let profile: ChatConnectorProfile;
+    try {
+      profile = this.registry.getForMode(context.connection.providerKind, context.connection.bridgeMode);
+      const request = profile.outbound.buildRequest(context);
+      return request.transport === "http"
+        ? await this.sendHttp(context, profile, request)
+        : await this.sendNative(context, profile, request);
+    } catch (error) {
+      if (error instanceof ChatProviderOutboundAdapterError) {
+        throw error;
+      }
+      throw new ChatProviderOutboundAdapterError(
+        error instanceof Error ? error.message : "Unsupported chat provider bridge mode.",
+        false,
+      );
     }
   }
 
   private async sendHttp(
     context: ChatProviderOutboundAdapterContext,
-    url: string,
-    mode: "managed_bridge" | "webhook",
+    profile: ChatConnectorProfile,
+    request: ChatConnectorHttpOutboundRequest,
   ): Promise<ChatProviderOutboundAdapterResult> {
-    const normalizedUrl = requireHttpUrl(url, `${mode} bridge URL`);
-    const headers: Record<string, string> = {
-      "content-type": "application/json",
-      "x-correlation-id": context.correlationId,
-      "x-codeux-provider-kind": context.connection.providerKind,
-      "x-codeux-bridge-mode": context.connection.bridgeMode,
-    };
-    const bearer = getFirstSecret(context.connection.secrets, [
-      "bridgeApiKey",
-      "bridgeToken",
-      "botToken",
-      "webhookSecret",
-      "signingSecret",
-      "botAppPassword",
-    ]);
+    const normalizedUrl = requireHttpUrl(request.url, request.label);
+    const headers = { ...request.headers };
+    const bearer = getFirstSecret(context.connection.secrets, request.bearerSecretKeys);
     if (bearer) {
       headers.authorization = `Bearer ${bearer}`;
     }
 
+    await this.waitForRateLimit(request, context.signal);
+
     let response: Response;
     try {
+      const timeoutSignal = AbortSignal.timeout(request.timeoutMs);
       response = await fetch(normalizedUrl, {
         method: "POST",
         headers,
-        body: JSON.stringify(context.payload),
-        signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+        body: JSON.stringify(request.body),
+        signal: context.signal ? AbortSignal.any([context.signal, timeoutSignal]) : timeoutSignal,
       });
     } catch (error) {
+      if (context.signal?.aborted) {
+        throw new ChatProviderOutboundAdapterError("Outbound delivery was cancelled.", false, undefined, undefined, "cancelled");
+      }
+      const ambiguous = profile.outbound.ambiguousTransportFailureModes?.includes(context.connection.bridgeMode) === true;
       throw new ChatProviderOutboundAdapterError(
-        `Failed to reach ${mode} bridge: ${error instanceof Error ? error.message : String(error)}`,
-        true,
+        ambiguous
+          ? "The provider send did not return a response; delivery status is unknown."
+          : `Failed to reach ${context.connection.bridgeMode} bridge: ${error instanceof Error ? error.message : String(error)}`,
+        !ambiguous,
+        undefined,
+        undefined,
+        ambiguous ? "ambiguous" : "rejected",
       );
     }
 
     const responseText = await response.text().catch(() => "");
-    if (!response.ok) {
+    const responseContext = {
+      bridgeMode: context.connection.bridgeMode,
+      mode: context.connection.bridgeMode,
+      statusCode: response.status,
+      headers: Object.fromEntries(response.headers.entries()),
+      correlationId: context.correlationId,
+    } as const;
+    const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
+    const classification = profile.outbound.classifyError?.(
+      response.status,
+      responseText,
+      responseContext,
+    );
+    if (classification) {
       throw new ChatProviderOutboundAdapterError(
-        `${mode} bridge returned HTTP ${response.status}${responseText ? `: ${responseText.slice(0, 500)}` : ""}`,
-        isRetryableHttpStatus(response.status),
+        classification.message,
+        classification.retryable,
         response.status,
+        retryAfterMs,
       );
     }
 
-    return parseAdapterResponse(responseText);
+    let parsed: ChatProviderOutboundAdapterResult;
+    try {
+      parsed = profile.outbound.parseResponse(responseText, responseContext);
+    } catch (error) {
+      if (error instanceof ChatConnectorOutboundResponseError) {
+        throw new ChatProviderOutboundAdapterError(
+          error.message,
+          error.retryable,
+          error.statusCode ?? response.status,
+          Math.max(error.retryAfterMs ?? 0, retryAfterMs ?? 0) || undefined,
+        );
+      }
+      throw error;
+    }
+    if (parsed.failure) {
+      throw new ChatProviderOutboundAdapterError(
+        parsed.failure.message,
+        parsed.failure.retryable || profile.outbound.isRetryableStatus(response.status),
+        response.status,
+        retryAfterMs,
+      );
+    }
+    if (!response.ok) {
+      throw new ChatProviderOutboundAdapterError(
+        `${context.connection.bridgeMode} bridge returned HTTP ${response.status}${responseText ? `: ${responseText.slice(0, 500)}` : ""}`,
+        profile.outbound.isRetryableStatus(response.status, context.connection.bridgeMode),
+        response.status,
+        retryAfterMs,
+      );
+    }
+
+    return parsed;
   }
 
-  private async sendNative(context: ChatProviderOutboundAdapterContext): Promise<ChatProviderOutboundAdapterResult> {
-    const command = getString(context.connection.setup.command);
-    if (!command) {
+  private async waitForRateLimit(request: ChatConnectorHttpOutboundRequest, signal?: AbortSignal): Promise<void> {
+    if (!request.rateLimit || request.rateLimit.minimumIntervalMs <= 0) {
+      return;
+    }
+    const now = Date.now();
+    const readyAt = Math.max(now, this.rateLimitReadyAt.get(request.rateLimit.key) ?? now);
+    this.rateLimitReadyAt.set(request.rateLimit.key, readyAt + request.rateLimit.minimumIntervalMs);
+    if (this.rateLimitReadyAt.size > 2_000) {
+      const oldest = this.rateLimitReadyAt.keys().next().value as string | undefined;
+      if (oldest) {
+        this.rateLimitReadyAt.delete(oldest);
+      }
+    }
+    if (readyAt > now) {
+      await waitWithSignal(readyAt - now, signal);
+    }
+  }
+
+  private async sendNative(
+    context: ChatProviderOutboundAdapterContext,
+    profile: ChatConnectorProfile,
+    request: ChatConnectorCommandOutboundRequest,
+  ): Promise<ChatProviderOutboundAdapterResult> {
+    if (!request.command) {
       throw new ChatProviderOutboundAdapterError("Native bridge command is not configured.", false);
     }
 
+    const bridgeToken = getFirstSecret(context.connection.secrets, request.tokenSecretKeys);
+    if (request.protocol === "imessage_bridge") {
+      try {
+        return await this.imessageNativeBridge.send({
+          command: request.command,
+          workingDirectory: request.workingDirectory,
+          bridgeToken,
+          correlationId: context.correlationId,
+          request: request.body as ImessageBridgeEnvelope,
+          timeoutMs: request.timeoutMs,
+          signal: context.signal,
+        });
+      } catch (error) {
+        if (error instanceof ImessageNativeBridgeError) {
+          throw new ChatProviderOutboundAdapterError(error.message, error.retryable);
+        }
+        throw error;
+      }
+    }
     const env: NodeJS.ProcessEnv = { ...process.env };
-    const bridgeToken = getFirstSecret(context.connection.secrets, ["bridgeToken", "botToken", "webhookSecret"]);
     if (bridgeToken) {
       env.CODEUX_CHAT_BRIDGE_TOKEN = bridgeToken;
     }
-    const cwd = getString(context.connection.setup.workingDirectory) || process.cwd();
-
-    const result = await runNativeCommand(command, JSON.stringify(context.payload), cwd, env);
+    const result = await runNativeCommand(
+      request.command,
+      JSON.stringify(request.body),
+      request.workingDirectory,
+      env,
+      request.timeoutMs,
+      context.signal,
+    );
     if (result.code !== 0) {
       const detail = result.stderr.trim() || result.stdout.trim() || `exit code ${result.code ?? "unknown"}`;
       throw new ChatProviderOutboundAdapterError(
@@ -144,29 +266,13 @@ export class ConfiguredChatProviderOutboundAdapter implements ChatProviderOutbou
       );
     }
 
-    return parseAdapterResponse(result.stdout);
+    return profile.outbound.parseResponse(result.stdout, {
+      bridgeMode: context.connection.bridgeMode,
+      mode: context.connection.bridgeMode,
+      statusCode: 200,
+      headers: {},
+    });
   }
-}
-
-function resolveManagedUrl(setup: Record<string, unknown>): string {
-  return getString(
-    setup.bridgeUrl,
-    setup.outboundUrl,
-    setup.endpointUrl,
-    setup.url,
-  );
-}
-
-function resolveWebhookUrl(setup: Record<string, unknown>): string {
-  return getString(
-    setup.outboundWebhookUrl,
-    setup.webhookUrl,
-    setup.eventsUrl,
-    setup.botEndpointUrl,
-    setup.gatewayUrl,
-    setup.bridgeUrl,
-    setup.url,
-  );
 }
 
 function requireHttpUrl(value: string, label: string): string {
@@ -187,16 +293,7 @@ function requireHttpUrl(value: string, label: string): string {
   }
 }
 
-function getString(...values: unknown[]): string {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-  return "";
-}
-
-function getFirstSecret(secrets: Record<string, unknown> | null, keys: string[]): string {
+function getFirstSecret(secrets: Record<string, unknown> | null, keys: readonly string[]): string {
   if (!secrets) {
     return "";
   }
@@ -209,28 +306,16 @@ function getFirstSecret(secrets: Record<string, unknown> | null, keys: string[])
   return "";
 }
 
-function isRetryableHttpStatus(status: number): boolean {
-  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
-}
-
-function parseAdapterResponse(text: string): ChatProviderOutboundAdapterResult {
-  const trimmed = text.trim();
-  if (!trimmed) {
-    return {};
+export function parseRetryAfterMs(value: string | null, nowMs = Date.now()): number | undefined {
+  if (!value) {
+    return undefined;
   }
-  try {
-    const parsed = JSON.parse(trimmed) as unknown;
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      const record = parsed as Record<string, unknown>;
-      return {
-        externalMessageId: getString(record.externalMessageId, record.messageId, record.id) || null,
-        responseMetadata: redactMetadata(record) as Record<string, unknown>,
-      };
-    }
-  } catch {
-    return { responseMetadata: { raw: redactText(trimmed.slice(0, 500)) } };
+  const seconds = Number(value.trim());
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.ceil(seconds * 1_000);
   }
-  return { responseMetadata: { raw: redactText(trimmed.slice(0, 500)) } };
+  const dateMs = Date.parse(value);
+  return Number.isFinite(dateMs) ? Math.max(0, dateMs - nowMs) : undefined;
 }
 
 function runNativeCommand(
@@ -238,6 +323,8 @@ function runNativeCommand(
   stdin: string,
   cwd: string,
   env: NodeJS.ProcessEnv,
+  timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<NativeCommandResult> {
   const [spawnCommand, ...spawnArgs] = splitCommandLine(command);
   return new Promise((resolve, reject) => {
@@ -248,10 +335,24 @@ function runNativeCommand(
     });
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    const finish = (callback: () => void): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", onAbort);
+      callback();
+    };
+    const onAbort = (): void => {
+      child.kill("SIGTERM");
+      finish(() => reject(new ChatProviderOutboundAdapterError("Native bridge command was cancelled.", false, undefined, undefined, "cancelled")));
+    };
     const timeout = setTimeout(() => {
       child.kill("SIGTERM");
-      reject(new ChatProviderOutboundAdapterError("Native bridge command timed out.", true));
-    }, DEFAULT_TIMEOUT_MS);
+      finish(() => reject(new ChatProviderOutboundAdapterError("Native bridge command timed out.", true)));
+    }, timeoutMs);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
 
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
@@ -262,14 +363,29 @@ function runNativeCommand(
       stderr += chunk;
     });
     child.on("error", (error) => {
-      clearTimeout(timeout);
-      reject(new ChatProviderOutboundAdapterError(`Failed to start native bridge command: ${error.message}`, true));
+      finish(() => reject(new ChatProviderOutboundAdapterError(`Failed to start native bridge command: ${error.message}`, true)));
     });
     child.on("close", (code) => {
-      clearTimeout(timeout);
-      resolve({ code, stdout, stderr });
+      finish(() => resolve({ code, stdout, stderr }));
     });
     child.stdin.end(stdin);
+  });
+}
+
+function waitWithSignal(delayMs: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(new ChatProviderOutboundAdapterError("Outbound delivery was cancelled.", false, undefined, undefined, "cancelled"));
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(new ChatProviderOutboundAdapterError("Outbound delivery was cancelled.", false, undefined, undefined, "cancelled"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
 

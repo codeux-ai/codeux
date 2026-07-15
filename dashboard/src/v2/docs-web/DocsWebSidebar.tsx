@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Link } from "@tanstack/react-router";
 import { ChevronDown, Search } from "lucide-preact";
 import type { DocsWebCollectionResponse, DocsWebEntry, DocsWebSection } from "../../../../src/contracts/docs-web-types.js";
+import { useOptionalDashboardI18n } from "../i18n/context.js";
+import { shellMessages } from "../i18n/messages/shell.js";
 
 function CollapsibleSection({
   title,
@@ -55,6 +57,7 @@ export const DocsWebSidebar: FunctionComponent<DocsWebSidebarProps> = ({
   currentDocId,
   onNavigate,
 }) => {
+  const { translate, translatePlural } = useOptionalDashboardI18n();
   const [query, setQuery] = useState("");
   const [isScrolling, setIsScrolling] = useState(false);
   const scrollTimeoutRef = useRef<number | null>(null);
@@ -111,21 +114,21 @@ export const DocsWebSidebar: FunctionComponent<DocsWebSidebarProps> = ({
   return (
     <aside
       className={`docs-web-sidebar-scroll ${isScrolling ? "is-scrolling" : ""} h-full overflow-y-auto rounded-lg border border-black/[0.08] bg-white/72 p-4 shadow-[0_20px_80px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-void-900/58 dark:shadow-[0_20px_80px_rgba(0,0,0,0.18)]`}
-      aria-label="Documentation navigation"
+      aria-label={translate(shellMessages, "docsNavigation")}
       onScroll={handleScroll}
     >
       <div className="space-y-6 pb-2">
         <div className="border-b border-black/[0.07] pb-4 dark:border-white/[0.07]">
           <p className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-signal-600 dark:text-signal-500">
-            Documentation
+            {translate(shellMessages, "documentation")}
           </p>
           <label className="mt-3 flex min-h-10 items-center gap-2 rounded-lg border border-black/[0.08] bg-black/[0.025] px-3 text-sm text-slate-500 focus-within:border-signal-500/50 focus-within:ring-2 focus-within:ring-signal-500/20 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-400">
             <Search className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span className="sr-only">Search documentation</span>
+            <span className="sr-only">{translate(shellMessages, "searchDocumentation")}</span>
             <input
               value={query}
               onInput={(event) => setQuery(event.currentTarget.value)}
-              placeholder="Search docs"
+              placeholder={translate(shellMessages, "searchDocs")}
               className="min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500"
             />
           </label>
@@ -134,7 +137,7 @@ export const DocsWebSidebar: FunctionComponent<DocsWebSidebarProps> = ({
         {filteredDocs ? (
           <div>
             <p className="mb-3 text-xs font-medium text-slate-500 dark:text-slate-400">
-              {filteredDocs.length} result{filteredDocs.length === 1 ? "" : "s"}
+              {translatePlural(shellMessages, "docsResults", filteredDocs.length)}
             </p>
             <ul className="ml-2 space-y-1.5 border-l border-black/[0.07] dark:border-white/[0.07]">
               {filteredDocs.map(renderDocLink)}

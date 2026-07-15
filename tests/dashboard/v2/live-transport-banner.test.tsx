@@ -8,6 +8,7 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
 
 import { LiveTransportBanner } from "../../../dashboard/src/v2/components/live-session/LiveTransportBanner.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
 
 describe("LiveTransportBanner", () => {
   beforeEach(() => {
@@ -148,5 +149,41 @@ describe("LiveTransportBanner", () => {
     expect(screen.getByText(/snapshot is more than a minute old/)).toBeInTheDocument();
     expect(banner).toHaveAttribute("aria-live", "polite");
     expect(banner).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("localizes German reconnecting, recovering, stale, and error presentation while preserving API errors", () => {
+    const renderGerman = (props: Parameters<typeof LiveTransportBanner>[0]) => (
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <LiveTransportBanner {...props} />
+      </DashboardI18nProvider>
+    );
+    const baseProps = {
+      transportState: "reconnecting" as const,
+      isRecovering: false,
+      snapshotUpdatedAt: null,
+      error: null,
+    };
+    const view = render(renderGerman(baseProps));
+
+    expect(screen.getByText("Verbindung wird wiederhergestellt")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Zwischengespeicherte Laufzeitdaten bleiben sichtbar");
+
+    view.rerender(renderGerman({ ...baseProps, transportState: "connected", isRecovering: true }));
+    expect(screen.getByText("Live-Daten werden wiederhergestellt")).toBeInTheDocument();
+
+    view.rerender(renderGerman({
+      ...baseProps,
+      transportState: "connected",
+      snapshotUpdatedAt: new Date(Date.now() - 61_000).toISOString(),
+    }));
+    expect(screen.getByText("Veraltete Daten")).toBeInTheDocument();
+
+    view.rerender(renderGerman({
+      ...baseProps,
+      transportState: "connected",
+      error: "Runtime API unavailable: trace-42",
+    }));
+    expect(screen.getByText("Verbindungsfehler")).toBeInTheDocument();
+    expect(screen.getByText("Runtime API unavailable: trace-42")).toBeInTheDocument();
   });
 });

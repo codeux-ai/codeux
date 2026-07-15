@@ -4,8 +4,8 @@ This guide gets the MCP server and dashboard running locally with minimal setup.
 
 ## Prerequisites
 
-- Node.js 22+
-- pnpm 10.33.0 (only for building from source)
+- Node.js 22.13+
+- pnpm 11.13.0 (only for building from source)
 - A valid Jules API key
 - Optional for remote git intelligence: GitHub CLI (`gh`) authenticated
 

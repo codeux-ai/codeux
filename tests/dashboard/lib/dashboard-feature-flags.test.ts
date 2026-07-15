@@ -9,6 +9,8 @@ import {
 } from "../../../dashboard/src/v2/lib/dashboard-feature-flags.js";
 import { getPrimaryNavigationItems } from "../../../dashboard/src/v2/lib/navigation-items.js";
 import { canPrefetchRoute } from "../../../dashboard/src/v2/router/route-prefetch.js";
+import { customDashboardMessages } from "../../../dashboard/src/v2/i18n/messages/custom-dashboards.js";
+import { translateDashboardMessage } from "../../../dashboard/src/v2/i18n/locales.js";
 
 const buildFeatureFlags = (overrides: Partial<DashboardFeatureFlagMap> = {}): DashboardFeatureFlagMap => ({
   nodes: true,
@@ -102,8 +104,11 @@ describe("dashboard feature flags", () => {
   });
 
   it("filters custom dashboards from shared navigation and prefetch when disabled", () => {
-    expect(navigationLabels(buildFeatureFlags({ "custom-dashboards": false }))).not.toContain("Dashboards");
-    expect(canPrefetchRoute("/custom-dashboards", buildFeatureFlags({ "custom-dashboards": false }))).toBe(false);
+    const flags = buildFeatureFlags({ "custom-dashboards": false });
+    expect(navigationLabels(flags)).not.toContain("Dashboards");
+    expect(canPrefetchRoute("/custom-dashboards", flags)).toBe(false);
+    expect(translateDashboardMessage(customDashboardMessages, "de", "workspaceTitle")).toBe("Dashboard-Arbeitsbereich");
+    expect(canPrefetchRoute("/custom-dashboards", flags)).toBe(false);
   });
 
   it("keeps custom dashboards in shared navigation and prefetch when enabled", () => {

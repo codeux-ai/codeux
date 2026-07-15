@@ -15,7 +15,7 @@ permissions:
 
 env:
   NODE_VERSION: "22"
-  PNPM_VERSION: "10.33.0"
+  PNPM_VERSION: "11.13.0"
   PLAYWRIGHT_BROWSERS_PATH: .cache/ms-playwright
 
 jobs:
@@ -95,7 +95,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: node_modules
-          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-node22-pnpm11.13.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -104,7 +104,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .cache/tsc
-          key: ${{ runner.os }}-node22-pnpm10.33.0-tsc-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'tsconfig.json', 'dashboard/tsconfig.json') }}
+          key: ${{ runner.os }}-node22-pnpm11.13.0-tsc-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'tsconfig.json', 'dashboard/tsconfig.json') }}
 
       - name: Run quality guardrails
         run: pnpm run quality:guardrails
@@ -140,7 +140,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: node_modules
-          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-node22-pnpm11.13.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -151,7 +151,7 @@ jobs:
           path: |
             .cache/tsc
             .cache/vite
-          key: ${{ runner.os }}-node22-pnpm10.33.0-build-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json') }}
+          key: ${{ runner.os }}-node22-pnpm11.13.0-build-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json') }}
 
       - name: Build server and dashboard
         run: pnpm run build
@@ -200,7 +200,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: node_modules
-          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-node22-pnpm11.13.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -209,7 +209,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: node_modules/.vitest
-          key: ${{ runner.os }}-node22-pnpm10.33.0-vitest-backend-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vitest.config.ts') }}
+          key: ${{ runner.os }}-node22-pnpm11.13.0-vitest-backend-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vitest.config.ts') }}
 
       - name: Run backend tests with coverage
         run: pnpm run test:backend:coverage
@@ -239,7 +239,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: node_modules
-          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-node22-pnpm11.13.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -248,7 +248,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: node_modules/.vitest
-          key: ${{ runner.os }}-node22-pnpm10.33.0-vitest-dashboard-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vitest.config.ts') }}
+          key: ${{ runner.os }}-node22-pnpm11.13.0-vitest-dashboard-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vitest.config.ts') }}
 
       - name: Run dashboard tests
         run: pnpm run test:dashboard
@@ -278,7 +278,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: node_modules
-          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-node22-pnpm11.13.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -311,7 +311,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: node_modules
-          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-node22-pnpm11.13.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -377,7 +377,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: node_modules
-          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-node22-pnpm11.13.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
 
       - name: Restore Electron caches
         if: matrix.runtime == 'electron'
@@ -386,9 +386,9 @@ jobs:
           path: |
             .cache/electron-runtime
             .cache/electron-downloads
-          key: ${{ runner.os }}-node22-pnpm10.33.0-electron-dag-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'electron-builder.config.cjs', 'scripts/e2e/run-mockup-sprint-pentest.mjs', 'scripts/e2e/mockup-sprint-pentest-scenarios.mjs', 'scripts/prepare-electron-runtime-deps.mjs') }}
+          key: ${{ runner.os }}-node22-pnpm11.13.0-electron-dag-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'electron-builder.config.cjs', 'scripts/e2e/run-mockup-sprint-pentest.mjs', 'scripts/e2e/mockup-sprint-pentest-scenarios.mjs', 'scripts/prepare-electron-runtime-deps.mjs') }}
           restore-keys: |
-            ${{ runner.os }}-node22-pnpm10.33.0-electron-dag-
+            ${{ runner.os }}-node22-pnpm11.13.0-electron-dag-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -445,7 +445,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: node_modules
-          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-node22-pnpm11.13.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -460,9 +460,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .cache/ms-playwright
-          key: ${{ runner.os }}-node22-pnpm10.33.0-playwright-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-node22-pnpm11.13.0-playwright-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-node22-pnpm10.33.0-playwright-
+            ${{ runner.os }}-node22-pnpm11.13.0-playwright-
 
       - name: Install Playwright dependencies and Chromium
         run: |
@@ -522,7 +522,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: node_modules
-          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-node22-pnpm11.13.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -537,9 +537,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .cache/ms-playwright
-          key: ${{ runner.os }}-node22-pnpm10.33.0-playwright-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-node22-pnpm11.13.0-playwright-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-node22-pnpm10.33.0-playwright-
+            ${{ runner.os }}-node22-pnpm11.13.0-playwright-
 
       - name: Install Playwright OS dependencies
         if: runner.os == 'Linux'
@@ -617,9 +617,9 @@ jobs:
             ~/AppData/Local/electron-builder/Cache
             ~/Library/Caches/electron
             ~/Library/Caches/electron-builder
-          key: ${{ runner.os }}-node22-pnpm10.33.0-release-candidate-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'electron-builder.config.cjs', 'scripts/prepare-electron-runtime-deps.mjs') }}
+          key: ${{ runner.os }}-node22-pnpm11.13.0-release-candidate-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'electron-builder.config.cjs', 'scripts/prepare-electron-runtime-deps.mjs') }}
           restore-keys: |
-            ${{ runner.os }}-node22-pnpm10.33.0-release-candidate-
+            ${{ runner.os }}-node22-pnpm11.13.0-release-candidate-
 
       - name: Install Linux packaging dependencies
         if: runner.os == 'Linux'

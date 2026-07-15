@@ -18,3 +18,11 @@ pnpm run test:e2e:credentialed-automation
 Record database integrity, key ids/versions (never key material), last audit id, lease/outbox counts, and rollback publication. A drill passes only with 20 processed fixtures, the expected selected delivery count, no duplicate provider/idempotency ids, and no secret canary.
 
 The drill checks zero canary disclosure across MCP responses, graphs, attempts, invocation messages, audit export, logs, custom-node diagnostics, and run summaries. Recovery replays only pre-invocation work; externally observable attempts with unknown outcomes remain attention-required.
+
+## Chat connector rollback drill
+
+Use the approved local test project and placeholder identities only. Exercise bad credentials, provider outage/throttling, stale Discord reconnect state, blocked/partial legacy-secret migration, ambiguous shared-channel routing, repeated delivery retry, and cancellation with mocked provider boundaries.
+
+For each incident, disable the new connection/binding first, preserve sanitized health/delivery evidence, correct and reverify, then enable one test route. A credential-gated skip is recorded as not run. Roll back by re-enabling the previously verified managed/custom bridge; do not delete the failed connection until pending work, leases, sessions, audit retention, and cascading history deletion have been reviewed.
+
+The detailed steps and cleanup contract are in [Chat connector recovery](../user/troubleshooting.md#chat-connector-recovery).

@@ -2,14 +2,23 @@
 /** @jsx h */
 import { h, type ComponentChildren } from "preact";
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, act, cleanup, waitFor } from "@testing-library/preact";
+import { render as testingRender, screen, fireEvent, act, cleanup, waitFor } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { BrowserPage } from "../../../dashboard/src/v2/BrowserPage.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
 import { usePreviewSessions } from "../../../dashboard/src/v2/hooks/use-preview-sessions.js";
-import { fetchPreviewLogs, fetchPreviewScript, rebuildPreviewSession, savePreviewDockerAccessOverride, savePreviewEnvironmentOverrides, savePreviewScript, savePreviewStartupCommandOverride } from "../../../dashboard/src/v2/lib/browser-api.js";
+import { fetchPreviewLogs, fetchPreviewScript, rebuildPreviewSession, savePreviewDockerAccessOverride, savePreviewEnvironmentOverrides, savePreviewScript, savePreviewStartupCommandOverride, stopPreviewSession } from "../../../dashboard/src/v2/lib/browser-api.js";
 import { saveProjectPreviewDockerAccess, saveProjectPreviewEnvironmentVariables } from "../../../dashboard/src/v2/lib/settings-api.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+
+const render = (ui: Parameters<typeof testingRender>[0], options?: Parameters<typeof testingRender>[1]) => testingRender(ui, {
+  ...options,
+  wrapper: ({ children }) => <DashboardI18nProvider initialLocale="en" storage={null}>{children}</DashboardI18nProvider>,
+});
+const renderGerman = (ui: Parameters<typeof testingRender>[0]) => testingRender(ui, {
+  wrapper: ({ children }) => <DashboardI18nProvider initialLocale="de" storage={null}>{children}</DashboardI18nProvider>,
+});
 
 expect.extend(matchers);
 
@@ -222,7 +231,12 @@ vi.mock("../../../dashboard/src/v2/components/browser/LaunchContainerPanel.js", 
 }));
 
 vi.mock("../../../dashboard/src/v2/components/ui/ActionFeedbackRegion.js", () => ({
-  ActionFeedbackRegion: ({ message }: { message: string }) => <div>{message}</div>,
+  ActionFeedbackRegion: ({ message, retryAction }: { message: string; retryAction?: () => void }) => (
+    <div>
+      {message}
+      {retryAction ? <button type="button" onClick={retryAction}>Retry</button> : null}
+    </div>
+  ),
 }));
 
 vi.mock("../../../dashboard/src/v2/lib/browser-api.js", () => ({
@@ -458,6 +472,28 @@ describe("BrowserPage", () => {
     expect(screen.queryByTestId("browser-main-tool-panel")).not.toBeInTheDocument();
     const firstSliderLink = screen.getAllByText("Open Link")[0];
     expect(((disabledStatus as HTMLElement).compareDocumentPosition(firstSliderLink) & Node.DOCUMENT_POSITION_FOLLOWING)).not.toBe(0);
+  });
+
+  it("fully localizes disabled Browser Preview guidance in German", () => {
+    effectiveSettingsMock.value = {
+      data: {
+        settings: {
+          sprintPreview: {
+            enabled: false,
+            showInAppBrowser: true,
+          },
+        },
+      },
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    };
+
+    renderGerman(<BrowserPage />);
+
+    expect(screen.getByText("Die Vorschau-Laufzeit ist deaktiviert.")).toBeInTheDocument();
+    expect(screen.getByText(/Aktiviere „Vorschau-Laufzeit aktiviert“/)).toBeInTheDocument();
+    expect(screen.queryByText(/Preview runtime enabled/)).not.toBeInTheDocument();
   });
 
   afterEach(() => {
@@ -1119,6 +1155,79 @@ describe("BrowserPage", () => {
     expect(mockStartPreviewSession).toHaveBeenCalledWith("p1", "s3");
     expect(mockRefreshSessions).toHaveBeenCalled();
     expect(screen.getByText("Container launched successfully")).toBeInTheDocument();
+  });
+
+  it("runs German start-reuse, rebuild, and stop flows while preserving sprint names", async () => {
+    const user = userEvent.setup();
+    mockStartPreviewSession.mockResolvedValueOnce({
+      ...buildDefaultPreviewSessionsResult().selectedSession,
+      id: "sess-1",
+      status: "running",
+    });
+
+    renderGerman(<BrowserPage />);
+
+    await user.click(screen.getByRole("button", { name: "Launch Container" }));
+    expect(mockStartPreviewSession).toHaveBeenCalledWith("p1", "s1");
+    expect(screen.getByText("Container erfolgreich gestartet")).toBeInTheDocument();
+
+    expandPanel(/Ausgewählter Sprint/);
+    await user.click(screen.getByRole("button", { name: "Vorschau-Container neu erstellen" }));
+    expect(rebuildPreviewSession).toHaveBeenCalledWith("p1", "s1", "sess-1");
+    expect(screen.getByText("Container erfolgreich neu erstellt")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Vorschau-Container stoppen" }));
+    expect(stopPreviewSession).toHaveBeenCalledWith("p1", "s1", "sess-1");
+    expect(screen.getByText("Container erfolgreich gestoppt")).toBeInTheDocument();
+    expect(screen.getAllByText("Sprint 1").length).toBeGreaterThan(0);
+  });
+
+  it("keeps unavailable-script diagnostics verbatim in German", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchPreviewScript).mockRejectedValueOnce(new Error("ENOENT /workspace/.code-ux/preview.sh"));
+
+    renderGerman(<BrowserPage />);
+    expandPanel(/Ausgewählter Sprint/);
+    await user.click(screen.getByRole("button", { name: "Startskript-Editor anzeigen" }));
+
+    expect(await screen.findByText("Skript konnte nicht geladen werden: ENOENT /workspace/.code-ux/preview.sh")).toBeInTheDocument();
+    expect(screen.getByText("ENOENT /workspace/.code-ux/preview.sh", { exact: false })).toBeInTheDocument();
+  });
+
+  it("routes German script-save failures to the existing retry action", async () => {
+    const user = userEvent.setup();
+    vi.mocked(savePreviewScript).mockRejectedValueOnce(new Error("disk full"));
+
+    renderGerman(<BrowserPage />);
+    expandPanel(/Ausgewählter Sprint/);
+    await user.click(screen.getByRole("button", { name: "Startskript-Editor anzeigen" }));
+    await screen.findByLabelText("Inhalt des Startskripts");
+    await user.click(screen.getByRole("button", { name: "Startskript speichern" }));
+
+    expect(await screen.findByText("Skript konnte nicht gespeichert werden: disk full")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(savePreviewScript).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText("Skript erfolgreich gespeichert")).toBeInTheDocument();
+  });
+
+  it("keeps invalid environment diagnostics and entered values verbatim in German", async () => {
+    const user = userEvent.setup();
+    vi.mocked(savePreviewEnvironmentOverrides).mockRejectedValueOnce(new Error("INVALID-NAME is reserved by runtime"));
+
+    renderGerman(<BrowserPage />);
+    await user.click(screen.getByRole("button", { name: "Env Sprint 1" }));
+    await user.click(screen.getByRole("button", { name: "Überschreibung hinzufügen" }));
+    await user.type(screen.getAllByLabelText("Name der Umgebungsvariable").at(-1) as HTMLElement, "INVALID-NAME");
+    await user.type(screen.getAllByLabelText("Wert der Vorschau-Umgebungsüberschreibung").at(-1) as HTMLElement, "literal-secret-value");
+    await user.click(screen.getByRole("button", { name: "Überschreibungen speichern" }));
+
+    expect(savePreviewEnvironmentOverrides).toHaveBeenCalledWith(
+      "p1",
+      "s1",
+      "sess-1",
+      [{ key: "INVALID-NAME", value: "literal-secret-value", enabled: true }],
+    );
+    expect(screen.getByText("Vorschau-Umgebung konnte nicht gespeichert werden: INVALID-NAME is reserved by runtime")).toBeInTheDocument();
   });
 
   it("removes a preview session from the session card", async () => {

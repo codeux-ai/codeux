@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 /** @jsx h */
-import { h } from "preact";
+import { h, type ComponentChildren } from "preact";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +8,8 @@ import { CustomDashboardViewer } from "../CustomDashboardViewer.js";
 import type { CustomDashboardRecord, CustomDashboardRevisionRecord } from "../../../types.js";
 import { resolvePublishedCustomDashboardRuntime } from "../../../lib/custom-dashboard-runtime.js";
 import { createDefaultCustomDashboardDraft } from "../../../lib/custom-dashboard-view-models.js";
+import { DashboardI18nProvider } from "../../../i18n/context.js";
+import type { DashboardLocale } from "../../../i18n/locales.js";
 
 vi.mock("../../../lib/motion/tokens.js", () => ({
   useInteractionTokens: vi.fn(() => ({
@@ -84,6 +86,12 @@ const revision: CustomDashboardRevisionRecord = {
   updatedAt: "2026-07-07T00:00:00.000Z",
 };
 
+const renderWithLocale = (ui: ComponentChildren, locale: DashboardLocale = "en") => render(
+  <DashboardI18nProvider initialLocale={locale} storage={null}>
+    {ui}
+  </DashboardI18nProvider>,
+);
+
 describe("CustomDashboardViewer", () => {
   const onRefresh = vi.fn();
   const onReturnToEditor = vi.fn();
@@ -103,7 +111,7 @@ describe("CustomDashboardViewer", () => {
   });
 
   it("renders a sandboxed iframe for a published validated revision", () => {
-    render(
+    renderWithLocale(
       <CustomDashboardViewer
         dashboard={dashboard}
         revisions={[revision]}
@@ -175,7 +183,7 @@ describe("CustomDashboardViewer", () => {
       },
     };
 
-    render(
+    renderWithLocale(
       <CustomDashboardViewer
         dashboard={defaultDashboard}
         revisions={[defaultRevision]}
@@ -273,7 +281,7 @@ describe("CustomDashboardViewer", () => {
   });
 
   it("blocks drafts and shows the validation report with a validate/publish action", () => {
-    render(
+    renderWithLocale(
       <CustomDashboardViewer
         dashboard={{ ...dashboard, status: "draft", publishedRevisionId: null }}
         revisions={[{ ...revision, validationReport: { valid: false, summary: "Build failed", issues: [{ field: "runtime", code: "failed", message: "Vite failed" }] } }]}
@@ -291,7 +299,7 @@ describe("CustomDashboardViewer", () => {
   });
 
   it("contains runtime errors reported from the iframe", async () => {
-    render(
+    renderWithLocale(
       <CustomDashboardViewer
         dashboard={dashboard}
         revisions={[revision]}
@@ -329,7 +337,7 @@ describe("CustomDashboardViewer", () => {
   });
 
   it("returns source errors to the isolated frame without throwing in the app shell", async () => {
-    render(
+    renderWithLocale(
       <CustomDashboardViewer
         dashboard={dashboard}
         revisions={[revision]}
@@ -358,5 +366,56 @@ describe("CustomDashboardViewer", () => {
     });
     expect(JSON.stringify(postMessage.mock.calls)).not.toContain("viewer-binding-id-canary");
     expect(JSON.stringify(postMessage.mock.calls)).not.toContain(STORED_CREDENTIAL_PLAINTEXT_CANARY);
+  });
+
+  it("translates German viewer chrome without rewriting generated content or diagnostics", async () => {
+    const diagnostic = "Vite build failed: /workspace/src/dashboard.tsx:17";
+    renderWithLocale(
+      <CustomDashboardViewer
+        dashboard={dashboard}
+        revisions={[revision]}
+        onRefresh={onRefresh}
+        onReturnToEditor={onReturnToEditor}
+      />,
+      "de",
+    );
+
+    expect(screen.getByText("Veröffentlichte Anzeige")).toBeInTheDocument();
+    const iframe = screen.getByTitle("Veröffentlichtes benutzerdefiniertes Dashboard: Delivery Pulse") as HTMLIFrameElement;
+    expect(iframe.getAttribute("srcdoc")).toContain("<main>Published dashboard</main>");
+
+    window.dispatchEvent(new MessageEvent("message", {
+      data: { type: "codeux-custom-dashboard:runtime-error", message: diagnostic },
+      source: iframe.contentWindow,
+    }));
+    expect(await screen.findByRole("alert", { name: "Laufzeitfehler des benutzerdefinierten Dashboards" })).toHaveTextContent(diagnostic);
+  });
+
+  it("translates stable validation issues but preserves detached build diagnostics", () => {
+    const diagnostic = "docker build exited 17: Datei.tsx blieb unverändert";
+    renderWithLocale(
+      <CustomDashboardViewer
+        dashboard={{ ...dashboard, status: "draft", publishedRevisionId: null }}
+        revisions={[{
+          ...revision,
+          validationReport: {
+            valid: false,
+            summary: diagnostic,
+            issues: [
+              { field: "runtime", code: "validation_failed", message: diagnostic },
+              { field: "runtime", code: "container_missing", message: "Validation container is no longer present." },
+            ],
+          },
+        }]}
+        onRefresh={onRefresh}
+        onReturnToEditor={onReturnToEditor}
+      />,
+      "de",
+    );
+
+    expect(screen.getByText(diagnostic)).toBeInTheDocument();
+    expect(screen.getAllByText("runtime")[0]?.closest("li")).toHaveTextContent(diagnostic);
+    expect(screen.getByText(/Der Validierungscontainer ist nicht mehr vorhanden/)).toBeInTheDocument();
+    expect(screen.getByText(/Nur veröffentlichte benutzerdefinierte Dashboards/)).toBeInTheDocument();
   });
 });

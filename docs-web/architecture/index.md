@@ -14,15 +14,18 @@ It is for contributors and integrators who need to reason about *how* Code UX ma
 | 4 | [Virtual workers](./virtual-workers.md) | Provisioning, lifecycle, Docker vs host execution, attention-item handling |
 | 5 | [CI integration](./ci-integration.md) | Feature PR gate, merge protocol, autofix retries, conflict handling |
 | 6 | [Dashboard architecture](./dashboard-architecture.md) | Preact stack, real-time client, route map, state model |
+| 6a | [Dashboard internationalization](./dashboard-internationalization.md) | Typed locale state, feature catalogs, persistence, and native formatting |
 | 7 | [Data model](./data-model.md) | Projects, sprints, tasks, runs, dispatches, memory, conversations |
 | 8 | [Custom dashboard foundation](./custom-dashboard-foundation.md) | Persisted dashboard manifests, generated bundles, validation history, and publication state |
 | 9 | [Execution invocation tracking](./execution-invocation-tracking.md) | Provider parser normalization, usage isolation, live telemetry, transcript persistence |
-| 10 | [External chat connectors](./external-chat-providers.md) | Provider setup, channel bindings, inbound dedupe, outbound delivery state |
-| 11 | [Configuration resolution](./configuration-resolution.md) | Cascade order, search paths, settings hierarchy |
-| 12 | [Speech input](./speech-input.md) | Persisted transcription settings, privacy boundary, provider fallback contract |
-| 13 | [Security model](./security.md) | Authentication, authorisation, secrets, network surface |
-| 14 | [Worker clarification contract](./worker-clarification-contract.md) | Durable human-owned worker questions, idempotent replies, and continuation boundary |
-| 15 | [Custom nodes](./custom-nodes.md) | Generated TypeScript packages, validation/publication gates, and hardened container execution |
+| 10 | [Chat connector registry](./chat-connectors/index.md) | Typed provider profiles, capabilities, transport ownership, and lifecycle metadata |
+| 11 | [External chat connectors](./external-chat-providers.md) | Provider setup, channel bindings, inbound dedupe, outbound delivery state |
+| 12 | [Chat connector runtime reliability](./chat-connector-runtime-reliability.md) | Fast durable acceptance, leased delivery, cancellation, restart recovery |
+| 13 | [Configuration resolution](./configuration-resolution.md) | Cascade order, search paths, settings hierarchy |
+| 13 | [Speech input](./speech-input.md) | Persisted transcription settings, privacy boundary, provider fallback contract |
+| 14 | [Security model](./security.md) | Authentication, authorisation, secrets, network surface |
+| 15 | [Worker clarification contract](./worker-clarification-contract.md) | Durable human-owned worker questions, idempotent replies, and continuation boundary |
+| 16 | [Custom nodes](./custom-nodes.md) | Generated TypeScript packages, validation/publication gates, and hardened container execution |
 | 16 | [Card CI status projection](./card-ci-status-projection.md) | Compact persisted CI state shared by Task, Sprint, and Live card consumers |
 | 17 | [Sprint rollbacks](./sprint-rollbacks.md) | Auditable automatic and agent-assisted rollback delivery across remote and local Git modes |
 
@@ -34,7 +37,7 @@ Agent persistent skill storage is opt-in per preset. A shared project-owned agen
 
 - **For new contributors** — read 1, 3, 7 in that order.
 - **For MCP integrators** — read 1, 2, 8.
-- **For dashboard / UI work** — read 1, 6, 7.
+- **For dashboard / UI work** — read 1, 6, 6a.
 - **For ops / SRE** — read 1, 5, 9.
 
 Each architecture page links to the relevant source files so you can audit the implementation against this document.

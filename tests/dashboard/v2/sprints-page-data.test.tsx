@@ -5,8 +5,10 @@ import { useEffect, useState } from "preact/hooks";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
+import { renderWithI18n } from "../render-with-i18n.js";
 import { useSprintsPageActions } from "../../../dashboard/src/v2/pages/sprints/use-sprints-page-actions.js";
 import { useSprintsPageData } from "../../../dashboard/src/v2/pages/sprints/use-sprints-page-data.js";
+import { fetchAgentPresets } from "../../../dashboard/src/v2/lib/agent-preset-api.js";
 
 expect.extend(matchers);
 
@@ -84,7 +86,7 @@ const renderActions = (createProject = vi.fn()) => {
     return null;
   };
 
-  render(<ActionHarness />);
+  renderWithI18n(<ActionHarness />);
   if (!actionsRef) {
     throw new Error("actions did not render");
   }
@@ -295,7 +297,7 @@ describe("useSprintsPageData sprint-number reservations", () => {
   it("advances nextId while create sprint request is unresolved and resets after failure", async () => {
     const deferred = createDeferred<{ id: string }>();
     createSprintMock.mockReturnValueOnce(deferred.promise);
-    render(<HookHarness />);
+    renderWithI18n(<HookHarness />);
 
     expect(screen.getByTestId("next-id")).toHaveTextContent("SPR-02");
 
@@ -317,10 +319,29 @@ describe("useSprintsPageData sprint-number reservations", () => {
     });
   });
 
+  it("aborts the agent-preset request when the sprint page unmounts", async () => {
+    let requestSignal: AbortSignal | undefined;
+    vi.mocked(fetchAgentPresets).mockImplementationOnce((_projectId, signal) => {
+      requestSignal = signal;
+      return new Promise((_resolve, reject) => {
+        signal?.addEventListener("abort", () => reject(new Error("request aborted")), { once: true });
+      });
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const view = renderWithI18n(<HookHarness />);
+
+    await waitFor(() => expect(requestSignal).toBeDefined());
+    view.unmount();
+    await waitFor(() => expect(requestSignal?.aborted).toBe(true));
+
+    expect(consoleError).not.toHaveBeenCalledWith("Failed to fetch agent presets", expect.anything());
+    consoleError.mockRestore();
+  });
+
   it("creates a sprint without passing imported tasks in the create payload and then adds them through the imported-task API", async () => {
     createSprintMock.mockResolvedValueOnce({ id: "new-sprint" });
     addImportedTasksToSprintMock.mockResolvedValueOnce([]);
-    render(<HookHarness />);
+    renderWithI18n(<HookHarness />);
 
     fireEvent.click(screen.getByRole("button", { name: "submit-sprint-with-tasks" }));
 
@@ -376,7 +397,7 @@ describe("useSprintsPageData sprint-number reservations", () => {
       return null;
     };
 
-    render(<ActionHarness />);
+    renderWithI18n(<ActionHarness />);
     await actionsRef!.handleSubmitSprint({
       name: "Existing sprint",
       goal: "Existing",
@@ -557,7 +578,7 @@ describe("useSprintsPageData sprint-number reservations", () => {
     createSprintMock
       .mockReturnValueOnce(firstDeferred.promise)
       .mockReturnValueOnce(secondDeferred.promise);
-    render(<HookHarness />);
+    renderWithI18n(<HookHarness />);
 
     fireEvent.click(screen.getByRole("button", { name: "submit-sprint" }));
 
@@ -589,7 +610,7 @@ describe("useSprintsPageData sprint-number reservations", () => {
   it("advances nextId while quicksprint execution is unresolved and resets after failure", async () => {
     const deferred = createDeferred<{ id: string }>();
     executeQuicksprintMock.mockReturnValueOnce(deferred.promise);
-    render(<HookHarness />);
+    renderWithI18n(<HookHarness />);
 
     expect(screen.getByTestId("next-id")).toHaveTextContent("SPR-02");
 
@@ -609,7 +630,7 @@ describe("useSprintsPageData sprint-number reservations", () => {
   it("includes noTaskLimit in the quicksprint execution payload", async () => {
     const deferred = createDeferred<{ id: string }>();
     executeQuicksprintMock.mockReturnValueOnce(deferred.promise);
-    render(<HookHarness />);
+    renderWithI18n(<HookHarness />);
 
     fireEvent.click(screen.getByRole("button", { name: "quicksprint-unlimited" }));
 
@@ -632,7 +653,7 @@ describe("useSprintsPageData sprint-number reservations", () => {
     executeQuicksprintMock
       .mockReturnValueOnce(firstDeferred.promise)
       .mockReturnValueOnce(secondDeferred.promise);
-    render(<HookHarness />);
+    renderWithI18n(<HookHarness />);
 
     fireEvent.click(screen.getByRole("button", { name: "quicksprint" }));
 

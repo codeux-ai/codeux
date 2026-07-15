@@ -404,7 +404,12 @@ export type ManageChatProvidersAction =
   | "create_channel_binding"
   | "update_channel_binding"
   | "delete_channel_binding"
-  | "list_outbound_deliveries";
+  | "verify_connection"
+  | "get_health"
+  | "list_deliveries"
+  | "list_outbound_deliveries"
+  | "retry_delivery"
+  | "cancel_delivery";
 
 export interface ManageChatProvidersArgs {
   action: ManageChatProvidersAction;
@@ -431,6 +436,8 @@ export interface ManageChatProvidersArgs {
   outboundEnabled?: boolean;
   suppressRichWidgets?: boolean;
   deliveryStatus?: ChatProviderDeliveryStatus;
+  direction?: "inbound" | "outbound";
+  deliveryId?: string;
   limit?: number | string;
   baseUrl?: string;
   approval?: ManagementApproval;

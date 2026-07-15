@@ -45,11 +45,21 @@ The desktop rail and mobile category drawer include these Expert-mode categories
 
 Each category opens one or more **content panels** with grouped fields. Inputs are typed (text, number with min/max, toggle, multi-select) and validate inline.
 
+## Dashboard language and card help
+
+Open **Appearance → Display Settings → Language** to switch dashboard-authored interface copy between English and Deutsch. The change applies immediately in both System and Project views, persists in browser-local storage, updates the document language for assistive technology, and never dirties or submits the Settings draft.
+
+Settings card titles and their help popovers follow the selected language, including the purpose summary, controlled-functions guidance, recommended configuration, and risk notes. Card identity, documentation links, provider names, technical values, runtime/API messages, saved instructions, and the linked English documentation remain unchanged.
+
+The preference survives browser restarts and synchronizes to other open Code UX tabs in the same browser profile. It is not synchronized through the backend, a user account, or project settings. Missing, invalid, cleared, or unavailable browser storage recovers to English; an in-session switch still works when storage cannot persist it. For the complete behavior, content boundaries, and contributor model, see [Dashboard Language and Internationalization](/docs/user-dashboard-internationalization).
+
 ### Language-first speech output
 
 Open **AI Models -> Configure speech** and choose the output language first. Code UX preselects the catalog's preferred compatible local model and a matching voice. The recommendation keeps **Selected**, **Installed / Download required**, and **Output enabled / off** visible as separate states; the normal **Save Changes** action still controls when the draft becomes active.
 
 No model downloads automatically. **Download recommended** opens the named model's license and attribution confirmation, and only **Accept & Download** starts the transfer. **Compare compatible models** opens Speech output filtered to the chosen language, with the preferred model first and alternatives still available.
+
+AI Models and Memory settings follow the active dashboard language. German mode translates routing, model and speech controls, pricing, catalog filters, download confirmation, and memory remediation labels. Counts, model sizes, percentages, prices, and memory limits use German number separators where applicable. Provider/model IDs, language tags, BCP-47 values, voice IDs, API-returned language and model metadata, license and attribution text, and runtime diagnostics remain unchanged.
 
 ## General legal actions
 
@@ -117,6 +127,18 @@ Settings > Integrations includes Google Drive under **Storage & Mounts**. It lin
 
 The mount is available to scoped Docker-backed provider workspaces at the fixed `/mnt/code-ux/google-drive` container path. It is shared by Project Manager replies, planning, setup, task coding, QA, CI repair, and merge repair; host-mode and unscoped runs do not receive it. **Read-only** is the safe default. Choose **Read-write** only when agents must modify synced Drive files, because edits and deletions can propagate through Google Drive. A card is **Configured** only after a linked directory is set and **Active** only when that configured mount is also enabled. The host path appears only inside the editable linked-directory control.
 
+## Chat connectors
+
+Open **Settings -> Integrations -> Chat Connectors** to connect Discord, WhatsApp, iMessage, Telegram, Slack, or Microsoft Teams. Discord is the prominent starting point. Each provider card shows verified active connections, channel bindings, outbound reply state, and delivery failures. A connection is not shown as healthy merely because it is enabled: required configuration and write-only credentials must be saved, then **Test connection** must succeed.
+
+Connection modes are labeled by their operational shape: **Provider-native API**, **Managed bridge**, **Custom webhook**, or **Native bridge**. The provider workspace links to official documentation and shows backend-supplied limitations. Provider traffic remains server-side; the dashboard calls only Code UX REST endpoints. Ingress URLs can be copied into the provider or bridge configuration, while saved credentials are represented only by configured/redacted metadata and are never filled back into the browser. When reduced motion is enabled, navigation between the connector catalog and provider details changes immediately without an animated transition.
+
+Changing a mode, endpoint, bridge command, setup value, or credential makes the prior verification stale. Save the draft and test it again before activation. Blank secret fields preserve the stored credentials. Replacing a credential or changing an endpoint/command opens a confirmation dialog, as does deleting a connection or binding.
+
+Channel bindings map provider-specific channel or conversation identifiers to a project and optional conversation thread. They also select an agent preset, inbound/outbound behavior, and rich-widget suppression. For shared channels, configure a project selector prefix or routing hint; if routing remains ambiguous, Code UX requests clarification instead of guessing. Long replies are split to provider-safe lengths while retaining thread identifiers when supported.
+
+Delivery history shows outbound status, attempt count, next retry, and terminal, retryable, or ambiguous failure state. Diagnostics are redacted; payload bodies, signed URLs, and token-shaped values are never displayed. Connection and binding save or deletion errors and failed verification issue details are also redacted before their persistent alert is shown. Retry and cancellation require confirmation because they may change provider-side state. If delivery history cannot refresh, the dashboard keeps the last successful history visible and reports the error rather than replacing it with an empty list.
+
 ## Provider config files
 
 Each CLI provider instance in **AI providers** includes a **Provider Config** choice that controls only provider config-file copying. It is separate from API Key, Local Copy, and Dashboard Login authentication modes.
@@ -134,6 +156,8 @@ Jules and the internal test provider do not use provider config files. Switching
 Dashboard Login opens the provider's real interactive CLI in the managed container. Each CLI starts as the normal non-root runtime user from a dedicated empty `/tmp/code-ux-login` directory instead of `/`, preventing discovery-oriented tools such as Qwen Code from warning about or scanning the container root. Credential storage and the read-only provider-tool volume are unchanged.
 
 The terminal interprets ANSI cursor and erase controls while removing non-display OSC/DCS strings such as Qwen window-title and terminal-color queries. Full-screen redraws stay within a bounded 100-column by 30-row layout, meaningful prompts and authentication links remain selectable, and output uses high-contrast white text. Click the console to focus it. Right-click exposes Paste without transferring focus away from the session, while Ctrl+V and Command+V continue to work normally. Arrow keys, Tab, Escape, Backspace, Ctrl+C, and Ctrl+D are sent directly to the provider CLI. Clipboard success or denial appears below the console instead of failing silently.
+
+When German is selected, dashboard-owned Integrations and MCP labels, instructions, validation, and accessible feedback are translated. Provider and product names, credentials, redacted secret placeholders, detected paths, endpoints, repository and tool identifiers, scopes, transport values, terminal output, and server-returned diagnostics remain exactly as supplied. Locale changes therefore do not alter saved settings, provider authentication, secure-storage checks, MCP installation, token regeneration, or terminal behavior.
 
 ## Connections panel
 

@@ -325,6 +325,72 @@ Transient provider failures are classified and managed in `src/shared/providers/
 - **OpenCode missing sessions**: Attempts to resume a removed native session resulting in "Session not found"; Code UX retries once as a fresh OpenCode session in the same workspace.
 - **Silent quota signals**: Provider tools (like Antigravity) failing due to capacity limits without explicit failure output.
 
+### External chat connector incidents
+
+Use only redacted connection, binding, delivery, and session IDs in incident notes. Start with `GET /api/chat-providers/health`, the connection record, persisted binding, and `GET /api/chat-providers/deliveries?...`. Connector health is a local persisted-state summary; it does not prove provider reachability.
+
+#### Bad or rotated credentials
+
+1. Disable the affected connection or its inbound/outbound binding.
+2. Rotate the provider credential, then replace the write-only secret through a local operator or authorized TLS `credential_admin` path with remote credential management enabled.
+3. Treat the update as verification-invalidating. Run `POST /api/chat-providers/connections/:connectionId/verify` or MCP `verify_connection`; do not reactivate until it returns `verified`.
+4. If a credential-gated lane skips, record **not run**, not passed. Telegram `getMe`, Slack `auth.test`, and Discord current-user checks need test credentials. Meta sends need explicit test-number opt-in.
+5. Re-enable one test binding and observe one inbound/outbound cycle before restoring broader routing.
+
+Rollback: disable the changed connection and re-enable the previously verified managed/custom bridge. Do not paste the previous secret into logs or approval payloads.
+
+#### Provider outage or throttling
+
+1. Confirm provider status outside Code UX and inspect the sanitized provider error code/retry time.
+2. Leave scheduled retries alone when `nextAttemptAt` follows provider `Retry-After`; repeated manual retry can duplicate messages and worsen throttling.
+3. Disable outbound routing if the queue grows faster than recovery. Inbound may remain enabled only if callback acknowledgement is healthy.
+4. Cancel deliveries that are no longer safe. After recovery, manually retry one known delivery through the approval handshake, then let the durable worker drain.
+
+Rollback: route new traffic through an existing managed/custom bridge only after verifying its credentials and binding. Preserve failed delivery rows for audit.
+
+#### Stale or reconnecting sessions
+
+Discord symptoms include repeated Gateway reconnects, missed heartbeat acknowledgements, invalid-session loops, or exhausted attempts. iMessage bridge symptoms mean the operator bridge is unavailable; Code UX does not own an Apple session.
+
+1. Disable the connection to stop reconnect timers and outbound work.
+2. Confirm Discord bot token, intents, and privileged `MESSAGE_CONTENT` access. Reject a persisted resume URL that is not a secure Discord-owned host.
+3. Restart Code UX once. Eligible sessions resume durable state; Discord falls back to Identify after invalid/expired resume state.
+4. If attempts exhaust, keep the connection disabled, correct provider configuration, reverify, and restart/re-enable. Do not create an unbounded restart loop.
+5. For iMessage, repair the selected bridge and run its protocol health check; do not substitute unsupported AppleScript or Messages-database automation.
+
+Rollback: restore the known-good custom Discord gateway or managed/native iMessage bridge connection. Registry presence is not bridge certification.
+
+#### Failed legacy-secret migration
+
+1. Stop credential edits and take a protected database backup plus the referenced key-provider version. Never copy `secret_json` into incident notes.
+2. Restore the original secure key provider (KMS/Vault version, Electron safe storage, or owner-only mounted key) and verify health.
+3. Restart Code UX or rerun migration. It seals first and compare-and-set commits before clearing the legacy row, so completed rows need not repeat.
+4. Resolve each sanitized failure and repeat until `pending: 0`.
+5. Reverify affected connections if credentials/setup changed during recovery.
+
+Rollback: restore the database **and matching key material** from one backup point. Never downgrade an encrypted row to plaintext or delete the legacy source before a successful envelope commit.
+
+#### Disabled or ambiguous routing
+
+1. Confirm the connection is enabled/active and the persisted binding has the intended project, external channel, inbound/outbound flags, and selector.
+2. For a shared channel, add a unique selector/alias. Code UX intentionally refuses to guess between projects.
+3. Confirm the principal is authorized for the binding's stored project; a query `projectId` cannot grant access.
+4. Create a new inbound message after correction. Do not mutate a historical delivery into a different project.
+
+Rollback: disable the new binding and re-enable the prior binding/bridge pair. Preserve the ambiguous delivery as evidence.
+
+#### Repeated retries or possible duplicate send
+
+1. Inspect attempt count, sanitized `lastError`, `nextAttemptAt`, and ambiguity classification.
+2. Do not manually retry `sending` work with an unexpired lease. After a crash, let lease expiry/startup recovery reclaim it.
+3. Cancel unsafe/stale work. Manual retry is one-use approval-gated because the provider could receive it twice.
+4. Reconcile provider-declared ambiguous terminal outcomes with provider history before retrying.
+5. If retries loop after restart, disable outbound routing, capture redacted diagnostics, fix configuration, and test one delivery.
+
+#### Cleanup after rollback
+
+Keep failed connections disabled until retention is satisfied. Cancel unwanted pending deliveries, let in-flight leases settle, and verify resumable timers stopped. Delete a connection only after approval and a backup decision because deletion cascades bindings and delivery rows. Expired replay receipts and sessions are cleaned automatically; connector cleanup does not require deleting global runtime state.
+
 ## Recovery Techniques
 
 - Temporarily disable selected loop steps for diagnosis.
@@ -387,7 +453,7 @@ GitHub validation is split by signal:
 - Backend coverage, dashboard tests, npm install smoke, and the cross-OS orchestration DAG matrix reuse that build artifact and run in parallel after the prerequisite stage. Release-candidate packaging starts after package smoke and can run beside the main-only E2E matrix. Matrix bounds are `08 Orchestration` at three shards, `09 E2E` at ten shards, and `10 Release Candidate` at three shards; GitHub's runner quota queues any excess work across the parallel lanes.
 - `Playwright Diagnostics`, `Release Candidate Diagnostics`, and `Mockup Sprint Diagnostics` are manual-only workflows for focused reruns. They no longer run automatically on every PR.
 - Superseded runs for the same branch or pull request are cancelled by workflow concurrency groups.
-- Security validation is intentionally separated from build and Playwright lanes. The `04 Security / dependency audit` job runs `pnpm run audit`, which is `pnpm audit --audit-level=high`; high-severity dependency findings fail that job without preventing typecheck, tests, build, or Playwright artifacts from reporting their own status.
+- Security validation is intentionally separated from build and Playwright lanes. The `04 Security / dependency audit` job runs the standard `pnpm run audit`, which is `pnpm audit --audit-level=high`; high-severity dependency findings fail that job without preventing typecheck, tests, build, or Playwright artifacts from reporting their own status. The repository pins pnpm 11.13.0 so the native audit command uses npm's supported bulk-advisory API.
 
 Local equivalents:
 - `pnpm run lint` mirrors the TypeScript validation portion of `Typecheck & Lint`.
@@ -396,11 +462,11 @@ Local equivalents:
 - `pnpm run audit` mirrors the independent security audit job.
 - `pnpm run build` validates the compiled server and dashboard bundle.
 - `pnpm run build` followed by `pnpm run test:e2e` runs the browser E2E suite locally against the compiled app after dependencies and Playwright browsers are installed. The wrapper delegates to `pnpm exec playwright test` after choosing isolated local ports.
-- `node scripts/verify-release-install.mjs` mirrors the release install smoke check before Electron packaging. CI sets `CODE_UX_SKIP_RELEASE_INSTALL_BUILD=1` only after downloading `codeux-build-linux`, which makes the verifier reuse `dist/` and `dashboard/dist/` instead of rebuilding.
+- `node scripts/verify-release-install.mjs` mirrors the release install smoke check before Electron packaging. CI sets `CODE_UX_SKIP_RELEASE_INSTALL_BUILD=1` only after downloading `codeux-build-linux`, which makes the verifier reuse `dist/` and `dashboard/dist/` instead of rebuilding. The clean install skips only the upstream optional ONNX CUDA/TensorRT download and then imports the bundled CPU runtime, so NuGet availability cannot mask package correctness.
 
 Dependency and cache behavior:
 - CI restores `node_modules` only as a speed hint and still runs `pnpm install --frozen-lockfile --ignore-scripts` in every job.
-- Vitest, Vite, TypeScript, Playwright browser, Electron binary, Electron Builder, and release-candidate caches are keyed to the runner OS, Node 22, pnpm 10.33.0, and dependency/config files that affect the cached output.
+- Vitest, Vite, TypeScript, Playwright browser, Electron binary, Electron Builder, and release-candidate caches are keyed to the runner OS, Node 22, pnpm 11.13.0, and dependency/config files that affect the cached output.
 - Playwright restores the browser cache before running `pnpm exec playwright install chromium`; Linux runners also run `pnpm exec playwright install-deps chromium` so cached browser binaries cannot hide missing OS dependencies.
 - The build artifact, not repeated source builds, feeds package smoke, orchestration, Playwright, and release-candidate jobs.
 - `tests/backend/ci/workflow-health.test.ts` audits these workflow invariants so accidental drift in package manager version, Node version, install mode, artifact reuse, audit separation, concurrency cancellation, Playwright artifacts, manual diagnostics, or release-lane separation fails a focused backend test.

@@ -35,3 +35,7 @@ The former `codeux:nodes-canvas:v1` value can be imported once into a project dr
 The run debugger reads redacted flow runs, node runs, numbered attempts, approvals, retry decisions, invocation links, timing, and cancellation state. Scheduling preserves pinned-versus-latest publication selection.
 
 Outside development, `/nodes` requires the Nodes feature flag plus the node-flow backend and automation-security prerequisites. Definition-specific execution still requires the applicable provider, credential, egress, approval/outbox, webhook, or custom-node service and security policy. Registry presence alone is not a production-readiness claim.
+
+## Localized dashboard surface
+
+The Nodes dashboard surface follows the active English or German dashboard locale for authored controls, generated validation explanations, governance states, debugger actions, scheduling links, loading and empty states, and accessibility labels. Localization does not rewrite graph JSON, node or edge identities, types, widget keys, configuration values, command names, skill metadata, API diagnostics, run logs, or provider payloads.

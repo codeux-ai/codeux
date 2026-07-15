@@ -16,6 +16,8 @@ import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 import type { ConfirmDialogOptions } from "../../hooks/use-confirm-dialog.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { sprintAuthoringMessages } from "../../i18n/messages/sprint-authoring.js";
 
 import {
   getBuiltinTemplates,
@@ -110,6 +112,8 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   onUpdateTemplate,
   onDeleteTemplate,
 }) => {
+  const { locale, translate } = useDashboardI18n();
+  const t = (key: keyof typeof sprintAuthoringMessages.en, variables?: Record<string, string>): string => translate(sprintAuthoringMessages, key, variables);
   const cardRef = useRef<HTMLDivElement>(null);
   const fieldsRef = useRef<HTMLDivElement>(null);
   const gsapTokens = useGsapInteractionTokens();
@@ -121,7 +125,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   const [phase, setPhase] = useState<Phase>("browse");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [selectedBuiltinPurpose, setSelectedBuiltinPurpose] = useState("");
-  const [phaseStatus, setPhaseStatus] = useState("Choose a quicksprint template.");
+  const [phaseStatus, setPhaseStatus] = useState(() => t("chooseQuicksprintTemplate"));
   const [blockingStatus, setBlockingStatus] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<QuicksprintTemplateRecord | null>(null);
 
@@ -150,8 +154,8 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   );
 
   const builtinPurposeOptions = useMemo(
-    () => getBuiltinPurposeOptions(builtinTemplates),
-    [builtinTemplates],
+    () => getBuiltinPurposeOptions(builtinTemplates, locale),
+    [builtinTemplates, locale],
   );
 
   useEffect(() => {
@@ -192,7 +196,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     setModelOverride(null);
     setShowPrompt(false);
     setAdditionalPrompt("");
-    setPhaseStatus(`${t.name} selected. Configure the quicksprint before planning.`);
+    setPhaseStatus(translate(sprintAuthoringMessages, "templateSelected", { name: t.name }));
   };
 
   const handleBackToBrowse = () => {
@@ -200,8 +204,8 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     setPhase("browse");
     setPhaseStatus(
       selectedTemplate
-        ? `Returned to templates. ${selectedTemplate.name} remains selected.`
-        : "Returned to templates.",
+        ? t("returnedTemplatesSelected", { name: selectedTemplate.name })
+        : t("returnedTemplates"),
     );
   };
 
@@ -213,7 +217,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     onDeleteTemplate,
     onCancel: () => {
       setPhase("browse");
-      setPhaseStatus("Returned to templates.");
+      setPhaseStatus(t("returnedTemplates"));
     },
     onStatus: setPhaseStatus,
     onError: setBlockingStatus,
@@ -223,7 +227,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     setBlockingStatus("");
     editorState.openEditor(t);
     setPhase("editor");
-    setPhaseStatus(t ? `Editing ${t.name}.` : "Creating a new quicksprint template.");
+    setPhaseStatus(t ? translate(sprintAuthoringMessages, "editingTemplateStatus", { name: t.name }) : translate(sprintAuthoringMessages, "creatingTemplateStatus"));
   };
 
   const restoreDeleteFocus = () => {
@@ -246,21 +250,21 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     setBlockingStatus("");
     deleteTriggerRef.current = trigger || null;
     setDeleteTarget(template);
-    setPhaseStatus(`Confirm deletion for ${template.name}.`);
+    setPhaseStatus(t("confirmDeletionStatus", { name: template.name }));
   };
 
   const confirmDeleteTemplate = async () => {
     if (!deleteTarget) return;
     const template = deleteTarget;
-    setPhaseStatus(`Deleting ${template.name} from quicksprint templates.`);
+    setPhaseStatus(t("deletingTemplateStatus", { name: template.name }));
     try {
       await onDeleteTemplate?.(template.id);
-      setPhaseStatus(`${template.name} deleted from quicksprint templates.`);
+      setPhaseStatus(t("deletedTemplateStatus", { name: template.name }));
       setDeleteTarget(null);
     } catch (error) {
       console.error("Failed to delete quicksprint template", error);
-      setBlockingStatus(`Could not delete ${template.name}. Try again or check the project template files.`);
-      setPhaseStatus(`Deletion failed for ${template.name}.`);
+      setBlockingStatus(t("deleteTemplateFailed", { name: template.name }));
+      setPhaseStatus(t("deletionFailedStatus", { name: template.name }));
       setDeleteTarget(null);
     } finally {
       restoreDeleteFocus();
@@ -271,7 +275,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     const templateName = deleteTarget?.name;
     setDeleteTarget(null);
     if (templateName) {
-      setPhaseStatus(`Deletion cancelled for ${templateName}.`);
+      setPhaseStatus(t("deletionCancelledStatus", { name: templateName }));
     }
     restoreDeleteFocus();
   };
@@ -344,12 +348,12 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   } as JSX.CSSProperties;
   const deleteConfirmOptions: ConfirmDialogOptions | null = deleteTarget
     ? {
-      title: `Delete ${deleteTarget.name}?`,
+      title: t("deleteTemplateQuestion", { name: deleteTarget.name }),
       body: deleteTarget.isBuiltIn
-        ? `Delete ${deleteTarget.name} from this project by hiding the default template. The shared bundled template remains available outside this project.`
-        : `Delete ${deleteTarget.name} from this project's custom templates.`,
-      confirmLabel: `Delete ${deleteTarget.name}`,
-      cancelLabel: "Cancel",
+        ? t("deleteBuiltinTemplateBody", { name: deleteTarget.name })
+        : t("deleteCustomTemplateBody", { name: deleteTarget.name }),
+      confirmLabel: t("deleteNamed", { name: deleteTarget.name }),
+      cancelLabel: t("cancel"),
       destructive: true,
     }
     : null;
@@ -396,7 +400,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
               setBlockingStatus("");
               setPhase(nextPhase);
               if (nextPhase === "browse") {
-                setPhaseStatus("Returned to templates.");
+                setPhaseStatus(t("returnedTemplates"));
               }
             }}
             cardRef={cardRef}
@@ -426,8 +430,8 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
             handleNewQuicksprint={executionState.handleNewQuicksprint}
             onSchedule={onSchedule}
             scheduleAnchorSprintOptions={scheduleAnchorSprintOptions}
-            defaultRouteOptionLabel={defaultRouteOptionLabel}
-            defaultModelOptionLabel={defaultModelOptionLabel}
+            defaultRouteOptionLabel={defaultRouteOptionLabel === "Default Route" ? t("defaultRoute") : defaultRouteOptionLabel}
+            defaultModelOptionLabel={defaultModelOptionLabel === "Default Model" ? t("defaultModel") : defaultModelOptionLabel}
             defaultRouteIconProviderId={defaultRouteIconProviderId}
             planningEta={planningEta}
             announcePhaseStatus={setPhaseStatus}

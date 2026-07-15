@@ -15,7 +15,10 @@ import {
 } from "../ci-status-presentation.js";
 import { deriveTaskBoardState, type TaskBoardState } from "../task-board-state.js";
 import { buildLiveTaskEnrichmentMap, type LiveTaskEnrichment } from "./live-task-enrichment.js";
-import { buildTaskCardViewModel, type TaskCardViewModel } from "./task-card-view-model.js";
+import { buildTaskCardViewModel, formatTaskDuration, type TaskCardViewModel } from "./task-card-view-model.js";
+import { getTaskPriorityLabel, getTaskStatusLabel } from "../tasks-constants.js";
+import type { DashboardLocale } from "../../i18n/locales.js";
+import { translateTask, translateTaskPlural } from "../../i18n/messages/tasks.js";
 import { STATUS_CFG } from "../tasks-constants.js";
 import { formatDuration } from "../format-duration.js";
 import { findActiveTaskHumanIntervention } from "../workflow-status-presentation.js";
@@ -34,6 +37,7 @@ export interface TaskBoardViewModelOptions {
   subtasks: Subtask[];
   taskPullRequestsEnabled?: boolean;
   previousTaskViewModels?: ReadonlyMap<string, TaskCardViewModel>;
+  locale?: DashboardLocale;
 }
 
 export interface TaskBoardViewModel {
@@ -50,12 +54,16 @@ export interface TaskBoardSprintScopeState {
   isEmpty: boolean;
 }
 
-function formatStatusFilter(statusFilter: "all" | TaskStatus): string {
-  return statusFilter === "all" ? "all statuses" : `${STATUS_CFG[statusFilter].label} status`;
+function formatStatusFilter(statusFilter: "all" | TaskStatus, locale: DashboardLocale): string {
+  return statusFilter === "all"
+    ? translateTask(locale, "allStatuses")
+    : translateTask(locale, "statusFilterValue", { status: getTaskStatusLabel(statusFilter, locale) });
 }
 
-function formatPriorityFilter(priorityFilter: "all" | TaskPriority): string {
-  return priorityFilter === "all" ? "any priority" : `${priorityFilter} priority`;
+function formatPriorityFilter(priorityFilter: "all" | TaskPriority, locale: DashboardLocale): string {
+  return priorityFilter === "all"
+    ? translateTask(locale, "anyPriorityLower")
+    : translateTask(locale, "priorityFilterValue", { priority: getTaskPriorityLabel(priorityFilter, locale).toLocaleLowerCase(locale) });
 }
 
 function appendField(parts: string[], value: unknown): void {
@@ -262,14 +270,14 @@ function buildDependencyIndicatorSignature(task: Task, indicators: ReadonlyArray
   return parts.join("|");
 }
 
-function buildLiveEnrichmentSignature(liveEnrichment?: LiveTaskEnrichment): string {
+function buildLiveEnrichmentSignature(liveEnrichment: LiveTaskEnrichment | undefined, locale: DashboardLocale): string {
   const parts: string[] = [];
   appendField(parts, liveEnrichment?.sessionId);
   appendField(parts, liveEnrichment?.sessionState);
   appendField(parts, liveEnrichment?.prUrl);
   appendField(parts, liveEnrichment?.liveStartedAt);
   appendField(parts, liveEnrichment?.liveTotalSeconds && liveEnrichment.liveTotalSeconds > 0
-    ? formatDuration(liveEnrichment.liveTotalSeconds)
+    ? formatTaskDuration(liveEnrichment.liveTotalSeconds, locale)
     : undefined);
   return parts.join("|");
 }
@@ -290,12 +298,14 @@ function buildTaskCardReuseSignature(args: {
   liveEnrichment?: LiveTaskEnrichment;
   taskPullRequestsEnabled: boolean;
   ciStatusSourceSignature: string;
+  locale: DashboardLocale;
 }): string {
   return [
     buildTaskSignature(args.task),
     buildDependencySignature(args.task, args.taskLookup),
-    buildLiveEnrichmentSignature(args.liveEnrichment),
+    buildLiveEnrichmentSignature(args.liveEnrichment, args.locale),
     args.ciStatusSourceSignature,
+    args.locale,
     args.liveEnrichment?.prUrl || args.taskPullRequestsEnabled ? "pr:1" : "pr:0",
   ].join("||");
 }
@@ -307,6 +317,7 @@ function findReusableTaskCardViewModel(args: {
   previousTaskViewModels?: ReadonlyMap<string, TaskCardViewModel>;
   taskPullRequestsEnabled: boolean;
   ciStatusSourceSignature: string;
+  locale: DashboardLocale;
 }): TaskCardViewModel | null {
   const previous = args.previousTaskViewModels?.get(args.task.recordId);
   if (!previous) {
@@ -323,6 +334,7 @@ function findReusableTaskCardViewModel(args: {
     buildDependencyIndicatorSignature(previous.task, previous.dependencyIndicators),
     buildTaskCardLiveSignature(previous),
     previous.ciStatusSourceSignature ?? "",
+    previous.presentationLocale ?? "en",
     previous.hasPullRequestMetadata ?? true ? "pr:1" : "pr:0",
   ].join("||");
 
@@ -335,12 +347,23 @@ export function buildTaskFilterAnnouncement(args: {
   statusFilter: "all" | TaskStatus;
   priorityFilter: "all" | TaskPriority;
   scopeLabel: string;
+  locale?: DashboardLocale;
 }): string {
-  const taskWord = args.totalCount === 1 ? "task" : "tasks";
+  const locale = args.locale ?? "en";
+  const number = new Intl.NumberFormat(locale);
+  const tasks = translateTaskPlural(locale, "taskCount", args.totalCount, {
+    count: number.format(args.totalCount),
+  });
   const visibleSuffix = args.visibleCount < args.totalCount
-    ? `, ${args.visibleCount} currently visible`
+    ? translateTask(locale, "visibleCount", { count: number.format(args.visibleCount) })
     : "";
-  return `Task board now shows ${args.totalCount} ${taskWord}${visibleSuffix} in ${args.scopeLabel} for ${formatStatusFilter(args.statusFilter)} and ${formatPriorityFilter(args.priorityFilter)}.`;
+  return translateTask(locale, "boardAnnouncement", {
+    tasks,
+    visible: visibleSuffix,
+    scope: args.scopeLabel,
+    status: formatStatusFilter(args.statusFilter, locale),
+    priority: formatPriorityFilter(args.priorityFilter, locale),
+  });
 }
 
 export function buildTaskBoardSprintScopeState(args: {
@@ -348,11 +371,13 @@ export function buildTaskBoardSprintScopeState(args: {
   selectedSprintId: string | null;
   selectedSprintLabel: string | null;
   loading: boolean;
+  locale?: DashboardLocale;
 }): TaskBoardSprintScopeState {
+  const locale = args.locale ?? "en";
   if (args.loading) {
     return {
-      label: "Loading sprints",
-      description: "Sprint scope options are loading.",
+      label: translateTask(locale, "loadingSprints"),
+      description: translateTask(locale, "loadingSprintsDescription"),
       isScoped: false,
       isLoading: true,
       isEmpty: false,
@@ -361,8 +386,8 @@ export function buildTaskBoardSprintScopeState(args: {
 
   if (args.sprints.length === 0) {
     return {
-      label: "No sprints",
-      description: "Create a sprint before selecting task scope.",
+      label: translateTask(locale, "noSprints"),
+      description: translateTask(locale, "noSprintsDescription"),
       isScoped: false,
       isLoading: false,
       isEmpty: true,
@@ -372,7 +397,7 @@ export function buildTaskBoardSprintScopeState(args: {
   if (args.selectedSprintId && args.selectedSprintLabel) {
     return {
       label: args.selectedSprintLabel,
-      description: `Task board scoped to ${args.selectedSprintLabel}.`,
+      description: translateTask(locale, "scopedToSprint", { sprint: args.selectedSprintLabel }),
       isScoped: true,
       isLoading: false,
       isEmpty: false,
@@ -380,8 +405,8 @@ export function buildTaskBoardSprintScopeState(args: {
   }
 
   return {
-    label: "All Sprints",
-    description: "Task board scoped to all project sprints.",
+    label: translateTask(locale, "allSprints"),
+    description: translateTask(locale, "scopedToAll"),
     isScoped: false,
     isLoading: false,
     isEmpty: false,
@@ -403,6 +428,7 @@ export function buildTaskBoardViewModel(options: TaskBoardViewModelOptions): Tas
     subtasks,
     taskPullRequestsEnabled = true,
     previousTaskViewModels,
+    locale = "en",
   } = options;
 
   const optimisticRecordIds = new Set(optimisticTasks.map((task) => task.recordId));
@@ -458,6 +484,7 @@ export function buildTaskBoardViewModel(options: TaskBoardViewModelOptions): Tas
       previousTaskViewModels,
       taskPullRequestsEnabled,
       ciStatusSourceSignature: ciSource.signature,
+      locale,
     });
     taskViewModels.set(
       task.recordId,
@@ -466,6 +493,7 @@ export function buildTaskBoardViewModel(options: TaskBoardViewModelOptions): Tas
         ciStatusPresentation: ciSource.presentation,
         humanIntervention: ciSource.humanIntervention,
         ciStatusSourceSignature: ciSource.signature,
+        locale,
       })
     );
   }
@@ -478,7 +506,8 @@ export function buildTaskBoardViewModel(options: TaskBoardViewModelOptions): Tas
       visibleCount: boardState.visibleTasks.length,
       statusFilter,
       priorityFilter,
-      scopeLabel: taskScopeSprintId ? "selected sprint" : "all sprints",
+      scopeLabel: translateTask(locale, taskScopeSprintId ? "selectedSprint" : "allSprintsScope"),
+      locale,
     }),
   };
 }

@@ -15,6 +15,8 @@ import {
   dashboardSettingsToProjectSettings,
 } from "../../lib/settings-view-models.js";
 import type { ProjectSettings, SettingsValueSource } from "../../../types.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { sprintAuthoringMessages } from "../../i18n/messages/sprint-authoring.js";
 
 interface SprintSettingsOverrideModalProps {
   projectId: string;
@@ -29,6 +31,8 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
   onClose,
   onSaved,
 }) => {
+  const { translate } = useDashboardI18n();
+  const t = (key: keyof typeof sprintAuthoringMessages.en): string => translate(sprintAuthoringMessages, key);
   const backdropRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -97,7 +101,7 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
       await saveSprintSettings(projectId, sprint.id, settings);
       await loadSettings();
       await onSaved();
-      setMessage("Sprint overrides saved.");
+      setMessage(t("overridesSaved"));
       setError(null);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : String(saveError));
@@ -112,7 +116,7 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
       await resetSprintSettings(sprint.id);
       await loadSettings();
       await onSaved();
-      setMessage("Sprint overrides reset.");
+      setMessage(t("overridesReset"));
       setError(null);
     } catch (resetError) {
       setError(resetError instanceof Error ? resetError.message : String(resetError));
@@ -137,18 +141,18 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
       >
         <SettingsHeader
           icon={SlidersHorizontal}
-          eyebrow="Sprint Overrides"
+          eyebrow={t("sprintOverrides")}
           title={sprint.name}
-          description="Sprint settings override the resolved project configuration for this sprint only. Saving from this dialog stays sparse on the backend."
+          description={t("sprintOverridesLongDescription")}
           actions={
             <>
               <ActionButton
-                label="Reload"
+                label={t("reload")}
                 onClick={() => { void loadSettings(); }}
                 busy={loading}
               />
               <ActionButton
-                label="Reset"
+                label={t("reset")}
                 onClick={() => { void handleReset(); }}
                 tone="danger"
                 busy={resetting}
@@ -166,25 +170,25 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
               >
                 {saving ? (
                   <>
-                    <><RefreshCw aria-hidden="true" className="h-3.5 w-3.5 animate-spin" strokeWidth={2.2} /><span className="sr-only">Loading</span></>
-                    Saving
+                    <><RefreshCw aria-hidden="true" className="h-3.5 w-3.5 animate-spin" strokeWidth={2.2} /><span className="sr-only">{t("loading")}</span></>
+                    {t("savingShort")}
                   </>
                 ) : message && !error ? (
                   <>
                     <Check className="h-3.5 w-3.5" strokeWidth={2.2} />
-                    Saved
+                    {t("saved")}
                   </>
                 ) : (
                   <>
                     <Zap className="h-3.5 w-3.5 transition-transform duration-200 group-hover:scale-110" strokeWidth={2} />
-                    Save Changes
+                    {t("saveChanges")}
                   </>
                 )}
               </button>
               <button
                 type="button"
                 onClick={onClose}
-                aria-label="Close dialog"
+                aria-label={t("closeDialog")}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/[0.05] text-slate-500 transition-colors hover:text-slate-900 dark:bg-white/[0.05] dark:text-slate-400 dark:hover:text-white"
               >
                 <X aria-hidden="true" className="h-4 w-4" strokeWidth={2.1} />
@@ -198,7 +202,7 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
             error={error}
             message={message}
             loading={loading || !settings}
-            loadingLabel="Loading sprint overrides\u2026"
+            loadingLabel={t("loadingSprintOverrides")}
           >
             {settings ? (
               <ProjectSettingsEditor settings={settings} onChange={setSettings} sources={sources} editingScope="sprint" />

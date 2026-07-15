@@ -6,8 +6,8 @@ This page covers cloning, building, running, and contributing.
 
 ## Prerequisites
 
-- **Node.js >=22** — The project targets Node 22 in CI and uses ES2022 / NodeNext modules.
-- **pnpm 10.33.0** — The package manager declared in `packageManager`.
+- **Node.js >=22.13** — The project targets Node 22 in CI and uses ES2022 / NodeNext modules.
+- **pnpm 11.13.0** — The package manager declared in `packageManager`.
 - **Git** — only needed for the manual `git clone` step or contributor workflows.
 - **Docker** — required for normal runtime operation, including containerized helper Git, virtual workers in DOCKER mode, and sprint preview browsers.
 
@@ -165,6 +165,8 @@ pnpm run dev:server-only       # boot just the server from source
 ```
 
 Electron and npm package builds must include the `docs-web` runtime catalog. The dashboard Docs page fetches its collection and markdown through `/api/docs-web`, so installed desktop builds and npm-installed CLI/server runs need the same `docs-web` directory beside the compiled runtime root.
+
+Electron runtime dependency preparation runs a production-only pnpm 11 install. The workspace `allowBuilds` policy approves only `onnxruntime-node`; preparation sets `ONNXRUNTIME_NODE_INSTALL=skip` because the CPU bindings used by Code UX are bundled and the upstream Linux default fetches optional CUDA/TensorRT binaries from NuGet. This keeps desktop packaging deterministic without suppressing the dependency postinstall or pnpm's build-policy check. Keep that allowlist narrow and review any addition as release-executed code.
 
 They must also include `assets/models-dev/catalog.json`. The automatic token-pricing path reads this snapshot beside the compiled runtime; without it, known models can appear unpriced only in the desktop build. Electron packaging tests pin both runtime assets and a representative GPT-5.5 catalogue rate.
 

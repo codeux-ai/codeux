@@ -2,6 +2,8 @@ import { type FunctionComponent } from "preact";
 import { CircleDot, ExternalLink, GitMerge, GitPullRequest, Ticket } from "lucide-preact";
 import { ChatWidgetFrame, type ExecutionStatus } from "./ChatWidgetFrame.js";
 import type { ExternalReferenceKind, ExternalReferenceWidgetState } from "../../../lib/chat-widget-view-models.js";
+import { useDashboardI18n } from "../../../i18n/context.js";
+import { chatMessages } from "../../../i18n/messages/chat.js";
 
 export interface ExternalReferenceWidgetProps {
   reference: ExternalReferenceWidgetState;
@@ -48,6 +50,7 @@ export const ExternalReferenceWidget: FunctionComponent<ExternalReferenceWidgetP
   reference,
   status,
 }) => {
+  const { translate } = useDashboardI18n();
   const url = safeExternalUrl(reference.url);
   const path = reference.repositoryPath ?? reference.projectPath;
   const hasMetadata = Boolean(reference.stateLabel || path || reference.assignee || reference.author || reference.labels.length > 0);
@@ -73,10 +76,10 @@ export const ExternalReferenceWidget: FunctionComponent<ExternalReferenceWidgetP
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-black/[0.06] bg-white/75 px-2 py-1 text-[11px] font-bold text-slate-700 transition hover:border-signal-500/40 hover:text-signal-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-200 dark:hover:text-signal-300"
-              aria-label={`Open ${reference.providerLabel} ${reference.kindLabel}: ${reference.title}`}
+              aria-label={translate(chatMessages, "openExternalReference", { provider: reference.providerLabel, kind: reference.kindLabel, title: reference.title })}
             >
               <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>Open</span>
+              <span>{translate(chatMessages, "open")}</span>
             </a>
           ) : null}
         </div>
@@ -103,9 +106,9 @@ export const ExternalReferenceWidget: FunctionComponent<ExternalReferenceWidgetP
 
         {hasMetadata ? (
           <div className="flex min-w-0 flex-wrap gap-1.5">
-            {path ? <MetadataChip label={reference.repositoryPath ? "Repo" : "Project"} value={path} /> : null}
-            {reference.assignee ? <MetadataChip label="Assignee" value={reference.assignee} /> : null}
-            {reference.author ? <MetadataChip label="Author" value={reference.author} /> : null}
+            {path ? <MetadataChip label={translate(chatMessages, reference.repositoryPath ? "repo" : "project")} value={path} /> : null}
+            {reference.assignee ? <MetadataChip label={translate(chatMessages, "assignee")} value={reference.assignee} /> : null}
+            {reference.author ? <MetadataChip label={translate(chatMessages, "author")} value={reference.author} /> : null}
             {reference.labels.map((label) => (
               <span
                 key={label}

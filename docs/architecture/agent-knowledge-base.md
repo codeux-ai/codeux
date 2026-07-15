@@ -69,4 +69,8 @@ acknowledgement step after selecting or deselecting knowledge.
 
 Knowledge and memory routes must be registered through the dashboard route-registration phase, after `applyDashboardPreRouteMiddleware` installs `express.json`. If knowledge routes are mounted before the JSON parser, pasted notes and repo-path ingest requests arrive with an empty `req.body`, and subscription updates can silently replace the agent document set with an empty array.
 
+## Dashboard Localization Boundary
+
+The `/knowledge` interface uses the dashboard's English/German locale while keeping the ingestion contract opaque to localization. Route-authored headings, controls, statuses, validation fallbacks, confirmations, and live announcements are translated, and derived counts, file sizes, dates, and similarity percentages are locale-formatted. Document text and metadata, repository paths, agent and model names, MIME and language identifiers, embedding/search output, partial-failure diagnostics, and API error messages pass through unchanged.
+
 Focused coverage lives in `tests/backend/server/knowledge-route-registration.test.ts`.

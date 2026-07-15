@@ -57,6 +57,7 @@
 - [MCP Worker Dispatch Executor](./architecture/mcp-worker-dispatch-executor.md)
 - [External MCP Worker Client](./architecture/external-mcp-worker-client.md)
 - [External Chat Provider Foundation](./architecture/external-chat-providers.md)
+- [Chat Connector Runtime Reliability](./architecture/chat-connector-runtime-reliability.md)
 - [Virtual Workers](./architecture/virtual-workers.md)
 - [Chat Thread Runtime](./architecture/chat-thread-runtime.md)
 - [MCP Tools and Contracts](./mcp/tools-and-contracts.md)
@@ -66,6 +67,7 @@
 - [Sprint Rollbacks](./architecture/sprint-rollbacks.md)
 - [Instruction Template System](./instructions/markdown-template-system.md)
 - [Dashboard Guide](./dashboard/dashboard-guide.md)
+- [Dashboard Internationalization](./dashboard/internationalization.md) — Language selector, browser-local persistence, content boundaries, and contributor workflow
 - [Dashboard Accessibility Patterns](./dashboard/dashboard-guide.md#accessibility-patterns)
 - [Interaction Patterns](./dashboard/interaction-patterns.md)
 - [Dashboard Interaction Contracts](./dashboard/interaction-patterns.md#implemented-surface-contracts)
@@ -92,6 +94,7 @@
 - [Configuration and Storage](./settings/configuration-and-storage.md)
 - [Provider Routing](./settings/provider-routing.md)
 - [Chat Provider Integrations](./settings/chat-provider-integrations.md)
+- [Chat Connector Profiles](./settings/chat-connectors/index.md)
 - [Settings Reference](./settings/index.md)
   - [Google Drive Project Mount](./settings/google-drive-mount.md)
   - [Integrations](./settings/integrations.md)

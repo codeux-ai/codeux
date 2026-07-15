@@ -26,6 +26,8 @@ import type { RefObject } from "preact";
 import type { DashboardSettings, ExecutionDashboardSnapshot, TechstackCatalogEntrySettings } from "../../types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../lib/settings.js";
 import { getCreateAppQuickactionSpec } from "../../../../src/domain/chat/create-app-quickaction-catalog.js";
+import { useDashboardI18n } from "../i18n/context.js";
+import { chatMessages } from "../i18n/messages/chat.js";
 
 export const upsertMessage = (messages: ChatMessageRecord[], nextMessage: ChatMessageRecord): ChatMessageRecord[] => {
   if (messages.some((message) => message.id === nextMessage.id)) {
@@ -279,6 +281,7 @@ export const useChatThreadData = (options: {
   onMessageSent?: (payload: { message: ChatMessageRecord; optimisticInvocationId?: string | null }) => void;
   onMessageSendFailed?: (optimisticInvocationId: string) => void;
 }) => {
+  const { formatDate, translate } = useDashboardI18n();
   const { selectedProject, cache, execution, dashboardSettings, composerRef, messagesRef, onMessageSent } = options;
 
   const [threads, setThreads] = useState<ChatThread[]>([]);
@@ -749,10 +752,10 @@ export const useChatThreadData = (options: {
 
   const createThreadForCompose = useCallback(async (): Promise<ChatThread> => {
     if (!selectedProject) {
-      throw new Error("Select a project before starting a chat thread.");
+      throw new Error(translate(chatMessages, "selectProjectBeforeThread"));
     }
     const thread = await createConversationThread(selectedProject.id, {
-      title: `Project Chat ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`,
+      title: translate(chatMessages, "projectChatTitle", { date: formatDate(new Date(), { month: "short", day: "numeric" }) }),
     });
     const nextThreads = upsertChatThread(cache.getThreads(selectedProject.id) || threadsRef.current, thread);
     cache.setThreads(selectedProject.id, nextThreads);
@@ -768,9 +771,9 @@ export const useChatThreadData = (options: {
     }
 
     const confirmed = await requestConfirm({
-      title: "Compact Thread?",
-      body: "This will truncate previous active sessions.",
-      confirmLabel: "Compact",
+      title: translate(chatMessages, "compactThreadQuestion"),
+      body: translate(chatMessages, "compactThreadBody"),
+      confirmLabel: translate(chatMessages, "compact"),
     });
 
     if (!confirmed) return;
@@ -787,7 +790,7 @@ export const useChatThreadData = (options: {
       setThreadsSnapshot(nextThreads);
       await refreshMessages(updated.id);
       setError(null);
-      setSuccess("Thread compacted.");
+      setSuccess(translate(chatMessages, "threadCompacted"));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -819,7 +822,7 @@ export const useChatThreadData = (options: {
       setThreadsSnapshot(nextThreads);
       await refreshMessages(selectedThread.id, { force: true });
       setError(null);
-      setSuccess("Turn cancelled.");
+      setSuccess(translate(chatMessages, "turnCancelled"));
     } catch (cancelError) {
       setError(cancelError instanceof Error ? cancelError.message : String(cancelError));
     } finally {
@@ -829,7 +832,7 @@ export const useChatThreadData = (options: {
 
   const handleRenameThread = useCallback(async (title: string): Promise<ChatThread> => {
     if (!selectedThread || !selectedProject) {
-      throw new Error("Select a thread before renaming it.");
+      throw new Error(translate(chatMessages, "selectThreadBeforeRename"));
     }
 
     const updated = await updateConversationThread(selectedThread.id, { title });
@@ -839,7 +842,7 @@ export const useChatThreadData = (options: {
     cache.setThreads(selectedProject.id, nextThreads);
     setThreadsSnapshot(nextThreads);
     setError(null);
-    setSuccess("Thread renamed.");
+    setSuccess(translate(chatMessages, "threadRenamed"));
     return updated;
   }, [cache, selectedProject, selectedThread, setSuccess, setThreadsSnapshot]);
 
@@ -1011,7 +1014,7 @@ export const useChatThreadData = (options: {
     try {
       await deleteConversationThread(threadId);
       setError(null);
-      setSuccess("Thread deleted.");
+      setSuccess(translate(chatMessages, "threadDeleted"));
     } catch (deleteError) {
       // Assuming parent handles broad refresh, but since we optimistically updated, if error, we might be out of sync.
       setError(deleteError instanceof Error ? deleteError.message : String(deleteError));

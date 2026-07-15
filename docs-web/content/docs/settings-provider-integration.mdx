@@ -31,6 +31,10 @@ A practical review flow is:
 2. Save the smallest scope that should own the change. Use System for defaults that every project should inherit, and Project for repository-specific behavior.
 3. Reopen the Settings page after saving when the value controls startup behavior, provider routing, preview runtime, or destructive maintenance.
 
+## Localization And Protected Values
+
+Provider setup descriptions, authentication-mode labels, chat-bridge fields, terminal chrome, and dashboard-authored status messages follow the selected dashboard language. Provider names, configuration paths, credential fields, terminal streams, and provider or network failures remain verbatim. The UI also preserves secure-storage capability checks and redaction independently of locale.
+
 ## Risks And Gotchas
 
 Expecting project scope to create credentials can leave routes without provider instances.

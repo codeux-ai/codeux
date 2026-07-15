@@ -12,6 +12,7 @@ export interface SprintSummaryAggregation {
   completedTasks: number;
   progressTasks: SprintProgressTask[];
   latestRunStatus: string | null;
+  latestRunUpdatedAt: string | null;
   ciStatus: CardCiStatus | null;
   latestReview?: SprintReviewSummary;
 }
@@ -28,6 +29,7 @@ interface SprintTaskProgressRow {
 interface SprintLatestRunRow {
   sprint_id: string;
   latest_run_status: string | null;
+  latest_run_updated_at: string | null;
 }
 
 export const sprintSummaryQuery = {
@@ -72,6 +74,7 @@ export function loadSprintSummaryAggregationMap(
       completedTasks: 0,
       progressTasks: [],
       latestRunStatus: null,
+      latestRunUpdatedAt: null,
       ciStatus: null,
     });
   }
@@ -147,11 +150,12 @@ export function loadSprintSummaryAggregationMap(
 
   for (const row of storage.executeChunkedInQuery<SprintLatestRunRow>({
     sqlPrefix: `
-      SELECT sprint_id, status AS latest_run_status
+      SELECT sprint_id, status AS latest_run_status, updated_at AS latest_run_updated_at
       FROM (
         SELECT
           sprint_id,
           status,
+          updated_at,
           ROW_NUMBER() OVER (
             PARTITION BY sprint_id
             ORDER BY COALESCE(started_at, created_at) DESC, created_at DESC, rowid DESC
@@ -167,6 +171,7 @@ export function loadSprintSummaryAggregationMap(
     const aggregate = map.get(row.sprint_id);
     if (aggregate) {
       aggregate.latestRunStatus = row.latest_run_status;
+      aggregate.latestRunUpdatedAt = row.latest_run_updated_at;
     }
   }
 

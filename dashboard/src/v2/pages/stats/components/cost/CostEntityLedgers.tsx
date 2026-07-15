@@ -22,6 +22,7 @@ import {
   TokenFlowBar,
 } from "../StatsShared.js";
 import styles from "./CostEntityLedgers.module.css";
+import { useStatsI18n, type StatsI18nValue, type StatsMessageKey } from "../../stats-i18n.js";
 
 export type CostLedgerView = "tasks" | "sprints";
 export type CostLedgerSortKey = "spend" | "tokens" | "calls" | "costPerCall" | "recency" | "name";
@@ -34,41 +35,21 @@ export interface CostEntityLedgersProps {
   averageCostPerSprint: CostAverage;
 }
 
-const SORT_OPTIONS: ReadonlyArray<{ key: CostLedgerSortKey; label: string }> = [
-  { key: "spend", label: "Spend" },
-  { key: "tokens", label: "Tokens" },
-  { key: "calls", label: "Calls" },
-  { key: "costPerCall", label: "Cost / call" },
-  { key: "recency", label: "Recent" },
-  { key: "name", label: "Name" },
+const SORT_OPTIONS: ReadonlyArray<{ key: CostLedgerSortKey; labelKey: StatsMessageKey }> = [
+  { key: "spend", labelKey: "spend" },
+  { key: "tokens", labelKey: "tokens" },
+  { key: "calls", labelKey: "calls" },
+  { key: "costPerCall", labelKey: "costPerCall" },
+  { key: "recency", labelKey: "recent" },
+  { key: "name", labelKey: "name" },
 ];
 
-const COVERAGE_COPY: Record<CostCoverageState, { label: string; detail: string; tone: string }> = {
-  complete: {
-    label: "Full coverage",
-    detail: "Every invocation has configured or provider-reported pricing.",
-    tone: STATUS_TONE_CLASS.positive,
-  },
-  partial: {
-    label: "Partial coverage",
-    detail: "Spend excludes one or more unpriced invocations.",
-    tone: STATUS_TONE_CLASS.warning,
-  },
-  unpriced: {
-    label: "Unpriced",
-    detail: "No invocation in this row has usable pricing.",
-    tone: STATUS_TONE_CLASS.negative,
-  },
-  unknown: {
-    label: "Coverage unknown",
-    detail: "Legacy telemetry does not contain pricing coverage.",
-    tone: STATUS_TONE_CLASS.neutral,
-  },
-  unavailable: {
-    label: "No usage",
-    detail: "No priced invocation is available for this row.",
-    tone: STATUS_TONE_CLASS.neutral,
-  },
+const COVERAGE_COPY: Record<CostCoverageState, { labelKey: StatsMessageKey; detailKey: StatsMessageKey; tone: string }> = {
+  complete: { labelKey: "fullCoverage", detailKey: "fullCoverageDetail", tone: STATUS_TONE_CLASS.positive },
+  partial: { labelKey: "partialCoverage", detailKey: "partialCoverageDetail", tone: STATUS_TONE_CLASS.warning },
+  unpriced: { labelKey: "unpriced", detailKey: "unpricedRowDetail", tone: STATUS_TONE_CLASS.negative },
+  unknown: { labelKey: "coverageUnknown", detailKey: "legacyCoverageUnknown", tone: STATUS_TONE_CLASS.neutral },
+  unavailable: { labelKey: "noUsage", detailKey: "noPricedInvocation", tone: STATUS_TONE_CLASS.neutral },
 };
 
 function getStatusTone(status: string | null): string {
@@ -165,19 +146,20 @@ function compareRows(
 }
 
 const CoverageBadge: FunctionComponent<{ amount: CostAmount }> = ({ amount }) => {
+  const i18n = useStatsI18n();
   const coverage = COVERAGE_COPY[amount.provenance.state];
   const covered = amount.provenance.configuredPricingInvocationCount
     + amount.provenance.providerReportedCostInvocationCount;
   const countDetail = amount.provenance.invocationCount > 0
-    ? ` ${covered.toLocaleString()} of ${amount.provenance.invocationCount.toLocaleString()} calls covered.`
+    ? ` ${i18n.text("callsCovered", { covered: i18n.formatNumber(covered), total: i18n.formatNumber(amount.provenance.invocationCount) })}`
     : "";
   return (
     <span
       className={`${styles.badge} ${coverage.tone}`}
-      title={`${coverage.detail}${countDetail}`}
-      aria-label={`${coverage.label}.${countDetail}`.trim()}
+      title={`${i18n.text(coverage.detailKey)}${countDetail}`}
+      aria-label={`${i18n.text(coverage.labelKey)}.${countDetail}`.trim()}
     >
-      {coverage.label}
+      {i18n.text(coverage.labelKey)}
     </span>
   );
 };
@@ -187,36 +169,41 @@ const Summary: FunctionComponent<{
   average: CostAverage;
   kind: "task" | "sprint";
   matchCount: number;
-}> = ({ total, average, kind, matchCount }) => (
-  <div className={styles.summary} aria-label={`${kind} cost ledger summary`}>
+}> = ({ total, average, kind, matchCount }) => {
+  const i18n = useStatsI18n();
+  return (
+  <div className={styles.summary} aria-label={i18n.text("costLedgerSummary", { kind: i18n.text(kind) })}>
     <div className={styles.summaryItem}>
-      <span>Filtered spend</span>
-      <strong>{formatAdaptiveCurrency(total)}</strong>
-      <small>{matchCount.toLocaleString()} matching {matchCount === 1 ? kind : `${kind}s`}</small>
+      <span>{i18n.text("filteredSpend")}</span>
+      <strong>{formatAdaptiveCurrency(total, i18n.locale)}</strong>
+      <small>{i18n.plural(kind === "task" ? "matchingTasks" : "matchingSprints", matchCount, { count: i18n.formatNumber(matchCount) })}</small>
     </div>
     <div className={styles.summaryItem}>
-      <span>Average / {kind}</span>
-      <strong>{formatAdaptiveCurrency(average)}</strong>
-      <small>All {average.entityCount.toLocaleString()} active {average.entityCount === 1 ? kind : `${kind}s`}</small>
+      <span>{i18n.text("averageByKind", { kind: i18n.text(kind) })}</span>
+      <strong>{formatAdaptiveCurrency(average, i18n.locale)}</strong>
+      <small>{i18n.plural(kind === "task" ? "allActiveTasks" : "allActiveSprints", average.entityCount, { count: i18n.formatNumber(average.entityCount) })}</small>
     </div>
     <div className={styles.summaryItem}>
-      <span>Pricing provenance</span>
+      <span>{i18n.text("pricingProvenance")}</span>
       <CoverageBadge amount={total} />
-      <small>{COVERAGE_COPY[total.provenance.state].detail}</small>
+      <small>{i18n.text(COVERAGE_COPY[total.provenance.state].detailKey)}</small>
     </div>
   </div>
-);
+  );
+};
 
 const CostRow: FunctionComponent<{ row: CostDetailRow; kind: "task" | "sprint"; rank: number }> = ({ row, kind, rank }) => {
+  const i18n = useStatsI18n();
+  const kindLabel = i18n.text(kind === "task" ? "taskKind" : "sprintKind");
   const segments = Object.fromEntries(row.tokenSegments.map((segment) => [segment.id, segment.tokens]));
-  const status = row.status?.replaceAll("_", " ") ?? "Status unavailable";
+  const status = row.status?.replaceAll("_", " ") ?? i18n.text("statusUnavailable");
   return (
-    <article className={styles.row} aria-label={`${row.label} ${kind} cost row`} data-cost-row-id={row.id}>
+    <article className={styles.row} aria-label={i18n.text("entityCostRow", { label: row.label, kind: kindLabel })} data-cost-row-id={row.id}>
       <div className={styles.identity}>
-        <span className={styles.rank} aria-label={`Rank ${rank}`}>{rank}</span>
+        <span className={styles.rank} aria-label={i18n.text("rank", { rank: i18n.formatNumber(rank) })}>{rank}</span>
         <div className={styles.identityCopy}>
           <h3>{row.label}</h3>
-          <p>{row.secondaryLabel || `No secondary ${kind} context`} · {row.recency}</p>
+          <p>{row.secondaryLabel || i18n.text("noSecondaryContext", { kind: kindLabel })} · {row.recency}</p>
           <div className={styles.badges}>
             <span className={`${styles.badge} ${getStatusTone(row.status)}`}>{status}</span>
             <CoverageBadge amount={row.amount} />
@@ -225,18 +212,18 @@ const CostRow: FunctionComponent<{ row: CostDetailRow; kind: "task" | "sprint"; 
       </div>
 
       <dl className={styles.metrics}>
-        <div><dt>Spend</dt><dd>{formatAdaptiveCurrency(row.amount)}</dd></div>
-        <div><dt>Spend share</dt><dd>{formatPercent(row.spendShare * 100)}</dd></div>
-        <div><dt>Tokens</dt><dd>{formatTokens(row.tokens)}</dd></div>
-        <div><dt>Calls</dt><dd>{row.calls.toLocaleString()}</dd></div>
-        <div><dt>Cost / call</dt><dd>{formatAdaptiveCurrency(row.costPerCall)}</dd></div>
-        <div><dt>Last activity</dt><dd>{row.recency}</dd></div>
+        <div><dt>{i18n.text("spend")}</dt><dd>{formatAdaptiveCurrency(row.amount, i18n.locale)}</dd></div>
+        <div><dt>{i18n.text("spendShare")}</dt><dd>{formatPercent(row.spendShare * 100, i18n.locale)}</dd></div>
+        <div><dt>{i18n.text("tokens")}</dt><dd>{formatTokens(row.tokens, i18n.locale)}</dd></div>
+        <div><dt>{i18n.text("calls")}</dt><dd>{i18n.formatNumber(row.calls)}</dd></div>
+        <div><dt>{i18n.text("costPerCall")}</dt><dd>{formatAdaptiveCurrency(row.costPerCall, i18n.locale)}</dd></div>
+        <div><dt>{i18n.text("lastActivity")}</dt><dd>{row.recency}</dd></div>
       </dl>
 
       <div className={styles.tokenMix}>
         <div className={styles.tokenMixHeader}>
-          <span>Token mix</span>
-          <span>{formatTokens(row.tokens)} total</span>
+          <span>{i18n.text("tokenMix")}</span>
+          <span>{i18n.text("valueTotal", { value: formatTokens(row.tokens, i18n.locale) })}</span>
         </div>
         <TokenFlowBar
           input={segments.input ?? 0}
@@ -246,10 +233,10 @@ const CostRow: FunctionComponent<{ row: CostDetailRow; kind: "task" | "sprint"; 
           total={row.tokens}
         />
         <p>
-          <span>Input {formatTokens(segments.input ?? 0)}</span>
-          <span>Cached {formatTokens(segments.cached_input ?? 0)}</span>
-          <span>Output {formatTokens(segments.output ?? 0)}</span>
-          <span>Reasoning {formatTokens(segments.reasoning ?? 0)}</span>
+          <span>{i18n.text("inputValue", { value: formatTokens(segments.input ?? 0, i18n.locale) })}</span>
+          <span>{i18n.text("cachedValue", { value: formatTokens(segments.cached_input ?? 0, i18n.locale) })}</span>
+          <span>{i18n.text("outputValue", { value: formatTokens(segments.output ?? 0, i18n.locale) })}</span>
+          <span>{i18n.text("reasoningValue", { value: formatTokens(segments.reasoning ?? 0, i18n.locale) })}</span>
         </p>
       </div>
     </article>
@@ -262,17 +249,18 @@ export const CostEntityLedgers: FunctionComponent<CostEntityLedgersProps> = ({
   averageCostPerTask,
   averageCostPerSprint,
 }) => {
+  const i18n = useStatsI18n();
   const [activeView, setActiveView] = useState<CostLedgerView>("tasks");
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<CostLedgerSortKey>("spend");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const tabRefs = useRef<Record<CostLedgerView, HTMLButtonElement | null>>({ tasks: null, sprints: null });
   const views = [
-    { id: "tasks" as const, label: "Tasks", rows: tasks },
-    { id: "sprints" as const, label: "Sprints", rows: sprints },
+    { id: "tasks" as const, label: i18n.text("tasks"), rows: tasks },
+    { id: "sprints" as const, label: i18n.text("sprints"), rows: sprints },
   ];
   const active = views.find((view) => view.id === activeView) ?? views[0];
-  const normalizedQuery = query.trim().toLocaleLowerCase("en");
+  const normalizedQuery = query.trim().toLocaleLowerCase(i18n.locale);
   const filteredRows = useMemo(() => {
     const matches = normalizedQuery
       ? active.rows.filter((row) => [
@@ -280,21 +268,22 @@ export const CostEntityLedgers: FunctionComponent<CostEntityLedgersProps> = ({
         row.secondaryLabel ?? "",
         row.status ?? "",
         row.recency,
-        COVERAGE_COPY[row.amount.provenance.state].label,
-      ].join(" ").toLocaleLowerCase("en").includes(normalizedQuery))
+        i18n.text(COVERAGE_COPY[row.amount.provenance.state].labelKey),
+      ].join(" ").toLocaleLowerCase(i18n.locale).includes(normalizedQuery))
       : active.rows;
     return [...matches].sort((left, right) => compareRows(left, right, sortKey, sortDirection));
-  }, [active.rows, normalizedQuery, sortDirection, sortKey]);
+  }, [active.rows, i18n, normalizedQuery, sortDirection, sortKey]);
   const filteredTotal = useMemo(() => aggregateAmount(filteredRows), [filteredRows]);
   const average = activeView === "tasks" ? averageCostPerTask : averageCostPerSprint;
   const kind = activeView === "tasks" ? "task" : "sprint";
+  const activeSearchNoun = i18n.text(activeView === "tasks" ? "tasksSearchNoun" : "sprintsSearchNoun");
   const { visibleItems, visibleCount, hasMore, sentinelRef, scrollContainerRef } = useProgressiveList(filteredRows, {
     initialCount: 12,
     stepCount: 8,
   });
   const queryActive = normalizedQuery.length > 0;
-  const sortLabel = SORT_OPTIONS.find((option) => option.key === sortKey)?.label ?? sortKey;
-  const announcement = `${active.label} cost ledger. ${queryActive ? `Filter ${query.trim()}.` : "No search filter."} Sorted by ${sortLabel} ${sortDirection === "asc" ? "ascending" : "descending"}. ${visibleCount.toLocaleString()} of ${filteredRows.length.toLocaleString()} matching rows displayed.`;
+  const sortLabel = i18n.text(SORT_OPTIONS.find((option) => option.key === sortKey)?.labelKey ?? "spend");
+  const announcement = i18n.text("costLedgerAnnouncement", { ledger: active.label, filter: queryActive ? i18n.text("filterValue", { value: query.trim() }) : i18n.text("noSearchFilter"), sort: sortLabel, direction: i18n.text(sortDirection === "asc" ? "ascending" : "descending"), visible: i18n.formatNumber(visibleCount), total: i18n.formatNumber(filteredRows.length) });
 
   const selectView = (view: CostLedgerView) => {
     setActiveView(view);
@@ -326,15 +315,15 @@ export const CostEntityLedgers: FunctionComponent<CostEntityLedgersProps> = ({
         <div className={styles.titleGroup}>
           <span className={styles.icon}><Coins aria-hidden="true" /></span>
           <div>
-            <p>Cost ledgers</p>
-            <h2 id="cost-entity-ledgers-title">Task and sprint spend</h2>
-            <span>Find expensive work and audit pricing coverage without splitting conceptual sprint reruns.</span>
+            <p>{i18n.text("costLedgers")}</p>
+            <h2 id="cost-entity-ledgers-title">{i18n.text("taskAndSprintSpend")}</h2>
+            <span>{i18n.text("costLedgersDescription")}</span>
           </div>
         </div>
         <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</div>
       </div>
 
-      <div role="tablist" aria-label="Cost ledgers" onKeyDown={handleTabKeyDown} className={styles.tabs}>
+      <div role="tablist" aria-label={i18n.text("costLedgers")} onKeyDown={handleTabKeyDown} className={styles.tabs}>
         {views.map((view) => {
           const selected = view.id === activeView;
           return (
@@ -351,7 +340,7 @@ export const CostEntityLedgers: FunctionComponent<CostEntityLedgersProps> = ({
               className={`${styles.tab} ${CONTROL_FOCUS_CLASS} ${selected ? TAB_ACTIVE_CLASS : TAB_IDLE_CLASS}`}
             >
               <span>{view.label}</span>
-              <span>{view.rows.length.toLocaleString()}</span>
+              <span>{i18n.formatNumber(view.rows.length)}</span>
             </button>
           );
         })}
@@ -366,7 +355,7 @@ export const CostEntityLedgers: FunctionComponent<CostEntityLedgersProps> = ({
       >
         <div className={styles.controls}>
           <div className={styles.search}>
-            <label htmlFor={`cost-${activeView}-search`}>Search {activeView}</label>
+            <label htmlFor={`cost-${activeView}-search`}>{i18n.text("searchView", { view: activeSearchNoun })}</label>
             <div>
               <Search aria-hidden="true" />
               <input
@@ -374,21 +363,21 @@ export const CostEntityLedgers: FunctionComponent<CostEntityLedgersProps> = ({
                 type="search"
                 value={query}
                 onInput={(event) => setQuery((event.currentTarget as HTMLInputElement).value)}
-                placeholder={`Search ${activeView}`}
+                placeholder={i18n.text("searchView", { view: activeSearchNoun })}
                 className={`${INPUT_CLASS} ${styles.searchInput}`}
               />
               {queryActive ? (
-                <button type="button" onClick={() => setQuery("")} aria-label="Clear cost ledger search" className={CONTROL_FOCUS_CLASS}>
+                <button type="button" onClick={() => setQuery("")} aria-label={i18n.text("clearCostLedgerSearch")} className={CONTROL_FOCUS_CLASS}>
                   <X aria-hidden="true" />
                 </button>
               ) : null}
             </div>
           </div>
-          <div className={styles.sorts} role="group" aria-label={`Sort ${activeView} cost ledger`}>
+          <div className={styles.sorts} role="group" aria-label={i18n.text("sortCostLedger", { view: active.label })}>
             {SORT_OPTIONS.map((option) => (
               <SortButton
                 key={option.key}
-                label={option.label}
+                label={i18n.text(option.labelKey)}
                 active={sortKey === option.key}
                 direction={sortKey === option.key ? sortDirection : null}
                 onClick={() => handleSort(option.key)}
@@ -400,20 +389,20 @@ export const CostEntityLedgers: FunctionComponent<CostEntityLedgersProps> = ({
         {active.rows.length > 0 ? <Summary total={filteredTotal} average={average} kind={kind} matchCount={filteredRows.length} /> : null}
 
         {filteredRows.length > 0 ? (
-          <div ref={scrollContainerRef} className={styles.rows} aria-label={`${active.label} cost rows`}>
+          <div ref={scrollContainerRef} className={styles.rows} aria-label={i18n.text("costRows", { view: active.label })}>
             {visibleItems.map((row, index) => <CostRow key={row.id} row={row} kind={kind} rank={index + 1} />)}
             {hasMore ? (
               <div ref={sentinelRef} className={styles.sentinel} role="status">
-                Showing {visibleCount.toLocaleString()} of {filteredRows.length.toLocaleString()} rows. More rows load as you scroll.
+                {i18n.text("showingRows", { visible: i18n.formatNumber(visibleCount), total: i18n.formatNumber(filteredRows.length) })}
               </div>
             ) : null}
           </div>
         ) : active.rows.length === 0 ? (
-          <div className={DASHED_EMPTY_CLASS}>No {activeView} have cost telemetry in this window.</div>
+          <div className={DASHED_EMPTY_CLASS}>{i18n.text(activeView === "tasks" ? "noTasksCostTelemetry" : "noSprintsCostTelemetry")}</div>
         ) : (
           <div className={`${DASHED_EMPTY_CLASS} ${styles.empty}`}>
-            <p>No {activeView} match “{query.trim()}”.</p>
-            <button type="button" onClick={() => setQuery("")} className={CONTROL_FOCUS_CLASS}>Clear search</button>
+            <p>{i18n.text(activeView === "tasks" ? "noTasksMatch" : "noSprintsMatch", { query: query.trim() })}</p>
+            <button type="button" onClick={() => setQuery("")} className={CONTROL_FOCUS_CLASS}>{i18n.text("clearSearch")}</button>
           </div>
         )}
       </div>

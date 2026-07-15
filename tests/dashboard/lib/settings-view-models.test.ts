@@ -26,6 +26,8 @@ import {
   getSystemIntegrationProviders,
   getDefaultModelOptionLabel,
   getDefaultRouteOptionLabel,
+  getInvocationRouteDisplay,
+  getRoutingProfileLabel,
   getProviderDisplayMetadata,
   getVirtualProviderDisplayMetadata,
   applyExternalHintsToSystemSettings,
@@ -179,6 +181,8 @@ describe("settings view model source helpers", () => {
     ]);
     expect(getProviderThinkingModeLabel("codex", "HIGH")).toBe("High");
     expect(getProviderThinkingModeLabel("opencode", "none")).toBe("None");
+    expect(getProviderThinkingModeLabel("codex", "HIGH", undefined, "de")).toBe("Hoch");
+    expect(getProviderThinkingModeOptions("codex", undefined, "de")).toContainEqual({ value: "xhigh", label: "Sehr hoch" });
   });
 
   it("provides provider labels", () => {
@@ -221,6 +225,7 @@ describe("settings view model source helpers", () => {
       { value: "flash-lite", label: "flash-lite (recent)" },
       { value: "gemini-2.5-pro", label: "gemini-2.5-pro" },
     ]));
+    expect(getProviderModelOptions("gemini", "de")).toContainEqual({ value: "pro", label: "pro (aktuell)" });
   });
 
   it("includes claude-fable-5 in Claude model options", () => {
@@ -409,6 +414,7 @@ describe("model pricing view model helpers", () => {
   it("formats missing and configured token pricing consistently", () => {
     expect(formatModelPrice(undefined)).toBe("No published pricing");
     expect(formatModelPrice({ inputTokens: 1, outputTokens: 2, cachedInputTokens: 0.5 })).toBe("$1/M in • $2/M out • $0.5/M cached");
+    expect(formatModelPrice({ inputTokens: 1.25, outputTokens: 2, cachedInputTokens: 0.5 }, "de")).toBe("$1,25/M Eingabe • $2/M Ausgabe • $0,5/M Cache");
   });
 
   it("keeps enabled project defaults visible as relevant pricing refs", () => {
@@ -513,6 +519,7 @@ describe("provider availability helpers", () => {
     expect(getProviderAuthLabel("codex", mockSystemSettings, mockHints, false)).toBeNull();
     // Claude can still surface an active auth mount in Docker mode without an API key
     expect(getProviderAuthLabel("claude-code", mockSystemSettings, mockHints, true)).toBe("Auth mount enabled");
+    expect(getProviderAuthLabel("gemini", mockSystemSettings, mockHints, true, "de")).toBe("Auth-Einbindung aktiviert");
   });
 
   it("returns no auth display for an invalid provider config id", () => {
@@ -731,6 +738,13 @@ describe("provider display metadata helpers", () => {
     expect(getDefaultModelOptionLabel(metadata)).toBe("Default Model (gpt-5.5)");
     expect(getDefaultRouteOptionLabel(null)).toBe("Default Route");
     expect(getDefaultModelOptionLabel(null)).toBe("Default Model");
+    expect(getDefaultRouteOptionLabel(metadata, "de")).toBe("Standardroute (Codex Primary)");
+    expect(getDefaultModelOptionLabel(metadata, "de")).toBe("Standardmodell (gpt-5.5)");
+    expect(getInvocationRouteDisplay("ci_fix", "de")).toEqual({
+      label: "CI-Korrektur",
+      description: "Worker-eigene CI-Reparaturschleifen und Wiederholungen.",
+    });
+    expect(getRoutingProfileLabel("WORKER", "de")).toBe("Worker-Standards");
   });
 
   it("falls back to the provider base model for invalid worker model defaults", () => {

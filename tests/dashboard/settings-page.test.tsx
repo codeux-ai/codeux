@@ -1,19 +1,33 @@
 /**
  * @vitest-environment jsdom
  */
-import { render, screen, cleanup, waitFor } from "@testing-library/preact";
+import { render as testingRender, screen, cleanup, waitFor } from "@testing-library/preact";
 import { fireEvent } from "@testing-library/preact";
+import type { ComponentChildren } from "preact";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { ProjectSettingsEditor } from "../../dashboard/src/v2/components/settings/ProjectSettingsEditor.jsx";
 import { SettingsModelsPanel } from "../../dashboard/src/v2/components/settings/panels/SettingsModelsPanel.js";
-import { TextInput } from "../../dashboard/src/v2/components/settings/SettingsFormFields.js";
+import { NumberInput, TextInput } from "../../dashboard/src/v2/components/settings/SettingsFormFields.js";
 import { fetchLocalFiles } from "../../dashboard/src/v2/lib/project-api.js";
 import { cloneProjectSettings } from "../../dashboard/src/v2/lib/settings/project-overrides.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../src/repositories/settings-defaults.js";
 import * as matchers from '@testing-library/jest-dom/matchers';
 import type { SettingsPageState } from "../../dashboard/src/v2/hooks/use-settings-page-state.js";
 import type { ProjectSettings, SystemSettings } from "../../dashboard/src/types.js";
+import { DashboardI18nProvider, type DashboardLocale } from "../../dashboard/src/v2/i18n/index.js";
 expect.extend(matchers);
+
+const render = (children: ComponentChildren, initialLocale: DashboardLocale = "en") => {
+  const result = testingRender(
+    <DashboardI18nProvider initialLocale={initialLocale} storage={null}>{children}</DashboardI18nProvider>,
+  );
+  return {
+    ...result,
+    rerender: (nextChildren: ComponentChildren) => result.rerender(
+      <DashboardI18nProvider initialLocale={initialLocale} storage={null}>{nextChildren}</DashboardI18nProvider>,
+    ),
+  };
+};
 
 vi.mock("../../dashboard/src/v2/lib/project-api.js", () => ({
   fetchLocalFiles: vi.fn(),
@@ -134,6 +148,14 @@ describe("ProjectSettingsEditor", () => {
     expect(counter).toHaveStyle({ animationDuration: "0ms" });
   });
 
+  it("localizes shared Settings validation fallbacks without changing field values", () => {
+    render(<NumberInput value={1} min={2} onChange={vi.fn()} forceValidation aria-label="Grenzwert" />, "de");
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Verwende einen Wert von mindestens 2.");
+    expect(screen.getByRole("spinbutton", { name: "Grenzwert" })).toHaveValue(1);
+    document.documentElement.lang = "en";
+  });
+
   it("uses the local file picker for setup script path updates", async () => {
     const settings = cloneProjectSettings(DEFAULT_DASHBOARD_SETTINGS);
     settings.cliWorkflow.containerSetupScriptPath = ".code-ux/container/setup.sh";
@@ -218,7 +240,7 @@ describe("ProjectSettingsEditor", () => {
       updateSystem: vi.fn(),
     } as unknown as SettingsPageState;
 
-    render(<SettingsModelsPanel state={state} />);
+    render(<DashboardI18nProvider initialLocale="en" storage={null}><SettingsModelsPanel state={state} /></DashboardI18nProvider>);
 
     fireEvent.click(screen.getByRole("button", { name: "Expand Codex Primary settings" }));
     const codexThinking = screen.getByRole("button", { name: "Codex Primary base thinking" });
@@ -284,7 +306,7 @@ describe("ProjectSettingsEditor", () => {
       updateSystem: vi.fn(),
     } as unknown as SettingsPageState;
 
-    render(<SettingsModelsPanel state={state} />);
+    render(<DashboardI18nProvider initialLocale="en" storage={null}><SettingsModelsPanel state={state} /></DashboardI18nProvider>);
 
     fireEvent.click(screen.getByRole("button", { name: "Expand Codex Primary overrides" }));
     const routeThinking = screen.getByRole("button", { name: "Codex Primary thinking override for Task coding" });

@@ -2,12 +2,17 @@
 /** @jsx h */
 import { h } from "preact";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/preact";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { FileBrowserPage } from "../../../dashboard/src/v2/FileBrowserPage.js";
 import type { FileBrowserSession } from "../../../dashboard/src/types.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
 
 expect.extend(matchers);
+
+const renderPage = (locale: "en" | "de" = "en") => render(
+  <DashboardI18nProvider initialLocale={locale} storage={null}><FileBrowserPage /></DashboardI18nProvider>,
+);
 
 type ProjectState = { id: string; name: string } | null;
 
@@ -135,7 +140,7 @@ describe("FileBrowserPage", () => {
   });
 
   it("renders the no-project state", () => {
-    render(<FileBrowserPage />);
+    renderPage();
 
     expect(screen.getByText(/Select a project to open the sprint file browser/i)).toBeInTheDocument();
   });
@@ -146,7 +151,7 @@ describe("FileBrowserPage", () => {
     state.selectedSprint = { id: "s1", name: "Sprint 1" };
     state.selectedSprintId = null;
 
-    render(<FileBrowserPage />);
+    renderPage();
 
     const pageRoot = screen.getByTestId("file-browser-page-root");
     expect(pageRoot.className).toContain("px-4");
@@ -178,7 +183,7 @@ describe("FileBrowserPage", () => {
       refresh: vi.fn().mockResolvedValue(undefined),
     };
 
-    render(<FileBrowserPage />);
+    renderPage();
 
     const mainPanel = screen.getByTestId("file-browser-main-tool-panel");
     expect(mainPanel).toBeInTheDocument();
@@ -196,5 +201,40 @@ describe("FileBrowserPage", () => {
     expect(screen.getByText("No file selected")).toBeInTheDocument();
     expect(screen.getByText("Sprint File Browser").className).toContain("text-signal-500");
     expect(screen.getByPlaceholderText("Filter files…").className).toContain("text-slate-700");
+  });
+
+  it("renders German session controls while preserving sprint and Git reference data", () => {
+    state.selectedProject = { id: "p1", name: "Project 1" };
+    state.sprints = [{ id: "s1", name: "Sprint Übernahme" }];
+    state.selectedSprint = { id: "s1", name: "Sprint Übernahme" };
+    state.selectedSprintId = "s1";
+    const runningSession = makeSession({ sprintName: "Sprint Übernahme", featureBranch: "feature/untranslated-ref" });
+    state.sessionsResult = { sessions: [runningSession], selectedSession: runningSession, loading: false, error: null, refresh: vi.fn().mockResolvedValue(undefined) };
+
+    renderPage("de");
+
+    expect(screen.getByRole("heading", { name: "Sprint-Branch durchsuchen und vergleichen" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Dateien" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Dateibrowser-Container neu erstellen" })).toBeInTheDocument();
+    expect(screen.getByText("Sprint Übernahme")).toBeInTheDocument();
+    expect(screen.getByText("feature/untranslated-ref")).toBeInTheDocument();
+    expect(apiMocks.startFileBrowserSession).not.toHaveBeenCalled();
+  });
+
+  it("starts a German-selected sprint and keeps backend errors verbatim", async () => {
+    state.selectedProject = { id: "p1", name: "Project 1" };
+    state.sprints = [{ id: "s1", name: "Sprint unverändert" }];
+    state.selectedSprint = { id: "s1", name: "Sprint unverändert" };
+    state.selectedSprintId = null;
+    apiMocks.startFileBrowserSession.mockRejectedValueOnce(new Error("BACKEND_CODE unchanged"));
+
+    renderPage("de");
+    const openButton = screen.getByRole("button", { name: "Dateibrowser öffnen" });
+    await waitFor(() => expect(openButton).toBeEnabled());
+    fireEvent.click(openButton);
+
+    await waitFor(() => expect(apiMocks.startFileBrowserSession).toHaveBeenCalledWith("p1", "s1"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Dateibrowser konnte nicht gestartet werden: BACKEND_CODE unchanged");
+    expect(screen.getAllByText("Sprint unverändert").length).toBeGreaterThan(0);
   });
 });

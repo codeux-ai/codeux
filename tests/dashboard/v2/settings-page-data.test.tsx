@@ -2,8 +2,9 @@
 /** @jsx h */
 /** @jsxFrag Fragment */
 import { h, Fragment } from "preact";
+import type { ComponentChildren } from "preact";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, render, screen, waitFor, fireEvent, within } from "@testing-library/preact";
+import { cleanup, render as testingLibraryRender, screen, waitFor, fireEvent, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { SettingsPage } from "../../../dashboard/src/v2/SettingsPage.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
@@ -12,6 +13,11 @@ import { fetchAgentPresets } from "../../../dashboard/src/v2/lib/agent-preset-ap
 import { fetchLocalFiles } from "../../../dashboard/src/v2/lib/project-api.js";
 import { fetchExternalSettingsHints } from "../../../dashboard/src/lib/api/dashboard-api.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+
+const render = (children: ComponentChildren) => testingLibraryRender(
+  <DashboardI18nProvider initialLocale="en" storage={null}>{children}</DashboardI18nProvider>,
+);
 
 expect.extend(matchers);
 

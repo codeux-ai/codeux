@@ -4,6 +4,8 @@ import { Banknote } from "lucide-preact";
 import { Modal } from "../ui/Modal.js";
 import { NumberInput, Row } from "./SettingsFormFields.js";
 import type { TokenPricing } from "../../../../../src/contracts/app-types.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import { settingsModelsMessages } from "../../i18n/messages/settings-models.js";
 
 interface ModelPriceOverrideModalProps {
   isOpen: boolean;
@@ -22,6 +24,7 @@ export const ModelPriceOverrideModal: FunctionComponent<ModelPriceOverrideModalP
   override,
   onSave,
 }) => {
+  const { formatNumber, translate: t } = useDashboardI18n();
   const [inputTokens, setInputTokens] = useState<number>(0);
   const [outputTokens, setOutputTokens] = useState<number>(0);
   const [cachedInputTokens, setCachedInputTokens] = useState<number>(0);
@@ -65,22 +68,22 @@ export const ModelPriceOverrideModal: FunctionComponent<ModelPriceOverrideModalP
           </div>
           <div>
             <h2 id="model-price-override-title" className="text-lg font-bold text-slate-900 dark:text-white">
-              Price override
+              {t(settingsModelsMessages, "priceOverride")}
             </h2>
             <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-              {modelLabel} — cost per million tokens. Leave all fields at 0 to fall back to the catalogue base price.
+              {t(settingsModelsMessages, "priceOverrideDescription", { model: modelLabel })}
             </p>
           </div>
         </div>
 
         <div className="flex flex-col gap-4">
-          <Row label="Input tokens" description={basePrice ? `Catalogue base price: $${basePrice.inputTokens}/M.` : "No published base price."}>
+          <Row label={t(settingsModelsMessages, "inputTokens")} description={basePrice ? t(settingsModelsMessages, "catalogBasePrice", { price: `$${formatNumber(basePrice.inputTokens, { maximumFractionDigits: 20 })}` }) : t(settingsModelsMessages, "noPublishedBasePrice")}>
             <NumberInput value={inputTokens} onChange={setInputTokens} min={0} step={0.01} />
           </Row>
-          <Row label="Output tokens" description={basePrice ? `Catalogue base price: $${basePrice.outputTokens}/M.` : "No published base price."}>
+          <Row label={t(settingsModelsMessages, "outputTokens")} description={basePrice ? t(settingsModelsMessages, "catalogBasePrice", { price: `$${formatNumber(basePrice.outputTokens, { maximumFractionDigits: 20 })}` }) : t(settingsModelsMessages, "noPublishedBasePrice")}>
             <NumberInput value={outputTokens} onChange={setOutputTokens} min={0} step={0.01} />
           </Row>
-          <Row label="Cached input tokens" description={basePrice ? `Catalogue base price: $${basePrice.cachedInputTokens}/M.` : "No published base price."}>
+          <Row label={t(settingsModelsMessages, "cachedInputTokens")} description={basePrice ? t(settingsModelsMessages, "catalogBasePrice", { price: `$${formatNumber(basePrice.cachedInputTokens, { maximumFractionDigits: 20 })}` }) : t(settingsModelsMessages, "noPublishedBasePrice")}>
             <NumberInput value={cachedInputTokens} onChange={setCachedInputTokens} min={0} step={0.01} />
           </Row>
         </div>
@@ -91,14 +94,14 @@ export const ModelPriceOverrideModal: FunctionComponent<ModelPriceOverrideModalP
             onClick={onClose}
             className="rounded-xl border border-black/[0.08] bg-transparent px-4 py-2 text-sm font-bold text-slate-700 hover:bg-black/[0.02] dark:border-white/[0.08] dark:text-slate-300 dark:hover:bg-white/[0.02]"
           >
-            Cancel
+            {t(settingsModelsMessages, "cancel")}
           </button>
           <button
             type="button"
             onClick={handleSave}
             className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white shadow-[var(--elevation-raised)] hover:bg-amber-600 transition-colors"
           >
-            Save override
+            {t(settingsModelsMessages, "saveOverride")}
           </button>
         </div>
       </div>

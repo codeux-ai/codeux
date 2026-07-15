@@ -2,9 +2,10 @@
 /** @jsx h */
 import { h } from "preact";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, fireEvent, screen, cleanup, waitFor } from "@testing-library/preact";
+import { fireEvent, screen, cleanup, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { SprintsPage } from "../../../dashboard/src/v2/pages/sprints/SprintsPage";
+import { renderWithI18n } from "../render-with-i18n.js";
 
 // @ts-expect-error Types are not required for test
 import { useSprintsPageData } from "../../../dashboard/src/v2/pages/sprints/use-sprints-page-data";
@@ -263,7 +264,7 @@ describe("SprintsPage", () => {
     };
     vi.mocked(useSprintsPageData).mockReturnValue(baseData as any);
 
-    const { rerender } = render(<SprintsPage />);
+    const { rerender } = renderWithI18n(<SprintsPage />);
     await waitFor(() => expect(selectProject).toHaveBeenCalledWith("project-9"));
 
     vi.mocked(useSprintsPageData).mockReturnValue({
@@ -300,7 +301,7 @@ describe("SprintsPage", () => {
       clearFeedback: vi.fn(),
     } as any);
 
-    const { rerender } = render(<SprintsPage />);
+    const { rerender } = renderWithI18n(<SprintsPage />);
 
     // Verify the Import trigger is visible
     const importTriggers = screen.getAllByRole("button");
@@ -359,7 +360,7 @@ describe("SprintsPage", () => {
       clearFeedback: vi.fn(),
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     // Open the menu
     const importTriggers = screen.getAllByRole("button");
@@ -397,7 +398,7 @@ describe("SprintsPage", () => {
       clearFeedback: vi.fn(),
     } as any);
 
-    const { rerender } = render(<SprintsPage />);
+    const { rerender } = renderWithI18n(<SprintsPage />);
 
     const importTrigger = screen.getAllByRole("button").find((btn) => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown")) || screen.getAllByRole("button").find((btn) => btn.textContent?.includes("Import"))!;
     fireEvent.click(importTrigger);
@@ -456,7 +457,7 @@ describe("SprintsPage", () => {
       handleSubmitSprint: vi.fn(),
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     const importTrigger = screen.getAllByRole("button").find((btn) => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown")) || screen.getAllByRole("button").find((btn) => btn.textContent?.includes("Import"))!;
     fireEvent.click(importTrigger);
@@ -513,7 +514,7 @@ describe("SprintsPage", () => {
       clearFeedback: vi.fn(),
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     const importTriggers = screen.getAllByRole("button");
     const importTrigger = importTriggers.find((btn) => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown")) || importTriggers.find((btn) => btn.textContent?.includes("Import"))!;
@@ -548,7 +549,7 @@ describe("SprintsPage", () => {
       clearFeedback: vi.fn(),
     } as any);
 
-    const { rerender } = render(<SprintsPage />);
+    const { rerender } = renderWithI18n(<SprintsPage />);
 
     const importTrigger = screen.getAllByRole("button").find((btn) => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown")) || screen.getAllByRole("button").find((btn) => btn.textContent?.includes("Import"))!;
     fireEvent.click(importTrigger);
@@ -607,7 +608,7 @@ describe("SprintsPage", () => {
       clearFeedback: vi.fn(),
     } as any);
 
-    const { rerender } = render(<SprintsPage />);
+    const { rerender } = renderWithI18n(<SprintsPage />);
 
     const importTrigger = screen.getAllByRole("button").find((btn) => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown")) || screen.getAllByRole("button").find((btn) => btn.textContent?.includes("Import"))!;
     fireEvent.click(importTrigger);
@@ -680,7 +681,7 @@ describe("SprintsPage", () => {
       handleSubmitSprint: vi.fn(),
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     fireEvent.click(screen.getByTestId("pm-import-linked"));
 
@@ -731,7 +732,7 @@ describe("SprintsPage", () => {
       handleSubmitSprint: vi.fn(),
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     fireEvent.click(screen.getByTestId("canvas-import-linked"));
 
@@ -770,7 +771,7 @@ describe("SprintsPage", () => {
       handleSubmitSprint: vi.fn(),
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     const importTriggers = screen.getAllByRole("button");
     const importTrigger = importTriggers.find((btn) => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown")) || importTriggers.find((btn) => btn.textContent?.includes("Import"))!;
@@ -828,7 +829,7 @@ describe("SprintsPage", () => {
       handleSubmitSprint: vi.fn(),
     } as any);
 
-    const { rerender } = render(<SprintsPage />);
+    const { rerender } = renderWithI18n(<SprintsPage />);
 
     const importTrigger = screen.getAllByRole("button").find((btn) => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown")) || screen.getAllByRole("button").find((btn) => btn.textContent?.includes("Import"))!;
     fireEvent.click(importTrigger);
@@ -892,7 +893,7 @@ describe("SprintsPage", () => {
       clearFeedback: vi.fn(),
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     // Open the menu
     const importTriggers = screen.getAllByRole("button");
@@ -943,7 +944,7 @@ describe("SprintsPage", () => {
       clearFeedback: vi.fn(),
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     // Click New Sprint
     const newSprintBtn = screen.getAllByRole("button").find(b => b.textContent?.toLowerCase().includes("new sprint"));
@@ -988,7 +989,7 @@ describe("SprintsPage", () => {
       clearFeedback: vi.fn(),
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     expect(screen.getByText("Default Route (Codex Primary)")).toBeInTheDocument();
     expect(screen.getByText("Default Model (gpt-5.5)")).toBeInTheDocument();
@@ -1021,7 +1022,7 @@ describe("SprintsPage", () => {
       clearFeedback: vi.fn(),
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     const hideGalleryButton = screen.getByRole("button", { name: /hide gallery/i });
     expect(hideGalleryButton).toBeInTheDocument();
@@ -1058,13 +1059,13 @@ describe("SprintsPage", () => {
       clearFeedback: vi.fn(),
     } as any);
 
-    const { unmount } = render(<SprintsPage />);
+    const { unmount } = renderWithI18n(<SprintsPage />);
 
     fireEvent.click(screen.getByRole("button", { name: /hide gallery/i }));
     expect(window.localStorage.getItem("code_ux_sprints_show_gallery")).toBe("false");
 
     unmount();
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     expect(screen.getByRole("button", { name: /show gallery/i })).toBeInTheDocument();
   });
@@ -1109,7 +1110,7 @@ describe("SprintsPage", () => {
       handleDeleteSprint: vi.fn(),
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     expect(screen.getByText("Window Sprint 25")).toBeInTheDocument();
     expect(screen.getByText("Window Sprint 6")).toBeInTheDocument();
@@ -1169,7 +1170,7 @@ describe("SprintsPage", () => {
       handleDeleteSprint: vi.fn(),
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "Filter ledger by sprint status" }));
     fireEvent.click(screen.getByRole("option", { name: "Done" }));
@@ -1226,7 +1227,7 @@ describe("SprintsPage", () => {
       handleDeleteSprint: vi.fn(),
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     const createdSort = screen.getByRole("button", { name: "Sort by Created" });
     expect(createdSort.closest("th")).toHaveAttribute("aria-sort", "descending");
@@ -1283,9 +1284,9 @@ describe("SprintsPage", () => {
       handleDeleteSprint: vi.fn(),
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
-    const stopButton = screen.getByRole("button", { name: "Stop Running Ledger Sprint is pending" });
+    const stopButton = screen.getByRole("button", { name: "Stop sprint Running Ledger Sprint is pending" });
     expect(stopButton).toBeDisabled();
     expect(stopButton).toHaveAttribute("aria-busy", "true");
     expect(stopButton).toHaveTextContent("Stop");
@@ -1336,7 +1337,7 @@ describe("SprintsPage", () => {
       handleDeleteSprint: vi.fn(),
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "Select all filtered sprints" }));
     expect(screen.getByText("2 of 2 selected")).toBeInTheDocument();
@@ -1384,7 +1385,7 @@ describe("SprintsPage", () => {
       clearFeedback: vi.fn(),
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     // Simulate interaction and state cleanup without full GSAP timing dependencies
   });
@@ -1414,7 +1415,7 @@ describe("SprintsPage", () => {
       clearFeedback: vi.fn(),
     } as any);
 
-    render(<SprintsPage />);
+    renderWithI18n(<SprintsPage />);
 
     // Dispatch events to hit the useEffect handlers in SprintsPage
     fireEvent.keyDown(document, { key: "Escape" });

@@ -10,6 +10,7 @@ import type {
 import { isValidCustomRange } from "./stats-utils.js";
 import { deriveStatsPageViewModel } from "./stats-page-view-model.js";
 import { useUsageChartState } from "./use-usage-chart-state.js";
+import { useStatsI18n } from "./stats-i18n.js";
 
 export interface StatsPageData {
   stats: import("../../types.js").ProjectExecutionStatsSnapshot | null;
@@ -39,6 +40,7 @@ export interface StatsPageData {
 }
 
 export function useStatsPageData(projectId: string | null): StatsPageData {
+  const { locale } = useStatsI18n();
   const [activeQuery, setActiveQuery] = useState<ProjectStatsQuery>({ window: "7d" });
   const [customFrom, setCustomFrom] = useState(() => {
     const from = new Date();
@@ -53,7 +55,7 @@ export function useStatsPageData(projectId: string | null): StatsPageData {
   const { stats, loading, error, refresh } = useProjectStats(projectId, activeQuery);
   const chartState = useUsageChartState(projectId, stats || null);
   
-  const viewModel = useMemo(() => deriveStatsPageViewModel(stats), [stats]);
+  const viewModel = useMemo(() => deriveStatsPageViewModel(stats, locale), [locale, stats]);
 
   const applyPresetWindow = (window: Exclude<ProjectStatsWindow, "custom">) => {
     setActiveQuery({ window });

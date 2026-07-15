@@ -80,7 +80,7 @@ describe("tool and reasoning humor widgets", () => {
     for (const { toolName, callId, args } of tools) {
       expect(view.getByText(toolName)).toBeInTheDocument();
       expect(view.getByText(expectedToolLine(toolName, callId))).toBeInTheDocument();
-      expect(view.getAllByText("done").length).toBeGreaterThan(0);
+      expect(view.getAllByText("completed").length).toBeGreaterThan(0);
       expect(view.getAllByText("12").length).toBeGreaterThan(0);
       expect(view.getByText(callId.slice(0, 8))).toBeInTheDocument();
       expect(container.textContent).toContain(args.replace(/\s+/g, " ").trim().slice(0, 12));

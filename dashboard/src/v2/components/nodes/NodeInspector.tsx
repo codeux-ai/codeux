@@ -14,6 +14,7 @@ import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { Toggle } from "../ui/Toggle.js";
 import { Button } from "../ui/Button.js";
 import { NodePortList } from "./NodePortList.js";
+import { useNodesI18n } from "../../i18n/messages/nodes.js";
 
 export interface NodeInspectorProps {
   graph: NodeCanvasGraph;
@@ -156,42 +157,43 @@ const EdgeDetails: FunctionComponent<{
   graph: NodeCanvasGraph;
   onSelectEdge?: (edgeId: string) => void;
   onSelectNode?: (nodeId: string) => void;
-}> = ({ edge, graph, onSelectEdge, onSelectNode }) => (
-  <aside
+}> = ({ edge, graph, onSelectEdge, onSelectNode }) => {
+  const { t } = useNodesI18n();
+  return <aside
     className="flex min-w-0 flex-col gap-4 rounded-[var(--radius-panel)] border border-black/[0.06] bg-white/70 p-4 shadow-[var(--elevation-soft)] dark:border-white/[0.06] dark:bg-white/[0.035] xl:w-[360px] xl:shrink-0"
     aria-labelledby="node-edge-inspector-heading"
   >
     <div>
-      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">Inspector</p>
-      <h2 id="node-edge-inspector-heading" className="mt-1 text-base font-bold text-slate-900 dark:text-white">Selected edge</h2>
+      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">{t("inspector")}</p>
+      <h2 id="node-edge-inspector-heading" className="mt-1 text-base font-bold text-slate-900 dark:text-white">{t("selectedEdge")}</h2>
     </div>
     <dl className="grid gap-3 text-sm">
       <div>
-        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Edge id</dt>
+        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{t("edgeId")}</dt>
         <dd className="mt-1 break-all text-slate-800 dark:text-slate-100">{edge.id}</dd>
       </div>
       <div>
-        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Source</dt>
+        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{t("source")}</dt>
         <dd className="mt-1 text-slate-800 dark:text-slate-100">{readPortLabel(graph, edge.source.nodeId, edge.source.portId)}</dd>
       </div>
       <div>
-        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Target</dt>
+        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{t("target")}</dt>
         <dd className="mt-1 text-slate-800 dark:text-slate-100">{readPortLabel(graph, edge.target.nodeId, edge.target.portId)}</dd>
       </div>
     </dl>
     <div className="flex flex-wrap gap-2 border-t border-black/[0.06] pt-3 dark:border-white/[0.06]">
       <Button type="button" size="sm" variant="ghost" icon={Cable} onClick={() => onSelectEdge?.(edge.id)} disabled={!onSelectEdge}>
-        Select edge
+        {t("selectEdgeAction")}
       </Button>
       <Button type="button" size="sm" variant="ghost" icon={MousePointer2} onClick={() => onSelectNode?.(edge.source.nodeId)} disabled={!onSelectNode}>
-        Source node
+        {t("sourceNode")}
       </Button>
       <Button type="button" size="sm" variant="ghost" icon={MousePointer2} onClick={() => onSelectNode?.(edge.target.nodeId)} disabled={!onSelectNode}>
-        Target node
+        {t("targetNode")}
       </Button>
     </div>
-  </aside>
-);
+  </aside>;
+};
 
 export const NodeInspector: FunctionComponent<NodeInspectorProps> = ({
   graph,
@@ -205,6 +207,7 @@ export const NodeInspector: FunctionComponent<NodeInspectorProps> = ({
   onSelectEdge,
   onSelectNode,
 }) => {
+  const { t } = useNodesI18n();
   if (!selectedNode && selectedEdge) {
     return <EdgeDetails edge={selectedEdge} graph={graph} onSelectEdge={onSelectEdge} onSelectNode={onSelectNode} />;
   }
@@ -215,8 +218,8 @@ export const NodeInspector: FunctionComponent<NodeInspectorProps> = ({
         className="flex min-h-56 min-w-0 flex-col justify-center rounded-[var(--radius-panel)] border border-dashed border-black/[0.08] bg-white/45 p-6 text-sm text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-400 xl:w-[360px] xl:shrink-0"
         aria-labelledby="node-inspector-empty-heading"
       >
-        <h2 id="node-inspector-empty-heading" className="text-base font-bold text-slate-900 dark:text-white">Nothing selected</h2>
-        <p className="mt-2 leading-relaxed">Select a node or edge to inspect wiring, edit configuration, and review validation details.</p>
+        <h2 id="node-inspector-empty-heading" className="text-base font-bold text-slate-900 dark:text-white">{t("nothingSelected")}</h2>
+        <p className="mt-2 leading-relaxed">{t("nothingSelectedDescription")}</p>
       </aside>
     );
   }
@@ -239,7 +242,7 @@ export const NodeInspector: FunctionComponent<NodeInspectorProps> = ({
       <section className="flex flex-col gap-3" aria-labelledby="node-inspector-heading">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">Inspector</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">{t("inspector")}</p>
             <h2 id="node-inspector-heading" className="mt-1 truncate text-base font-bold text-slate-900 dark:text-white">
               {selectedNode.label || selectedNode.id}
             </h2>
@@ -249,7 +252,7 @@ export const NodeInspector: FunctionComponent<NodeInspectorProps> = ({
           </span>
         </div>
         <div className="flex items-center justify-between gap-3 rounded-[var(--radius-ui)] border border-black/[0.06] bg-white/55 px-3 py-2 dark:border-white/[0.06] dark:bg-white/[0.03]">
-          <span id={enabledLabelId} className={FIELD_LABEL_CLASS}>Enabled</span>
+          <span id={enabledLabelId} className={FIELD_LABEL_CLASS}>{t("enabled")}</span>
           <Toggle
             aria-labelledby={enabledLabelId}
             disabled={!onNodeEnabledChange}
@@ -258,7 +261,7 @@ export const NodeInspector: FunctionComponent<NodeInspectorProps> = ({
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label className={FIELD_LABEL_CLASS} htmlFor={`node-label-${selectedNode.id}`}>Label</label>
+          <label className={FIELD_LABEL_CLASS} htmlFor={`node-label-${selectedNode.id}`}>{t("label")}</label>
           <Input
             id={`node-label-${selectedNode.id}`}
             value={selectedNode.label}
@@ -269,7 +272,7 @@ export const NodeInspector: FunctionComponent<NodeInspectorProps> = ({
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label className={FIELD_LABEL_CLASS} htmlFor={descriptionId}>Description</label>
+          <label className={FIELD_LABEL_CLASS} htmlFor={descriptionId}>{t("description")}</label>
           <textarea
             id={descriptionId}
             className={TEXTAREA_CLASS}
@@ -279,7 +282,7 @@ export const NodeInspector: FunctionComponent<NodeInspectorProps> = ({
         </div>
         {selectedNode.kind === "agent" || selectedNode.metadata.agentIntent !== undefined ? (
           <div className="flex flex-col gap-1.5">
-            <label className={FIELD_LABEL_CLASS} htmlFor={`node-agent-intent-${selectedNode.id}`}>Agent intent</label>
+            <label className={FIELD_LABEL_CLASS} htmlFor={`node-agent-intent-${selectedNode.id}`}>{t("agentIntent")}</label>
             <AvantgardeSelect
               id={`node-agent-intent-${selectedNode.id}`}
               value={selectedNode.metadata.agentIntent ?? "implement"}
@@ -294,7 +297,7 @@ export const NodeInspector: FunctionComponent<NodeInspectorProps> = ({
         ) : null}
         {selectedNode.kind === "task" || selectedNode.metadata.taskIntent !== undefined ? (
           <div className="flex flex-col gap-1.5">
-            <label className={FIELD_LABEL_CLASS} htmlFor={`node-task-intent-${selectedNode.id}`}>Task intent</label>
+            <label className={FIELD_LABEL_CLASS} htmlFor={`node-task-intent-${selectedNode.id}`}>{t("taskIntent")}</label>
             <AvantgardeSelect
               id={`node-task-intent-${selectedNode.id}`}
               value={selectedNode.metadata.taskIntent ?? "feature"}
@@ -312,11 +315,11 @@ export const NodeInspector: FunctionComponent<NodeInspectorProps> = ({
       <section className="flex flex-col gap-3 border-t border-black/[0.06] pt-4 dark:border-white/[0.06]" aria-labelledby="node-config-heading">
         <div className="flex items-center gap-2">
           <SlidersHorizontal className="h-4 w-4 text-signal-500" aria-hidden="true" />
-          <h3 id="node-config-heading" className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Configuration</h3>
+          <h3 id="node-config-heading" className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{t("configuration")}</h3>
         </div>
         {selectedNode.config.length === 0 ? (
           <p className="rounded-[var(--radius-ui)] border border-dashed border-black/[0.08] bg-white/45 px-3 py-2 text-sm text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-400">
-            This node has no editable configuration.
+            {t("noConfiguration")}
           </p>
         ) : (
           selectedNode.config.map((field) => (

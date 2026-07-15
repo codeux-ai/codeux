@@ -186,8 +186,8 @@ describe("TelemetryStats token throughput", () => {
   it("preserves running and queued counts for active running sprints only", () => {
     render(<TelemetryStats projectId="project-1" sprints={sprints} />);
 
-    expect(screen.getByText("running")).toBeInTheDocument();
-    expect(screen.getByText("queued")).toBeInTheDocument();
+    expect(screen.getAllByText("Running").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Queued").length).toBeGreaterThan(0);
     expect(screen.getAllByText("1")).toHaveLength(2);
     expect(useProjectTasks).toHaveBeenCalledWith("project-1", [], sprints, null, {
       enabled: true,
@@ -214,7 +214,7 @@ describe("TelemetryStats token throughput", () => {
     render(<TelemetryStats projectId="project-1" sprints={sprints} />);
 
     expect(screen.getByRole("group", { name: /Token telemetry unavailable/i })).toBeInTheDocument();
-    expect(screen.getByText("running")).toBeInTheDocument();
-    expect(screen.getByText("queued")).toBeInTheDocument();
+    expect(screen.getAllByText("Running").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Queued").length).toBeGreaterThan(0);
   });
 });

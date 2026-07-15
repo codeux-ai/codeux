@@ -9,6 +9,8 @@ import { clearSelectedMemoryIds, memoryMutationsSignal, setSelectedMemoryIds } f
 import { fetchSkillCatalog } from "../lib/agent-preset-api.js";
 import type { SkillCatalogEntry } from "../../../../src/contracts/skill-types.js";
 import type { MemoryCategory } from "../memory-types.js";
+import { useMemoryI18n, translateMemory } from "../i18n/messages/memory.js";
+import { DEFAULT_DASHBOARD_LOCALE, type DashboardLocale } from "../i18n/locales.js";
 
 const SKILL_CATEGORY_KEYWORDS: Array<[MemoryCategory, string[]]> = [
     ["architecture", ["architecture", "design", "system"]],
@@ -18,14 +20,14 @@ const SKILL_CATEGORY_KEYWORDS: Array<[MemoryCategory, string[]]> = [
     ["learning", ["research", "learn", "guide", "documentation"]],
 ];
 
-export function skillCatalogEntryToMemoryRecord(entry: SkillCatalogEntry): MemoryRecord {
+export function skillCatalogEntryToMemoryRecord(entry: SkillCatalogEntry, locale: DashboardLocale = DEFAULT_DASHBOARD_LOCALE): MemoryRecord {
     const searchable = [entry.name, entry.description, ...entry.tags, ...entry.appliesTo].join(" ").toLowerCase();
     const category = SKILL_CATEGORY_KEYWORDS.find(([, keywords]) => keywords.some((keyword) => searchable.includes(keyword)))?.[0] ?? "context";
     const metadata = [
         entry.description,
-        entry.storageName ? `Storage: ${entry.storageName}` : "",
-        entry.tags.length > 0 ? `Tags: ${entry.tags.join(", ")}` : "",
-        entry.appliesTo.length > 0 ? `Applies to: ${entry.appliesTo.join(", ")}` : "",
+        entry.storageName ? translateMemory(locale, "storageMetadata", { value: entry.storageName }) : "",
+        entry.tags.length > 0 ? translateMemory(locale, "tagsMetadata", { value: entry.tags.join(", ") }) : "",
+        entry.appliesTo.length > 0 ? translateMemory(locale, "appliesToMetadata", { value: entry.appliesTo.join(", ") }) : "",
     ].filter(Boolean).join(" · ");
     return {
         id: entry.id,
@@ -69,6 +71,7 @@ export function useMemoryPageData(
     selectedAgentPresetId?: string,
     enabled = true
 ) {
+    const { formatNumber, locale, t, tp } = useMemoryI18n();
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [records, setRecords] = useState<MemoryRecord[]>([]);
@@ -128,18 +131,18 @@ export function useMemoryPageData(
             promotionReason: null,
         };
 
-        setPending("Adding memory...");
+        setPending(t("addingMemory"));
         updateRecordsAndGraph((current) => [tempRecord, ...current]);
 
         try {
             const created = await createMemory(pid, input);
             updateRecordsAndGraph((current) => current.map(r => r.id === tempId ? created : r));
-            setSuccess("Memory added successfully");
+            setSuccess(t("memoryAddedSuccess"));
         } catch (e: any) {
             updateRecordsAndGraph((current) => current.filter(r => r.id !== tempId));
-            setError(e.message || "Failed to add memory");
+            setError(e.message || t("failedAddMemory"));
         }
-    }, [updateRecordsAndGraph, setSuccess, setError]);
+    }, [updateRecordsAndGraph, setSuccess, setError, setPending, t]);
 
     const removeMemory = useCallback((id: string) => {
         const recordToRestore = records.find(r => r.id === id);
@@ -165,7 +168,7 @@ export function useMemoryPageData(
                     }
                     return next;
                 });
-                setError(e.message || "Failed to delete memory");
+                setError(e.message || t("failedDeleteMemory"));
             }
         };
 
@@ -202,13 +205,13 @@ export function useMemoryPageData(
             }
         };
 
-        setWarning("Memory removed", { retryAction: undo, retryLabel: "Undo" });
+        setWarning(t("memoryRemoved"), { retryAction: undo, retryLabel: t("undo") });
         removeTimers.current[id] = window.setTimeout(() => {
             executeDelete();
             delete removeTimers.current[id];
         }, 5000);
 
-    }, [records, updateRecordsAndGraph, setWarning, setError, clearFeedback, addMemory]);
+    }, [records, updateRecordsAndGraph, setWarning, setError, clearFeedback, addMemory, t]);
 
     const removeMemories = useCallback(async (ids: string[]) => {
         const uniqueIds = Array.from(new Set(ids));
@@ -230,7 +233,8 @@ export function useMemoryPageData(
             return [] as MemoryDeleteResult[];
         }
 
-        setPending(`Deleting ${selectedRecords.length} ${selectedRecords.length === 1 ? "memory" : "memories"}...`);
+        const selectedCountLabel = tp("memory", selectedRecords.length, { formattedCount: formatNumber(selectedRecords.length) });
+        setPending(t("deletingMemories", { countLabel: selectedCountLabel }));
         const optimistic = snapshot.filter((record) => !uniqueIds.includes(record.id));
         updateRecordsAndGraph((current) => current.filter((record) => !uniqueIds.includes(record.id)));
         clearSelectedMemoryIds();
@@ -248,20 +252,23 @@ export function useMemoryPageData(
                 .filter((result) => !result.ok)
                 .map((result) => result.error)
                 .filter((error): error is string => Boolean(error));
-            const failureLabel = failedIds.length === 1 ? "memory" : "memories";
             const deletedCount = selectedRecords.length - failedIds.length;
-            setError(`Deleted ${deletedCount} ${deletedCount === 1 ? "memory" : "memories"}, but ${failedIds.length} ${failureLabel} failed to delete.${failureMessages.length > 0 ? ` ${failureMessages[0]}` : ""}`, {
+            setError(t("deletePartialFailure", {
+                deletedCount: tp("memory", deletedCount, { formattedCount: formatNumber(deletedCount) }),
+                failedCount: tp("memory", failedIds.length, { formattedCount: formatNumber(failedIds.length) }),
+                errorSuffix: failureMessages.length > 0 ? ` ${failureMessages[0]}` : "",
+            }), {
                 retryAction: () => {
                     void removeMemories(failedIds);
                 },
-                retryLabel: "Retry delete",
+                retryLabel: t("retryDelete"),
             });
         } else {
-            setSuccess(`Deleted ${selectedRecords.length} ${selectedRecords.length === 1 ? "memory" : "memories"}`);
+            setSuccess(t("deletedMemories", { countLabel: selectedCountLabel }));
         }
 
         return results;
-    }, [records, syncRecordsAndGraph, updateRecordsAndGraph, setPending, setError, setSuccess]);
+    }, [formatNumber, records, syncRecordsAndGraph, t, tp, updateRecordsAndGraph, setPending, setError, setSuccess]);
 
     useEffect(() => {
         memoryMutationsSignal.value = {
@@ -284,7 +291,7 @@ export function useMemoryPageData(
             if (activeTier === "skills") {
                 const skills = await fetchSkillCatalog(pid, selectedAgentPresetId);
                 if (requestId !== latestLoadRequestId.current) return;
-                const skillRecords = skills.map(skillCatalogEntryToMemoryRecord);
+                const skillRecords = skills.map((skill) => skillCatalogEntryToMemoryRecord(skill, locale));
                 setSkillCount(skillRecords.length);
                 setRecords(skillRecords);
                 setMemoryCount(skillRecords.length);
@@ -332,13 +339,13 @@ export function useMemoryPageData(
             if (requestId !== latestLoadRequestId.current) {
                 return;
             }
-            setLoadError(error instanceof Error ? error.message : "Failed to load memories");
+            setLoadError(error instanceof Error ? error.message : t("failedLoadMemories"));
         } finally {
             if (requestId === latestLoadRequestId.current) {
                 setLoading(false);
             }
         }
-    }, [pid, activeScope, activeTier, selectedSprintId, selectedAgentPresetId, enabled, requestedContextKey]);
+    }, [pid, activeScope, activeTier, selectedSprintId, selectedAgentPresetId, enabled, requestedContextKey, locale, t]);
 
     useEffect(() => { loadData(); }, [loadData]);
 

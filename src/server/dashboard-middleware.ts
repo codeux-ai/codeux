@@ -100,7 +100,7 @@ export const applyDashboardPreRouteMiddleware = (
   }));
   app.use("/api", (req, res, next) => {
     const requestPath = req.path.toLowerCase();
-    if (requestPath.startsWith("/webhooks/") || requestPath.includes("/ingress/")) {
+    if (requestPath.startsWith("/webhooks/") || /(?:^|\/)ingress(?:\/|$)/.test(requestPath)) {
       next();
       return;
     }

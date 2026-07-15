@@ -3,6 +3,7 @@ import { h } from "preact";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import { afterEach, expect, test, describe, vi } from "vitest";
 import { AddTaskModal } from "../AddTaskModal.js";
+import { DashboardI18nProvider } from "../../../i18n/context.js";
 import * as matchers from '@testing-library/jest-dom/matchers';
 expect.extend(matchers);
 
@@ -14,8 +15,14 @@ describe("AddTaskModal Accessibility", () => {
     cleanup();
   });
 
+  const renderModal = () => render(
+    <DashboardI18nProvider initialLocale="en" storage={null}>
+      <AddTaskModal sprints={dummySprints as any} availableTasks={dummyTasks as any} onClose={() => {}} onSubmit={() => {}} />
+    </DashboardI18nProvider>,
+  );
+
   test("renders with accessible name and structure", () => {
-    render(<AddTaskModal sprints={dummySprints as any} availableTasks={dummyTasks as any} onClose={() => {}} onSubmit={() => {}} />);
+    renderModal();
     const dialogs = screen.getAllByRole("dialog");
     expect(dialogs[0]).toHaveAttribute("aria-labelledby", "add-task-modal-title");
 
@@ -25,7 +32,7 @@ describe("AddTaskModal Accessibility", () => {
   });
 
   test("dependency search and options handle accessibility", async () => {
-    render(<AddTaskModal sprints={dummySprints as any} availableTasks={dummyTasks as any} onClose={() => {}} onSubmit={() => {}} />);
+    renderModal();
 
     expect(screen.getByText(/0 dependency options available. 0 selected./i)).toBeInTheDocument();
 
@@ -36,13 +43,17 @@ describe("AddTaskModal Accessibility", () => {
   });
 
   test("applies FieldWrapper attributes to required form inputs", () => {
-    render(<AddTaskModal sprints={dummySprints as any} availableTasks={dummyTasks as any} onClose={() => {}} onSubmit={() => {}} />);
+    renderModal();
     const titleInput = screen.getAllByRole("textbox").find(el => el.id === "add-task-title");
     expect(titleInput).toHaveAttribute("aria-required", "true");
   });
 
   test("invalid submit focuses the first invalid field and scrolls inside the form body", async () => {
-    render(<AddTaskModal sprints={dummySprints as any} availableTasks={dummyTasks as any} onClose={() => {}} onSubmit={() => {}} />);
+    renderModal();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Close dialog" })).toHaveFocus();
+    });
 
     const form = document.getElementById("add-task-form") as HTMLFormElement;
     const formBody = document.getElementById("add-task-form-body") as HTMLDivElement;
@@ -63,7 +74,7 @@ describe("AddTaskModal Accessibility", () => {
   });
 
   test("status, priority, and executor choices expose radio semantics", () => {
-    render(<AddTaskModal sprints={dummySprints as any} availableTasks={dummyTasks as any} onClose={() => {}} onSubmit={() => {}} />);
+    renderModal();
 
     expect(screen.getByRole("radiogroup", { name: /status/i })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /pending/i })).toBeChecked();
@@ -82,7 +93,11 @@ describe("AddTaskModal Accessibility", () => {
       priority: "medium",
     }));
 
-    render(<AddTaskModal sprints={dummySprints as any} availableTasks={dependencyTasks as any} onClose={() => {}} onSubmit={() => {}} />);
+    render(
+      <DashboardI18nProvider initialLocale="en" storage={null}>
+        <AddTaskModal sprints={dummySprints as any} availableTasks={dependencyTasks as any} onClose={() => {}} onSubmit={() => {}} />
+      </DashboardI18nProvider>,
+    );
 
     fireEvent.click(screen.getByRole("checkbox", { name: /Database migration/i }));
     expect(screen.getByText(/Database migration added to dependencies./i)).toBeInTheDocument();

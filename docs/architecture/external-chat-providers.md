@@ -1,145 +1,113 @@
 # External Chat Providers
 
-Code UX persists external chat provider configuration separately from MCP listener connections and dashboard conversation messages. The runtime stays adapter-neutral: it records provider setup, bridge mode, channel routing, inbound dedupe, outbound delivery state, and bridge attempts without adding provider SDK dependencies.
+Code UX keeps external chat connectors separate from MCP listener connections and dashboard conversation transport. A connector profile declares setup, ingress authentication, normalization, identity, provider-native or bridge outbound behavior, verification, and session requirements. Shared services own encrypted credentials, project routing, durable ingress idempotency, outbound leases, cancellation, recovery, and redacted diagnostics.
 
-## Contracts
+Registry presence means that Code UX advertises a typed connector contract. It does **not** mean that a provider has certified Code UX, that an operator-selected bridge is provider-certified, or that a particular connection is ready for production.
 
-Typed contracts live in `src/contracts/chat-provider-types.ts`.
+## Transport boundaries
 
-Supported providers:
+- `official_api` calls only the provider-owned endpoints declared by that profile. WhatsApp, Telegram, Slack, Microsoft Teams, and Discord have provider-native contracts.
+- `managed_bridge` sends to a separately configured managed HTTP bridge. The bridge operator owns its provider relationship and availability.
+- `webhook` sends to an operator-configured custom URL. Code UX validates its own bridge contract but does not treat the URL as a provider API.
+- `native_bridge` runs an operator-configured local command without shell interpretation. iMessage uses this third-party/local contract; Code UX does not expose an Apple personal-iMessage bot API.
 
-- `whatsapp`
-- `imessage`
-- `telegram`
-- `slack`
-- `microsoft-teams`
-- `discord`
+Unsupported provider/mode combinations fail validation. Existing managed, webhook, and native records retain their prior endpoint meaning when provider-native modes are added.
 
-Supported bridge modes are `managed_bridge`, `webhook`, and `native_bridge`. Provider setup schemas describe the executable bridge shape for future runtime adapters:
+## Six-provider contract matrix
 
-- WhatsApp: managed bridge or webhook.
-- iMessage: managed bridge or macOS native bridge command.
-- Telegram: managed bridge or bot webhook.
-- Slack: managed bridge or Events webhook.
-- Microsoft Teams: managed bridge or bot webhook.
-- Discord: bot/webhook gateway.
+### Setup, ingress, identity, and outbound
 
-Public records expose redacted credential metadata only. Runtime code that needs secrets must call the explicit internal repository read path.
+| Provider | Supported modes | Required provider-native setup and secrets | Ingress authentication | Message and thread identity | Outbound endpoint behavior |
+| --- | --- | --- | --- | --- | --- |
+| Meta WhatsApp | `managed_bridge`, `webhook`, `official_api` | Graph version and phone-number ID; write-only access token, app secret, and webhook verify token. | GET challenge compares the verify token; POST verifies `X-Hub-Signature-256` over exact raw bytes with the app secret. Meta callbacks do not carry the shared timestamp header. | Business `phone_number_id` is the channel; inbound `wamid` is the message/idempotency key; sender WhatsApp ID is the reply recipient. | Official sends are pinned to `https://graph.facebook.com/{version}/{phoneNumberId}/messages`; bridge modes use only their configured URLs. |
+| Apple iMessage | `managed_bridge`, `native_bridge` | Managed bridge workspace/device plus bridge API key, or local command/working directory plus bridge token. | Shared fresh timestamp, bearer token, and replay nonce/request ID for bridge callbacks. There is no Apple webhook authentication contract. | Bridge-supplied chat and message GUIDs are opaque, Unicode-normalized identifiers; no undocumented Apple structure is inferred. | Managed mode posts protocol v1 to the configured third-party bridge; native mode writes protocol v1 JSON to command stdin with `shell: false`. No Apple endpoint is called. |
+| Telegram | `managed_bridge`, `webhook`, `official_api` | Optional bot username; write-only bot token and webhook secret token. | Official webhook requires exact `X-Telegram-Bot-Api-Secret-Token`; no Code UX timestamp/HMAC headers are invented. | `update_id` plus chat/message IDs form durable identity; `message_thread_id` preserves forum/private topic replies. | Official calls the fixed `https://api.telegram.org/bot<token>/sendMessage`; the token-bearing URL is never persisted or logged. |
+| Slack | `managed_bridge`, `webhook`, `official_api` | App/workspace metadata; write-only signing secret and bot token. | Official Events requests require Slack `v0` HMAC over timestamp and exact raw body and a five-minute freshness window. | Outer `event_id` is the idempotency key; channel plus `ts`/`thread_ts` preserve message and parent thread. | Official replies use only `https://slack.com/api/chat.postMessage`; legacy webhook URLs are custom bridge endpoints, not Slack Web API bases. |
+| Microsoft Teams | `managed_bridge`, `webhook`, `official_api` | App ID, `MultiTenant`/`SingleTenant`, tenant ID when required, and write-only client secret. | Official Activities require fully validated Bot Connector Bearer JWTs, claims, endorsement, tenant policy, and documented service URL. | Activity ID, conversation ID, reply ID, tenant/team/channel IDs, and authenticated conversation reference are retained; credentials are not. | OAuth uses Microsoft's fixed authority; replies use only the authenticated `{serviceUrl}/v3/conversations/{conversationId}/activities/{activityId}`. |
+| Discord | `webhook`, `official_api` | Application ID, Ed25519 public key, Gateway intents, and write-only bot token. | HTTP interactions use Ed25519 over timestamp plus exact raw body; Gateway sessions authenticate with the bot token. | Discord snowflakes identify messages/channels; thread IDs are preserved; the connected bot user is ignored to prevent loops. | Official REST is pinned to `https://discord.com/api/v10`; Gateway/resume hosts must be Discord-owned secure `discord.gg` endpoints. |
 
-## MCP management
+### Verification, retry/idempotency, sessions, and limitations
 
-The `manage_chat_providers` MCP tool exposes provider configuration management and outbound delivery inspection.
+| Provider | Verification and live-test eligibility | Retry and idempotency guarantee | Session/reconnect behavior | Known limitations |
+| --- | --- | --- | --- | --- |
+| Meta WhatsApp | Read-only phone-number resource verification uses configured credentials. A message-send test is a separate, explicit Meta test-number opt-in; a skipped opt-in check is not a pass. | Inbound `wamid` dedupe is durable. Graph retry classification is sanitized; manual retry may duplicate a message if the provider accepted an ambiguous attempt. | Webhook transport is stateless; no provider session is persisted. | Official text and supported media captions only; test-number eligibility is not general production readiness. |
+| Apple iMessage | Validates the configured third-party bridge and protocol health only. Apple publishes no public personal-iMessage bot sandbox or provider-native endpoint check. | GUID-based ingress dedupe plus shared delivery leases. Command timeout/cancellation terminates the process group; retryability comes from the bridge's protocol error. | The operator's third-party bridge owns its session. Code UX can resume its durable connection-scoped state but does not manage an Apple session. | No `official_api`, Apple certification, Messages database access, AppleScript automation, or public bot sandbox is claimed. |
+| Telegram | Official verification calls `getMe` and read-only `getWebhookInfo`; it requires test bot credentials and never changes the webhook. | Durable update/message dedupe. Exact `retry_after` is honored for 429. Transport failures after dispatch are treated as ambiguous/terminal to avoid automatic duplicates. | Webhook mode is stateless; no long-poll session is opened. | `sendMessage` text is bounded to 4,096 characters; webhook registration remains an operator action. |
+| Slack | Official verification calls `auth.test` with a test bot token and checks configured workspace identity/capability. Missing credentials mean not run, not passed. | `event_id` dedupe precedes chat work. Callbacks are acknowledged after durable insert. Per-channel pacing and `Retry-After` are honored; ambiguous send transport is terminal. | Events webhook is stateless; no Socket Mode session is opened. | Bot scopes, installation, membership, and provider rate limits remain operator responsibilities. |
+| Microsoft Teams | No public unauthenticated sandbox. Deterministic tests use Emulator-shaped Activities and mocked OpenID/JWKS/OAuth/Connector boundaries; they do not prove a live tenant deployment. | Activity IDs dedupe inbound work. 429/transient service errors are retryable; invalid JWT/claims/tenant/service URL are terminal. | Durable authenticated conversation references support replies; OAuth tokens are memory-only. There is no fake sandbox session. | Only message Activities enter chat; localhost is not trusted as an official Connector service URL. |
+| Discord | Read-only current-user verification calls `GET /users/@me` and requires a test bot token. Credential-gated skips are not passes. | Inbound event/message IDs dedupe. Outbound uses a stable nonce and `enforce_nonce`; route/global 429 state is honored before durable retry. | Gateway v10 persists sequence/session/resume state, heartbeats, resumes recoverable sessions, re-identifies invalid sessions, and uses bounded reconnect backoff. | `MESSAGE_CONTENT` is privileged; permissions and application verification remain Discord-controlled. |
 
-Supported actions:
+Provider-controlled references: [Meta WhatsApp Cloud API](https://developers.facebook.com/docs/whatsapp/cloud-api), [Meta Webhooks](https://developers.facebook.com/docs/graph-api/webhooks/getting-started), [Apple Messages framework](https://developer.apple.com/documentation/messages), [Apple iMessage apps](https://developer.apple.com/imessage/), [Telegram Bot API](https://core.telegram.org/bots/api), [Slack Events API](https://docs.slack.dev/apis/events-api/), [Slack Web API `chat.postMessage`](https://api.slack.com/methods/chat.postMessage), [Microsoft Bot Connector authentication](https://learn.microsoft.com/en-us/azure/bot-service/rest-api/bot-framework-rest-connector-authentication?view=azure-bot-service-4.0), [Microsoft Bot Connector messages](https://learn.microsoft.com/en-us/azure/bot-service/rest-api/bot-framework-rest-connector-send-and-receive-messages?view=azure-bot-service-4.0), [Discord Gateway](https://docs.discord.com/developers/events/gateway), [Discord Interactions](https://docs.discord.com/developers/interactions/overview), and [Discord messages](https://docs.discord.com/developers/resources/message).
 
-- Provider setup definitions: `list_provider_definitions`.
-- Provider connections: `list_connections`, `get_connection`, `create_connection`, `update_connection`, `delete_connection`.
-- Channel bindings: `list_channel_bindings`, `create_channel_binding`, `update_channel_binding`, `delete_channel_binding`.
-- Delivery inspection: `list_outbound_deliveries` for outbound records, optionally filtered by delivery status including `retryable_failure`.
+## Durable security and lifecycle contracts
 
-Connection and binding responses include stable IDs plus generated ingress URL guidance under `ingressUrls`. Connection responses expose `credentials` with redacted configured-state metadata only; raw `secrets` are never returned.
+### Secrets and legacy migration
 
-Approval rules:
+New connector secrets are sealed as AES-256-GCM envelopes through `ChatProviderSecretService`; public records expose only configured-state metadata. Runtime services resolve plaintext ephemerally and do not obtain it from public repository reads.
 
-- `delete_connection` and `delete_channel_binding` require the standard destructive-action approval handshake.
-- `update_connection` requires a one-use approval handshake before replacing a non-empty `secrets` payload. The approval response is bound to the redacted action payload and does not echo secret values.
+At startup, legacy `secret_json` rows are migrated one at a time after the key provider reports secure readiness. Each migration seals first, then uses connection ID, legacy JSON, and secret version in a compare-and-set transaction before clearing plaintext. Failure leaves the original row intact for a later retry; partial migration is resumable and logged as a security warning. Operators must restore the same key provider, rerun startup/migration, and confirm `pending: 0`. Do not "roll back" by copying secrets back to plaintext. A database restore also requires the matching key material/version.
 
-## Storage
+Secret replacement, secret clearing, bridge-mode change, or setup change increments/updates transport state and resets verification to `unverified`; display name, enabled flag, and lifecycle status alone preserve the last verification result. Active connections with transport changes return to draft/error flow until reverified.
 
-SQLite tables are created by `APP_DB_SCHEMA_TABLES` for fresh databases and by `ensureChatProviderTables()` during startup migrations for existing databases.
+### Authorization and approvals
 
-| Table | Purpose |
+- Remote connection create/update and `verify` require TLS, `credential_admin`, and `CODE_UX_REMOTE_CREDENTIAL_MANAGEMENT=true`.
+- Bindings and deliveries authorize against the project stored on the binding. A caller-supplied project filter never grants access.
+- MCP connection/binding deletion requires one-use approval. Connection secret or executable/endpoint replacement requires a one-use approval bound to the exact redacted payload for 15 minutes.
+- Manual delivery retry also requires one-use approval because the provider may receive the message again. REST retry requires `{ "approval": { "confirmed": true } }`.
+
+### Ingress replay and message idempotency
+
+The canonical route is both `GET` and `POST` at `/api/chat-providers/ingress/:providerConnectionId`; `/api/chat-providers/connections/:connectionId/ingress` remains a compatibility alias. Secrets are resolved ephemerally before GET handshakes and POST authentication.
+
+Generic HMAC requests require a fresh timestamp and are replay-checked by timestamp/signature. Generic bearer requests with `X-Code-UX-Nonce` or `X-Request-Id` receive the same durable receipt protection. Provider-native authentication follows the provider contract instead: Meta raw-body HMAC has no provider timestamp, Telegram uses its exact header secret, Slack uses its signed timestamp, Teams validates Bot Connector JWTs, and Discord validates Ed25519 interaction signatures.
+
+After authentication, the normalized external message ID is atomically inserted in `chat_provider_message_deliveries`. Only the insert winner can post to chat. Profile-declared immediate callbacks are acknowledged after that durable insert and processed asynchronously. Shared-channel ambiguity is stored as `disambiguation_needed`; Code UX does not guess a project.
+
+### Outbound leases, timeouts, cancellation, and recovery
+
+Outbound records move through `pending`, `sending`, `delivered`, `retryable_failure`, `failed`, or `cancelled`. Retry workers claim compare-and-set SQLite leases; other workers cannot claim an unexpired lease, and stale `sending` leases become recoverable after expiry/restart. Retryable failures use capped exponential backoff with jitter unless a provider supplies a longer/exact retry interval.
+
+HTTP, provider verification, and local commands have bounded timeouts. Cancellation writes terminal state and aborts fetch/command work. Shutdown aborts in-flight work, terminates native process groups, releases owned delivery leases back to pending/retryable state, stops reconnect timers, and waits for connector jobs before storage closes. Dashboard startup independently attempts ingress recovery, outbound retry recovery, and resumable sessions; an optional connector failure is logged but does not fail global `/ready`.
+
+Connector health (`GET /api/chat-providers/health`, alias `/diagnostics`, or MCP `get_health`) is a persisted-state read: configured/active/verified/error counts and sanitized last outcomes. It makes no provider call. Expired replay receipts and sessions are cleaned up by repository/runtime maintenance; deleting a connection cascades its bindings and delivery rows.
+
+## REST surface
+
+| Endpoint | Contract |
 | --- | --- |
-| `chat_provider_connections` | Provider kind, bridge mode, status, enabled flag, setup JSON, and secret JSON. |
-| `chat_provider_channel_bindings` | Links external channels to projects with routing hints, optional project-manager agent preset, inbound/outbound flags, and `suppress_rich_widgets` defaulting to true. |
-| `chat_provider_message_deliveries` | Inbound idempotency keys and outbound delivery status, attempts, errors, linked conversation message IDs, and payload snapshots. |
+| `GET /api/chat-providers/setup-definitions` | Setup schemas, required fields, official references, limitations, and ingress URL template. |
+| `POST /api/chat-providers/connections` | Validated creation with write-only secrets; live-verification modes cannot be activated before verification. |
+| `PATCH /api/chat-providers/connections/:connectionId` | Metadata/setup/secret update; transport changes invalidate verification. |
+| `POST /api/chat-providers/connections/:connectionId/verify` | Bounded configuration/provider check with sanitized outcome. |
+| `GET /api/chat-providers/health` | Persisted health summary; no network call. |
+| `GET /api/chat-providers/deliveries` | Authorized, sanitized inbound/outbound delivery metadata; omits payload and lease fields. |
+| `POST /api/chat-providers/deliveries/:deliveryId/retry` | Approved manual retry. |
+| `POST /api/chat-providers/deliveries/:deliveryId/cancel` | Terminal cancellation and in-flight abort. |
+| `GET|POST /api/chat-providers/ingress/:providerConnectionId` | Provider handshake and authenticated callback ingress. |
 
-Bindings allow many projects to point at the same external channel and one project to use multiple channels. Provider deletion cascades bindings and delivery rows. Existing `mcp_connections`, `conversation_threads`, and `conversation_messages` behavior remains unchanged.
+Example ingress and controls use placeholders only:
 
-## Repository
+```text
+GET  https://codeux.example.test/api/chat-providers/ingress/connection-example
+POST https://codeux.example.test/api/chat-providers/ingress/connection-example
+```
 
-`src/repositories/chat-provider-repository.ts` owns persistence for this foundation:
+```json
+POST /api/chat-providers/deliveries/delivery-example/retry
+{ "approval": { "confirmed": true } }
+```
 
-- Connection create/update/list/get/delete.
-- Redacted public reads and unredacted internal reads.
-- Secret-preserving updates when an update omits the `secrets` field.
-- Channel binding create/update/list/get/delete.
-- Inbound duplicate lookup by `(providerConnectionId, externalMessageId)`.
-- Outbound delivery upsert and state transitions.
-- Outbound delivery listing scoped to a provider connection or channel binding for dashboard status views, plus pending/retryable outbound delivery scans for retry workers.
+A verification timeout is returned without upstream URLs, bodies, or credentials:
 
-Indexes cover provider kind, enabled status, project lookup, provider/channel lookup, inbound dedupe, and pending/retryable outbound delivery scans.
+```json
+{
+  "status": "failed",
+  "providerErrorCode": "verification_timeout",
+  "retryable": true,
+  "issues": ["Provider verification timed out."],
+  "diagnostics": null
+}
+```
 
-## Outbound delivery
-
-`ChatProviderOutboundService` sends assistant/system replies back to external chat channels only for threads sourced from chat provider ingress metadata. Dashboard-originated chat keeps the existing rich widget behavior and does not create outbound provider deliveries.
-
-The outbound runtime builds one delivery payload per persisted reply with:
-
-- Provider kind and provider connection id.
-- External channel id and channel binding id.
-- Conversation thread id and reply conversation message id.
-- Plain markdown reply text.
-- Reply-to external message id from the inbound delivery when available.
-- Redacted metadata linking the inbound delivery and source conversation message.
-
-Bridge execution is isolated behind `src/services/chat-provider-adapters.ts`:
-
-- `managed_bridge`: HTTP `POST` to a configured managed bridge URL such as `bridgeUrl`, using bridge credentials as transport headers.
-- `webhook`: HTTP `POST` to configured generic bridge URLs such as `webhookUrl`, `eventsUrl`, `botEndpointUrl`, or `gatewayUrl`.
-- `native_bridge`: local command execution for macOS/iMessage-style bridge scripts. The payload is written as JSON on stdin, commands are parsed into executable plus arguments without shell interpretation, and optional bridge tokens are supplied through environment variables.
-
-The runtime never calls WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, or Discord APIs directly. Provider-specific SDKs are not required.
-
-Outbound delivery lifecycle:
-
-- `pending`: reply has been persisted and queued for bridge delivery.
-- `sending`: an adapter attempt is in progress.
-- `delivered`: the bridge accepted the reply; `externalMessageId` is stored when the bridge returns one.
-- `retryable_failure`: a retryable bridge failure occurred and the payload contains `delivery.nextAttemptAt`.
-- `failed`: delivery is terminal, such as disabled outbound routing, missing bridge configuration, non-retryable HTTP response, or exhausted attempts.
-
-Retryable HTTP/network/native bridge failures use exponential backoff. The dashboard lifecycle starts the outbound retry loop, and status APIs/MCP reads expose delivery status, attempt count, last error, linked conversation message id, and redacted payload state. Secrets are redacted from logs, payloads, stored errors, dashboard responses, and MCP responses.
-
-## Dashboard API
-
-Dashboard settings use `src/server/chat-provider-routes.ts` to manage chat provider configuration through REST endpoints. The routes are registered with the settings route group and use the shared `asyncRoute`/`syncRoute` error wrappers and request parser validation.
-
-| Endpoint | Purpose |
-| --- | --- |
-| `GET /api/chat-providers/setup-definitions` | Lists provider setup schemas with ingress URL templates and setup hints. |
-| `GET /api/chat-providers/connections` | Lists redacted provider connections, optionally filtered by provider kind or enabled state. |
-| `GET /api/chat-providers/connections/:connectionId` | Reads one redacted provider connection with generated ingress URL and setup hints. |
-| `POST /api/chat-providers/connections` | Creates a provider connection after validating provider kind, bridge mode, setup fields, display name, booleans, and secret shape. |
-| `PATCH /api/chat-providers/connections/:connectionId` | Updates connection metadata, setup, status, enabled state, bridge mode, or secrets without echoing raw secret values. |
-| `DELETE /api/chat-providers/connections/:connectionId` | Deletes a provider connection and cascades bindings and delivery rows. |
-| `GET /api/chat-providers/channel-bindings` | Lists channel bindings, including same external channel bindings across multiple projects. |
-| `GET /api/chat-providers/connections/:connectionId/channel-bindings` | Lists bindings for one provider connection. |
-| `POST /api/chat-providers/channel-bindings` | Creates a project/channel binding after validating channel id, project id, optional agent preset id, routing hints, metadata, and booleans. |
-| `PATCH /api/chat-providers/channel-bindings/:bindingId` | Updates binding labels, project routing, agent preset, routing hints, metadata, and enabled flags. |
-| `DELETE /api/chat-providers/channel-bindings/:bindingId` | Deletes a channel binding. |
-| `GET /api/chat-providers/connections/:connectionId/delivery-status` | Lists recent outbound delivery records for one provider connection. |
-| `GET /api/chat-providers/channel-bindings/:bindingId/delivery-status` | Lists recent outbound delivery records for one channel binding. |
-| `POST /api/chat-providers/ingress/:providerConnectionId` | Accepts authenticated inbound bridge messages, normalizes provider payloads, deduplicates external message IDs, and posts routed text to dashboard chat threads. |
-
-## Dashboard Settings UI
-
-Settings -> Integrations includes a Chat Connectors group for WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, and Discord. Each provider detail view reads the setup definitions, redacted connection records, channel bindings, generated ingress URLs, and outbound delivery status from the dashboard API.
-
-The UI lets operators create and edit provider connections with display names, bridge modes, setup fields, enabled state, connection status, and write-only secret replacement fields. Saved secrets are never rendered back into the form; configured credentials appear only as redacted metadata and empty replacement inputs.
-
-Channel binding controls support multiple projects on the same external channel and multiple channels per project. Bindings expose project selection, optional project-manager agent preset selection, inbound and outbound toggles, project selector prefix or routing hint fields, and the `suppressRichWidgets` setting. The Settings copy explains that shared-channel routing uses these selectors before accepting inbound messages and records disambiguation instead of guessing when a channel maps to multiple projects.
-
-Provider cards and connection detail views surface enabled state, bridge mode, ingress URL, authentication status, configured channels, bound projects, outbound reply state, pending outbound delivery count, and failed outbound delivery count. Recent failed outbound messages are shown with retryable labels and redacted error text.
-
-The ingress endpoint supports Managed, webhook, and native bridge payloads for WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, and Discord. Managed and native bridges authenticate with bearer tokens from the configured bridge secret. Webhook bridges require a configured signing secret and a valid HMAC signature; they do not accept bearer-only fallback. All ingress requests require a fresh timestamp, and signed requests or requests with explicit nonces are replay-checked before processing.
-
-Inbound messages normalize to provider connection id, provider kind, external channel id/name, external sender id/name, text, external message id, timestamp, and redacted raw metadata. The repository idempotency lookup runs before chat posting; duplicate external messages return the existing delivery record without creating another conversation message.
-
-Channel resolution only considers enabled bindings with inbound enabled for the provider connection and external channel. If multiple projects share a channel, routing hints such as `projectSelectorPrefix`, `projectSelector`, `projectAlias`, `aliases`, or payload-level project selectors are applied first. If no hint selects exactly one binding, the runtime records a `disambiguation_needed` inbound delivery state and returns a conflict response instead of guessing a project.
-
-Routed inbound text is posted through `ChatThreadRuntimeService.postMessage` with metadata marking `source: "chat_provider"`, provider kind, external channel id, external sender, inbound delivery id, and `suppressRichWidgets: true`.
-
-Chat-provider-sourced prompts omit the dashboard `codeux:*` rich widget instruction block. If a provider reply still contains a dashboard-only widget fence, outbound delivery strips or downgrades it to readable markdown before sending externally. Approval prompts and management-action result summaries remain plain markdown and continue to be delivered to the external channel.
-
-Dashboard-only `agentEffect` metadata follows the same boundary. External prompts do not advertise the avatar effect contract, outbound payloads never include assistant avatar metadata, and any remaining `codeux:agent` fence is removed or downgraded before delivery.
+See [Chat Provider Integrations](../settings/chat-provider-integrations.md), [provider profiles](../settings/chat-connectors/index.md), [MCP tools](../mcp/tools-and-contracts.md), and [the operations runbook](../operations/runbook.md).

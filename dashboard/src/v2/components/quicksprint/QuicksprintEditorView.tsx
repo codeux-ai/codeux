@@ -6,6 +6,8 @@ import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { SubtaskSlider, TAG_STYLES, ICON_OPTIONS, IconMap, getTagStyles } from "./quicksprint-shared.js";
 import type { QuicksprintTemplateRecord } from "../../../../../src/contracts/quicksprint-types.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { sprintAuthoringMessages } from "../../i18n/messages/sprint-authoring.js";
 
 export const QuicksprintEditorView: FunctionComponent<{
   agentPresets: AgentPreset[];
@@ -53,6 +55,8 @@ export const QuicksprintEditorView: FunctionComponent<{
   handleEditorDelete,
   cardRef,
 }) => {
+  const { translate } = useDashboardI18n();
+  const t = (key: keyof typeof sprintAuthoringMessages.en, variables?: Record<string, string>): string => translate(sprintAuthoringMessages, key, variables);
   const interactionTokens = useInteractionTokens();
   const iconPickerId = "quicksprint-template-icon-picker";
   const colorPickerId = "quicksprint-template-color-picker";
@@ -68,11 +72,11 @@ export const QuicksprintEditorView: FunctionComponent<{
     left: pickerPos.left,
     ...pickerMotionStyle,
   };
-  const deleteTargetName = editorTemplate?.name || "template";
+  const deleteTargetName = editorTemplate?.name || t("templates");
   const saveDisabledReason = !edName.trim()
-    ? "Add a template name before saving."
+    ? t("addTemplateName")
     : !edInstruction.trim() && !edAgentPresetId
-      ? "Add agent instructions or choose an agent preset before saving."
+      ? t("addTemplateInstructions")
       : "";
   const isSaveDisabled = edSaving || Boolean(saveDisabledReason);
 
@@ -103,18 +107,18 @@ export const QuicksprintEditorView: FunctionComponent<{
               </button>
               <div className="inline-flex items-center gap-2 rounded-full border border-ember-500/15 bg-ember-500/[0.07] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-ember-600 dark:text-ember-400">
                 <Settings2 className="h-3.5 w-3.5" strokeWidth={2.3} />
-                {editorTemplate ? "Edit Template" : "New Template"}
+                {editorTemplate ? t("editTemplate") : t("newTemplate")}
               </div>
             </div>
 
             {/* Name */}
             <label data-qs-stagger className="mt-8 block space-y-2">
-              <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Template Name</span>
+              <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{t("templateName")}</span>
               <input
                 type="text"
                 value={edName}
                 onInput={(e) => setEdName((e.target as HTMLInputElement).value)}
-                placeholder="API Integration Tests"
+                placeholder={t("templateNamePlaceholder")}
                 className="w-full rounded-[1rem] border border-black/[0.06] bg-transparent px-4 py-3 font-display text-xl font-semibold leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:ring-4 focus:ring-signal-500/20 focus:border-signal-500 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]"
                 autoFocus
               />
@@ -122,12 +126,12 @@ export const QuicksprintEditorView: FunctionComponent<{
 
             {/* Description */}
             <label data-qs-stagger className="mt-6 block space-y-2">
-              <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Description</span>
+              <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{t("description")}</span>
               <input
                 type="text"
                 value={edDescription}
                 onInput={(e) => setEdDescription((e.target as HTMLInputElement).value)}
-                placeholder="What this template does in one line"
+                placeholder={t("templateDescriptionPlaceholder")}
                 className="w-full rounded-[1rem] border border-black/[0.06] bg-transparent px-4 py-3 text-sm leading-relaxed text-slate-700 outline-none transition-colors placeholder:text-slate-300 focus:ring-4 focus:ring-signal-500/20 focus:border-signal-500 dark:border-white/[0.06] dark:text-slate-300 dark:placeholder:text-slate-600"
               />
             </label>
@@ -135,12 +139,12 @@ export const QuicksprintEditorView: FunctionComponent<{
             {/* Icon + Color + Category Tag + Default Tasks */}
             <div data-qs-stagger className="mt-8 grid gap-4 sm:grid-cols-2">
               <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-3">Category Tag</div>
+                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-3">{t("categoryTag")}</div>
                 <div className="flex items-center gap-3">
                   {/* Icon picker trigger */}
                   <button
                     type="button"
-                    aria-label={`Pick template icon, current icon ${edIcon}`}
+                    aria-label={t("pickCurrentIcon", { icon: edIcon })}
                     aria-haspopup="dialog"
                     aria-expanded={showIconPicker}
                     aria-controls={iconPickerId}
@@ -158,7 +162,7 @@ export const QuicksprintEditorView: FunctionComponent<{
                         : "border-black/[0.08] dark:border-white/[0.08]"
                     }`}
                     style={pickerMotionStyle}
-                    title="Pick icon"
+                    title={t("pickIcon")}
                   >
                     {(() => { const Ic = IconMap[edIcon] || Zap; return <Ic className="h-5 w-5" />; })()}
                   </button>
@@ -166,7 +170,7 @@ export const QuicksprintEditorView: FunctionComponent<{
                   {/* Color dot picker trigger */}
                   <button
                     type="button"
-                    aria-label={`Pick template tag color, current color ${edCategoryColor}`}
+                    aria-label={t("pickCurrentColor", { color: edCategoryColor })}
                     aria-haspopup="dialog"
                     aria-expanded={showColorPicker}
                     aria-controls={colorPickerId}
@@ -184,7 +188,7 @@ export const QuicksprintEditorView: FunctionComponent<{
                         : "border-black/[0.08] dark:border-white/[0.08]"
                     }`}
                     style={pickerMotionStyle}
-                    title="Pick tag color"
+                    title={t("pickTagColor")}
                   >
                     <span
                       className={`block h-5 w-5 rounded-full shadow-[inset_0_1px_2px_rgba(255,255,255,0.4),0_0_0_2px_rgba(0,0,0,0.06)] transition-transform duration-[var(--qs-picker-control-duration)] ease-[var(--qs-picker-control-ease)] motion-reduce:transition-none ${getTagStyles(edCategoryColor).dot}`}
@@ -197,7 +201,7 @@ export const QuicksprintEditorView: FunctionComponent<{
                     type="text"
                     value={edCategory}
                     onInput={(e) => setEdCategory((e.target as HTMLInputElement).value)}
-                    placeholder="e.g. engineering..."
+                    placeholder={t("categoryPlaceholder")}
                     className="flex-1 min-w-0 rounded-[1rem] border border-black/[0.06] bg-transparent px-3 py-2 text-sm text-slate-700 outline-none transition-colors placeholder:text-slate-300 focus:ring-4 focus:ring-signal-500/20 focus:border-signal-500 dark:border-white/[0.06] dark:text-slate-300 dark:placeholder:text-slate-600"
                   />
                 </div>
@@ -220,7 +224,7 @@ export const QuicksprintEditorView: FunctionComponent<{
               </div>
 
               <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-4">Default Tasks</div>
+                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-4">{t("defaultTasks")}</div>
                 <SubtaskSlider value={edTaskCount} onChange={setEdTaskCount} />
               </div>
             </div>
@@ -233,7 +237,7 @@ export const QuicksprintEditorView: FunctionComponent<{
                 id={iconPickerId}
                 role="dialog"
                 aria-modal="true"
-                aria-label="Icon picker"
+                aria-label={t("iconPicker")}
                 className="absolute z-[9999] w-[17rem] rounded-2xl border border-white/[0.08] p-3 shadow-2xl backdrop-blur-2xl bg-[#1a1d24]/95 transition-[opacity,transform] duration-[var(--qs-picker-enter-duration)] ease-[var(--qs-picker-enter-ease)] motion-reduce:transition-none"
                 style={pickerPositionStyle}
               >
@@ -244,7 +248,7 @@ export const QuicksprintEditorView: FunctionComponent<{
                       <button
                         key={opt.value}
                         type="button"
-                        aria-label={`Use ${opt.value} icon`}
+                        aria-label={t("useIcon", { icon: opt.value })}
                         aria-pressed={isActive}
                         onClick={() => { setShowIconPicker(false); setEdIcon(opt.value); }}
                         title={opt.value}
@@ -270,7 +274,7 @@ export const QuicksprintEditorView: FunctionComponent<{
                 id={colorPickerId}
                 role="dialog"
                 aria-modal="true"
-                aria-label="Color picker"
+                aria-label={t("colorPicker")}
                 className="absolute z-[9999] w-52 rounded-2xl border border-white/[0.08] p-3 shadow-2xl backdrop-blur-2xl bg-[#1a1d24]/95 transition-[opacity,transform] duration-[var(--qs-picker-enter-duration)] ease-[var(--qs-picker-enter-ease)] motion-reduce:transition-none"
                 style={pickerPositionStyle}
               >
@@ -281,7 +285,7 @@ export const QuicksprintEditorView: FunctionComponent<{
                       <button
                         key={value}
                         type="button"
-                        aria-label={`Use ${value} tag color`}
+                        aria-label={t("useTagColor", { color: value })}
                         aria-pressed={isActive}
                         onClick={() => { setShowColorPicker(false); setEdCategoryColor(value); }}
                         className={`group flex min-h-[44px] min-w-[44px] h-8 w-8 cursor-pointer items-center justify-center rounded-full border transition-[background-color,border-color,box-shadow,transform] duration-[var(--qs-picker-control-duration)] ease-[var(--qs-picker-control-ease)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-400/50 motion-safe:hover:scale-[1.08] motion-safe:active:scale-[0.97] motion-reduce:transition-none ${
@@ -310,19 +314,19 @@ export const QuicksprintEditorView: FunctionComponent<{
             {agentPresets.length > 0 && (
               <div data-qs-stagger className="mt-6">
                 <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">Agent Preset (optional)</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">{t("agentPresetOptional")}</div>
                   <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">
-                    Attach an agent's instructions to this template. The agent's prompt will be prepended to the template instructions.
+                    {t("agentPresetDescription")}
                   </p>
                   <AvantgardeSelect
                     variant="compact"
                     value={edAgentPresetId}
                     onChange={(val) => setEdAgentPresetId(val)}
                     options={[
-                      { value: "", label: "No Agent" },
+                      { value: "", label: t("noAgent") },
                       ...agentPresets.map((p) => ({ value: p.id, label: `${p.name}${p.labels.length ? ` (${p.labels.join(", ")})` : ""}` })),
                     ]}
-                    placeholder="No Agent"
+                    placeholder={t("noAgent")}
                   />
                 </div>
               </div>
@@ -330,11 +334,11 @@ export const QuicksprintEditorView: FunctionComponent<{
 
             {/* Instructions */}
             <div data-qs-stagger className="mt-6 space-y-2">
-              <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Agent Instructions</span>
+              <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{t("agentInstructions")}</span>
               <textarea
                 value={edInstruction}
                 onInput={(e) => setEdInstruction((e.target as HTMLTextAreaElement).value)}
-                placeholder="Write detailed instructions for the planning agent. Leave empty to use only the agent preset's instructions..."
+                placeholder={t("agentInstructionsPlaceholder")}
                 rows={10}
                 className="w-full rounded-[1rem] border border-black/[0.06] bg-black/[0.025] p-5 text-sm font-mono leading-relaxed text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:ring-4 focus:ring-signal-500/20 focus:border-signal-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:placeholder:text-slate-600 resize-y"
               />
@@ -357,7 +361,7 @@ export const QuicksprintEditorView: FunctionComponent<{
                       }`}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
-                      {edSaving && edConfirmDelete ? `Deleting ${deleteTargetName}` : edConfirmDelete ? `Delete ${deleteTargetName}` : "Delete"}
+                      {edSaving && edConfirmDelete ? t("deletingNamed", { name: deleteTargetName }) : edConfirmDelete ? t("deleteNamed", { name: deleteTargetName }) : t("delete")}
                     </button>
                     {edConfirmDelete && (
                       <>
@@ -367,10 +371,10 @@ export const QuicksprintEditorView: FunctionComponent<{
                           disabled={edSaving}
                           className="inline-flex min-h-[44px] items-center rounded-full border border-black/[0.08] px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:opacity-55 dark:border-white/[0.08] dark:text-slate-300 dark:hover:bg-white/[0.06]"
                         >
-                          Cancel
+                          {t("cancel")}
                         </button>
                         <p id="quicksprint-editor-delete-confirmation" className="basis-full text-xs font-semibold leading-relaxed text-status-amber">
-                          Confirm deletion for {deleteTargetName}. Press Escape or Cancel to keep it.
+                          {t("confirmDeleteTemplate", { name: deleteTargetName })}
                         </p>
                       </>
                     )}
@@ -393,7 +397,7 @@ export const QuicksprintEditorView: FunctionComponent<{
                 aria-busy={edSaving ? "true" : "false"}
                 className="inline-flex min-h-[44px] items-center gap-2 rounded-[1.35rem] bg-ember-600 px-6 py-3 text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_0_20px_rgba(255,107,0,0.25)] transition-all hover:bg-ember-500 hover:shadow-[0_0_28px_rgba(255,107,0,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {edSaving ? "Saving..." : editorTemplate ? "Save Changes" : "Create Template"}
+                {edSaving ? t("saving") : editorTemplate ? t("saveChanges") : t("createTemplate")}
               </button>
             </div>
           </div>

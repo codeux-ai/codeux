@@ -4,10 +4,17 @@
 import { h, Fragment } from "preact";
 import { useState } from "preact/hooks";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/preact";
+import { cleanup, fireEvent, render as testingLibraryRender, screen, within } from "@testing-library/preact";
+import type { ComponentChildren } from "preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { SettingsMcpPanel } from "../../../dashboard/src/v2/components/settings/panels/SettingsMcpPanel.js";
 import type { CustomMcpServer, McpToolToggle } from "../../../dashboard/src/v2/types.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+import type { DashboardLocale } from "../../../dashboard/src/v2/i18n/locales.js";
+
+const render = (children: ComponentChildren, locale: DashboardLocale = "en") => testingLibraryRender(
+  <DashboardI18nProvider initialLocale={locale} storage={null}>{children}</DashboardI18nProvider>,
+);
 
 expect.extend(matchers);
 
@@ -18,6 +25,7 @@ vi.mock("gsap", () => ({
       return { revert: vi.fn() };
     }),
     fromTo: vi.fn(),
+    set: vi.fn(),
   },
 }));
 
@@ -27,8 +35,8 @@ vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
   useResolvedMotionDuration: (duration: number | string) => duration,
 }));
 
-const TestHarness = () => {
-  const [customMcpServers, setCustomMcpServers] = useState<CustomMcpServer[]>([]);
+const TestHarness = ({ initialServers = [] }: { initialServers?: CustomMcpServer[] }) => {
+  const [customMcpServers, setCustomMcpServers] = useState<CustomMcpServer[]>(initialServers);
   const [mcpTools, setMcpTools] = useState<McpToolToggle[]>([]);
 
   const systemSettings = {
@@ -112,5 +120,35 @@ describe("SettingsMcpPanel", () => {
     expect(within(preview).getByText(/"url": "https:\/\/mcp\.example\.test\/sse"/)).toBeInTheDocument();
     expect(within(preview).getByText(/"headers":/)).toBeInTheDocument();
     expect(within(preview).getByText(/"Authorization": "Bearer test-token"/)).toBeInTheDocument();
+  });
+
+  it("reports German clipboard denial while preserving the token and endpoint", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      enabled: true,
+      url: "http://127.0.0.1:4445/mcp",
+      authToken: "local-token-verbatim",
+      providers: [],
+    }), { status: 200, headers: { "content-type": "application/json" } })));
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined });
+
+    render(<TestHarness />, "de");
+    expect(await screen.findByText("local-token-verbatim")).toBeInTheDocument();
+    expect(screen.getByText("http://127.0.0.1:4445/mcp")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Token kopieren" }));
+    expect(await screen.findByText("Schreiben in die Zwischenablage fehlgeschlagen.")).toBeInTheDocument();
+  });
+
+  it("shows German duplicate-name, URL, and transport validation", () => {
+    const duplicateServers: CustomMcpServer[] = [
+      { id: "one", name: "remote_docs", enabled: true, transport: "http", url: "https://valid.example/mcp" },
+      { id: "two", name: "remote_docs", enabled: true, transport: "invalid" as CustomMcpServer["transport"], url: "file:///tmp/mcp" },
+    ];
+    render(<TestHarness initialServers={duplicateServers} />, "de");
+    fireEvent.click(screen.getAllByRole("button", { name: "Verwalten" })[1]!);
+
+    expect(screen.getByText("Serverschlüssel müssen eindeutig sein.")).toBeInTheDocument();
+    expect(screen.getByText("Geben Sie eine gültige HTTP- oder HTTPS-URL ein.")).toBeInTheDocument();
+    expect(screen.getByText("Wählen Sie HTTP / SSE oder Befehl (stdio).")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("file:///tmp/mcp")).toBeInTheDocument();
   });
 });

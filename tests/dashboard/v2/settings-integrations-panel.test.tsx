@@ -2,14 +2,22 @@
 /** @vitest-environment happy-dom */
 /** @jsx h */
 /** @jsxFrag Fragment */
-import { h, Fragment } from "preact";
+import { h, Fragment, type ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { render, waitFor, screen, fireEvent, cleanup, within } from "@testing-library/preact";
+import { render as testingLibraryRender, waitFor, screen, fireEvent, cleanup, within } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import { SettingsIntegrationsPanel } from "../../../dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.js";
 import { fetchLocalFiles } from "../../../dashboard/src/v2/lib/project-api.js";
 import { fetchAutomationCredentials, fetchCredentialHealth } from "../../../dashboard/src/v2/lib/automation-credential-api.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+import type { DashboardLocale } from "../../../dashboard/src/v2/i18n/locales.js";
+
+const render = (children: ComponentChildren, locale: DashboardLocale = "en") => testingLibraryRender(children, {
+  wrapper: ({ children: wrappedChildren }) => (
+    <DashboardI18nProvider initialLocale={locale} storage={null}>{wrappedChildren}</DashboardI18nProvider>
+  ),
+});
 
 vi.mock("../../../dashboard/src/v2/lib/project-api.js", () => ({
   fetchLocalFiles: vi.fn(),
@@ -219,7 +227,7 @@ describe("SettingsIntegrationsPanel", () => {
     const { container } = render(<Harness />);
     const card = await waitFor(() => container.querySelector('[data-integration-card="automation-credentials"]') as HTMLElement);
     expect(container.textContent?.indexOf("Automation Credentials")).toBeLessThan(container.textContent?.indexOf("GitHub") ?? -1);
-    expect(within(card).getByText("Ready · not configured")).toBeTruthy();
+    expect(within(card).getByText("Ready, not configured.")).toBeTruthy();
     expect(screen.queryByText("Automation credential management")).toBeNull();
 
     const manageButton = within(card).getByRole("button", { name: "Manage" });
@@ -232,6 +240,47 @@ describe("SettingsIntegrationsPanel", () => {
     await user.keyboard("{Enter}");
     await waitFor(() => expect(screen.queryByText("Automation credential management")).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(manageButton));
+  });
+
+  it("localizes the ready credential status while preserving integration data", async () => {
+    vi.mocked(fetchAutomationCredentials).mockResolvedValue([]);
+    vi.mocked(fetchCredentialHealth).mockResolvedValue({
+      available: true,
+      secure: true,
+      provider: "local-file",
+      keyId: "root",
+      keyVersion: 1,
+    });
+
+    const { container } = render(<SettingsIntegrationsPanel state={{
+      activeScope: "project",
+      selectedProject: { id: "project-1", name: "Selected project" },
+      projects: [{ id: "project-1", name: "Selected project" }],
+      editableSettings: {
+        cliWorkflow: { executionMode: "DOCKER" },
+        git: { githubMode: "REMOTE" },
+      },
+      systemSettings: {
+        integrations: { providers: {}, githubToken: "", gitlabToken: "" },
+      },
+      projectSources: {},
+      selectedIntegration: null,
+      setSelectedIntegration: vi.fn(),
+      integrations: [
+        { id: "automation-credentials", label: "Automation Credentials", description: "Write-only project automation secrets" },
+      ],
+      importingHints: false,
+      externalHints: { resolved: {} },
+      handleImportHints: vi.fn(),
+      updateEditableSettings: vi.fn(),
+      updateSystem: vi.fn(),
+      updateProject: vi.fn(),
+    } as any} />, "de");
+
+    const card = await waitFor(() => container.querySelector('[data-integration-card="automation-credentials"]') as HTMLElement);
+    expect(within(card).getByText("Bereit, nicht konfiguriert.")).toBeTruthy();
+    expect(within(card).getByText("Automation Credentials")).toBeTruthy();
+    expect(within(card).queryByText("Ready, not configured.")).toBeNull();
   });
 
   it("keeps the selected integration detail in flow so long forms are not clipped", async () => {
@@ -683,6 +732,26 @@ describe("SettingsIntegrationsPanel", () => {
       { id: "mural", label: "Mural", fieldLabel: "Mural ID", fieldKey: "boardId" },
     ] as const;
 
+    it("renders German importer chrome while preserving credential and identifier values", async () => {
+      const state = createImporterState({
+        selectedIntegration: "notion",
+        integrations: [{ id: "notion", label: "Notion", description: "Read-only importer" }],
+      });
+      state.systemSettings.integrations.notion = createImporterSettings({
+        enabled: true,
+        apiToken: "credential-value-verbatim",
+        databaseId: "database-id-verbatim",
+      });
+
+      render(<SettingsIntegrationsPanel state={state as any} />, "de");
+
+      expect(await screen.findByText("Importer-Konfiguration")).toBeTruthy();
+      expect(screen.getByText("Unterstützung für schreibgeschützte Importe")).toBeTruthy();
+      expect(screen.getByText("Datenbank-ID")).toBeTruthy();
+      expect((screen.getByLabelText("Notion API-Token") as HTMLInputElement).value).toBe("credential-value-verbatim");
+      expect((screen.getByLabelText("Notion Datenbank-ID") as HTMLInputElement).value).toBe("database-id-verbatim");
+    });
+
     it.each(providerCases)("edits %s importer credentials and defaults", async ({ id, label, fieldLabel, fieldKey }) => {
       let updatedSystem: any = null;
       const state = createImporterState({
@@ -922,8 +991,8 @@ describe("SettingsIntegrationsPanel", () => {
       rerender(<SettingsIntegrationsPanel state={stateLocal as any} />);
       const disabledReason = await screen.findByText(/Custom endpoint fields are disabled while local auth is selected/i);
       const providerPicker = screen.getByRole("button", { name: "Codex Primary API provider" });
-      const baseUrlInput = screen.getByLabelText("Codex Primary custom base URL");
-      const modelPicker = screen.getByRole("button", { name: "Codex Primary custom model" });
+      const baseUrlInput = screen.getByLabelText("Codex Primary Base URL");
+      const modelPicker = screen.getByRole("button", { name: "Codex Primary Custom model" });
       expect(providerPicker.getAttribute("aria-describedby")).toContain(disabledReason.id);
       expect(baseUrlInput.getAttribute("aria-disabled")).toBe("true");
       expect(baseUrlInput.getAttribute("aria-describedby")).toContain(disabledReason.id);

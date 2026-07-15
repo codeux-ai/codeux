@@ -8,6 +8,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
 import { useUpdateStatus } from "../../hooks/use-update-status.js";
 import { TitleBar } from "../TitleBar.js";
+import { DashboardI18nProvider } from "../../i18n/context.js";
 
 vi.mock("../../hooks/use-update-status.js", () => ({
   useUpdateStatus: vi.fn(),
@@ -88,5 +89,14 @@ describe("TitleBar", () => {
     expect(screen.getByRole("button", { name: "Minimize window" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Maximize window" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Close window" })).toBeInTheDocument();
+  });
+
+  it("updates desktop chrome when the active locale is German", () => {
+    installDesktopApi();
+    render(<DashboardI18nProvider initialLocale="de"><TitleBar /></DashboardI18nProvider>);
+
+    expect(screen.getByRole("button", { name: "Fenster minimieren" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Fenster maximieren" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Fenster schließen" })).toBeInTheDocument();
   });
 });

@@ -1,5 +1,7 @@
 import type { DashboardStatus, ExecutionDashboardSnapshot, ExecutionSprintRunSummary } from "../../types.js";
 import { getPrimaryPausedInterventionRun } from "../../lib/execution-intervention.js";
+import type { DashboardLocale } from "../i18n/locales.js";
+import { translateLiveMessage } from "../i18n/messages/live.js";
 
 function hasStatusTaskSnapshot(status: DashboardStatus, sprintId?: string | null): boolean {
   if (sprintId) {
@@ -93,19 +95,19 @@ export function getPendingActionState(pendingActionIds: Set<string>, actionId: s
   return pendingActionIds.has(actionId) ? "pending" : "idle";
 }
 
-export function getLiveActionLabel(state: LiveActionState, labels: LiveActionLabels): string {
+export function getLiveActionLabel(state: LiveActionState, labels: LiveActionLabels, locale: DashboardLocale = "en"): string {
   if (state === "pending") return labels.pending;
   if (state === "success") return labels.success ?? labels.idle;
-  if (state === "error") return labels.error ?? `Retry ${labels.idle.toLowerCase()}`;
+  if (state === "error") return labels.error ?? translateLiveMessage(locale, "retryAction", { action: labels.idle.toLocaleLowerCase(locale) });
   if (state === "disabled") return labels.disabled ?? labels.idle;
   return labels.idle;
 }
 
-export function getLiveActionStatusLabel(state: LiveActionState, labels: LiveActionLabels): string | null {
-  if (state === "pending") return `${labels.pending} in progress.`;
-  if (state === "success") return `${labels.success ?? labels.idle} succeeded.`;
-  if (state === "error") return `${labels.error ?? labels.idle} failed. Retry when ready.`;
-  if (state === "disabled") return labels.disabled ? `${labels.disabled}.` : "Action unavailable.";
+export function getLiveActionStatusLabel(state: LiveActionState, labels: LiveActionLabels, locale: DashboardLocale = "en"): string | null {
+  if (state === "pending") return translateLiveMessage(locale, "actionInProgressLabel", { action: labels.pending });
+  if (state === "success") return translateLiveMessage(locale, "actionSucceededLabel", { action: labels.success ?? labels.idle });
+  if (state === "error") return translateLiveMessage(locale, "actionFailedRetryLabel", { action: labels.error ?? labels.idle });
+  if (state === "disabled") return labels.disabled ? `${labels.disabled}.` : translateLiveMessage(locale, "actionUnavailable");
   return null;
 }
 
@@ -113,9 +115,10 @@ export function getLiveActionDisabledReason(
   state: LiveActionState,
   labels: LiveActionLabels,
   disabledReason?: string | null,
+  locale: DashboardLocale = "en",
 ): string | null {
-  if (state === "pending") return `${labels.pending} is already in progress.`;
-  if (state === "disabled") return disabledReason || labels.disabled || "Action unavailable.";
+  if (state === "pending") return translateLiveMessage(locale, "actionAlreadyInProgress", { action: labels.pending });
+  if (state === "disabled") return disabledReason || labels.disabled || translateLiveMessage(locale, "actionUnavailable");
   return null;
 }
 

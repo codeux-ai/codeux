@@ -1,6 +1,9 @@
 import type { FunctionComponent } from "preact";
 import { AlertTriangle, Bot } from "lucide-preact";
 import type { ExecutionHumanInterventionSummary } from "../../../types.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
+import { sprintsMessages } from "../../i18n/messages/sprints.js";
 
 interface HumanInterventionBadgeProps {
   summary: ExecutionHumanInterventionSummary;
@@ -11,14 +14,19 @@ interface HumanInterventionBadgeProps {
 
 export const HumanInterventionBadge: FunctionComponent<HumanInterventionBadgeProps> = ({
   summary,
-  label = "Needs you",
+  label,
   compact = false,
   align = "center",
 }) => {
+  const { translate } = useOptionalDashboardI18n();
   void align;
   const isMergeConflict = summary.attentionType === "merge_conflict";
   const isSystemStop = !isMergeConflict && (summary.ownerType === "system" || summary.ownerType === "worker");
-  const displayLabel = isMergeConflict ? "Merge conflict" : isSystemStop ? "System stopped" : label;
+  const displayLabel = isMergeConflict
+    ? translate(sprintsMessages, "mergeConflict")
+    : isSystemStop
+      ? translate(sprintsMessages, "systemStopped")
+      : label ?? translate(sprintsMessages, "needsYou");
   const toneClass = isMergeConflict
     ? "border-status-red/25 bg-status-red/10 text-status-red shadow-[0_10px_24px_rgba(227,0,15,0.12)]"
     : isSystemStop
@@ -35,7 +43,7 @@ export const HumanInterventionBadge: FunctionComponent<HumanInterventionBadgePro
       >
         <Icon className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} strokeWidth={2.2} />
         <span>{displayLabel}</span>
-        <span className="sr-only">Severity: {summary.severity}</span>
+        <span className="sr-only">{translate(shellMessages, "notificationSeverity", { severity: summary.severity ?? "" })}</span>
       </div>
     </div>
   );

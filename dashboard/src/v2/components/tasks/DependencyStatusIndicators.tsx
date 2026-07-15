@@ -3,6 +3,9 @@ import { memo } from "preact/compat";
 import { ArrowRight } from "lucide-preact";
 import { getDependencyPresentation, type DependencyIndicator } from "../../lib/tasks/task-card-view-model.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { taskMessages } from "../../i18n/messages/tasks.js";
+import type { DashboardTranslate } from "../../i18n/context.js";
 
 function getDependencyStatusCopy(dep: DependencyIndicator): string {
   return getDependencyPresentation(dep.status, isDependencyKnown(dep)).stateLabel ?? "Unknown";
@@ -55,24 +58,46 @@ function getDependencyToneClass(dep: DependencyIndicator): string {
   }
 }
 
+function getDependencyStatusText(
+  status: DependencyIndicator["status"],
+  locale: "en" | "de",
+  translate: DashboardTranslate,
+): string {
+  if (locale === "en") {
+    return status.replace(/_/g, " ");
+  }
+  const key = status === "pending"
+    ? "pending"
+    : status === "in_progress"
+      ? "inProgressLower"
+      : status === "coding_completed"
+        ? "codingCompleted"
+        : status === "QA_REVIEW_FAILED"
+          ? "qaFailedLower"
+          : "completed";
+  return translate(taskMessages, key).toLocaleLowerCase(locale);
+}
+
 export const DependencyStatusIndicators: FunctionComponent<{
   indicators: DependencyIndicator[];
 }> = memo(({ indicators }) => {
   const interactionTokens = useInteractionTokens();
+  const { locale, translate, translatePlural, formatNumber } = useOptionalDashboardI18n();
   if (!indicators || indicators.length === 0) return null;
 
   const blockerCount = indicators.filter(isDependencyBlocking).length;
   const summary = blockerCount === 0
-    ? `Dependencies resolved: ${indicators.length} clear`
-    : `Blocked: ${blockerCount} ${blockerCount === 1 ? "dependency needs" : "dependencies need"} completion`;
+    ? translate(taskMessages, "dependenciesResolved", { count: formatNumber(indicators.length) })
+    : translatePlural(taskMessages, "dependenciesBlocked", blockerCount, { count: formatNumber(blockerCount) });
   const announcement = blockerCount === 0
-    ? `Dependency blockers resolved. ${indicators.length} ${indicators.length === 1 ? "dependency is" : "dependencies are"} clear.`
+    ? translatePlural(taskMessages, "dependencyResolvedAnnouncement", indicators.length, { count: formatNumber(indicators.length) })
     : `${summary}.`;
 
   return (
-    <section
-      className="relative z-10 mt-3"
-      aria-label="Task dependencies"
+    <div
+      className="relative z-10 mt-3 flex flex-wrap items-center gap-1.5"
+      role="list"
+      aria-label={`${summary}. ${translate(taskMessages, "taskDependencies")}`}
       aria-live="polite"
       aria-atomic="false"
       style={{
@@ -94,33 +119,43 @@ export const DependencyStatusIndicators: FunctionComponent<{
       >
         {summary}
       </div>
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5" role="list" aria-label={`${summary}. Task dependencies`}>
-        {indicators.map((dep) => {
-          const statusText = dep.status.replace(/_/g, " ");
-          const statusCopy = getDependencyStatusCopy(dep);
-          const dependencyState = getDependencyState(dep);
-          const blockingCopy = isDependencyBlocking(dep) ? "Blocking dependency" : "Resolved dependency";
-          const stateDescription = dep.stateDescription ?? getDependencyPresentation(dep.status, isDependencyKnown(dep)).stateDescription;
-          const containerClass = getDependencyToneClass(dep);
+      {indicators.map((dep) => {
+        const statusText = getDependencyStatusText(dep.status, locale, translate);
+        const presentation = getDependencyPresentation(dep.status, dep.isKnown !== false && !dep.title.startsWith("Unknown Task"), locale);
+        const statusCopy = dep.stateLabel ?? presentation.stateLabel ?? translate(taskMessages, "unknown");
+        const dependencyState = getDependencyState(dep);
+        const blockingCopy = translate(taskMessages, isDependencyBlocking(dep) ? "blockingDependency" : "resolvedDependency");
+        const blockingBadge = translate(taskMessages, isDependencyBlocking(dep) ? "blocking" : "clear");
+        const stateDescription = dep.stateDescription ?? presentation.stateDescription;
+        const accessibleDescription = translate(taskMessages, "dependsOnAccessible", {
+          id: dep.id,
+          state: statusCopy.toLocaleLowerCase(locale),
+          blocking: blockingCopy,
+          description: stateDescription ?? "",
+          status: statusText,
+          title: dep.title,
+        });
+        const containerClass = getDependencyToneClass(dep);
 
-          return (
-            <div
-              key={dep.recordId}
-              role="listitem"
-              className={`flex min-h-7 max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] transition-colors motion-reduce:transition-none ${containerClass}`}
-              data-dependency-state={dependencyState}
-              data-blocking={isDependencyBlocking(dep) ? "true" : "false"}
-              title={`Depends on ${dep.title} (${statusCopy}; ${statusText})`}
-              aria-label={`Depends on task ${dep.id}, ${statusCopy.toLowerCase()}. ${blockingCopy}. ${stateDescription}. Status: ${statusText}. Title: ${dep.title}`}
-            >
-              <span className="sr-only">Depends on task {dep.id}, {statusCopy.toLowerCase()}. {blockingCopy}. {stateDescription}. Status: {statusText}. Title: {dep.title}</span>
-              <ArrowRight className="h-2.5 w-2.5 shrink-0" strokeWidth={2.5} aria-hidden="true" />
-              <span aria-hidden="true" className="min-w-0 break-all font-mono">{dep.id}</span>
-              <span aria-hidden="true" className="shrink-0 rounded-full bg-current/10 px-1.5 py-0.5 text-[8px] opacity-90">{statusCopy}</span>
-            </div>
-          );
-        })}
-      </div>
-    </section>
+        return (
+          <div
+            key={dep.recordId}
+            role="listitem"
+            className={`flex min-h-7 max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] transition-colors motion-reduce:transition-none ${containerClass}`}
+            data-dependency-state={dependencyState}
+            data-blocking={isDependencyBlocking(dep) ? "true" : "false"}
+            title={translate(taskMessages, "dependsOnTitle", { title: dep.title, state: statusCopy, status: statusText })}
+            aria-label={accessibleDescription}
+          >
+            <span className="sr-only">{accessibleDescription}</span>
+            <ArrowRight className="w-2.5 h-2.5" strokeWidth={2.5} aria-hidden="true" />
+            <span aria-hidden="true" className="shrink-0">{dep.id}</span>
+            <span aria-hidden="true" className="rounded-full bg-current/10 px-1.5 py-0.5 text-[8px] opacity-90">{statusCopy}</span>
+            <span aria-hidden="true" className="rounded-full border border-current/15 bg-current/5 px-1.5 py-0.5 text-[8px] opacity-90">{blockingBadge}</span>
+            <span aria-hidden="true" className="min-w-0 max-w-[9rem] truncate text-[8px] normal-case opacity-80">{dep.title}</span>
+          </div>
+        );
+      })}
+    </div>
   );
 });

@@ -29,7 +29,10 @@ import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { computeSprintActionMenuPosition } from "../../lib/sprint-menu-positioning.js";
 import { ORGANIC_CELL_SHADOW_CLASS } from "../ui/organic-cell-styles.js";
 import { formatSprintCompletion } from "../../lib/sprint-progress-display.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import { sprintsMessages } from "../../i18n/messages/sprints.js";
 import { SprintAmbientWaves } from "./SprintAmbientWaves.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 const CARD_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -87,14 +90,6 @@ const formatSprintKey = (sprint: Sprint, prefix: string = "SPR"): string => (
   sprint.number ? `${prefix}-${sprint.number}` : sprint.slug.toUpperCase()
 );
 
-const formatCardDate = (value: string): string => CARD_DATE_FORMATTER.format(new Date(value));
-const BUBBLE_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
-const formatBubbleTime = (value: string): string => BUBBLE_TIME_FORMATTER.format(new Date(value));
-
 export const SprintCell: FunctionComponent<SprintCellProps> = ({
   sprint,
   isEven,
@@ -122,6 +117,8 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   onMarkQaPassed,
   onRollback,
 }) => {
+  const { formatDate, formatNumber, formatTime, locale, translate } = useDashboardI18n();
+  const reducedMotion = useReducedMotion();
   const interactionTokens = useInteractionTokens();
   const gsapTokens = useGsapInteractionTokens();
 
@@ -139,6 +136,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
     completion: sprint.completion,
     latestReviewStatus: sprint.latestReview?.status ?? null,
   });
+  let effectiveLabel = statusPresentation.statusLabel;
 
   const attentionOverride = (sprint.status === "running" || sprint.status === "paused")
     && humanIntervention?.attentionType
@@ -157,13 +155,33 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   } else if (attentionOverride) {
     effectiveAccentHex = attentionOverride;
   }
-  const visualAccentHex = sprint.status === "running"
-    ? ACTIVE_WAVE_ACCENT_HEX
-    : effectiveAccentHex;
+  const effectiveLabelKey = effectiveLabel === "QA"
+    ? "statusQa"
+    : effectiveLabel === "Merge"
+      ? "statusMerge"
+      : effectiveLabel === "Merge Conflict"
+        ? "statusMergeConflict"
+        : effectiveLabel === "Conflict"
+          ? "statusConflict"
+          : effectiveLabel === "CI"
+            ? "statusCi"
+            : ({
+              running: "statusRunning",
+              paused: "statusPaused",
+              completed: "statusCompleted",
+              failed: "statusFailed",
+              cancelled: "statusCancelled",
+              idle: "statusDraft",
+            } as const)[sprint.status];
+  effectiveLabel = translate(sprintsMessages, effectiveLabelKey);
 
   const isCompleted = sprint.status === "completed";
   const isRunning = sprint.status === "running";
-  const completionLabel = formatSprintCompletion(sprint.completion);
+  const completionLabel = formatSprintCompletion(sprint.completion, locale);
+  const showInterventionBadge = Boolean(humanIntervention) && statusPresentation.showHumanInterventionBadge;
+  const visualAccentHex = sprint.status === "running"
+    ? ACTIVE_WAVE_ACCENT_HEX
+    : effectiveAccentHex;
   const attentionIndicatorState = resolveSprintAttentionIndicatorState({
     sprintStatus: sprint.status,
     statusPresentation,
@@ -213,10 +231,10 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
     });
   };
 
-  const primaryActionLabel = isRunning ? "Stop" : "Start";
+  const primaryActionLabel = translate(sprintsMessages, isRunning ? "stop" : "start");
   const primaryAriaLabel = primaryBusy
-    ? `${primaryActionLabel} sprint ${sprint.name} is pending`
-    : `${primaryActionLabel} sprint ${sprint.name}`;
+    ? translate(sprintsMessages, "sprintActionPending", { action: primaryActionLabel, name: sprint.name })
+    : translate(sprintsMessages, "sprintAction", { action: primaryActionLabel, name: sprint.name });
   const routeSearch = { projectId: sprint.projectId, sprintId: sprint.id } as any;
   const tasksHref = `/tasks?${new URLSearchParams(routeSearch).toString()}`;
 
@@ -298,7 +316,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
         {isRollback && (
           <div className="absolute left-1/2 top-5 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-orange-500/25 bg-orange-500/10 px-3 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-orange-700 dark:text-orange-300">
             <RotateCcw className="h-3 w-3" strokeWidth={2.2} />
-            Rollback
+            {translate(sprintsMessages, "rollback")}
           </div>
         )}
         {galleryAttentionIndicatorState && (
@@ -311,16 +329,17 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
         <div className={`absolute left-6 top-6 inline-flex flex-col gap-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.14em] ${accentColor}`}>
           <div className="flex items-center gap-1.5">
             <CalendarDays className="h-3.5 w-3.5" strokeWidth={2.1} />
-            {formatCardDate(sprint.createdAt)}
+            {formatDate(new Date(sprint.createdAt), { month: "short", day: "numeric" })}
           </div>
           <div className="pl-5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:opacity-100" style={controlFeedbackStyle}>
-            {formatBubbleTime(sprint.createdAt)}
+            {formatTime(new Date(sprint.createdAt), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}
           </div>
         </div>
         <div className="absolute right-5 top-5 z-[60] flex max-w-[11rem] items-center justify-end lg:max-w-[13rem]">
           <WorkflowStatusBadge
             scope="sprint"
             status={sprint.status}
+            completion={sprint.completion}
             review={sprint.latestReview}
             ciPresentation={ciStatus}
             humanIntervention={humanIntervention}
@@ -346,13 +365,13 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
 
         <div data-sprint-metrics className="mt-6 flex items-center justify-center gap-7 text-center transition-transform group-hover:-translate-y-3 group-focus-within:-translate-y-3 motion-reduce:transform-none" style={controlFeedbackStyle}>
           <div className="flex flex-col items-center">
-            <div className="font-mono text-2xl font-semibold text-[var(--text-primary)]">{sprint.tasksCount}</div>
-            <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Tasks</div>
+            <div className="font-mono text-2xl font-semibold text-[var(--text-primary)]">{formatNumber(sprint.tasksCount)}</div>
+            <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(sprintsMessages, "tasks")}</div>
           </div>
           <div className="h-10 w-px bg-black/[0.08] dark:bg-white/[0.08]" />
           <div className="flex flex-col items-center">
             <div className="font-mono text-2xl font-semibold text-[var(--text-primary)]">{completionLabel}</div>
-            <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Done</div>
+            <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(sprintsMessages, "done")}</div>
           </div>
         </div>
 
@@ -379,7 +398,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
                 : "bg-signal-500/[0.12] shadow-[0_0_18px_rgba(0,224,160,0.16)] hover:bg-signal-500/[0.18]"
             } disabled:cursor-not-allowed disabled:opacity-60`}
             style={primaryBusy ? asyncFeedbackStyle : controlFeedbackStyle}
-            title={primaryBusy ? `${primaryActionLabel} pending` : primaryActionLabel}
+            title={primaryBusy ? translate(sprintsMessages, "primaryPending", { action: primaryActionLabel }) : primaryActionLabel}
           >
             {primaryBusy
               ? <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" strokeWidth={2.2} />
@@ -391,22 +410,22 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
             to="/tasks"
             search={routeSearch}
             onClick={(event: MouseEvent) => event.stopPropagation()}
-            aria-label={`Open tasks for sprint ${sprint.name}`}
+            aria-label={translate(sprintsMessages, "openTasksFor", { name: sprint.name })}
             className="touch-target inline-flex h-9 items-center gap-1.5 rounded-full bg-slate-900 px-4 text-[10px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] transition-all hover:opacity-85 dark:bg-white dark:text-void-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
             style={controlFeedbackStyle}
           >
-            Tasks
+            {translate(sprintsMessages, "tasks")}
             <Maximize2 className="h-2.5 w-2.5" />
           </Link>
           <Link
             to="/live"
             search={routeSearch}
             onClick={(event: MouseEvent) => event.stopPropagation()}
-            aria-label={`Open live session for sprint ${sprint.name}`}
+            aria-label={translate(sprintsMessages, "openLiveFor", { name: sprint.name })}
             className="touch-target inline-flex h-9 items-center gap-1.5 rounded-full border border-signal-500/25 bg-signal-500/[0.12] px-4 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-700 shadow-[0_4px_12px_rgba(0,224,160,0.12)] transition-all hover:bg-signal-500/[0.18] dark:text-signal-300 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
             style={controlFeedbackStyle}
           >
-            Live
+            {translate(sprintsMessages, "live")}
             <Maximize2 className="h-2.5 w-2.5" />
           </Link>
           <DropdownMenu
@@ -456,10 +475,10 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
               type="button"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
-              aria-label={`Open actions menu for sprint ${sprint.name}`}
+              aria-label={translate(sprintsMessages, "openActionsFor", { name: sprint.name })}
               className="touch-target flex h-9 w-9 items-center justify-center rounded-full bg-black/[0.06] text-slate-800 transition-colors hover:bg-black/10 dark:bg-white/[0.07] dark:text-white dark:hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
               style={controlFeedbackStyle}
-              title="Settings"
+              title={translate(sprintsMessages, "settings")}
             >
               <MoreVertical className="h-3.5 w-3.5" />
             </button>

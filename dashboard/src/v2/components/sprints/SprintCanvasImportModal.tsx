@@ -38,6 +38,9 @@ import {
   IssueImportLoadingSkeletonList,
   IssueImportShell,
 } from "./importer/IssueImportShell.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import { sprintsMessages } from "../../i18n/messages/sprints.js";
+import { translateDashboardMessage, type DashboardLocale } from "../../i18n/locales.js";
 
 export type CanvasImportProvider = Extract<IssueImportProvider, "miro" | "lucid" | "figma" | "mural">;
 
@@ -169,8 +172,15 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
   onClose,
   onImport,
 }) => {
-  const config = PROVIDER_CONFIGS[provider];
-  const providerMetadata = getIssueImportProviderMetadata(provider);
+  const { formatNumber, locale, translate } = useDashboardI18n();
+  const config = useMemo<CanvasProviderConfig>(() => {
+    const base = PROVIDER_CONFIGS[provider];
+    if (provider === "miro") return { ...base, title: translate(sprintsMessages, "importMiroTitle"), description: translate(sprintsMessages, "importMiroDescription"), resultNounSingular: translate(sprintsMessages, "canvasItemSingular"), resultNounPlural: translate(sprintsMessages, "canvasItemPlural"), searchPlaceholder: translate(sprintsMessages, "miroSearchPlaceholder"), identifierHelp: translate(sprintsMessages, "miroIdentifierHelp") };
+    if (provider === "lucid") return { ...base, title: translate(sprintsMessages, "importLucidTitle"), description: translate(sprintsMessages, "importLucidDescription"), resultNounSingular: translate(sprintsMessages, "document"), resultNounPlural: translate(sprintsMessages, "documents"), searchPlaceholder: translate(sprintsMessages, "lucidSearchPlaceholder"), identifierHelp: translate(sprintsMessages, "lucidIdentifierHelp") };
+    if (provider === "figma") return { ...base, title: translate(sprintsMessages, "importFigmaTitle"), description: translate(sprintsMessages, "importFigmaDescription"), resultNounSingular: translate(sprintsMessages, "file"), resultNounPlural: translate(sprintsMessages, "files"), identifierHelp: translate(sprintsMessages, "figmaIdentifierHelp") };
+    return { ...base, title: translate(sprintsMessages, "importMuralTitle"), description: translate(sprintsMessages, "importMuralDescription"), resultNounSingular: translate(sprintsMessages, "muralSingular"), resultNounPlural: translate(sprintsMessages, "muralPlural"), searchPlaceholder: translate(sprintsMessages, "muralSearchPlaceholder"), identifierHelp: translate(sprintsMessages, "muralIdentifierHelp") };
+  }, [provider, translate]);
+  const providerMetadata = getIssueImportProviderMetadata(provider, undefined, locale);
   const [filters, setFilters] = useState<CanvasFilters>(DEFAULT_FILTERS);
   const [initialFilters, setInitialFilters] = useState<CanvasFilters>(DEFAULT_FILTERS);
   const [results, setResults] = useState<RemoteIssueSummary[]>([]);
@@ -192,10 +202,10 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
   const allSelectedConversationEnabled = config.supportsConversation
     && anySelected
     && selectedResults.every((result) => !conversationDisabledKeys.has(resultKey(result)));
-  const emptyCopy = getIssueImportEmptyStateCopy(provider, hasSearched);
+  const emptyCopy = getIssueImportEmptyStateCopy(provider, hasSearched, locale);
 
   const runSearch = useCallback(async (query: CanvasFilters): Promise<void> => {
-    const validationMessage = validateSearchTarget(config, query);
+    const validationMessage = validateSearchTarget(config, query, locale);
     if (validationMessage) {
       setError(validationMessage);
       setHasSearched(false);
@@ -230,7 +240,7 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
       if (err instanceof DOMException && err.name === "AbortError") {
         return;
       }
-      const copy = getIssueImportErrorCopy(err, `${providerMetadata.label} search failed. Check Settings -> Integrations and try again.`);
+      const copy = getIssueImportErrorCopy(err, translate(sprintsMessages, "canvasSearchFailed", { provider: providerMetadata.label }), locale);
       setError(copy.message);
       setResults([]);
       pruneSelectionToResults([]);
@@ -240,7 +250,7 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
       }
       setLoading(false);
     }
-  }, [config, projectId, provider, providerMetadata.label]);
+  }, [config, locale, projectId, provider, providerMetadata.label, translate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -254,14 +264,14 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
         const nextFilters = filtersFromSettings(config, settings);
         setFilters(nextFilters);
         setInitialFilters(nextFilters);
-        if (!validateSearchTarget(config, nextFilters)) {
+        if (!validateSearchTarget(config, nextFilters, locale)) {
           await runSearch(nextFilters);
         }
       } catch (err) {
         if (cancelled) {
           return;
         }
-        const copy = getIssueImportErrorCopy(err, `Failed to load ${providerMetadata.label} defaults from Settings -> Integrations.`);
+        const copy = getIssueImportErrorCopy(err, translate(sprintsMessages, "defaultsLoadFailed", { provider: providerMetadata.label }), locale);
         setError(copy.message);
       }
     };
@@ -270,7 +280,7 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
       cancelled = true;
       abortRef.current?.abort();
     };
-  }, [config, projectId, provider, providerMetadata.label, runSearch]);
+  }, [config, locale, projectId, provider, providerMetadata.label, runSearch, translate]);
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent): void => {
@@ -372,41 +382,42 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
       await onImport(contexts);
       onClose();
     } catch (err) {
-      const copy = getIssueImportErrorCopy(err, `${providerMetadata.label} import failed. Try again after checking the selected canvas items.`);
+      const copy = getIssueImportErrorCopy(err, translate(sprintsMessages, "canvasImportFailed", { provider: providerMetadata.label }), locale);
       setError(copy.message);
     } finally {
       setImporting(false);
     }
-  }, [config.supportsConversation, conversationDisabledKeys, onClose, onImport, projectId, providerMetadata.label, selectedResults]);
+  }, [config.supportsConversation, conversationDisabledKeys, locale, onClose, onImport, projectId, providerMetadata.label, selectedResults, translate]);
 
   const compactState = buildIssueImportCompactState({
     filters: [
-      { id: "provider", label: "Provider", value: providerMetadata.label, alwaysShow: true, priority: 0 },
-      { id: "board", label: "Board", value: filters.boardId, defaultValue: initialFilters.boardId, alwaysShow: config.supportsBoardId, priority: 1 },
-      { id: "document", label: "Document", value: filters.documentId, defaultValue: initialFilters.documentId, alwaysShow: config.supportsDocumentId, priority: 2 },
-      { id: "fileKey", label: "File", value: filters.fileKey, defaultValue: initialFilters.fileKey, alwaysShow: config.supportsFileKey, priority: 3 },
-      { id: "workspace", label: "Workspace", value: filters.workspaceId, defaultValue: initialFilters.workspaceId, alwaysShow: config.supportsWorkspaceId, priority: 4 },
+      { id: "provider", label: translate(sprintsMessages, "provider"), value: providerMetadata.label, alwaysShow: true, priority: 0 },
+      { id: "board", label: translate(sprintsMessages, "board"), value: filters.boardId, defaultValue: initialFilters.boardId, alwaysShow: config.supportsBoardId, priority: 1 },
+      { id: "document", label: translate(sprintsMessages, "document"), value: filters.documentId, defaultValue: initialFilters.documentId, alwaysShow: config.supportsDocumentId, priority: 2 },
+      { id: "fileKey", label: translate(sprintsMessages, "file"), value: filters.fileKey, defaultValue: initialFilters.fileKey, alwaysShow: config.supportsFileKey, priority: 3 },
+      { id: "workspace", label: translate(sprintsMessages, "workspace"), value: filters.workspaceId, defaultValue: initialFilters.workspaceId, alwaysShow: config.supportsWorkspaceId, priority: 4 },
       { id: "mural", label: "Mural", value: filters.muralId, defaultValue: initialFilters.muralId, alwaysShow: config.supportsMuralId, priority: 5 },
-      { id: "search", label: "Search", value: filters.search, priority: 6 },
-      { id: "types", label: "Types", value: filters.itemTypes, priority: 7 },
-      { id: "externalIds", label: "External IDs", value: filters.externalIds, priority: 8 },
-      { id: "conversation", label: "Comments", value: filters.includeConversation, defaultValue: false, alwaysShow: config.supportsConversation, priority: 9 },
-      { id: "limit", label: "Limit", value: filters.limit, defaultValue: initialFilters.limit, defaultLabel: `${initialFilters.limit} results`, alwaysShow: true, priority: 10 },
+      { id: "search", label: translate(sprintsMessages, "search"), value: filters.search, priority: 6 },
+      { id: "types", label: translate(sprintsMessages, "types"), value: filters.itemTypes, priority: 7 },
+      { id: "externalIds", label: translate(sprintsMessages, "externalIds"), value: filters.externalIds, priority: 8 },
+      { id: "conversation", label: translate(sprintsMessages, "comments"), value: filters.includeConversation, defaultValue: false, alwaysShow: config.supportsConversation, priority: 9 },
+      { id: "limit", label: translate(sprintsMessages, "limit"), value: filters.limit, defaultValue: initialFilters.limit, defaultLabel: translate(sprintsMessages, "results", { count: formatNumber(initialFilters.limit) }), alwaysShow: true, priority: 10 },
     ],
     selectedCount: selectedResults.length,
     visibleCount: results.length,
     totalCount: results.length,
     resultNounSingular: config.resultNounSingular,
     resultNounPlural: config.resultNounPlural,
-  });
+  }, locale);
 
-  const selectVisibleLabel = allVisibleSelected ? "Deselect all visible results" : "Select all visible results";
+  const selectVisibleLabel = translate(sprintsMessages, allVisibleSelected ? "deselectAllVisibleResults" : "selectAllVisibleResults");
   const selectedCountLabel = getIssueImportSelectedResultCountLabel(
     selectedResults.length,
     results.length,
     results.length,
     config.resultNounSingular,
     config.resultNounPlural,
+    locale,
   );
 
   return (
@@ -415,25 +426,25 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
       title={config.title}
       description={config.description}
       onClose={onClose}
-      closeLabel={`Close ${providerMetadata.label} import`}
+      closeLabel={translate(sprintsMessages, "closeProviderImport", { provider: providerMetadata.label })}
       activeFilterCountLabel={compactState.activeFilterCountLabel}
       summaryRail={(
         <IssueImportSummaryRail
           provider={providerMetadata}
-          eyebrow="Canvas Browser"
-          title={`${providerMetadata.label} linked scope`}
-          description="Canvas imports are read-only. Code UX stores linked-source metadata and prompt context, but never mutates provider boards, documents, files, or murals."
+          eyebrow={translate(sprintsMessages, "canvasBrowser")}
+          title={translate(sprintsMessages, "canvasLinkedScope", { provider: providerMetadata.label })}
+          description={translate(sprintsMessages, "canvasReadOnlyDescription")}
           items={[
-            { label: "Provider", value: providerMetadata.label },
-            { label: "Target", value: getTargetSummary(config, filters) },
-            { label: "Visible", value: String(results.length) },
-            { label: "Selected", value: String(selectedResults.length), active: selectedResults.length > 0 },
-            { label: "Limit", value: String(filters.limit) },
+            { label: translate(sprintsMessages, "provider"), value: providerMetadata.label },
+            { label: translate(sprintsMessages, "target"), value: getTargetSummary(config, filters, locale) },
+            { label: translate(sprintsMessages, "visible"), value: formatNumber(results.length) },
+            { label: translate(sprintsMessages, "selected"), value: formatNumber(selectedResults.length), active: selectedResults.length > 0 },
+            { label: translate(sprintsMessages, "limit"), value: formatNumber(filters.limit) },
           ]}
           status={compactState.selectedCountLabel}
           footer={provider === "mural" ? (
             <div className="rounded-[1rem] border border-white/10 bg-white/[0.04] p-3 text-[10px] font-semibold leading-relaxed text-white/56">
-              Mural public API support is limited; returned scope may include metadata only.
+              {translate(sprintsMessages, "muralApiLimited")}
             </div>
           ) : undefined}
         />
@@ -441,7 +452,7 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
       filters={(
         <div className="grid gap-4">
           <IssueImportFilterSection
-            title={`${providerMetadata.label} search`}
+            title={translate(sprintsMessages, "providerSearch", { provider: providerMetadata.label })}
             description={config.identifierHelp}
             compact
             action={(
@@ -450,71 +461,71 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
                 onClick={() => { void runSearch(filters); }}
                 disabled={loading}
                 className={`inline-flex min-h-11 min-w-32 items-center justify-center gap-2 rounded-[1rem] px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] transition-all hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${providerMetadata.accent.selectedIconClassName}`}
-                aria-label={loading ? `Search ${providerMetadata.label} is loading` : `Search ${providerMetadata.label}`}
+                aria-label={translate(sprintsMessages, loading ? "searchProviderLoading" : "searchProvider", { provider: providerMetadata.label })}
               >
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Search className="h-4 w-4" aria-hidden="true" />}
-                Search
+                {translate(sprintsMessages, "search")}
               </button>
             )}
           >
             <div className="grid min-w-0 gap-3 lg:grid-cols-3">
               {config.supportsBoardId && (
-                <IssueImportField label="Board ID" hint="Required unless search text is supplied." required>
+                <IssueImportField label={translate(sprintsMessages, "boardId")} hint={translate(sprintsMessages, "requiredUnlessSearch")} required>
                   <IssueImportTextInput
                     provider={providerMetadata}
                     value={filters.boardId}
                     onInput={(event) => updateFilters((current) => ({ ...current, boardId: (event.target as HTMLInputElement).value }))}
                     placeholder="miro-board-id"
-                    aria-label="Miro board ID"
+                    aria-label={translate(sprintsMessages, "providerBoardId", { provider: providerMetadata.label })}
                   />
                 </IssueImportField>
               )}
               {config.supportsDocumentId && (
-                <IssueImportField label="Document ID" hint="Required unless search text or external IDs are supplied." required>
+                <IssueImportField label={translate(sprintsMessages, "documentId")} hint={translate(sprintsMessages, "requiredUnlessSearchOrIds")} required>
                   <IssueImportTextInput
                     provider={providerMetadata}
                     value={filters.documentId}
                     onInput={(event) => updateFilters((current) => ({ ...current, documentId: (event.target as HTMLInputElement).value }))}
                     placeholder="lucid-document-id"
-                    aria-label="Lucid document ID"
+                    aria-label={translate(sprintsMessages, "providerDocumentId", { provider: providerMetadata.label })}
                   />
                 </IssueImportField>
               )}
               {config.supportsFileKey && (
-                <IssueImportField label="File key" hint="Required unless exact file keys are added below." required>
+                <IssueImportField label={translate(sprintsMessages, "fileKey")} hint={translate(sprintsMessages, "requiredUnlessFileKeys")} required>
                   <IssueImportTextInput
                     provider={providerMetadata}
                     value={filters.fileKey}
                     onInput={(event) => updateFilters((current) => ({ ...current, fileKey: (event.target as HTMLInputElement).value }))}
                     placeholder="figma-file-key"
-                    aria-label="Figma file key"
+                    aria-label={translate(sprintsMessages, "providerFileKey", { provider: providerMetadata.label })}
                   />
                 </IssueImportField>
               )}
               {config.supportsWorkspaceId && (
-                <IssueImportField label="Workspace ID" hint="Required unless a mural ID is supplied." required>
+                <IssueImportField label={translate(sprintsMessages, "workspaceId")} hint={translate(sprintsMessages, "requiredUnlessMural")} required>
                   <IssueImportTextInput
                     provider={providerMetadata}
                     value={filters.workspaceId}
                     onInput={(event) => updateFilters((current) => ({ ...current, workspaceId: (event.target as HTMLInputElement).value }))}
                     placeholder="mural-workspace-id"
-                    aria-label="Mural workspace ID"
+                    aria-label={translate(sprintsMessages, "providerWorkspaceId", { provider: providerMetadata.label })}
                   />
                 </IssueImportField>
               )}
               {config.supportsMuralId && (
-                <IssueImportField label="Mural ID" hint="Use for an exact mural import.">
+                <IssueImportField label={translate(sprintsMessages, "muralId")} hint={translate(sprintsMessages, "exactMuralHint")}>
                   <IssueImportTextInput
                     provider={providerMetadata}
                     value={filters.muralId}
                     onInput={(event) => updateFilters((current) => ({ ...current, muralId: (event.target as HTMLInputElement).value }))}
                     placeholder="mural-id"
-                    aria-label="Mural ID"
+                    aria-label={translate(sprintsMessages, "muralId")}
                   />
                 </IssueImportField>
               )}
               {config.supportsSearch && (
-                <IssueImportField label="Search text">
+                <IssueImportField label={translate(sprintsMessages, "searchText")}>
                   <IssueImportTextInput
                     provider={providerMetadata}
                     value={filters.search}
@@ -525,11 +536,11 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
                       }
                     }}
                     placeholder={config.searchPlaceholder}
-                    aria-label={`${providerMetadata.label} search text`}
+                    aria-label={translate(sprintsMessages, "providerSearchText", { provider: providerMetadata.label })}
                   />
                 </IssueImportField>
               )}
-              <IssueImportField label="Limit" hint="Bounded to the shared issue search endpoint limit.">
+              <IssueImportField label={translate(sprintsMessages, "limit")} hint={translate(sprintsMessages, "resultLimitHint")}>
                 <IssueImportNumberInput
                   provider={providerMetadata}
                   min={1}
@@ -539,7 +550,7 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
                     ...current,
                     limit: normalizeLimit((event.target as HTMLInputElement).value, current.limit),
                   }))}
-                  aria-label={`${providerMetadata.label} result limit`}
+                  aria-label={translate(sprintsMessages, "resultLimitAria", { provider: providerMetadata.label })}
                 />
               </IssueImportField>
             </div>
@@ -550,11 +561,11 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
         <div className="grid gap-4">
           {config.supportsItemTypes && (
             <IssueImportFilterSection
-              title="Readable item types"
-              description="Optional Miro item type filters such as sticky_note, text, shape, or card."
+              title={translate(sprintsMessages, "readableItemTypes")}
+              description={translate(sprintsMessages, "readableItemTypesDescription")}
               compact
             >
-              <IssueImportMultiSelectField label="Item types">
+              <IssueImportMultiSelectField label={translate(sprintsMessages, "itemTypes")}>
                 <MultiSelect
                   value={filters.itemTypes}
                   onChange={(itemTypes) => updateFilters((current) => ({ ...current, itemTypes }))}
@@ -564,22 +575,22 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
             </IssueImportFilterSection>
           )}
           <IssueImportFilterSection
-            title="Exact external IDs"
-            description="Use exact provider object IDs when search text is too broad or unavailable."
+            title={translate(sprintsMessages, "exactExternalIds")}
+            description={translate(sprintsMessages, "exactExternalIdsDescription")}
             compact
           >
-            <IssueImportMultiSelectField label="External IDs">
+            <IssueImportMultiSelectField label={translate(sprintsMessages, "externalIds")}>
               <MultiSelect
                 value={filters.externalIds}
                 onChange={(externalIds) => updateFilters((current) => ({ ...current, externalIds }))}
-                placeholder={provider === "figma" ? "file-key-1, file-key-2" : "External object ID"}
+                placeholder={provider === "figma" ? "file-key-1, file-key-2" : translate(sprintsMessages, "externalObjectId")}
               />
             </IssueImportMultiSelectField>
           </IssueImportFilterSection>
           {config.supportsConversation && (
             <IssueImportFilterSection
-              title="Comment context"
-              description="Figma/FigJam can append file comments when the token can read them."
+              title={translate(sprintsMessages, "commentContext")}
+              description={translate(sprintsMessages, "figmaCommentDescription")}
               compact
             >
               <label className="inline-flex w-fit items-center gap-2 rounded-full border border-black/[0.06] bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:text-white">
@@ -588,28 +599,28 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
                   checked={filters.includeConversation}
                   onChange={(event) => updateFilters((current) => ({ ...current, includeConversation: (event.target as HTMLInputElement).checked }))}
                   className="h-3.5 w-3.5 rounded border-slate-300 text-signal-500 focus:ring-signal-500 dark:border-white/[0.18] dark:bg-transparent"
-                  aria-label="Append comments while searching Figma files"
+                  aria-label={translate(sprintsMessages, "appendCommentsFigmaSearch")}
                 />
                 <MessageSquare className="h-3.5 w-3.5" strokeWidth={2.1} aria-hidden="true" />
-                Append comments
+                {translate(sprintsMessages, "appendComments")}
               </label>
             </IssueImportFilterSection>
           )}
         </div>
       )}
       advancedFiltersExpanded={advancedFiltersExpanded}
-      advancedFiltersLabel={`Advanced ${providerMetadata.label} filters`}
+      advancedFiltersLabel={translate(sprintsMessages, "advancedFilters", { provider: providerMetadata.label })}
       advancedFiltersId={`${provider}-canvas-import-advanced-filters`}
       onAdvancedFiltersToggle={() => setAdvancedFiltersExpanded((current) => !current)}
       resultStatus={(
         <div className="grid gap-3 rounded-[1.1rem] border border-black/[0.06] bg-white/70 p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-              <span className="font-black text-slate-700 dark:text-slate-200">{results.length}</span>{" "}
-              visible {config.resultNounPlural}.
-              {" "}
-              <span className="font-black text-slate-700 dark:text-slate-200">{selectedResults.length}</span>{" "}
-              selected.
+              {translate(sprintsMessages, "visibleSelectedSummary", {
+                visible: formatNumber(results.length),
+                selected: formatNumber(selectedResults.length),
+                noun: config.resultNounPlural,
+              })}
             </div>
             <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
               {compactState.activeFilterCountLabel}
@@ -617,11 +628,11 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
           </div>
           {provider === "mural" && (
             <div className="rounded-[0.9rem] border border-[#12B3A8]/20 bg-[#12B3A8]/10 px-3 py-2 text-xs font-semibold leading-relaxed text-[#0F766E] dark:text-[#67E8F9]">
-              Mural public API support is limited; imported scope may include only metadata and readable content available to the token.
+              {translate(sprintsMessages, "muralImportedLimited")}
             </div>
           )}
           {compactState.chips.length > 0 && (
-            <div className="flex flex-wrap gap-1.5" aria-label={`Active ${providerMetadata.label} filters`}>
+            <div className="flex flex-wrap gap-1.5" aria-label={translate(sprintsMessages, "activeProviderFilters", { provider: providerMetadata.label })}>
               {compactState.chips.map((chip) => (
                 <span
                   key={chip.id}
@@ -644,7 +655,7 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="text-xs font-semibold text-slate-400" aria-live="polite">
               <span className="font-bold text-slate-600 dark:text-slate-200">{selectedCountLabel}</span>{" "}
-              Canvas imports are read-only linked scope.
+              {translate(sprintsMessages, "canvasReadOnlyScope")}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -654,16 +665,16 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
                 className="rounded-[1rem] border border-black/[0.06] px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:text-white"
                 aria-label={selectVisibleLabel}
               >
-                {allVisibleSelected ? "Deselect visible" : "Select all visible"}
+                {translate(sprintsMessages, allVisibleSelected ? "deselectVisibleShort" : "selectAllVisible")}
               </button>
               <button
                 type="button"
                 onClick={clearSelection}
                 disabled={!anySelected}
                 className="rounded-[1rem] border border-black/[0.06] px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:text-white"
-                aria-label={anySelected ? "Clear selection" : "Clear selection is disabled because no items are selected"}
+                aria-label={translate(sprintsMessages, anySelected ? "clearSelection" : "clearSelectionDisabled")}
               >
-                Clear selection
+                {translate(sprintsMessages, "clearSelection")}
               </button>
             </div>
           </div>
@@ -677,14 +688,14 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
                   disabled={!anySelected}
                   onChange={(event) => setConversationForSelection((event.target as HTMLInputElement).checked)}
                   className="h-3.5 w-3.5 rounded border-slate-300 text-signal-500 focus:ring-signal-500 dark:border-white/[0.18] dark:bg-transparent"
-                  aria-label={`Append comments to all selected ${providerMetadata.label} files`}
+                  aria-label={translate(sprintsMessages, "appendCommentsAllSelected", { provider: providerMetadata.label })}
                 />
                 <MessageSquare className="h-3.5 w-3.5" strokeWidth={2.1} aria-hidden="true" />
-                Append comments to selected
+                {translate(sprintsMessages, "appendCommentsSelected")}
               </label>
             ) : (
               <div className="text-xs font-semibold leading-relaxed text-slate-400">
-                This provider returns compact readable metadata only; live canvas previews and write actions are not available.
+                {translate(sprintsMessages, "compactMetadataOnly")}
               </div>
             )}
 
@@ -694,23 +705,23 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
                 onClick={onClose}
                 className={`rounded-[1rem] border border-black/[0.06] px-5 py-3 text-sm font-bold text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 ${providerMetadata.accent.focusRingClassName} dark:border-white/[0.08] dark:text-slate-300 dark:hover:text-white`}
               >
-                Cancel
+                {translate(sprintsMessages, "cancel")}
               </button>
               <button
                 type="button"
                 onClick={() => { void handleImport(); }}
                 disabled={!anySelected || importing}
                 className={`rounded-[1rem] px-5 py-3 text-sm font-semibold shadow-[0_12px_28px_rgba(15,23,42,0.12)] transition-all hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${providerMetadata.accent.selectedIconClassName}`}
-                aria-label={!anySelected ? `Import ${providerMetadata.label} scope disabled until items are selected` : `Import selected ${providerMetadata.label} scope`}
+                aria-label={translate(sprintsMessages, anySelected ? "importSelectedScope" : "importScopeDisabled", { provider: providerMetadata.label })}
               >
-                {importing ? "Importing..." : "Import Selected"}
+                {translate(sprintsMessages, importing ? "importing" : "importSelectedButton")}
               </button>
             </div>
           </div>
         </div>
       )}
     >
-      {error && <IssueImportErrorPanel error={getIssueImportErrorCopy(error)} />}
+      {error && <IssueImportErrorPanel error={getIssueImportErrorCopy(error, undefined, locale)} />}
 
       {loading ? (
         <IssueImportLoadingSkeletonList count={6} />
@@ -725,7 +736,7 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
               className={`inline-flex min-h-10 items-center gap-2 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.14em] transition-all hover:-translate-y-px ${providerMetadata.accent.selectedIconClassName}`}
             >
               <Search className="h-3.5 w-3.5" aria-hidden="true" />
-              Search again
+              {translate(sprintsMessages, "searchAgain")}
             </button>
           )}
         />
@@ -746,7 +757,7 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
                 selected={selected}
                 includeConversation={conversationEnabled}
                 showConversationToggle={config.supportsConversation}
-                conversationLabel="Append Comments"
+                conversationLabel={translate(sprintsMessages, "appendComments")}
                 metadataRows={buildIssueImportMetadataRows({
                   provider,
                   sourceProvider: result.sourceProvider,
@@ -765,11 +776,11 @@ export const SprintCanvasImportModal: FunctionComponent<SprintCanvasImportModalP
                   issueCommentCount: result.issueCommentCount,
                   createdAt: result.createdAt,
                   updatedAt: result.updatedAt,
-                })}
-                labels={truncateIssueImportLabels(result.labels ?? [], 6)}
-                assignees={truncateIssueImportAssignees(result.assignees ?? [], 4)}
-                selectionLabel={selected ? "Selected" : "Click to select"}
-                modeLabel="Read-only scope"
+                }, locale)}
+                labels={truncateIssueImportLabels(result.labels ?? [], 6, locale)}
+                assignees={truncateIssueImportAssignees(result.assignees ?? [], 4, locale)}
+                selectionLabel={translate(sprintsMessages, selected ? "selected" : "clickToSelect")}
+                modeLabel={translate(sprintsMessages, "readOnlyScope")}
                 icon={<ProviderResultIcon provider={provider} />}
                 metadataLimit={selected ? 7 : 5}
                 onToggle={() => toggleResult(result)}
@@ -818,33 +829,37 @@ function filtersFromSettings(config: CanvasProviderConfig, settings: ExternalImp
   };
 }
 
-function validateSearchTarget(config: CanvasProviderConfig, filters: CanvasFilters): string | null {
+function validateSearchTarget(config: CanvasProviderConfig, filters: CanvasFilters, locale: DashboardLocale): string | null {
   const hasSearch = Boolean(config.supportsSearch && normalizeOptionalText(filters.search));
   const hasExternalIds = filters.externalIds.length > 0;
   if (config.provider === "miro" && !normalizeOptionalText(filters.boardId) && !hasSearch) {
-    return "Paste a Miro board ID or enter search text before searching.";
+    return translateDashboardMessage(sprintsMessages, locale, "canvasValidationMiro");
   }
   if (config.provider === "lucid" && !normalizeOptionalText(filters.documentId) && !hasSearch && !hasExternalIds) {
-    return "Paste a Lucid document ID, enter search text, or add exact external IDs before searching.";
+    return translateDashboardMessage(sprintsMessages, locale, "canvasValidationLucid");
   }
   if (config.provider === "figma" && !normalizeOptionalText(filters.fileKey) && !hasExternalIds) {
-    return "Paste a Figma or FigJam file key before searching.";
+    return translateDashboardMessage(sprintsMessages, locale, "canvasValidationFigma");
   }
   if (config.provider === "mural" && !normalizeOptionalText(filters.workspaceId) && !normalizeOptionalText(filters.muralId) && !hasExternalIds) {
-    return "Paste a Mural workspace ID or mural ID before searching.";
+    return translateDashboardMessage(sprintsMessages, locale, "canvasValidationMural");
   }
   return null;
 }
 
-function getTargetSummary(config: CanvasProviderConfig, filters: CanvasFilters): string {
+function getTargetSummary(config: CanvasProviderConfig, filters: CanvasFilters, locale: DashboardLocale): string {
   if (config.supportsBoardId && filters.boardId) return filters.boardId;
   if (config.supportsDocumentId && filters.documentId) return filters.documentId;
   if (config.supportsFileKey && filters.fileKey) return filters.fileKey;
   if (config.supportsMuralId && filters.muralId) return filters.muralId;
   if (config.supportsWorkspaceId && filters.workspaceId) return filters.workspaceId;
   if (filters.search) return filters.search;
-  if (filters.externalIds.length > 0) return `${filters.externalIds.length} exact IDs`;
-  return "Identifier required";
+  if (filters.externalIds.length > 0) {
+    return translateDashboardMessage(sprintsMessages, locale, "exactIdsCount", {
+      count: new Intl.NumberFormat(locale).format(filters.externalIds.length),
+    });
+  }
+  return translateDashboardMessage(sprintsMessages, locale, "identifierRequired");
 }
 
 function normalizeOptionalText(value: string): string | undefined {

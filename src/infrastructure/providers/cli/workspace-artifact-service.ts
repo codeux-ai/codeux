@@ -441,18 +441,18 @@ export class WorkspaceArtifactService {
       // host worker ref in LOCAL mode; applying that old-base patch directly to the advanced tip
       // makes an already-landed file fail with "already exists in index".
       await git(["read-tree", args.patchBaseRef]);
+      let patchTree: string;
       if (args.hasPatch) {
         await git(["apply", "--cached", "--binary", args.patchPath]);
-      }
-
-      const patchTree = (await git(["write-tree"])).trim();
-      const patchBaseTree = (await git(["rev-parse", `${args.patchBaseRef}^{tree}`])).trim();
-      if (!patchTree || (patchTree === patchBaseTree && !args.forceCommitForMergeParent)) {
-        return {};
+        patchTree = (await git(["write-tree"])).trim();
+      } else {
+        await git(["read-tree", args.commitBaseRef]);
+        patchTree = (await git(["write-tree"])).trim();
       }
 
       let tree = patchTree;
-      if (args.patchBaseRef !== args.commitBaseRef && patchTree !== patchBaseTree) {
+      const patchBaseTree = (await git(["rev-parse", `${args.patchBaseRef}^{tree}`])).trim();
+      if (args.hasPatch && args.patchBaseRef !== args.commitBaseRef && patchTree !== patchBaseTree) {
         // Materialize an internal commit solely as the second head for Git's three-way tree merge.
         // This preserves changes added by either side, de-duplicates identical additions, and
         // rejects genuine content conflicts instead of silently overwriting newer branch work.

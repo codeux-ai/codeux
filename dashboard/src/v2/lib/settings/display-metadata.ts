@@ -19,6 +19,19 @@ import {
   getSystemIntegrationProviders,
   inferProviderTypeFromConfigId,
 } from "./provider-instances.js";
+import { translateDashboardMessage, type DashboardLocale } from "../../i18n/locales.js";
+import { settingsModelsMessages } from "../../i18n/messages/settings-models.js";
+
+const THINKING_MESSAGE_KEYS: Record<string, "thinkingNone" | "thinkingMinimal" | "thinkingLow" | "thinkingMedium" | "thinkingHigh" | "thinkingExtraHigh" | "thinkingMax" | "thinkingUltra"> = {
+  none: "thinkingNone",
+  minimal: "thinkingMinimal",
+  low: "thinkingLow",
+  medium: "thinkingMedium",
+  high: "thinkingHigh",
+  xhigh: "thinkingExtraHigh",
+  max: "thinkingMax",
+  ultra: "thinkingUltra",
+};
 
 export const thinkingModeOptions: Array<{ value: ThinkingMode; label: string }> = [
   ...new Map(
@@ -41,8 +54,16 @@ export const thinkingModeOptions: Array<{ value: ThinkingMode; label: string }> 
 export const getProviderThinkingModeOptions = (
   providerId: ProviderId,
   model?: string | null,
+  locale: DashboardLocale = "en",
 ): Array<{ value: ThinkingMode; label: string }> => (
-  [...getProviderThinkingModeOptionsFromDefaults(providerId, model)]
+  [...getProviderThinkingModeOptionsFromDefaults(providerId, model)].map((option) => ({
+    ...option,
+    label: translateDashboardMessage(
+      settingsModelsMessages,
+      locale,
+      THINKING_MESSAGE_KEYS[String(option.value).toLowerCase()] ?? "thinkingHigh",
+    ),
+  }))
 );
 
 export const getProviderThinkingModeValue = (
@@ -57,9 +78,10 @@ export const getProviderThinkingModeLabel = (
   providerId: ProviderId,
   value: ThinkingMode,
   model?: string | null,
+  locale: DashboardLocale = "en",
 ): string => {
   const normalized = normalizeProviderThinkingMode(providerId, value, undefined, model);
-  return getProviderThinkingModeOptions(providerId, model).find((option) => option.value === normalized)?.label || normalized;
+  return getProviderThinkingModeOptions(providerId, model, locale).find((option) => option.value === normalized)?.label || normalized;
 };
 
 export interface ProviderDisplayMetadata {
@@ -150,13 +172,19 @@ export const getVirtualProviderDisplayMetadata = (
 
 export const getDefaultRouteOptionLabel = (
   defaultProvider: ProviderDisplayMetadata | null,
-): string => defaultProvider ? `Default Route (${defaultProvider.displayLabel})` : "Default Route";
+  locale: DashboardLocale = "en",
+): string => defaultProvider
+  ? translateDashboardMessage(settingsModelsMessages, locale, "defaultRouteWithProvider", { provider: defaultProvider.displayLabel })
+  : translateDashboardMessage(settingsModelsMessages, locale, "defaultRoute");
 
 export const getDefaultModelOptionLabel = (
   defaultProvider: Pick<ProviderDisplayMetadata, "effectiveModel"> | null,
+  locale: DashboardLocale = "en",
 ): string => {
   const model = defaultProvider?.effectiveModel?.trim();
-  return model ? `Default Model (${model})` : "Default Model";
+  return model
+    ? translateDashboardMessage(settingsModelsMessages, locale, "defaultModelWithModel", { model })
+    : translateDashboardMessage(settingsModelsMessages, locale, "defaultModel");
 };
 
 export const PROVIDER_CARD_TOKENS: Record<ProviderId, {

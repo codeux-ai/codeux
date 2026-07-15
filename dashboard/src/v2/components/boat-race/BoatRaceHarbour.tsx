@@ -2,8 +2,10 @@ import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
 import { SVG_H, HARBOUR_X } from "./constants.js";
 import { hashStr } from "./utils.js";
+import { useLiveI18n } from "../../i18n/messages/live.js";
 
 export const HarbourBuilding: FunctionComponent<{ x: number; waitingCount: number; isDark: boolean }> = memo(({ x, waitingCount, isDark }) => {
+    const { locale, t, formatNumber } = useLiveI18n();
     const buildingFill = isDark ? "#0c1825" : "#c8d6e5";
     const buildingStroke = isDark ? "#162840" : "#8395a7";
     const roofFill = isDark ? "#101c2e" : "#a4b0be";
@@ -89,11 +91,11 @@ export const HarbourBuilding: FunctionComponent<{ x: number; waitingCount: numbe
                     {/* Ship icon */}
                     <text y={-2} textAnchor="middle" fill="#FFB800" fontSize={10} fontWeight="bold" fontFamily="monospace"
                         dominantBaseline="middle" opacity={0.9}>
-                        {waitingCount}
+                        {formatNumber(waitingCount)}
                     </text>
                     <text y={9} textAnchor="middle" fill="#FFB800" fontSize={4.5} fontFamily="monospace"
                         dominantBaseline="middle" opacity={0.5} letterSpacing="0.1em">
-                        WAITING
+                        {t("waitingLabel").toLocaleUpperCase(locale)}
                     </text>
                 </g>
             )}
@@ -101,7 +103,7 @@ export const HarbourBuilding: FunctionComponent<{ x: number; waitingCount: numbe
             {/* PORT label */}
             <text x={x + 4} y={SVG_H - 18} textAnchor="middle" fill={labelColor} fontSize={7.5} fontFamily="monospace"
                 fontWeight="bold" letterSpacing="0.3em" opacity={isDark ? 0.5 : 0.6}>
-                HARBOUR
+                {t("harbour").toLocaleUpperCase(locale)}
             </text>
         </g>
     );

@@ -4,6 +4,8 @@ import gsap from "gsap";
 import { RefreshCw, Wrench } from "lucide-preact";
 import { renderMarkdown } from "../../../../lib/markdown.js";
 import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
+import { useDashboardI18n } from "../../../i18n/context.js";
+import { chatMessages } from "../../../i18n/messages/chat.js";
 
 export interface CinematicInvocationProgressBubbleProps {
   invocationId: string;
@@ -29,7 +31,8 @@ export const CinematicInvocationProgressBubble: FunctionComponent<CinematicInvoc
 }) => {
   const bubbleRef = useRef<HTMLDivElement>(null);
   const reducedMotion = useReducedMotion();
-  const toolLabel = `${toolCount} ${toolCount === 1 ? "tool" : "tools"} used`;
+  const { formatNumber, translate, translatePlural } = useDashboardI18n();
+  const toolLabel = translatePlural(chatMessages, "toolsUsed", toolCount, { count: formatNumber(toolCount) });
 
   useLayoutEffect(() => {
     if (!bubbleRef.current || reducedMotion) return;
@@ -61,7 +64,7 @@ export const CinematicInvocationProgressBubble: FunctionComponent<CinematicInvoc
         <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-signal-500/15 pb-2.5">
           <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-700 dark:text-signal-300">
             <RefreshCw className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-            In progress
+            {translate(chatMessages, "progressInProgress")}
           </span>
           <span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-slate-500 dark:text-slate-400">
             <Wrench className="h-3.5 w-3.5" aria-hidden="true" />
@@ -76,7 +79,7 @@ export const CinematicInvocationProgressBubble: FunctionComponent<CinematicInvoc
             />
           ) : (
             <p className="text-[13px] leading-6 text-slate-500 dark:text-slate-400 lg:text-[14px] lg:leading-7">
-              Preparing the first progress update…
+              {translate(chatMessages, "preparingProgressUpdate")}
             </p>
           )}
         </div>

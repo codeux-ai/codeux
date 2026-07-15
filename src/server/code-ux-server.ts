@@ -28,6 +28,9 @@ import { ProjectManagementRepository } from "../repositories/project-management-
 import { ProjectRuntimeRepository } from "../repositories/project-runtime-repository.js";
 import { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
 import { ChatProviderRepository } from "../repositories/chat-provider-repository.js";
+import type { ChatProviderSecretService } from "../services/chat-provider-secret-service.js";
+import type { ChatProviderVerificationService } from "../services/chat-provider-verification-service.js";
+import type { ChatConnectorRegistry } from "../domain/chat-connectors/registry.js";
 import { ExecutionRepository } from "../repositories/execution-repository.js";
 import { QaReviewRepository } from "../repositories/qa-review-repository.js";
 import { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
@@ -172,6 +175,9 @@ export class CodeUxServer {
   private projectRuntimeRepository: ProjectRuntimeRepository;
   private connectionChatRepository: ConnectionChatRepository;
   private chatProviderRepository: ChatProviderRepository;
+  private chatProviderSecretService: ChatProviderSecretService;
+  private chatProviderVerificationService: ChatProviderVerificationService;
+  private chatConnectorRegistry: ChatConnectorRegistry;
   private projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   private projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   private projectAttentionRepository: ProjectAttentionRepository;
@@ -212,6 +218,8 @@ export class CodeUxServer {
   private nodeFlowService: import("../services/node-flow-service.js").NodeFlowService;
   private chatThreadRuntimeService: import("../services/chat-thread-runtime-service.js").ChatThreadRuntimeService;
   private chatProviderIngressService: ChatProviderIngressService;
+  private chatProviderOutboundService: import("../services/chat-provider-outbound-service.js").ChatProviderOutboundService;
+  private chatProviderSessionRuntimeService: import("../services/chat-provider-session-runtime-service.js").ChatProviderSessionRuntimeService;
   private speechTranscriptionService: import("../services/speech-transcription-service.js").SpeechTranscriptionService;
   private speechSynthesisService: import("../services/speech-synthesis-service.js").SpeechSynthesisService;
   private speechModelManager: import("../services/speech-model-manager.js").SpeechModelManager;
@@ -270,6 +278,9 @@ export class CodeUxServer {
     this.projectRuntimeRepository = deps.projectRuntimeRepository;
     this.connectionChatRepository = deps.connectionChatRepository;
     this.chatProviderRepository = deps.chatProviderRepository;
+    this.chatProviderSecretService = deps.chatProviderSecretService;
+    this.chatProviderVerificationService = deps.chatProviderVerificationService;
+    this.chatConnectorRegistry = deps.chatConnectorRegistry;
     this.projectWorkerAssignmentRepository = deps.projectWorkerAssignmentRepository;
     this.projectWorkerAssignmentService = deps.projectWorkerAssignmentService;
     this.projectAttentionRepository = deps.projectAttentionRepository;
@@ -323,6 +334,8 @@ export class CodeUxServer {
     this.nodeFlowService = deps.nodeFlowService;
     this.chatThreadRuntimeService = deps.chatThreadRuntimeService;
     this.chatProviderIngressService = deps.chatProviderIngressService;
+    this.chatProviderOutboundService = deps.chatProviderOutboundService;
+    this.chatProviderSessionRuntimeService = deps.chatProviderSessionRuntimeService;
     this.speechTranscriptionService = deps.speechTranscriptionService;
     this.speechSynthesisService = deps.speechSynthesisService;
     this.speechModelManager = deps.speechModelManager;
@@ -1494,6 +1507,9 @@ export class CodeUxServer {
         getDashboardNotifications: (limit) => this.executionRepository.getDashboardNotifications({ limit }),
         connectionChatRepository: this.connectionChatRepository,
         chatProviderRepository: this.chatProviderRepository,
+        chatProviderSecretService: this.chatProviderSecretService,
+        chatProviderVerificationService: this.chatProviderVerificationService,
+        chatConnectorRegistry: this.chatConnectorRegistry,
         projectWorkerAssignmentRepository: this.projectWorkerAssignmentRepository,
         projectWorkerAssignmentService: this.projectWorkerAssignmentService,
         projectAttentionRepository: this.projectAttentionRepository,
@@ -1526,6 +1542,8 @@ export class CodeUxServer {
         skillService: this.skillService,
         chatThreadRuntimeService: this.chatThreadRuntimeService,
         chatProviderIngressService: this.chatProviderIngressService,
+        chatProviderOutboundService: this.chatProviderOutboundService,
+        chatProviderSessionRuntimeService: this.chatProviderSessionRuntimeService,
         speechTranscriptionService: this.speechTranscriptionService,
         speechSynthesisService: this.speechSynthesisService,
         speechModelManager: this.speechModelManager,

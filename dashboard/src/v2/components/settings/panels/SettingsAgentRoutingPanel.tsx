@@ -2,6 +2,8 @@ import type { FunctionComponent } from "preact";
 import { Route } from "lucide-preact";
 import type { ProjectSettings } from "../../../../types.js";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
+import { useDashboardI18n } from "../../../i18n/index.js";
+import { settingsAgentsGuidanceMessages } from "../../../i18n/messages/settings-agents-guidance.js";
 import { AgentSelectAvatarIcon } from "../../agents/AgentSelectAvatarIcon.js";
 import { Row, SelectInput } from "../SettingsFormFields.js";
 import { OptionCardChoiceGroup, SectionCard, getBadge } from "./SharedPanelComponents.js";
@@ -35,6 +37,7 @@ export interface SettingsAgentRoutingPanelProps {
 }
 
 export const SettingsAgentRoutingPanel: FunctionComponent<SettingsAgentRoutingPanelProps> = ({ state }) => {
+  const { translate, translatePlural } = useDashboardI18n();
   const {
     activeScope,
     setActiveScope,
@@ -54,11 +57,14 @@ export const SettingsAgentRoutingPanel: FunctionComponent<SettingsAgentRoutingPa
     icon: () => <AgentSelectAvatarIcon avatarConfig={option.avatarConfig} seed={`${option.value}:${option.label}`} />,
   }));
   const selectorsDisabled = !selectedProject || !projectSettings;
-  const disabledReason = "Select a project to choose custom project agents. Built-in routing remains available.";
+  const disabledReason = translate(settingsAgentsGuidanceMessages, "routingDisabledReason");
   const selectedCount = routing.taskCoding.orchestratorAgentPresetIds.length;
   const sectionBadge = selectedProject
     ? getBadge("project", projectSources, "agents.routing")
     : getBadge(activeScope, projectSources, "agents.routing");
+  const localizedSectionBadge = sectionBadge
+    ? translate(settingsAgentsGuidanceMessages, "projectOverride")
+    : undefined;
 
   const updateRouting = (recipe: (current: typeof routing) => typeof routing): void => {
     if (selectedProject && projectSettings) {
@@ -77,50 +83,53 @@ export const SettingsAgentRoutingPanel: FunctionComponent<SettingsAgentRoutingPa
 
   const rosterOptions = options.map((option) => ({
     ...option,
-    description: "Available for Planning-agent task assignment.",
+    description: translate(settingsAgentsGuidanceMessages, "routingRosterDescription"),
     disabled: selectorsDisabled,
     disabledReason: selectorsDisabled ? disabledReason : undefined,
   }));
 
   return (
     <SectionCard
-      title="Agent Routing"
+      title={translate(settingsAgentsGuidanceMessages, "routingTitle")}
       watermark="RTE"
-      badge={sectionBadge}
+      badge={localizedSectionBadge}
+      helpId="agent-routing"
       icon={<Route strokeWidth={2.4} />}
       accent="indigo"
-      summary="See who handles each stage of a sprint, then refine only the routes that need a specialist."
-      configureLabel="Review routes"
+      summary={translate(settingsAgentsGuidanceMessages, "routingSummary")}
+      configureLabel={translate(settingsAgentsGuidanceMessages, "routingConfigure")}
       highlights={[
-        { label: "Coding mode", value: routing.taskCoding.mode === "ORCHESTRATOR" ? "Orchestrator" : "Manual", tone: "active" },
-        { label: "Specialists", value: routing.taskCoding.mode === "ORCHESTRATOR" ? `${selectedCount} selected` : routing.taskCoding.agentPresetId ? "Custom agent" : "Built-in worker" },
-        { label: "Project agents", value: projectAgentPresetOptions.length },
+        { label: translate(settingsAgentsGuidanceMessages, "routingCodingMode"), value: translate(settingsAgentsGuidanceMessages, routing.taskCoding.mode === "ORCHESTRATOR" ? "routingOrchestrator" : "routingManual"), tone: "active" },
+        { label: translate(settingsAgentsGuidanceMessages, "routingSpecialists"), value: routing.taskCoding.mode === "ORCHESTRATOR" ? translatePlural(settingsAgentsGuidanceMessages, "routingSelectedCount", selectedCount) : translate(settingsAgentsGuidanceMessages, routing.taskCoding.agentPresetId ? "routingCustomAgent" : "routingBuiltInWorker") },
+        { label: translate(settingsAgentsGuidanceMessages, "routingProjectAgents"), value: projectAgentPresetOptions.length },
       ]}
     >
       <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(14rem,17.5rem)_minmax(0,1fr)]">
         <div className="min-w-0 rounded-[1.35rem] border border-black/[0.06] bg-black/[0.02] p-4 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
-          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Coding tasks</div>
-          <div className="mt-2">Manual pins all coding work to one preset. Orchestrator gives the Planning agent a roster and lets it assign the best specialist per task.</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">{translate(settingsAgentsGuidanceMessages, "routingCodingTasks")}</div>
+          <div className="mt-2">{translate(settingsAgentsGuidanceMessages, "routingExplanation")}</div>
           {selectedProject && activeScope !== "project" ? (
             <div role="status" className="mt-3 rounded-xl border border-signal-500/18 bg-signal-500/[0.08] px-3 py-2 text-signal-700 dark:border-signal-400/18 dark:bg-signal-400/[0.08] dark:text-signal-200">
-              Routing edits switch to Project scope for the selected project.
+              {translate(settingsAgentsGuidanceMessages, "routingProjectScopeStatus")}
             </div>
           ) : null}
         </div>
 
         <div className="min-w-0 rounded-[1.35rem] border border-black/[0.06] bg-white/78 p-4 dark:border-white/[0.06] dark:bg-void-900/52 sm:p-5 md:p-6">
-          <Row label="Coding task routing" description="Choose whether coding tasks use one fixed agent or a Planning-agent-selected specialist.">
+          <Row label={translate(settingsAgentsGuidanceMessages, "routingTaskLabel")} description={translate(settingsAgentsGuidanceMessages, "routingTaskDescription")}>
             <OptionCardChoiceGroup
               value={routing.taskCoding.mode}
-              aria-label="Coding task routing mode"
-              selectedSummaryLabel={`Routing mode: ${routing.taskCoding.mode === "ORCHESTRATOR" ? "Orchestrator" : "Manual"}`}
+              aria-label={translate(settingsAgentsGuidanceMessages, "routingModeAria")}
+              selectedSummaryLabel={translate(settingsAgentsGuidanceMessages, "routingModeSummary", {
+                mode: translate(settingsAgentsGuidanceMessages, routing.taskCoding.mode === "ORCHESTRATOR" ? "routingOrchestrator" : "routingManual"),
+              })}
               onChange={(value) => updateRouting((current) => ({
                 ...current,
                 taskCoding: { ...current.taskCoding, mode: value === "ORCHESTRATOR" ? "ORCHESTRATOR" : "MANUAL" },
               }))}
               options={[
-                { value: "MANUAL", label: "Manual", description: "Pin coding work to one selected preset or the built-in Worker fallback." },
-                { value: "ORCHESTRATOR", label: "Orchestrator", description: "Give Planning a roster and let it choose the best specialist per task." },
+                { value: "MANUAL", label: translate(settingsAgentsGuidanceMessages, "routingManual"), description: translate(settingsAgentsGuidanceMessages, "routingManualDescription") },
+                { value: "ORCHESTRATOR", label: translate(settingsAgentsGuidanceMessages, "routingOrchestrator"), description: translate(settingsAgentsGuidanceMessages, "routingOrchestratorDescription") },
               ]}
             />
           </Row>
@@ -135,13 +144,15 @@ export const SettingsAgentRoutingPanel: FunctionComponent<SettingsAgentRoutingPa
                   taskCoding: { ...current.taskCoding, orchestratorAgentPresetIds },
                 }))}
                 options={rosterOptions}
-                aria-label="Orchestrator coding agent roster"
-                selectedSummaryLabel={selectedCount === 0 ? "No orchestrator agents selected" : `${selectedCount} orchestrator ${selectedCount === 1 ? "agent" : "agents"} selected`}
-                helperText="Selected project agents are the only specialists Planning may assign to coding tasks."
+                aria-label={translate(settingsAgentsGuidanceMessages, "routingRosterAria")}
+                selectedSummaryLabel={selectedCount === 0
+                  ? translate(settingsAgentsGuidanceMessages, "routingRosterNone")
+                  : translatePlural(settingsAgentsGuidanceMessages, "routingRosterCount", selectedCount)}
+                helperText={translate(settingsAgentsGuidanceMessages, "routingRosterHelper")}
               />
               {options.length === 0 ? (
                 <div role="status" className="mt-3 rounded-[1.15rem] border border-dashed border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">
-                  No project agents are available. Create project agents first, then return here to expose coding specialists to the orchestrator.
+                  {translate(settingsAgentsGuidanceMessages, "routingNoProjectAgents")}
                 </div>
               ) : null}
             </div>
@@ -149,14 +160,14 @@ export const SettingsAgentRoutingPanel: FunctionComponent<SettingsAgentRoutingPa
 
           <div className="mt-5 grid min-w-0 gap-3 md:grid-cols-2">
             {([
-              ["planning", "Planning agent", "Used for sprint planning and prompt improvement.", "Built-in Planning agent"],
+              ["planning", translate(settingsAgentsGuidanceMessages, "routingPlanningAgent"), translate(settingsAgentsGuidanceMessages, "routingPlanningDescription"), translate(settingsAgentsGuidanceMessages, "routingBuiltInPlanning")],
               ...(routing.taskCoding.mode === "MANUAL"
-                ? [["taskCoding", "Coding agent", "Used for task coding when no task-level orchestrator assignment exists.", "Built-in Worker agent"] as const]
+                ? [["taskCoding", translate(settingsAgentsGuidanceMessages, "routingCodingAgent"), translate(settingsAgentsGuidanceMessages, "routingCodingDescription"), translate(settingsAgentsGuidanceMessages, "routingBuiltInWorkerAgent")] as const]
                 : []),
-              ["ciFix", "CI fix", "Used for automated CI repair loops.", "Built-in Worker agent"],
-              ["mergeConflict", "Merge conflict", "Used for automated conflict resolution.", "Built-in Worker agent"],
-              ["dashboardReply", "Dashboard reply", "Used for generated dashboard chat replies.", "Built-in Project manager agent"],
-              ["clarificationReply", "Clarification reply", "Used for automatic worker clarification replies.", "Built-in Project manager agent"],
+              ["ciFix", translate(settingsAgentsGuidanceMessages, "routingCiFix"), translate(settingsAgentsGuidanceMessages, "routingCiFixDescription"), translate(settingsAgentsGuidanceMessages, "routingBuiltInWorkerAgent")],
+              ["mergeConflict", translate(settingsAgentsGuidanceMessages, "routingMergeConflict"), translate(settingsAgentsGuidanceMessages, "routingMergeConflictDescription"), translate(settingsAgentsGuidanceMessages, "routingBuiltInWorkerAgent")],
+              ["dashboardReply", translate(settingsAgentsGuidanceMessages, "routingDashboardReply"), translate(settingsAgentsGuidanceMessages, "routingDashboardReplyDescription"), translate(settingsAgentsGuidanceMessages, "routingBuiltInProjectManager")],
+              ["clarificationReply", translate(settingsAgentsGuidanceMessages, "routingClarificationReply"), translate(settingsAgentsGuidanceMessages, "routingClarificationReplyDescription"), translate(settingsAgentsGuidanceMessages, "routingBuiltInProjectManager")],
             ] as const).map(([key, label, description, builtInLabel]) => (
               <div key={key} className="flex min-w-0 flex-col gap-3 rounded-2xl border border-black/[0.05] bg-white/55 p-4 dark:border-white/[0.06] dark:bg-white/[0.025]">
                 <div className="min-w-0">
@@ -172,7 +183,7 @@ export const SettingsAgentRoutingPanel: FunctionComponent<SettingsAgentRoutingPa
                   options={[{ value: "", label: builtInLabel, icon: () => <AgentSelectAvatarIcon seed={`built-in:${key}:${builtInLabel}`} /> }, ...options]}
                   disabled={selectorsDisabled}
                   disabledReason={selectorsDisabled ? disabledReason : undefined}
-                  aria-label={`${label} preset`}
+                  aria-label={translate(settingsAgentsGuidanceMessages, "routingPresetAria", { label })}
                 />
               </div>
             ))}

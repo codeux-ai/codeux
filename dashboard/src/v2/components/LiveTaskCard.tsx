@@ -28,6 +28,7 @@ import { LiveTaskInvocationRow } from "./live-session/LiveTaskInvocationRow.js";
 import { QuotaCountdown, TaskDuration } from "./live-session/LiveTaskTiming.js";
 import { WorkflowStatusBadge } from "./ui/WorkflowStatusBadge.js";
 import type { CiStatusPresentation } from "../lib/ci-status-presentation.js";
+import { useLiveI18n } from "../i18n/messages/live.js";
 
 /* ─── LiveTaskCard ───────────────────────────────────────────────────────── */
 
@@ -84,6 +85,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     dispatchInfo,
     agentPreset,
 }) => {
+    const { t, formatNumber } = useLiveI18n();
     const [expanded, setExpanded] = useState(false);
     const [showFeed, setShowFeed] = useState(false);
     const [showInvocations, setShowInvocations] = useState(false);
@@ -109,11 +111,11 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     const sessionLabel = (task.session_id || task.session_name || "").replace(/^sessions\//, "");
     const isForceCompleteUnavailable = taskPhase === "COMPLETED" || isForceCompleting;
     const forceCompleteStatusMessage = isForceCompleting
-        ? "Marking this task complete. The live snapshot remains visible while the update is confirmed."
+        ? t("forceCompletingStatus")
         : taskPhase === "COMPLETED"
-            ? "Task is already complete."
+            ? t("taskAlreadyComplete")
             : null;
-    const rerunStatusMessage = isRerunning ? "Rerun request is in progress." : null;
+    const rerunStatusMessage = isRerunning ? t("rerunInProgress") : null;
 
     const handleRerunClick = useCallback(() => {
         if (isRerunning) return;
@@ -285,7 +287,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                         </div>
 
                         <div className="min-w-0 flex-1">
-                            <div className="flex max-w-full flex-wrap items-center gap-2 mb-1.5" role="group" aria-label={`Status indicators for task ${task.id}`}>
+                            <div className="flex max-w-full flex-wrap items-center gap-2 mb-1.5" role="group" aria-label={t("statusIndicators", { id: task.id })}>
                                 <span className="font-mono text-[10px] font-bold px-2.5 py-0.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.04] text-slate-400">
                                     #{task.id}
                                 </span>
@@ -351,7 +353,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                     <div className="mb-5 p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.04]">
                         <div className="flex items-center gap-2 mb-3">
                             <FileText className="w-3 h-3 text-slate-400" strokeWidth={2} />
-                            <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Task Prompt</span>
+                            <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("taskPrompt")}</span>
                         </div>
                         <div
                             className={`${MARKDOWN_PROSE_CLASS}
@@ -369,13 +371,13 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                         <div className="mb-3 flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2">
                                 <Cpu className="w-3.5 h-3.5 text-signal-500" strokeWidth={2} />
-                                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Task Invocations</span>
+                                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("taskInvocations")}</span>
                             </div>
-                            <span className="text-[9px] font-mono text-slate-400">{invocations.length} total</span>
+                            <span className="text-[9px] font-mono text-slate-400">{t("invocationTotal", { count: formatNumber(invocations.length) })}</span>
                         </div>
                         <div
                             role="log"
-                            aria-label={`Invocation feed for task ${task.id}`}
+                            aria-label={t("taskInvocationFeed", { id: task.id })}
                             aria-live="polite"
                             aria-relevant="additions text"
                             className="max-h-80 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar"
@@ -392,7 +394,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                     <div className="mb-5 p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.04]">
                         <div className="flex items-center gap-2 mb-3">
                             <span className="w-1.5 h-1.5 rounded-full bg-signal-500 motion-safe:animate-pulse motion-reduce:ring-2 motion-reduce:ring-signal-500/25" />
-                            <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Runtime Feed</span>
+                            <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("runtimeFeed")}</span>
                         </div>
                         <RuntimeEventFeed events={events} />
                     </div>
@@ -422,7 +424,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                             <button
                                 type="button"
                                 onClick={handleToggleInvocations}
-                                aria-label={`${showInvocations ? 'Hide' : 'Show'} invocation feed for task ${task.id}`}
+                                aria-label={t(showInvocations ? "hideInvocationFeed" : "showInvocationFeed", { id: task.id })}
                                 className={`flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-xl text-[10px] font-bold uppercase tracking-[0.1em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800
                                            transition-all duration-200 border
                                            ${showInvocations
@@ -431,14 +433,14 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                                            }`}
                             >
                                 {showInvocations ? <EyeOff className="w-3 h-3" strokeWidth={2} /> : <Cpu className="w-3 h-3" strokeWidth={2} />}
-                                {showInvocations ? "Hide Invocations" : `Invocations ${invocations.length}`}
+                                {showInvocations ? t("hideInvocations") : t("invocationsCount", { count: formatNumber(invocations.length) })}
                             </button>
                         )}
                         {hasEventFeed && (
                             <button
                                 type="button"
                                 onClick={handleToggleFeed}
-                                aria-label={`${showFeed ? 'Hide' : 'Show'} runtime feed for task ${task.id}`}
+                                aria-label={t(showFeed ? "hideRuntimeFeed" : "showRuntimeFeed", { id: task.id })}
                                 className={`flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-xl text-[10px] font-bold uppercase tracking-[0.1em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800
                                            transition-all duration-200 border
                                            ${showFeed
@@ -447,13 +449,13 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                                            }`}
                             >
                                 {showFeed ? <EyeOff className="w-3 h-3" strokeWidth={2} /> : <Eye className="w-3 h-3" strokeWidth={2} />}
-                                {showFeed ? "Hide Feed" : "Runtime Feed"}
+                                {showFeed ? t("hideFeed") : t("runtimeFeed")}
                             </button>
                         )}
                         <button
                             type="button"
                             onClick={handleToggleExpand}
-                                aria-label={`${expanded ? 'Collapse' : 'Expand'} prompt for task ${task.id}`}
+                                aria-label={t(expanded ? "collapsePrompt" : "expandPrompt", { id: task.id })}
                             className={`flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-xl text-[10px] font-bold uppercase tracking-[0.1em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800
                                        transition-all duration-200 border
                                        ${expanded
@@ -462,45 +464,45 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                                        }`}
                         >
                             <ChevronRight ref={chevronRef} className="w-3 h-3" strokeWidth={2.5} />
-                            Prompt
+                            {t("prompt")}
                         </button>
                         <Button
                             type="button"
                             onClick={handleEditClick}
-                            aria-label={`Edit task ${task.id}`}
+                            aria-label={t("editTask", { id: task.id })}
                             variant="ghost"
                             icon={PencilLine}
                             className="px-3 py-2.5 min-h-[44px] text-[10px] uppercase tracking-[0.1em] hover:text-signal-500 hover:border-signal-500/15 disabled:opacity-40 disabled:pointer-events-none focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
                         >
-                            Edit
+                            {t("edit")}
                         </Button>
                         <Button
                             type="button"
                             onClick={handleForceCompleteClick}
-                            aria-label={`Force complete task ${task.id}`}
+                            aria-label={t("forceCompleteTaskAria", { id: task.id })}
                             isLoading={isForceCompleting}
                             aria-disabled={isForceCompleteUnavailable}
                             aria-busy={isForceCompleting}
-                            title={forceCompleteStatusMessage ?? "Force complete task"}
+                            title={forceCompleteStatusMessage ?? t("forceCompleteTaskTitle")}
                             variant="ghost"
                             icon={CheckCheck}
                             className="px-3 py-2.5 min-h-[44px] text-[10px] uppercase tracking-[0.1em] hover:text-status-green hover:border-status-green/15 disabled:opacity-40 disabled:pointer-events-none focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800 aria-disabled:opacity-40 aria-disabled:pointer-events-none"
                         >
-                            {isForceCompleting ? "Force completing" : "Force complete"}
+                            {t(isForceCompleting ? "forceCompleting" : "forceComplete")}
                             {forceCompleteStatusMessage && <span className="sr-only">{forceCompleteStatusMessage}</span>}
                         </Button>
                         <Button
                             type="button"
                             onClick={handleRerunClick}
-                            aria-label={`Rerun task ${task.id}`}
+                            aria-label={t("rerunTask", { id: task.id })}
                             isLoading={isRerunning}
                             aria-busy={isRerunning}
-                            title={rerunStatusMessage ?? "Rerun task"}
+                            title={rerunStatusMessage ?? t("rerunTaskTitle")}
                             variant="ghost"
                             icon={RotateCcw}
                             className="px-3 py-2.5 min-h-[44px] text-[10px] uppercase tracking-[0.1em] hover:text-status-amber hover:border-status-amber/15 disabled:opacity-40 disabled:pointer-events-none focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
                         >
-                            {isRerunning ? "Rerunning" : "Rerun"}
+                            {t(isRerunning ? "rerunning" : "rerun")}
                             {rerunStatusMessage && <span className="sr-only">{rerunStatusMessage}</span>}
                         </Button>
                     </div>
@@ -509,12 +511,12 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                             href={getSafeUrl(task.pr_url)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            aria-label={`View Pull Request for task ${task.id}`}
+                            aria-label={t("viewPullRequest", { id: task.id })}
                             className="text-[10px] font-mono text-signal-500 hover:text-signal-400 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800 focus-visible:rounded"
                         >
                             <span className="py-2.5 min-h-[44px] inline-flex items-center gap-1.5">
                                 <GitPullRequest className="w-3 h-3" strokeWidth={2} aria-hidden="true" />
-                                <span className="sr-only">Pull Request</span>
+                                <span className="sr-only">{t("pullRequest")}</span>
                                 <span aria-hidden="true">PR</span>
                                 <ExternalLink className="w-2.5 h-2.5 opacity-50" strokeWidth={2} />
                             </span>

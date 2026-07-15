@@ -6,6 +6,8 @@ import type {
   AppCreationProgressStageState,
   AppCreationProgressWidgetState,
 } from "../../../lib/chat-widget-view-models.js";
+import { useDashboardI18n } from "../../../i18n/context.js";
+import { chatMessages } from "../../../i18n/messages/chat.js";
 
 export interface AppCreationProgressWidgetProps {
   progress: AppCreationProgressWidgetState;
@@ -31,13 +33,15 @@ const StageIcon: FunctionComponent<{ stage: AppCreationProgressStageState }> = (
   return <Circle className="h-3.5 w-3.5" aria-hidden="true" />;
 };
 
-export const AppCreationProgressWidget: FunctionComponent<AppCreationProgressWidgetProps> = ({ progress }) => (
-  <ChatWidgetFrame
+export const AppCreationProgressWidget: FunctionComponent<AppCreationProgressWidgetProps> = ({ progress }) => {
+  const { translate } = useDashboardI18n();
+  const statusLabel = translate(chatMessages, progress.status === "queued" ? "queued" : progress.status);
+  return <ChatWidgetFrame
     status={progress.status}
     header={
       <div class="flex min-w-0 items-center gap-2">
-        <ChatRuntimeBadge status={progress.status} label={`${progress.appKindLabel} sprint`} />
-        <span class="truncate">{progress.appKindLabel} sprint</span>
+        <ChatRuntimeBadge status={progress.status} label={translate(chatMessages, "sprintSuffix", { name: progress.appKindLabel })} />
+        <span class="truncate">{translate(chatMessages, "sprintSuffix", { name: progress.appKindLabel })}</span>
       </div>
     }
   >
@@ -53,7 +57,7 @@ export const AppCreationProgressWidget: FunctionComponent<AppCreationProgressWid
           </div>
         </div>
         <span class="w-fit shrink-0 rounded-lg border border-black/[0.06] bg-white/70 px-2.5 py-1 font-mono text-[11px] font-bold uppercase text-slate-700 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-200">
-          {progress.status}
+          {statusLabel}
         </span>
       </div>
 
@@ -73,7 +77,7 @@ export const AppCreationProgressWidget: FunctionComponent<AppCreationProgressWid
         )}
       </div>
 
-      <ol class="space-y-1.5" aria-label={`${progress.appKindLabel} sprint stages`}>
+      <ol class="space-y-1.5" aria-label={translate(chatMessages, "sprintStages", { appKind: progress.appKindLabel })}>
         {progress.stages.map((stage, index) => (
           <li
             key={`${stage.id}-${index}`}
@@ -83,14 +87,14 @@ export const AppCreationProgressWidget: FunctionComponent<AppCreationProgressWid
             <StageIcon stage={stage} />
             <div class="min-w-0 flex-1">
               <div class="truncate text-[12px] font-semibold">{stage.label}</div>
-              <div class="text-[10px] font-medium opacity-80">{stage.statusLabel}</div>
+              <div class="text-[10px] font-medium opacity-80">{translate(chatMessages, stage.status === "pending" ? "pending" : stage.status)}</div>
             </div>
           </li>
         ))}
       </ol>
 
       {progress.suggestionTags.length > 0 && (
-        <div class="flex flex-wrap items-center gap-1.5" aria-label="Suggested follow-up directions">
+        <div class="flex flex-wrap items-center gap-1.5" aria-label={translate(chatMessages, "suggestedFollowUpDirections")}>
           {progress.suggestionTags.map((tag) => (
             <span
               key={tag}
@@ -102,5 +106,5 @@ export const AppCreationProgressWidget: FunctionComponent<AppCreationProgressWid
         </div>
       )}
     </div>
-  </ChatWidgetFrame>
-);
+  </ChatWidgetFrame>;
+};

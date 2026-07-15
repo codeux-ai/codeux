@@ -8,6 +8,7 @@ import { render, screen, cleanup, fireEvent, waitFor, act, within } from "@testi
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { SprintLedger } from "../../../dashboard/src/v2/components/sprints/SprintLedger.js";
 import type { Sprint } from "../../../dashboard/src/types.js";
+import { renderWithI18n } from "../render-with-i18n.js";
 
 expect.extend(matchers);
 
@@ -108,6 +109,53 @@ describe("SprintLedger Component", () => {
     onBulkDelete: vi.fn(),
   };
 
+  it("keeps 100% task completion at Running without explicit merge evidence", () => {
+    renderWithI18n(
+      <SprintLedger
+        {...defaultProps}
+        sprints={[{ ...mockSprints[0]!, completion: 100 }]}
+        listWindow="all"
+      />,
+    );
+
+    expect(screen.getByText("Running")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /CI status: Coding in progress/i })).toBeInTheDocument();
+    expect(screen.queryByText("Merge")).not.toBeInTheDocument();
+  });
+
+  it("shows final sprint QA in German while preserving sprint content", () => {
+    const sprintName = "Externally supplied sprint name";
+    const sprintGoal = "Provider-authored goal remains unchanged.";
+    renderWithI18n(
+      <SprintLedger
+        {...defaultProps}
+        sprints={[{
+          ...mockSprints[0]!,
+          name: sprintName,
+          goal: sprintGoal,
+          completion: 100,
+          latestReview: {
+            status: "in_progress",
+            outcome: null,
+            summary: "Provider-authored QA summary stays verbatim.",
+            findings: [],
+            reviewer: "QA Worker",
+            finishedAt: null,
+          },
+        }]}
+        listWindow="all"
+      />,
+      {},
+      "de",
+    );
+
+    expect(screen.getByText(sprintName)).toBeInTheDocument();
+    expect(screen.getByText(sprintGoal)).toBeInTheDocument();
+    expect(screen.getAllByText("QA").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /QA läuft/i })).toHaveTextContent("QA läuft");
+    expect(screen.queryByText("Zusammenführung")).not.toBeInTheDocument();
+  });
+
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -128,7 +176,7 @@ describe("SprintLedger Component", () => {
     // The previous tests failed because they couldn't find "Alpha Design", meaning the windowing
     // or filtering effect is omitting rows. By default listWindow="all", but let's make sure our limit
     // isn't resolving to 0. Let's pass 'all' correctly and await a tick.
-    render(<SprintLedger {...defaultProps} listWindow="all" />);
+    renderWithI18n(<SprintLedger {...defaultProps} listWindow="all" />);
 
     // Check header text
     expect(screen.getByText("Sprint Ledger")).toBeInTheDocument();
@@ -155,7 +203,7 @@ describe("SprintLedger Component", () => {
   });
 
   it("renders project-aware Tasks and Live row links instead of the old Open CTA", async () => {
-    render(<SprintLedger {...defaultProps} listWindow="all" />);
+    renderWithI18n(<SprintLedger {...defaultProps} listWindow="all" />);
 
     const alphaRow = await screen.findByRole("row", { name: /Alpha Design/i });
     const alphaScope = within(alphaRow);
@@ -174,7 +222,7 @@ describe("SprintLedger Component", () => {
   });
 
   it("filters by status from the ledger controls", async () => {
-    render(<SprintLedger {...defaultProps} listWindow="all" />);
+    renderWithI18n(<SprintLedger {...defaultProps} listWindow="all" />);
 
     await waitFor(() => {
       expect(screen.getByText("Alpha Design")).toBeInTheDocument();
@@ -191,7 +239,7 @@ describe("SprintLedger Component", () => {
   });
 
   it("selects, deselects, and performs bulk actions", async () => {
-    render(<SprintLedger {...defaultProps} listWindow="all" />);
+    renderWithI18n(<SprintLedger {...defaultProps} listWindow="all" />);
 
     // Wait for render
     await waitFor(() => {
@@ -206,16 +254,16 @@ describe("SprintLedger Component", () => {
     // Click first row's checkbox
     fireEvent.click(checkboxes[0]); // This checks "Beta API" due to initial descending sort (date)
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Start \d+ selected sprints/ })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Start \d+ selected sprints?/ })).toBeInTheDocument();
     });
 
     // Perform bulk start
-    const bulkStartBtn = screen.getByRole("button", { name: /Start \d+ selected sprints/ });
+    const bulkStartBtn = screen.getByRole("button", { name: /Start \d+ selected sprints?/ });
     fireEvent.click(bulkStartBtn);
     expect(defaultProps.onBulkStart).toHaveBeenCalledWith(["sprint-2"]); // Beta API id
 
     // Perform bulk delete
-    const bulkDeleteBtn = screen.getByRole("button", { name: "Delete 1 selected sprints. Permanent action." });
+    const bulkDeleteBtn = screen.getByRole("button", { name: "Delete 1 selected sprint. Permanent action." });
     fireEvent.click(bulkDeleteBtn);
     
     // Wait for Confirm Dialog and perform destructive hold
@@ -243,7 +291,7 @@ describe("SprintLedger Component", () => {
     // That means the Clear button is gone already. Let's select it again to test clear:
     fireEvent.click(checkboxes[1]);
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Start \d+ selected sprints/ })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Start \d+ selected sprints?/ })).toBeInTheDocument();
     });
     const clearBtn = screen.getAllByText("Clear")[0];
     fireEvent.click(clearBtn);
@@ -254,7 +302,7 @@ describe("SprintLedger Component", () => {
 
   it("displays pending state on select all button when bulk action is running", async () => {
     const pendingBulkActionIds = new Set(["sprint-delete:sprint-1", "sprint-delete:sprint-2"]);
-    const { unmount } = render(<SprintLedger {...defaultProps} pendingActionIds={pendingBulkActionIds} />);
+    const { unmount } = renderWithI18n(<SprintLedger {...defaultProps} pendingActionIds={pendingBulkActionIds} />);
     await waitFor(() => {
       const selectAllBtn = screen.getByTitle("Bulk action in progress for selected sprints");
       expect(selectAllBtn).toBeDisabled();
@@ -263,19 +311,19 @@ describe("SprintLedger Component", () => {
   });
 
   it("displays pending state on bulk actions when running", async () => {
-    const { unmount } = render(<SprintLedger {...defaultProps} />);
+    const { unmount } = renderWithI18n(<SprintLedger {...defaultProps} />);
     await waitFor(() => expect(screen.getByText("Alpha Design")).toBeInTheDocument());
     fireEvent.click(screen.getAllByRole("button", { name: /Select sprint/i })[0]);
-    await waitFor(() => expect(screen.getByRole("button", { name: /Start \d+ selected sprints/ })).toBeInTheDocument());
-    const startBtn = screen.getByRole("button", { name: /Start \d+ selected sprints/ });
+    await waitFor(() => expect(screen.getByRole("button", { name: /Start \d+ selected sprints?/ })).toBeInTheDocument());
+    const startBtn = screen.getByRole("button", { name: /Start \d+ selected sprints?/ });
     expect(startBtn.getAttribute("title")).toBeNull();
     unmount();
     const pendingBulkActionIds = new Set(["sprint-start:sprint-2"]);
-    render(<SprintLedger {...defaultProps} pendingActionIds={pendingBulkActionIds} />);
+    renderWithI18n(<SprintLedger {...defaultProps} pendingActionIds={pendingBulkActionIds} />);
     await waitFor(() => expect(screen.getByText("Beta API")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: /Select sprint Beta API/i }));
-    await waitFor(() => expect(screen.getByRole("button", { name: /Starting \d+ selected sprints/ })).toBeInTheDocument());
-    const pendingStartBtn = screen.getByRole("button", { name: /Starting \d+ selected sprints/ });
+    await waitFor(() => expect(screen.getByRole("button", { name: /Starting \d+ selected sprints?/ })).toBeInTheDocument());
+    const pendingStartBtn = screen.getByRole("button", { name: /Starting \d+ selected sprints?/ });
     expect(pendingStartBtn).toHaveTextContent("Starting");
     expect(pendingStartBtn.getAttribute("title")).toBe("Bulk controls are disabled while starting 1 selected sprint.");
     expect(pendingStartBtn).toHaveAccessibleDescription(/Starting 1 selected sprint\. Bulk controls are disabled while starting 1 selected sprint\./);
@@ -283,7 +331,7 @@ describe("SprintLedger Component", () => {
   });
 
   it("updates sort indicator state through aria-sort", () => {
-    render(<SprintLedger {...defaultProps} />);
+    renderWithI18n(<SprintLedger {...defaultProps} />);
 
     const sprintHeader = screen.getByRole("button", { name: "Sort by Sprint" });
     const sprintColumn = sprintHeader.closest("th");
@@ -309,7 +357,7 @@ describe("SprintLedger Component", () => {
     // Set a bulk action pending state
     const pendingBulkActionIds = new Set(["sprint-delete:sprint-1", "sprint-delete:sprint-2"]);
 
-    const { unmount } = render(<SprintLedger {...defaultProps} pendingActionIds={pendingBulkActionIds} />);
+    const { unmount } = renderWithI18n(<SprintLedger {...defaultProps} pendingActionIds={pendingBulkActionIds} />);
 
     // In bulk pending mode, ALL row selection buttons should be disabled
     await waitFor(() => {
@@ -321,7 +369,7 @@ describe("SprintLedger Component", () => {
 
     // 2. Specific lock (non-bulk)
     const specificPendingIds = new Set(["sprint-showcase:sprint-1"]);
-    render(<SprintLedger {...defaultProps} pendingActionIds={specificPendingIds} />);
+    renderWithI18n(<SprintLedger {...defaultProps} pendingActionIds={specificPendingIds} />);
 
     await waitFor(() => {
       const selectAllBtn = screen.getByTitle("Select all filtered sprints");
@@ -358,7 +406,7 @@ describe("SprintLedger Component", () => {
 
     const interventionBySprintId = new Map([["sprint-paused", mockIntervention]]);
 
-    render(
+    renderWithI18n(
       <SprintLedger
         {...defaultProps}
         sprints={[pausedSprint]}
@@ -393,7 +441,7 @@ describe("SprintLedger Component", () => {
       ownerType: "human",
     };
 
-    render(
+    renderWithI18n(
       <SprintLedger
         {...defaultProps}
         sprints={[failedSprint]}
@@ -448,7 +496,7 @@ describe("SprintLedger Component", () => {
       } as DOMRect;
     });
 
-    render(<SprintLedger {...defaultProps} listWindow="all" />);
+    renderWithI18n(<SprintLedger {...defaultProps} listWindow="all" />);
 
     await waitFor(() => {
       expect(screen.getByText("Alpha Design")).toBeInTheDocument();
@@ -469,7 +517,7 @@ describe("SprintLedger Component", () => {
   });
 
   it("selects all sprints in the filtered result set", async () => {
-    render(<SprintLedger {...defaultProps} listWindow="all" />);
+    renderWithI18n(<SprintLedger {...defaultProps} listWindow="all" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Filter ledger by sprint status" }));
     fireEvent.click(screen.getByRole("option", { name: "Done" }));
@@ -482,12 +530,12 @@ describe("SprintLedger Component", () => {
     fireEvent.click(screen.getByRole("button", { name: "Select all filtered sprints" }));
     expect(screen.getByText("1 of 1 selected")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Start 1 selected sprints" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start 1 selected sprint" }));
     expect(defaultProps.onBulkStart).toHaveBeenCalledWith(["sprint-2"]);
   });
 
   it("prunes row selection when filtering removes selected rows", async () => {
-    render(<SprintLedger {...defaultProps} listWindow="all" />);
+    renderWithI18n(<SprintLedger {...defaultProps} listWindow="all" />);
 
     await waitFor(() => expect(screen.getByText("Beta API")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Select sprint Beta API" }));
@@ -506,7 +554,7 @@ describe("SprintLedger Component", () => {
 
   it("disables row actions with explicit labels during pending bulk work", async () => {
     const pendingBulkActionIds = new Set(["sprint-start:sprint-2"]);
-    render(<SprintLedger {...defaultProps} pendingActionIds={pendingBulkActionIds} listWindow="all" />);
+    renderWithI18n(<SprintLedger {...defaultProps} pendingActionIds={pendingBulkActionIds} listWindow="all" />);
 
     await waitFor(() => expect(screen.getByText("Beta API")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Select sprint Beta API" }));
@@ -524,7 +572,7 @@ describe("SprintLedger Component", () => {
   });
 
   it("opens row action menus from the keyboard and restores focus after close", async () => {
-    render(<SprintLedger {...defaultProps} listWindow="all" />);
+    renderWithI18n(<SprintLedger {...defaultProps} listWindow="all" />);
 
     await waitFor(() => expect(screen.getByText("Beta API")).toBeInTheDocument());
     const trigger = screen.getAllByRole("button", { name: /Open actions menu for sprint/i })[0] as HTMLButtonElement;
@@ -549,7 +597,7 @@ describe("SprintLedger Component", () => {
       removeListener: vi.fn(),
     }));
 
-    render(<SprintLedger {...defaultProps} listWindow="all" />);
+    renderWithI18n(<SprintLedger {...defaultProps} listWindow="all" />);
 
     await waitFor(() => expect(screen.getByText("Beta API")).toBeInTheDocument());
     const selectButton = screen.getByRole("button", { name: "Select sprint Beta API" });

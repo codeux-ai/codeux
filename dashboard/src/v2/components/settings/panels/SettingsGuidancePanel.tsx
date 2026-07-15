@@ -2,6 +2,8 @@ import type { FunctionComponent } from "preact";
 import { Code2, Palette, ShieldCheck, Trash2 } from "lucide-preact";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import type { DesignGuidanceEntrySettings, DesignGuidanceSettings } from "../../../../types.js";
+import { useDashboardI18n, type DashboardTranslate } from "../../../i18n/index.js";
+import { settingsAgentsGuidanceMessages } from "../../../i18n/messages/settings-agents-guidance.js";
 import { DESIGN_GUIDANCE_NONE_ID } from "../../../../../../src/domain/settings/design-guidance-catalog.js";
 import {
   createDesignGuidanceCustomEntry,
@@ -20,31 +22,35 @@ import { SelectInput, TextAreaInput, TextInput, Toggle } from "../SettingsFormFi
 import { ActionFeedbackRegion } from "../../ui/ActionFeedbackRegion.js";
 import { Row, SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
 
-const KIND_COPY: Record<DesignGuidanceEntryKind, {
+type GuidanceKindCopy = {
   title: string;
+  lowerTitle: string;
   customTitle: string;
   selectorLabel: string;
   selectorDescription: string;
   emptyTitle: string;
   emptyBody: string;
-}> = {
-  techStack: {
-    title: "Tech Stack",
-    customTitle: "Custom tech stack guidance",
-    selectorLabel: "Active tech stack guidance",
-    selectorDescription: "Choose extra implementation guidance for the active settings scope, or clear it to None.",
-    emptyTitle: "No custom tech stack guidance",
-    emptyBody: "Add a custom entry when the built-in tech stack guidance does not fit this scope.",
-  },
-  styleguide: {
-    title: "Styleguide",
-    customTitle: "Custom styleguides",
-    selectorLabel: "Active styleguide",
-    selectorDescription: "Choose visual and interaction guidance for the active settings scope, or clear it to None.",
-    emptyTitle: "No custom styleguides",
-    emptyBody: "Add a custom styleguide when the default styleguides do not match this product surface.",
-  },
 };
+
+const getKindCopy = (kind: DesignGuidanceEntryKind, translate: DashboardTranslate): GuidanceKindCopy => kind === "techStack"
+  ? {
+    title: translate(settingsAgentsGuidanceMessages, "guidanceTechStack"),
+    lowerTitle: translate(settingsAgentsGuidanceMessages, "guidanceTechStackLower"),
+    customTitle: translate(settingsAgentsGuidanceMessages, "guidanceCustomTechStack"),
+    selectorLabel: translate(settingsAgentsGuidanceMessages, "guidanceActiveTechStack"),
+    selectorDescription: translate(settingsAgentsGuidanceMessages, "guidanceTechStackSelectorDescription"),
+    emptyTitle: translate(settingsAgentsGuidanceMessages, "guidanceNoCustomTechStack"),
+    emptyBody: translate(settingsAgentsGuidanceMessages, "guidanceNoCustomTechStackBody"),
+  }
+  : {
+    title: translate(settingsAgentsGuidanceMessages, "guidanceStyleguide"),
+    lowerTitle: translate(settingsAgentsGuidanceMessages, "guidanceStyleguideLower"),
+    customTitle: translate(settingsAgentsGuidanceMessages, "guidanceCustomStyleguides"),
+    selectorLabel: translate(settingsAgentsGuidanceMessages, "guidanceActiveStyleguide"),
+    selectorDescription: translate(settingsAgentsGuidanceMessages, "guidanceStyleguideSelectorDescription"),
+    emptyTitle: translate(settingsAgentsGuidanceMessages, "guidanceNoCustomStyleguides"),
+    emptyBody: translate(settingsAgentsGuidanceMessages, "guidanceNoCustomStyleguidesBody"),
+  };
 
 const getSelectedKey = (kind: DesignGuidanceEntryKind): keyof Pick<DesignGuidanceSettings, "selectedTechStackId" | "selectedStyleguideId"> => (
   kind === "techStack" ? "selectedTechStackId" : "selectedStyleguideId"
@@ -79,9 +85,10 @@ const GuidanceEntryEditor: FunctionComponent<{
   onUpdate: (recipe: (entry: DesignGuidanceEntrySettings) => DesignGuidanceEntrySettings) => void;
   onDelete: () => void;
 }> = ({ kind, entry, entries, index, disabled, onUpdate, onDelete }) => {
-  const copy = KIND_COPY[kind];
-  const validation = validateDesignGuidanceCustomEntry(entry, entries, kind, index);
-  const label = entry.name.trim() || entry.id.trim() || `Custom ${copy.title}`;
+  const { locale, translate } = useDashboardI18n();
+  const copy = getKindCopy(kind, translate);
+  const validation = validateDesignGuidanceCustomEntry(entry, entries, kind, index, locale);
+  const label = entry.name.trim() || entry.id.trim() || translate(settingsAgentsGuidanceMessages, "guidanceCustomFallback", { kind: copy.title });
 
   return (
     <section
@@ -93,18 +100,18 @@ const GuidanceEntryEditor: FunctionComponent<{
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span className="min-w-0 break-words text-sm font-bold text-slate-800 dark:text-slate-100">{label}</span>
             <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2 py-0.5 font-mono text-[10px] font-bold text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300">
-              {entry.id || "missing-id"}
+              {entry.id || translate(settingsAgentsGuidanceMessages, "guidanceMissingId")}
             </span>
           </div>
           <div className="mt-1 max-w-2xl break-words text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
-            {entry.summary || "Add a concise summary so operators can recognize this guidance in selectors."}
+            {entry.summary || translate(settingsAgentsGuidanceMessages, "guidanceSummaryFallback")}
           </div>
         </div>
         <button
           type="button"
           disabled={disabled}
-          aria-label={`Delete ${label}`}
-          title={disabled ? "Wait for the current settings save to finish." : undefined}
+          aria-label={translate(settingsAgentsGuidanceMessages, "guidanceDeleteAria", { label })}
+          title={disabled ? translate(settingsAgentsGuidanceMessages, "waitForSave") : undefined}
           onClick={onDelete}
           className="inline-flex min-h-[2.6rem] items-center justify-center rounded-xl border border-status-red/25 bg-status-red/[0.06] px-3 text-status-red transition-colors hover:bg-status-red/[0.12] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-danger)] focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-void-900"
         >
@@ -120,8 +127,8 @@ const GuidanceEntryEditor: FunctionComponent<{
           invalid={Boolean(validation.id)}
           forceValidation={Boolean(validation.id)}
           errorText={validation.id}
-          helperText="Letters, numbers, underscores, or hyphens."
-          aria-label={`${copy.title} guidance id for ${label}`}
+          helperText={translate(settingsAgentsGuidanceMessages, "guidanceIdHelper")}
+          aria-label={translate(settingsAgentsGuidanceMessages, "guidanceIdAria", { kind: copy.title, label })}
           onChange={(value) => onUpdate((current) => ({ ...current, id: value }))}
         />
         <TextInput
@@ -130,8 +137,8 @@ const GuidanceEntryEditor: FunctionComponent<{
           invalid={Boolean(validation.name)}
           forceValidation={Boolean(validation.name)}
           errorText={validation.name}
-          helperText="Human-readable selector label."
-          aria-label={`${copy.title} guidance name for ${entry.id || label}`}
+          helperText={translate(settingsAgentsGuidanceMessages, "guidanceNameHelper")}
+          aria-label={translate(settingsAgentsGuidanceMessages, "guidanceNameAria", { kind: copy.title, label: entry.id || label })}
           onChange={(value) => onUpdate((current) => ({ ...current, name: value }))}
         />
         <TextInput
@@ -140,8 +147,8 @@ const GuidanceEntryEditor: FunctionComponent<{
           invalid={Boolean(validation.summary)}
           forceValidation={Boolean(validation.summary)}
           errorText={validation.summary}
-          helperText="Short selector summary."
-          aria-label={`${copy.title} guidance summary for ${label}`}
+          helperText={translate(settingsAgentsGuidanceMessages, "guidanceSummaryHelper")}
+          aria-label={translate(settingsAgentsGuidanceMessages, "guidanceSummaryAria", { kind: copy.title, label })}
           onChange={(value) => onUpdate((current) => ({ ...current, summary: value }))}
         />
       </div>
@@ -152,8 +159,8 @@ const GuidanceEntryEditor: FunctionComponent<{
         invalid={Boolean(validation.instructionMarkdown)}
         forceValidation={Boolean(validation.instructionMarkdown)}
         errorText={validation.instructionMarkdown}
-        helperText="Markdown instructions appended to worker guidance when this entry is selected."
-        aria-label={`${copy.title} instruction markdown for ${label}`}
+        helperText={translate(settingsAgentsGuidanceMessages, "guidanceInstructionHelper")}
+        aria-label={translate(settingsAgentsGuidanceMessages, "guidanceInstructionAria", { kind: copy.title, label })}
         onChange={(value) => onUpdate((current) => ({ ...current, instructionMarkdown: value }))}
       />
     </section>
@@ -165,7 +172,8 @@ const GuidanceManagementSection: FunctionComponent<{
   guidance: DesignGuidanceSettings;
   kind: DesignGuidanceEntryKind;
 }> = ({ state, guidance, kind }) => {
-  const copy = KIND_COPY[kind];
+  const { locale, translate } = useDashboardI18n();
+  const copy = getKindCopy(kind, translate);
   const {
     activeSaving,
     activeScope,
@@ -179,9 +187,13 @@ const GuidanceManagementSection: FunctionComponent<{
   const selectedHiddenDefault = kind === "styleguide" && isSelectedDefaultStyleguideHidden(guidance);
   const customEntries = getCustomDesignGuidanceEntries(guidance, kind);
   const allEntries = getAllDesignGuidanceEntries(guidance, kind);
-  const hasValidationErrors = hasDesignGuidanceValidationErrors(guidance, kind);
-  const getBadge = (...prefixes: string[]) => getBadgeHelper(activeScope, projectSources, ...prefixes);
-  const getFieldBadge = (path: string) => getFieldBadgeHelper(activeScope, projectSources, path);
+  const hasValidationErrors = hasDesignGuidanceValidationErrors(guidance, kind, locale);
+  const getBadge = (...prefixes: string[]) => getBadgeHelper(activeScope, projectSources, ...prefixes)
+    ? translate(settingsAgentsGuidanceMessages, "projectOverride")
+    : undefined;
+  const getFieldBadge = (path: string) => getFieldBadgeHelper(activeScope, projectSources, path)
+    ? translate(settingsAgentsGuidanceMessages, "projectOverride")
+    : undefined;
   const selectedPath = `designGuidance.${getSelectedKey(kind)}`;
   const customPath = kind === "techStack" ? "designGuidance.customTechStacks" : "designGuidance.customStyleguides";
   const Icon = kind === "techStack" ? Code2 : Palette;
@@ -246,21 +258,21 @@ const GuidanceManagementSection: FunctionComponent<{
       badge={getBadge("designGuidance", selectedPath, customPath)}
       icon={<Icon strokeWidth={2.4} />}
       highlights={[
-        { label: "Selected", value: getVisibleDesignGuidanceEntries(guidance, kind).find((entry) => entry.id === selectedId)?.name ?? "None", tone: selectedId === DESIGN_GUIDANCE_NONE_ID ? "neutral" : "active" },
-        { label: "Available", value: getVisibleDesignGuidanceEntries(guidance, kind).length },
-        { label: "Custom", value: getCustomDesignGuidanceEntries(guidance, kind).length },
+        { label: translate(settingsAgentsGuidanceMessages, "guidanceSelected"), value: selectedId === DESIGN_GUIDANCE_NONE_ID ? translate(settingsAgentsGuidanceMessages, "guidanceNone") : getVisibleDesignGuidanceEntries(guidance, kind).find((entry) => entry.id === selectedId)?.name ?? translate(settingsAgentsGuidanceMessages, "guidanceNone"), tone: selectedId === DESIGN_GUIDANCE_NONE_ID ? "neutral" : "active" },
+        { label: translate(settingsAgentsGuidanceMessages, "guidanceAvailable"), value: getVisibleDesignGuidanceEntries(guidance, kind).length },
+        { label: translate(settingsAgentsGuidanceMessages, "guidanceCustom"), value: getCustomDesignGuidanceEntries(guidance, kind).length },
       ]}
       actions={(
         <ActionButton
-          label={`Add ${copy.title}`}
+          label={translate(settingsAgentsGuidanceMessages, "guidanceAdd", { kind: copy.title })}
           onClick={addEntry}
           disabled={activeSaving}
-          disabledReason={activeSaving ? "Wait for the current settings save to finish." : undefined}
+          disabledReason={activeSaving ? translate(settingsAgentsGuidanceMessages, "waitForSave") : undefined}
         />
       )}
     >
-      <NoticePanel title="Built-ins are protected" tone="success">
-        Built-in {copy.title.toLowerCase()} entries can be selected, but only custom entries can be edited or deleted.
+      <NoticePanel title={translate(settingsAgentsGuidanceMessages, "guidanceProtectedTitle")} tone="success">
+        {translate(settingsAgentsGuidanceMessages, "guidanceProtectedBody", { kind: copy.lowerTitle })}
       </NoticePanel>
 
       <Row
@@ -274,33 +286,35 @@ const GuidanceManagementSection: FunctionComponent<{
             <SelectInput
               value={selectedVisible ? selectedId : ""}
               disabled={activeSaving}
-              disabledReason={activeSaving ? "Wait for the current settings save to finish." : undefined}
+              disabledReason={activeSaving ? translate(settingsAgentsGuidanceMessages, "waitForSave") : undefined}
               aria-label={copy.selectorLabel}
               onChange={(value) => updateGuidance((current) => withSelectedId(current, kind, value))}
               options={getVisibleDesignGuidanceEntries(guidance, kind).map((entry) => ({
                 value: entry.id,
-                label: entry.name,
+                label: entry.id === DESIGN_GUIDANCE_NONE_ID ? translate(settingsAgentsGuidanceMessages, "guidanceNone") : entry.name,
               }))}
             />
             <ActionButton
-              label="Clear"
+              label={translate(settingsAgentsGuidanceMessages, "guidanceClear")}
               onClick={() => updateGuidance((current) => withSelectedId(current, kind, DESIGN_GUIDANCE_NONE_ID))}
               disabled={activeSaving || selectedId === DESIGN_GUIDANCE_NONE_ID}
-              disabledReason={activeSaving ? "Wait for the current settings save to finish." : undefined}
+              disabledReason={activeSaving ? translate(settingsAgentsGuidanceMessages, "waitForSave") : undefined}
             />
           </div>
           <div className="text-xs font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
-            Active: {getDesignGuidanceActiveLabel(guidance, kind)}
+            {translate(settingsAgentsGuidanceMessages, "guidanceActive", {
+              label: getDesignGuidanceActiveLabel(guidance, kind, locale),
+            })}
           </div>
           {selectedHiddenDefault ? (
-            <NoticePanel title="Default styleguide hidden" tone="warning">
-              The selected default styleguide is preserved, but hidden from the selector while default styleguides are hidden. Choose None, a custom styleguide, or turn defaults back on to change it here.
+            <NoticePanel title={translate(settingsAgentsGuidanceMessages, "guidanceHiddenTitle")} tone="warning">
+              {translate(settingsAgentsGuidanceMessages, "guidanceHiddenBody")}
             </NoticePanel>
           ) : null}
           {!selectedVisible && !selectedHiddenDefault ? (
             <ActionFeedbackRegion
               status="error"
-              message={`The selected ${copy.title.toLowerCase()} id is not available in this scope.`}
+              message={translate(settingsAgentsGuidanceMessages, "guidanceUnavailableId", { kind: copy.lowerTitle })}
               autoDismiss={false}
             />
           ) : null}
@@ -309,15 +323,15 @@ const GuidanceManagementSection: FunctionComponent<{
 
       {kind === "styleguide" ? (
         <Row
-          label="Hide default styleguides"
-          description="Hide built-in styleguides from the selector while keeping None and custom styleguides available."
+          label={translate(settingsAgentsGuidanceMessages, "guidanceHideDefaults")}
+          description={translate(settingsAgentsGuidanceMessages, "guidanceHideDefaultsDescription")}
           badge={getFieldBadge("designGuidance.hideDefaultStyleguides")}
           onReset={getFieldReset("designGuidance.hideDefaultStyleguides")}
         >
           <Toggle
             value={guidance.hideDefaultStyleguides}
             disabled={activeSaving}
-            aria-label="Hide default styleguides"
+            aria-label={translate(settingsAgentsGuidanceMessages, "guidanceHideDefaults")}
             onChange={(value) => updateGuidance((current) => ({
               ...current,
               hideDefaultStyleguides: value,
@@ -330,13 +344,13 @@ const GuidanceManagementSection: FunctionComponent<{
         <ShieldCheck className="h-3.5 w-3.5" strokeWidth={2.2} />
         {copy.customTitle}
         <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2 py-0.5 text-[9px] text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.04]">
-          {customEntries.length} custom / {allEntries.length} total
+          {translate(settingsAgentsGuidanceMessages, "guidanceCountSummary", { customCount: customEntries.length, totalCount: allEntries.length })}
         </span>
       </div>
 
       <ActionFeedbackRegion
         status={hasValidationErrors ? "error" : "idle"}
-        message={hasValidationErrors ? `Fix the highlighted ${copy.title.toLowerCase()} ids, names, summaries, or instructions before saving.` : null}
+        message={hasValidationErrors ? translate(settingsAgentsGuidanceMessages, "guidanceFixValidation", { kind: copy.lowerTitle }) : null}
         autoDismiss={false}
       />
 
@@ -365,12 +379,13 @@ const GuidanceManagementSection: FunctionComponent<{
 };
 
 export const SettingsGuidancePanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
+  const { translate } = useDashboardI18n();
   const { activeScope, editableSettings, selectedProject } = state;
 
   if (activeScope === "project" && !selectedProject) {
     return (
-      <NoticePanel title="Project scope unavailable">
-        Select a project first to manage project-specific guidance.
+      <NoticePanel title={translate(settingsAgentsGuidanceMessages, "guidanceProjectUnavailable")}>
+        {translate(settingsAgentsGuidanceMessages, "guidanceSelectProject")}
       </NoticePanel>
     );
   }

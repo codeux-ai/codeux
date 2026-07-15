@@ -6,6 +6,8 @@ import type {
   SystemSettings,
 } from "../../../types.js";
 import { getSystemIntegrationProviders } from "./provider-instances.js";
+import { translateDashboardMessage, type DashboardLocale } from "../../i18n/locales.js";
+import { settingsModelsMessages } from "../../i18n/messages/settings-models.js";
 
 export interface ProviderModelOption {
   value: string;
@@ -97,21 +99,17 @@ export const AI_MODEL_CATALOG: Record<string, string[]> = {
   ],
 };
 
-const PROVIDER_MODEL_LABEL_OVERRIDES: Partial<Record<ProviderId, Record<string, string>>> = {
-  gemini: {
-    pro: "pro (recent)",
-    flash: "flash (recent)",
-    "flash-lite": "flash-lite (recent)",
-  },
-};
+const RECENT_GEMINI_MODELS = new Set(["pro", "flash", "flash-lite"]);
 
 export const getProviderModelOptions = (
   providerId: ProviderId,
+  locale: DashboardLocale = "en",
 ): ProviderModelOption[] => {
-  const labelOverrides = PROVIDER_MODEL_LABEL_OVERRIDES[providerId] || {};
   return (AI_MODEL_CATALOG[providerId] || []).map((model) => ({
     value: model,
-    label: labelOverrides[model] || model,
+    label: providerId === "gemini" && RECENT_GEMINI_MODELS.has(model)
+      ? translateDashboardMessage(settingsModelsMessages, locale, "recentSuffix", { model })
+      : model,
   }));
 };
 
@@ -171,8 +169,9 @@ export const getProviderInstanceModelOptions = (
   providerConfigId: ProviderConfigId,
   provider: Pick<ProjectProviderSettings, "provider" | "model">,
   systemSettings: SystemSettings | null,
+  locale: DashboardLocale = "en",
 ): ProviderModelOption[] => {
-  const baseOptions = getProviderModelOptions(provider.provider);
+  const baseOptions = getProviderModelOptions(provider.provider, locale);
   const systemProvider = getSystemIntegrationProviders(systemSettings)[providerConfigId];
   const configuredModel = getConfiguredProviderModel(provider.provider, systemProvider, provider.model);
   const selectedModels = [
@@ -189,7 +188,7 @@ export const getProviderInstanceModelOptions = (
       optionsByValue.set(selectedModel, {
         value: selectedModel,
         label: configuredModel === selectedModel
-          ? `${selectedModel} (configured)`
+          ? translateDashboardMessage(settingsModelsMessages, locale, "configuredSuffix", { model: selectedModel })
           : selectedModel,
       });
     }

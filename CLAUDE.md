@@ -19,7 +19,7 @@ in Docker-backed workspaces; Jules is the one hosted provider.
 
 ## Commands
 
-Package manager is **pnpm** (`pnpm@10.33.0`), Node **22+**. Use `pnpm`, not `npm`.
+Package manager is **pnpm** (`pnpm@11.13.0`), Node **22.13+**. Use `pnpm`, not `npm`.
 
 ```bash
 pnpm run dev            # Server from source + dashboard `vite build --watch` side by side (scripts/dev.mjs)

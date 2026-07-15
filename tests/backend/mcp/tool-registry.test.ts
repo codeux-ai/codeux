@@ -222,6 +222,12 @@ describe("ToolRegistry", () => {
       action: "list_provider_definitions",
       providerKind: "slack",
     });
+
+    await expect(registry.dispatch("manage_chat_providers", {
+      action: "list_deliveries",
+      direction: "outbound",
+      deliveryStatus: "retryable_failure",
+    })).resolves.toBe("manage_chat_providers:list_deliveries");
   });
 
   it("can register and dispatch manage_node_flows", async () => {

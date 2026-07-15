@@ -32,6 +32,8 @@ All panels update via the WebSocket connection to `/api/realtime`. Update latenc
 
 If the WebSocket disconnects (network blip, page sleep), the client automatically reconnects with exponential backoff and replays missed events using the sequence number.
 
+Runtime update times accept the current ISO/Unix formats and the legacy 12-hour time-only format. An invalid optional timestamp is omitted instead of interrupting the Live page. Animated dashboard backgrounds remain enabled on Live, with their paint loop bounded so software-rendered or no-vsync browsers stay responsive while the task pipeline and DAG render.
+
 ## Self-reflection ratings
 
 Live task cards can show a compact 5-star self-reflection badge when the task snapshot includes `selfReflectionRating`. The badge uses the task's overall rating for the visible score, and hover or keyboard focus opens a viewport-positioned panel with the individual section ratings and any notes the worker recorded. Live tasks without a captured rating do not show a placeholder badge.
@@ -47,7 +49,7 @@ Live task cards use one bright delivery workflow badge in place of the former ta
 | Blue pencil, **QA edits** / **QA changes requested** | QA completed successfully and requested changes. This is an actionable review outcome, not a provider failure. |
 | Red X, **QA failed** | The QA provider run failed, errored, or was cancelled before returning a usable verdict. It does not mean QA requested code changes. |
 
-Hovering, focusing, or activating the badge opens one viewport-positioned interaction region without a visible outer card. Its independent opaque Delivery flow card uses six circles joined by animated dotted connectors. When review data exists, a floating responsive arrow links it to an independent opaque QA review card containing the outcome, summary, findings, fix instructions, target task key, reviewer, reviewed time, and generated follow-up tasks. `Escape` restores focus to the exact workflow or QA trigger that opened the region. Reduced motion stops connector and arrow animation without removing state.
+Hovering, focusing, or activating the badge opens one viewport-positioned interaction region on a lightly translucent, blurred outer surface. Its opaque Delivery flow card uses six vertically centered circles joined by animated dotted connectors. When review data exists, a floating responsive arrow links it to the opaque QA review card containing the outcome, summary, findings, fix instructions, target task key, reviewer, reviewed time, and generated follow-up tasks. `Escape` restores focus to the exact workflow or QA trigger that opened the region. Reduced motion stops connector and arrow animation without removing state.
 
 Generated follow-up task specifications are collapsed initially, so long prompts do not dominate the review. Each **Follow-up task N** button exposes `aria-expanded` and can be toggled with the keyboard or touch. Expansion reveals the generated title, description, priority, dependency task keys (or **None**), and full Markdown prompt in a bounded scrolling area. The card uses one column on constrained screens, may split summary and findings on wider screens, clamps to the viewport, and scrolls vertically when needed. Reduced motion removes spinner, pulse, rotation, and transition movement without removing labels, borders, focus rings, expanded content, or state semantics.
 

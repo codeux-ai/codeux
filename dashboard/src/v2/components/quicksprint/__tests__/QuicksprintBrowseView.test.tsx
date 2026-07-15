@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
 
 import type { QuicksprintTemplateRecord } from "../../../../../../src/contracts/quicksprint-types.js";
+import { DashboardI18nProvider } from "../../../i18n/context.js";
 import { QuicksprintBrowseView } from "../QuicksprintBrowseView.js";
 
 const makeTemplate = (id: string): QuicksprintTemplateRecord => ({
@@ -39,8 +40,9 @@ function setElementScrollSize(element: HTMLElement, clientHeight: number, scroll
 
 function renderBrowseView(selectedTemplateId: string | null = null): HTMLElement {
   const result = render(
-    <div data-testid="scroll-host" style={{ overflowY: "auto" }}>
-      <QuicksprintBrowseView
+    <DashboardI18nProvider initialLocale="en" storage={null}>
+      <div data-testid="scroll-host" style={{ overflowY: "auto" }}>
+        <QuicksprintBrowseView
         templates={templates}
         builtinPurposeOptions={[{
           value: "fullstack-js",
@@ -59,8 +61,9 @@ function renderBrowseView(selectedTemplateId: string | null = null): HTMLElement
         loading={false}
         onClose={vi.fn()}
         selectedTemplateId={selectedTemplateId}
-      />
-    </div>,
+        />
+      </div>
+    </DashboardI18nProvider>,
   );
 
   return result.getByTestId("scroll-host");
@@ -123,7 +126,8 @@ describe("QuicksprintBrowseView", () => {
   it("announces purpose filter changes in the browse phase", () => {
     const announcePhaseStatus = vi.fn();
     render(
-      <QuicksprintBrowseView
+      <DashboardI18nProvider initialLocale="en" storage={null}>
+        <QuicksprintBrowseView
         templates={templates}
         builtinPurposeOptions={[
           {
@@ -149,7 +153,8 @@ describe("QuicksprintBrowseView", () => {
         }}
         loading={false}
         onClose={vi.fn()}
-      />,
+        />
+      </DashboardI18nProvider>,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Default template purpose" }));

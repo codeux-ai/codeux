@@ -697,6 +697,43 @@ describe("dashboard project management API", () => {
     expect(apiSprint2.latestReview.reviewer).toBe('QA Bot');
   });
 
+  it("reports a cancellation-pending sprint as active until shutdown completes", async () => {
+    const { fetch, storage } = await createServerHandle();
+    const baseUrl = "http://127.0.0.1";
+    const project = await fetch(`${baseUrl}/api/projects`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Cancellation API Project",
+        sourceType: "local",
+        sourceRef: "/tmp/cancellation-api",
+      }),
+    }).then(async (response) => response.json()) as { id: string };
+    const sprint = await fetch(`${baseUrl}/api/projects/${project.id}/sprints`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Cancellation API Sprint", status: "running" }),
+    }).then(async (response) => response.json()) as { id: string };
+    const now = new Date().toISOString();
+    storage.getDatabase().prepare(`
+      INSERT INTO sprint_runs (
+        id, project_id, sprint_id, status, trigger_type, executor_mode,
+        started_at, finished_at, last_heartbeat_at, created_at, updated_at
+      ) VALUES (?, ?, ?, 'cancel_requested', 'dashboard', 'docker_cli', ?, NULL, ?, ?, ?)
+    `).run("cancellation-api-run", project.id, sprint.id, now, now, now, now);
+
+    const sprintCollection = await fetch(`${baseUrl}/api/projects/${project.id}/sprints`)
+      .then(async (response) => response.json()) as { sprints: Array<{ id: string; status: string }> };
+    expect(sprintCollection.sprints.find((record) => record.id === sprint.id)?.status).toBe("running");
+
+    const projectCollection = await fetch(`${baseUrl}/api/projects`)
+      .then(async (response) => response.json()) as { projects: Array<{ id: string; status: string; isRunning: boolean }> };
+    expect(projectCollection.projects.find((record) => record.id === project.id)).toMatchObject({
+      status: "running",
+      isRunning: true,
+    });
+  });
+
   it("includes latest run activity in GET /api/projects", async () => {
     const { fetch, storage } = await createServerHandle();
     const baseUrl = "http://127.0.0.1";

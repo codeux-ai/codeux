@@ -12,6 +12,8 @@ import type {
 import { cloneGuardrails, cloneTechstackCatalog, DEFAULT_DASHBOARD_SETTINGS } from "../../../lib/settings.js";
 import { getHintApiKey } from "./provider-instances.js";
 import { cloneDesignGuidanceSettings } from "../../../../../src/domain/settings/design-guidance-catalog.js";
+import { settingsAgentsGuidanceMessages } from "../../i18n/messages/settings-agents-guidance.js";
+import { translateDashboardMessage, type DashboardLocale } from "../../i18n/locales.js";
 
 const cloneMemorySettings = (memory: ProjectSettings["memory"]): ProjectSettings["memory"] => ({
   ...memory,
@@ -367,17 +369,20 @@ export const getSectionSource = (
 
 export type SettingsEditorScope = "project" | "sprint";
 
-export const sourceLabel = (source: SettingsValueSource | "mixed"): string => {
+export const sourceLabel = (
+  source: SettingsValueSource | "mixed",
+  locale: DashboardLocale = "en",
+): string => {
   switch (source) {
     case "project":
-      return "Project override";
+      return translateDashboardMessage(settingsAgentsGuidanceMessages, locale, "projectOverride");
     case "sprint":
-      return "Sprint override";
+      return translateDashboardMessage(settingsAgentsGuidanceMessages, locale, "sprintOverride");
     case "mixed":
-      return "Mixed sources";
+      return translateDashboardMessage(settingsAgentsGuidanceMessages, locale, "mixedSources");
     case "system":
     default:
-      return "Inherited";
+      return translateDashboardMessage(settingsAgentsGuidanceMessages, locale, "inherited");
   }
 };
 
@@ -395,10 +400,11 @@ export const getFieldSource = (
 export const getFieldSourceLabel = (
   source: SettingsValueSource | "mixed",
   scope: SettingsEditorScope,
+  locale: DashboardLocale = "en",
 ): string | null => {
   if (scope === "project") {
-    return source === "project" ? "Project override" : null;
+    return source === "project" ? sourceLabel("project", locale) : null;
   }
 
-  return source === "sprint" ? "Sprint override" : null;
+  return source === "sprint" ? sourceLabel("sprint", locale) : null;
 };

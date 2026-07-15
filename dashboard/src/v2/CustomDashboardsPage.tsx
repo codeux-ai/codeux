@@ -37,6 +37,7 @@ import {
   createDefaultCustomDashboardDraft,
   hasDraftChanged,
   parseJsonDraft,
+  getRevisionValidationLabel,
   selectLatestRevision,
   stableJsonStringify,
 } from "./lib/custom-dashboard-view-models.js";
@@ -64,6 +65,8 @@ import type {
   CustomDashboardValidationSessionRecord,
   UpdateCustomDashboardDraftInput,
 } from "./types.js";
+import { useDashboardI18n } from "./i18n/context.js";
+import { customDashboardMessages } from "./i18n/messages/custom-dashboards.js";
 
 const terminalValidationStatuses = new Set(["passed", "failed", "cancelled"]);
 
@@ -92,6 +95,7 @@ function dashboardToDraft(dashboard: CustomDashboardRecord): CustomDashboardDraf
 }
 
 export const CustomDashboardsPage: FunctionComponent = () => {
+  const { locale, translate } = useDashboardI18n();
   const { selectedProject, loading: projectLoading } = useProjectData();
   const projectId = selectedProject?.id ?? null;
   const initialPageState = useMemo(() => getInitialDashboardPageState(), []);
@@ -207,14 +211,14 @@ export const CustomDashboardsPage: FunctionComponent = () => {
       }
     } catch (error) {
       if (!signal?.aborted) {
-        setError(error instanceof Error ? error.message : "Failed to load custom dashboards.");
+        setError(error instanceof Error ? error.message : translate(customDashboardMessages, "loadDashboardsFailed"));
       }
     } finally {
       if (!signal?.aborted) {
         setLoading(false);
       }
     }
-  }, [initialPageState.dashboardId, setError]);
+  }, [initialPageState.dashboardId, setError, translate]);
 
   const loadDashboardDetail = useCallback(async (dashboardId: string, signal?: AbortSignal): Promise<void> => {
     try {
@@ -232,10 +236,10 @@ export const CustomDashboardsPage: FunctionComponent = () => {
       setSelectedFilePath(detail.dashboard.fileBundle.files[0]?.path ?? "src/dashboard.tsx");
     } catch (error) {
       if (!signal?.aborted) {
-        setError(error instanceof Error ? error.message : "Failed to load custom dashboard details.");
+        setError(error instanceof Error ? error.message : translate(customDashboardMessages, "loadDetailsFailed"));
       }
     }
-  }, [selectedRevisionId, setError]);
+  }, [selectedRevisionId, setError, translate]);
 
   useEffect(() => {
     if (!projectId) {
@@ -388,21 +392,21 @@ export const CustomDashboardsPage: FunctionComponent = () => {
 
   const buildDraftInput = useCallback((): UpdateCustomDashboardDraftInput & CreateCustomDashboardRevisionInput => {
     if (!draft) {
-      throw new Error("No dashboard draft is selected.");
+      throw new Error(translate(customDashboardMessages, "noDraftSelected"));
     }
-    const manifest = parseJsonDraft<CustomDashboardManifest>(draft.manifestText, "Manifest");
+    const manifest = parseJsonDraft<CustomDashboardManifest>(draft.manifestText, translate(customDashboardMessages, "manifestFieldName"), locale);
     if (!manifest.ok) {
       throw new Error(manifest.message);
     }
-    const fileBundle = parseJsonDraft<CustomDashboardFileBundle>(draft.fileBundleText, "File bundle");
+    const fileBundle = parseJsonDraft<CustomDashboardFileBundle>(draft.fileBundleText, translate(customDashboardMessages, "fileBundleFieldName"), locale);
     if (!fileBundle.ok) {
       throw new Error(fileBundle.message);
     }
-    const sourceNodeGraph = parseJsonDraft<CustomDashboardDataSourceNodeGraph>(draft.sourceGraphText, "Source graph");
+    const sourceNodeGraph = parseJsonDraft<CustomDashboardDataSourceNodeGraph>(draft.sourceGraphText, translate(customDashboardMessages, "sourceGraphFieldName"), locale);
     if (!sourceNodeGraph.ok) {
       throw new Error(sourceNodeGraph.message);
     }
-    const styleguide = parseJsonDraft<CustomDashboardJsonObject>(draft.styleguideText, "Styleguide");
+    const styleguide = parseJsonDraft<CustomDashboardJsonObject>(draft.styleguideText, translate(customDashboardMessages, "styleguideFieldName"), locale);
     if (!styleguide.ok) {
       throw new Error(styleguide.message);
     }
@@ -414,11 +418,11 @@ export const CustomDashboardsPage: FunctionComponent = () => {
       sourceNodeGraph: sourceNodeGraph.value,
       styleguide: styleguide.value,
     };
-  }, [draft]);
+  }, [draft, locale, translate]);
 
   const saveDraft = useCallback(async (): Promise<CustomDashboardRecord> => {
     if (!selectedDashboard) {
-      throw new Error("No dashboard is selected.");
+      throw new Error(translate(customDashboardMessages, "noDashboardSelected"));
     }
     const input = buildDraftInput();
     const updated = await updateCustomDashboardDraft(selectedDashboard.id, input);
@@ -426,16 +430,16 @@ export const CustomDashboardsPage: FunctionComponent = () => {
     setDashboards((current) => current.map((dashboard) => dashboard.id === updated.id ? updated : dashboard));
     setDraft(dashboardToDraft(updated));
     return updated;
-  }, [buildDraftInput, selectedDashboard]);
+  }, [buildDraftInput, selectedDashboard, translate]);
 
   const handleSaveDraft = async (): Promise<void> => {
     setSaving(true);
     clearFeedback();
     try {
       await saveDraft();
-      setSuccess("Custom dashboard draft saved.");
+      setSuccess(translate(customDashboardMessages, "draftSaved"));
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to save custom dashboard.");
+      setError(error instanceof Error ? error.message : translate(customDashboardMessages, "saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -451,10 +455,10 @@ export const CustomDashboardsPage: FunctionComponent = () => {
       const created = await createCustomDashboard(projectId, createDefaultCustomDashboardDraft());
       setDashboards((current) => [created, ...current]);
       setSelectedDashboardId(created.id);
-      setSuccess("Custom dashboard created.");
+      setSuccess(translate(customDashboardMessages, "dashboardCreated"));
       await loadProjectDashboards(projectId);
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to create custom dashboard.");
+      setError(error instanceof Error ? error.message : translate(customDashboardMessages, "createFailed"));
     } finally {
       setCreating(false);
     }
@@ -476,10 +480,10 @@ export const CustomDashboardsPage: FunctionComponent = () => {
       setSelectedRevisionId(revision.id);
       setValidationSession(null);
       setLogs("");
-      setSuccess(`Revision ${revision.revisionNumber} created.`);
+      setSuccess(translate(customDashboardMessages, "revisionCreated", { number: revision.revisionNumber }));
       await refreshSelectedDashboard();
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to create dashboard revision.");
+      setError(error instanceof Error ? error.message : translate(customDashboardMessages, "revisionCreateFailed"));
     } finally {
       setCreatingRevision(false);
     }
@@ -491,11 +495,11 @@ export const CustomDashboardsPage: FunctionComponent = () => {
       const response = await fetchCustomDashboardValidationLogs(sessionId, 300);
       setLogs(response.logs);
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to load validation logs.");
+      setError(error instanceof Error ? error.message : translate(customDashboardMessages, "logsLoadFailed"));
     } finally {
       setRefreshingLogs(false);
     }
-  }, [setError]);
+  }, [setError, translate]);
 
   const handleStartValidation = async (): Promise<void> => {
     if (!projectId || !selectedDashboard || !selectedRevision) {
@@ -508,12 +512,14 @@ export const CustomDashboardsPage: FunctionComponent = () => {
       const session = await startCustomDashboardValidation(selectedDashboard.id, selectedRevision.id, projectId);
       setValidationSession(session);
       await refreshLogs(session.id);
-      setSuccess(`Validation ${session.status}.`);
+      setSuccess(translate(customDashboardMessages, "validationStatus", {
+        status: getRevisionValidationLabel(session.status, locale),
+      }));
       if (terminalValidationStatuses.has(session.status)) {
         await refreshSelectedDashboard();
       }
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to start validation.");
+      setError(error instanceof Error ? error.message : translate(customDashboardMessages, "validationStartFailed"));
     } finally {
       setValidating(false);
     }
@@ -538,7 +544,7 @@ export const CustomDashboardsPage: FunctionComponent = () => {
         })
         .catch((error) => {
           if (!cancelled) {
-            setError(error instanceof Error ? error.message : "Failed to poll validation status.");
+            setError(error instanceof Error ? error.message : translate(customDashboardMessages, "validationPollFailed"));
           }
         });
     }, 2500);
@@ -546,7 +552,7 @@ export const CustomDashboardsPage: FunctionComponent = () => {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [refreshLogs, refreshSelectedDashboard, setError, validationSession]);
+  }, [refreshLogs, refreshSelectedDashboard, setError, translate, validationSession]);
 
   const handleRefreshLogs = async (): Promise<void> => {
     if (validationSession) {
@@ -565,10 +571,10 @@ export const CustomDashboardsPage: FunctionComponent = () => {
       const published = await publishCustomDashboardRevision(selectedDashboard.id, selectedRevision.id, validationSessionId);
       setSelectedDashboard(published);
       setDashboards((current) => current.map((dashboard) => dashboard.id === published.id ? published : dashboard));
-      setSuccess("Custom dashboard revision published.");
+      setSuccess(translate(customDashboardMessages, "revisionPublished"));
       await refreshSelectedDashboard();
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to publish revision.");
+      setError(error instanceof Error ? error.message : translate(customDashboardMessages, "publishFailed"));
     } finally {
       setPublishing(false);
     }
@@ -579,9 +585,10 @@ export const CustomDashboardsPage: FunctionComponent = () => {
       return;
     }
     const confirmed = await archiveConfirm.requestConfirm({
-      title: "Archive custom dashboard?",
-      body: "Archiving clears the active publication while preserving revision and validation history.",
-      confirmLabel: "Archive",
+      title: translate(customDashboardMessages, "archiveTitle"),
+      body: translate(customDashboardMessages, "archiveBody"),
+      confirmLabel: translate(customDashboardMessages, "archive"),
+      cancelLabel: translate(customDashboardMessages, "cancel"),
       destructive: true,
       tone: "danger",
     });
@@ -595,9 +602,9 @@ export const CustomDashboardsPage: FunctionComponent = () => {
       setSelectedDashboard(archived);
       setDashboards((current) => current.map((dashboard) => dashboard.id === archived.id ? archived : dashboard));
       setDraft(dashboardToDraft(archived));
-      setSuccess("Custom dashboard archived.");
+      setSuccess(translate(customDashboardMessages, "dashboardArchived"));
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to archive custom dashboard.");
+      setError(error instanceof Error ? error.message : translate(customDashboardMessages, "archiveFailed"));
     } finally {
       setArchiving(false);
     }
@@ -607,27 +614,27 @@ export const CustomDashboardsPage: FunctionComponent = () => {
   const showEmpty = !loading && projectId && dashboards.length === 0;
 
   return (
-    <PageContainer aria-label="Custom dashboards" padding="section" className="gap-6">
+    <PageContainer aria-label={translate(customDashboardMessages, "workspaceAriaLabel")} padding="section" className="gap-6">
       <PageHeader
         icon={LayoutDashboard}
-        eyebrow="Custom Dashboards"
-        title="Dashboard Workspace"
-        subtitle="Manage generated dashboard drafts, validate immutable revisions in detached preview sessions, and publish only validated bundles."
+        eyebrow={translate(customDashboardMessages, "workspaceEyebrow")}
+        title={translate(customDashboardMessages, "workspaceTitle")}
+        subtitle={translate(customDashboardMessages, "workspaceSubtitle")}
         actions={(
           <div className="flex flex-wrap items-center gap-2">
             <Button icon={RefreshCw} onClick={() => projectId && void loadProjectDashboards(projectId)} disabled={!projectId} pending={loading}>
-              Refresh
+              {translate(customDashboardMessages, "refresh")}
             </Button>
             <Button
               icon={ExternalLink}
               onClick={() => setPageMode("viewer")}
               disabled={!selectedDashboard}
-              disabledReason="Select a dashboard with a published validated revision to open it."
+              disabledReason={translate(customDashboardMessages, "openPublishedDisabled")}
             >
-              Open Published
+              {translate(customDashboardMessages, "openPublished")}
             </Button>
             <Button icon={Save} variant="signal" onClick={() => void handleSaveDraft()} disabled={!selectedDashboard || !dirty || selectedDashboard.status === "archived"} pending={saving}>
-              Save Draft
+              {translate(customDashboardMessages, "saveDraft")}
             </Button>
           </div>
         )}
@@ -647,23 +654,23 @@ export const CustomDashboardsPage: FunctionComponent = () => {
       {noProject ? (
         <EmptyState
           icon={<LayoutDashboard className="h-8 w-8" aria-hidden="true" />}
-          title="Select a project to manage custom dashboards."
-          description="Custom dashboards are scoped to the active project and use that project's persisted data catalog."
+          title={translate(customDashboardMessages, "selectProjectTitle")}
+          description={translate(customDashboardMessages, "selectProjectDescription")}
         />
       ) : null}
 
       {showEmpty ? (
         <EmptyState
           icon={<LayoutDashboard className="h-8 w-8" aria-hidden="true" />}
-          title="No custom dashboards yet."
-          description="Create a draft to edit the generated manifest, file bundle, source graph, and validation workflow."
-          primaryAction={<Button icon={LayoutDashboard} variant="signal" pending={creating} onClick={() => void handleCreateDashboard()}>Create Dashboard</Button>}
+          title={translate(customDashboardMessages, "emptyTitle")}
+          description={translate(customDashboardMessages, "emptyDescription")}
+          primaryAction={<Button icon={LayoutDashboard} variant="signal" pending={creating} onClick={() => void handleCreateDashboard()}>{translate(customDashboardMessages, "createDashboard")}</Button>}
         />
       ) : null}
 
       {loading && dashboards.length === 0 && projectId ? (
         <div className="rounded-[1.4rem] border border-black/[0.08] bg-white/70 p-8 text-sm font-semibold text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-400">
-          Loading custom dashboards...
+          {translate(customDashboardMessages, "loadingDashboards")}
         </div>
       ) : null}
 
@@ -752,7 +759,7 @@ export const CustomDashboardsPage: FunctionComponent = () => {
       {!loading && projectId && dashboards.length > 0 && !selectedDashboard ? (
         <div className="flex items-center gap-2 rounded-[1rem] border border-status-red/20 bg-status-red/[0.06] p-4 text-sm font-semibold text-status-red">
           <AlertTriangle aria-hidden="true" className="h-4 w-4 shrink-0" />
-          Custom dashboard details could not be loaded.
+          {translate(customDashboardMessages, "detailsUnavailable")}
         </div>
       ) : null}
 

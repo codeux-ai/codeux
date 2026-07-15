@@ -46,6 +46,18 @@ Unavailable key custody leaves non-secret metadata visible and disables secret-b
 
 Configure provider and importer credentials at system scope and use project overrides only for repository-specific git hosts or importer defaults. Automation credentials follow their own project-aware ownership and allowlist policy rather than Settings inheritance.
 
+### Chat connectors
+
+Chat Connectors are separate from AI model providers. Choose an explicit transport: provider-native `official_api`; operator-selected `managed_bridge`/custom `webhook`; or iMessage's local `native_bridge`. Registry presence is not provider certification or production readiness.
+
+Create connections as draft, save write-only secrets, configure the generated `/api/chat-providers/ingress/:providerConnectionId` URL, run verification, bind an authorized project/channel, then enable one test route. Transport or secret changes invalidate verification.
+
+Health refresh, verification progress/success, delivery inspection, retry, and cancellation appear in a localized polite status region. Failed actions keep their redacted provider error in an assertive alert, providing durable feedback without exposing secret-bearing diagnostics.
+
+Live-test eligibility differs: Meta sends require explicit test-number opt-in; Telegram `getMe`, Slack `auth.test`, and Discord current-user checks require test credentials; Teams uses deterministic Emulator-shaped/mocked contract coverage; Apple provides no public personal-iMessage bot sandbox. A skipped credential-gated check is not a pass.
+
+See [External Chat Providers](/docs/architecture-external-chat-providers), [connector profiles](/docs/architecture-chat-connectors-overview), and [troubleshooting](/docs/user-troubleshooting).
+
 For Google Drive, link an existing host-side sync or mount directory and enable the opt-in Docker mount only for projects that need it. The mount defaults to read-only; see [Google Drive Project Mount](./google-drive-mount.md) for access, inheritance, security, and troubleshooting details. This integration does not configure Google Drive API synchronization or credentials.
 
 A practical review flow is:
@@ -53,6 +65,10 @@ A practical review flow is:
 1. Start from the inherited default and change only the fields that solve a concrete operational problem.
 2. Save the smallest scope that should own the change. Use System for defaults that every project should inherit, and Project for repository-specific behavior.
 3. Reopen the Settings page after saving when the value controls startup behavior, provider routing, preview runtime, or destructive maintenance.
+
+## Localization And Protected Values
+
+The Integrations interface follows the dashboard language for setup guidance, authentication labels, connection states, importer controls, validation, and accessible feedback. Provider and product names remain unchanged. Credential values, secret placeholders, detected paths, endpoints, repository identifiers, scopes, and diagnostics returned by a provider or API are always shown verbatim and are never passed through translation messages.
 
 ## Risks And Gotchas
 

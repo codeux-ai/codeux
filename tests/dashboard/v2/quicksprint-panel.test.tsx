@@ -1,10 +1,11 @@
 /** @vitest-environment happy-dom */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, fireEvent, waitFor, within } from "@testing-library/preact";
+import { render as testingLibraryRender, fireEvent, waitFor, within } from "@testing-library/preact";
 import { h } from "preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { cleanup } from "@testing-library/preact";
 import gsap from "gsap";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
 /** @jsx h */
 
 expect.extend(matchers);
@@ -29,6 +30,10 @@ vi.mock("../../../dashboard/src/hooks/ExecutionTimelineContext.js", () => ({
 }));
 
 import { QuicksprintPanel } from "../../../dashboard/src/v2/components/quicksprint/QuicksprintPanel.js";
+
+const render = (ui: Parameters<typeof testingLibraryRender>[0]) => testingLibraryRender(
+  <DashboardI18nProvider initialLocale="en" storage={null}>{ui}</DashboardI18nProvider>,
+);
 
 describe("QuicksprintPanel", () => {
   beforeEach(() => {

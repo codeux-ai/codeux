@@ -14,9 +14,10 @@ const WORKFLOWS = {
 
 const PLAYWRIGHT_CONFIG = "playwright.config.ts";
 const RELEASE_INSTALL_VERIFIER = "scripts/verify-release-install.mjs";
+const ELECTRON_RUNTIME_PREPARER = "scripts/prepare-electron-runtime-deps.mjs";
 const REQUIRED_INSTALL = "pnpm install --frozen-lockfile --ignore-scripts";
-const PACKAGE_MANAGER_VERSION = "10.33.0";
-const NODE_VERSION = "22";
+const PACKAGE_MANAGER_VERSION = "11.13.0";
+const MINIMUM_NODE_VERSION = "22.13";
 
 type PackageJson = {
   packageManager?: string;
@@ -76,11 +77,11 @@ function expectManualOnly(workflow: string, label: string): void {
 }
 
 describe("GitHub workflow health", () => {
-  it("keeps package toolchain policy pinned to pnpm 10.33.0 and Node 22", async () => {
+  it("keeps package toolchain policy pinned to pnpm 11.13.0 and Node 22.13 or newer", async () => {
     const packageJson = JSON.parse(await readRepoFile("package.json")) as PackageJson;
 
     expect(packageJson.packageManager).toBe(`pnpm@${PACKAGE_MANAGER_VERSION}`);
-    expect(packageJson.engines?.node).toBe(`>=${NODE_VERSION}`);
+    expect(packageJson.engines?.node).toBe(`>=${MINIMUM_NODE_VERSION}`);
     expect(packageJson.scripts?.audit).toBe("pnpm audit --audit-level=high");
   });
 
@@ -253,6 +254,24 @@ describe("GitHub workflow health", () => {
     expect(releaseCandidate).toContain("if-no-files-found: error");
     expect(releaseCandidate).not.toContain("pnpm run audit");
     expect(releaseCandidate).not.toContain("pnpm run build");
+  });
+
+  it("keeps native CPU package verification independent of optional ONNX CUDA downloads", async () => {
+    const [releaseVerifier, electronRuntimePreparer] = await Promise.all([
+      readRepoFile(RELEASE_INSTALL_VERIFIER),
+      readRepoFile(ELECTRON_RUNTIME_PREPARER),
+    ]);
+
+    expect(releaseVerifier).toContain('const onnxRuntimeInstallMode = "skip";');
+    expect(releaseVerifier).toMatch(
+      /Install packed package[\s\S]+ONNXRUNTIME_NODE_INSTALL: onnxRuntimeInstallMode/,
+    );
+    expect(releaseVerifier).toContain('"Load installed ONNX CPU runtime"');
+    expect(releaseVerifier).toContain('"await import(\'onnxruntime-node\')"');
+
+    expect(electronRuntimePreparer).toContain('const onnxRuntimeInstallMode = "skip";');
+    expect(electronRuntimePreparer).toContain("onnxRuntimeInstallMode,");
+    expect(electronRuntimePreparer).toContain("ONNXRUNTIME_NODE_INSTALL: onnxRuntimeInstallMode");
   });
 
   it("keeps legacy main ruleset contexts coupled to their current validation gates", async () => {

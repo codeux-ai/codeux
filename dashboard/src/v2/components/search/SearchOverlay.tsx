@@ -8,6 +8,8 @@ import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import type { AgentAvatarConfig } from "../../types.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { shellMessages } from "../../i18n/messages/shell.js";
 
 
 export interface SprintSearchItem {
@@ -120,6 +122,7 @@ interface SearchOverlayProps {
 }
 
 export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef, committedSearchQuery, isOpen, onClose, searchQuery, onSearchChange, results, isLoading, hasProjectData = true }) => {
+    const { translate, translatePlural } = useOptionalDashboardI18n();
     const overlayRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const resultsRegionRef = useRef<HTMLDivElement>(null);
@@ -154,10 +157,10 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
     };
 
     const CATEGORIES: Array<{ id: SearchCategoryId; title: string; icon: any; items: ReadonlyArray<SearchItem> }> = [
-        { id: 'sprints', title: 'Sprints', icon: Layers, items: results?.sprints || [] },
-        { id: 'tasks', title: 'Tasks', icon: Activity, items: results?.tasks || [] },
-        { id: 'agents', title: 'Agents', icon: Cpu, items: results?.agents || [] },
-        { id: 'containers', title: 'Preview Containers', icon: Box, items: results?.containers || [] }
+        { id: 'sprints', title: translate(shellMessages, "searchCategorySprints"), icon: Layers, items: results?.sprints || [] },
+        { id: 'tasks', title: translate(shellMessages, "searchCategoryTasks"), icon: Activity, items: results?.tasks || [] },
+        { id: 'agents', title: translate(shellMessages, "searchCategoryAgents"), icon: Cpu, items: results?.agents || [] },
+        { id: 'containers', title: translate(shellMessages, "searchCategoryPreviews"), icon: Box, items: results?.containers || [] }
     ];
 
     const allItems: CategorizedSearchItem[] = useMemo(
@@ -180,11 +183,11 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
         ? ''
         : isLoading
             ? hasResults
-                    ? `Updating results for '${searchQuery}'. ${allItems.length} current ${allItems.length === 1 ? "result remains" : "results remain"} available.`
-                : 'Searching workspace'
+                    ? translatePlural(shellMessages, "searchUpdatingResults", allItems.length, { query: searchQuery })
+                : translate(shellMessages, "searchingWorkspace")
             : allItems.length === 0
-                ? (!hasProjectData ? `Project data unavailable for '${searchQuery}'` : `No results found for '${visibleResultQuery}'`)
-                : `${allItems.length} results available`;
+                ? (!hasProjectData ? translate(shellMessages, "noProjectSearchResults", { query: searchQuery }) : translate(shellMessages, "noSearchResults", { query: visibleResultQuery }))
+                : translatePlural(shellMessages, "searchResultsAvailable", allItems.length);
 
     const [modalStyle, setModalStyle] = useState({});
     const [isMobileFallback, setIsMobileFallback] = useState(false);
@@ -374,7 +377,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
             <div
                 id={searchOverlayDialogId}
                 role="dialog"
-                aria-label="Search"
+                aria-label={translate(shellMessages, "search")}
                 aria-modal="true"
                 ref={containerRef}
                 className={anchorRef && !isMobileFallback ? "flex flex-col overflow-hidden rounded-[1.5rem] border border-black/[0.08] bg-white/92 shadow-[0_24px_80px_rgba(15,23,42,0.22)] backdrop-blur-2xl dark:border-white/[0.1] dark:bg-void-800/94 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)] max-w-[calc(100vw-1.5rem)] max-h-[calc(100dvh-1.5rem)]" : "relative mx-auto flex w-full max-w-4xl flex-col overflow-hidden rounded-[1.5rem] border border-black/[0.08] bg-white/92 shadow-[0_24px_80px_rgba(15,23,42,0.22)] backdrop-blur-2xl dark:border-white/[0.1] dark:bg-void-800/94 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)] max-w-[calc(100vw-1.5rem)] max-h-[calc(100dvh-1.5rem)]"}
@@ -387,7 +390,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                     </div>
                     <div className="min-w-0 flex-1">
                         <label htmlFor="global-search-input" className="mb-0.5 block text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500">
-                            Global search
+                            {translate(shellMessages, "globalSearch")}
                         </label>
                         <input
                             id="global-search-input"
@@ -399,17 +402,17 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                             aria-controls={searchResultsListId}
                             aria-activedescendant={activeDescendantId}
                             aria-busy={isLoading ? "true" : undefined}
-                            aria-label="Global search"
-                            placeholder="Find sprints, tasks, agents, previews..."
+                            aria-label={translate(shellMessages, "globalSearch")}
+                            placeholder={translate(shellMessages, "searchPlaceholder")}
                             value={searchQuery}
                             onInput={(e) => onSearchChange(e.currentTarget.value)}
                             className="w-full min-w-0 border-none bg-transparent text-base font-semibold text-slate-900 outline-none placeholder:font-medium placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-500 sm:text-lg"
                         />
                     </div>
-                    {isLoading && <Loader2 className="mr-1 h-5 w-5 shrink-0 animate-spin text-slate-400 motion-reduce:animate-none" aria-label={hasStaleResults ? "Updating search results" : "Searching"} />}
+                    {isLoading && <Loader2 className="mr-1 h-5 w-5 shrink-0 animate-spin text-slate-400 motion-reduce:animate-none" aria-label={translate(shellMessages, hasStaleResults ? "updatingSearchResults" : "searching")} />}
                     <button
                         onClick={onClose}
-                        aria-label="Close search"
+                        aria-label={translate(shellMessages, "closeSearch")}
                         style={{ transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }}
                         className="ml-0 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:hover:bg-white/[0.06] dark:hover:text-slate-100"
                     >
@@ -434,10 +437,10 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                             <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.035]">
                                 <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500">
                                     <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-                                    Quick navigation
+                                    {translate(shellMessages, "quickNavigation")}
                                 </div>
                                 <p className="max-w-xl text-sm leading-6 text-slate-600 dark:text-slate-300">
-                                    Search by sprint key, task ID, provider name, agent name, preview container, or status.
+                                    {translate(shellMessages, "quickNavigationHelp")}
                                 </p>
                             </div>
                             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -447,7 +450,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                                     className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-black/[0.06] bg-white/58 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-white/86 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-slate-300 dark:hover:bg-white/[0.06]"
                                 >
                                     <Layers className="h-4 w-4 shrink-0" aria-hidden="true" />
-                                    <span className="truncate">Sprints</span>
+                                    <span className="truncate">{translate(shellMessages, "searchCategorySprints")}</span>
                                 </Link>
                                 <Link
                                     to="/tasks"
@@ -455,7 +458,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                                     className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-black/[0.06] bg-white/58 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-white/86 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-slate-300 dark:hover:bg-white/[0.06]"
                                 >
                                     <Activity className="h-4 w-4 shrink-0" aria-hidden="true" />
-                                    <span className="truncate">Tasks</span>
+                                    <span className="truncate">{translate(shellMessages, "searchCategoryTasks")}</span>
                                 </Link>
                                 <Link
                                     to="/agents"
@@ -463,28 +466,28 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                                     className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-black/[0.06] bg-white/58 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-white/86 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-slate-300 dark:hover:bg-white/[0.06]"
                                 >
                                     <Cpu className="h-4 w-4 shrink-0" aria-hidden="true" />
-                                    <span className="truncate">Agents</span>
+                                    <span className="truncate">{translate(shellMessages, "searchCategoryAgents")}</span>
                                 </Link>
                             </div>
                         </div>
                     ) : isLoading && allItems.length === 0 ? (
                         <div className="flex min-h-52 flex-col items-center justify-center rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] px-6 py-12 text-center text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-slate-400" aria-live="polite" role="status">
                             <Loader2 className="mb-4 h-8 w-8 animate-spin text-slate-400 motion-reduce:animate-none" aria-hidden="true" />
-                            <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Searching workspace</span>
-                            <span className="mt-1 max-w-sm text-xs leading-5 text-slate-500 dark:text-slate-400">Checking sprints, tasks, agents, and preview containers.</span>
+                            <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{translate(shellMessages, "searchingWorkspace")}</span>
+                            <span className="mt-1 max-w-sm text-xs leading-5 text-slate-500 dark:text-slate-400">{translate(shellMessages, "searchingWorkspaceHelp")}</span>
                         </div>
                     ) : allItems.length === 0 && !isLoading ? (
                         !hasProjectData ? (
                             <div className="flex min-h-52 flex-col items-center justify-center rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] px-6 py-12 text-center text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-slate-400" aria-live="polite" role="status">
                                 <FileX className="mb-4 h-8 w-8 text-status-red opacity-70" aria-hidden="true" />
-                                <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Project data unavailable</span>
-                                <span className="mt-1 max-w-sm text-xs leading-5 text-slate-500 dark:text-slate-400">Unable to load project search results.</span>
+                                <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{translate(shellMessages, "projectDataUnavailable")}</span>
+                                <span className="mt-1 max-w-sm text-xs leading-5 text-slate-500 dark:text-slate-400">{translate(shellMessages, "projectSearchUnavailable")}</span>
                             </div>
                         ) : (
                             <div className="flex min-h-52 flex-col items-center justify-center rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] px-6 py-12 text-center text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-slate-400" aria-live="polite" role="status">
                                 <Inbox className="mb-4 h-8 w-8 opacity-55" aria-hidden="true" />
-                                <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">No results found for '{visibleResultQuery}'</span>
-                                <span className="mt-1 max-w-sm text-xs leading-5 text-slate-500 dark:text-slate-400">Try a sprint key, task ID, provider, agent, or status.</span>
+                                <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{translate(shellMessages, "noSearchResults", { query: visibleResultQuery })}</span>
+                                <span className="mt-1 max-w-sm text-xs leading-5 text-slate-500 dark:text-slate-400">{translate(shellMessages, "searchSuggestion")}</span>
                             </div>
                         )
                     ) : (
@@ -493,7 +496,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                             role="listbox"
                             aria-busy={isLoading ? "true" : undefined}
                             aria-describedby={hasStaleResults ? "search-results-refreshing-note" : undefined}
-                            aria-label="Search results"
+                            aria-label={translate(shellMessages, "searchResults")}
                             style={{
                                 transitionDuration: hasStaleResults ? interactionTokens.controlFeedback.duration : interactionTokens.listReveal.duration,
                                 transitionTimingFunction: hasStaleResults ? interactionTokens.controlFeedback.ease : interactionTokens.listReveal.ease
@@ -506,7 +509,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                                     className="pointer-events-none absolute right-1 top-1 z-10 inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-white/88 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-700 shadow-sm backdrop-blur-xl dark:bg-void-800/88 dark:text-signal-400"
                                 >
                                     <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                    Updating visible results
+                                    {translate(shellMessages, "updatingVisibleResults")}
                                 </div>
                             )}
                             {CATEGORIES.map((category) => {
@@ -560,17 +563,17 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                     <div className="flex flex-wrap items-center gap-3">
                         <span className="flex items-center gap-1.5">
                             <ArrowDownUp className="h-3.5 w-3.5" aria-hidden="true" />
-                            <span>Navigate</span>
+                            <span>{translate(shellMessages, "searchNavigate")}</span>
                         </span>
                         <span className="flex items-center gap-1.5">
                             <kbd className="rounded-md border border-black/[0.08] bg-white px-1.5 py-0.5 font-mono text-[10px] shadow-sm dark:border-white/[0.1] dark:bg-void-800">Enter</kbd>
-                            <span>Select</span>
+                            <span>{translate(shellMessages, "searchSelect")}</span>
                         </span>
                     </div>
                     <span className="flex items-center gap-1.5">
                         <CornerDownLeft className="h-3.5 w-3.5" aria-hidden="true" />
                         <kbd className="rounded-md border border-black/[0.08] bg-white px-1.5 py-0.5 font-mono text-[10px] shadow-sm dark:border-white/[0.1] dark:bg-void-800">Esc</kbd>
-                        <span>Close</span>
+                        <span>{translate(shellMessages, "searchClose")}</span>
                     </span>
                 </div>
             </div>

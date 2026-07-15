@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { CiStatusPresentation } from "../../../../../dashboard/src/v2/lib/ci-status-presentation.js";
 import { WorkflowStatusBadge } from "../../../../../dashboard/src/v2/components/ui/WorkflowStatusBadge.js";
 import type { ExecutionAttentionItemSummary } from "../../../../../dashboard/src/types.js";
+import { renderWithI18n } from "../../../render-with-i18n.js";
 
 afterEach(cleanup);
 
@@ -28,6 +29,15 @@ const review = {
   findings: ["The recovery branch needs a regression test."],
   reviewer: "QA Reviewer",
   finishedAt: "2026-07-14T08:00:00.000Z",
+} as const;
+
+const activeSprintReview = {
+  status: "in_progress",
+  outcome: null,
+  summary: "Provider-authored QA summary stays verbatim.",
+  findings: [],
+  reviewer: "QA Reviewer",
+  finishedAt: null,
 } as const;
 
 const humanIntervention: ExecutionAttentionItemSummary = {
@@ -71,11 +81,17 @@ describe("WorkflowStatusBadge", () => {
     const workflow = screen.getByRole("region", { name: "CI workflow details" });
     expect(workflow.querySelectorAll("[data-workflow-stage]")).toHaveLength(6);
     expect(workflow.querySelectorAll(".workflow-status__connector")).toHaveLength(5);
+    const codingStage = workflow.querySelector('[data-workflow-stage="coding"]') as HTMLElement;
+    const codingMarker = codingStage.querySelector("[data-workflow-stage-marker]") as HTMLElement;
+    expect(codingMarker.parentElement).toHaveClass("items-center", "self-stretch");
+    expect(codingStage.lastElementChild).toHaveClass("min-h-12", "items-center");
     expect(within(workflow).getByText("Coding")).toBeVisible();
     expect(within(workflow).getByText("Completion")).toBeVisible();
     expect(screen.getByRole("region", { name: "QA Changes Requested" })).toHaveTextContent(review.summary);
     expect(container.querySelector('[data-qa-state="changes_requested"]')).toBeInTheDocument();
-    expect(workflow).not.toHaveClass("rounded-[1.65rem]", "border", "bg-[#F9F8F4]", "shadow-[0_24px_70px_rgba(15,23,42,0.2)]");
+    expect(workflow).toHaveAttribute("data-glass");
+    expect(workflow).toHaveAttribute("data-workflow-overlay-surface", "translucent");
+    expect(workflow).toHaveClass("rounded-[1.65rem]", "border", "bg-white/[0.82]", "backdrop-blur-xl");
     expect(within(workflow).getByRole("region", { name: "Workflow status card" })).toHaveClass("rounded-[1.4rem]", "border", "bg-white");
     expect(workflow.querySelector(".workflow-status__chevron")).toBeInTheDocument();
   });
@@ -98,6 +114,24 @@ describe("WorkflowStatusBadge", () => {
     expect(trigger).toHaveTextContent("Coding in progress");
     expect(trigger.closest("[data-workflow-state]")).toHaveAttribute("data-ci-state", "in_progress");
     expect(trigger).not.toHaveAccessibleName(/CI failed/i);
+  });
+
+  it.each([
+    ["en", "QA running", "Review in progress"],
+    ["de", "QA läuft", "Prüfung läuft"],
+  ] as const)("shows active sprint-level QA in %s", (locale, badgeLabel, reviewLabel) => {
+    renderWithI18n(
+      <WorkflowStatusBadge scope="sprint" status="running" completion={100} review={activeSprintReview} compact />,
+      {},
+      locale,
+    );
+
+    const trigger = screen.getByRole("button", { name: new RegExp(badgeLabel) });
+    expect(trigger).toHaveTextContent(badgeLabel);
+    expect(trigger.closest("[data-workflow-state]")).toHaveAttribute("data-qa-state", "running");
+    fireEvent.click(trigger);
+    expect(screen.getByRole("region", { name: /workflow details|Workflow-Details/i })).toHaveTextContent(reviewLabel);
+    expect(screen.getByText("Provider-authored QA summary stays verbatim.")).toBeInTheDocument();
   });
 
   it("renders active human-only intervention as a red Human needed workflow", () => {

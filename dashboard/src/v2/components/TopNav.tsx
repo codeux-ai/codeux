@@ -39,6 +39,9 @@ import { useToast } from "./feedback/ToastProvider.js";
 import { useThemeSetting } from "../hooks/useThemeSetting.js";
 import { useIsDark } from "../hooks/use-is-dark.js";
 import type { AgentSchedulerSummaryEntry } from "../lib/scheduler-api.js";
+import { useOptionalDashboardI18n } from "../i18n/context.js";
+import { shellMessages } from "../i18n/messages/shell.js";
+import { ALL_NAVIGATION_ITEMS, getNavigationItemLabel, isRouteNavigationItem } from "../lib/navigation-items.js";
 
 const AddProjectModal = lazy(() => import("./ui/AddProjectModal.js").then((module) => ({ default: module.AddProjectModal })));
 const AddSprintModal = lazy(() => import("./ui/AddSprintModal.js").then((module) => ({ default: module.AddSprintModal })));
@@ -206,6 +209,7 @@ interface TopNavProps {
 }
 
 const ScheduledAgentIndicator: FunctionComponent<{ entries: AgentSchedulerSummaryEntry[] }> = ({ entries }) => {
+    const { formatNumber, translate, translatePlural } = useOptionalDashboardI18n();
     const [detailsVisible, setDetailsVisible] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const detailsId = "scheduled-agent-details";
@@ -214,7 +218,7 @@ const ScheduledAgentIndicator: FunctionComponent<{ entries: AgentSchedulerSummar
         return null;
     }
 
-    const countLabel = `${entries.length} active scheduled agent ${entries.length === 1 ? "entry" : "entries"}`;
+    const countLabel = translatePlural(shellMessages, "scheduledAgentCount", entries.length, { count: formatNumber(entries.length) });
 
     return (
         <div
@@ -238,7 +242,7 @@ const ScheduledAgentIndicator: FunctionComponent<{ entries: AgentSchedulerSummar
         >
             <button
                 type="button"
-                aria-label={`Scheduled agent work: ${countLabel}`}
+                aria-label={translate(shellMessages, "scheduledAgentWorkLabel", { countLabel })}
                 aria-describedby={detailsVisible ? detailsId : undefined}
                 className="relative flex h-9 min-w-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-signal-500/20 bg-signal-500/10 px-2.5 text-signal-700 transition-colors hover:bg-signal-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:text-signal-300 dark:hover:bg-signal-500/20"
             >
@@ -254,7 +258,7 @@ const ScheduledAgentIndicator: FunctionComponent<{ entries: AgentSchedulerSummar
                     className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-black/[0.08] bg-white/95 p-3 text-left shadow-2xl backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/95"
                 >
                     <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                        Scheduled agent work
+                        {translate(shellMessages, "scheduledAgentWork")}
                     </div>
                     <div className="mt-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
                         {countLabel}
@@ -288,6 +292,7 @@ const ScheduledAgentIndicator: FunctionComponent<{ entries: AgentSchedulerSummar
 };
 
 export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile, hideLogo, isMobileMenuOpen }) => {
+    const { locale, translate, translatePlural } = useOptionalDashboardI18n();
     const navRef = useRef<HTMLElement>(null);
     const navigate = useNavigate();
     const { addToast } = useToast();
@@ -463,7 +468,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                 type: notification.type === "system-error" ? "error" : "warning",
                 message: notificationToastMessage(notification),
                 action: notification.actionHref ? {
-                    label: notification.actionLabel ?? "Open",
+                    label: notification.actionLabel ?? translate(shellMessages, "open"),
                     onClick: () => {
                         notifications.markRead(notification.id);
                         void navigateToNotificationHref(notification.actionHref!);
@@ -531,64 +536,70 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     const techstackSelectorDisabled = !selectedProject || guidanceSelectorLoading || guidanceSwitchBusy === "techStack";
     const styleguideSelectorDisabled = !selectedProject || guidanceSelectorLoading || guidanceSwitchBusy === "styleguide";
     const guidanceHelper = !selectedProject
-        ? "Select a project first"
+        ? translate(shellMessages, "selectProjectFirst")
         : guidanceSelectorLoading
-            ? "Loading settings"
+            ? translate(shellMessages, "loadingSettings")
             : "";
     const techstackHelper = guidanceHelper || (techstackSelectedId === DESIGN_GUIDANCE_NONE_ID
-                ? "None"
-                : "Assigned");
+                ? translate(shellMessages, "none")
+                : translate(shellMessages, "assigned"));
     const styleguideHelper = guidanceHelper || (styleguideSelectedId === DESIGN_GUIDANCE_NONE_ID
-                ? "None"
-                : "Assigned");
+                ? translate(shellMessages, "none")
+                : translate(shellMessages, "assigned"));
     const techstackTriggerLabel = !selectedProject
         ? techstackHelper
         : guidanceSwitchBusy === "techStack"
-            ? "Saving..."
+            ? translate(shellMessages, "savingEllipsis")
             : guidanceSelectorLoading
-                ? "Loading..."
+                ? translate(shellMessages, "loadingEllipsis")
                 : techstackActiveLabel;
     const styleguideTriggerLabel = !selectedProject
         ? styleguideHelper
         : guidanceSwitchBusy === "styleguide"
-            ? "Saving..."
+            ? translate(shellMessages, "savingEllipsis")
             : guidanceSelectorLoading
-                ? "Loading..."
+                ? translate(shellMessages, "loadingEllipsis")
                 : styleguideActiveLabel;
 
     useEffect(() => {
         if (previousPathRef.current !== currentPath) {
             previousPathRef.current = currentPath;
-            setNavAnnouncement(`Route changed to ${currentPath === "/" ? "Overview" : currentPath.slice(1).replace(/-/g, " ")}`);
+            const activeNavigationItem = ALL_NAVIGATION_ITEMS.find((item) => (
+                isRouteNavigationItem(item) && (item.path === currentPath || (item.path !== "/" && currentPath.startsWith(`${item.path}/`)))
+            ));
+            const routeLabel = activeNavigationItem
+                ? getNavigationItemLabel(activeNavigationItem, "sidebar", locale)
+                : currentPath.slice(1).replace(/-/g, " ");
+            setNavAnnouncement(translate(shellMessages, "routeChangedTo", { route: routeLabel }));
         }
     }, [currentPath]);
 
     useEffect(() => {
         if (loading) {
-            setNavAnnouncement("Loading projects");
+            setNavAnnouncement(translate(shellMessages, "loadingProjects"));
         } else if (projects.length === 0) {
-            setNavAnnouncement("No projects connected yet");
+            setNavAnnouncement(translate(shellMessages, "noProjectsConnected"));
         }
     }, [loading, projects.length]);
 
     useEffect(() => {
         if (!selectedProject) return;
         if (sprintsLoading) {
-            setNavAnnouncement(`Loading sprints for ${selectedProject.name}`);
+            setNavAnnouncement(translate(shellMessages, "loadingSprintsFor", { project: selectedProject.name }));
         } else if (sprints.length === 0) {
-            setNavAnnouncement(`No sprints available for ${selectedProject.name}`);
+            setNavAnnouncement(translate(shellMessages, "noSprintsFor", { project: selectedProject.name }));
         }
     }, [selectedProject, sprints.length, sprintsLoading]);
 
     useEffect(() => {
         if (dropdownOpen && !loading && filteredProjects.length === 0) {
-            setNavAnnouncement(projectFilter ? `No projects match ${projectFilter}` : "No projects connected yet");
+            setNavAnnouncement(projectFilter ? translate(shellMessages, "noProjectsMatch", { query: projectFilter }) : translate(shellMessages, "noProjectsConnected"));
         }
     }, [dropdownOpen, filteredProjects.length, loading, projectFilter]);
 
     useEffect(() => {
         if (sprintDropdownOpen && !sprintsLoading && filteredSprints.length === 0) {
-            setNavAnnouncement(sprintFilter ? `No sprints match ${sprintFilter}` : "No sprints available");
+            setNavAnnouncement(sprintFilter ? translate(shellMessages, "noSprintsMatch", { query: sprintFilter }) : translate(shellMessages, "noSprintsAvailable"));
         }
     }, [filteredSprints.length, sprintDropdownOpen, sprintFilter, sprintsLoading]);
 
@@ -637,7 +648,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
         const selectorLabel = kind === "techStack" ? "tech stack guidance" : "styleguide";
         setGuidanceSwitchBusy(kind);
-        setNavAnnouncement(`Saving ${selectorLabel} ${label}...`);
+        setNavAnnouncement(translate(shellMessages, "savingGuidance", { selector: selectorLabel, label }));
         try {
             const nextGuidance: DesignGuidanceSettings = kind === "techStack"
                 ? { ...designGuidance, selectedTechStackId: nextId }
@@ -646,13 +657,13 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
             clearProjectEffectiveSettingsCache(projectId);
             await refreshEffectiveSettings();
             setNavAnnouncement(nextId === DESIGN_GUIDANCE_NONE_ID
-                ? `${kind === "techStack" ? "Tech stack guidance" : "Styleguide"} set to None.`
-                : `${kind === "techStack" ? "Tech stack guidance" : "Styleguide"} switched to ${label}`);
+                ? translate(shellMessages, "guidanceSetNone", { selector: kind === "techStack" ? translate(shellMessages, "techStackGuidance") : translate(shellMessages, "styleguide") })
+                : translate(shellMessages, "guidanceSwitched", { selector: kind === "techStack" ? translate(shellMessages, "techStackGuidance") : translate(shellMessages, "styleguide"), label }));
             setTechstackDropdownOpen(false);
             setStyleguideDropdownOpen(false);
         } catch (error) {
-            const message = error instanceof Error ? error.message : "Unknown error";
-            setNavAnnouncement(`Could not save ${selectorLabel}. ${message}`);
+            const message = error instanceof Error ? error.message : translate(shellMessages, "unknownError");
+            setNavAnnouncement(translate(shellMessages, "guidanceSaveFailed", { selector: selectorLabel, error: message }));
         } finally {
             setGuidanceSwitchBusy(null);
         }
@@ -660,7 +671,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
     const handleCreateSprint = async (sprint: AddSprintModalSubmission) => {
         if (!projectId) return;
-        setNavAnnouncement(`Creating sprint ${sprint.name}...`);
+        setNavAnnouncement(translate(shellMessages, "creatingSprint", { name: sprint.name }));
         const created = await createSprint({
             name: sprint.name,
             goal: sprint.goal,
@@ -676,7 +687,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
         await refetchSprints();
         await replaceWorkspaceScope(projectId, created.id);
         await selectSprint(created.id);
-        setNavAnnouncement(`Sprint ${created.name} created and selected.`);
+        setNavAnnouncement(translate(shellMessages, "sprintCreatedSelected", { name: created.name }));
     };
 
     const openAddProjectModal = () => {
@@ -722,7 +733,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
             data-glass
             className="sticky top-0 z-50 flex items-center justify-between flex-wrap md:flex-nowrap gap-x-4 gap-y-2 w-full min-h-[60px] py-2 md:py-0 px-4 sm:px-6 md:px-12 bg-[#F9F8F4]/90 dark:bg-void-900/90 backdrop-blur-xl border-b border-black/[0.06] dark:border-white/[0.06]"
         >
-            <nav aria-label="Primary navigation" className="contents">
+            <nav aria-label={translate(shellMessages, "primaryNavigation")} className="contents">
             <div className="flex flex-1 min-w-0 flex-wrap items-center gap-2 sm:gap-3 md:gap-4">
                 <BrandSection isMobile={isMobile} onMenuToggle={onMenuToggle} hideLogo={hideLogo} isMobileMenuOpen={isMobileMenuOpen} />
 
@@ -753,7 +764,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                         aria-haspopup="listbox"
                         aria-expanded={techstackDropdownOpen}
                         id="techstack-selector-button"
-                        aria-label={`Tech stack guidance selector, active tech stack: ${!selectedProject ? "No project selected" : guidanceSelectorLoading ? "Loading settings" : techstackActiveLabel}`}
+                        aria-label={translate(shellMessages, "techStackSelector", { label: !selectedProject ? translate(shellMessages, "noProjectSelected") : guidanceSelectorLoading ? translate(shellMessages, "loadingSettings") : techstackActiveLabel })}
                         aria-controls={techstackDropdownOpen ? "techstack-listbox" : undefined}
                         aria-activedescendant={techstackDropdownOpen ? techstackActiveDescendantId : undefined}
                         aria-busy={guidanceSwitchBusy === "techStack" || guidanceSelectorLoading ? "true" : "false"}
@@ -775,9 +786,9 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                     </button>
 
                     {techstackDropdownOpen && !techstackSelectorDisabled && (
-                        <div id="techstack-listbox" role="listbox" aria-label="Tech stack guidance list" className="absolute top-full right-0 mt-2 min-w-[14rem] w-72 max-w-[calc(100vw-2rem)] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50">
+                        <div id="techstack-listbox" role="listbox" aria-label={translate(shellMessages, "techStackList")} className="absolute top-full right-0 mt-2 min-w-[14rem] w-72 max-w-[calc(100vw-2rem)] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50">
                             <div className="px-3 pt-3 pb-1.5">
-                                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Tech Stack Guidance</span>
+                                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(shellMessages, "techStackGuidanceTitle")}</span>
                             </div>
                             <div className="max-h-64 sm:max-h-72 md:max-h-80 overflow-y-auto dropdown-scrollbar">
                                 {techstackOptions.map((option) => {
@@ -813,14 +824,14 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                     className="focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-ember-600 dark:text-ember-400 hover:bg-ember-500/[0.06] rounded-xl transition-colors"
                                 >
                                     <Plus aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={2} />
-                                    Add Tech Stack
+                                    {translate(shellMessages, "addTechStack")}
                                 </a>
                                 <a
                                     href="/config?category=guidance#guidance"
                                     onClick={() => setTechstackDropdownOpen(false)}
                                     className="focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center justify-between gap-2 px-3 py-2 min-h-[44px] text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/[0.04] dark:hover:bg-white/[0.04] rounded-xl transition-colors"
                                 >
-                                    <span>Manage Guidance</span>
+                                    <span>{translate(shellMessages, "manageGuidance")}</span>
                                     <ArrowRight aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
                                 </a>
                             </div>
@@ -853,7 +864,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                         aria-haspopup="listbox"
                         aria-expanded={styleguideDropdownOpen}
                         id="styleguide-selector-button"
-                        aria-label={`Styleguide selector, active styleguide: ${!selectedProject ? "No project selected" : guidanceSelectorLoading ? "Loading settings" : styleguideActiveLabel}`}
+                        aria-label={translate(shellMessages, "styleguideSelector", { label: !selectedProject ? translate(shellMessages, "noProjectSelected") : guidanceSelectorLoading ? translate(shellMessages, "loadingSettings") : styleguideActiveLabel })}
                         aria-controls={styleguideDropdownOpen ? "styleguide-listbox" : undefined}
                         aria-activedescendant={styleguideDropdownOpen ? styleguideActiveDescendantId : undefined}
                         aria-busy={guidanceSwitchBusy === "styleguide" || guidanceSelectorLoading ? "true" : "false"}
@@ -875,9 +886,9 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                     </button>
 
                     {styleguideDropdownOpen && !styleguideSelectorDisabled && (
-                        <div id="styleguide-listbox" role="listbox" aria-label="Styleguide list" className="absolute top-full right-0 mt-2 min-w-[14rem] w-72 max-w-[calc(100vw-2rem)] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50">
+                        <div id="styleguide-listbox" role="listbox" aria-label={translate(shellMessages, "styleguideList")} className="absolute top-full right-0 mt-2 min-w-[14rem] w-72 max-w-[calc(100vw-2rem)] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50">
                             <div className="px-3 pt-3 pb-1.5">
-                                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Styleguide</span>
+                                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(shellMessages, "styleguide")}</span>
                             </div>
                             <div className="max-h-64 sm:max-h-72 md:max-h-80 overflow-y-auto dropdown-scrollbar">
                                 {styleguideOptions.map((option) => {
@@ -913,14 +924,14 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                     className="focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-ember-600 dark:text-ember-400 hover:bg-ember-500/[0.06] rounded-xl transition-colors"
                                 >
                                     <Plus aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={2} />
-                                    Add Styleguide
+                                    {translate(shellMessages, "addStyleguide")}
                                 </a>
                                 <a
                                     href="/config?category=guidance#guidance"
                                     onClick={() => setStyleguideDropdownOpen(false)}
                                     className="focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center justify-between gap-2 px-3 py-2 min-h-[44px] text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/[0.04] dark:hover:bg-white/[0.04] rounded-xl transition-colors"
                                 >
-                                    <span>Manage Guidance</span>
+                                    <span>{translate(shellMessages, "manageGuidance")}</span>
                                     <ArrowRight aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
                                 </a>
                             </div>
@@ -940,7 +951,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                         aria-haspopup="listbox"
                         aria-expanded={dropdownOpen}
                         id="project-selector-button"
-                        aria-label={`Project selector, selected project: ${selectedProject?.name || "None"}`}
+                        aria-label={translate(shellMessages, "projectSelector", { label: selectedProject?.name || translate(shellMessages, "none") })}
                         aria-controls={dropdownOpen ? "project-listbox" : undefined}
                         aria-activedescendant={dropdownOpen && filteredProjects.length > 0 ? (projectKb.activeDescendantId || `project-option-${selectedProject?.id || 'none'}`) : undefined}
                         aria-busy={projectSwitchBusy || loading ? "true" : "false"}
@@ -948,36 +959,36 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                     >
                         <StatusDot status={selectedProject?.status || "idle"} />
                         <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono truncate max-w-[80px] sm:max-w-[140px] md:max-w-[200px]">
-                            {projectSwitchBusy ? "Switching..." : (selectedProject?.name || (loading ? "Loading..." : "Select Project"))}
+                            {projectSwitchBusy ? translate(shellMessages, "switchingEllipsis") : (selectedProject?.name || (loading ? translate(shellMessages, "loadingEllipsis") : translate(shellMessages, "selectProject")))}
                         </span>
                         <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${dropdownOpen ? 'rotate-180' : ''}`} />
                     </button>
 
                     {/* Project Dropdown */}
                     {dropdownOpen && (
-                        <div id="project-listbox" role="listbox" aria-label="Project list" className="absolute top-full right-0 mt-2 min-w-[12rem] w-56 max-w-[calc(100vw-2rem)] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50">
+                        <div id="project-listbox" role="listbox" aria-label={translate(shellMessages, "projectList")} className="absolute top-full right-0 mt-2 min-w-[12rem] w-56 max-w-[calc(100vw-2rem)] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50">
                             <div className="px-3 pt-3 pb-1.5">
-                                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Projects</span>
+                                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(shellMessages, "projects")}</span>
                             </div>
                             <div className="px-2 pb-2">
                                 <input
                                     type="text"
                                     id="project-filter-input"
-                                    aria-label="Filter projects"
+                                    aria-label={translate(shellMessages, "filterProjects")}
                                     aria-controls="project-listbox"
-                                    placeholder="Filter projects..."
+                                    placeholder={translate(shellMessages, "filterProjectsPlaceholder")}
                                     value={projectFilter}
                                     onInput={(e) => setProjectFilter(e.currentTarget.value)}
                                     aria-describedby="project-filter-desc"
                                     aria-activedescendant={projectKb.activeDescendantId}
                                     className="w-full px-3 py-1.5 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-signal-500/30"
                                 />
-                                <span id="project-filter-desc" className="sr-only">Use arrow keys to navigate options.</span>
+                                <span id="project-filter-desc" className="sr-only">{translate(shellMessages, "useArrowKeys")}</span>
                             </div>
                             <div className="max-h-64 sm:max-h-72 md:max-h-80 overflow-y-auto dropdown-scrollbar">
                             {filteredProjects.length === 0 && (
                                 <div className="px-3 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
-                                    No projects found.
+                                    {translate(shellMessages, "noProjectsFound")}
                                 </div>
                             )}
                             {filteredProjects.map((source) => (
@@ -988,11 +999,11 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                     aria-selected={selectedProject?.id === source.id}
                                     onClick={async () => {
                                         setProjectSwitchBusy(true);
-                                        setNavAnnouncement(`Switching project to ${source.name}...`);
+                                        setNavAnnouncement(translate(shellMessages, "switchingProject", { name: source.name }));
                                         try {
                                             await replaceWorkspaceScope(source.id, null);
                                             await selectProject(source.id);
-                                            setNavAnnouncement(`Project switched to ${source.name}`);
+                                            setNavAnnouncement(translate(shellMessages, "projectSwitched", { name: source.name }));
                                             setDropdownOpen(false);
                                         } finally {
                                             setProjectSwitchBusy(false);
@@ -1012,7 +1023,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                             </div>
                             {!loading && projects.length === 0 && (
                                 <div className="px-3 py-4 text-xs text-slate-400 font-medium">
-                                    No projects connected yet.
+                                    {translate(shellMessages, "noProjectsConnected")}
                                 </div>
                             )}
                             <div className="p-2 border-t border-black/[0.04] dark:border-white/[0.04] mt-1 flex flex-col gap-1">
@@ -1021,14 +1032,14 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                     className="focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-ember-600 dark:text-ember-400 hover:bg-ember-500/[0.06] rounded-xl transition-colors"
                                 >
                                     <FolderOpen aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={2} />
-                                    Add Project
+                                    {translate(shellMessages, "addProject")}
                                 </button>
                                 <Link
                                     to="/projects"
                                     onClick={() => setDropdownOpen(false)}
                                     className="focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center justify-between gap-2 px-3 py-2 min-h-[44px] text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/[0.04] dark:hover:bg-white/[0.04] rounded-xl transition-colors"
                                 >
-                                    <span>Manage Projects</span>
+                                    <span>{translate(shellMessages, "manageProjects")}</span>
                                     <ArrowRight aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
                                 </Link>
                             </div>
@@ -1045,7 +1056,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                             aria-haspopup="listbox"
                             aria-expanded={sprintDropdownOpen}
                             id="sprint-selector-button"
-                            aria-label={`Sprint selector, selected sprint: ${sprintsLoading ? "Loading..." : selectedSprint ? formatSprintDisplay(selectedSprint, sprintKeyPrefix) : "All Sprints"}`}
+                            aria-label={translate(shellMessages, "sprintSelector", { label: sprintsLoading ? translate(shellMessages, "loadingEllipsis") : selectedSprint ? formatSprintDisplay(selectedSprint, sprintKeyPrefix) : translate(shellMessages, "allSprints") })}
                             aria-controls={sprintDropdownOpen ? "sprint-listbox" : undefined}
                             aria-activedescendant={sprintDropdownOpen && sprints.length > 0 ? (sprintKb.activeDescendantId || (selectedSprintId ? `sprint-option-${selectedSprintId}` : undefined)) : undefined}
                             aria-busy={sprintSwitchBusy || sprintsLoading ? "true" : "false"}
@@ -1057,36 +1068,36 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                 <StatusDot status={selectedSprint.status} />
                             )}
                             <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono truncate max-w-[60px] sm:max-w-[120px] md:max-w-[180px]">
-                                {sprintSwitchBusy ? "Switching..." : (sprintsLoading ? "Loading..." : formatSprintDisplay(selectedSprint, sprintKeyPrefix))}
+                                {sprintSwitchBusy ? translate(shellMessages, "switchingEllipsis") : (sprintsLoading ? translate(shellMessages, "loadingEllipsis") : formatSprintDisplay(selectedSprint, sprintKeyPrefix))}
                             </span>
                             <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${sprintDropdownOpen ? 'rotate-180' : ''}`} />
                         </button>
 
                         {/* Sprint Dropdown */}
                         {sprintDropdownOpen && (
-                            <div id="sprint-listbox" role="listbox" aria-label="Sprint list" className="absolute top-full right-0 mt-2 max-w-[calc(100vw-2rem)] min-w-[10rem] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50" style={{ minWidth: Math.max(sprintDropdownWidth, 224) + 'px' }}>
+                            <div id="sprint-listbox" role="listbox" aria-label={translate(shellMessages, "sprintList")} className="absolute top-full right-0 mt-2 max-w-[calc(100vw-2rem)] min-w-[10rem] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50" style={{ minWidth: Math.max(sprintDropdownWidth, 224) + 'px' }}>
                                 <div className="px-3 pt-3 pb-1.5">
-                                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Sprint Scope</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{translate(shellMessages, "sprintScope")}</span>
                                 </div>
                                 <div className="px-2 pb-2">
                                     <input
                                         type="text"
                                         id="sprint-filter-input"
-                                        aria-label="Filter sprints"
+                                        aria-label={translate(shellMessages, "filterSprints")}
                                         aria-controls="sprint-listbox"
-                                        placeholder="Filter sprints..."
+                                        placeholder={translate(shellMessages, "filterSprintsPlaceholder")}
                                         value={sprintFilter}
                                         onInput={(e) => setSprintFilter(e.currentTarget.value)}
                                         aria-describedby="sprint-filter-desc"
                                         aria-activedescendant={sprintKb.activeDescendantId}
                                         className="w-full px-3 py-1.5 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-signal-500/30"
                                     />
-                                    <span id="sprint-filter-desc" className="sr-only">Use arrow keys to navigate options.</span>
+                                    <span id="sprint-filter-desc" className="sr-only">{translate(shellMessages, "useArrowKeys")}</span>
                                 </div>
                                 <div className="max-h-64 sm:max-h-72 md:max-h-80 overflow-y-auto dropdown-scrollbar">
                                 {filteredSprints.length === 0 && (
                                     <div className="px-3 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
-                                        {sprints.length === 0 ? "No sprints yet." : "No sprints found."}
+                                        {translate(shellMessages, sprints.length === 0 ? "noSprintsYet" : "noSprintsFound")}
                                     </div>
                                 )}
                                 {filteredSprints.map((sprint) => (
@@ -1097,11 +1108,11 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                         aria-selected={selectedSprintId === sprint.id}
                                         onClick={async () => {
                                             setSprintSwitchBusy(true);
-                                            setNavAnnouncement(`Switching sprint to ${sprint.name}...`);
+                                            setNavAnnouncement(translate(shellMessages, "switchingSprint", { name: sprint.name }));
                                             try {
                                                 await replaceWorkspaceScope(selectedProject.id, sprint.id);
                                                 await selectSprint(sprint.id);
-                                                setNavAnnouncement(`Sprint switched to ${sprint.name}`);
+                                                setNavAnnouncement(translate(shellMessages, "sprintSwitched", { name: sprint.name }));
                                                 setSprintDropdownOpen(false);
                                             } finally {
                                                 setSprintSwitchBusy(false);
@@ -1129,14 +1140,14 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                         className="focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-ember-600 dark:text-ember-400 hover:bg-ember-500/[0.06] rounded-xl transition-colors"
                                     >
                                         <Target aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={2} />
-                                        Add Sprint
+                                        {translate(shellMessages, "addSprint")}
                                     </button>
                                     <Link
                                         to="/sprints"
                                         onClick={() => setSprintDropdownOpen(false)}
                                         className="focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center justify-between gap-2 px-3 py-2 min-h-[44px] text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/[0.04] dark:hover:bg-white/[0.04] rounded-xl transition-colors"
                                     >
-                                        <span>Manage Sprints</span>
+                                        <span>{translate(shellMessages, "manageSprints")}</span>
                                         <ArrowRight aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
                                     </Link>
                                 </div>
@@ -1164,7 +1175,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                     onMouseEnter={handleNotificationMouseEnter}
                     onMouseLeave={handleNotificationMouseLeave}
                 >
-                    <Tooltip content="Notifications">
+                    <Tooltip content={translate(shellMessages, "notifications")}>
                         <button
                             ref={notificationTriggerRef}
                             type="button"
@@ -1173,7 +1184,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                             onBlur={handleNotificationBlur}
                             aria-haspopup="menu"
                             aria-expanded={isNotificationMenuVisible}
-                            aria-label={`Notifications: ${notifications.unreadCount} unread`}
+                            aria-label={translatePlural(shellMessages, "unreadNotifications", notifications.unreadCount, { count: notifications.unreadCount })}
                             className="relative w-11 h-11 shrink-0 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
                         >
                             <Bell aria-hidden="true" className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" strokeWidth={1.5} />
@@ -1198,10 +1209,10 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                 </div>
 
                 {/* Theme Toggle */}
-                <Tooltip content={isDark ? "Switch to light mode" : "Switch to dark mode"}>
+                <Tooltip content={translate(shellMessages, isDark ? "switchLightMode" : "switchDarkMode")}>
                     <button
                         onClick={() => setTheme(isDark ? "LIGHT" : "DARK")}
-                        aria-label={`Current theme: ${isDark ? "Dark" : "Light"}. ${isDark ? "Switch to light mode" : "Switch to dark mode"}`}
+                        aria-label={translate(shellMessages, "currentTheme", { theme: translate(shellMessages, isDark ? "darkTheme" : "lightTheme"), action: translate(shellMessages, isDark ? "switchLightMode" : "switchDarkMode") })}
                         className="w-11 h-11 shrink-0 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
                     >
                         {isDark

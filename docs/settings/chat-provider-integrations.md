@@ -1,199 +1,180 @@
 # Chat Provider Integrations
 
-External chat connector integrations let Code UX accept messages from chat channels, route them into project chat threads, and deliver assistant replies back through the same bridge. These integrations are configured under Settings -> Integrations -> Chat Connectors, but they are separate from AI provider credentials and model routing.
+External chat connectors accept provider messages, route them into authorized project chat threads, and deliver assistant replies through the same provider-native or bridge transport. Configure them under Settings -> Integrations -> Chat Connectors. They are separate from AI provider/model credentials.
 
-## Supported Providers And Bridge Modes
+## Choose the transport deliberately
 
-Code UX supports external chat channels through the bridge contracts implemented by the runtime:
+| Provider | Provider-native mode | Retained bridge modes |
+| --- | --- | --- |
+| WhatsApp | `official_api` (Meta Cloud API) | `managed_bridge`, custom `webhook` |
+| iMessage | None | `managed_bridge`, local `native_bridge` |
+| Telegram | `official_api` (Bot API) | `managed_bridge`, custom `webhook` |
+| Slack | `official_api` (Events/Web API) | `managed_bridge`, custom `webhook` |
+| Microsoft Teams | `official_api` (Bot Connector) | `managed_bridge`, custom `webhook` |
+| Discord | `official_api` (Gateway/Interactions/REST) | custom `webhook` gateway |
 
-| Provider kind | Supported bridge modes |
-| --- | --- |
-| `whatsapp` | managed bridge, webhook |
-| `imessage` | managed bridge, native bridge command |
-| `telegram` | managed bridge, bot webhook |
-| `slack` | managed bridge, Events webhook |
-| `microsoft-teams` | managed bridge, bot webhook |
-| `discord` | bot/webhook gateway |
+An `official_api` profile pins provider-controlled endpoints and owns provider-specific authentication and error mapping. A `managed_bridge` or `webhook` profile sends to the URL the operator configured. A `native_bridge` runs the configured local command with `shell: false`. Code UX does not certify an operator-selected bridge, and a connector card/registry entry is not proof of production readiness.
 
-These connector labels describe the normalized payloads Code UX can accept and the bridge setup schemas it exposes. Code UX does not call WhatsApp, iMessage, Telegram, Slack, Microsoft Teams, or Discord APIs directly. A managed bridge, webhook gateway, or native command owns provider-specific API interaction.
+The complete setup, identity, verification, retry, session, and limitation matrix is in [External Chat Providers](../architecture/external-chat-providers.md). Provider details are in [Chat Connector Profiles](./chat-connectors/index.md).
 
-Bridge modes:
+## Safe setup sequence
 
-- `managed_bridge`: HTTP delivery to a configured managed bridge URL, with bridge credentials used as transport credentials.
-- `webhook`: HTTP delivery to a configured generic gateway URL such as `webhookUrl`, `eventsUrl`, `botEndpointUrl`, or `gatewayUrl`.
-- `native_bridge`: local command execution for native bridge scripts. Code UX writes JSON to stdin, parses the configured command into executable and arguments without shell interpretation, and passes an optional bridge token through the environment.
+1. Create the connection as `draft`; choose one advertised bridge mode and enter only its setup fields.
+2. Enter credentials in write-only fields. Saved values return only `configured` plus `********`; empty replacement inputs preserve existing values.
+3. Copy the generated canonical ingress URL:
 
-## Setup Model
+   ```text
+   https://codeux.example.test/api/chat-providers/ingress/connection-example
+   ```
 
-Settings -> Integrations contains related but separate configuration families:
+   GET is used for provider challenges where applicable; POST accepts authenticated callbacks. The older `/api/chat-providers/connections/:connectionId/ingress` path is compatibility-only.
 
-- AI provider credentials and model routing configure CLI or hosted providers that do Code UX work, such as Codex, Gemini, Claude Code, Qwen Code, OpenCode, Antigravity, and Jules.
-- Chat connector connections configure external chat ingress, project/channel binding, and outbound reply delivery.
+4. Configure provider webhook/event subscriptions or start the operator bridge. Official modes never reuse a custom bridge URL.
+5. Run verification. A setup or secret change resets verification to `unverified`; verify before activation.
+6. Create at least one channel binding for an authorized project. Keep inbound/outbound disabled until the identity and routing fields have been checked.
+7. Enable the binding and connection, send one eligible test message, inspect the durable inbound/outbound delivery records, and then expand access.
 
-Chat provider connections are stored in the Code UX SQLite database. Each connection records provider kind, bridge mode, display name, enabled state, status, non-secret setup fields, and secret fields. Public dashboard and MCP reads return redacted credential metadata only; runtime services that need raw secrets use an explicit internal repository path.
+## Provider setup and test eligibility
 
-Saved secret fields are write-only in the dashboard. To rotate a secret, enter a replacement value. Empty replacement fields preserve the existing stored secret.
+- **Meta WhatsApp:** configure Graph version, phone-number ID, access token, app secret, and webhook verify token. Read-only phone-number verification is separate from message-send testing. A Meta test-number send must be explicitly opted in and is not evidence that an unrestricted production number is ready.
+- **iMessage:** configure only the selected third-party managed bridge or local protocol-v1 command. Apple publishes no general personal-iMessage bot endpoint or public bot sandbox. Do not configure unsupported AppleScript/database automation as an official mode.
+- **Telegram:** configure bot token and webhook secret token; the operator must call `setWebhook`. Verification uses `getMe` plus read-only `getWebhookInfo` and therefore needs test bot credentials.
+- **Slack:** configure app/workspace metadata, signing secret, bot token, Events request URL, subscriptions, scopes, and installation. Verification uses `auth.test` and needs a test token; channel membership is ultimately proven by provider delivery.
+- **Microsoft Teams:** configure app ID, application type, tenant policy, and client secret. There is no public unauthenticated Connector sandbox. Automated tests use Emulator-shaped Activities and mocked contract boundaries; a fixture pass is not a live tenant check.
+- **Discord:** configure application ID, Interactions public key, intents, and bot token; enable `MESSAGE_CONTENT` where required. Current-user verification uses `GET /users/@me` and needs a test bot token.
 
-## Ingress Security
+If a credential-gated live test skips, report it as **not run (credentials unavailable)**. Never convert a skip into a pass.
 
-Inbound chat provider requests are accepted on the dashboard server and must authenticate before routing:
+## Ingress authentication and routing
 
-- Managed and native bridge modes use bearer-style bridge credentials. The request can use an `Authorization: Bearer ...` header or `x-code-ux-bridge-token`.
-- Webhook mode requires a configured HMAC signing secret and a valid signature. Webhook mode does not fall back to bearer-only authentication.
-- Every inbound request needs a fresh timestamp header such as `x-code-ux-timestamp`, `x-provider-timestamp`, or `x-slack-request-timestamp`.
-- Signed requests and bearer requests with explicit nonce/request-id headers are replay-checked during the timestamp window.
+Managed/native bridges use a fresh timestamp plus `Authorization: Bearer ...` or `X-Code-UX-Bridge-Token`; add a unique `X-Code-UX-Nonce` or `X-Request-Id` for durable replay rejection. Generic webhooks require their configured HMAC and fresh timestamp and do not fall back to bearer-only authentication. Official modes follow their provider's authentication contract rather than invented Code UX headers.
 
-The primary ingress endpoint is:
+After authentication, Code UX normalizes provider identity and atomically inserts the external message ID before posting to chat. Duplicate provider retries return the existing delivery. For immediate-callback profiles, the acknowledgement is sent only after durable acceptance and model work continues asynchronously.
 
-```text
-POST /api/chat-providers/ingress/:providerConnectionId
-```
+A binding stores provider connection, external channel, project, optional agent preset, selectors, and inbound/outbound/`suppressRichWidgets` flags. Project authorization comes from the persisted binding. If several projects share an external channel, a selector must choose exactly one; otherwise the delivery records `disambiguation_needed` and no project is guessed.
 
-The compatibility alias remains:
+## Delivery state and control
 
-```text
-POST /api/chat-providers/connections/:connectionId/ingress
-```
+Outbound replies exist only for turns sourced from connector ingress. Provider payload and lease fields stay private; public REST/MCP reads expose IDs, direction, status, attempts, sanitized error, and next retry time.
 
-## Channel Binding And Project Routing
+- `pending`: durable queue entry.
+- `sending`: a worker owns the attempt lease.
+- `delivered`: provider/bridge accepted the reply.
+- `retryable_failure`: a durable next-attempt time exists.
+- `failed`: terminal configuration, provider, ambiguity, or exhausted-attempt failure.
+- `cancelled`: operator/runtime cancellation won before completion.
 
-A channel binding connects one external channel to one Code UX project. Bindings include:
+Workers use expiring compare-and-set leases. Restart recovery reclaims expired work; shutdown aborts HTTP/native/session work and releases owned leases safely. Manual retry requires explicit approval because it can duplicate a message. Provider-declared ambiguous outcomes are terminal so an automatic retry does not blindly resend.
 
-- `providerConnectionId`
-- `externalChannelId` and `externalChannelName`
-- `projectId`
-- optional `agentPresetId`
-- optional routing hints
-- enabled, inbound, outbound, and `suppressRichWidgets` flags
+The connector detail view reports health refreshes, verification progress/success, delivery inspection, retry, and cancellation through a localized polite status region. A failed action instead keeps the redacted provider error in an assertive alert, so operators receive durable feedback without exposing secret-bearing diagnostics.
 
-Multiple projects may bind to the same external channel. When that happens, inbound routing must identify exactly one project before Code UX posts the message. Routing can use payload-level selectors such as `projectId`, `projectSelector`, `projectAlias`, or `project`, or binding hints such as `projectSelectorPrefix`, `projectSelector`, `projectAlias`, `aliases`, `prefix`, or `selector`.
+## Secret migration and verification invalidation
 
-Selectors can be embedded in message text with supported prefix forms such as `[selector] message`, `/selector message`, `@selector message`, or `selector: message`. When a selector matches, Code UX strips the selector before posting the message to the project chat thread.
+Connector credentials are encrypted in a dedicated envelope table. Startup seals legacy plaintext rows only after secure key-provider readiness, commits with secret-version compare-and-set, and clears the legacy column only after success. Partial/failing migrations remain resumable. Restore the original key material and restart/rerun until the migration reports no pending rows; do not copy credentials back into plaintext as rollback.
 
-If a shared external channel maps to multiple projects and no selector chooses exactly one binding, Code UX records the inbound delivery with `state: "disambiguation_needed"` and returns a conflict response instead of guessing.
+Replacing or clearing secrets, switching bridge mode, or replacing setup invalidates verification. Display-name, enabled, or status-only edits preserve it. A transport edit to an active connection is demoted to the draft/reverification path.
 
-## Inbound Conversation Behavior
+## MCP examples
 
-Inbound payloads normalize to provider connection id, provider kind, external channel id/name, external sender id/name, message text, external message id, timestamp, and redacted raw metadata.
-
-The external message id is the idempotency boundary. Code UX checks for an existing inbound delivery before posting to chat; duplicate provider retries return the existing delivery record and do not create another conversation message.
-
-Routed inbound messages are posted through the normal chat thread runtime with metadata that marks:
-
-- `source: "chat_provider"`
-- provider kind
-- external channel id
-- external sender id/name
-- inbound delivery id
-- `suppressRichWidgets: true`
-
-When a payload or binding provides an existing conversation thread id, Code UX reuses that thread. Otherwise the chat runtime creates or selects the project conversation thread through its existing project chat path.
-
-## Outbound Replies And Delivery State
-
-Assistant and system replies are delivered back to an external channel only when the triggering user message came from chat provider ingress metadata. Dashboard-originated threads do not create chat provider outbound deliveries.
-
-Outbound delivery records are persisted in `chat_provider_message_deliveries` and link the provider connection, channel binding, external channel, conversation thread, conversation message, retry state, and redacted payload metadata.
-
-Outbound states:
-
-- `pending`: reply is queued for bridge delivery.
-- `sending`: an adapter attempt is in progress.
-- `delivered`: the bridge accepted the reply, with an external message id stored when returned.
-- `retryable_failure`: a network, HTTP, or native bridge failure will be retried after `delivery.nextAttemptAt`.
-- `failed`: delivery is terminal because routing is disabled, bridge setup is missing, the bridge returned a non-retryable error, or retry attempts were exhausted.
-
-The dashboard lifecycle starts the retry loop. Failed and retryable deliveries are visible through Settings -> Integrations -> Chat Connectors delivery status views and through MCP `manage_chat_providers` inspection. Error text and payload metadata are redacted before being returned through dashboard or MCP reads.
-
-## Rich Widget Suppression
-
-Dashboard chat can include `codeux:*` rich widget instructions and fences for dashboard-only controls. External channels receive plain markdown instead:
-
-- chat-provider-sourced prompts omit the dashboard rich-widget instruction block
-- persisted replay and compaction input for external turns uses the same widget suppression rules
-- outbound delivery strips or downgrades any remaining dashboard-only widget fences into readable markdown
-
-Approval prompts and management-action summaries remain plain markdown so they can still be delivered through the external chat channel.
-
-## MCP Management
-
-The `manage_chat_providers` tool can list setup definitions, manage connections, manage channel bindings, and inspect outbound delivery state. It does not process inbound messages or force outbound sends.
-
-Supported actions:
-
-- `list_provider_definitions`
-- `list_connections`
-- `get_connection`
-- `create_connection`
-- `update_connection`
-- `delete_connection`
-- `list_channel_bindings`
-- `create_channel_binding`
-- `update_channel_binding`
-- `delete_channel_binding`
-- `list_outbound_deliveries`
-
-Approval behavior:
-
-- `delete_connection` and `delete_channel_binding` require destructive-action approval.
-- `update_connection` requires a one-use approval handshake before replacing a non-empty `secrets` payload.
-- Approval fingerprints use a redacted payload plus a secret hash; raw secret values are not returned in approval responses.
-
-Example connection creation:
+Create a draft official Telegram connection with placeholders:
 
 ```json
 {
   "action": "create_connection",
-  "providerKind": "slack",
-  "displayName": "Team chat bridge",
-  "bridgeMode": "webhook",
-  "status": "active",
-  "enabled": true,
-  "setup": {
-    "eventsUrl": "https://bridge.example.test/events",
-    "appId": "app-generic"
-  },
+  "providerKind": "telegram",
+  "displayName": "Telegram test connector",
+  "bridgeMode": "official_api",
+  "status": "draft",
+  "enabled": false,
+  "setup": { "botUsername": "example_bot" },
   "secrets": {
-    "signingSecret": "replace-with-secret",
-    "botToken": "replace-with-token"
-  }
+    "botToken": "replace-with-test-token",
+    "webhookSecret": "replace-with-test-webhook-secret"
+  },
+  "baseUrl": "https://codeux.example.test"
 }
 ```
 
-Example channel binding:
+The response returns `/api/chat-providers/ingress/<id>` guidance and redacted credentials, never the two secret values.
+
+Verify and inspect health:
+
+```json
+{ "action": "verify_connection", "providerConnectionId": "connection-example" }
+```
+
+```json
+{ "action": "get_health" }
+```
+
+Bind a generic channel to an authorized test project:
 
 ```json
 {
   "action": "create_channel_binding",
-  "providerConnectionId": "connection-generic",
-  "externalChannelId": "channel-shared",
-  "externalChannelName": "Shared engineering channel",
-  "projectId": "project-alpha",
-  "routingHints": {
-    "projectSelectorPrefix": "alpha",
-    "aliases": ["alpha", "project-alpha"]
-  },
+  "providerConnectionId": "connection-example",
+  "externalChannelId": "channel-example",
+  "externalChannelName": "Test channel",
+  "projectId": "project-example",
+  "routingHints": { "projectSelectorPrefix": "example" },
   "inboundEnabled": true,
   "outboundEnabled": true,
   "suppressRichWidgets": true
 }
 ```
 
-Example delivery inspection:
+Inspect, retry with the two-call approval handshake, or cancel:
 
 ```json
 {
-  "action": "list_outbound_deliveries",
-  "providerConnectionId": "connection-generic",
-  "externalChannelId": "channel-shared",
+  "action": "list_deliveries",
+  "providerConnectionId": "connection-example",
+  "direction": "outbound",
   "deliveryStatus": "retryable_failure",
   "limit": 25
 }
 ```
 
-## Related Docs
+```json
+{ "action": "retry_delivery", "deliveryId": "delivery-example" }
+```
 
-- [External Chat Provider Foundation](../architecture/external-chat-providers.md)
-- [Chat Thread Runtime](../architecture/chat-thread-runtime.md)
-- [MCP Tools and Contracts](../mcp/tools-and-contracts.md)
-- [Provider Routing](./provider-routing.md)
+Repeat the exact request only after human confirmation:
+
+```json
+{
+  "action": "retry_delivery",
+  "deliveryId": "delivery-example",
+  "approval": { "confirmed": true }
+}
+```
+
+```json
+{ "action": "cancel_delivery", "deliveryId": "delivery-example" }
+```
+
+Expected failure contracts are sanitized:
+
+```json
+{
+  "status": "failed",
+  "providerErrorCode": "invalid_auth",
+  "retryable": false,
+  "issues": ["Provider authentication failed."],
+  "diagnostics": { "capability": "authentication", "status": "missing" }
+}
+```
+
+Validation rejects unsupported modes/fields and bounds delivery limits to 1-500. Unauthorized bindings/deliveries fail against persisted project ownership. Verification times out with `verification_timeout` and `retryable: true`. Provider 429/temporary outages schedule retry; terminal authentication/permission failures require operator correction.
+
+## Rollback
+
+To revert a failed provider-native rollout without deleting known-good configuration:
+
+1. Disable the new connection or its inbound/outbound binding.
+2. Re-enable the existing managed/custom bridge connection and its previously verified binding.
+3. Confirm its ingress URL, bridge credentials, project selectors, and recent health/delivery state.
+4. Leave the new connection disabled for evidence collection; cancel pending deliveries that must not be sent.
+5. Delete the failed connection only after approval and retention review, because deletion cascades its bindings and delivery history.
+
+See [Security Hardening](../operations/security-hardening.md) and [Operations Runbook](../operations/runbook.md) for incident-specific recovery.

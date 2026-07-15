@@ -804,6 +804,64 @@ describe("RuntimeStartupRecoveryService", () => {
     });
   });
 
+  it("immediately cancels a fresh pre-provider QA invocation after restart", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      qaReviewRepository,
+      service,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Fresh Pre-provider QA Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/fresh-pre-provider-qa-recovery",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Fresh Pre-provider QA Recovery Sprint",
+      number: 8,
+      status: "running",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "docker_cli",
+      status: "running",
+    });
+    const startedAt = new Date().toISOString();
+    const invocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      type: "qa_review",
+      provider: "codex",
+      status: "running",
+      startedAt,
+    });
+    const qaRun = qaReviewRepository.createRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      triggerType: "sprint_completion",
+      runIndex: 1,
+      payload: { reviewExecutionInvocationId: invocation.id },
+      startedAt,
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledQaReviewRunIds).toEqual(expect.arrayContaining([qaRun.id]));
+    expect(qaReviewRepository.getRun(qaRun.id)).toMatchObject({
+      status: "cancelled",
+      outcome: null,
+      summaryMarkdown: expect.stringContaining("without provider runtime linkage"),
+    });
+    expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({
+      status: "cancelled",
+      errorMessage: null,
+    });
+  });
+
   it("reuses one Docker inventory while cancelling multiple interrupted QA reviewers", async () => {
     const listContainers = vi.fn().mockResolvedValue([
       { id: "qa-container-1", labels: { "code-ux.session-id": "qa-review-session-1" } },

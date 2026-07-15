@@ -6,12 +6,14 @@ import type { Source } from "../../types.js";
 import { useProjectData } from "../../context/project-data.js";
 import { CellActions } from "./CellActions.js";
 import { ORGANIC_CELL_SHADOW_CLASS } from "./organic-cell-styles.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import { overviewMessages } from "../../i18n/messages/overview.js";
 
 const statusMap = {
-    running:      { ring: 'border-status-green/50 shadow-[0_0_28px_rgba(0,171,132,0.35)]', text: 'text-status-green', icon: Activity,       label: "Running"     },
-    failed:       { ring: 'border-status-red/60 shadow-[0_0_28px_rgba(227,0,15,0.35)]',   text: 'text-status-red',   icon: XCircle,        label: "Failed"      },
-    intervention: { ring: 'border-status-amber/50 shadow-[0_0_28px_rgba(245,158,11,0.3)]', text: 'text-status-amber', icon: AlertTriangle,  label: "Needs Review" },
-    idle:         { ring: '',                                                               text: 'text-slate-400 dark:text-slate-500', icon: FolderGit2, label: "Idle" },
+    running:      { ring: 'border-status-green/50 shadow-[0_0_28px_rgba(0,171,132,0.35)]', text: 'text-status-green', icon: Activity,       labelKey: "sourceStatusRunning" },
+    failed:       { ring: 'border-status-red/60 shadow-[0_0_28px_rgba(227,0,15,0.35)]',   text: 'text-status-red',   icon: XCircle,        labelKey: "sourceStatusFailed" },
+    intervention: { ring: 'border-status-amber/50 shadow-[0_0_28px_rgba(245,158,11,0.3)]', text: 'text-status-amber', icon: AlertTriangle,  labelKey: "sourceStatusIntervention" },
+    idle:         { ring: '',                                                               text: 'text-slate-400 dark:text-slate-500', icon: FolderGit2, labelKey: "sourceStatusIdle" },
 } as const;
 
 interface SourceCellProps {
@@ -23,9 +25,13 @@ interface SourceCellProps {
 export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven, animDelay = 0 }) => {
     const cellRef = useRef<HTMLDivElement>(null);
     const { selectProject } = useProjectData();
+    const { formatNumber, translate, translatePlural } = useDashboardI18n();
     const anim = isEven ? 'animate-organic' : 'animate-organic-reverse';
     const state = statusMap[source.status] ?? statusMap.idle;
     const StatusIcon = state.icon;
+    const statusLabel = translate(overviewMessages, state.labelKey);
+    const openCount = translatePlural(overviewMessages, "sourceOpenCount", source.openTasks, { formattedCount: formatNumber(source.openTasks) });
+    const doneCount = translatePlural(overviewMessages, "sourceDoneCount", source.completedTasks, { formattedCount: formatNumber(source.completedTasks) });
 
     const handleHoverEnter = useCallback(() => {
         if (!cellRef.current) return;
@@ -57,6 +63,7 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
             onFocus={handleHoverEnter}
             onBlur={handleHoverLeave}
             role="group"
+            aria-label={translate(overviewMessages, "sourceGroupLabel", { name: source.name, status: statusLabel, openCount, doneCount })}
             tabIndex={0}
             className="relative group cursor-pointer aspect-square w-[min(14rem,72vw)] max-w-full flex items-center justify-center shrink-0 perspective-1000 focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-[2rem] focus:outline-none"
             style={{ animationDelay: `${animDelay}s` }}
@@ -82,13 +89,13 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
             <div className="relative z-20 flex flex-col items-center justify-center text-center p-5 w-full h-full transform-gpu group-hover:translate-z-12 transition-transform duration-500 ease-out">
                 {/* Status label on hover */}
                 <div className={`absolute top-5 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 ${state.text}`}>
-                    <StatusIcon className={`w-3.5 h-3.5 ${source.status === 'running' ? 'animate-pulse' : ''}`} strokeWidth={2.5} />
-                    <span className="text-[10px] font-bold uppercase tracking-[0.14em]">{state.label}</span>
+                    <StatusIcon aria-hidden="true" className={`w-3.5 h-3.5 ${source.status === 'running' ? 'animate-pulse' : ''}`} strokeWidth={2.5} />
+                    <span className="text-[10px] font-bold uppercase tracking-[0.14em]">{statusLabel}</span>
                 </div>
 
                 {/* Main icon */}
                 <div className="w-10 h-10 rounded-full flex items-center justify-center text-slate-600 dark:text-slate-400 group-hover:opacity-0 transition-opacity duration-300 mb-2">
-                    <FolderGit2 className="w-7 h-7" strokeWidth={1} />
+                    <FolderGit2 className="w-7 h-7" strokeWidth={1} aria-hidden="true" />
                 </div>
 
                 <h4 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight truncate w-full px-3 mt-1 group-hover:-translate-y-3 transition-transform duration-300 font-mono">
@@ -96,14 +103,17 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
                 </h4>
 
                 <div className="mt-1.5 flex gap-3 text-xs font-semibold text-slate-500 dark:text-slate-400 group-hover:opacity-0 transition-opacity duration-300">
-                    <span>{source.openTasks} open</span>
+                    <span>{openCount}</span>
                     <span className="text-slate-300 dark:text-slate-600">·</span>
-                    <span>{source.completedTasks} done</span>
+                    <span>{doneCount}</span>
                 </div>
 
                 {/* Actions */}
                 <CellActions 
                     isRunning={source.status === 'running'} 
+                    label={translate(overviewMessages, "sourceSprintsAction")}
+                    primaryLabel={source.status === 'running' ? translate(overviewMessages, "stop") : translate(overviewMessages, "play")}
+                    settingsLabel={translate(overviewMessages, "settings")}
                     to="/sprints"
                     onSprintsClick={() => selectProject(source.id)}
                     onSettingsClick={() => selectProject(source.id)}

@@ -133,6 +133,11 @@ describe("Dashboard Factory", () => {
         resolveItemsForSprintRun: vi.fn(),
       },
       connectionChatRepository: {},
+      chatProviderRepository: { id: "chat-provider-repository" },
+      chatProviderSecretService: { id: "chat-provider-secret-service" },
+      chatProviderVerificationService: { id: "chat-provider-verification-service" },
+      chatConnectorRegistry: { id: "chat-connector-registry" },
+      headlessAuthService: { configuration: { mode: "local", remoteCredentialManagement: false } },
       projectWorkerAssignmentRepository: {},
       agentPresetSyncService: {},
       activeDispatchRegistry: {
@@ -183,6 +188,20 @@ describe("Dashboard Factory", () => {
 
     expect(result.activityCacheService).toBeDefined();
     expect(result.taskRerunService).toBeDefined();
+    expect(result.chatProviderRepository).toBe(mockCoreDeps.chatProviderRepository);
+    expect(result.chatProviderSecretService).toBe(mockCoreDeps.chatProviderSecretService);
+    expect(result.chatProviderVerificationService).toBe(mockCoreDeps.chatProviderVerificationService);
+    expect(result.chatConnectorRegistry).toBe(mockCoreDeps.chatConnectorRegistry);
+    expect((result.chatProviderIngressService as any).registry).toBe(mockCoreDeps.chatConnectorRegistry);
+    expect((result.chatProviderSessionRuntimeService as any).registry).toBe(mockCoreDeps.chatConnectorRegistry);
+    expect((result.chatProviderOutboundService as any).adapter.registry).toBe(mockCoreDeps.chatConnectorRegistry);
+    const dashboardManagementHandlerDeps = (result.chatThreadRuntimeService as any)
+      .deps.chatManagementActionService.deps.managementToolHandler.deps;
+    expect(dashboardManagementHandlerDeps.chatProviderRepository).toBe(mockCoreDeps.chatProviderRepository);
+    expect(dashboardManagementHandlerDeps.chatProviderSecretService).toBe(mockCoreDeps.chatProviderSecretService);
+    expect(dashboardManagementHandlerDeps.chatProviderVerificationService).toBe(mockCoreDeps.chatProviderVerificationService);
+    expect(dashboardManagementHandlerDeps.chatProviderOutboundService).toBe(result.chatProviderOutboundService);
+    expect(dashboardManagementHandlerDeps.chatConnectorRegistry).toBe(mockCoreDeps.chatConnectorRegistry);
 
     expect(ActivityCacheService).toHaveBeenCalledTimes(1);
     expect(TaskRerunService).toHaveBeenCalledTimes(1);

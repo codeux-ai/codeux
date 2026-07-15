@@ -5,6 +5,8 @@ import type {
   CiWorkflowState,
   CiWorkflowStep,
 } from "./ci-status-presentation.js";
+import type { DashboardLocale } from "../i18n/index.js";
+import { translateTask, type TaskTextKey } from "../i18n/messages/tasks.js";
 
 export type WorkflowStageId = "coding" | "pull_request" | "qa" | "checks" | "merge" | "completion";
 
@@ -42,9 +44,23 @@ export interface WorkflowTaskIdentity {
 export interface WorkflowStatusPresentationInput {
   scope: "task" | "sprint";
   status: string;
+  completion?: number;
   review?: SprintReviewSummary | null;
   ciPresentation?: CiStatusPresentation | null;
   humanIntervention?: WorkflowHumanInterventionEvidence | null;
+}
+
+const WORKFLOW_COPY_KEYS: Readonly<Record<string, TaskTextKey>> = {
+  "Pull request": "workflowPullRequest", "Pull request ready": "workflowPullRequestReady", "CI checks": "workflowCiChecks", "Checks passed": "workflowChecksPassed", Merge: "workflowMerge", Merged: "workflowMerged", "Waiting for pull request": "workflowWaitingForPullRequest", "Checks pending": "workflowChecksPending", "Merge pending": "workflowMergePending",
+  QA: "workflowQa", "Review in progress": "workflowReviewInProgress", "Changes requested": "workflowChangesRequested", "Review failed": "workflowReviewFailed", "QA passed": "workflowQaPassed", "QA cleared": "workflowQaCleared", "No review required": "workflowNoReviewRequired", "Review pending": "workflowReviewPending", "QA pending": "workflowQaPending",
+  Coding: "workflowCoding", "Coding cancelled": "workflowCodingCancelled", "Coding failed": "workflowCodingFailed", "Coding complete": "workflowCodingComplete", "Coding queued": "workflowCodingQueued", "Quota wait": "workflowQuotaWait", "Provider capacity wait": "workflowProviderCapacityWait", "Preparing workspace": "workflowPreparingWorkspace", "Coding in progress": "workflowCodingInProgress", "Coding blocked": "workflowCodingBlocked", "Coding paused": "workflowCodingPaused", "Waiting to start": "workflowWaitingToStart",
+  Completion: "workflowCompletion", "Workflow complete": "workflowComplete", "Workflow cancelled": "workflowCancelled", "Workflow failed": "workflowFailed", "Completion pending": "workflowCompletionPending",
+  "QA changes": "workflowQaChanges", "QA failed": "workflowQaFailed", "CI failed": "workflowCiFailed", "Merge conflict": "workflowMergeConflict", "Merge failed": "workflowMergeFailed", "CI running": "workflowCiRunning", "Creating PR": "workflowCreatingPr", "QA running": "workflowQaRunning", "Merge running": "workflowMergeRunning", Completed: "workflowCompleted", "Coding pending": "workflowCodingPending", "CI passed": "workflowCiPassed", "PR ready": "workflowPrReady", "PR pending": "workflowPrPending", "Human needed": "workflowHumanNeeded", CI: "workflowCi",
+};
+
+function localizeWorkflowCopy(locale: DashboardLocale, value: string): string {
+  const key = WORKFLOW_COPY_KEYS[value];
+  return key ? translateTask(locale, key) : value;
 }
 
 function normalizeStatus(value: string): string {
@@ -240,10 +256,13 @@ function displayLabel(stages: readonly WorkflowStage[]): string {
 
 export function deriveWorkflowStatusPresentation(
   input: WorkflowStatusPresentationInput,
+  locale: DashboardLocale = "en",
 ): WorkflowStatusPresentation {
   const status = normalizeStatus(input.status);
   const workflowCompleted = status === "completed";
-  const suppressRunningSprintTaskGates = input.scope === "sprint" && status === "running";
+  const suppressRunningSprintTaskGates = input.scope === "sprint"
+    && status === "running"
+    && input.completion !== 100;
   const ciPresentation = suppressRunningSprintTaskGates ? null : input.ciPresentation;
   const stageReview = suppressRunningSprintTaskGates ? null : input.review;
   const pullRequest = resolveCiStep("pull_request", ciPresentation?.steps[0], workflowCompleted);
@@ -268,10 +287,25 @@ export function deriveWorkflowStatusPresentation(
       : stages[5].state === "successful"
         ? "successful"
         : "pending";
-  const label = requiresHuman ? "Human needed" : displayLabel(stages);
+  const label = localizeWorkflowCopy(locale, requiresHuman ? "Human needed" : displayLabel(stages));
   const qaChangesRequested = stages.some((stage) => (
     stage.id === "qa" && stage.state === "failed" && stage.statusLabel === "Changes requested"
   ));
+  const localizedStages = stages.map((stage, index) => {
+    const observed = index === 1
+      ? ciPresentation?.steps[0]
+      : index === 3
+        ? ciPresentation?.steps[1]
+        : index === 4
+          ? ciPresentation?.steps[2]
+          : null;
+    const preserveObservedCopy = observed && !(workflowCompleted && observed.state !== "successful");
+    return {
+      ...stage,
+      label: index === 3 ? localizeWorkflowCopy(locale, "CI") : preserveObservedCopy ? stage.label : localizeWorkflowCopy(locale, stage.label),
+      statusLabel: preserveObservedCopy ? stage.statusLabel : localizeWorkflowCopy(locale, stage.statusLabel),
+    };
+  }) as WorkflowStatusPresentation["stages"];
   return {
     scope: input.scope,
     state,
@@ -283,8 +317,8 @@ export function deriveWorkflowStatusPresentation(
         ? "active"
         : state,
     label,
-    accessibleLabel: `${label}. ${requiresHuman && input.humanIntervention?.title ? `${input.humanIntervention.title}. ` : ""}${stages.map((stage) => `${stage.label}: ${stage.statusLabel}`).join(". ")}.`,
+    accessibleLabel: `${label}. ${requiresHuman && input.humanIntervention?.title ? `${input.humanIntervention.title}. ` : ""}${localizedStages.map((stage) => `${stage.label}: ${stage.statusLabel}`).join(". ")}.`,
     requiresHuman,
-    stages,
+    stages: localizedStages,
   };
 }

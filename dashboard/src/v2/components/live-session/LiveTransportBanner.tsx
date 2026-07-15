@@ -10,6 +10,7 @@ import {
   deriveLiveTransportBannerViewModel,
   type LiveTransportBannerViewModel,
 } from "../../lib/live-session-view-model.js";
+import { useLiveI18n } from "../../i18n/messages/live.js";
 
 export interface LiveTransportBannerProps {
   transportState: TransportState;
@@ -26,11 +27,12 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
   error,
   viewModel,
 }) => {
+  const { locale, t } = useLiveI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const isReducedMotion = useReducedMotion();
   const motionTokens = useGsapInteractionTokens();
   const [shouldRender, setShouldRender] = useState(false);
-  const derivedBannerState = deriveLiveTransportBannerViewModel({ transportState, isRecovering, error, snapshotUpdatedAt });
+  const derivedBannerState = deriveLiveTransportBannerViewModel({ transportState, isRecovering, error, snapshotUpdatedAt, locale });
   const bannerState = viewModel ?? derivedBannerState;
   const isVisible = bannerState?.isVisible === true;
 
@@ -92,7 +94,7 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
         <>
           <div className={`flex items-center justify-center ${bannerState.iconClass}`}>
             {icon}
-            <span className="sr-only">Live transport state: {bannerState.title}</span>
+            <span className="sr-only">{t("liveTransportState", { state: bannerState.title })}</span>
           </div>
           <div className="flex flex-col min-w-0">
             <span className="text-sm font-bold tracking-tight">{bannerState.title}</span>

@@ -1,4 +1,5 @@
 import type { ExecutionUsageBucketSummary } from "../../types.js";
+import type { DashboardLocale } from "../../i18n/index.js";
 
 export interface TrendDelta {
   current: number;
@@ -30,13 +31,13 @@ export function computeWindowDelta(
   return { current, previous, changePercent, direction };
 }
 
-export function formatDeltaPercent(delta: TrendDelta): string {
+export function formatDeltaPercent(delta: TrendDelta, locale: DashboardLocale = "en"): string {
   if (delta.changePercent === null) {
-    return delta.current > 0 ? "new" : "—";
+    return delta.current > 0 ? (locale === "de" ? "neu" : "new") : "—";
   }
   const rounded = Math.round(Math.abs(delta.changePercent));
   if (rounded === 0) {
-    return "flat";
+    return locale === "de" ? "unverändert" : "flat";
   }
-  return `${delta.changePercent > 0 ? "+" : "-"}${rounded}%`;
+  return `${delta.changePercent > 0 ? "+" : "-"}${new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 0 }).format(rounded / 100)}`;
 }

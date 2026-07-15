@@ -6,6 +6,8 @@ import { useHeaderTokenThroughput } from "../../hooks/use-header-token-throughpu
 import { useProjectTasks } from "../../hooks/use-project-tasks.js";
 import { RollingNumber } from "../ui/RollingNumber.js";
 import type { Sprint, Task } from "../../types.js";
+import { useOptionalDashboardI18n } from "../../i18n/context.js";
+import { taskMessages } from "../../i18n/messages/tasks.js";
 
 interface TelemetryStatsProps {
     projectId: string | null;
@@ -17,6 +19,8 @@ const countDotClasses = {
     queued: "bg-amber-400",
     idle: "bg-slate-300 dark:bg-slate-600",
 };
+const RUNNING_TASK_STATE = "running" as const;
+const QUEUED_TASK_STATE = "queued" as const;
 
 type ThroughputDirection = "up" | "down" | "flat";
 
@@ -247,8 +251,12 @@ const ThroughputMetric: FunctionComponent<{
 const TaskCountMetric: FunctionComponent<{
     label: "running" | "queued";
     value: number;
-}> = ({ label, value }) => (
-    <div className="flex min-w-0 items-center gap-2 px-2">
+}> = ({ label, value }) => {
+    const { translate } = useOptionalDashboardI18n();
+    const localizedLabel = translate(taskMessages, label);
+
+    return (
+      <div className="flex min-w-0 items-center gap-2 px-2">
         <span className="relative flex h-2 w-2 shrink-0">
             {label === "running" && value > 0 && (
                 <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 motion-safe:animate-ping motion-reduce:animate-none" />
@@ -259,11 +267,12 @@ const TaskCountMetric: FunctionComponent<{
             <span className="font-mono text-sm font-semibold leading-none text-slate-700 tabular-nums dark:text-slate-200">
                 <RollingNumber value={value} />
             </span>
-            <span className="hidden text-[10px] font-medium leading-none text-slate-400 xl:inline">{label}</span>
-            <span className="text-[10px] font-medium leading-none text-slate-400 xl:hidden">{label === "running" ? "run" : "queue"}</span>
+            <span className="hidden text-[10px] font-medium leading-none text-slate-400 xl:inline">{localizedLabel}</span>
+            <span className="text-[10px] font-medium leading-none text-slate-400 xl:hidden">{localizedLabel}</span>
         </div>
-    </div>
-);
+      </div>
+    );
+};
 
 export const TelemetryStats: FunctionComponent<TelemetryStatsProps> = ({ projectId, sprints }) => {
     const activeSprintIds = useMemo(
@@ -309,9 +318,9 @@ export const TelemetryStats: FunctionComponent<TelemetryStatsProps> = ({ project
             </span>
             <ThroughputMetric metric={tokenView.app} trend={appTrend} />
             <div className="h-4 w-px shrink-0 bg-black/[0.06] dark:bg-white/[0.06]" />
-            <TaskCountMetric label="running" value={runningCount} />
+            <TaskCountMetric label={RUNNING_TASK_STATE} value={runningCount} />
             <div className="h-4 w-px shrink-0 bg-black/[0.06] dark:bg-white/[0.06]" />
-            <TaskCountMetric label="queued" value={queuedCount} />
+            <TaskCountMetric label={QUEUED_TASK_STATE} value={queuedCount} />
         </div>
     );
 };

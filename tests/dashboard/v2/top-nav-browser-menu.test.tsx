@@ -2,7 +2,7 @@
 // @vitest-environment happy-dom
 import { h } from "preact";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
+import { render as testingRender, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
 import { act } from "preact/test-utils";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { BrowserSessionsMenu } from "../../../dashboard/src/v2/components/browser/BrowserSessionsMenu.js";
@@ -13,6 +13,12 @@ import { useNotifications } from "../../../dashboard/src/v2/hooks/use-notificati
 import { useRouterState } from "@tanstack/react-router";
 import * as browserApi from "../../../dashboard/src/v2/lib/browser-api.js";
 import { buildPreviewUrl } from "../../../dashboard/src/v2/lib/preview-origin.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/context.js";
+
+const render = (ui: Parameters<typeof testingRender>[0], options?: Parameters<typeof testingRender>[1]) => testingRender(ui, {
+    ...options,
+    wrapper: ({ children }) => <DashboardI18nProvider initialLocale="en" storage={null}>{children}</DashboardI18nProvider>,
+});
 
 expect.extend(matchers);
 
@@ -810,7 +816,7 @@ describe("TopNav shell accessibility", () => {
         rerender(<TopNav />);
 
         await waitFor(() => {
-            expect(screen.getByRole("status")).toHaveTextContent("Route changed to sprints");
+            expect(screen.getByRole("status")).toHaveTextContent("Route changed to Sprints");
         });
     });
 

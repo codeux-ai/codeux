@@ -12,21 +12,13 @@ import { Button } from "../../components/ui/Button.js";
 import { PageContainer } from "../../components/layout/PageContainer.js";
 import { PANEL_CLASS, CHIP_CLASS, SUBPANEL_CLASS } from "./components/stats-ui-primitives.js";
 import { formatDateTime } from "./stats-utils.js";
+import { useOptionalDashboardI18n } from "../../i18n/index.js";
+import { StatsI18nProvider, useStatsI18n } from "./stats-i18n.js";
 import styles from "./StatsPage.module.css";
 
-const MODE_LABELS = {
-  trend: "Trend",
-  composition: "Composition",
-  cost: "Cost",
-  models: "Models",
-  reliability: "Providers",
-  ledgers: "Ledgers",
-  system: "System",
-} as const;
-
-function getWindowLabel(window: string): string {
+function getWindowLabel(window: string, allTimeLabel: string): string {
   if (window === "all") {
-    return "All time";
+    return allTimeLabel;
   }
 
   return window;
@@ -38,11 +30,21 @@ const ContextChip: FunctionComponent<{ children: ComponentChildren }> = ({ child
   </div>
 );
 
-export const StatsPage: FunctionComponent = () => {
+const StatsPageContent: FunctionComponent = () => {
   const rootRef = useRef<HTMLElement>(null);
   const hasAnimated = useRef(false);
   const { selectedProject } = useProjectData();
   const reducedMotion = useReducedMotion();
+  const { locale, text, formatDate } = useStatsI18n();
+  const modeLabels = {
+    trend: text("trend"),
+    composition: text("composition"),
+    cost: text("cost"),
+    models: text("models"),
+    reliability: text("providers"),
+    ledgers: text("ledgers"),
+    system: text("system"),
+  } as const;
   const {
     stats,
     loading,
@@ -84,25 +86,30 @@ export const StatsPage: FunctionComponent = () => {
     );
   }, [reducedMotion]);
 
+  const formatRangeBoundary = (value: string, fallback: string): string => {
+    if (!value) return fallback;
+    const date = new Date(`${value}T00:00:00.000Z`);
+    return Number.isNaN(date.getTime()) ? value : formatDate(date, { dateStyle: "medium", timeZone: "UTC" });
+  };
   const windowLabel = activeQuery.window === "custom"
-    ? `${customFrom || "Start"} → ${customTo || "End"}`
-    : getWindowLabel(activeQuery.window);
+    ? `${formatRangeBoundary(customFrom, text("start"))} → ${formatRangeBoundary(customTo, text("end"))}`
+    : getWindowLabel(activeQuery.window, text("allTime"));
 
-  const generatedLabel = stats?.generatedAt ? formatDateTime(stats.generatedAt) : loading ? "Loading snapshot" : "No snapshot";
+  const generatedLabel = stats?.generatedAt ? formatDateTime(stats.generatedAt, locale) : loading ? text("loadingSnapshot") : text("noSnapshot");
 
   const renderContextRail = () => (
     <div className={styles.stateMetaGrid}>
       <ContextChip>
-        Project · {selectedProject?.name || "No project selected"}
+        {text("project")} · {selectedProject?.name || text("noProjectSelected")}
       </ContextChip>
       <ContextChip>
-        Window · {windowLabel}
+        {text("window")} · {windowLabel}
       </ContextChip>
       <ContextChip>
-        Generated · {generatedLabel}
+        {text("generated")} · {generatedLabel}
       </ContextChip>
       <ContextChip>
-        Mode · {MODE_LABELS[visualMode]}
+        {text("mode")} · {modeLabels[visualMode]}
       </ContextChip>
     </div>
   );
@@ -149,31 +156,31 @@ export const StatsPage: FunctionComponent = () => {
   const statePanel = !selectedProject
     ? renderStatePanel({
         icon: Folder,
-        title: "No project selected",
-        description: "Select a project to open the stats command panel, telemetry summary, and analysis modes.",
+        title: text("noProjectTitle"),
+        description: text("noProjectDescription"),
         role: "status",
-        badge: "Stats panel idle",
+        badge: text("statsPanelIdle"),
       })
     : loading && !stats
       ? renderStatePanel({
           icon: Loader2,
-          title: "Loading telemetry field",
-          description: `Gathering ${selectedProject.name} telemetry for the ${getWindowLabel(activeQuery.window)} window.`,
+          title: text("loadingTelemetry"),
+          description: text("gatheringTelemetry", { project: selectedProject.name, window: getWindowLabel(activeQuery.window, text("allTime")) }),
           role: "status",
           iconClassName: "animate-spin motion-reduce:animate-none",
-          badge: "Stats panel refreshing",
+          badge: text("statsPanelRefreshing"),
         })
       : error && !stats
         ? renderStatePanel({
             icon: AlertTriangle,
             title: error,
-            description: `${selectedProject.name} remains selected for the ${getWindowLabel(activeQuery.window)} window.`,
+            description: text("selectedWindowRetained", { project: selectedProject.name, window: getWindowLabel(activeQuery.window, text("allTime")) }),
             role: "alert",
             iconClassName: "text-[color:var(--stats-negative-text)]",
-            badge: "Stats panel unavailable",
+            badge: text("statsPanelUnavailable"),
             primaryAction: (
               <Button variant="danger" size="sm" onClick={() => refresh()}>
-                Retry
+                {text("retry")}
               </Button>
             ),
           })
@@ -185,10 +192,10 @@ export const StatsPage: FunctionComponent = () => {
       padding="stats"
       className={`gap-6 xl:gap-8 ${styles.pageRoot}`}
       role="region"
-      aria-label="Statistics"
+      aria-label={text("statistics")}
       aria-busy={loading && !stats ? "true" : undefined}
     >
-      <section className={styles.heroSection} data-stats-shell-animate aria-label="Stats command controls">
+      <section className={styles.heroSection} data-stats-shell-animate aria-label={text("statsCommandControls")}>
         <StatsPageHero
           selectedProject={selectedProject}
           stats={stats}
@@ -212,7 +219,7 @@ export const StatsPage: FunctionComponent = () => {
           <section
             data-stats-shell-animate
             className={styles.metricDeckSection}
-            aria-label={`${MODE_LABELS[visualMode]} metrics`}
+            aria-label={text("modeMetrics", { mode: modeLabels[visualMode] })}
           >
             <TopCardsModeRenderer
               mode={visualMode}
@@ -240,5 +247,14 @@ export const StatsPage: FunctionComponent = () => {
         </>
       ) : null}
     </PageContainer>
+  );
+};
+
+export const StatsPage: FunctionComponent = () => {
+  const dashboardI18n = useOptionalDashboardI18n();
+  return (
+    <StatsI18nProvider locale={dashboardI18n?.locale ?? "en"}>
+      <StatsPageContent />
+    </StatsI18nProvider>
   );
 };

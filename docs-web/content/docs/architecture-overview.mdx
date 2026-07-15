@@ -14,15 +14,18 @@ It is for contributors and integrators who need to reason about *how* Code UX ma
 | 4 | [Virtual workers](/docs/architecture-virtual-workers) | Provisioning, lifecycle, Docker vs host execution, attention-item handling |
 | 5 | [CI integration](/docs/architecture-ci-integration) | Feature PR gate, merge protocol, autofix retries, conflict handling |
 | 6 | [Dashboard architecture](/docs/architecture-dashboard-architecture) | Preact stack, real-time client, route map, state model |
+| 6a | [Dashboard internationalization](/docs/architecture-dashboard-internationalization) | Typed locale state, feature catalogs, persistence, and native formatting |
 | 7 | [Data model](/docs/architecture-data-model) | Projects, sprints, tasks, runs, dispatches, memory, conversations |
 | 8 | [Custom dashboard foundation](/docs/architecture-custom-dashboard-foundation) | Persisted dashboard manifests, generated bundles, validation history, and publication state |
 | 9 | [Execution invocation tracking](/docs/architecture-execution-invocation-tracking) | Provider parser normalization, usage isolation, live telemetry, transcript persistence |
-| 10 | [External chat connectors](/docs/architecture-external-chat-providers) | Provider setup, channel bindings, inbound dedupe, outbound delivery state |
-| 11 | [Configuration resolution](/docs/architecture-configuration-resolution) | Cascade order, search paths, settings hierarchy |
-| 12 | [Speech input](/docs/architecture-speech-input) | Persisted transcription settings, privacy boundary, provider fallback contract |
-| 13 | [Security model](/docs/architecture-security) | Authentication, authorisation, secrets, network surface |
-| 14 | [Worker clarification contract](/docs/architecture-worker-clarification-contract) | Durable human-owned worker questions, idempotent replies, and continuation boundary |
-| 15 | [Custom nodes](/docs/architecture-custom-nodes) | Generated TypeScript packages, validation/publication gates, and hardened container execution |
+| 10 | [Chat connector registry](/docs/architecture-chat-connectors-overview) | Typed provider profiles, capabilities, transport ownership, and lifecycle metadata |
+| 11 | [External chat connectors](/docs/architecture-external-chat-providers) | Provider setup, channel bindings, inbound dedupe, outbound delivery state |
+| 12 | [Chat connector runtime reliability](/docs/architecture-chat-connector-runtime-reliability) | Fast durable acceptance, leased delivery, cancellation, restart recovery |
+| 13 | [Configuration resolution](/docs/architecture-configuration-resolution) | Cascade order, search paths, settings hierarchy |
+| 13 | [Speech input](/docs/architecture-speech-input) | Persisted transcription settings, privacy boundary, provider fallback contract |
+| 14 | [Security model](/docs/architecture-security) | Authentication, authorisation, secrets, network surface |
+| 15 | [Worker clarification contract](/docs/architecture-worker-clarification-contract) | Durable human-owned worker questions, idempotent replies, and continuation boundary |
+| 16 | [Custom nodes](/docs/architecture-custom-nodes) | Generated TypeScript packages, validation/publication gates, and hardened container execution |
 | 16 | [Card CI status projection](/docs/architecture-card-ci-status-projection) | Compact persisted CI state shared by Task, Sprint, and Live card consumers |
 | 17 | [Sprint rollbacks](/docs/architecture-sprint-rollbacks) | Auditable automatic and agent-assisted rollback delivery across remote and local Git modes |
 
@@ -34,7 +37,7 @@ Agent persistent skill storage is opt-in per preset. A shared project-owned agen
 
 - **For new contributors** — read 1, 3, 7 in that order.
 - **For MCP integrators** — read 1, 2, 8.
-- **For dashboard / UI work** — read 1, 6, 7.
+- **For dashboard / UI work** — read 1, 6, 6a.
 - **For ops / SRE** — read 1, 5, 9.
 
 Each architecture page links to the relevant source files so you can audit the implementation against this document.

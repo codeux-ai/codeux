@@ -3,6 +3,12 @@ import { Play, Loader2 } from "lucide-preact";
 import type { Sprint } from "../../types.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { buildInteractionTransition } from "../../lib/motion/tokens.js";
+import { useDashboardI18n } from "../../i18n/index.js";
+import {
+  browserPreviewMessages,
+  type BrowserPreviewMessageKey,
+  type BrowserPreviewMessageVariables,
+} from "../../i18n/messages/browser-preview.js";
 
 interface LaunchContainerPanelProps {
   sprints: Sprint[];
@@ -23,21 +29,26 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
   launchEnabled,
   launchBusy,
 }) => {
+  const { translate } = useDashboardI18n();
+  const t = (key: BrowserPreviewMessageKey, variables?: BrowserPreviewMessageVariables) => (
+    translate(browserPreviewMessages, key, variables)
+  );
   const selectedSprintName = sprints.find((sprint) => sprint.id === launchSprintId)?.name || null;
+  const sprintSuffix = selectedSprintName ? t("launchForSprintSuffix", { name: selectedSprintName }) : "";
   const disabledReason = launchBusy
-    ? `A preview is already launching${selectedSprintName ? ` for ${selectedSprintName}` : ""}.`
+    ? t("launchAlreadyPending", { suffix: sprintSuffix })
     : sprints.length === 0
-      ? "No sprint is available to launch."
+      ? t("noSprintLaunchReason")
       : !launchEnabled
-        ? "Select a project with Browser Preview enabled to start a container."
+        ? t("noProjectLaunchReason")
         : !launchSprintId
-          ? "Select a sprint before launching a preview container."
+          ? t("selectSprintLaunchReason")
           : null;
   const selectUnavailable = !launchEnabled || launchBusy || sprints.length === 0;
   const launchUnavailable = selectUnavailable || !launchSprintId;
   const statusMessage = launchBusy
-    ? `Launching preview container${selectedSprintName ? ` for ${selectedSprintName}` : ""}. Launch controls are temporarily unavailable and the selected sprint is preserved.`
-    : disabledReason || "Ready to launch a preview container for the selected sprint.";
+    ? t("launchPendingStatus", { suffix: sprintSuffix })
+    : disabledReason || t("launchReadyStatus");
 
   return (
     <div
@@ -48,7 +59,7 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
     >
       <div className="flex items-center justify-between gap-3">
         <div id="launch-container-title" className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-          Launch Container
+          {t("launchContainer")}
         </div>
         <div className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
           launchBusy
@@ -57,14 +68,14 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
               ? "border-slate-400/25 bg-slate-500/10 text-slate-600 dark:border-slate-500/40 dark:bg-slate-500/15 dark:text-slate-300"
               : "border-signal-500/30 bg-signal-500/10 text-signal-600 dark:text-signal-400"
         }`}>
-          {launchBusy ? "Launching" : launchUnavailable ? "Unavailable" : "Ready"}
+          {launchBusy ? t("launchStatus") : launchUnavailable ? t("unavailableStatus") : t("readyStatus")}
         </div>
       </div>
       <div className="mt-4 space-y-3">
         <div id="launch-container-status" role="status" aria-live="polite" aria-atomic="true" className="min-h-4 text-xs text-slate-500 mb-2">
           {statusMessage}
         </div>
-        <label htmlFor="launch-container-sprint" className="sr-only">Sprint to preview</label>
+        <label htmlFor="launch-container-sprint" className="sr-only">{t("sprintToPreview")}</label>
         <AvantgardeSelect
           id="launch-container-sprint"
           value={launchSprintId}
@@ -72,10 +83,10 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
           disabled={selectUnavailable}
           aria-busy={launchBusy}
           aria-describedby="launch-container-status"
-          title={selectUnavailable ? statusMessage : "Choose the sprint to preview"}
+          title={selectUnavailable ? statusMessage : t("chooseSprintToPreview")}
           className="w-full"
           options={sprints.length === 0
-            ? [{ value: "", label: "No sprints available" }]
+            ? [{ value: "", label: t("noSprintsAvailable") }]
             : sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))}
         />
 
@@ -90,8 +101,8 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
           aria-disabled={launchUnavailable}
           aria-busy={launchBusy}
           aria-describedby="launch-container-status"
-          aria-label={launchBusy ? "Launching preview container" : "Launch preview container"}
-          title={launchUnavailable ? statusMessage : "Launch preview container for the selected sprint"}
+          aria-label={launchBusy ? t("launchingPreviewContainer") : t("launchContainerLower")}
+          title={launchUnavailable ? statusMessage : t("launchContainerForSprint")}
           className={`inline-flex h-10 w-full items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold text-void-900 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 ${
             launchUnavailable
               ? "bg-signal-500 cursor-not-allowed opacity-50"
@@ -105,14 +116,14 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
             <Play aria-hidden="true" className="h-4 w-4" strokeWidth={2.2} />
           )}
           {launchBusy
-            ? "Launching..."
+            ? t("launchingEllipsis")
             : sprints.length === 0
-              ? "Disabled: No Sprint"
+              ? t("disabledNoSprint")
               : !launchEnabled
-                ? "Disabled: No Project"
+                ? t("disabledNoProject")
                 : !launchSprintId
-                  ? "Disabled: Select Sprint"
-                  : "Launch Container"}
+                  ? t("disabledSelectSprint")
+                  : t("launchContainer")}
         </button>
       </div>
     </div>

@@ -10,6 +10,8 @@ import { useProjectData } from "../../../dashboard/src/v2/context/project-data.j
 import { fetchLocalFiles } from "../../../dashboard/src/v2/lib/project-api.js";
 import { cloneProjectSettings } from "../../../dashboard/src/v2/lib/settings/project-overrides.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
+import { DashboardI18nProvider } from "../../../dashboard/src/v2/i18n/index.js";
+import { SettingsDetailWorkspaceProvider } from "../../../dashboard/src/v2/components/settings/panels/SharedPanelComponents.js";
 
 expect.extend(matchers);
 
@@ -305,5 +307,80 @@ describe("SettingsGeneralPanel", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Path is outside allowed roots");
     expect(input).toHaveValue(".code-ux/container/setup.sh");
+  });
+
+  it("localizes German validation, failed saves, unavailable scope, and file-picker feedback without changing runtime data", async () => {
+    const updateProject = vi.fn().mockRejectedValue(new Error("Rename rejected by API"));
+    vi.mocked(useProjectData).mockReturnValue({ updateProject } as any);
+
+    const projectView = render(
+      <DashboardI18nProvider initialLocale="de">
+        <SettingsGeneralPanel state={createProjectState() as any} />
+      </DashboardI18nProvider>,
+    );
+
+    const nameInput = screen.getByLabelText("Projektname");
+    fireEvent.input(nameInput, { target: { value: "   " } });
+    expect(screen.getByRole("button", { name: "Namen speichern" })).toHaveAttribute(
+      "title",
+      "Gib vor dem Speichern einen Projektnamen ein.",
+    );
+
+    fireEvent.input(nameInput, { target: { value: "Umbenanntes Projekt" } });
+    fireEvent.click(screen.getByRole("button", { name: "Namen speichern" }));
+    expect(await screen.findByText("Rename rejected by API")).toBeInTheDocument();
+    expect(updateProject).toHaveBeenCalledWith("proj-1", { name: "Umbenanntes Projekt" });
+    projectView.unmount();
+
+    const unavailableState = {
+      ...createProjectState(),
+      selectedProject: null,
+      projectSettings: null,
+      editableSettings: null,
+    };
+    const unavailableView = render(
+      <DashboardI18nProvider initialLocale="de">
+        <SettingsGeneralPanel state={unavailableState as any} />
+      </DashboardI18nProvider>,
+    );
+    expect(screen.getByText("Projektbereich nicht verfügbar")).toBeInTheDocument();
+    expect(screen.getByText("Wähle zuerst ein Projekt aus, um vererbbare Projekteinstellungen zu bearbeiten.")).toBeInTheDocument();
+    unavailableView.unmount();
+
+    vi.mocked(fetchLocalFiles).mockRejectedValueOnce(new Error("Path is outside allowed roots"));
+    const systemState = createSystemState();
+    const setupScriptPath = systemState.editableSettings.cliWorkflow.containerSetupScriptPath;
+    render(
+      <DashboardI18nProvider initialLocale="de">
+        <SettingsGeneralPanel state={systemState as any} />
+      </DashboardI18nProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Durchsuchen" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Path is outside allowed roots");
+    expect(screen.getByLabelText("Container-Einrichtungsskript")).toHaveValue(setupScriptPath);
+  });
+
+  it("localizes German System Runtime summary values without changing logging enums", () => {
+    const state = createSystemState();
+    state.systemSettings.runtime.consoleLogLevel = "warn";
+    state.systemSettings.runtime.debugLogFileLevel = "error";
+
+    render(
+      <DashboardI18nProvider initialLocale="de">
+        <SettingsDetailWorkspaceProvider>
+          <SettingsGeneralPanel state={state as any} />
+        </SettingsDetailWorkspaceProvider>
+      </DashboardI18nProvider>,
+    );
+
+    const runtimeCard = screen.getByRole("heading", { name: "Systemlaufzeit" }).closest("section");
+    expect(runtimeCard).not.toBeNull();
+    expect(within(runtimeCard!).getByText("Warnung")).toBeInTheDocument();
+    expect(within(runtimeCard!).getByText("Fehler")).toBeInTheDocument();
+    expect(within(runtimeCard!).queryByText("warn")).not.toBeInTheDocument();
+    expect(within(runtimeCard!).queryByText("error")).not.toBeInTheDocument();
+    expect(state.systemSettings.runtime.consoleLogLevel).toBe("warn");
+    expect(state.systemSettings.runtime.debugLogFileLevel).toBe("error");
+    expect(state.updateSystem).not.toHaveBeenCalled();
   });
 });

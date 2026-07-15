@@ -7,9 +7,10 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import userEvent from "@testing-library/user-event";
 import gsap from "gsap";
 import { KanbanTaskCard } from "../KanbanTaskCard.js";
-import type { TaskCardViewModel } from "../../../lib/tasks/task-card-view-model.js";
+import { buildTaskCardViewModel, type TaskCardViewModel } from "../../../lib/tasks/task-card-view-model.js";
 import type { CiStatusPresentation } from "../../../lib/ci-status-presentation.js";
 import type { TaskSelfReflectionRating } from "../../../../../../src/contracts/task-self-reflection-types.js";
+import { DashboardI18nProvider } from "../../../i18n/context.js";
 
 expect.extend(matchers);
 
@@ -42,7 +43,6 @@ const createRating = (overrides: Partial<TaskSelfReflectionRating> = {}): TaskSe
   updatedAt: "2026-07-07T00:00:00.000Z",
   ...overrides,
 });
-
 const createCiPresentation = (
   state: CiStatusPresentation["state"],
 ): CiStatusPresentation => ({
@@ -753,7 +753,7 @@ describe("KanbanTaskCard Integration", () => {
 
     expect(mockRequestConfirm).toHaveBeenCalled();
     expect(onDelete).not.toHaveBeenCalled();
-    expect(actionTrigger).toHaveFocus();
+    await waitFor(() => expect(actionTrigger).toHaveFocus());
   });
 
   it("provides accurate drag-and-drop screen-reader guidance", async () => {
@@ -873,6 +873,40 @@ describe("KanbanTaskCard Integration", () => {
     expect(actionTrigger).toHaveClass('kanban-card__action-trigger');
     expect(actionTrigger).not.toHaveClass('absolute');
     expect(actionTrigger).toHaveAccessibleName("Open task actions for task TASK-123: A very long task title that could potentially blow out the card width if not wrapped correctly with pr-12 or break-words");
+  });
+
+  it("renders German card actions and delete confirmation without translating task content", async () => {
+    const task = {
+      ...mockViewModel.task,
+      id: "TASK_KEY_DE_1",
+      title: "Keep persisted English title",
+      status: "in_progress" as const,
+      priority: "critical" as const,
+      promptMarkdown: "## Keep this prompt verbatim",
+      sprintId: "sprint-de",
+      dependsOnTaskIds: [],
+    };
+    const viewModel = buildTaskCardViewModel(task, new Map(), undefined, { locale: "de" });
+    const onDelete = vi.fn();
+    render(
+      <DashboardI18nProvider initialLocale="de" storage={null}>
+        <KanbanTaskCard viewModel={viewModel} onEdit={vi.fn()} onDelete={onDelete} />
+      </DashboardI18nProvider>,
+    );
+
+    expect(screen.getByText("Keep persisted English title")).toBeInTheDocument();
+    expect(screen.getByText("In Bearbeitung")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Aufgabenaktionen für Aufgabe TASK_KEY_DE_1 öffnen/i }));
+    const deleteButton = await screen.findByRole("menuitem", { name: /Aufgabe TASK_KEY_DE_1 löschen/i });
+    expect(deleteButton).toHaveTextContent("Löschen");
+    fireEvent.click(deleteButton);
+
+    await waitFor(() => expect(mockRequestConfirm).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Aufgabe löschen",
+      confirmLabel: "Aufgabe löschen",
+      body: expect.stringContaining("Keep persisted English title"),
+    })));
+    expect(onDelete).toHaveBeenCalledWith(task);
   });
 
 });

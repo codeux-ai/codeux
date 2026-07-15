@@ -24,14 +24,14 @@ test('manages a write-only credential with durable feedback, keyboard focus, and
   const card = page.locator('[data-integration-card="automation-credentials"]');
   await expect(card).toBeVisible();
   expect(await card.locator('xpath=preceding-sibling::*').count()).toBe(0);
-  await expect(card).toContainText('Ready · not configured');
+  await expect(card).toContainText('Ready, not configured.');
   const manage = card.getByRole('button', { name: 'Manage' });
   await manage.focus();
   await page.keyboard.press('Enter');
 
-  await expect(page.getByRole('heading', { name: 'Automation Credentials', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Automation credential management', exact: true })).toBeVisible();
   await expect(page.getByText('Secure storage ready')).toBeVisible();
-  await expect(page.getByText(/Ready, not configured/)).toBeVisible();
+  await expect(page.locator('strong').filter({ hasText: 'Ready, not configured.' })).toBeVisible();
 
   await page.getByLabel('Credential name').fill('Browser jobs credential');
   await page.getByLabel('Credential kind').fill('http');
@@ -129,7 +129,7 @@ test('shows safe metadata and prevents custody-dependent submissions when the ex
 
     await openSettingsCategory(page, 'integrations', 'Integrations');
     const card = page.locator('[data-integration-card="automation-credentials"]');
-    await expect(card).toContainText('Unavailable');
+    await expect(card).toContainText('Not available');
     await card.getByRole('button', { name: 'Manage' }).click();
 
     const alert = page.getByRole('alert').filter({ hasText: 'Secure credential storage is unavailable' });

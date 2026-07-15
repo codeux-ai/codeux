@@ -4,8 +4,10 @@ import { useRef, useLayoutEffect, useEffect, useState } from "preact/hooks";
 import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { CoffeeCup, ContainerShip, WoodenShip } from "./PlanningShip.js";
-import { type PlanningActionType, type PlanningFeedback, PLANNING_ACTION_LABELS } from "../../lib/sprint-planning-feedback.js";
+import { getPlanningActionLabel, type PlanningActionType, type PlanningFeedback } from "../../lib/sprint-planning-feedback.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { sprintAuthoringMessages } from "../../i18n/messages/sprint-authoring.js";
 
 interface PlanningProgressOverlayProps {
   isBusy: boolean;
@@ -36,6 +38,8 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
   secondaryActionLabel,
   onSecondaryAction,
 }) => {
+  const { locale, translate } = useDashboardI18n();
+  const t = (key: keyof typeof sprintAuthoringMessages.en): string => translate(sprintAuthoringMessages, key);
   const textContainerRef = useRef<HTMLDivElement>(null);
   const prevTextRef = useRef(feedback?.text);
   const prevBusyStateRef = useRef<{ isBusy: boolean; actionType: PlanningProgressOverlayProps["actionType"] }>({ isBusy, actionType });
@@ -123,31 +127,31 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
   const displayedProgress = Math.round(Math.min(0.99, Math.max(0, feedback.progress)) * 100);
 
   const getBadgeText = () => {
-    if (actionType === "quicksprint") return "Quicksprint in motion";
-    return PLANNING_ACTION_LABELS[actionType] || "Planning in motion";
+    if (actionType === "quicksprint") return t("quicksprintInMotion");
+    return getPlanningActionLabel(actionType, locale) || t("planningInMotion");
   };
 
   const getCancelLabel = () => {
-    if (actionType === "quicksprint") return "Cancel Quicksprint Request";
-    return "Cancel Active Request";
+    if (actionType === "quicksprint") return t("cancelQuicksprintRequest");
+    return t("cancelActiveRequest");
   };
 
   const getDescriptionText = () => {
     switch (actionType) {
       case "improve":
-        return "The Planning agent is researching your codebase to produce a more precise technical definition.";
+        return t("improvePlanningDescription");
       case "replan":
-        return "The Planning agent is analyzing existing tasks and researching the codebase to generate an updated plan.";
+        return t("replanPlanningDescription");
       case "plan_only":
-        return "The Planning agent is researching the codebase to decompose your sprint into grounded, atomic subtasks. Execution will wait for your review.";
+        return t("planOnlyPlanningDescription");
       case "plan_and_start":
-        return "The Planning agent is researching the codebase to decompose your sprint into grounded, atomic subtasks and will begin execution immediately.";
+        return t("planStartPlanningDescription");
       case "draft":
-        return "Saving your sprint definition without generating subtasks.";
+        return t("draftPlanningDescription");
       case "append_tasks":
-        return "Adding new tasks to your existing sprint.";
+        return t("appendPlanningDescription");
       default:
-        return "The Planning agent is researching the codebase to decompose your sprint into grounded, atomic subtasks.";
+        return t("defaultPlanningDescription");
     }
   };
 
@@ -166,7 +170,7 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
         type="button"
         onClick={onDismiss}
         className="absolute top-6 right-6 inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/[0.06] bg-white/78 text-slate-400 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:hover:text-white z-10"
-        aria-label="Minimize overlay"
+        aria-label={t("minimizeOverlay")}
       >
         <X className="h-4 w-4" />
       </button>
@@ -216,7 +220,7 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
           <div className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2">
             <button
               type="button"
-              aria-label={isCoffeeBreak ? "Coffee break reminder is visible" : "Turn planning vessel into a coffee break reminder"}
+              aria-label={isCoffeeBreak ? t("coffeeVisible") : t("coffeeActivate")}
               aria-pressed={isCoffeeBreak ? "true" : "false"}
               data-testid="planning-vessel-button"
               onClick={(e) => {
@@ -263,14 +267,14 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
         </div>
         <div className="flex items-center justify-center gap-6">
           <div className="flex flex-col items-center">
-            <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">ETA</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("eta")}</div>
             <div className="font-mono text-xl font-medium tracking-tight text-slate-900 dark:text-white">
               {String(Math.floor(Math.max(0, planningEta - elapsedMs) / 60000)).padStart(2, "0")}:{String(Math.floor((Math.max(0, planningEta - elapsedMs) % 60000) / 1000)).padStart(2, "0")}
             </div>
           </div>
           <div className="h-8 w-px bg-black/[0.08] dark:bg-white/[0.08]" />
           <div className="flex flex-col items-center">
-            <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Elapsed</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{t("elapsed")}</div>
             <div className="font-mono text-xl font-medium tracking-tight text-slate-500">
               {String(Math.floor(elapsedMs / 60000)).padStart(2, "0")}:{String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, "0")}
             </div>
@@ -299,11 +303,11 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
             role="status"
             aria-live="polite"
           >
-            Coffee break unlocked. Grab a fresh cup while planning keeps moving.
+            {t("coffeeUnlocked")}
           </p>
         )}
         <p className="mx-auto max-w-sm text-xs leading-relaxed text-slate-400 dark:text-slate-500">
-          You can minimize this panel and keep the request running, or cancel it from here.
+          {t("planningMinimizeHint")}
         </p>
         <div className="mt-4 flex flex-row items-center justify-center gap-3">
           <button
@@ -311,7 +315,7 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
             onClick={onDismiss}
             className="inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/66 px-4 py-2 text-xs font-semibold text-slate-500 transition-colors hover:border-black/[0.15] hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:border-white/[0.15] dark:hover:text-white"
           >
-            Minimize
+            {t("minimize")}
           </button>
           {secondaryActionLabel && onSecondaryAction && (
             <button

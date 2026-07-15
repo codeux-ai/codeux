@@ -8,6 +8,7 @@ import type { Sprint } from "../../../types.js";
 import { ORGANIC_CELL_SHADOW_CLASS } from "../../ui/organic-cell-styles.js";
 import { SprintCell } from "../SprintCell.js";
 import type { CiStatusPresentation } from "../../../lib/ci-status-presentation.js";
+import { renderWithI18n } from "../../../../../../tests/dashboard/render-with-i18n.js";
 
 expect.extend(matchers);
 
@@ -79,7 +80,7 @@ describe("SprintCell visuals", () => {
   });
 
   it("uses the shared organic project-cell background shadow", () => {
-    const { container } = render(
+    const { container } = renderWithI18n(
       <SprintCell
         sprint={sprint}
         isEven={false}
@@ -119,7 +120,7 @@ describe("SprintCell visuals", () => {
 
   it("shows target-specific busy state for the primary sprint action", () => {
     const onPrimaryAction = vi.fn();
-    render(
+    renderWithI18n(
       <SprintCell
         sprint={sprint}
         isEven={false}
@@ -274,7 +275,7 @@ describe("SprintCell visuals", () => {
   });
 
   it("does not render attention for a healthy completed sprint", () => {
-    const { container } = render(
+    const { container } = renderWithI18n(
       <SprintCell
         sprint={{ ...sprint, status: "completed", completion: 100 }}
         isEven={false}
@@ -287,7 +288,7 @@ describe("SprintCell visuals", () => {
   });
 
   it("renders rollback sprints with a dedicated orange treatment", () => {
-    const { container } = render(
+    const { container } = renderWithI18n(
       <SprintCell
         sprint={{
           ...sprint,
@@ -361,5 +362,33 @@ describe("SprintCell visuals", () => {
     const review = screen.getByRole("region", { name: "QA Changes Requested" });
     expect(within(review).getByText("Add a deterministic timeout regression test.")).toBeVisible();
     expect(within(review).getByText("T02")).toBeVisible();
+  });
+
+  it("shows active final QA on the sprint gallery card", () => {
+    const sprintName = "Provider supplied sprint name";
+    renderWithI18n(
+      <SprintCell
+        sprint={{
+          ...sprint,
+          name: sprintName,
+          status: "running",
+          completion: 100,
+          latestReview: {
+            status: "pending",
+            outcome: null,
+            summary: "Provider-authored QA summary stays verbatim.",
+            findings: [],
+            reviewer: "QA Worker",
+            finishedAt: null,
+          },
+        }}
+        isEven={false}
+        accentColor="text-signal-600 dark:text-signal-300"
+      />,
+    );
+
+    expect(screen.getByText(sprintName)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /CI status: QA running/i })).toHaveTextContent("QA running");
+    expect(screen.queryByText("Merge running")).not.toBeInTheDocument();
   });
 });

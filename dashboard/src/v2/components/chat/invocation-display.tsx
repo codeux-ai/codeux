@@ -1,6 +1,8 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
 import { Layers, ListChecks } from "lucide-preact";
 import type { ExecutionInvocationRecord } from "../../types.js";
+import type { DashboardLocale } from "../../i18n/locales.js";
+import { translateChatMessage } from "../../i18n/messages/chat.js";
 
 /** Human-friendly titles for the invocation purpose, falling back to a title-cased type. */
 const PURPOSE_LABELS: Record<string, string> = {
@@ -13,25 +15,45 @@ const PURPOSE_LABELS: Record<string, string> = {
   worker_dispatch: "Worker Dispatch",
 };
 
-export const formatInvocationPurpose = (type: string | null | undefined): string => {
-  if (!type) return "No Invocation Selected";
+const PURPOSE_MESSAGE_KEYS: Record<string, Parameters<typeof translateChatMessage>[1]> = {
+  planning: "purposePlanning",
+  cli_task_coding: "purposeTaskCoding",
+  cli_task_review: "purposeTaskReview",
+  cli_qa: "purposeQaReview",
+  qa_review: "purposeQaReview",
+  dashboard_reply: "purposeChatReply",
+  worker_dispatch: "purposeWorkerDispatch",
+};
+
+export const formatInvocationPurpose = (
+  type: string | null | undefined,
+  locale: DashboardLocale = "en",
+): string => {
+  if (!type) return translateChatMessage(locale, "noInvocationSelectedPurpose");
+  const messageKey = PURPOSE_MESSAGE_KEYS[type];
+  if (messageKey) return translateChatMessage(locale, messageKey);
   return PURPOSE_LABELS[type] ?? type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 };
 
 /** Compact elapsed/total duration between two ISO timestamps (end defaults to now). */
-export const formatInvocationDuration = (startIso: string | null, endIso: string | null): string | null => {
+export const formatInvocationDuration = (
+  startIso: string | null,
+  endIso: string | null,
+  locale: DashboardLocale = "en",
+): string | null => {
   if (!startIso) return null;
   const start = Date.parse(startIso);
   const end = endIso ? Date.parse(endIso) : Date.now();
   if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
   const totalSeconds = Math.round((end - start) / 1000);
-  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const formatNumber = (value: number): string => new Intl.NumberFormat(locale).format(value);
+  if (totalSeconds < 60) return `${formatNumber(totalSeconds)}s`;
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  if (minutes < 60) return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`;
+  if (minutes < 60) return seconds ? `${formatNumber(minutes)}m ${formatNumber(seconds)}s` : `${formatNumber(minutes)}m`;
   const hours = Math.floor(minutes / 60);
   const remMinutes = minutes % 60;
-  return remMinutes ? `${hours}h ${remMinutes}m` : `${hours}h`;
+  return remMinutes ? `${formatNumber(hours)}h ${formatNumber(remMinutes)}m` : `${formatNumber(hours)}h`;
 };
 
 export interface InvocationLinks {

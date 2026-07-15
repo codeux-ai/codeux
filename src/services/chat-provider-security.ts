@@ -1,5 +1,10 @@
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHash, createHmac, timingSafeEqual } from "crypto";
 import type { ChatProviderConnectionInternalRecord, ChatProviderSecretConfig } from "../contracts/chat-provider-types.js";
+import {
+  CHAT_CONNECTOR_REGISTRY,
+  type ChatConnectorRegistry,
+} from "../domain/chat-connectors/registry.js";
+import type { ChatConnectorHmacAuthentication } from "../domain/chat-connectors/types.js";
 
 export interface ChatProviderIngressSecurityRequest {
   headers: Record<string, string | string[] | undefined>;
@@ -9,7 +14,7 @@ export interface ChatProviderIngressSecurityRequest {
 
 export interface ChatProviderIngressSecurityResult {
   authenticated: true;
-  method: "bearer" | "hmac";
+  method: "bearer" | "header_secret" | "hmac";
 }
 
 export class ChatProviderIngressSecurityError extends Error {
@@ -23,14 +28,20 @@ interface ReplayEntry {
   expiresAt: number;
 }
 
+export interface ChatProviderReplayReceiptStore {
+  insertIngressReplayReceipt(providerConnectionId: string, receiptKey: string, expiresAt: string, now?: Date): boolean;
+}
+
 const DEFAULT_TIMESTAMP_TOLERANCE_MS = 5 * 60 * 1000;
 const MAX_REPLAY_CACHE_SIZE = 2_000;
-const HMAC_SECRET_KEYS = ["signingSecret", "webhookSecret", "botAppPassword"];
-
 export class ChatProviderIngressSecurity {
   private readonly replayCache = new Map<string, ReplayEntry>();
 
-  constructor(private readonly timestampToleranceMs = DEFAULT_TIMESTAMP_TOLERANCE_MS) {}
+  constructor(
+    private readonly timestampToleranceMs = DEFAULT_TIMESTAMP_TOLERANCE_MS,
+    private readonly replayReceiptStore?: ChatProviderReplayReceiptStore,
+    private readonly registry: ChatConnectorRegistry = CHAT_CONNECTOR_REGISTRY,
+  ) {}
 
   verify(
     connection: ChatProviderConnectionInternalRecord,
@@ -40,20 +51,34 @@ export class ChatProviderIngressSecurity {
       throw new ChatProviderIngressSecurityError("connection_disabled", "Chat provider connection is not enabled.", 403);
     }
 
-    const nowMs = (request.now ?? new Date()).getTime();
-    const timestamp = this.requireFreshTimestamp(request.headers, nowMs);
-    const signature = firstHeader(request.headers, [
-      "x-code-ux-signature",
-      "x-hub-signature-256",
-      "x-slack-signature",
-      "x-signature",
-    ]);
+    const profile = this.registry.getForMode(connection.providerKind, connection.bridgeMode);
+    const authentication = profile.ingress.authentication[connection.bridgeMode];
+    if (!authentication) {
+      throw new ChatProviderIngressSecurityError("unsupported_authentication", "Unsupported chat provider authentication mode.", 403);
+    }
+    if (authentication.type === "header_secret") {
+      const expectedToken = firstConfiguredSecretExact(connection.secrets, authentication.secretKeys);
+      if (!expectedToken) {
+        throw new ChatProviderIngressSecurityError("missing_header_secret", "Webhook secret token is not configured.", 403);
+      }
+      const actualToken = firstHeaderExact(request.headers, authentication.tokenHeaders);
+      if (actualToken === undefined || !constantTimeEqualsExact(actualToken, expectedToken)) {
+        throw new ChatProviderIngressSecurityError("invalid_header_secret", "Invalid webhook secret token.", 401);
+      }
+      return { authenticated: true, method: "header_secret" };
+    }
 
-    if (connection.bridgeMode === "webhook") {
-      const hmacSecret = firstConfiguredSecret(connection.secrets, HMAC_SECRET_KEYS);
+    const nowMs = (request.now ?? new Date()).getTime();
+    const timestamp = authentication.timestampRequirement === "none"
+      ? null
+      : this.requireFreshTimestamp(request.headers, authentication.timestampHeaders, nowMs);
+
+    if (authentication.type === "hmac_sha256") {
+      const hmacSecret = firstConfiguredSecret(connection.secrets, authentication.secretKeys);
       if (!hmacSecret) {
         throw new ChatProviderIngressSecurityError("missing_hmac_secret", "Webhook signing secret is not configured.", 403);
       }
+      const signature = firstHeader(request.headers, authentication.signatureHeaders);
       if (!signature) {
         throw new ChatProviderIngressSecurityError("missing_signature", "Missing chat provider ingress signature.", 401);
       }
@@ -64,19 +89,17 @@ export class ChatProviderIngressSecurity {
         rawBody: request.rawBody,
         secret: hmacSecret,
         nowMs,
+        authentication,
       });
       return { authenticated: true, method: "hmac" };
     }
 
-    const expectedBearer = firstConfiguredSecret(
-      connection.secrets,
-      connection.bridgeMode === "native_bridge" ? ["bridgeToken"] : ["bridgeApiKey"],
-    );
+    const expectedBearer = firstConfiguredSecret(connection.secrets, authentication.secretKeys);
     if (!expectedBearer) {
       throw new ChatProviderIngressSecurityError("missing_bridge_secret", "Chat provider bridge secret is not configured.", 403);
     }
 
-    const actualBearer = parseBearerToken(request.headers);
+    const actualBearer = parseBearerToken(request.headers, authentication.tokenHeaders);
     if (!actualBearer || !constantTimeEquals(actualBearer, expectedBearer)) {
       throw new ChatProviderIngressSecurityError("invalid_bearer_token", "Invalid chat provider bridge token.", 401);
     }
@@ -92,12 +115,12 @@ export class ChatProviderIngressSecurity {
     return { authenticated: true, method: "bearer" };
   }
 
-  private requireFreshTimestamp(headers: Record<string, string | string[] | undefined>, nowMs: number): { raw: string; value: number } {
-    const rawTimestamp = firstHeader(headers, [
-      "x-code-ux-timestamp",
-      "x-provider-timestamp",
-      "x-slack-request-timestamp",
-    ]);
+  private requireFreshTimestamp(
+    headers: Record<string, string | string[] | undefined>,
+    timestampHeaders: readonly string[],
+    nowMs: number,
+  ): { raw: string; value: number } {
+    const rawTimestamp = firstHeader(headers, timestampHeaders);
     if (!rawTimestamp) {
       throw new ChatProviderIngressSecurityError("missing_timestamp", "Missing chat provider ingress timestamp.", 401);
     }
@@ -120,34 +143,47 @@ export class ChatProviderIngressSecurity {
   private verifyHmacSignature(input: {
     connectionId: string;
     signature: string;
-    timestamp: { raw: string; value: number };
+    timestamp: { raw: string; value: number } | null;
     rawBody: string;
     secret: string;
     nowMs: number;
+    authentication: ChatConnectorHmacAuthentication;
   }): void {
-    const normalizedSignature = normalizeSignature(input.signature);
+    const normalizedSignature = normalizeSignature(input.signature, input.authentication.signaturePrefix);
     if (!normalizedSignature) {
       throw new ChatProviderIngressSecurityError("invalid_signature", "Invalid chat provider ingress signature.", 401);
     }
 
-    const candidates = [
-      createHmac("sha256", input.secret).update(`${input.timestamp.raw}.${input.rawBody}`).digest("hex"),
-      createHmac("sha256", input.secret).update(`v0:${input.timestamp.raw}:${input.rawBody}`).digest("hex"),
-      createHmac("sha256", input.secret).update(input.rawBody).digest("hex"),
-    ];
+    const candidates = input.authentication
+      .signatureBases({ timestamp: input.timestamp?.raw ?? "", rawBody: input.rawBody })
+      .map((base) => createHmac("sha256", input.secret).update(base).digest("hex"));
     const valid = candidates.some((candidate) => constantTimeEquals(candidate, normalizedSignature));
     if (!valid) {
       throw new ChatProviderIngressSecurityError("signature_mismatch", "Invalid chat provider ingress signature.", 401);
     }
 
-    this.preventReplay({
-      connectionId: input.connectionId,
-      key: `hmac:${input.timestamp.value}:${normalizedSignature}`,
-      nowMs: input.nowMs,
-    });
+    if (input.timestamp) {
+      this.preventReplay({
+        connectionId: input.connectionId,
+        key: `hmac:${input.timestamp.value}:${normalizedSignature}`,
+        nowMs: input.nowMs,
+      });
+    }
   }
 
   private preventReplay(input: { connectionId: string; key: string; nowMs: number }): void {
+    if (this.replayReceiptStore) {
+      const inserted = this.replayReceiptStore.insertIngressReplayReceipt(
+        input.connectionId,
+        input.key,
+        new Date(input.nowMs + this.timestampToleranceMs).toISOString(),
+        new Date(input.nowMs),
+      );
+      if (!inserted) {
+        throw new ChatProviderIngressSecurityError("replay_detected", "Duplicate chat provider ingress request.", 409);
+      }
+      return;
+    }
     this.pruneReplayCache(input.nowMs);
     const replayKey = `${input.connectionId}:${input.key}`;
     if (this.replayCache.has(replayKey)) {
@@ -171,13 +207,20 @@ export class ChatProviderIngressSecurity {
   }
 }
 
-function parseBearerToken(headers: Record<string, string | string[] | undefined>): string | null {
-  const authorization = firstHeader(headers, ["authorization"]);
+function parseBearerToken(
+  headers: Record<string, string | string[] | undefined>,
+  tokenHeaders: readonly string[],
+): string | null {
+  const authorization = tokenHeaders.includes("authorization")
+    ? firstHeader(headers, ["authorization"])
+    : undefined;
   const match = authorization?.match(/^Bearer\s+(.+)$/i);
-  return match?.[1]?.trim() || firstHeader(headers, ["x-code-ux-bridge-token"]) || null;
+  return match?.[1]?.trim()
+    || firstHeader(headers, tokenHeaders.filter((header) => header !== "authorization"))
+    || null;
 }
 
-function firstConfiguredSecret(secrets: ChatProviderSecretConfig | null, keys: string[]): string | null {
+function firstConfiguredSecret(secrets: ChatProviderSecretConfig | null, keys: readonly string[]): string | null {
   for (const key of keys) {
     const value = secrets?.[key];
     if (typeof value === "string" && value.trim()) {
@@ -187,7 +230,17 @@ function firstConfiguredSecret(secrets: ChatProviderSecretConfig | null, keys: s
   return null;
 }
 
-function firstHeader(headers: Record<string, string | string[] | undefined>, names: string[]): string | undefined {
+function firstConfiguredSecretExact(secrets: ChatProviderSecretConfig | null, keys: readonly string[]): string | null {
+  for (const key of keys) {
+    const value = secrets?.[key];
+    if (typeof value === "string" && value.length > 0) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function firstHeader(headers: Record<string, string | string[] | undefined>, names: readonly string[]): string | undefined {
   const normalized = new Map(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]));
   for (const name of names) {
     const value = normalized.get(name.toLowerCase());
@@ -199,8 +252,26 @@ function firstHeader(headers: Record<string, string | string[] | undefined>, nam
   return undefined;
 }
 
-function normalizeSignature(value: string): string | null {
+function firstHeaderExact(
+  headers: Record<string, string | string[] | undefined>,
+  names: readonly string[],
+): string | undefined {
+  const normalized = new Map(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]));
+  for (const name of names) {
+    const value = normalized.get(name.toLowerCase());
+    const candidate = Array.isArray(value) ? value[0] : value;
+    if (typeof candidate === "string") {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+function normalizeSignature(value: string, requiredPrefix?: string): string | null {
   const trimmed = value.trim();
+  if (requiredPrefix && !trimmed.toLowerCase().startsWith(requiredPrefix.toLowerCase())) {
+    return null;
+  }
   const match = trimmed.match(/^(?:sha256=|v0=)?([a-f0-9]{64})$/i);
   return match?.[1]?.toLowerCase() || null;
 }
@@ -212,4 +283,12 @@ function constantTimeEquals(left: string, right: string): boolean {
     return false;
   }
   return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function constantTimeEqualsExact(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  const leftDigest = createHash("sha256").update(leftBuffer).digest();
+  const rightDigest = createHash("sha256").update(rightBuffer).digest();
+  return timingSafeEqual(leftDigest, rightDigest) && leftBuffer.length === rightBuffer.length;
 }

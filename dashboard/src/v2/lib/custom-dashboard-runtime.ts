@@ -1,4 +1,6 @@
 import { fetchJson } from "../../lib/api/fetch-json.js";
+import { customDashboardMessages } from "../i18n/messages/custom-dashboards.js";
+import { translateDashboardMessage, type DashboardLocale } from "../i18n/locales.js";
 import type {
   CustomDashboardJsonValue,
   CustomDashboardRecord,
@@ -76,6 +78,7 @@ const CREDENTIAL_BINDING_PROPERTY_NAMES = new Set(["credentialbindings", "creden
 export function resolvePublishedCustomDashboardRuntime(
   dashboard: CustomDashboardRecord,
   revisions: CustomDashboardRevisionRecord[],
+  locale: DashboardLocale = "en",
 ): CustomDashboardRuntimeResolution {
   const credentialIds = collectCredentialBindingIds(dashboard, revisions);
   const safeDashboard = sanitizeViewerValue(dashboard, credentialIds);
@@ -87,12 +90,17 @@ export function resolvePublishedCustomDashboardRuntime(
   const validationReport = getLastValidationReport(safeRevisions);
 
   if (safeDashboard.status === "archived") {
-    return { status: "blocked", reason: "Archived custom dashboards cannot be opened.", validationReport, publishedRevision: safePublishedRevision };
+    return {
+      status: "blocked",
+      reason: translateDashboardMessage(customDashboardMessages, locale, "blockedArchived"),
+      validationReport,
+      publishedRevision: safePublishedRevision,
+    };
   }
   if (safeDashboard.status !== "published") {
     return {
       status: "blocked",
-      reason: "Only published custom dashboards can be opened. Validate and publish a revision first.",
+      reason: translateDashboardMessage(customDashboardMessages, locale, "blockedUnpublished"),
       validationReport,
       publishedRevision: safePublishedRevision,
     };
@@ -100,7 +108,7 @@ export function resolvePublishedCustomDashboardRuntime(
   if (!safeDashboard.publishedRevisionId || !publishedRevision) {
     return {
       status: "blocked",
-      reason: "This custom dashboard has no published revision.",
+      reason: translateDashboardMessage(customDashboardMessages, locale, "blockedNoRevision"),
       validationReport,
       publishedRevision: safePublishedRevision,
     };
@@ -108,7 +116,7 @@ export function resolvePublishedCustomDashboardRuntime(
   if (publishedRevision.validationStatus !== "passed" || publishedRevision.validationReport?.valid !== true) {
     return {
       status: "blocked",
-      reason: "The published revision no longer has a passed validation report.",
+      reason: translateDashboardMessage(customDashboardMessages, locale, "blockedInvalidRevision"),
       validationReport: safePublishedRevision?.validationReport ?? validationReport,
       publishedRevision: safePublishedRevision,
     };
@@ -121,7 +129,7 @@ export function resolvePublishedCustomDashboardRuntime(
     runtime: {
       dashboard: safeDashboard,
       revision: readyRevision,
-      document: buildCustomDashboardFrameDocument(safeDashboard, readyRevision),
+      document: buildCustomDashboardFrameDocument(safeDashboard, readyRevision, locale),
     },
   };
 }
@@ -129,17 +137,20 @@ export function resolvePublishedCustomDashboardRuntime(
 export function buildCustomDashboardFrameDocument(
   dashboard: CustomDashboardRecord,
   revision: CustomDashboardRevisionRecord,
+  locale: DashboardLocale = "en",
 ): string {
   const credentialIds = collectCredentialBindingIds(dashboard, [revision]);
   return buildSanitizedCustomDashboardFrameDocument(
     sanitizeViewerValue(dashboard, credentialIds),
     sanitizeViewerValue(revision, credentialIds),
+    locale,
   );
 }
 
 function buildSanitizedCustomDashboardFrameDocument(
   dashboard: CustomDashboardRecord,
   revision: CustomDashboardRevisionRecord,
+  locale: DashboardLocale,
 ): string {
   const entryFile = revision.fileBundle.files.find((file) => file.path === revision.manifest.entryFile) ?? null;
   const bridgeConfig = {
@@ -156,7 +167,7 @@ function buildSanitizedCustomDashboardFrameDocument(
   const viewerArtifact = getViewerArtifact(revision.runtimeMetadata);
 
   if (viewerArtifact) {
-    return buildViewerArtifactDocument(viewerArtifact, bootstrap, title);
+    return buildViewerArtifactDocument(viewerArtifact, bootstrap, title, locale);
   }
 
   if (entryFile && isHtmlEntry(entryFile.path, entryFile.contentType)) {
@@ -166,7 +177,7 @@ function buildSanitizedCustomDashboardFrameDocument(
   if (entryFile && isJavaScriptEntry(entryFile.path, entryFile.contentType)) {
     return [
       "<!doctype html>",
-      "<html lang=\"en\">",
+      `<html lang="${locale}">`,
       "<head>",
       "<meta charset=\"utf-8\" />",
       "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />",
@@ -174,7 +185,7 @@ function buildSanitizedCustomDashboardFrameDocument(
       baseFrameStyle(),
       "</head>",
       "<body>",
-      "<main id=\"codeux-custom-dashboard-root\" aria-label=\"Published custom dashboard\"></main>",
+      `<main id="codeux-custom-dashboard-root" aria-label="${escapeHtml(translateDashboardMessage(customDashboardMessages, locale, "publishedFrameAriaLabel"))}"></main>`,
       `<script>${bootstrap}</script>`,
       `<script type=\"module\">${escapeScript(entryFile.content)}</script>`,
       "</body>",
@@ -184,7 +195,7 @@ function buildSanitizedCustomDashboardFrameDocument(
 
   return [
     "<!doctype html>",
-    "<html lang=\"en\">",
+    `<html lang="${locale}">`,
     "<head>",
     "<meta charset=\"utf-8\" />",
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />",
@@ -194,8 +205,8 @@ function buildSanitizedCustomDashboardFrameDocument(
     "<body>",
     "<main class=\"runtime-empty\" role=\"status\">",
     `<h1>${title}</h1>`,
-    "<p>The published revision is validated, but its entry file is not directly executable in the isolated browser viewer.</p>",
-    "<p>Use an HTML or browser-ready JavaScript entry file for in-app rendering, or open the validation preview while its runtime is still available.</p>",
+    `<p>${escapeHtml(translateDashboardMessage(customDashboardMessages, locale, "nonExecutableEntry"))}</p>`,
+    `<p>${escapeHtml(translateDashboardMessage(customDashboardMessages, locale, "nonExecutableEntryHelp"))}</p>`,
     "</main>",
     `<script>${bootstrap}</script>`,
     "</body>",
@@ -447,6 +458,7 @@ function buildViewerArtifactDocument(
   artifact: CustomDashboardViewerArtifact,
   bootstrap: string,
   title: string,
+  locale: DashboardLocale,
 ): string {
   const entryFile = artifact.files.find((file) => file.path === artifact.entryFile) ?? null;
   if (entryFile && isHtmlEntry(entryFile.path, entryFile.contentType)) {
@@ -455,7 +467,7 @@ function buildViewerArtifactDocument(
   if (entryFile && isJavaScriptEntry(entryFile.path, entryFile.contentType)) {
     return [
       "<!doctype html>",
-      "<html lang=\"en\">",
+      `<html lang="${locale}">`,
       "<head>",
       "<meta charset=\"utf-8\" />",
       "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />",
@@ -463,7 +475,7 @@ function buildViewerArtifactDocument(
       baseFrameStyle(),
       "</head>",
       "<body>",
-      "<main id=\"codeux-custom-dashboard-root\" aria-label=\"Published custom dashboard\"></main>",
+      `<main id="codeux-custom-dashboard-root" aria-label="${escapeHtml(translateDashboardMessage(customDashboardMessages, locale, "publishedFrameAriaLabel"))}"></main>`,
       `<script>${bootstrap}</script>`,
       `<script type=\"module\">${escapeScript(entryFile.content)}</script>`,
       "</body>",
@@ -472,7 +484,7 @@ function buildViewerArtifactDocument(
   }
   return [
     "<!doctype html>",
-    "<html lang=\"en\">",
+    `<html lang="${locale}">`,
     "<head>",
     "<meta charset=\"utf-8\" />",
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />",
@@ -482,7 +494,7 @@ function buildViewerArtifactDocument(
     "<body>",
     "<main class=\"runtime-empty\" role=\"status\">",
     `<h1>${title}</h1>`,
-    "<p>The published revision has a viewer artifact, but its artifact entry file is missing or unsupported.</p>",
+    `<p>${escapeHtml(translateDashboardMessage(customDashboardMessages, locale, "unsupportedArtifactEntry"))}</p>`,
     "</main>",
     `<script>${bootstrap}</script>`,
     "</body>",

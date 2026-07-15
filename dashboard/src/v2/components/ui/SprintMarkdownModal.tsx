@@ -4,6 +4,8 @@ import gsap from "gsap";
 import { X, Download, Upload, Copy, Check, FileText, ListChecks } from "lucide-preact";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
+import { useDashboardI18n } from "../../i18n/context.js";
+import { sprintAuthoringMessages } from "../../i18n/messages/sprint-authoring.js";
 
 interface SprintMarkdownModalProps {
   mode: "import" | "export";
@@ -22,6 +24,8 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
   onClose,
   onImport,
 }) => {
+  const { translate } = useDashboardI18n();
+  const t = (key: keyof typeof sprintAuthoringMessages.en, variables?: Record<string, string>): string => translate(sprintAuthoringMessages, key, variables);
   const backdropRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const [sprintText, setSprintText] = useState(sprintMarkdown);
@@ -105,10 +109,10 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
     URL.revokeObjectURL(url);
   };
 
-  const title = mode === "import" ? "Import Sprint Markdown." : `Export ${sprintLabel || "Sprint"} Markdown.`;
+  const title = mode === "import" ? t("importSprintMarkdownTitle") : t("exportSprintMarkdownTitle", { sprint: sprintLabel || t("sprint") });
   const subtitle = mode === "import"
-    ? "Paste structured sprint metadata plus optional task files. Formatting hints are shown inline."
-    : "Copy the generated sprint and task markdown bundle from the database state.";
+    ? t("importSprintMarkdownDescription")
+    : t("exportSprintMarkdownDescription");
 
   const loadExample = (): void => {
     setSprintText([
@@ -149,7 +153,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
       >
         <div className="relative flex w-full md:w-48 lg:w-56 shrink-0 bg-void-900 dark:bg-void-950 flex-row md:flex-col overflow-x-auto overflow-y-auto justify-between p-8">
           <span className="absolute -top-2 -left-4 text-[7.5rem] font-black text-white/[0.035] font-display leading-none pointer-events-none select-none tracking-tighter">
-            {mode === "import" ? "LOAD" : "SAVE"}
+            {mode === "import" ? t("load") : t("save")}
           </span>
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className={`w-44 h-44 ${mode === "import" ? "bg-signal-500/[0.08]" : "bg-ember-500/[0.08]"} animate-organic`} style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }} />
@@ -157,12 +161,12 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
           </div>
           <div className={`relative z-10 flex items-center gap-2 ${mode === "import" ? "text-signal-500" : "text-ember-500"} font-mono font-bold text-[10px] tracking-[0.2em] uppercase`}>
             {mode === "import" ? <Upload className="w-3.5 h-3.5" strokeWidth={2.5} /> : <Download className="w-3.5 h-3.5" strokeWidth={2.5} />}
-            {mode === "import" ? "Import Markdown" : "Export Markdown"}
+            {mode === "import" ? t("markdownImport") : t("markdownExport")}
           </div>
           <div className="relative z-10">
-            <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/25 font-mono mb-1.5">Bundle</div>
+            <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/25 font-mono mb-1.5">{t("bundle")}</div>
             <div className="text-4xl font-black text-white font-display tracking-tight leading-none">
-              {mode === "import" ? "IN" : "OUT"}
+              {mode === "import" ? t("in") : t("out")}
             </div>
             <div className={`mt-3 w-8 h-[2px] ${mode === "import" ? "bg-signal-500/50" : "bg-ember-500/50"}`} />
           </div>
@@ -180,7 +184,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
             </div>
             <button
               onClick={handleClose}
-              aria-label="Close dialog"
+              aria-label={t("closeDialog")}
               className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0"
             >
               <X aria-hidden="true" className="w-4 h-4" />
@@ -192,9 +196,9 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
             {mode === "import" && (
               <div className="grid gap-3 md:grid-cols-3">
                 {[
-                  { icon: FileText, title: "Sprint Fields", text: "`name`, `number`, `status`, then `goal:` followed by markdown scope." },
-                  { icon: ListChecks, title: "Task Files", text: "Separate tasks with `--- FILE: T01.md ---`; dependencies use task keys." },
-                  { icon: Upload, title: "Import Result", text: "Creates one sprint and preserves task order, dependencies, and merge flags." },
+                  { icon: FileText, title: t("sprintFields"), text: t("sprintFieldsHelp") },
+                  { icon: ListChecks, title: t("taskFiles"), text: t("taskFilesHelp") },
+                  { icon: Upload, title: t("importResult"), text: t("importResultHelp") },
                 ].map(({ icon: Icon, title: itemTitle, text }) => (
                   <div key={itemTitle} className="rounded-[1.1rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.07] dark:bg-white/[0.035]">
                     <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-300">
@@ -211,7 +215,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
             <div className="grid grid-cols-1 gap-5 flex-1 min-h-0">
               <div className="flex flex-col min-h-0">
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint Markdown</label>
+                  <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{t("markdownTitle")}</label>
                   {mode === "import" ? (
                     <button
                       type="button"
@@ -219,7 +223,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                       className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 transition-colors hover:text-signal-500"
                     >
                       <FileText className="w-3 h-3" />
-                      Load Example
+                      {t("loadExample")}
                     </button>
                   ) : (
                     <div className="flex items-center gap-3">
@@ -229,7 +233,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                         className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-ember-600 hover:text-ember-500 transition-colors"
                       >
                         <Download className="w-3 h-3" />
-                        Download
+                        {t("download")}
                       </button>
                       <button
                         type="button"
@@ -237,7 +241,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                         className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
                       >
                         {copiedField === "sprint" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                        {copiedField === "sprint" ? "Copied" : "Copy"}
+                        {copiedField === "sprint" ? t("copied") : t("copy")}
                       </button>
                     </div>
                   )}
@@ -247,13 +251,13 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                   onInput={(event) => setSprintText((event.target as HTMLTextAreaElement).value)}
                   readOnly={mode === "export"}
                   className="w-full min-h-[180px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 resize-none font-mono"
-                  placeholder="name: Sprint Name&#10;number: 1&#10;status: idle&#10;goal:&#10;Describe outcomes, affected systems, acceptance criteria, and verification expectations."
+                  placeholder={t("sprintMarkdownPlaceholder")}
                 />
               </div>
 
               <div className="flex flex-col min-h-0 shrink-0">
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Task Bundle</label>
+                  <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{t("taskBundle")}</label>
                   {mode === "export" && (
                     <div className="flex items-center gap-3">
                       <button
@@ -262,7 +266,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                         className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-ember-600 hover:text-ember-500 transition-colors"
                       >
                         <Download className="w-3 h-3" />
-                        Download
+                        {t("download")}
                       </button>
                       <button
                         type="button"
@@ -270,7 +274,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                         className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
                       >
                         {copiedField === "tasks" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                        {copiedField === "tasks" ? "Copied" : "Copy"}
+                        {copiedField === "tasks" ? t("copied") : t("copy")}
                       </button>
                     </div>
                   )}
@@ -280,7 +284,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                   onInput={(event) => setTasksText((event.target as HTMLTextAreaElement).value)}
                   readOnly={mode === "export"}
                   className="w-full min-h-[240px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 resize-none font-mono"
-                  placeholder={'--- FILE: T01.md ---\ntitle: Task Title\ndepends_on: []\nis_independent: true\nmerged: false\nprompt:\nDetailed instructions'}
+                  placeholder={t("taskMarkdownPlaceholder")}
                 />
               </div>
             </div>
@@ -288,7 +292,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between pt-2 gap-4">
               <div className="text-xs text-slate-400 shrink-0 max-w-sm">
-                {mode === "import" ? "Task markers are optional. Supported fields: title, depends_on, is_independent, merged/is_merged, merge_indicator, status, prompt." : "Export reflects current DB state, not repo-local markdown files."}
+                {mode === "import" ? t("importMarkdownHint") : t("exportMarkdownHint")}
               </div>
               <div className="flex items-center gap-3">
                 <button
@@ -296,7 +300,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                   onClick={handleClose}
                   className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
                 >
-                  Close
+                  {t("close")}
                 </button>
                 {mode === "import" && (
                   <button
@@ -304,7 +308,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                     className="group/btn flex items-center gap-2.5 px-6 py-3 bg-signal-500 hover:bg-signal-400 text-white dark:text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.4)] hover:-translate-y-px"
                   >
                     <Upload className="w-4 h-4" />
-                    Import Sprint
+                    {t("importSprint")}
                   </button>
                 )}
               </div>

@@ -9,6 +9,8 @@ import type {
   DashboardNotification as DashboardNotificationRecord,
   DashboardNotificationKind,
 } from "../../types.js";
+import { translateDashboardMessage, type DashboardLocale, type DashboardTextMessageKey } from "../i18n/locales.js";
+import { shellMessages } from "../i18n/messages/shell.js";
 
 export type NotificationSeverity = "critical" | "warning" | "success" | "info";
 
@@ -20,6 +22,7 @@ export type NotificationType =
   | "system-error";
 
 export interface NotificationDetail {
+  kind?: "project" | "sprint" | "task" | "summary" | "reason" | "instructions" | "timestamp" | "source";
   label: string;
   value: string;
 }
@@ -47,13 +50,13 @@ export interface NotificationViewModel {
 const KIND_PRESENTATION: Record<DashboardNotificationKind, {
   type: NotificationType;
   icon: LucideIcon;
-  actionLabel: string;
+  actionKey: DashboardTextMessageKey<typeof shellMessages>;
 }> = {
-  human_intervention: { type: "intervention", icon: HelpCircle, actionLabel: "Review intervention" },
-  task_execution_failed: { type: "task-failure", icon: AlertTriangle, actionLabel: "Review task" },
-  sprint_execution_failed: { type: "sprint-failure", icon: AlertTriangle, actionLabel: "Review sprint" },
-  sprint_automatically_stopped: { type: "automatic-stop", icon: CircleStop, actionLabel: "Review stop" },
-  system_execution_error: { type: "system-error", icon: ServerCrash, actionLabel: "Review error" },
+  human_intervention: { type: "intervention", icon: HelpCircle, actionKey: "notificationActionReviewIntervention" },
+  task_execution_failed: { type: "task-failure", icon: AlertTriangle, actionKey: "notificationActionReviewTask" },
+  sprint_execution_failed: { type: "sprint-failure", icon: AlertTriangle, actionKey: "notificationActionReviewSprint" },
+  sprint_automatically_stopped: { type: "automatic-stop", icon: CircleStop, actionKey: "notificationActionReviewStop" },
+  system_execution_error: { type: "system-error", icon: ServerCrash, actionKey: "notificationActionReviewError" },
 };
 
 const toSeverity = (record: DashboardNotificationRecord): NotificationSeverity => {
@@ -64,15 +67,18 @@ const toSeverity = (record: DashboardNotificationRecord): NotificationSeverity =
   return "critical";
 };
 
-const relativeTime = (timestamp: string, now: number): string => {
+const relativeTime = (timestamp: string, now: number, locale: DashboardLocale): string => {
+  const text = (key: DashboardTextMessageKey<typeof shellMessages>, variables?: Record<string, string | number>): string => (
+    translateDashboardMessage(shellMessages, locale, key, variables)
+  );
   const parsed = new Date(timestamp).getTime();
-  if (!Number.isFinite(parsed)) return "just now";
+  if (!Number.isFinite(parsed)) return text("justNow");
   const elapsedMinutes = Math.floor(Math.max(0, now - parsed) / 60_000);
-  if (elapsedMinutes < 1) return "just now";
-  if (elapsedMinutes < 60) return `${elapsedMinutes}m ago`;
+  if (elapsedMinutes < 1) return text("justNow");
+  if (elapsedMinutes < 60) return text("minutesAgo", { count: elapsedMinutes });
   const elapsedHours = Math.floor(elapsedMinutes / 60);
-  if (elapsedHours < 24) return `${elapsedHours}h ago`;
-  return `${Math.floor(elapsedHours / 24)}d ago`;
+  if (elapsedHours < 24) return text("hoursAgo", { count: elapsedHours });
+  return text("daysAgo", { count: Math.floor(elapsedHours / 24) });
 };
 
 const sprintLabel = (record: DashboardNotificationRecord): string | null => {
@@ -97,41 +103,43 @@ const actionTarget = (record: DashboardNotificationRecord): string => {
   return record.links.project;
 };
 
-const sourceContext = (record: DashboardNotificationRecord): string => {
-  const sourceLabels: Record<DashboardNotificationRecord["source"]["type"], string> = {
-    attention_item: "Project attention item",
-    task_dispatch: "Task dispatch",
-    sprint_run: "Sprint run",
-    task_run_event: "Task run event",
-    sprint_run_event: "Sprint run event",
+const sourceContext = (record: DashboardNotificationRecord, locale: DashboardLocale): string => {
+  const sourceKeys: Record<DashboardNotificationRecord["source"]["type"], DashboardTextMessageKey<typeof shellMessages>> = {
+    attention_item: "notificationSourceAttention",
+    task_dispatch: "notificationSourceDispatch",
+    sprint_run: "notificationSourceSprintRun",
+    task_run_event: "notificationSourceTaskEvent",
+    sprint_run_event: "notificationSourceSprintEvent",
   };
   const event = record.source.eventType
     ? ` · ${record.source.eventType.replace(/[_-]+/g, " ")}`
     : "";
-  return `${sourceLabels[record.source.type]}${event} · Source ${record.source.id}`;
+  return `${translateDashboardMessage(shellMessages, locale, sourceKeys[record.source.type])}${event} · ${translateDashboardMessage(shellMessages, locale, "notificationSource", { id: record.source.id })}`;
 };
 
 export const toNotificationViewModel = (
   record: DashboardNotificationRecord,
   now: number = Date.now(),
+  locale: DashboardLocale = "en",
 ): Omit<NotificationViewModel, "unread"> => {
   const presentation = KIND_PRESENTATION[record.kind];
+  const text = (key: DashboardTextMessageKey<typeof shellMessages>): string => translateDashboardMessage(shellMessages, locale, key);
   const sprint = sprintLabel(record);
   const task = taskLabel(record);
   const context = [
-    task ? `Task ${task}` : null,
-    sprint ? `Sprint ${sprint}` : null,
-    `Project ${record.projectName}`,
+    task ? `${text("notificationTask")} ${task}` : null,
+    sprint ? `${text("notificationSprint")} ${sprint}` : null,
+    `${text("notificationProject")} ${record.projectName}`,
   ].filter((part): part is string => Boolean(part)).join(" · ");
   const details: NotificationDetail[] = [
-    { label: "Project", value: record.projectName },
-    ...(sprint ? [{ label: "Sprint", value: sprint }] : []),
-    ...(task ? [{ label: "Task", value: task }] : []),
-    { label: "What went wrong", value: record.summary },
-    { label: "Why this needs attention", value: record.reason },
-    { label: "Recommended next steps", value: record.instructions },
-    { label: "Timestamp", value: record.updatedAt },
-    { label: "Source context", value: sourceContext(record) },
+    { kind: "project", label: text("notificationProject"), value: record.projectName },
+    ...(sprint ? [{ kind: "sprint" as const, label: text("notificationSprint"), value: sprint }] : []),
+    ...(task ? [{ kind: "task" as const, label: text("notificationTask"), value: task }] : []),
+    { kind: "summary", label: text("notificationWhatWentWrong"), value: record.summary },
+    { kind: "reason", label: text("notificationWhyAttention"), value: record.reason },
+    { kind: "instructions", label: text("notificationRecommendedSteps"), value: record.instructions },
+    { kind: "timestamp", label: text("notificationTimestamp"), value: record.updatedAt },
+    { kind: "source", label: text("notificationSourceContext"), value: sourceContext(record, locale) },
   ];
 
   return {
@@ -142,12 +150,12 @@ export const toNotificationViewModel = (
     title: record.title,
     body: `${context} — ${record.summary}`,
     subtitle: context,
-    time: relativeTime(record.updatedAt, now),
+    time: relativeTime(record.updatedAt, now, locale),
     updatedAt: record.updatedAt,
     dismissible: true,
     icon: presentation.icon,
     iconColor: record.kind === "human_intervention" ? "text-status-amber" : undefined,
-    actionLabel: presentation.actionLabel,
+    actionLabel: text(presentation.actionKey),
     actionHref: actionTarget(record),
     details,
   };
