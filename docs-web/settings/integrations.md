@@ -52,6 +52,8 @@ Chat Connectors are separate from AI model providers. Choose an explicit transpo
 
 Create connections as draft, save write-only secrets, configure the generated `/api/chat-providers/ingress/:providerConnectionId` URL, run verification, bind an authorized project/channel, then enable one test route. Transport or secret changes invalidate verification.
 
+Health refresh, verification progress/success, delivery inspection, retry, and cancellation appear in a localized polite status region. Failed actions keep their redacted provider error in an assertive alert, providing durable feedback without exposing secret-bearing diagnostics.
+
 Live-test eligibility differs: Meta sends require explicit test-number opt-in; Telegram `getMe`, Slack `auth.test`, and Discord current-user checks require test credentials; Teams uses deterministic Emulator-shaped/mocked contract coverage; Apple provides no public personal-iMessage bot sandbox. A skipped credential-gated check is not a pass.
 
 See [External Chat Providers](/docs/architecture-external-chat-providers), [connector profiles](/docs/architecture-chat-connectors-overview), and [troubleshooting](/docs/user-troubleshooting).

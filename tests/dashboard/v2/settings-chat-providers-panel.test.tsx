@@ -324,13 +324,22 @@ describe("SettingsIntegrationsPanel chat connectors", () => {
   });
 
   it("renders German connector success and keeps provider failures verbatim", async () => {
-    const state = createState("slack");
+    const baseState = createState("slack");
+    const state = {
+      ...baseState,
+      chatProviders: {
+        ...baseState.chatProviders,
+        statusMessage: "deliveryRetryCompleted" as const,
+      },
+    };
     (state.chatProviders as typeof state.chatProviders & { error: string | null }).error = "Provider gateway unavailable: ECONNREFUSED";
     render(<SettingsIntegrationsPanel state={state as any} />, "de");
 
     await waitFor(() => expect(screen.getByText("Slack Konnektor")).not.toBeNull());
     expect(screen.getByText("Chat-Konnektor-Einstellungen nicht verfügbar")).not.toBeNull();
     expect(screen.getByText("Provider gateway unavailable: ECONNREFUSED")).not.toBeNull();
+    expect(screen.getByText("Chat-Konnektor-Aktion abgeschlossen")).not.toBeNull();
+    expect(screen.getByText("Zustellung erfolgreich wiederholt.")).not.toBeNull();
     expect(screen.getByText("Zustellverlauf")).not.toBeNull();
     expect(screen.getByRole("radiogroup", { name: "Slack Bridge Verbindungsmodus" })).not.toBeNull();
     expect((screen.getByLabelText("Slack Bridge Bridge API key") as HTMLInputElement).value).toBe("");

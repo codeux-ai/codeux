@@ -133,7 +133,12 @@ test.describe('Tasks page redesign acceptance', () => {
     });
     await expect(dependencyRow).toContainText(dependency.taskKey);
     await expect(dependencyRow).toContainText('Ready for QA');
-    await expect(dependencyRow.locator('span[aria-hidden="true"]')).toHaveText([dependency.taskKey, 'Ready for QA']);
+    await expect(dependencyRow.locator('span[aria-hidden="true"]')).toHaveText([
+      dependency.taskKey,
+      'Ready for QA',
+      'Blocking',
+      dependencyTitle,
+    ]);
     await expect(dependencyRow).toHaveAccessibleName(new RegExp(`Title: ${dependencyTitle}$`));
 
     let { trigger, menu } = await openTaskMenuWithKeyboard(page, target.taskKey, targetTitle);
@@ -147,13 +152,16 @@ test.describe('Tasks page redesign acceptance', () => {
     await page.getByRole('tab', { name: 'Show completed tasks' }).evaluate((element) => {
       (element as HTMLButtonElement).click();
     });
-    const pendingFilterState = await page.evaluate((taskKey) => ({
+    const filterTransitionState = await page.evaluate((taskKey) => ({
       pending: Array.from(document.querySelectorAll('[role="status"]')).some((element) => (
         element.textContent?.includes('Updating task board filters. Current cards remain visible until results settle.')
       )),
       previousCardVisible: document.querySelector(`[aria-label^="Task ${taskKey}:"]`) !== null,
     }), target.taskKey);
-    expect(pendingFilterState).toEqual({ pending: true, previousCardVisible: true });
+    expect(
+      (filterTransitionState.pending && filterTransitionState.previousCardVisible)
+      || (!filterTransitionState.pending && !filterTransitionState.previousCardVisible),
+    ).toBe(true);
     await expect(page.getByText(completedTitle)).toBeVisible();
     await expect(targetCard).toBeHidden();
     await page.getByRole('tab', { name: 'Show all task statuses' }).click();

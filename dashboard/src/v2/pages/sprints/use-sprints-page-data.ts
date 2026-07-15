@@ -181,12 +181,17 @@ export function useSprintsPageData() {
       setAgentPresets([]);
       return;
     }
-    void fetchAgentPresets(selectedProject.id)
-      .then(setAgentPresets)
+    const controller = new AbortController();
+    void fetchAgentPresets(selectedProject.id, controller.signal)
+      .then((presets) => {
+        if (!controller.signal.aborted) setAgentPresets(presets);
+      })
       .catch((error) => {
+        if (controller.signal.aborted) return;
         console.error("Failed to fetch agent presets", error);
         setAgentPresets([]);
       });
+    return () => controller.abort();
   }, [selectedProject?.id]);
 
   const planningPresets = useMemo(() => agentPresets, [agentPresets]);

@@ -202,6 +202,14 @@ const AGENT_INSTRUCTION_TEMPLATE_OPTIONS: Array<{
   { value: "cleanupEmpty", label: "Cleanup Empty", description: "Shown when the sprint is still empty." },
 ];
 
+type ChatProviderStatusMessageKey =
+  | "chatConnectorHealthRefreshed"
+  | "testingChatConnector"
+  | "connectionVerifiedActivationAvailable"
+  | "deliveryDiagnosticsRefreshed"
+  | "deliveryRetryCompleted"
+  | "deliveryCancelled";
+
 const QA_PRESET_LABEL_PATTERN = /(?:^|[\s_-])qa(?:$|[\s_-])|quality[\s_-]*assurance/i;
 
 const sortAgentPresetOptions = (
@@ -312,7 +320,7 @@ export const useSettingsPageState = (
   const [chatProviderPendingConnections, setChatProviderPendingConnections] = useState<Record<string, string>>({});
   const [chatProviderPendingDeliveries, setChatProviderPendingDeliveries] = useState<Record<string, string>>({});
   const [chatProvidersError, setChatProvidersError] = useState<string | null>(null);
-  const [chatProvidersStatusMessage, setChatProvidersStatusMessage] = useState<string | null>(null);
+  const [chatProvidersStatusMessage, setChatProvidersStatusMessage] = useState<ChatProviderStatusMessageKey | null>(null);
   const chatProviderLoadRequestRef = useRef(0);
   const chatProviderConnectionRequestRef = useRef<Record<string, number>>({});
   const chatProviderDeliveryRequestRef = useRef<Record<string, number>>({});
@@ -833,11 +841,13 @@ export const useSettingsPageState = (
   const refreshChatProviderHealth = useCallback(async (): Promise<ChatProviderConnectorHealth | null> => {
     const requestId = ++chatProviderHealthRequestRef.current;
     setChatProviderHealthPending(true);
+    setChatProvidersError(null);
+    setChatProvidersStatusMessage(null);
     try {
       const health = await fetchChatProviderHealth();
       if (requestId !== chatProviderHealthRequestRef.current) return null;
       setChatProviderHealth(health);
-      setChatProvidersStatusMessage("Chat connector health refreshed.");
+      setChatProvidersStatusMessage("chatConnectorHealthRefreshed");
       return health;
     } catch (healthError) {
       if (requestId === chatProviderHealthRequestRef.current) {
@@ -856,7 +866,7 @@ export const useSettingsPageState = (
     chatProviderConnectionRequestRef.current[connectionId] = requestId;
     setChatProviderPendingConnections((current) => ({ ...current, [connectionId]: "verify" }));
     setChatProvidersError(null);
-    setChatProvidersStatusMessage(`Testing chat connector ${connectionId}.`);
+    setChatProvidersStatusMessage("testingChatConnector");
     try {
       const outcome = await verifyChatProviderConnection(connectionId);
       const connection = await fetchChatProviderConnection(connectionId);
@@ -864,8 +874,9 @@ export const useSettingsPageState = (
       setChatProviderVerificationOutcomes((current) => ({ ...current, [connectionId]: outcome }));
       setChatProviderConnections((current) => current.map((entry) => entry.id === connectionId ? connection : entry));
       if (outcome.status === "verified") {
-        setChatProvidersStatusMessage("Connection verified. Activation is now available.");
+        setChatProvidersStatusMessage("connectionVerifiedActivationAvailable");
       } else {
+        setChatProvidersStatusMessage(null);
         setChatProvidersError(outcome.issues.length > 0
           ? outcome.issues.map((issue) => redactChatProviderError(issue)).join(" ")
           : "Connection verification failed.");
@@ -873,6 +884,7 @@ export const useSettingsPageState = (
       return outcome;
     } catch (verificationError) {
       if (chatProviderConnectionRequestRef.current[connectionId] === requestId) {
+        setChatProvidersStatusMessage(null);
         setChatProvidersError(redactChatProviderError(
           verificationError instanceof Error ? verificationError.message : String(verificationError),
         ));
@@ -895,6 +907,8 @@ export const useSettingsPageState = (
     const requestId = (chatProviderDeliveryRequestRef.current[deliveryId] ?? 0) + 1;
     chatProviderDeliveryRequestRef.current[deliveryId] = requestId;
     setChatProviderPendingDeliveries((current) => ({ ...current, [deliveryId]: "inspect" }));
+    setChatProvidersError(null);
+    setChatProvidersStatusMessage(null);
     try {
       const delivery = await fetchChatProviderDelivery(deliveryId);
       if (chatProviderDeliveryRequestRef.current[deliveryId] !== requestId) return delivery;
@@ -903,7 +917,7 @@ export const useSettingsPageState = (
         [delivery.providerConnectionId]: (current[delivery.providerConnectionId] ?? [])
           .map((entry) => entry.id === delivery.id ? delivery : entry),
       }));
-      setChatProvidersStatusMessage("Delivery diagnostics refreshed.");
+      setChatProvidersStatusMessage("deliveryDiagnosticsRefreshed");
       return delivery;
     } catch (deliveryError) {
       if (chatProviderDeliveryRequestRef.current[deliveryId] === requestId) {
@@ -929,6 +943,7 @@ export const useSettingsPageState = (
     chatProviderDeliveryRequestRef.current[deliveryId] = requestId;
     setChatProviderPendingDeliveries((current) => ({ ...current, [deliveryId]: action }));
     setChatProvidersError(null);
+    setChatProvidersStatusMessage(null);
     try {
       const delivery = action === "retry"
         ? await retryChatProviderDelivery(deliveryId)
@@ -939,7 +954,7 @@ export const useSettingsPageState = (
         [delivery.providerConnectionId]: (current[delivery.providerConnectionId] ?? [])
           .map((entry) => entry.id === delivery.id ? delivery : entry),
       }));
-      setChatProvidersStatusMessage(action === "retry" ? "Delivery retry completed." : "Delivery cancelled.");
+      setChatProvidersStatusMessage(action === "retry" ? "deliveryRetryCompleted" : "deliveryCancelled");
       return delivery;
     } catch (deliveryError) {
       if (chatProviderDeliveryRequestRef.current[deliveryId] === requestId) {
