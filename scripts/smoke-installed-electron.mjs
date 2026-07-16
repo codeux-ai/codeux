@@ -18,9 +18,6 @@ const artifactDirectory = path.resolve(
 );
 const timeoutMs = Number.parseInt(process.env.CODE_UX_ELECTRON_SMOKE_TIMEOUT_MS || "120000", 10);
 const packageJson = JSON.parse(await readFile(path.join(projectRoot, "package.json"), "utf8"));
-const WINDOWS_ACCESS_VIOLATION = 0xC0000005;
-const WINDOWS_INSTALL_RETRY_DELAYS_MS = [1_500, 5_000, 15_000];
-const WINDOWS_INSTALL_ATTEMPTS = WINDOWS_INSTALL_RETRY_DELAYS_MS.length + 1;
 const MAC_TERMINATION_GRACE_MS = 5_000;
 
 function runResult(command, args, options = {}) {
@@ -73,51 +70,30 @@ async function installLinuxCandidate() {
 
 async function installWindowsCandidate(temporaryRoot) {
   const installer = await findArtifact(".exe");
-  const failures = [];
-  for (let attempt = 1; attempt <= WINDOWS_INSTALL_ATTEMPTS; attempt += 1) {
-    const installDirectory = path.join(temporaryRoot, "installed", `Code UX attempt ${attempt}`);
-    await rm(installDirectory, { recursive: true, force: true });
-    await mkdir(installDirectory, { recursive: true });
-    // NSIS requires /D= to be the final, completely unquoted command-line segment even when the
-    // destination contains spaces. Node otherwise quotes that argument on Windows and the generated
-    // installer can terminate before extracting the application.
-    // Force the current-user mode used by the shipped installer and keep the smoke isolated under
-    // its temporary root. The custom NSIS beta page explicitly aborts in silent mode, so the
-    // release probe never initializes interactive nsDialogs while no desktop is attached.
-    const result = runResult(installer, ["/S", "/currentuser", `/D=${installDirectory}`], {
-      windowsVerbatimArguments: true,
-    });
-    if (result.status === 0) {
-      const executable = path.join(installDirectory, "Code UX.exe");
-      await access(executable);
-      return { command: executable, args: [] };
-    }
-
+  const installDirectory = path.join(temporaryRoot, "installed", "Code UX");
+  await rm(installDirectory, { recursive: true, force: true });
+  await mkdir(installDirectory, { recursive: true });
+  // NSIS requires /D= to be the final, completely unquoted command-line segment even when the
+  // destination contains spaces. Node otherwise quotes that argument on Windows and the generated
+  // installer can terminate before extracting the application.
+  // Force the current-user mode used by the shipped installer and keep the smoke isolated under
+  // its temporary root. The custom NSIS beta page explicitly aborts in silent mode, so the
+  // release probe never initializes interactive nsDialogs while no desktop is attached.
+  const result = runResult(installer, ["/S", "/currentuser", `/D=${installDirectory}`], {
+    windowsVerbatimArguments: true,
+  });
+  if (result.status !== 0) {
     const normalizedStatus = typeof result.status === "number"
-      ? result.status >>> 0
+      ? `0x${(result.status >>> 0).toString(16).toUpperCase().padStart(8, "0")}`
       : null;
-    failures.push({
-      attempt,
-      status: result.status,
-      normalizedStatus: normalizedStatus === null
-        ? null
-        : `0x${normalizedStatus.toString(16).toUpperCase().padStart(8, "0")}`,
-    });
-    const canRetry = attempt < WINDOWS_INSTALL_ATTEMPTS
-      && normalizedStatus === WINDOWS_ACCESS_VIOLATION;
-    if (!canRetry) {
-      throw new Error(
-        `${installer} failed during silent install: ${JSON.stringify(failures)}.`,
-      );
-    }
-    const retryDelayMs = WINDOWS_INSTALL_RETRY_DELAYS_MS[attempt - 1];
-    console.warn(
-      `Windows installer hit transient access violation on attempt ${attempt}; `
-      + `retrying in ${retryDelayMs}ms with a fresh directory.`,
+    throw new Error(
+      `${installer} failed during silent install with status `
+      + `${normalizedStatus ?? result.status ?? "unknown"}.`,
     );
-    await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
   }
-  throw new Error(`${installer} did not produce an installed application.`);
+  const executable = path.join(installDirectory, "Code UX.exe");
+  await access(executable);
+  return { command: executable, args: [] };
 }
 
 async function installMacCandidate(temporaryRoot) {

@@ -133,6 +133,8 @@ The main branch ruleset still includes historical context names from older CI nu
 
 `Playwright Diagnostics`, `Release Candidate Diagnostics`, and `Mockup Sprint Diagnostics` are manual-only rerun workflows. Desktop diagnostics invoke Electron Builder directly with an explicit platform target and `--publish never`, preventing CI auto-detection from turning an artifact-only validation into a publish attempt. A PR cannot be merged with red CI.
 
+Workflow actions are pinned to immutable reviewed commit SHAs, with release versions kept in comments for auditability. pnpm enforces a strict 24-hour package-age gate; deliberately selected current releases use exact reviewed exclusions, and CI rejects other immature resolutions. Dependabot checks npm, GitHub Actions, and the managed runtime Docker base weekly against `dev`. TypeScript remains on the newest source-loader-compatible stable line (5.9.3) until stable `ts-node` supports TypeScript 7, while Node type declarations stay aligned with the supported Node 22 runtime.
+
 ## Smoke test
 
 After build, sanity-check the binary:

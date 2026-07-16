@@ -101,7 +101,7 @@
     },
     {
       "path": "dashboard/src/v2/components/onboarding/OnboardingIntroductionStep.tsx",
-      "line": 89,
+      "line": 90,
       "kind": "jsx-expression",
       "text": "MIT License Copyright (c) 2026 Pierre Voss Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the \"Software\"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
       "rationale": "The verbatim MIT license is English legal documentation and must not be translated."
@@ -423,77 +423,77 @@
     },
     {
       "path": "dashboard/src/v2/components/sprints/SprintImportMenu.tsx",
-      "line": 168,
+      "line": 169,
       "kind": "jsx-text",
       "text": "Markdown",
       "rationale": "This is a file format or external product name and remains unchanged across locales."
     },
     {
       "path": "dashboard/src/v2/components/sprints/SprintImportMenu.tsx",
-      "line": 280,
+      "line": 281,
       "kind": "jsx-text",
       "text": "Asana",
       "rationale": "This is a file format or external product name and remains unchanged across locales."
     },
     {
       "path": "dashboard/src/v2/components/sprints/SprintImportMenu.tsx",
-      "line": 302,
+      "line": 303,
       "kind": "jsx-text",
       "text": "Linear",
       "rationale": "This is a file format or external product name and remains unchanged across locales."
     },
     {
       "path": "dashboard/src/v2/components/sprints/SprintImportMenu.tsx",
-      "line": 326,
+      "line": 327,
       "kind": "jsx-text",
       "text": "Miro",
       "rationale": "This is a file format or external product name and remains unchanged across locales."
     },
     {
       "path": "dashboard/src/v2/components/sprints/SprintImportMenu.tsx",
-      "line": 348,
+      "line": 349,
       "kind": "jsx-text",
       "text": "Lucid",
       "rationale": "This is a file format or external product name and remains unchanged across locales."
     },
     {
       "path": "dashboard/src/v2/components/sprints/SprintImportMenu.tsx",
-      "line": 392,
+      "line": 393,
       "kind": "jsx-text",
       "text": "Mural",
       "rationale": "This is a file format or external product name and remains unchanged across locales."
     },
     {
       "path": "dashboard/src/v2/components/sprints/SprintIssueImportModal.tsx",
-      "line": 637,
+      "line": 636,
       "kind": "attribute:placeholder",
       "text": "owner/repository",
       "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
     },
     {
       "path": "dashboard/src/v2/components/sprints/SprintIssueImportModal.tsx",
-      "line": 732,
+      "line": 731,
       "kind": "attribute:placeholder",
       "text": "bug, security",
       "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
     },
     {
       "path": "dashboard/src/v2/components/sprints/SprintIssueImportModal.tsx",
-      "line": 740,
+      "line": 739,
       "kind": "attribute:placeholder",
       "text": "me or alice",
       "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
     },
     {
       "path": "dashboard/src/v2/components/sprints/SprintIssueImportModal.tsx",
-      "line": 749,
+      "line": 748,
       "kind": "attribute:placeholder",
       "text": "octocat",
       "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."
     },
     {
       "path": "dashboard/src/v2/components/sprints/SprintIssueImportModal.tsx",
-      "line": 758,
+      "line": 757,
       "kind": "attribute:placeholder",
       "text": "v1.2",
       "rationale": "This is an example API filter, identifier, or user-authored import value and remains verbatim."

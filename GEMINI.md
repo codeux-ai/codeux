@@ -21,7 +21,7 @@ app**, and an **MCP server** (stdio + optional HTTPS worker gateway).
 
 ### Backend (Node.js / ESM)
 - **Runtime**: Node.js **22.13+** (strict ESM, `"type": "module"`, NodeNext resolution).
-- **Package manager**: **pnpm** (`pnpm@11.13.0`) — use `pnpm`, not `npm`.
+- **Package manager**: **pnpm** (`pnpm@11.13.1`) — use `pnpm`, not `npm`.
 - **Language**: TypeScript 5.9 (strict, `ES2022` target).
 - **Protocol**: Model Context Protocol via `@modelcontextprotocol/sdk`.
 - **HTTP**: Express 5 for the dashboard/API; Axios for Jules + Jira REST.

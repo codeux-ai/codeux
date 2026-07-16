@@ -1,6 +1,7 @@
 import type { FunctionComponent } from "preact";
-import { GitBranch, Github } from "lucide-preact";
+import { GitBranch } from "lucide-preact";
 import type { SystemSettings, ProjectSettings } from "../../../types.js";
+import { Github } from "../icons/GitHostIcons.js";
 import { PillChoiceGroup } from "../settings/SettingsFormFields.js";
 import { useOnboardingMessages } from "../../i18n/messages/onboarding.js";
 
