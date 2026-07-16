@@ -81,7 +81,10 @@ async function installWindowsCandidate(temporaryRoot) {
     // NSIS requires /D= to be the final, completely unquoted command-line segment even when the
     // destination contains spaces. Node otherwise quotes that argument on Windows and the generated
     // installer can terminate before extracting the application.
-    const result = runResult(installer, ["/S", `/D=${installDirectory}`], {
+    // Force the current-user mode used by the shipped installer and keep the smoke isolated under
+    // its temporary root. The custom NSIS beta page explicitly aborts in silent mode, so the
+    // release probe never initializes interactive nsDialogs while no desktop is attached.
+    const result = runResult(installer, ["/S", "/currentuser", `/D=${installDirectory}`], {
       windowsVerbatimArguments: true,
     });
     if (result.status === 0) {

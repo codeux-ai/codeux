@@ -127,10 +127,14 @@ describe("electron-builder packaged defaults", () => {
       path.join(process.cwd(), "scripts", "smoke-installed-electron.mjs"),
       "utf8",
     );
+    const installerInclude = fs.readFileSync(
+      path.join(process.cwd(), "build", "installer.nsh"),
+      "utf8",
+    );
     const mainProcessSource = fs.readFileSync(path.join(process.cwd(), "src/electron/main.ts"), "utf8");
 
     expect(installerSmoke).toContain('findArtifact(".deb")');
-    expect(installerSmoke).toContain('["/S", `/D=${installDirectory}`]');
+    expect(installerSmoke).toContain('["/S", "/currentuser", `/D=${installDirectory}`]');
     expect(installerSmoke).toContain("windowsVerbatimArguments: true");
     expect(installerSmoke).toContain("WINDOWS_ACCESS_VIOLATION");
     expect(installerSmoke).toContain("WINDOWS_INSTALL_RETRY_DELAYS_MS = [1_500, 5_000, 15_000]");
@@ -152,6 +156,11 @@ describe("electron-builder packaged defaults", () => {
     expect(installerSmoke).toContain("terminateValidatedMacProbe");
     expect(installerSmoke).toContain("stopped.exit.code === 0");
     expect(installerSmoke).toContain("stopped.exit.signal === stopped.termination");
+    expect(installerInclude).toContain(
+      "IfSilent CodeUxBetaPageSilent CodeUxBetaPageInteractive",
+    );
+    expect(installerInclude).toContain("CodeUxBetaPageSilent:\n  Abort");
+    expect(installerInclude).toContain("CodeUxBetaPageInteractive:\n  nsDialogs::Create 1018");
     expect(mainProcessSource).toContain('window.webContents.once("did-finish-load"');
     expect(mainProcessSource).toContain("writeElectronStartupSmoke");
     expect(mainProcessSource).toContain('CODE_UX_ELECTRON_STARTUP_SMOKE_EXIT === "1"');
