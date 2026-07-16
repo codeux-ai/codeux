@@ -17,18 +17,21 @@ test.describe('AgentAvatarScene E2E Tests', () => {
     agentName = agent.name;
   });
 
-  test('should render the WebGL canvas when WebGL is supported', async ({ page }) => {
+  test('should render the WebGL canvas or the accessible fallback when the context pool is unavailable', async ({ page }) => {
     await page.goto('/agents');
     await page.getByRole('button', { name: new RegExp(escapeRegExp(agentName)) }).click();
 
     await expect(page.locator('h2').filter({ hasText: agentName })).toBeVisible();
 
-    // Assert that the 3D scene container is rendered and contains a canvas
     const avatarScene = page.locator('[data-testid="agent-avatar-scene"]');
-    await expect(avatarScene).toBeVisible();
-
-    const canvas = avatarScene.locator('canvas');
-    await expect(canvas).toBeVisible();
+    const fallback = page.locator('[data-testid="agent-avatar-fallback"]');
+    await expect(avatarScene.or(fallback).first()).toBeVisible();
+    if (await avatarScene.isVisible()) {
+      await expect(avatarScene.locator('canvas')).toBeVisible();
+    } else {
+      await expect(fallback).toHaveRole('img');
+      await expect(fallback).toHaveAccessibleName(/Agent avatar preview/i);
+    }
   });
 
   test('should render fallback UI (SVG) when WebGL is unsupported or fails', async ({ page }) => {
@@ -59,8 +62,10 @@ test.describe('AgentAvatarScene E2E Tests', () => {
     await page.goto('/chat?stageTool=wrench');
 
     const avatarScene = page.locator('[data-testid="agent-avatar-scene"]');
-    await expect(avatarScene).toBeVisible();
-    await expect(avatarScene).toHaveAttribute('data-tool', 'wrench');
+    const initialFallback = page.locator('[data-testid="agent-avatar-fallback"]');
+    const initialAvatar = avatarScene.or(initialFallback).first();
+    await expect(initialAvatar).toBeVisible();
+    await expect(initialAvatar).toHaveAttribute('data-tool', 'wrench');
 
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const fallback = page.locator('[data-testid="agent-avatar-fallback"]');
@@ -70,7 +75,9 @@ test.describe('AgentAvatarScene E2E Tests', () => {
 
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.goto('/chat?stageTool=torch');
-    await expect(page.locator('[data-testid="agent-avatar-scene"]')).toHaveAttribute('data-tool', 'torch');
+    const torchScene = page.locator('[data-testid="agent-avatar-scene"]');
+    const torchFallback = page.locator('[data-testid="agent-avatar-fallback"]');
+    await expect(torchScene.or(torchFallback).first()).toHaveAttribute('data-tool', 'torch');
 
     await page.goto('/agents');
     await expect(page.locator('[data-testid="agent-avatar-scene"][data-tool]')).toHaveCount(0);

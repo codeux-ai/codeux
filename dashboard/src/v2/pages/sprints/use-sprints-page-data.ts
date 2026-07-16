@@ -52,6 +52,8 @@ import {
   buildDisplaySprints,
   getDefaultPlanningProviderMetadata,
   buildPauseResumeRunsMap,
+  buildPlanningStatusBySprintId,
+  buildWorkflowHumanInterventionBySprintId,
   buildPlanningConnection,
   buildPlanningRoute,
   buildShowcaseSprints,
@@ -349,6 +351,22 @@ export function useSprintsPageData() {
     isRunSummaryEqual,
   );
 
+  const planningStatusBySprintId = useStableMapByContent(
+    useMemo(
+      () => buildPlanningStatusBySprintId(execution.sprintWorkflowProjections ?? []),
+      [execution.sprintWorkflowProjections],
+    ),
+    (a, b) => a === b,
+  );
+
+  const workflowHumanInterventionBySprintId = useStableMapByContent(
+    useMemo(
+      () => buildWorkflowHumanInterventionBySprintId(execution.sprintWorkflowProjections ?? []),
+      [execution.sprintWorkflowProjections],
+    ),
+    (a, b) => a.id === b.id && a.updatedAt === b.updatedAt,
+  );
+
   const interventionBySprintId = useStableMapByContent(
     useMemo(
       // Only `sprintRuns` is read; keying on the whole snapshot would recompute on
@@ -499,6 +517,8 @@ export function useSprintsPageData() {
     pendingActionIds,
     activeRunsBySprintId,
     pauseResumeRunsBySprintId,
+    planningStatusBySprintId,
+    workflowHumanInterventionBySprintId,
     interventionBySprintId,
     ciStatusBySprintId,
     showCreateComposer,

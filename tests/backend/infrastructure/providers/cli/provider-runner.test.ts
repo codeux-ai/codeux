@@ -36,6 +36,28 @@ describe("ProviderRunner", () => {
     runner = new ProviderRunner(dockerRunner);
   });
 
+  it("prewarms an isolated Docker workspace without launching a provider", async () => {
+    await runner.prewarmWorkspace({
+      cwd: "/repo",
+      repoPath: "/repo",
+      sessionId: "thread-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      snapshotCheckout: { branch: "main", remoteOnly: true },
+      gitPolicy: { githubMode: "REMOTE", defaultBranch: "main" },
+    });
+
+    expect(dockerRunner.ensureWorkspace).toHaveBeenCalledWith({
+      cwd: "/repo",
+      repoPath: "/repo",
+      sessionId: "thread-1",
+      snapshotCheckout: { branch: "main", remoteOnly: true },
+      gitPolicy: { githubMode: "REMOTE", defaultBranch: "main" },
+      preserve: true,
+      reuseExisting: true,
+    });
+    expect(dockerRunner.runProviderInDocker).not.toHaveBeenCalled();
+  });
+
   it("prepares an isolated workspace before Docker execution", async () => {
     await runner.runProvider({
       provider: "gemini",
@@ -621,12 +643,57 @@ describe("ProviderRunner", () => {
     }));
   });
 
+  it("resumes the explicit Codex native session instead of the latest workspace session", async () => {
+    const nativeSessionId = "11111111-2222-7333-8444-555555555555";
+
+    await runner.runProvider({
+      provider: "codex",
+      prompt: "continue the selected conversation",
+      cwd: "/repo",
+      model: "gpt-5.3-codex",
+      apiKey: "key",
+      sessionId: "session-1",
+      continueSessionId: nativeSessionId,
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    const args: string[] = dockerRunner.runProviderInDocker.mock.calls[0][0].args;
+    expect(args.slice(0, 2)).toEqual(["exec", "resume"]);
+    expect(args).not.toContain("--last");
+    expect(args.at(-2)).toBe(nativeSessionId);
+    expect(args.at(-1)).toBe("continue the selected conversation");
+  });
+
+  it("falls back to the latest Codex session without passing a logical id as the native resume target", async () => {
+    await runner.runProvider({
+      provider: "codex",
+      prompt: "continue after telemetry was interrupted",
+      cwd: "/repo",
+      model: "gpt-5.3-codex",
+      apiKey: "key",
+      sessionId: "planning-codex-logical-session",
+      workspaceSessionId: "planning-workspace-logical-session",
+      continueSessionWithoutNativeId: true,
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    const args: string[] = dockerRunner.runProviderInDocker.mock.calls[0][0].args;
+    expect(args.slice(0, 3)).toEqual(["exec", "resume", "--last"]);
+    expect(args).not.toContain("planning-codex-logical-session");
+    expect(args).not.toContain("planning-workspace-logical-session");
+    expect(args.at(-1)).toBe("continue after telemetry was interrupted");
+  });
+
   it.each([
     {
       provider: "codex" as const,
       continueSessionId: "codex-native-1",
       expectedNativePrompt: "/compact",
-      expectedResumeArgs: ["exec", "resume", "--last"],
+      expectedResumeArgs: ["exec", "resume", "codex-native-1"],
     },
     {
       provider: "claude-code" as const,

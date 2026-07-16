@@ -5,14 +5,13 @@ import {
   CalendarDays,
   Check,
   CheckSquare,
-  Github,
-  Gitlab,
   Search,
   Shield,
   GitMerge,
   Loader2,
   MessageSquare,
 } from "lucide-preact";
+import { Github, Gitlab } from "../icons/GitHostIcons.js";
 import type {
   Source,
   SprintImportedTaskInput,

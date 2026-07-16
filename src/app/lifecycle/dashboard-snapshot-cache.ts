@@ -104,20 +104,33 @@ export type DashboardSnapshotCacheDeps = Pick<BootDashboardDeps,
 export class DashboardSnapshotCache {
   private deps: DashboardSnapshotCacheDeps;
 
-  private projectExecutionSnapshotCache = new Map<ProjectExecutionSnapshotCacheKey, { snapshot: ExecutionDashboardSnapshot; expiresAt: number }>();
+  private projectExecutionSnapshotCache = new Map<ProjectExecutionSnapshotCacheKey, {
+    projectId: string;
+    snapshot: ExecutionDashboardSnapshot;
+    expiresAt: number;
+  }>();
   private projectExecutionSnapshotKeysByProject = new Map<string, Set<ProjectExecutionSnapshotCacheKey>>();
   // Memoizes the feed-less view with the same explicit project/sprint scope as
   // the full snapshot cache. The source snapshot guard prevents stale lean views
   // from surviving a full snapshot rebuild after TTL expiry.
   private leanExecutionSnapshotCache = new Map<ProjectExecutionSnapshotCacheKey, {
+    projectId: string;
     sourceSnapshot: ExecutionDashboardSnapshot;
     snapshot: ExecutionDashboardSnapshot;
     expiresAt: number;
   }>();
   private leanExecutionSnapshotKeysByProject = new Map<string, Set<ProjectExecutionSnapshotCacheKey>>();
-  private projectStatsSnapshotCache = new Map<string, { snapshot: ReturnType<DashboardSnapshotCacheDeps["executionRepository"]["getProjectStatsSnapshot"]>; expiresAt: number }>();
+  private projectStatsSnapshotCache = new Map<string, {
+    projectId: string;
+    snapshot: ReturnType<DashboardSnapshotCacheDeps["executionRepository"]["getProjectStatsSnapshot"]>;
+    expiresAt: number;
+  }>();
   private projectStatsSnapshotKeysByProject = new Map<string, Set<string>>();
-  private headerTokenThroughputSnapshotCache = new Map<string, { snapshot: ReturnType<DashboardSnapshotCacheDeps["executionRepository"]["getHeaderTokenThroughputSnapshot"]>; expiresAt: number }>();
+  private headerTokenThroughputSnapshotCache = new Map<string, {
+    projectId: string | null;
+    snapshot: ReturnType<DashboardSnapshotCacheDeps["executionRepository"]["getHeaderTokenThroughputSnapshot"]>;
+    expiresAt: number;
+  }>();
   private headerTokenThroughputSnapshotKeysByProject = new Map<string, Set<string>>();
   private overviewTelemetryCache: { snapshot: ReturnType<DashboardSnapshotCacheDeps["executionRepository"]["getOverviewTelemetrySnapshot"]>; expiresAt: number } | null = null;
   private projectsSnapshotCache: { snapshot: ReturnType<DashboardSnapshotCacheDeps["projectManagementRepository"]["listProjects"]>; expiresAt: number } | null = null;
@@ -151,6 +164,38 @@ export class DashboardSnapshotCache {
     keys.delete(cacheKey);
     if (keys.size === 0) {
       index.delete(projectId);
+    }
+  }
+
+  private evictOldestProjectExecutionSnapshot(): void {
+    const oldestKey = this.projectExecutionSnapshotCache.keys().next().value;
+    if (oldestKey === undefined) return;
+    const entry = this.projectExecutionSnapshotCache.get(oldestKey);
+    this.projectExecutionSnapshotCache.delete(oldestKey);
+    this.leanExecutionSnapshotCache.delete(oldestKey);
+    if (entry) {
+      this.unregisterProjectCacheKey(this.projectExecutionSnapshotKeysByProject, entry.projectId, oldestKey);
+      this.unregisterProjectCacheKey(this.leanExecutionSnapshotKeysByProject, entry.projectId, oldestKey);
+    }
+  }
+
+  private evictOldestProjectStatsSnapshot(): void {
+    const oldestKey = this.projectStatsSnapshotCache.keys().next().value;
+    if (oldestKey === undefined) return;
+    const entry = this.projectStatsSnapshotCache.get(oldestKey);
+    this.projectStatsSnapshotCache.delete(oldestKey);
+    if (entry) {
+      this.unregisterProjectCacheKey(this.projectStatsSnapshotKeysByProject, entry.projectId, oldestKey);
+    }
+  }
+
+  private evictOldestHeaderTokenThroughputSnapshot(): void {
+    const oldestKey = this.headerTokenThroughputSnapshotCache.keys().next().value;
+    if (oldestKey === undefined) return;
+    const entry = this.headerTokenThroughputSnapshotCache.get(oldestKey);
+    this.headerTokenThroughputSnapshotCache.delete(oldestKey);
+    if (entry?.projectId) {
+      this.unregisterProjectCacheKey(this.headerTokenThroughputSnapshotKeysByProject, entry.projectId, oldestKey);
     }
   }
 
@@ -211,7 +256,14 @@ export class DashboardSnapshotCache {
       ),
     };
 
+    if (
+      !this.projectExecutionSnapshotCache.has(cacheKey)
+      && this.projectExecutionSnapshotCache.size >= DashboardSnapshotCachePolicy.PROJECT_EXECUTION_CACHE_MAX_ENTRIES
+    ) {
+      this.evictOldestProjectExecutionSnapshot();
+    }
     this.projectExecutionSnapshotCache.set(cacheKey, {
+      projectId,
       snapshot,
       expiresAt: now + DashboardSnapshotCachePolicy.PROJECT_EXECUTION_CACHE_TTL_MS,
     });
@@ -246,6 +298,7 @@ export class DashboardSnapshotCache {
     }
     const lean: ExecutionDashboardSnapshot = { ...full, recentEvents: [], recentInvocations: [] };
     this.leanExecutionSnapshotCache.set(cacheKey, {
+      projectId,
       sourceSnapshot: full,
       snapshot: lean,
       expiresAt: now + DashboardSnapshotCachePolicy.PROJECT_EXECUTION_CACHE_TTL_MS,
@@ -262,7 +315,14 @@ export class DashboardSnapshotCache {
       return cached.snapshot;
     }
     const snapshot = this.deps.executionRepository.getProjectStatsSnapshot(projectId, query);
+    if (
+      !this.projectStatsSnapshotCache.has(cacheKey)
+      && this.projectStatsSnapshotCache.size >= DashboardSnapshotCachePolicy.PROJECT_STATS_CACHE_MAX_ENTRIES
+    ) {
+      this.evictOldestProjectStatsSnapshot();
+    }
     this.projectStatsSnapshotCache.set(cacheKey, {
+      projectId,
       snapshot,
       expiresAt: now + DashboardSnapshotCachePolicy.PROJECT_STATS_CACHE_TTL_MS,
     });
@@ -278,7 +338,14 @@ export class DashboardSnapshotCache {
       return cached.snapshot;
     }
     const snapshot = this.deps.executionRepository.getHeaderTokenThroughputSnapshot(query);
+    if (
+      !this.headerTokenThroughputSnapshotCache.has(cacheKey)
+      && this.headerTokenThroughputSnapshotCache.size >= DashboardSnapshotCachePolicy.HEADER_TOKEN_THROUGHPUT_CACHE_MAX_ENTRIES
+    ) {
+      this.evictOldestHeaderTokenThroughputSnapshot();
+    }
     this.headerTokenThroughputSnapshotCache.set(cacheKey, {
+      projectId: query.projectId ?? null,
       snapshot,
       expiresAt: now + DashboardSnapshotCachePolicy.HEADER_TOKEN_THROUGHPUT_CACHE_TTL_MS,
     });

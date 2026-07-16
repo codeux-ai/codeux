@@ -7,7 +7,7 @@ This page covers cloning, building, running, and contributing.
 ## Prerequisites
 
 - **Node.js >=22.13** — The project targets Node 22 in CI and uses ES2022 / NodeNext modules.
-- **pnpm 11.13.0** — The package manager declared in `packageManager`.
+- **pnpm 11.13.1** — The package manager declared in `packageManager`.
 - **Git** — only needed for the manual `git clone` step or contributor workflows.
 - **Docker** — required for normal runtime operation, including containerized helper Git, virtual workers in DOCKER mode, and sprint preview browsers.
 
@@ -161,12 +161,27 @@ pnpm run audit                 # pnpm audit --audit-level=high
 pnpm run smoke-test            # node dist/index.js --help
 pnpm run dev:server-only       # boot just the server from source
 # Electron helper scripts:
-# electron:generate-icons, electron:prepare-deps, electron:dev, electron:pack, electron:dist, electron:dist:linux, electron:dist:mac, electron:dist:win, electron:benchmark:runtime, electron:benchmark:win, electron:install-deps
+# electron:generate-icons, electron:prepare-deps, electron:dev, electron:pack, electron:dist, electron:dist:linux, electron:dist:mac, electron:dist:win, electron:benchmark:runtime, electron:benchmark:win, electron:smoke-installed, electron:install-deps
 ```
 
 Electron and npm package builds must include the `docs-web` runtime catalog. The dashboard Docs page fetches its collection and markdown through `/api/docs-web`, so installed desktop builds and npm-installed CLI/server runs need the same `docs-web` directory beside the compiled runtime root.
 
-Electron runtime dependency preparation runs a production-only pnpm 11 install. The workspace `allowBuilds` policy approves only `onnxruntime-node`; preparation sets `ONNXRUNTIME_NODE_INSTALL=skip` because the CPU bindings used by Code UX are bundled and the upstream Linux default fetches optional CUDA/TensorRT binaries from NuGet. This keeps desktop packaging deterministic without suppressing the dependency postinstall or pnpm's build-policy check. Keep that allowlist narrow and review any addition as release-executed code.
+Electron runtime dependency preparation runs a production-only pnpm 11 install with `--config.node-linker=hoisted` passed on the command line. A nested runtime `.npmrc` is not enough once pnpm discovers the enclosing workspace. Preparation rejects symbolic links, missing direct production packages, and failed MCP SDK, ONNX Runtime, or `zod` imports so Electron Builder cannot silently copy a broken peer-dependency layout. The workspace `allowBuilds` policy approves only `onnxruntime-node` and explicitly denies the unused Squirrel `electron-winstaller` helper pulled into the NSIS toolchain; preparation sets `ONNXRUNTIME_NODE_INSTALL=skip` because the CPU bindings used by Code UX are bundled and the upstream Linux default fetches optional CUDA/TensorRT binaries from NuGet. This keeps desktop packaging deterministic without suppressing the dependency postinstall or pnpm's build-policy check. Keep that allowlist narrow and review any addition as release-executed code.
+
+The installed-Electron smoke uses each platform's native package and waits until the packaged
+backend and renderer are ready and the readiness marker is durably written. Linux and Windows then
+require the isolated app probe to exit with code zero. On Windows the harness passes the NSIS
+silent-install arguments verbatim so the required final `/D=` destination remains unquoted even
+when that destination contains spaces, and it explicitly selects current-user installation. The
+interactive beta notice aborts before initializing `nsDialogs` during silent installs while
+remaining visible in the normal installer. Electron Builder 26.15.6 supplies pnpm 11 dependency
+collection fixes, and `toolsets.nsis: "1.2.1"` selects NSIS 3.12 instead of the legacy assisted
+per-user installer path that could crash with `0xC0000005` on `windows-latest`. The smoke requires
+the first install attempt to succeed; every non-zero status fails immediately. On macOS the
+harness accepts the DMG's embedded MIT license through `hdiutil` stdin, validates readiness, then
+owns probe teardown with `SIGTERM` and a bounded `SIGKILL` fallback because Electron/AppKit can
+defer both Electron and Node exit paths. Production Electron shutdowns still drain the embedded
+runtime normally.
 
 They must also include `assets/models-dev/catalog.json`. The automatic token-pricing path reads this snapshot beside the compiled runtime; without it, known models can appear unpriced only in the desktop build. Electron packaging tests pin both runtime assets and a representative GPT-5.5 catalogue rate.
 

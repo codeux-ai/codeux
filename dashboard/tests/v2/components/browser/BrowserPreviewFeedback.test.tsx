@@ -25,8 +25,8 @@ test("LaunchContainerPanel shows correct status and feedback", () => {
       launchBusy={false}
     />
   );
-  expect(screen.getByRole("button")).toHaveTextContent("Disabled: No Sprint");
-  expect(screen.getByRole("button")).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Launch preview container" })).toHaveTextContent("Disabled: No Sprint");
+  expect(screen.getByRole("button", { name: "Launch preview container" })).toBeDisabled();
 
   rerender(
     <LaunchContainerPanel
@@ -38,8 +38,8 @@ test("LaunchContainerPanel shows correct status and feedback", () => {
       launchBusy={false}
     />
   );
-  expect(screen.getByRole("button")).toHaveTextContent("Disabled: No Project");
-  expect(screen.getByRole("button")).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Launch preview container" })).toHaveTextContent("Disabled: No Project");
+  expect(screen.getByRole("button", { name: "Launch preview container" })).toBeDisabled();
 
   rerender(
     <LaunchContainerPanel
@@ -51,8 +51,8 @@ test("LaunchContainerPanel shows correct status and feedback", () => {
       launchBusy={true}
     />
   );
-  expect(screen.getByRole("button")).toHaveTextContent("Launching...");
-  expect(screen.getByRole("button")).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Launching preview container" })).toHaveTextContent("Launching...");
+  expect(screen.getByRole("button", { name: "Launching preview container" })).toBeDisabled();
 
   rerender(
     <LaunchContainerPanel
@@ -64,8 +64,8 @@ test("LaunchContainerPanel shows correct status and feedback", () => {
       launchBusy={false}
     />
   );
-  expect(screen.getByRole("button")).toHaveTextContent("Launch Container");
-  expect(screen.getByRole("button")).not.toBeDisabled();
+  expect(screen.getByRole("button", { name: "Launch preview container" })).toHaveTextContent("Launch Container");
+  expect(screen.getByRole("button", { name: "Launch preview container" })).not.toBeDisabled();
 });
 
 test("PreviewSessionSlider handles states correctly", () => {

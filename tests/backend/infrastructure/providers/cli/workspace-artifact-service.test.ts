@@ -656,6 +656,7 @@ describe("WorkspaceArtifactService", () => {
       patchText,
       commitMessage: "resolve conflict",
       githubMode: "REMOTE",
+      allowExistingWorkerBranch: false,
     });
 
     expect(result.hasChanges).toBe(true);
@@ -664,6 +665,150 @@ describe("WorkspaceArtifactService", () => {
     expect(await runGit(hostRepoPath, ["show", "origin/worker/test:file.txt"], { trimOutput: false }))
       .toBe("base\nresolved\n");
   });
+
+  it("accepts only the fresh local worker ref owned by the exact host worktree", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-artifact-host-owner-"));
+    cleanupPaths.push(tempRoot);
+
+    const hostRepoPath = path.join(tempRoot, "host-repo");
+    const worktreePath = path.join(tempRoot, "worker-worktree");
+    await runCommandStrict("git", ["init", hostRepoPath], tempRoot);
+    await runGit(hostRepoPath, ["config", "user.name", "Code UX Test"]);
+    await runGit(hostRepoPath, ["config", "user.email", "code-ux@example.com"]);
+    await runGit(hostRepoPath, ["checkout", "-b", "main"]);
+    await fs.writeFile(path.join(hostRepoPath, "base.txt"), "base\n", "utf8");
+    await runGit(hostRepoPath, ["add", "base.txt"]);
+    await runGit(hostRepoPath, ["commit", "-m", "base"]);
+    const initialTip = (await runGit(hostRepoPath, ["rev-parse", "HEAD"])).trim();
+
+    await runGit(hostRepoPath, ["worktree", "add", "-b", "worker/test", worktreePath, "main"]);
+    await fs.writeFile(path.join(worktreePath, "provider-commit.txt"), "provider commit\n", "utf8");
+    await runGit(worktreePath, ["add", "provider-commit.txt"]);
+    await runGit(worktreePath, ["commit", "-m", "provider commit"]);
+    await fs.writeFile(path.join(worktreePath, "uncommitted.txt"), "workspace patch\n", "utf8");
+
+    const workspaceManager = {
+      runWorkspaceCommand: async (
+        _worktreePath: string,
+        command: string,
+        args: string[],
+        options: WorkspaceCommandOptions = {},
+      ) => await runCommandStrict(command, args, worktreePath, process.env, {
+        trimOutput: options.trimOutput,
+        signal: options.signal,
+        stdinFile: options.stdinFile,
+      }),
+    } as IWorkspaceManager;
+    const service = new WorkspaceArtifactService(workspaceManager);
+    const patchText = await service.exportBinaryPatch(worktreePath, initialTip);
+
+    const result = await service.applyPatchToBranch({
+      repoPath: hostRepoPath,
+      baseRef: initialTip,
+      workerBranch: "worker/test",
+      patchText,
+      commitMessage: "finalize owned host workspace",
+      githubMode: "LOCAL",
+      allowExistingWorkerBranch: false,
+      freshWorkerBranchOwnership: {
+        worktreePath,
+        initialTip,
+      },
+    });
+
+    expect(result.hasChanges).toBe(true);
+    expect(await runGit(hostRepoPath, ["show", `${result.commitSha}:provider-commit.txt`], { trimOutput: false }))
+      .toBe("provider commit\n");
+    expect(await runGit(hostRepoPath, ["show", `${result.commitSha}:uncommitted.txt`], { trimOutput: false }))
+      .toBe("workspace patch\n");
+
+    await runGit(hostRepoPath, ["branch", "worker/foreign", "main"]);
+    await expect(service.applyPatchToBranch({
+      repoPath: hostRepoPath,
+      baseRef: initialTip,
+      workerBranch: "worker/foreign",
+      patchText,
+      commitMessage: "must reject foreign local ref",
+      githubMode: "LOCAL",
+      allowExistingWorkerBranch: false,
+    })).rejects.toThrow(
+      "Fresh worker branch allocation collided with existing local ref 'worker/foreign'.",
+    );
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "accepts a fresh host worktree when its ownership path uses a filesystem alias",
+    async () => {
+      const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-artifact-host-alias-"));
+      cleanupPaths.push(tempRoot);
+
+      const realRoot = path.join(tempRoot, "real-root");
+      const aliasRoot = path.join(tempRoot, "alias-root");
+      await fs.mkdir(realRoot);
+      await fs.symlink(realRoot, aliasRoot, "dir");
+
+      const hostRepoPath = path.join(realRoot, "host-repo");
+      const worktreePath = path.join(realRoot, "worker-worktree");
+      const aliasedWorktreePath = path.join(aliasRoot, "worker-worktree");
+      expect(path.resolve(aliasedWorktreePath)).not.toBe(path.resolve(worktreePath));
+      await runCommandStrict("git", ["init", hostRepoPath], tempRoot);
+      await runGit(hostRepoPath, ["config", "user.name", "Code UX Test"]);
+      await runGit(hostRepoPath, ["config", "user.email", "code-ux@example.com"]);
+      await runGit(hostRepoPath, ["checkout", "-b", "main"]);
+      await fs.writeFile(path.join(hostRepoPath, "base.txt"), "base\n", "utf8");
+      await runGit(hostRepoPath, ["add", "base.txt"]);
+      await runGit(hostRepoPath, ["commit", "-m", "base"]);
+      const initialTip = (await runGit(hostRepoPath, ["rev-parse", "HEAD"])).trim();
+
+      await runGit(hostRepoPath, ["worktree", "add", "-b", "worker/alias", worktreePath, "main"]);
+      expect(await fs.realpath(aliasedWorktreePath)).toBe(await fs.realpath(worktreePath));
+      await fs.writeFile(path.join(worktreePath, "provider-commit.txt"), "provider commit\n", "utf8");
+      await runGit(worktreePath, ["add", "provider-commit.txt"]);
+      await runGit(worktreePath, ["commit", "-m", "provider commit"]);
+      await fs.writeFile(path.join(worktreePath, "uncommitted.txt"), "workspace patch\n", "utf8");
+
+      const workspaceManager = {
+        runWorkspaceCommand: async (
+          _worktreePath: string,
+          command: string,
+          args: string[],
+          options: WorkspaceCommandOptions = {},
+        ) => await runCommandStrict(command, args, worktreePath, process.env, {
+          trimOutput: options.trimOutput,
+          signal: options.signal,
+          stdinFile: options.stdinFile,
+        }),
+      } as IWorkspaceManager;
+      const service = new WorkspaceArtifactService(workspaceManager);
+      const patchText = await service.exportBinaryPatch(worktreePath, initialTip);
+
+      const result = await service.applyPatchToBranch({
+        repoPath: hostRepoPath,
+        baseRef: initialTip,
+        workerBranch: "worker/alias",
+        patchText,
+        commitMessage: "finalize aliased host workspace",
+        githubMode: "LOCAL",
+        allowExistingWorkerBranch: false,
+        freshWorkerBranchOwnership: {
+          worktreePath: aliasedWorktreePath,
+          initialTip,
+        },
+      });
+
+      expect(result.hasChanges).toBe(true);
+      expect(await runGit(
+        hostRepoPath,
+        ["show", `${result.commitSha}:provider-commit.txt`],
+        { trimOutput: false },
+      )).toBe("provider commit\n");
+      expect(await runGit(
+        hostRepoPath,
+        ["show", `${result.commitSha}:uncommitted.txt`],
+        { trimOutput: false },
+      )).toBe("workspace patch\n");
+    },
+  );
 
   it("exports untracked workspace files while excluding transient and runtime-home files", async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-artifact-service-"));

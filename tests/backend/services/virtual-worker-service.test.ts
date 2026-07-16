@@ -1762,6 +1762,85 @@ describe("VirtualWorkerService", () => {
     expect(humanEscalations[0]?.summaryMarkdown).toContain("refusing to mark the fix as pushed");
   });
 
+  it("starts a new provider attempt after a no-change repair instead of charging publication replay", async () => {
+    const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository } = await setupServiceWithProject();
+    let count = 0;
+    const recordedAttempts = new Set<string>();
+    (virtualWorkerService as any).deps.guardrailService = {
+      evaluate: vi.fn(() => ({
+        allowed: count < 5,
+        count,
+        cap: 5,
+        action: "BLOCK_AND_ESCALATE",
+      })),
+      recordOnce: vi.fn((_scope, _taskId, _purpose, sourceKey: string) => {
+        if (!recordedAttempts.has(sourceKey)) {
+          recordedAttempts.add(sourceKey);
+          count += 1;
+        }
+        return count;
+      }),
+      record: vi.fn(),
+      reset: vi.fn(),
+      getCounts: vi.fn(() => ({})),
+    };
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:no-change-retry",
+      displayName: "Virtual Worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType: "ci_fix_required",
+      severity: "high",
+      ownerType: "worker",
+      title: "CI Fix",
+      summaryMarkdown: "Fix it",
+      payload: { repoPath: "/test", branchName: "fix/branch", featureBranch: "feature/base" },
+    });
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree")
+      .mockResolvedValue({ worktreePath: "/tmp/no-change-retry", resumed: true });
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("guidance");
+    vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("");
+    vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "applyPatchToBranch")
+      .mockResolvedValue({ hasChanges: false });
+    const runProvider = vi.spyOn((virtualWorkerService as any), "runProviderWithRetry").mockResolvedValue(undefined);
+    vi.spyOn((virtualWorkerService as any), "runWorkspaceCommand").mockResolvedValue({
+      ok: true,
+      stdout: "same-head\n",
+      stderr: "",
+      code: 0,
+    });
+    (virtualWorkerService as any).prService = {
+      hasUnpushedCommits: vi.fn().mockResolvedValue(false),
+      hasWorkerBranchCommitsAgainstFeature: vi.fn().mockResolvedValue(true),
+    };
+
+    await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+    expect(projectAttentionService.getItem(item.id)).toMatchObject({
+      status: "open",
+      payload: {
+        repairRuntime: expect.objectContaining({
+          activeAttemptId: null,
+          attemptRecorded: false,
+          publicationPhase: "pending",
+          workspaceRepairHead: null,
+        }),
+        ciFixRetryCount: 1,
+      },
+    });
+
+    await (virtualWorkerService as any).handleAttentionItem(endpoint.id, projectAttentionService.getItem(item.id), "test");
+
+    expect(runProvider).toHaveBeenCalledTimes(2);
+    expect(count).toBe(2);
+    expect(recordedAttempts.size).toBe(2);
+    expect(projectAttentionService.listActiveProjectItems(project.id)
+      .some((attentionItem) => attentionItem.attentionType === "human_escalation_required")).toBe(false);
+  });
+
   it("requeues a failed CI invocation until the CI-fix guardrail is exhausted", async () => {
     const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository } = await setupServiceWithProject();
     let count = 0;
@@ -1792,7 +1871,17 @@ describe("VirtualWorkerService", () => {
       summaryMarkdown: "Fix it",
       payload: { repoPath: "/test", branchName: "fix/branch" },
     });
-    vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree").mockRejectedValue(new Error("provider bootstrap failed"));
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree")
+      .mockResolvedValue({ worktreePath: "/tmp/ci-retry", resumed: false });
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("guidance");
+    vi.spyOn((virtualWorkerService as any), "runWorkspaceCommand").mockResolvedValue({
+      ok: true,
+      stdout: "initial-head\n",
+      stderr: "",
+      code: 0,
+    });
+    vi.spyOn((virtualWorkerService as any), "runProviderWithRetry")
+      .mockRejectedValue(new Error("provider execution failed"));
 
     await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
 
@@ -1801,7 +1890,7 @@ describe("VirtualWorkerService", () => {
       status: "open",
       assignedWorkerEndpointId: null,
       payload: expect.objectContaining({
-        lastVirtualWorkerError: "provider bootstrap failed",
+        lastVirtualWorkerError: "provider execution failed",
         ciFixRetryCount: 1,
         ciFixRetryCap: 5,
       }),
@@ -1840,7 +1929,17 @@ describe("VirtualWorkerService", () => {
       summaryMarkdown: "Fix it",
       payload: { repoPath: "/test", branchName: "fix/branch" },
     });
-    vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree").mockRejectedValue(new Error("fifth attempt failed"));
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree")
+      .mockResolvedValue({ worktreePath: "/tmp/ci-handoff", resumed: false });
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("guidance");
+    vi.spyOn((virtualWorkerService as any), "runWorkspaceCommand").mockResolvedValue({
+      ok: true,
+      stdout: "initial-head\n",
+      stderr: "",
+      code: 0,
+    });
+    vi.spyOn((virtualWorkerService as any), "runProviderWithRetry")
+      .mockRejectedValue(new Error("fifth attempt failed"));
 
     await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
 
@@ -1850,6 +1949,31 @@ describe("VirtualWorkerService", () => {
     expect(handoffs).toHaveLength(1);
     expect(handoffs[0]?.summaryMarkdown).toContain("Attempts: 5/5");
     expect(handoffs[0]?.summaryMarkdown).toContain("fifth attempt failed");
+    expect(handoffs[0]?.payload).toEqual(expect.objectContaining({
+      sourceAttentionType: "ci_fix",
+      guardrailPurpose: "ci_fix",
+      guardrailSubject: `main-merge-ci-fix:${item.id}`,
+      guardrailAttempts: 5,
+      guardrailCap: 5,
+      guardrailAction: "human_handoff",
+      deduplicationKey: `guardrail:ci_fix:main-merge-ci-fix:${item.id}`,
+    }));
+    projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType: "human_escalation_required",
+      deduplicationKey: `guardrail:ci_fix:main-merge-ci-fix:${item.id}`,
+      severity: "high",
+      ownerType: "human",
+      title: "Canonical CI handoff",
+      summaryMarkdown: "The feature gate observed the same exhausted guardrail.",
+      payload: {
+        sourceAttentionType: "ci_fix",
+        guardrailPurpose: "ci_fix",
+        guardrailSubject: `main-merge-ci-fix:${item.id}`,
+      },
+    });
+    expect(projectAttentionService.listActiveProjectItems(project.id)
+      .filter((attentionItem) => attentionItem.attentionType === "human_escalation_required")).toHaveLength(1);
   });
 
   it("reuses an existing task workspace for CI autofix when the branch already has a CLI session", async () => {
@@ -1910,8 +2034,8 @@ describe("VirtualWorkerService", () => {
       "fix/branch",
       "fix/branch",
       "cli-codex-existing",
-      expect.anything(),
-      { remoteOnly: true },
+      { githubToken: "", gitlabToken: "" },
+      { remoteOnly: true, refreshRemote: true, allowExistingWorkerBranch: true },
     );
   });
 
@@ -2130,8 +2254,8 @@ describe("VirtualWorkerService", () => {
       "src",
       "tgt",
       expect.stringMatching(/^virtual-merge-codex-/),
-      expect.anything(),
-      { remoteOnly: true },
+      { githubToken: "", gitlabToken: "" },
+      { remoteOnly: true, refreshRemote: true, allowExistingWorkerBranch: true },
     );
     expect(projectManagementRepository.getTask(task.id)?.mergeIndicator).toBeNull();
     expect(projectManagementRepository.getTask(task.id)?.isMerged).toBe(false);

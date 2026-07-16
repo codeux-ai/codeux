@@ -8,7 +8,11 @@ import type {
 } from "../contracts/app-types.js";
 import type { Request } from "express";
 import { isHostileBrowserOrigin } from "./dashboard-security.js";
-import { parseDashboardRealtimeScope } from "../repositories/dashboard-realtime-event-repository.js";
+import {
+  parseDashboardRealtimeScope,
+  resolveDashboardRealtimeEventScope,
+  routeDashboardRealtimeEventToScope,
+} from "../repositories/dashboard-realtime-event-repository.js";
 import type { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 import {
@@ -50,8 +54,8 @@ function encodeFrame(payload: string): Buffer {
   return Buffer.concat([header, message]);
 }
 
-function sendJson(socket: Socket, payload: DashboardRealtimeServerMessage): void {
-  socket.write(encodeFrame(JSON.stringify(payload)));
+function encodeJsonFrame(payload: DashboardRealtimeServerMessage): Buffer {
+  return encodeFrame(JSON.stringify(payload));
 }
 
 function encodeEventFrame(event: DashboardRealtimeEvent): Buffer {
@@ -167,11 +171,18 @@ function isRealtimeUpgradeRequest(req: IncomingMessage, pathName: string): boole
   return upgradeHeader === "websocket" && connectionHeader.includes("upgrade");
 }
 
-function selectSubscribedClients(clients: Iterable<RealtimeClientState>, scope: string): RealtimeClientState[] {
-  const subscribers: RealtimeClientState[] = [];
+function selectSubscribedClients(
+  clients: Iterable<RealtimeClientState>,
+  event: DashboardRealtimeEvent,
+): Array<{ client: RealtimeClientState; event: DashboardRealtimeEvent }> {
+  const subscribers: Array<{ client: RealtimeClientState; event: DashboardRealtimeEvent }> = [];
   for (const client of clients) {
-    if (client.subscriptions.has(scope)) {
-      subscribers.push(client);
+    const matchedScope = resolveDashboardRealtimeEventScope(event, client.subscriptions);
+    if (matchedScope) {
+      subscribers.push({
+        client,
+        event: routeDashboardRealtimeEventToScope(event, matchedScope),
+      });
     }
   }
   return subscribers;
@@ -195,47 +206,82 @@ export function bootDashboardRealtimeWebSocketServer(args: {
     return false;
   });
 
+  const writeFrame = (
+    client: RealtimeClientState,
+    frame: Buffer,
+    context: { eventType: string; sequence?: number; scope?: string; projectId?: string | null; correlationId?: string | null },
+  ): boolean => {
+    const pendingLimit = Math.max(MAX_WS_PENDING_WRITE_BYTES, frame.length * 2);
+    const writableLength = client.socket.writableLength ?? 0;
+    const projectedWritableLength = writableLength + frame.length;
+    if (
+      client.socket.destroyed
+      || client.socket.writable === false
+      || projectedWritableLength > pendingLimit
+    ) {
+      clients.delete(client.socket);
+      args.logger.warn("dashboard_realtime_websocket_backpressure_disconnect", {
+        logPurpose: "realtime",
+        eventType: context.eventType,
+        sequence: context.sequence,
+        scope: context.scope,
+        projectId: context.projectId,
+        correlationId: context.correlationId ?? client.correlationId,
+        clientId: client.socket.remoteAddress || "unknown",
+        writableLength,
+        frameLength: frame.length,
+        projectedWritableLength,
+        pendingLimit,
+      });
+      client.socket.destroy();
+      return false;
+    }
+    client.socket.write(frame);
+    return true;
+  };
+
+  const sendClientJson = (
+    client: RealtimeClientState,
+    payload: DashboardRealtimeServerMessage,
+    eventType: string,
+  ): boolean => writeFrame(client, encodeJsonFrame(payload), { eventType });
+
   const broadcastEvent = (event: DashboardRealtimeEvent): void => {
-    const subscribers = selectSubscribedClients(clients.values(), event.scope);
+    const subscribers = selectSubscribedClients(clients.values(), event);
     if (subscribers.length === 0) {
       return;
     }
 
-    // The serialized frame is identical for every subscriber of this scope, so encode it once
-    // after subscriber selection and reuse the same Buffer for all connected dashboards.
-    const frame = encodeEventFrame(event);
-    for (const client of subscribers) {
-      client.lastPushedSequence = event.sequence;
+    // Conversation events can route through both their project collection scope and their
+    // thread-detail alias. Cache one frame per matched scope so overlapping subscribers receive
+    // one logical event while clients on the same scope still share the serialized Buffer.
+    const framesByScope = new Map<string, Buffer>();
+    for (const subscriber of subscribers) {
+      const { client, event: routedEvent } = subscriber;
       try {
-        const pendingLimit = Math.max(MAX_WS_PENDING_WRITE_BYTES, frame.length * 2);
-        const writableLength = client.socket.writableLength ?? 0;
-        if (client.socket.destroyed || client.socket.writable === false || writableLength > pendingLimit) {
-          clients.delete(client.socket);
-          args.logger.warn("dashboard_realtime_websocket_backpressure_disconnect", {
-            logPurpose: "realtime",
-            eventType: event.eventType,
-            sequence: event.sequence,
-            scope: event.scope,
-            projectId: event.projectId,
-            correlationId: event.correlationId,
-            clientId: client.socket.remoteAddress || "unknown",
-            writableLength,
-            pendingLimit,
-          });
-          client.socket.destroy();
-          continue;
+        let frame = framesByScope.get(routedEvent.scope);
+        if (!frame) {
+          frame = encodeEventFrame(routedEvent);
+          framesByScope.set(routedEvent.scope, frame);
         }
-
-        client.socket.write(frame);
+        if (writeFrame(client, frame, {
+          eventType: routedEvent.eventType,
+          sequence: routedEvent.sequence,
+          scope: routedEvent.scope,
+          projectId: routedEvent.projectId,
+          correlationId: routedEvent.correlationId,
+        })) {
+          client.lastPushedSequence = routedEvent.sequence;
+        }
       } catch (error) {
         clients.delete(client.socket);
         args.logger.warn("dashboard_realtime_websocket_broadcast_failed", {
           logPurpose: "realtime",
-          eventType: event.eventType,
-          sequence: event.sequence,
-          scope: event.scope,
-          projectId: event.projectId,
-          correlationId: event.correlationId,
+          eventType: routedEvent.eventType,
+          sequence: routedEvent.sequence,
+          scope: routedEvent.scope,
+          projectId: routedEvent.projectId,
+          correlationId: routedEvent.correlationId,
           clientId: client.socket.remoteAddress || "unknown",
           error,
         });
@@ -304,7 +350,8 @@ export function bootDashboardRealtimeWebSocketServer(args: {
         correlationId,
       };
       clients.set(socket, client);
-      sendJson(socket, { type: "ready" });
+      socket.setKeepAlive?.(true, 30_000);
+      sendClientJson(client, { type: "ready" }, "websocket.ready");
 
       let buffered: Buffer<ArrayBufferLike> = Buffer.alloc(0);
       socket.on("data", (chunk: Buffer) => {
@@ -378,26 +425,28 @@ export function bootDashboardRealtimeWebSocketServer(args: {
                       client.recoveryAttempts = [];
                     }
 
-                    sendJson(socket, {
+                    sendClientJson(client, {
                       type: "snapshot_required",
                       reason,
-                    });
+                    }, "websocket.snapshot_required");
                   } else {
                     for (const replayEvent of replayEvents) {
-                      sendJson(socket, {
+                      if (!sendClientJson(client, {
                         type: "event",
                         event: replayEvent,
-                      });
+                      }, replayEvent.eventType)) {
+                        break;
+                      }
                     }
                   }
                 }
               }
 
-              sendJson(socket, {
+              sendClientJson(client, {
                 type: "subscribed",
                 scopes: validScopes,
                 lastSequence: args.realtimeService.getLatestSequence(),
-              });
+              }, "websocket.subscribed");
             } catch (error) {
               args.logger.warn("Invalid dashboard realtime websocket message", {
                 logPurpose: "realtime",
@@ -424,10 +473,10 @@ export function bootDashboardRealtimeWebSocketServer(args: {
                 client.recoveryAttempts = [];
               }
 
-              sendJson(socket, {
+              sendClientJson(client, {
                 type: "snapshot_required",
                 reason,
-              });
+              }, "websocket.snapshot_required");
             }
           }
         });

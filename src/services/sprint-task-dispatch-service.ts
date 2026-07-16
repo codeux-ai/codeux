@@ -7,6 +7,10 @@ import { TaskService } from "./task-service.js";
 import type { GuardrailService } from "./guardrail-service.js";
 import type { ProviderConcurrencyService } from "./provider-concurrency-service.js";
 import type { Logger } from "../shared/logging/logger.js";
+import {
+  isJulesSessionCapacityError,
+  isJulesSessionConsumingConcurrentTask,
+} from "../integrations/jules-api-client.js";
 
 /**
  * Thrown when a task cannot be dispatched because the provider's global concurrency cap is
@@ -20,6 +24,23 @@ export class ProviderCapReachedError extends Error {
   constructor(public readonly provider: string, public readonly limit: number, public readonly currentCount: number) {
     super(`Provider concurrency cap reached for ${provider} (limit ${limit}, current ${currentCount}); task deferred.`);
     this.name = "ProviderCapReachedError";
+  }
+}
+
+export class ProviderCapacityCheckUnavailableError extends Error {
+  readonly retryableDispatchDeferral = true;
+  readonly deferralReason = "provider_concurrency_cap" as const;
+
+  constructor(
+    public readonly provider: string,
+    public readonly limit: number,
+    public readonly currentCount: number,
+    cause: unknown,
+  ) {
+    super(`Provider capacity could not be verified for ${provider}; task deferred to avoid exceeding limit ${limit}.`, {
+      cause,
+    });
+    this.name = "ProviderCapacityCheckUnavailableError";
   }
 }
 
@@ -92,8 +113,16 @@ const DUPLICATE_BLOCKING_TASK_DISPATCH_STATUSES = new Set<TaskDispatchRecord["st
   "cancel_requested",
   "paused",
 ]);
+const PROVIDER_REPORTED_CAPACITY_RETRY_MS = 30_000;
+
+interface ProviderReportedCapacityBackoff {
+  maxRunningBeforeProbe: number;
+  retryAfterMs: number;
+}
 
 export class SprintTaskDispatchService {
+  private readonly providerReportedCapacityBackoff = new Map<string, ProviderReportedCapacityBackoff>();
+
   constructor(
     private readonly executionRepository: ExecutionRepository,
     private readonly projectManagementRepository: ProjectManagementRepository,
@@ -102,6 +131,7 @@ export class SprintTaskDispatchService {
     private readonly providerConcurrencyService: ProviderConcurrencyService,
     private readonly getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings,
     private readonly logger?: Logger,
+    private readonly listJulesSessionsForCapacity?: () => Promise<JulesSession[]>,
   ) {}
 
   async startTask(args: StartSprintDispatchArgs): Promise<StartSprintDispatchResult> {
@@ -148,11 +178,26 @@ export class SprintTaskDispatchService {
       : undefined;
     const limit = providerSettings?.maxConcurrentTasks ?? 0;
 
-    if (provider && limit > 0) {
+    if (provider) {
       const counts = this.providerConcurrencyService.getGlobalRunningCounts([provider]);
       const currentCount = counts[provider] || 0;
-      if (currentCount >= limit) {
+      if (limit > 0 && currentCount >= limit) {
         throw this.deferForProviderCapacity(args, taskRecordId, provider, executorType, limit, currentCount);
+      }
+      const providerBackoff = this.providerReportedCapacityBackoff.get(provider);
+      if (
+        providerBackoff
+        && Date.now() < providerBackoff.retryAfterMs
+        && currentCount >= providerBackoff.maxRunningBeforeProbe
+      ) {
+        throw this.deferForProviderCapacity(
+          args,
+          taskRecordId,
+          provider,
+          executorType,
+          providerBackoff.maxRunningBeforeProbe,
+          currentCount,
+        );
       }
     }
 
@@ -166,11 +211,19 @@ export class SprintTaskDispatchService {
         ? await this.claimJulesSlot(args, taskRecordId, settingsScope)
         : null;
     } catch (error) {
-      if (error instanceof ProviderCapReachedError) {
+      const deferral = getTaskDispatchDeferral(error);
+      if (deferral) {
         const pStr = provider || "jules";
         const counts = this.providerConcurrencyService.getGlobalRunningCounts([pStr]);
         const currentCount = counts[pStr] || 0;
-        throw this.deferForProviderCapacity(args, taskRecordId, pStr, executorType, error.limit, currentCount);
+        throw this.deferForProviderCapacity(
+          args,
+          taskRecordId,
+          pStr,
+          executorType,
+          deferral.limit ?? 0,
+          Math.max(currentCount, deferral.currentCount ?? 0),
+        );
       }
       throw error;
     }
@@ -282,6 +335,9 @@ export class SprintTaskDispatchService {
       const sessionName = session.name || null;
       const sessionId = session.id || null;
       const nextProvider = session.provider || provider;
+      if (nextProvider) {
+        this.providerReportedCapacityBackoff.delete(nextProvider);
+      }
 
       // Re-key the claimed concurrency slot onto the real Jules session id so the session-sync
       // terminal handler can release it when the session completes or fails.
@@ -331,9 +387,67 @@ export class SprintTaskDispatchService {
         provider: nextProvider || undefined,
       };
     } catch (error) {
-      const deferral = getTaskDispatchDeferral(error);
+      let deferral = getTaskDispatchDeferral(error);
+      if (!deferral && executorType === "jules" && isJulesSessionCapacityError(error)) {
+        const counts = this.providerConcurrencyService.getGlobalRunningCounts(["jules"]);
+        const claimedCount = counts.jules || 0;
+        const currentCount = Math.max(0, claimedCount - (julesClaim?.status === "running" ? 1 : 0));
+        this.providerReportedCapacityBackoff.set("jules", {
+          maxRunningBeforeProbe: currentCount,
+          retryAfterMs: Date.now() + PROVIDER_REPORTED_CAPACITY_RETRY_MS,
+        });
+        deferral = {
+          reason: "provider_concurrency_cap",
+          provider: "jules",
+          limit: currentCount,
+          currentCount,
+        };
+        this.logger?.info("Jules task dispatch deferred after the provider reported session capacity", {
+          projectId: args.projectId,
+          sprintId: args.sprintId,
+          sprintRunId: args.sprintRunId,
+          taskId: taskRecordId,
+          currentCount,
+          retryAfterMs: PROVIDER_REPORTED_CAPACITY_RETRY_MS,
+          providerError: error instanceof Error ? error.message : String(error),
+        });
+      }
+      if (!deferral && executorType === "jules" && this.isGenericJulesPreconditionError(error)) {
+        // Jules currently returns a generic FAILED_PRECONDITION with no quota
+        // detail when createSession loses a subscription-capacity race. The
+        // list API has no state filter/count endpoint and may place old running
+        // sessions beyond its first page, so a bounded post-error snapshot
+        // cannot disprove the provider's authoritative rejection. Always make
+        // this retryable: INVALID_ARGUMENT remains the terminal validation path.
+        const confirmedCapacity = await this.confirmJulesCapacityAfterRejectedCreate(
+          limit,
+          julesClaim?.id || null,
+        ).catch(() => null);
+        const locallyRunning = this.providerConcurrencyService.getGlobalRunningCounts(["jules"]).jules || 0;
+        const currentCount = Math.max(limit, locallyRunning, confirmedCapacity?.currentCount ?? 0);
+        this.providerReportedCapacityBackoff.set("jules", {
+          maxRunningBeforeProbe: Math.max(0, locallyRunning - (julesClaim?.status === "running" ? 1 : 0)),
+          retryAfterMs: Date.now() + PROVIDER_REPORTED_CAPACITY_RETRY_MS,
+        });
+        deferral = {
+          reason: "provider_concurrency_cap",
+          provider: "jules",
+          limit,
+          currentCount,
+        };
+        this.logger?.info("Jules generic precondition response treated as retryable provider capacity", {
+          projectId: args.projectId,
+          sprintId: args.sprintId,
+          sprintRunId: args.sprintRunId,
+          taskId: taskRecordId,
+          configuredLimit: limit,
+          currentCount,
+          capacitySnapshotConfirmed: confirmedCapacity !== null,
+        });
+      }
       if (deferral) {
         const deferredProvider = deferral.provider || provider || executorType;
+        this.releaseJulesClaimForDeferral(julesClaim, julesExecutionInvocation?.id || null, error);
         throw this.deferForProviderCapacity(
           args,
           taskRecordId,
@@ -394,6 +508,41 @@ export class SprintTaskDispatchService {
     }
   }
 
+  private releaseJulesClaimForDeferral(
+    claim: ProviderInvocationUsageRecord | null,
+    executionInvocationId: string | null,
+    cause: unknown,
+  ): void {
+    if (!claim) {
+      return;
+    }
+    const deferredAt = new Date().toISOString();
+    this.executionRepository.updateProviderInvocationUsage(claim.id, {
+      status: "cancelled",
+      finishedAt: deferredAt,
+    });
+    if (!executionInvocationId) {
+      return;
+    }
+    this.executionRepository.updateExecutionInvocation(executionInvocationId, {
+      status: "cancelled",
+      finishedAt: deferredAt,
+      errorMessage: null,
+      lastErrorMessage: null,
+    });
+    this.executionRepository.appendExecutionInvocationMessage(executionInvocationId, {
+      role: "system",
+      contentMarkdown: "Jules dispatch deferred because the provider reported that session capacity is currently full.",
+      metadata: {
+        provider: "jules",
+        model: "jules-agent",
+        kind: "dispatch_deferred",
+        providerMessage: cause instanceof Error ? cause.message : String(cause),
+      },
+      createdAt: deferredAt,
+    });
+  }
+
   private canRecordStartedSession(sprintRunId: string, dispatchId: string): boolean {
     const sprintRun = this.executionRepository.getSprintRun(sprintRunId);
     if (sprintRun?.status === "cancelled" || sprintRun?.status === "failed" || sprintRun?.status === "completed" || sprintRun?.status === "cancel_requested") {
@@ -419,7 +568,8 @@ export class SprintTaskDispatchService {
       ?? Object.values(settings.aiProvider.providers).find((entry) => entry.provider === "jules");
     const limit = julesSettings?.maxConcurrentTasks ?? 0;
 
-    const claim = await this.providerConcurrencyService.tryClaimSlot("jules" as ProviderId, limit, {
+    const admission = await this.resolveJulesAdmission(limit);
+    const claim = await this.providerConcurrencyService.tryClaimSlot("jules" as ProviderId, admission.localLimit, {
       projectId: args.projectId,
       sprintId: args.sprintId,
       taskId: taskRecordId,
@@ -434,11 +584,127 @@ export class SprintTaskDispatchService {
 
     if (!claim) {
       const counts = this.providerConcurrencyService.getGlobalRunningCounts(["jules"]);
-      const currentCount = counts["jules"] || 0;
+      const currentCount = (counts["jules"] || 0) + admission.remoteOnlyCount;
       throw new ProviderCapReachedError("jules", limit, currentCount);
     }
 
     return claim;
+  }
+
+  private async resolveJulesAdmission(limit: number, excludedLocalInvocationId?: string | null): Promise<{
+    localLimit: number;
+    remoteOnlyCount: number;
+  }> {
+    if (limit <= 0 || !this.listJulesSessionsForCapacity) {
+      return { localLimit: limit, remoteOnlyCount: 0 };
+    }
+
+    let sessions: JulesSession[];
+    try {
+      sessions = await this.listJulesSessionsForCapacity();
+    } catch (error) {
+      const localCount = this.providerConcurrencyService.getGlobalRunningCounts(["jules"]).jules || 0;
+      this.logger?.warn("Jules dispatch deferred because remote session capacity could not be verified", {
+        provider: "jules",
+        configuredLimit: limit,
+        localRunningCount: localCount,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new ProviderCapacityCheckUnavailableError("jules", limit, localCount, error);
+    }
+
+    const remoteActive = this.uniqueActiveJulesSessions(sessions);
+    const localRunning = this.executionRepository.listRunningProviderInvocationUsages(["jules"])
+      .filter((invocation) => invocation.id !== excludedLocalInvocationId);
+    const localSessionIds = new Set<string>();
+    for (const invocation of localRunning) {
+      this.addJulesSessionIdentity(localSessionIds, invocation.sessionId);
+      this.addJulesSessionIdentity(localSessionIds, invocation.nativeSessionId);
+    }
+    const remoteOnlyCount = remoteActive.filter((session) => {
+      const identities = new Set<string>();
+      this.addJulesSessionIdentity(identities, session.id);
+      this.addJulesSessionIdentity(identities, session.name);
+      return !Array.from(identities).some((identity) => localSessionIds.has(identity));
+    }).length;
+    const totalRunningCount = localRunning.length + remoteOnlyCount;
+
+    if (totalRunningCount >= limit) {
+      throw new ProviderCapReachedError("jules", limit, totalRunningCount);
+    }
+
+    if (remoteOnlyCount > 0) {
+      this.logger?.info("Jules admission included remotely active sessions outside local runtime accounting", {
+        provider: "jules",
+        configuredLimit: limit,
+        remoteActiveCount: remoteActive.length,
+        remoteOnlyCount,
+        localRunningCount: localRunning.length,
+        availableSlots: Math.max(0, limit - totalRunningCount),
+      });
+    }
+
+    // Atomic local claims now enforce the subscription limit after reserving
+    // room for sessions that are active in Jules but absent from this DB.
+    return {
+      localLimit: Math.max(0, limit - remoteOnlyCount),
+      remoteOnlyCount,
+    };
+  }
+
+  private isGenericJulesPreconditionError(error: unknown): boolean {
+    if (!error || typeof error !== "object") {
+      return false;
+    }
+    const candidate = error as { status?: unknown; apiStatus?: unknown; message?: unknown };
+    return candidate.status === 400
+      && String(candidate.apiStatus || "").toUpperCase() === "FAILED_PRECONDITION"
+      && String(candidate.message || "").toLowerCase().includes("precondition");
+  }
+
+  private async confirmJulesCapacityAfterRejectedCreate(
+    limit: number,
+    excludedLocalInvocationId: string | null,
+  ): Promise<{ currentCount: number } | null> {
+    if (limit <= 0 || !this.listJulesSessionsForCapacity) {
+      return null;
+    }
+    try {
+      await this.resolveJulesAdmission(limit, excludedLocalInvocationId);
+      return null;
+    } catch (error) {
+      const deferral = getTaskDispatchDeferral(error);
+      if (!deferral) {
+        throw error;
+      }
+      return { currentCount: deferral.currentCount ?? limit };
+    }
+  }
+
+  private uniqueActiveJulesSessions(sessions: readonly JulesSession[]): JulesSession[] {
+    const unique = new Map<string, JulesSession>();
+    for (const session of sessions) {
+      if (!isJulesSessionConsumingConcurrentTask(session)) {
+        continue;
+      }
+      const key = session.id || session.name;
+      if (key && !unique.has(key)) {
+        unique.set(key, session);
+      }
+    }
+    return Array.from(unique.values());
+  }
+
+  private addJulesSessionIdentity(target: Set<string>, value: string | null | undefined): void {
+    const normalized = value?.trim();
+    if (!normalized) {
+      return;
+    }
+    target.add(normalized);
+    const slashIndex = normalized.lastIndexOf("/");
+    if (slashIndex >= 0 && slashIndex < normalized.length - 1) {
+      target.add(normalized.slice(slashIndex + 1));
+    }
   }
 
   private requireTaskRecordId(task: Subtask): string {

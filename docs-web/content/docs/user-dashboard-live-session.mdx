@@ -26,6 +26,8 @@ The page is composed of stacked panels:
    - **Attention ledger** — A dedicated queue for managing human-intervention attention items.
    - **Execution runtime panel** — Core runtime metrics, build statuses, and summary badges.
 
+Easy and Standard experience modes use a focused Live view containing only the upper Stats, Race, and DAG surfaces. The task pipeline and lower Git, CI, invocation, attention, and runtime details are available in Expert mode. While those lower details are hidden, Live disables its Git-status data channel and skips Expert-only task-card, filter, and per-task timing projections instead of computing unseen operational data.
+
 ## Real-time updates
 
 All panels update via the WebSocket connection to `/api/realtime`. Update latency is typically sub-second.
@@ -42,6 +44,8 @@ Live task cards can show a compact 5-star self-reflection badge when the task sn
 
 Live task cards use one bright delivery workflow badge in place of the former task lifecycle, QA, and CI badges. The badge remains mounted throughout Coding → Pull request → QA → CI → Merge → Completion. Lifecycle and review state provide the durable base; persisted CI evidence enriches the middle stages when available. Active task-matched human-only intervention changes the trigger to red **Human needed** while retaining the six-stage detail; resolved, worker-owned, system-owned, worker-assigned, and unrelated attention does not.
 
+The DAG uses the same task-scoped interactive workflow badge on each node, including task-specific QA, CI, merge, and true human-intervention evidence. Runtime events and attention are indexed once across the task set, and node updates observe title, status, review, dependency, and workflow-evidence changes.
+
 | Presentation | Meaning |
 | --- | --- |
 | Green check, **QA passed** | The QA run completed with a passing verdict. |
@@ -55,7 +59,7 @@ Generated follow-up task specifications are collapsed initially, so long prompts
 
 ## Six-stage delivery flow
 
-The workflow badge summarizes the same six stages on Sprints, Tasks, Overview, and Live:
+The task workflow badge summarizes the same six stages on Tasks, Overview, Live cards, and Live DAG nodes. Sprint badges add Planning as a seventh first stage and place Pull Request after QA:
 
 1. **Coding** — waiting, queued, preparing, active, quota/capacity wait, paused, complete, or failed.
 2. **Pull request** — waiting for a PR, missing a required PR, creating, or ready.

@@ -111,7 +111,7 @@ export const ALL_NAVIGATION_ITEMS: readonly NavigationItem[] = [
   { id: "config", icon: Settings, label: "Settings", dockLabel: "Config", path: "/config", color: "text-slate-400 dark:text-slate-400", group: "utility", dockSection: "right", tourId: "nav-config", kind: "route" },
 ] as const;
 
-const EASY_NAVIGATION_ITEM_IDS: readonly NavigationItemId[] = ["chat", "browser", "stats", "live", "config", "docs"];
+const EASY_NAVIGATION_ITEM_IDS: readonly NavigationItemId[] = ["chat", "sprints", "browser", "stats", "live", "config", "docs"];
 const STANDARD_NAVIGATION_ITEM_IDS: readonly NavigationItemId[] = [
   "chat",
   "overview",
@@ -121,7 +121,9 @@ const STANDARD_NAVIGATION_ITEM_IDS: readonly NavigationItemId[] = [
   "nodes",
   "custom-dashboards",
   "stats",
+  "scheduler",
   "browser",
+  "live",
   "docs",
   "config",
 ];

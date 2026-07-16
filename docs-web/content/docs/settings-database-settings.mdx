@@ -25,8 +25,16 @@ and optional startup page reclaim releases a bounded amount of free SQLite space
 ## Recommended Configuration
 
 Keep pruning enabled. Leave startup page reclaim disabled unless bounded free-page reclamation is
-useful for the local database. Provider work always takes priority: pruning, reclaim, and WAL
-checkpointing are deferred while an invocation is running.
+useful for the local database. Provider work always takes priority over pruning and page reclaim.
+Passive WAL checkpoints still run during active provider work because they do not wait for readers
+or writers; this bounds disk growth during continuously busy DAGs. Graceful shutdown performs a
+final checkpoint and explicitly closes all runtime SQLite connections.
+
+The legacy `session-tracking.db` keeps provider lifecycle, branch, and activity projections. It
+retains Jules prompts for hosted usage estimation, but does not copy local CLI prompts because the
+durable invocation message history already stores those in `app.db`. This avoids a second large
+prompt copy for wide DAG, QA, and CI-repair sessions. The schema upgrade clears legacy local prompt
+copies once while preserving Jules prompts.
 
 A practical review flow is:
 

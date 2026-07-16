@@ -5,11 +5,13 @@ import { runCommandStrict, type CommandResult } from "./cli-process-runner.js";
 import { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
 import { AsyncSemaphore } from "../shared/async-semaphore.js";
 import type { Logger } from "../shared/logging/logger.js";
+import { getRuntimeOwnerLabel } from "../shared/config/runtime-owner.js";
 
 export interface DockerAssetPruneResult {
   prunedWorkspaceVolumes: string[];
   prunedSetupImages: string[];
   prunedLoginContainers: string[];
+  prunedProviderContainers?: string[];
   prunedHelperContainers?: string[];
   prunedTempCredentialsDirs?: string[];
   prunedProviderToolVolumes?: string[];
@@ -20,6 +22,7 @@ export interface DockerAssetPruneServiceOptions {
   dockerConcurrency?: number;
   fileSystemConcurrency?: number;
   dockerBatchSize?: number;
+  protectedWorkspaceSessionIds?: () => Iterable<string>;
 }
 
 interface DockerVolumeInspection {
@@ -31,6 +34,7 @@ interface DockerVolumeInspection {
 const WORKSPACE_VOLUME_PREFIX = "code-ux-";
 const WORKSPACE_VOLUME_LABEL = "code-ux.workspace=true";
 const RUNTIME_VOLUME_LABEL = "code-ux.workspace-runtime=true";
+const WORKSPACE_SESSION_LABEL = "code-ux.workspace-session";
 const RUNTIME_VOLUME_SUFFIX = "-runtime";
 const DOCKER_PRUNE_TIMEOUT_MS = 10_000;
 const DOCKER_REMOVE_BATCH_SIZE = 50;
@@ -43,6 +47,7 @@ export class DockerAssetPruneService {
   private readonly dockerSemaphore: AsyncSemaphore;
   private readonly fileSystemSemaphore: AsyncSemaphore;
   private readonly dockerBatchSize: number;
+  private readonly protectedWorkspaceSessionIds: () => Iterable<string>;
   private cleanupInFlight: Promise<DockerAssetPruneResult> | null = null;
 
   constructor(
@@ -58,6 +63,7 @@ export class DockerAssetPruneService {
     this.dockerBatchSize = Number.isFinite(configuredBatchSize)
       ? Math.max(1, configuredBatchSize)
       : DOCKER_REMOVE_BATCH_SIZE;
+    this.protectedWorkspaceSessionIds = options.protectedWorkspaceSessionIds ?? (() => []);
   }
 
   cleanupOnStartup(): Promise<DockerAssetPruneResult> {
@@ -81,12 +87,15 @@ export class DockerAssetPruneService {
         .map((session) => session.id),
     );
 
+    // Old helper generations may still be running after a hard process exit;
+    // remove them first so the generic non-running scan cannot race the same ID.
+    const prunedHelperContainers = await this.pruneOrphanedHelperContainers();
     const [
-      prunedHelperContainers,
+      prunedProviderContainers,
       prunedLoginContainers,
       prunedTempCredentialsDirs,
     ] = await Promise.all([
-      this.pruneOrphanedHelperContainers(),
+      this.pruneOrphanedProviderContainers(),
       this.pruneOrphanedLoginContainers(),
       this.pruneTemporaryCredentialsDirectories(),
     ]);
@@ -108,6 +117,7 @@ export class DockerAssetPruneService {
       prunedWorkspaceVolumes.length > 0 ||
       prunedSetupImages.length > 0 ||
       prunedLoginContainers.length > 0 ||
+      prunedProviderContainers.length > 0 ||
       prunedHelperContainers.length > 0 ||
       prunedTempCredentialsDirs.length > 0 ||
       prunedProviderToolVolumes.length > 0 ||
@@ -117,6 +127,7 @@ export class DockerAssetPruneService {
         prunedWorkspaceVolumes: prunedWorkspaceVolumes.length,
         prunedSetupImages: prunedSetupImages.length,
         prunedLoginContainers: prunedLoginContainers.length,
+        prunedProviderContainers: prunedProviderContainers.length,
         prunedHelperContainers: prunedHelperContainers.length,
         prunedTempCredentialsDirs: prunedTempCredentialsDirs.length,
         prunedProviderToolVolumes: prunedProviderToolVolumes.length,
@@ -128,6 +139,7 @@ export class DockerAssetPruneService {
       prunedWorkspaceVolumes,
       prunedSetupImages,
       prunedLoginContainers,
+      prunedProviderContainers,
       prunedHelperContainers,
       prunedTempCredentialsDirs,
       prunedProviderToolVolumes,
@@ -137,8 +149,8 @@ export class DockerAssetPruneService {
 
   private async pruneWorkspaceVolumes(startupSessionIds: ReadonlySet<string>): Promise<string[]> {
     const [workspaceResult, runtimeResult] = await Promise.all([
-      this.runDocker(["volume", "ls", "-q", "--filter", `label=${WORKSPACE_VOLUME_LABEL}`]),
-      this.runDocker(["volume", "ls", "-q", "--filter", `label=${RUNTIME_VOLUME_LABEL}`]),
+      this.runDocker(["volume", "ls", "-q", "--filter", `label=${WORKSPACE_VOLUME_LABEL}`, "--filter", `label=${getRuntimeOwnerLabel()}`]),
+      this.runDocker(["volume", "ls", "-q", "--filter", `label=${RUNTIME_VOLUME_LABEL}`, "--filter", `label=${getRuntimeOwnerLabel()}`]),
     ]);
 
     const volumeNames = [
@@ -152,11 +164,30 @@ export class DockerAssetPruneService {
     for (const session of this.sessionTrackingRepository.listTrackedCliSessions()) {
       activeSessionIds.add(session.id);
     }
-    const createdAtByVolume = await this.readVolumeCreationTimes(volumeNames);
+    try {
+      for (const sessionId of this.protectedWorkspaceSessionIds()) {
+        const normalized = String(sessionId || "").trim();
+        if (normalized) {
+          activeSessionIds.add(normalized);
+        }
+      }
+    } catch (error) {
+      this.logger?.warn("Failed to resolve protected Docker workspace sessions during startup cleanup", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    const inspections = await this.readVolumeInspections(volumeNames);
     const recentCutoff = Date.now() - WORKSPACE_VOLUME_CREATION_GRACE_MS;
     const staleVolumes: string[] = [];
 
     for (const volumeName of volumeNames) {
+      const inspection = inspections.get(volumeName);
+      const labeledSessionId = inspection?.Labels?.[WORKSPACE_SESSION_LABEL]?.trim();
+      if (labeledSessionId && activeSessionIds.has(labeledSessionId)) {
+        continue;
+      }
+      // Volumes created before the durable session label was introduced remain
+      // recoverable when their unmodified name token matches a tracked session.
       const workspaceKey = this.extractWorkspaceKey(volumeName);
       if (!workspaceKey) {
         continue;
@@ -164,11 +195,11 @@ export class DockerAssetPruneService {
       if (activeSessionIds.has(workspaceKey)) {
         continue;
       }
-      const createdAt = createdAtByVolume.get(volumeName);
+      const createdAt = Date.parse(inspection?.CreatedAt || "");
       // A workspace is created before its provider session is persisted. Never
       // let an overlapping startup scan delete that short-lived untracked
       // window and cause Docker to recreate an empty volume at launch.
-      if (createdAt !== undefined && createdAt >= recentCutoff) {
+      if (Number.isFinite(createdAt) && createdAt >= recentCutoff) {
         continue;
       }
       staleVolumes.push(volumeName);
@@ -177,20 +208,27 @@ export class DockerAssetPruneService {
     return await this.removeDockerItems(["volume", "rm", "-f"], staleVolumes);
   }
 
-  private async readVolumeCreationTimes(volumeNames: string[]): Promise<Map<string, number>> {
-    const createdAtByVolume = new Map<string, number>();
-    const inspections = await this.readVolumeInspections(volumeNames);
-    for (const [name, entry] of inspections) {
-      const createdAt = Date.parse(entry.CreatedAt || "");
-      if (Number.isFinite(createdAt)) {
-        createdAtByVolume.set(name, createdAt);
-      }
+  private async pruneOrphanedLoginContainers(): Promise<string[]> {
+    const result = await this.runDocker(["ps", "-aq", "--filter", "label=code-ux.login=true", "--filter", `label=${getRuntimeOwnerLabel()}`]);
+    if (!result) {
+      return [];
     }
-    return createdAtByVolume;
+
+    return await this.removeDockerItems(["rm", "-f", "-v"], this.parseLines(result.stdout));
   }
 
-  private async pruneOrphanedLoginContainers(): Promise<string[]> {
-    const result = await this.runDocker(["ps", "-aq", "--filter", "label=code-ux.login=true"]);
+  private async pruneOrphanedProviderContainers(): Promise<string[]> {
+    // Provider clients cannot be reattached after the Code UX process exits.
+    // Remove their owner-scoped container generation in every state. This also
+    // covers `docker run --rm` clients interrupted after daemon create but
+    // before start, which otherwise remain in `created` forever.
+    const result = await this.runDocker([
+      "ps",
+      "-aq",
+      "--filter", "label=code-ux.managed=true",
+      "--filter", "label=code-ux.command",
+      "--filter", `label=${getRuntimeOwnerLabel()}`,
+    ]);
     if (!result) {
       return [];
     }
@@ -199,7 +237,7 @@ export class DockerAssetPruneService {
   }
 
   private async pruneProviderToolVolumes(): Promise<string[]> {
-    const listed = await this.runDocker(["volume", "ls", "-q", "--filter", "label=ai.codeux.asset=provider-tool"]);
+    const listed = await this.runDocker(["volume", "ls", "-q", "--filter", "label=ai.codeux.asset=provider-tool", "--filter", `label=${getRuntimeOwnerLabel()}`]);
     const names = this.parseLines(listed?.stdout);
     if (names.length === 0) return [];
     const [active, inspections] = await Promise.all([
@@ -241,7 +279,7 @@ export class DockerAssetPruneService {
   }
 
   private async prunePlaywrightBrowserVolumes(): Promise<string[]> {
-    const listed = await this.runDocker(["volume", "ls", "-q", "--filter", "label=ai.codeux.asset=playwright-browser"]);
+    const listed = await this.runDocker(["volume", "ls", "-q", "--filter", "label=ai.codeux.asset=playwright-browser", "--filter", `label=${getRuntimeOwnerLabel()}`]);
     const names = this.parseLines(listed?.stdout);
     if (names.length === 0) return [];
     const [active, inspections] = await Promise.all([
@@ -279,9 +317,9 @@ export class DockerAssetPruneService {
   }
 
   private async pruneOrphanedHelperContainers(): Promise<string[]> {
-    // Persistent git/file helper containers (`code-ux.helper`) from a previous process are
-    // recreated on demand, so any survivors at startup are safe to remove.
-    const result = await this.runDocker(["ps", "-aq", "--filter", "label=code-ux.helper"]);
+    // Scope cleanup to this state home. An isolated test runtime may share the daemon with a live
+    // app, and unscoped removal would terminate Git operations in that other runtime.
+    const result = await this.runDocker(["ps", "-aq", "--filter", "label=code-ux.helper", "--filter", `label=${getRuntimeOwnerLabel()}`]);
     if (!result) {
       return [];
     }

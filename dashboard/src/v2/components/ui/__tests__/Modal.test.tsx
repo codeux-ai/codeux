@@ -5,6 +5,7 @@ import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/pr
 import { Modal } from "../Modal.js";
 import { Popover } from "../Popover.js";
 import { expect, test, describe, afterEach, vi } from "vitest";
+import "@testing-library/jest-dom/vitest";
 
 vi.mock("gsap", () => {
   const gsap = {

@@ -6,6 +6,33 @@ import { describe, expect, it } from "vitest";
 const require = createRequire(import.meta.url);
 
 describe("electron-builder packaged defaults", () => {
+  it("uses the current NSIS toolset instead of the legacy installer runtime", () => {
+    const config = require("../../electron-builder.config.cjs") as {
+      toolsets?: { nsis?: string };
+      nsis?: {
+        customNsisResources?: {
+          version?: string;
+          url?: string;
+          checksum?: string;
+        };
+      };
+    };
+    const packageJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8")) as {
+      devDependencies?: Record<string, string>;
+      packageManager?: string;
+    };
+
+    expect(config.toolsets?.nsis).toBe("1.2.1");
+    expect(config.nsis?.customNsisResources).toEqual({
+      version: "3.4.1",
+      url: "https://github.com/electron-userland/electron-builder-binaries/releases/download/nsis-resources-3.4.1/nsis-resources-3.4.1.7z",
+      checksum: "593a9a92ef958321293ac6a2ee61e64bf1bd543142a5bd6b3d310709cc924103",
+    });
+    expect(packageJson.devDependencies?.["electron-builder"]).toBe("26.15.6");
+    expect(packageJson.devDependencies?.tslib).toBe("^2.8.1");
+    expect(packageJson.packageManager).toBe("pnpm@11.13.1");
+  });
+
   it("packages the automatic model-pricing catalogue used by desktop stats", () => {
     const config = require("../../electron-builder.config.cjs") as {
       files?: string[];
@@ -96,5 +123,74 @@ describe("electron-builder packaged defaults", () => {
         to: "node_modules",
       }),
     ]));
+  });
+
+  it("builds a copy-safe Electron runtime with its MCP peer dependency", () => {
+    const config = require("../../electron-builder.config.cjs") as {
+      linux?: { executableName?: string };
+    };
+    const packageJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+      scripts?: Record<string, string>;
+    };
+    const preparer = fs.readFileSync(
+      path.join(process.cwd(), "scripts", "prepare-electron-runtime-deps.mjs"),
+      "utf8",
+    );
+
+    expect(packageJson.dependencies).toHaveProperty("zod");
+    expect(packageJson.scripts?.["electron:smoke-installed"]).toBe(
+      "node scripts/smoke-installed-electron.mjs",
+    );
+    expect(preparer).toContain('"--config.node-linker=hoisted"');
+    expect(preparer).toContain("validateRuntimeTree();");
+    expect(preparer).toContain("@modelcontextprotocol/sdk/server/index.js");
+    expect(preparer).toContain('"zod"');
+    expect(preparer).toContain('"onnxruntime-node"');
+    expect(config.linux?.executableName).toBe("codeux");
+  });
+
+  it("installs and launches every native package format for release smoke", () => {
+    const installerSmoke = fs.readFileSync(
+      path.join(process.cwd(), "scripts", "smoke-installed-electron.mjs"),
+      "utf8",
+    );
+    const installerInclude = fs.readFileSync(
+      path.join(process.cwd(), "build", "installer.nsh"),
+      "utf8",
+    );
+    const mainProcessSource = fs.readFileSync(path.join(process.cwd(), "src/electron/main.ts"), "utf8");
+
+    expect(installerSmoke).toContain('findArtifact(".deb")');
+    expect(installerSmoke).toContain('["/S", "/currentuser", `/D=${installDirectory}`]');
+    expect(installerSmoke).toContain("windowsVerbatimArguments: true");
+    expect(installerSmoke).not.toContain("WINDOWS_INSTALL_RETRY_DELAYS_MS");
+    expect(installerSmoke).not.toContain("WINDOWS_ACCESS_VIOLATION");
+    expect(installerSmoke).toContain("failed during silent install with status");
+    expect(installerSmoke).toContain('findArtifact(".dmg")');
+    expect(installerSmoke).toContain('run("hdiutil", ["attach"');
+    expect(installerSmoke).toContain('input: "Y\\n"');
+    expect(installerSmoke).toContain('stdio: ["pipe", "inherit", "inherit"]');
+    expect(installerSmoke).toContain('const versionMarker = `-${packageJson.version}-`');
+    expect(installerSmoke).toContain("entry.name.includes(versionMarker)");
+    expect(installerSmoke).toContain("CODE_UX_ELECTRON_STARTUP_SMOKE_FILE");
+    expect(installerSmoke).toContain("marker.packaged !== true");
+    expect(installerSmoke).toContain('process.platform === "darwin"');
+    expect(installerSmoke).toContain('child.kill("SIGTERM")');
+    expect(installerSmoke).toContain('child.kill("SIGKILL")');
+    expect(installerSmoke).toContain("terminateValidatedMacProbe");
+    expect(installerSmoke).toContain("stopped.exit.code === 0");
+    expect(installerSmoke).toContain("stopped.exit.signal === stopped.termination");
+    expect(installerInclude).toContain(
+      "IfSilent CodeUxBetaPageSilent CodeUxBetaPageInteractive",
+    );
+    expect(installerInclude).toContain("CodeUxBetaPageSilent:\n  Abort");
+    expect(installerInclude).toContain("CodeUxBetaPageInteractive:\n  nsDialogs::Create 1018");
+    expect(mainProcessSource).toContain('window.webContents.once("did-finish-load"');
+    expect(mainProcessSource).toContain("writeElectronStartupSmoke");
+    expect(mainProcessSource).toContain('CODE_UX_ELECTRON_STARTUP_SMOKE_EXIT === "1"');
+    expect(mainProcessSource).toContain("exitElectronStartupSmoke()");
+    expect(mainProcessSource).toContain('app.on("before-quit"');
+    expect(mainProcessSource).toContain('app.exit(typeof process.exitCode === "number" ? process.exitCode : 0)');
   });
 });

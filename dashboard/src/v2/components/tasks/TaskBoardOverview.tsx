@@ -5,9 +5,10 @@ import type { TaskBoardState } from "../../lib/task-board-state.js";
 import { getTaskLane } from "../../lib/task-board-state.js";
 import { useDashboardI18n } from "../../i18n/context.js";
 import { taskMessages, type TaskTextKey } from "../../i18n/messages/tasks.js";
+import { formatTaskSprintDateRange } from "../../lib/tasks/task-presentation.js";
 
 export interface TaskBoardOverviewProps {
-  sprint: Pick<Sprint, "id" | "name" | "date"> | null;
+  sprint: Pick<Sprint, "id" | "name" | "date" | "startDate" | "endDate"> | null;
   tasks: Task[];
   stats: TaskBoardState["stats"];
 }
@@ -20,7 +21,7 @@ const overviewMetrics: ReadonlyArray<{ key: keyof TaskBoardState["stats"]; label
 ] as const;
 
 export const TaskBoardOverview: FunctionComponent<TaskBoardOverviewProps> = ({ sprint, tasks, stats }) => {
-  const { translate, translatePlural } = useDashboardI18n();
+  const { locale, translate, translatePlural } = useDashboardI18n();
   const completed = tasks.filter((task) => getTaskLane(task.status) === "completed").length;
   const inProgress = tasks.filter((task) => getTaskLane(task.status) === "in_progress").length;
   const queued = tasks.filter((task) => getTaskLane(task.status) === "pending").length;
@@ -47,7 +48,11 @@ export const TaskBoardOverview: FunctionComponent<TaskBoardOverviewProps> = ({ s
                 <h4 className="mt-1 break-words font-display text-base font-semibold tracking-tight text-slate-900 dark:text-white sm:text-lg">
                   {sprint.name}
                 </h4>
-                <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.1em] text-slate-400">{sprint.date}</p>
+                <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.1em] text-slate-400">
+                  {sprint.startDate || sprint.endDate
+                    ? formatTaskSprintDateRange(sprint.startDate, sprint.endDate, locale)
+                    : sprint.date}
+                </p>
               </div>
               <div className="shrink-0 text-right">
                 <span className="font-mono text-2xl font-semibold tracking-tighter text-slate-900 dark:text-white">{completion}%</span>

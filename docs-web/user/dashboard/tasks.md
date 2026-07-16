@@ -60,7 +60,7 @@ Generated follow-up task specifications are collapsed initially, so long prompts
 
 ## Six-stage delivery flow
 
-The workflow badge summarizes six stages shared by Sprints, Tasks, Overview, and Live:
+The workflow badge summarizes the six task-delivery stages shared by Tasks, Overview, and task-oriented Live surfaces. Sprint gallery and ledger badges use a separate seven-stage flow with Planning first and Pull request after QA:
 
 1. **Coding** — waiting, queued, preparing, active, quota/capacity wait, paused, complete, or failed.
 2. **Pull request** — waiting for a PR, missing a required PR, creating, or ready.

@@ -21,6 +21,9 @@ This project now uses a shared structured logger and request correlation context
     - `standard` is the default and keeps important lifecycle, orchestration, invocation, MCP, warning, and error logs visible.
     - `full` also prints routine dashboard HTTP request-completion logs.
   - File output uses its own severity threshold and is not hidden by console visibility filtering.
+  - Each stderr and debug-file stream has an 8 MiB pending-write ceiling. When a downstream
+    consumer is slower than the runtime, additional records are dropped before `write()` rather
+    than retained in the Node heap; application work and provider execution continue.
 
 - `src/shared/logging/correlation-id.ts`
   - Correlation ID context backed by `AsyncLocalStorage`.
@@ -107,7 +110,7 @@ Expected provider telemetry event types:
 - `provider_telemetry_poll_failed`: A watcher tick failed to read or parse provider telemetry; the warning logs invocation context, `failureCount`, and `errorName` without provider transcript or usage payload text.
 - `provider_invocation_usage_updated`: A provider invocation usage row was updated; logs include the update shape and summary counters, not raw usage payloads.
 
-Docker-backed provider launches pass secret-bearing provider environment values through a temporary `0600` env-file supplied with `--env-file`. Long prompts and provider argv are mounted from a generated argv file. Host `docker run` arguments and provider activity logs should show env-file or mount paths only, never API key values, provider env assignments, raw prompts, or usage JSON.
+Docker-backed provider launches pass secret-bearing provider environment values through a temporary `0600` env-file supplied with `--env-file`. Provider argv is mounted from a generated file, and oversized prompts are streamed from a separate restrictive file through `docker run -i` when the provider supports stdin input. This keeps raw prompts out of both the host Docker argv and the container's final `execve` argument array. Host process arguments and provider activity logs should show temporary paths or bounded metadata only, never API key values, provider env assignments, raw prompts, or usage JSON.
 
 Focused verification:
 
@@ -129,6 +132,9 @@ pnpm run test:dashboard -- tests/dashboard/lib/dashboard-realtime-client.test.ts
 - The CLI entrypoint installs a bootstrap warning filter before server modules load, suppressing Node's SQLite experimental warning. Dotenv is loaded in quiet mode so startup output is owned by the structured logger.
 - Treat `logPurpose` as required for new server, tool, provider, realtime, request, and security logs. The stable labels (`HTTP`, `INVK`, `LIVE`, `SEC`, and the other labels in the table above) are used by operators and tests to separate workflow concerns without string-matching free-form messages.
 - Keep provider invocation records and realtime event logs metadata-only. Persisted provider usage rows may retain raw usage JSON for diagnostics, but structured logs, realtime event metadata, and debug-file output must expose only bounded counters, identifiers, event types, sizes, `rawUsageJsonPresent`, `errorName`, and `correlationId`.
+- Never remove the pending-stream ceiling or bypass it from a child logger. A blocked terminal,
+  redirected pipe, or slow debug-log filesystem must not turn routine invocation telemetry into an
+  unbounded JavaScript write queue.
 - Security validation failures should log through `logPurpose: "security"` with sanitized reason metadata. Do not include request bodies, authorization headers, API keys, token values, raw websocket frames, provider prompts, subprocess argv, or transcript text.
 - `DEBUG_LOG_FILE_LEVEL` increases `.code-ux/debug.log` detail only; it does not relax redaction or metadata-only provider logging.
 

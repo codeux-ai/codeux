@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { runCommandStrict } from "../../../../src/services/cli-process-runner.js";
+import { acquireProjectGitHelper } from "../../../../src/shared/subprocess/command-runner.js";
 import {
   getCheckedOutRef,
   restoreCheckedOutRef,
@@ -14,6 +15,7 @@ import {
   findRecoverableWorkerBranch,
   workerBranchHasMergeWork,
   workerBranchIsMergedIntoFeature,
+  resolveWorkerBranchMergeState,
   deleteBranchLocally,
 } from "../../../../src/infrastructure/git/local-merge.js";
 
@@ -137,6 +139,11 @@ describe("local-merge helpers", () => {
     expect(files).toContain("two.txt");
     expect(runner.mock.calls.filter(([, args]) => args[0] === "worktree" && args[1] === "add")).toHaveLength(1);
     expect(runner.mock.calls.filter(([, args]) => args[0] === "worktree" && args[1] === "remove")).toHaveLength(1);
+    expect(runner.mock.calls.filter(([, args]) => (
+      args[0] === "rev-parse"
+      && args[1] === "--verify"
+      && args[2] === "refs/heads/feature^{commit}"
+    ))).toHaveLength(0);
   });
 
   it("retries a temporary merge when the target ref advances during publication", async () => {
@@ -188,6 +195,7 @@ describe("local-merge helpers", () => {
     const previousGitContainerMode = process.env.CODE_UX_GIT_CONTAINER_MODE;
     process.env.CODE_UX_CONTAINERIZED_GIT = "1";
     delete process.env.CODE_UX_GIT_CONTAINER_MODE;
+    const releaseGitHelper = acquireProjectGitHelper(repo);
 
     try {
       await git(repo, "checkout", "feature");
@@ -207,6 +215,7 @@ describe("local-merge helpers", () => {
       const files = (await git(repo, "ls-tree", "--name-only", "feature")).stdout;
       expect(files).toContain("host-worktree.txt");
     } finally {
+      await releaseGitHelper();
       if (previousContainerizedGit === undefined) {
         delete process.env.CODE_UX_CONTAINERIZED_GIT;
       } else {
@@ -831,10 +840,10 @@ describe("findRecoverableWorkerBranch", () => {
   });
 
   it("prefers the most recently committed matching branch", async () => {
-    await makeWorkerBranch(`${prefix}old`, true);
+    await makeWorkerBranch(`${prefix}0001`, true);
     // A second attempt's branch, committed later, should win.
-    await git(repo, "branch", `${prefix}new`, "feature");
-    await git(repo, "checkout", `${prefix}new`);
+    await git(repo, "branch", `${prefix}0002`, "feature");
+    await git(repo, "checkout", `${prefix}0002`);
     await commitFile(repo, "newer.md", "newer\n", "feat: newer work");
     await git(repo, "checkout", "main");
 
@@ -844,7 +853,7 @@ describe("findRecoverableWorkerBranch", () => {
       branchPrefix: prefix,
     });
 
-    expect(found).toBe(`${prefix}new`);
+    expect(found).toBe(`${prefix}0002`);
   });
 
   describe("deleteBranchLocally", () => {
@@ -858,10 +867,13 @@ describe("findRecoverableWorkerBranch", () => {
 
     it("refuses to delete the currently checked-out branch", async () => {
       const current = (await git(repo, "symbolic-ref", "--short", "HEAD")).stdout.trim();
-      const deleted = await deleteBranchLocally({ repoPath: repo, branch: current });
+      const runner = vi.fn((command: string, args: string[], cwd: string) => runCommandStrict(command, args, cwd));
+      const deleted = await deleteBranchLocally({ repoPath: repo, branch: current, runner });
       expect(deleted).toBe(false);
       const list = (await git(repo, "branch", "--format=%(refname:short)")).stdout;
       expect(list).toContain(current);
+      expect(runner).toHaveBeenCalledTimes(1);
+      expect(runner).toHaveBeenCalledWith("git", ["branch", "-D", current], repo);
     });
 
     it("returns false for a non-existent branch without throwing", async () => {
@@ -950,6 +962,41 @@ describe("workerBranchHasMergeWork", () => {
     })).resolves.toBe(true);
 
     expect(revListRanges).toEqual(["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa..bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]);
+    expect(runner).toHaveBeenCalledTimes(3);
+  });
+
+  it("resolves missing, merged, and unmerged branch state with a bounded common path", async () => {
+    await git(repo, "branch", "task/noop", "feature");
+    await git(repo, "checkout", "-b", "task/ahead", "feature");
+    await commitFile(repo, "ahead.txt", "ahead\n", "feat: ahead");
+    await git(repo, "checkout", "main");
+    const runner = vi.fn((command: string, args: string[], cwd: string) => runCommandStrict(command, args, cwd));
+
+    await expect(resolveWorkerBranchMergeState({
+      repoPath: repo,
+      featureBranch: "feature",
+      workerBranch: "task/noop",
+      runner,
+    })).resolves.toMatchObject({ state: "merged", sourceCommit: expect.any(String) });
+    expect(runner).toHaveBeenCalledTimes(3);
+
+    runner.mockClear();
+    await expect(resolveWorkerBranchMergeState({
+      repoPath: repo,
+      featureBranch: "feature",
+      workerBranch: "task/ahead",
+      runner,
+    })).resolves.toMatchObject({ state: "unmerged", sourceCommit: expect.any(String) });
+    expect(runner).toHaveBeenCalledTimes(3);
+
+    runner.mockClear();
+    await expect(resolveWorkerBranchMergeState({
+      repoPath: repo,
+      featureBranch: "feature",
+      workerBranch: "task/missing",
+      runner,
+    })).resolves.toEqual({ state: "missing", sourceCommit: null, targetCommit: null });
+    expect(runner).toHaveBeenCalledTimes(2);
   });
 });
 

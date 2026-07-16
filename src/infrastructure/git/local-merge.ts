@@ -25,6 +25,14 @@ export interface LocalMergeResult {
   error?: string;
 }
 
+export type WorkerBranchMergeState = "unmerged" | "merged" | "missing";
+
+export interface WorkerBranchMergeResolution {
+  state: WorkerBranchMergeState;
+  sourceCommit: string | null;
+  targetCommit: string | null;
+}
+
 /** A ref that was checked out before the orchestrator started mutating branches. */
 export interface CheckedOutRef {
   ref: string;
@@ -236,34 +244,44 @@ export async function findRecoverableWorkerBranch(args: {
   runner?: LocalMergeRunner;
 }): Promise<string | null> {
   const runner = args.runner ?? defaultRunner;
-  let names: string[];
+  let candidates: Array<{ name: string; when: number }>;
   try {
-    const out = await runner("git", ["for-each-ref", "--format=%(refname:short)", "refs/heads/"], args.repoPath);
-    names = out.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
+    const out = await runner(
+      "git",
+      ["for-each-ref", "--format=%(refname:short)%00%(committerdate:unix)", "refs/heads/"],
+      args.repoPath,
+    );
+    candidates = out.stdout
+      .split("\n")
+      .map((line) => {
+        const [name = "", rawWhen = ""] = line.trim().split("\0");
+        return { name, when: Number.parseInt(rawWhen, 10) || 0 };
+      })
+      .filter(({ name }) => name.startsWith(args.branchPrefix));
   } catch {
     return null;
   }
 
-  let best: { name: string; when: number } | null = null;
-  for (const name of names) {
-    if (!name.startsWith(args.branchPrefix)) continue;
-    let ahead = 0;
+  const recoverable = (await Promise.all(candidates.map(async (candidate) => {
     try {
-      const res = await runner("git", ["rev-list", "--count", `${args.featureBranch}..${name}`], args.repoPath);
-      ahead = Number.parseInt(res.stdout.trim(), 10) || 0;
+      const res = await runner(
+        "git",
+        ["rev-list", "--count", `${args.featureBranch}..${candidate.name}`],
+        args.repoPath,
+      );
+      return (Number.parseInt(res.stdout.trim(), 10) || 0) > 0 ? candidate : null;
     } catch {
-      continue;
+      return null;
     }
-    if (ahead <= 0) continue;
-    let when = 0;
-    try {
-      const res = await runner("git", ["log", "-1", "--format=%ct", name], args.repoPath);
-      when = Number.parseInt(res.stdout.trim(), 10) || 0;
-    } catch {
-      when = 0;
-    }
-    if (!best || when > best.when) best = { name, when };
-  }
+  }))).filter((candidate): candidate is { name: string; when: number } => candidate !== null);
+  const best = recoverable.reduce<{ name: string; when: number } | null>(
+    (current, candidate) => !current
+      || candidate.when > current.when
+      || (candidate.when === current.when && candidate.name > current.name)
+      ? candidate
+      : current,
+    null,
+  );
   return best?.name ?? null;
 }
 
@@ -316,19 +334,6 @@ async function gitCommitExists(
     return true;
   } catch {
     return false;
-  }
-}
-
-async function gitRevListCount(
-  repoPath: string,
-  range: string,
-  runner: LocalMergeRunner,
-): Promise<number> {
-  try {
-    const res = await runner("git", ["rev-list", "--count", range], repoPath);
-    return Number.parseInt(res.stdout.trim(), 10) || 0;
-  } catch {
-    return 0;
   }
 }
 
@@ -475,54 +480,51 @@ export async function workerBranchHasMergeWork(args: {
   workerBranch: string;
   runner?: LocalMergeRunner;
 }): Promise<boolean> {
+  const resolution = await resolveWorkerBranchMergeState(args);
+  return resolution.state === "unmerged";
+}
+
+/**
+ * Resolves the worker/feature relationship once for merge gating. Prefer the
+ * local refs that the LOCAL merger actually publishes, then fall back to the
+ * corresponding origin refs. A comparison failure is treated as unmerged so
+ * the authoritative merge fails closed instead of discarding work.
+ */
+export async function resolveWorkerBranchMergeState(args: {
+  repoPath: string;
+  featureBranch: string;
+  workerBranch: string;
+  runner?: LocalMergeRunner;
+}): Promise<WorkerBranchMergeResolution> {
   const runner = args.runner ?? defaultRunner;
   const branch = args.workerBranch.trim();
-  if (!branch) return false;
-
-  const sourceRefs = [
-    `refs/heads/${branch}`,
-    `refs/remotes/origin/${branch}`,
-  ];
-  const existingSourceRefs: string[] = [];
-  for (const ref of sourceRefs) {
-    if (await gitRefExists(args.repoPath, ref, runner)) {
-      existingSourceRefs.push(ref);
-    }
-  }
-  if (existingSourceRefs.length === 0) {
-    return false;
+  if (!branch) {
+    return { state: "missing", sourceCommit: null, targetCommit: null };
   }
 
-  const baseRefs = [
-    `refs/remotes/origin/${args.featureBranch}`,
-    `refs/heads/${args.featureBranch}`,
-  ];
-  const existingBaseRefs: string[] = [];
-  for (const ref of baseRefs) {
-    if (await gitRefExists(args.repoPath, ref, runner)) {
-      existingBaseRefs.push(ref);
-    }
-  }
-  if (existingBaseRefs.length === 0) {
-    return true;
+  const sourceCommit = await gitResolveCommit(args.repoPath, `refs/heads/${branch}`, runner)
+    ?? await gitResolveCommit(args.repoPath, `refs/remotes/origin/${branch}`, runner);
+  if (!sourceCommit) {
+    return { state: "missing", sourceCommit: null, targetCommit: null };
   }
 
-  for (const sourceRef of existingSourceRefs) {
-    const sourceCommit = await gitResolveCommit(args.repoPath, sourceRef, runner);
-    if (!sourceCommit) {
-      continue;
-    }
-    for (const baseRef of existingBaseRefs) {
-      const baseCommit = await gitResolveCommit(args.repoPath, baseRef, runner);
-      if (!baseCommit) {
-        continue;
-      }
-      if ((await gitRevListCount(args.repoPath, `${baseCommit}..${sourceCommit}`, runner)) > 0) {
-        return true;
-      }
-    }
+  const targetCommit = await gitResolveCommit(args.repoPath, `refs/heads/${args.featureBranch}`, runner)
+    ?? await gitResolveCommit(args.repoPath, `refs/remotes/origin/${args.featureBranch}`, runner);
+  if (!targetCommit) {
+    return { state: "unmerged", sourceCommit, targetCommit: null };
   }
-  return false;
+
+  try {
+    const result = await runner("git", ["rev-list", "--count", `${targetCommit}..${sourceCommit}`], args.repoPath);
+    const aheadCount = Number.parseInt(result.stdout.trim(), 10);
+    return {
+      state: Number.isFinite(aheadCount) && aheadCount === 0 ? "merged" : "unmerged",
+      sourceCommit,
+      targetCommit,
+    };
+  } catch {
+    return { state: "unmerged", sourceCommit, targetCommit };
+  }
 }
 
 /**
@@ -537,38 +539,8 @@ export async function workerBranchIsMergedIntoFeature(args: {
   workerBranch: string;
   runner?: LocalMergeRunner;
 }): Promise<boolean> {
-  const runner = args.runner ?? defaultRunner;
-  const branch = args.workerBranch.trim();
-  if (!branch) return false;
-
-  const sourceRefs = [
-    `refs/heads/${branch}`,
-    `refs/remotes/origin/${branch}`,
-  ];
-  const baseRefs = [
-    `refs/remotes/origin/${args.featureBranch}`,
-    `refs/heads/${args.featureBranch}`,
-  ];
-
-  for (const sourceRef of sourceRefs) {
-    if (!(await gitRefExists(args.repoPath, sourceRef, runner))) continue;
-    const sourceCommit = await gitResolveCommit(args.repoPath, sourceRef, runner);
-    if (!sourceCommit) continue;
-
-    for (const baseRef of baseRefs) {
-      if (!(await gitRefExists(args.repoPath, baseRef, runner))) continue;
-      const baseCommit = await gitResolveCommit(args.repoPath, baseRef, runner);
-      if (!baseCommit) continue;
-      try {
-        const result = await runner("git", ["rev-list", "--count", `${baseCommit}..${sourceCommit}`], args.repoPath);
-        if (Number.parseInt(result.stdout.trim(), 10) === 0) return true;
-      } catch {
-        // Try the next local/remote ref pair before treating the merge as unproven.
-      }
-    }
-  }
-
-  return false;
+  const resolution = await resolveWorkerBranchMergeState(args);
+  return resolution.state === "merged";
 }
 
 /**
@@ -587,14 +559,8 @@ export async function deleteBranchLocally(args: {
   }
   const runner = args.runner ?? defaultRunner;
   try {
-    const current = await runner("git", ["rev-parse", "--abbrev-ref", "HEAD"], args.repoPath);
-    if (current.stdout.trim() === branch) {
-      return false;
-    }
-  } catch {
-    // If HEAD cannot be resolved, fall through and let the delete attempt decide.
-  }
-  try {
+    // Git itself refuses to delete a branch checked out by any worktree. Let
+    // that authoritative operation decide instead of paying for a racy probe.
     await runner("git", ["branch", "-D", branch], args.repoPath);
     return true;
   } catch {
@@ -700,6 +666,7 @@ export function createTemporaryWorktreeBranchMerger(args: {
   let visibleCheckout: CheckedOutRef | null | undefined;
   let worktreePath: string | null = null;
   let worktreeHead: string | null = null;
+  let publishedTarget: string | null = null;
   let worktreeCreated = false;
   let mergedTarget = false;
   let closed = false;
@@ -745,6 +712,7 @@ export function createTemporaryWorktreeBranchMerger(args: {
       // Real Git always resolves this to an object ID. The symbolic fallback keeps injected
       // runners usable for higher-level orchestration tests that intentionally stub empty output.
       worktreeHead = await gitResolveCommit(worktreePath, "HEAD", runner) ?? targetBranch;
+      publishedTarget = worktreeHead;
       return null;
     } catch (err) {
       return { ok: false, conflict: false, error: formatGitError(err) };
@@ -760,14 +728,6 @@ export function createTemporaryWorktreeBranchMerger(args: {
       if (!sourceBranch) {
         return { ok: false, conflict: false, error: "Source branch is required for local merge." };
       }
-      if (!(await gitCommitExists(args.repoPath, sourceBranch, runner))) {
-        return {
-          ok: false,
-          conflict: false,
-          error: `Source branch or ref '${sourceBranch}' was not found or does not point to a commit.`,
-        };
-      }
-
       const opened = await openWorktree(sourceBranch);
       if (opened) {
         return opened;
@@ -778,7 +738,7 @@ export function createTemporaryWorktreeBranchMerger(args: {
 
       const targetRef = `refs/heads/${targetBranch}`;
       for (let attempt = 1; attempt <= LOCAL_MERGE_REF_UPDATE_RETRY_ATTEMPTS; attempt++) {
-        const expectedTarget = await gitResolveCommit(args.repoPath, targetRef, runner) ?? targetBranch;
+        const expectedTarget = publishedTarget ?? targetBranch;
 
         if (worktreeHead !== expectedTarget) {
           try {
@@ -813,13 +773,17 @@ export function createTemporaryWorktreeBranchMerger(args: {
         try {
           await runner("git", ["update-ref", targetRef, mergedHead, expectedTarget], worktreePath);
           mergedTarget = true;
+          publishedTarget = mergedHead;
           return mergeResult;
         } catch (error) {
           const actualTarget = await gitResolveCommit(args.repoPath, targetRef, runner);
           if (actualTarget !== expectedTarget && attempt < LOCAL_MERGE_REF_UPDATE_RETRY_ATTEMPTS) {
             // A concurrent CI repair or merge advanced the target. Re-run this merge from that
             // commit; the compare-and-swap prevents either writer from discarding the other.
-            continue;
+            if (actualTarget) {
+              publishedTarget = actualTarget;
+              continue;
+            }
           }
           const detail = actualTarget !== expectedTarget
             ? `Target branch '${targetBranch}' kept changing during local merge publication.`

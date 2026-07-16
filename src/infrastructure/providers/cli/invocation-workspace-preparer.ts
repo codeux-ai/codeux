@@ -1,6 +1,14 @@
 import type { CliWorkflowSettings } from "../../../contracts/app-types.js";
-import { syncRemoteBranchIfAvailable } from "../../../services/git-branch-sync-service.js";
-import type { GitHttpAuthOptions } from "../../../services/git-http-auth.js";
+import {
+  fetchOriginIfAvailable,
+  type GitBranchSyncOptions,
+} from "../../../services/git-branch-sync-service.js";
+import {
+  buildGitHttpAuthEnvForRepoWithFallbacks,
+  type GitHttpAuthOptions,
+} from "../../../services/git-http-auth.js";
+import { runCommandStrict } from "../../../services/cli-process-runner.js";
+import { acquireProjectGitHelper } from "../../../shared/subprocess/command-runner.js";
 import {
   WorkspaceManager,
   type IWorkspaceManager,
@@ -35,6 +43,7 @@ export interface PrepareInvocationWorktreeRequest {
   workerBranch: string;
   featureBranch: string;
   resumeSessionId?: string;
+  allowExistingWorkerBranch?: boolean;
   gitAuth?: GitHttpAuthOptions;
   gitPolicy?: InvocationWorkspaceGitPolicy;
 }
@@ -60,6 +69,8 @@ export interface ContinuationWorkspaceRequest {
   repoPath: string;
   sessionId: string;
   executionMode: CliWorkflowSettings["executionMode"];
+  /** Durable workspace path recorded by the execution log, when it differs from the latest session. */
+  worktreePath?: string | null;
 }
 
 export interface ContinuationWorkspaceTarget {
@@ -113,8 +124,10 @@ export function buildInvocationSnapshotCheckout(
 export function resolvePrepareWorktreeOptions(
   gitPolicy: Pick<InvocationWorkspaceGitPolicy, "githubMode"> | undefined,
 ): PrepareWorktreeOptions {
+  const usesRemoteGit = gitPolicy?.githubMode === "REMOTE";
   return {
-    remoteOnly: gitPolicy?.githubMode === "REMOTE",
+    remoteOnly: usesRemoteGit,
+    refreshRemote: usesRemoteGit,
   };
 }
 
@@ -138,61 +151,147 @@ export function buildProviderInvocationWorkspaceOptions(
   };
 }
 
+type ProjectGitHelperLeaseFactory = (repoPath: string) => () => Promise<void>;
+type SnapshotBranchFetcher = (
+  repoPath: string,
+  options: GitBranchSyncOptions,
+  branch?: string | readonly string[],
+) => Promise<boolean>;
+type FreshRemoteWorkerBranchProbe = (
+  repoPath: string,
+  workerBranch: string,
+  gitAuth: GitHttpAuthOptions,
+) => Promise<string | null>;
+
+const probeFreshRemoteWorkerBranch: FreshRemoteWorkerBranchProbe = async (
+  repoPath,
+  workerBranch,
+  gitAuth,
+) => {
+  const env = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, gitAuth);
+  const workerRef = `refs/heads/${workerBranch}`;
+  const result = await runCommandStrict(
+    "git",
+    ["ls-remote", "--heads", "origin", workerRef],
+    repoPath,
+    env ?? process.env,
+  );
+  for (const line of result.stdout.split(/\r?\n/)) {
+    const [sha, ref] = line.trim().split(/\s+/, 2);
+    if (sha && ref === workerRef) {
+      return sha;
+    }
+  }
+  return null;
+};
+
 export class InvocationWorkspacePreparer {
-  constructor(private readonly workspaceManager: IWorkspaceManager = new WorkspaceManager()) {}
+  constructor(
+    private readonly workspaceManager: IWorkspaceManager = new WorkspaceManager(),
+    private readonly acquireGitHelperLease: ProjectGitHelperLeaseFactory = acquireProjectGitHelper,
+    private readonly fetchSnapshotBranch: SnapshotBranchFetcher = fetchOriginIfAvailable,
+    private readonly probeRemoteWorkerBranch: FreshRemoteWorkerBranchProbe = probeFreshRemoteWorkerBranch,
+  ) {}
 
   get manager(): IWorkspaceManager {
     return this.workspaceManager;
   }
 
   async createSnapshotWorkspace(args: CreateSnapshotWorkspaceRequest): Promise<string> {
-    await this.refreshSnapshotRefs(args.repoPath, args.checkout, args.gitPolicy);
-    if (args.reuseExisting) {
-      return await this.workspaceManager.createOrReuseSnapshotWorkspace(args.repoPath, args.sessionId, args.checkout);
-    }
-    return await this.workspaceManager.createSnapshotWorkspace(
-      args.repoPath,
-      args.sessionId,
-      args.checkout,
-      args.workspaceOptions,
-    );
+    return await this.withProjectGitHelper(args.repoPath, async () => {
+      if (args.reuseExisting) {
+        return await this.workspaceManager.createOrReuseSnapshotWorkspace(
+          args.repoPath,
+          args.sessionId,
+          args.checkout,
+          async () => this.refreshSnapshotRefs(args.repoPath, args.checkout, args.gitPolicy),
+        );
+      }
+      await this.refreshSnapshotRefs(args.repoPath, args.checkout, args.gitPolicy);
+      return await this.workspaceManager.createSnapshotWorkspace(
+        args.repoPath,
+        args.sessionId,
+        args.checkout,
+        args.workspaceOptions,
+      );
+    });
   }
 
   async createHostSnapshotWorkspace(args: CreateSnapshotWorkspaceRequest): Promise<string> {
-    await this.refreshSnapshotRefs(args.repoPath, args.checkout, args.gitPolicy);
-    return await this.workspaceManager.createHostSnapshotWorkspace(args.repoPath, args.sessionId, args.checkout);
+    return await this.withProjectGitHelper(args.repoPath, async () => {
+      await this.refreshSnapshotRefs(args.repoPath, args.checkout, args.gitPolicy);
+      return await this.workspaceManager.createHostSnapshotWorkspace(args.repoPath, args.sessionId, args.checkout);
+    });
   }
 
-  async prepareWorktree(args: PrepareInvocationWorktreeRequest): Promise<{ worktreePath: string; resumed: boolean }> {
-    return await this.workspaceManager.prepareWorktree(
-      args.repoPath,
-      args.worktreePath,
-      args.workerBranch,
-      args.featureBranch,
-      args.resumeSessionId,
-      args.gitAuth,
-      resolvePrepareWorktreeOptions(args.gitPolicy),
-    );
+  async prepareWorktree(args: PrepareInvocationWorktreeRequest): Promise<{
+    worktreePath: string;
+    resumed: boolean;
+    createdFreshWorkerBranch?: boolean;
+  }> {
+    return await this.withProjectGitHelper(args.repoPath, async () => {
+      const allowExistingWorkerBranch = args.allowExistingWorkerBranch
+        ?? Boolean(args.resumeSessionId);
+      if (!allowExistingWorkerBranch && args.gitPolicy?.githubMode === "REMOTE") {
+        const remoteTip = await this.probeRemoteWorkerBranch(
+          args.repoPath,
+          args.workerBranch,
+          args.gitAuth ?? {},
+        );
+        if (remoteTip) {
+          throw new Error(
+            `Fresh worker branch allocation collided with existing remote ref '${args.workerBranch}'.`,
+          );
+        }
+      }
+      return await this.workspaceManager.prepareWorktree(
+        args.repoPath,
+        args.worktreePath,
+        args.workerBranch,
+        args.featureBranch,
+        args.resumeSessionId,
+        args.gitAuth,
+        {
+          ...resolvePrepareWorktreeOptions(args.gitPolicy),
+          allowExistingWorkerBranch,
+        },
+      );
+    });
   }
 
   async resolveContinuationWorkspace(args: ContinuationWorkspaceRequest): Promise<ContinuationWorkspaceTarget> {
-    const resumeWorkspacePath = await this.workspaceManager.resolveResumeWorktreePath(
-      args.repoPath,
-      args.sessionId,
-      args.executionMode,
-    );
-    const hasPreservedWorkspace = Boolean(resumeWorkspacePath);
-    const worktreePath = resumeWorkspacePath
-      || this.workspaceManager.buildWorktreePath(args.repoPath, args.sessionId, args.executionMode);
-    const currentBranch = hasPreservedWorkspace
-      ? await this.workspaceManager.resolveCurrentBranch(worktreePath)
-      : null;
+    return await this.withProjectGitHelper(args.repoPath, async () => {
+      const durableWorktreePath = args.worktreePath?.trim();
+      const resumeWorkspacePath = durableWorktreePath
+        && await this.workspaceManager.workspaceExists(durableWorktreePath)
+        ? durableWorktreePath
+        : await this.workspaceManager.resolveResumeWorktreePath(
+          args.repoPath,
+          args.sessionId,
+          args.executionMode,
+        );
+      const hasPreservedWorkspace = Boolean(resumeWorkspacePath);
+      const worktreePath = resumeWorkspacePath
+        || this.workspaceManager.buildWorktreePath(args.repoPath, args.sessionId, args.executionMode);
+      const currentBranch = hasPreservedWorkspace
+        ? await this.workspaceManager.resolveCurrentBranch(worktreePath)
+        : null;
 
-    return {
-      worktreePath,
-      hasPreservedWorkspace,
-      currentBranch,
-    };
+      return {
+        worktreePath,
+        hasPreservedWorkspace,
+        currentBranch,
+      };
+    });
+  }
+
+  private async withProjectGitHelper<T>(repoPath: string, operation: () => Promise<T>): Promise<T> {
+    const release = this.acquireGitHelperLease(repoPath);
+    try {
+      return await operation();
+    } finally {
+      await release();
+    }
   }
 
   async refreshSnapshotRefs(
@@ -208,11 +307,14 @@ export class InvocationWorkspacePreparer {
       .map(cleanBranch)
       .filter((branch): branch is string => Boolean(branch));
     const uniqueBranches = Array.from(new Set(branches));
-    for (const branch of uniqueBranches) {
-      await syncRemoteBranchIfAvailable(repoPath, branch, {
+    if (uniqueBranches.length > 0) {
+      // Snapshot consumers read refs/remotes/origin/* directly. Fetching the requested ref is
+      // sufficient; the full branch-sync path additionally probes and mutates the local branch,
+      // adding several serial Git processes without changing the snapshot that will be seeded.
+      await this.fetchSnapshotBranch(repoPath, {
         githubToken: gitPolicy.githubToken,
         gitlabToken: gitPolicy.gitlabToken,
-      });
+      }, uniqueBranches);
     }
   }
 }

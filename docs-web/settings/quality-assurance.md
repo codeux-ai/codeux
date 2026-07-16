@@ -43,6 +43,12 @@ Before applying changes, check:
 - Whether a project override is masking the system value you expected to change.
 - Whether a running sprint needs to be paused, restarted, or allowed to finish before the new value can be observed.
 
+Task-level QA prompts contain full details only for the task under review: title, status, provider, worker branch, PR, dependencies, the complete unshortened prompt, and the latest eight activity entries without content truncation. Other sprint tasks appear only after they reach `completed`, and then only their titles are listed; unfinished siblings and all sibling instructions, metadata, and activity are omitted. Sprint-completion QA still receives every task because it reviews cross-task integration. When that full sprint context exceeds 100,000 estimated tokens (using the runtime's four-characters-per-token estimate), sprint QA receives the first half of every task instruction with an explicit notice while task metadata, ordering, and recent activity remain intact.
+
+During orchestration, QA reconciliation and initial merge-gate evaluation load the whole DAG's latest review cycles and attempt counts in a chunked batch. Review decisions, retry budgets, and fail-closed behavior are unchanged.
+
+Task QA runs in waves of at most four reviews per orchestration cycle, or a lower positive capacity when the providers routed to `qa_review` are configured more conservatively. The cycle settles that wave, merges ready branches, and starts newly unblocked coding before scheduling more reviews. Provider admission remains authoritative and may reduce effective concurrency further under host pressure.
+
 ## Troubleshooting
 
 If the saved setting does not appear to take effect:

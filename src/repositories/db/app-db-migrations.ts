@@ -1159,6 +1159,58 @@ export function migrateGuardrailLedgerDropTaskForeignKey(db: DatabaseAdapter): v
   }
 }
 
+/**
+ * Rebuilds an existing `guardrail_ledger_adjustments` table to drop the legacy
+ * `FOREIGN KEY (task_id) REFERENCES tasks(id)` constraint.
+ *
+ * Adjustment rows also store durable idempotency markers for synthetic, taskless
+ * sprint-level guardrail subjects. Keep the schema aligned with `guardrail_ledger`
+ * so `recordOnce()` can count final merge CI-repair attempts without rejecting the
+ * synthetic `main-merge-ci-fix:<sprintRunId>` key.
+ */
+export function migrateGuardrailLedgerAdjustmentsDropTaskForeignKey(db: DatabaseAdapter): void {
+  const fks = db.prepare("PRAGMA foreign_key_list(guardrail_ledger_adjustments)").all() as Array<{
+    table?: string;
+    from?: string;
+  }>;
+  const hasTaskFk = fks.some((fk) => fk.table === "tasks" || fk.from === "task_id");
+  if (!hasTaskFk) {
+    return;
+  }
+
+  db.exec("PRAGMA foreign_keys = OFF");
+  try {
+    db.exec("BEGIN");
+    db.exec(`
+      CREATE TABLE guardrail_ledger_adjustments_new (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        purpose TEXT NOT NULL,
+        adjustment INTEGER NOT NULL,
+        source_key TEXT NOT NULL UNIQUE,
+        reason TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      )
+    `);
+    db.exec(`
+      INSERT INTO guardrail_ledger_adjustments_new
+        (id, project_id, task_id, purpose, adjustment, source_key, reason, created_at)
+      SELECT id, project_id, task_id, purpose, adjustment, source_key, reason, created_at
+      FROM guardrail_ledger_adjustments
+    `);
+    db.exec("DROP TABLE guardrail_ledger_adjustments");
+    db.exec("ALTER TABLE guardrail_ledger_adjustments_new RENAME TO guardrail_ledger_adjustments");
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  } finally {
+    db.exec("PRAGMA foreign_keys = ON");
+  }
+}
+
 function runMigrationsInternal(db: DatabaseAdapter): void {
   // We can group future schema changes here.
   // The current phase 1 approach calls schema definitions directly, but these ensure*
@@ -1311,6 +1363,7 @@ function runMigrationsInternal(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_execution_leases_scope", "execution_leases", "scope_type, scope_id");
   ensureIndex(db, "idx_task_run_events_task_run_created", "task_run_events", "task_run_id, created_at DESC");
   ensureIndex(db, "idx_task_run_events_task_run_created_id", "task_run_events", "task_run_id, created_at DESC, id DESC");
+  ensureIndex(db, "idx_task_run_events_task_run_type_created_id", "task_run_events", "task_run_id, event_type, created_at DESC, id DESC");
   ensureReadIndexSql(
     db,
     "idx_task_run_events_provider_activity_run_created",
@@ -1484,12 +1537,14 @@ function runMigrationsInternal(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_project_worker_assignments_project_status", "project_worker_assignments", "project_id, status, assignment_role, last_affinity_at DESC");
   ensureIndex(db, "idx_project_worker_assignments_worker_status", "project_worker_assignments", "worker_endpoint_id, status, last_affinity_at DESC");
   ensureIndex(db, "idx_project_attention_items_project_status", "project_attention_items", "project_id, status, opened_at DESC");
+  ensureIndex(db, "idx_project_attention_items_workflow_projection", "project_attention_items", "project_id, owner_type, status, assigned_worker_endpoint_id, sprint_id, updated_at DESC, opened_at DESC, id DESC");
   ensureIndex(db, "idx_project_attention_items_project_status_updated", "project_attention_items", "project_id, status, updated_at DESC");
   ensureIndex(db, "idx_project_attention_items_project_status_updated_opened", "project_attention_items", "project_id, status, updated_at DESC, opened_at DESC, id DESC");
   ensureIndex(db, "idx_project_attention_items_sprint_run_status", "project_attention_items", "sprint_run_id, status, opened_at DESC");
   ensureIndex(db, "idx_project_attention_items_sprint_run_status_updated", "project_attention_items", "sprint_run_id, status, updated_at DESC");
   ensureIndex(db, "idx_project_attention_items_sprint_run_status_updated_opened", "project_attention_items", "sprint_run_id, status, updated_at DESC, opened_at DESC, id DESC");
   ensureIndex(db, "idx_project_attention_items_dispatch_status", "project_attention_items", "dispatch_id, status, opened_at DESC");
+  ensureIndex(db, "idx_execution_invocations_project_type_sprint_started_created", "execution_invocations", "project_id, type, sprint_id, started_at DESC, created_at DESC");
   ensureIndex(db, "idx_sprint_preview_sessions_project_updated", "sprint_preview_sessions", "project_id, updated_at DESC");
   ensureIndex(db, "idx_sprint_preview_sessions_sprint", "sprint_preview_sessions", "sprint_id, updated_at DESC");
 
@@ -1563,6 +1618,26 @@ function runMigrationsInternal(db: DatabaseAdapter): void {
   migrateGuardrailLedgerDropTaskForeignKey(db);
   ensureUniqueIndex(db, "idx_guardrail_ledger_task_purpose", "guardrail_ledger", "task_id, purpose");
   ensureIndex(db, "idx_guardrail_ledger_project", "guardrail_ledger", "project_id, task_id");
+
+  // Runtime restarts are operational interruptions, not failed agent attempts. Keep each
+  // guardrail refund durable and idempotent so a second startup recovery cannot refund the
+  // same interrupted task run twice. `task_id` intentionally has no task FK because this
+  // table also stores idempotency markers for synthetic sprint-level guardrail subjects.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS guardrail_ledger_adjustments (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      task_id TEXT NOT NULL,
+      purpose TEXT NOT NULL,
+      adjustment INTEGER NOT NULL,
+      source_key TEXT NOT NULL UNIQUE,
+      reason TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  migrateGuardrailLedgerAdjustmentsDropTaskForeignKey(db);
+  ensureIndex(db, "idx_guardrail_ledger_adjustments_task", "guardrail_ledger_adjustments", "task_id, purpose");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS knowledge_documents (

@@ -4,6 +4,8 @@ import {
   buildPlanningRoute,
   getDefaultPlanningProviderMetadata,
   buildDisplaySprints,
+  buildPlanningStatusBySprintId,
+  buildWorkflowHumanInterventionBySprintId,
   buildCiStatusBySprintId,
   countSprintsByStatus,
   countInWorkSprints,
@@ -282,6 +284,36 @@ describe("Sprints Page View Models", () => {
       const suppressed = new Set(["1"]);
       const result = buildDisplaySprints(sprints, optimistic, suppressed);
       expect(result[0].status).toBe("cancelled");
+    });
+  });
+
+  describe("buildPlanningStatusBySprintId", () => {
+    it("uses the durable planning projection for each sprint", () => {
+      const statuses = buildPlanningStatusBySprintId([
+        { sprintId: "sprint-1", planningStatus: "running", humanIntervention: null },
+        { sprintId: "sprint-2", planningStatus: null, humanIntervention: null },
+      ]);
+
+      expect(statuses).toEqual(new Map([["sprint-1", "running"]]));
+    });
+  });
+
+  describe("buildWorkflowHumanInterventionBySprintId", () => {
+    it("aggregates only active, unassigned human-owned task intervention", () => {
+      const humanTaskIntervention = ciAttention("open", {
+        id: "human-task",
+        ownerType: "human",
+        attentionType: "human_escalation_required",
+        assignedWorkerEndpointId: null,
+      });
+      const result = buildWorkflowHumanInterventionBySprintId([
+        { sprintId: "sprint-1", planningStatus: null, humanIntervention: humanTaskIntervention },
+        { sprintId: "sprint-2", planningStatus: null, humanIntervention: ciAttention("open", { id: "worker-owned", sprintId: "sprint-2", ownerType: "worker" }) },
+        { sprintId: "sprint-3", planningStatus: null, humanIntervention: ciAttention("open", { id: "worker-assigned", sprintId: "sprint-3", ownerType: "human", assignedWorkerEndpointId: "worker-1" }) },
+        { sprintId: "sprint-4", planningStatus: null, humanIntervention: ciAttention("resolved", { id: "resolved-human", sprintId: "sprint-4", ownerType: "human", assignedWorkerEndpointId: null }) },
+      ]);
+
+      expect(result).toEqual(new Map([["sprint-1", humanTaskIntervention]]));
     });
   });
 

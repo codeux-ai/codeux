@@ -13,7 +13,7 @@ import {
   RotateCcw,
   Square,
 } from "lucide-preact";
-import type { ExecutionHumanInterventionSummary, Sprint, SprintStatus } from "../../types.js";
+import type { ExecutionAttentionItemSummary, ExecutionHumanInterventionSummary, Sprint, SprintStatus } from "../../types.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
 import { WorkflowStatusBadge } from "../ui/WorkflowStatusBadge.js";
 import type { CiStatusPresentation } from "../../lib/ci-status-presentation.js";
@@ -72,6 +72,8 @@ interface SprintCellProps {
   pauseResumeBusy?: boolean;
   humanIntervention?: ExecutionHumanInterventionSummary | null;
   ciStatus?: CiStatusPresentation | null;
+  planningStatus?: string | null;
+  workflowHumanIntervention?: ExecutionAttentionItemSummary | null;
   onPrimaryAction?: () => void;
   onPauseResume?: () => void;
   onAddTasks?: () => void;
@@ -90,6 +92,24 @@ const formatSprintKey = (sprint: Sprint, prefix: string = "SPR"): string => (
   sprint.number ? `${prefix}-${sprint.number}` : sprint.slug.toUpperCase()
 );
 
+function toHumanInterventionSummary(
+  intervention: ExecutionAttentionItemSummary | null,
+): ExecutionHumanInterventionSummary | null {
+  if (!intervention) return null;
+  const payloadInstructions = intervention.payload?.instructions;
+  const reason = intervention.summaryMarkdown.trim() || intervention.title;
+  return {
+    title: intervention.title,
+    reason,
+    instructions: typeof payloadInstructions === "string" && payloadInstructions.trim()
+      ? payloadInstructions.trim()
+      : reason,
+    attentionType: intervention.attentionType,
+    severity: intervention.severity,
+    ownerType: intervention.ownerType,
+  };
+}
+
 export const SprintCell: FunctionComponent<SprintCellProps> = ({
   sprint,
   isEven,
@@ -102,8 +122,9 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   updateBranchBusy = false,
   isPaused = false,
   pauseResumeBusy = false,
-  humanIntervention = null,
   ciStatus = null,
+  planningStatus = null,
+  workflowHumanIntervention = null,
   onPrimaryAction,
   onPauseResume,
   onAddTasks,
@@ -121,6 +142,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   const reducedMotion = useReducedMotion();
   const interactionTokens = useInteractionTokens();
   const gsapTokens = useGsapInteractionTokens();
+  const humanIntervention = toHumanInterventionSummary(workflowHumanIntervention);
 
   const bubbleRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -340,9 +362,11 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
             scope="sprint"
             status={sprint.status}
             completion={sprint.completion}
+            tasksCount={sprint.tasksCount}
+            planningStatus={planningStatus}
             review={sprint.latestReview}
             ciPresentation={ciStatus}
-            humanIntervention={humanIntervention}
+            humanIntervention={workflowHumanIntervention}
             compact
             align="right"
           />

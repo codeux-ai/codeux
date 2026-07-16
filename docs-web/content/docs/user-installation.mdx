@@ -101,7 +101,7 @@ Platform notes:
 ## Option 2 — From source
 
 Use a source build to develop Code UX itself or inspect the runtime. Requires Node.js 22.13+ and
-pnpm 11.13.0.
+pnpm 11.13.1.
 
 ```bash
 git clone https://github.com/codeux-ai/codeux.git

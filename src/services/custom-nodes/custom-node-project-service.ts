@@ -108,9 +108,9 @@ function projectFiles(manifest: CustomNodeManifest): Record<string, string> {
   return {
     "node.json": `${JSON.stringify(manifest, null, 2)}\n`,
     "package.json": `${JSON.stringify({
-      name: packageName, version: `${manifest.version}.0.0`, private: true, type: "module", packageManager: "pnpm@11.13.0",
+      name: packageName, version: `${manifest.version}.0.0`, private: true, type: "module", packageManager: "pnpm@11.13.1",
       scripts: { typecheck: "tsc --noEmit", build: "tsc", test: "node --test dist/tests/*.test.js" },
-      devDependencies: { "@types/node": "25.6.0", typescript: "5.9.3" },
+      devDependencies: { "@types/node": "22.20.1", typescript: "5.9.3" },
     }, null, 2)}\n`,
     "pnpm-lock.yaml": lockfile(packageName),
     "tsconfig.json": `${JSON.stringify({ compilerOptions: {
@@ -127,7 +127,7 @@ function projectFiles(manifest: CustomNodeManifest): Record<string, string> {
 }
 
 function lockfile(packageName: string): string {
-  return `lockfileVersion: '9.0'\n\nsettings:\n  autoInstallPeers: false\n  excludeLinksFromLockfile: false\n\nimporters:\n  .:\n    devDependencies:\n      '@types/node':\n        specifier: 25.6.0\n        version: 25.6.0\n      typescript:\n        specifier: 5.9.3\n        version: 5.9.3\n\npackages:\n  '@types/node@25.6.0':\n    resolution: {integrity: sha512-+qIYRKdNYJwY3vRCZMdJbPLJAtGjQBudzZzdzwQYkEPQd+PJGixUL5QfvCLDaULoLv+RhT3LDkwEfKaAkgSmNQ==}\n  typescript@5.9.3:\n    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}\n    engines: {node: '>=14.17'}\n    hasBin: true\n  undici-types@7.19.2:\n    resolution: {integrity: sha512-qYVnV5OEm2AW8cJMCpdV20CDyaN3g0AjDlOGf1OW4iaDEx8MwdtChUp4zu4H0VP3nDRF/8RKWH+IPp9uW0YGZg==}\n\nsnapshots:\n  '@types/node@25.6.0':\n    dependencies:\n      undici-types: 7.19.2\n  typescript@5.9.3: {}\n  undici-types@7.19.2: {}\n# ${packageName}\n`;
+  return `lockfileVersion: '9.0'\n\nsettings:\n  autoInstallPeers: false\n  excludeLinksFromLockfile: false\n\nimporters:\n  .:\n    devDependencies:\n      '@types/node':\n        specifier: 22.20.1\n        version: 22.20.1\n      typescript:\n        specifier: 5.9.3\n        version: 5.9.3\n\npackages:\n  '@types/node@22.20.1':\n    resolution: {integrity: sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q==}\n  typescript@5.9.3:\n    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}\n    engines: {node: '>=14.17'}\n    hasBin: true\n  undici-types@6.21.0:\n    resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}\n\nsnapshots:\n  '@types/node@22.20.1':\n    dependencies:\n      undici-types: 6.21.0\n  typescript@5.9.3: {}\n  undici-types@6.21.0: {}\n# ${packageName}\n`;
 }
 
 function sdkSource(): string {

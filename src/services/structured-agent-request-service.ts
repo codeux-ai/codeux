@@ -61,6 +61,8 @@ export interface StructuredRequestArgs<T> {
   sessionIdPrefix: string;
   logicalSessionId?: string;
   continueSessionId?: string | null;
+  continueSessionWithoutNativeId?: boolean;
+  allowFreshSessionFallback?: boolean;
   openCodeBaselineRawUsageJson?: Record<string, unknown> | null;
   invocationId?: string;
   systemRoutingMessage?: string;
@@ -195,6 +197,8 @@ export class StructuredAgentRequestService {
       signal: args.signal,
       invocationId,
       continueSessionId: args.continueSessionId,
+      continueSessionWithoutNativeId: args.continueSessionWithoutNativeId,
+      allowFreshSessionFallback: args.allowFreshSessionFallback,
       openCodeBaselineRawUsageJson: args.openCodeBaselineRawUsageJson,
       onActivity: args.onActivity,
       agentMcpAccess: args.agentMcpAccess,
@@ -212,7 +216,7 @@ export class StructuredAgentRequestService {
       parsed: result.parsed,
       bodyMarkdown: result.bodyMarkdown,
       nativeSessionId: result.nativeSessionId,
-      continueSessionId: result.nativeSessionId || sessionId,
+      continueSessionId: result.nativeSessionId || (args.provider === "codex" ? null : sessionId),
       openCodeBaselineRawUsageJson: result.openCodeBaselineRawUsageJson || args.openCodeBaselineRawUsageJson || null,
       attemptCount: 0,
       finalDecision: "disabled",
@@ -318,7 +322,9 @@ export class StructuredAgentRequestService {
           parsed: improved.parsed,
           bodyMarkdown: improved.bodyMarkdown,
           nativeSessionId: improved.nativeSessionId,
-          continueSessionId: improved.nativeSessionId || state.continueSessionId || sessionId,
+          continueSessionId: improved.nativeSessionId
+            || state.continueSessionId
+            || (args.provider === "codex" ? null : sessionId),
           openCodeBaselineRawUsageJson: improved.openCodeBaselineRawUsageJson || state.openCodeBaselineRawUsageJson,
           attemptCount: attempt + 1,
           finalDecision: "passed",
@@ -399,7 +405,9 @@ export class StructuredAgentRequestService {
       retryProviderFailures: false,
       maxProviderAttempts: undefined,
     });
-    state.continueSessionId = result.nativeSessionId || state.continueSessionId || sessionId;
+    state.continueSessionId = result.nativeSessionId
+      || state.continueSessionId
+      || (args.provider === "codex" ? null : sessionId);
     state.openCodeBaselineRawUsageJson = result.openCodeBaselineRawUsageJson || state.openCodeBaselineRawUsageJson;
     return result.parsed;
   }
@@ -471,6 +479,7 @@ export class StructuredAgentRequestService {
       signal: args.signal,
       invocationId,
       continueSessionId,
+      continueSessionWithoutNativeId: args.provider === "codex" && !continueSessionId,
       openCodeBaselineRawUsageJson: args.provider === "opencode" ? openCodeBaselineRawUsageJson : undefined,
       onActivity: args.onActivity,
       settings: args.settings,

@@ -78,6 +78,8 @@ import { workerClarificationAgentMcpAccess } from "./agent-mcp-access.js";
 type CliQaProvider = Exclude<ProviderId, "jules">;
 
 const SPRINT_RUN_KEEPALIVE_MS = 30_000;
+const QA_TASK_LIST_TOKEN_THRESHOLD = 100_000;
+const QA_TOKEN_ESTIMATE_CHARACTERS_PER_TOKEN = 4;
 
 interface QaFixContinuationResult {
   applied: boolean;
@@ -602,10 +604,12 @@ export class QualityAssuranceService {
     sprintId: string;
     tasks: Subtask[];
   }): Promise<void> {
-    const runningRuns = args.tasks
+    const taskIds = args.tasks
       .map((task) => task.record_id?.trim())
-      .filter((taskId): taskId is string => Boolean(taskId))
-      .flatMap((taskId) => this.deps.qaReviewRepository.listLatestTaskCycleRuns(taskId))
+      .filter((taskId): taskId is string => Boolean(taskId));
+    const snapshots = this.deps.qaReviewRepository.listTaskReviewSnapshots(taskIds);
+    const runningRuns = [...snapshots.values()]
+      .flatMap((snapshot) => snapshot.latestCycleRuns)
       .filter((run): run is QaReviewRunRecord => Boolean(run && run.status === "running"));
 
     if (runningRuns.length === 0) {
@@ -1149,6 +1153,43 @@ export class QualityAssuranceService {
     });
   }
 
+  getTaskMergeGateStatuses(args: {
+    projectId: string;
+    sprintId: string;
+    tasks: Subtask[];
+  }): Map<string, TaskQaMergeGateStatus> {
+    const settings = this.deps.getDashboardSettings({ projectId: args.projectId, sprintId: args.sprintId });
+    const qaSettings = settings.agents.qualityAssurance;
+    const taskIds = args.tasks
+      .map((task) => task.record_id?.trim())
+      .filter((taskId): taskId is string => Boolean(taskId));
+    const snapshots = this.deps.qaReviewRepository.listTaskReviewSnapshots(taskIds);
+    const statuses = new Map<string, TaskQaMergeGateStatus>();
+
+    for (const task of args.tasks) {
+      const taskId = task.record_id?.trim();
+      if (!taskId) {
+        continue;
+      }
+      const triggerType = resolveTaskTriggerType(task, qaSettings);
+      const isReviewRequired = Boolean(qaSettings.enabled && triggerType);
+      const snapshot = snapshots.get(taskId);
+      const latestRun = isReviewRequired && snapshot?.latestRun
+        ? this.reconcileRunningQaRun(snapshot.latestRun)
+        : null;
+      statuses.set(taskId, computeTaskMergeGateStatus({
+        taskId,
+        triggerType,
+        qaSettings,
+        latestRun,
+        runsUsed: isReviewRequired ? snapshot?.runsUsed ?? 0 : 0,
+        decisiveRuns: isReviewRequired ? snapshot?.decisiveRuns ?? 0 : 0,
+      }));
+    }
+
+    return statuses;
+  }
+
   private findResumableQaReviewerRun(
     runs: QaReviewRunRecord[],
     agentPresetId: string | null,
@@ -1265,8 +1306,11 @@ export class QualityAssuranceService {
       const continueSessionId = canResume
         ? previousProviderInvocation?.nativeSessionId
           || savedNativeSessionId
-          || (provider === "claude-code" ? null : logicalSessionId)
+          || (provider === "claude-code" || provider === "codex" ? null : logicalSessionId)
         : null;
+      const continueSessionWithoutNativeId = canResume
+        && provider === "codex"
+        && !continueSessionId;
       const openCodeBaselineRawUsageJson = provider === "opencode"
         ? previousProviderInvocation?.rawUsageJson
           || (resumePayload?.reviewOpenCodeBaselineRawUsageJson as Record<string, unknown> | null | undefined)
@@ -1327,6 +1371,8 @@ export class QualityAssuranceService {
           });
         }
       }
+      let releaseSnapshotHelperReservation: (() => void) | null = null;
+      try {
       let snapshotWorkspace = args.repoPath;
       let shouldCleanupSnapshot = false;
       if (workflowSettings.executionMode === "DOCKER") {
@@ -1337,6 +1383,14 @@ export class QualityAssuranceService {
           fallbackBranch: args.baseBranch,
           useDefaultBranch: false,
         });
+        const plannedSnapshotWorkspace = this.workspaceManager.buildWorktreePath(
+          args.repoPath,
+          `${snapshotSessionId}-snapshot`,
+          "DOCKER",
+        );
+        releaseSnapshotHelperReservation = this.workspaceManager.reserveWorkspaceHelper(
+          plannedSnapshotWorkspace,
+        );
         snapshotWorkspace = await this.invocationWorkspacePreparer.createSnapshotWorkspace({
           repoPath: args.repoPath,
           sessionId: snapshotSessionId,
@@ -1407,6 +1461,7 @@ export class QualityAssuranceService {
           sessionIdPrefix: "qa-review",
           logicalSessionId,
           continueSessionId,
+          continueSessionWithoutNativeId,
           openCodeBaselineRawUsageJson,
           invocationId: reviewExecutionInvocationId,
           systemRoutingMessage: args.agentInstructions.trim(),
@@ -1456,6 +1511,9 @@ export class QualityAssuranceService {
       }
 
       return result.parsed;
+      } finally {
+        releaseSnapshotHelperReservation?.();
+      }
     });
   }
 
@@ -1649,6 +1707,7 @@ export class QualityAssuranceService {
         `Provider: ${args.currentTask.provider || "unknown"}`,
         `Worker branch: ${args.currentTask.worker_branch || "none"}`,
         `PR URL: ${args.currentTask.pr_url || "none"}`,
+        `Depends on: ${args.currentTask.depends_on.length > 0 ? args.currentTask.depends_on.join(", ") : "none"}`,
         "",
         "Prompt:",
         args.currentTask.prompt,
@@ -1660,23 +1719,9 @@ export class QualityAssuranceService {
         "## CURRENT TASK",
         "No single task is preselected. If fixes are required, choose the best target task from the sprint task list and return its task key in `targetTaskKey`.",
       ];
-    const fullTaskInstructionsHeading = isTaskLevelReview
-      ? "## FULL TASK INSTRUCTIONS (SPRINT CONTEXT; ONLY CURRENT TASK IS UNDER REVIEW)"
-      : "## FULL TASK INSTRUCTIONS";
-    const fullTaskContextSections = args.subtasks.map((task) => [
-      `### ${task.id}: ${task.title}`,
-      `Status: ${task.status || "unknown"}`,
-      `Provider: ${task.provider || "unknown"}`,
-      `Worker branch: ${task.worker_branch || "none"}`,
-      `PR URL: ${task.pr_url || "none"}`,
-      `Depends on: ${task.depends_on.length > 0 ? task.depends_on.join(", ") : "none"}`,
-      "",
-      "Instruction:",
-      task.prompt || "No task instruction provided.",
-      "",
-      "Recent activity excerpts:",
-      this.renderActivityExcerpt(task),
-    ].join("\n"));
+    const sprintTaskContextSection = isTaskLevelReview
+      ? this.buildTaskReviewSiblingContext(args.subtasks, args.currentTask)
+      : this.buildSprintReviewTaskContext(args.subtasks);
 
     return [
       "## QUALITY ASSURANCE AGENT INSTRUCTIONS",
@@ -1694,13 +1739,7 @@ export class QualityAssuranceService {
       `Project: ${args.projectName}`,
       `Sprint goal: ${args.sprintGoal || "No sprint goal provided."}`,
       "",
-      "## SPRINT TASKS",
-      args.subtasks.map((task) => (
-        `- [${task.status || "unknown"}] ${task.id}: ${task.title} | provider=${task.provider || "unknown"} | branch=${task.worker_branch || "none"} | pr=${task.pr_url || "none"}`
-      )).join("\n"),
-      "",
-      fullTaskInstructionsHeading,
-      fullTaskContextSections.join("\n\n"),
+      ...sprintTaskContextSection,
       "",
       ...currentTaskSection,
       "",
@@ -1736,6 +1775,80 @@ export class QualityAssuranceService {
       "- Every `followUpTasks[].promptMarkdown` entry must contain the full task instructions, not just a short summary.",
       "- For `completed_task_without_pr`, set `shouldHavePr` explicitly.",
       "- Do not include prose outside the JSON object.",
+    ].join("\n");
+  }
+
+  private buildTaskReviewSiblingContext(subtasks: Subtask[], currentTask: Subtask | null): string[] {
+    const completedSiblingTitles = subtasks
+      .filter((task) => task.id !== currentTask?.id && task.status?.trim().toLowerCase() === "completed")
+      .map((task) => `- ${task.title}`);
+    return [
+      "## PREVIOUSLY COMPLETED SPRINT TASKS (TITLES ONLY)",
+      completedSiblingTitles.length > 0
+        ? completedSiblingTitles.join("\n")
+        : "- No other sprint tasks have completed.",
+    ];
+  }
+
+  private buildSprintReviewTaskContext(subtasks: Subtask[]): string[] {
+    const sprintTaskList = subtasks.map((task) => (
+      `- [${task.status || "unknown"}] ${task.id}: ${task.title} | provider=${task.provider || "unknown"} | branch=${task.worker_branch || "none"} | pr=${task.pr_url || "none"}`
+    )).join("\n");
+    const taskContextInputs = subtasks.map((task) => {
+      const instruction = task.prompt || "No task instruction provided.";
+      const sectionWithoutInstruction = this.renderFullTaskContextSection(task, "");
+      return { task, instruction, sectionWithoutInstruction };
+    });
+    const fullTaskContextCharacters = sprintTaskList.length
+      + Math.max(0, taskContextInputs.length - 1) * 2
+      + taskContextInputs.reduce(
+        (total, input) => total + input.sectionWithoutInstruction.length + input.instruction.length,
+        0,
+      );
+    const estimatedFullTaskContextTokens = Math.ceil(
+      fullTaskContextCharacters / QA_TOKEN_ESTIMATE_CHARACTERS_PER_TOKEN,
+    );
+    const shortenTaskInstructions = estimatedFullTaskContextTokens > QA_TASK_LIST_TOKEN_THRESHOLD;
+    const taskContextPolicy = shortenTaskInstructions
+      ? [
+        `Context policy: the full sprint task context is approximately ${estimatedFullTaskContextTokens.toLocaleString("en-US")} tokens, exceeding the 100,000-token threshold.`,
+        "Every task remains listed in order, but each task instruction below contains only its first half.",
+        "Use the visible first half of each task instruction together with repository and validation evidence.",
+        "Recent activity excerpts are not shortened.",
+      ].join("\n")
+      : "";
+    const fullTaskContextSections = taskContextInputs.map(({ task, instruction }) => {
+      if (!shortenTaskInstructions) {
+        return this.renderFullTaskContextSection(task, instruction);
+      }
+      const firstHalf = instruction.slice(0, Math.ceil(instruction.length / 2));
+      return this.renderFullTaskContextSection(task, firstHalf);
+    });
+    return [
+      "## SPRINT TASKS",
+      sprintTaskList,
+      "",
+      "## FULL TASK INSTRUCTIONS",
+      taskContextPolicy,
+      "",
+      fullTaskContextSections.join("\n\n"),
+    ];
+  }
+
+  private renderFullTaskContextSection(task: Subtask, instruction: string): string {
+    return [
+      `### ${task.id}: ${task.title}`,
+      `Status: ${task.status || "unknown"}`,
+      `Provider: ${task.provider || "unknown"}`,
+      `Worker branch: ${task.worker_branch || "none"}`,
+      `PR URL: ${task.pr_url || "none"}`,
+      `Depends on: ${task.depends_on.length > 0 ? task.depends_on.join(", ") : "none"}`,
+      "",
+      "Instruction:",
+      instruction,
+      "",
+      "Recent activity excerpts:",
+      this.renderActivityExcerpt(task),
     ].join("\n");
   }
 
@@ -1875,6 +1988,11 @@ export class QualityAssuranceService {
     const continuationAttemptCount = payload.continuationStatus === "running" && previousAttemptCount > 0
       ? previousAttemptCount
       : previousAttemptCount + 1;
+    const continuationStartedAt = payload.continuationStatus === "running"
+      && typeof payload.continuationStartedAt === "string"
+      && payload.continuationStartedAt.trim()
+      ? payload.continuationStartedAt
+      : new Date().toISOString();
     this.deps.qaReviewRepository.updateRun(args.run.id, {
       payload: {
         ...payload,
@@ -1883,7 +2001,7 @@ export class QualityAssuranceService {
           : `sprint-qa-followup:${args.run.id}`,
         continuationStatus: "running",
         continuationAttemptCount,
-        continuationStartedAt: new Date().toISOString(),
+        continuationStartedAt,
         continuationError: undefined,
       },
     });
@@ -2026,6 +2144,14 @@ export class QualityAssuranceService {
     maxTaskReviewRuns: number;
     findings?: string[];
   }): Promise<TaskQaReviewOutcome> {
+    const persistedRun = this.deps.qaReviewRepository.getRun(args.run.id) || args.run;
+    if (persistedRun.payload?.continuationStatus === "awaiting_provider") {
+      return this.reconcileAwaitingProviderTaskQaRun({
+        ...args,
+        run: persistedRun,
+      });
+    }
+
     if (this.activeQaContinuationRunIds.has(args.run.id)) {
       return {
         reviewed: false,
@@ -2134,6 +2260,11 @@ export class QualityAssuranceService {
       && previousAttemptCount > 0
       ? previousAttemptCount
       : previousAttemptCount + 1;
+    const continuationStartedAt = checkpointPayload.continuationStatus === "running"
+      && typeof checkpointPayload.continuationStartedAt === "string"
+      && checkpointPayload.continuationStartedAt.trim()
+      ? checkpointPayload.continuationStartedAt
+      : new Date().toISOString();
 
     this.deps.qaReviewRepository.updateRun(args.run.id, {
       payload: {
@@ -2141,7 +2272,7 @@ export class QualityAssuranceService {
         continuationKey,
         continuationStatus: "running",
         continuationAttemptCount,
-        continuationStartedAt: new Date().toISOString(),
+        continuationStartedAt,
         continuationError: undefined,
         followUpNoProgress: false,
         followUpBlocker: null,
@@ -2204,20 +2335,25 @@ export class QualityAssuranceService {
       this.activeQaContinuationRunIds.delete(args.run.id);
     }
 
+    const awaitingHostedProvider = continued.applied && continued.mode === "jules";
     const continuationStatus = continued.noProgress
       ? "no_progress"
-      : continued.applied
+      : awaitingHostedProvider
+        ? "awaiting_provider"
+        : continued.applied
         ? "completed"
         : "skipped";
     const postExhaustionVerificationEligible = continued.applied
       && args.decisiveRuns === args.maxTaskReviewRuns;
+    const continuationUpdatedAt = new Date().toISOString();
     this.deps.qaReviewRepository.updateRun(args.run.id, {
       payload: {
         ...latestPayload(),
         continued: continued.applied,
         continuationMode: continued.mode,
         continuationStatus,
-        continuationSettledAt: new Date().toISOString(),
+        continuationDispatchedAt: awaitingHostedProvider ? continuationUpdatedAt : undefined,
+        continuationSettledAt: awaitingHostedProvider ? undefined : continuationUpdatedAt,
         continuationError: undefined,
         followUpNoProgress: continued.noProgress,
         followUpBlocker: continued.blocker,
@@ -2233,6 +2369,15 @@ export class QualityAssuranceService {
           mergeIndicator: null,
         });
         args.task.status = "CODING_COMPLETED";
+      } else if (awaitingHostedProvider) {
+        clearMergeProjectionForRerun(args.task);
+        this.deps.projectManagementRepository.updateTask(taskId, {
+          status: "in_progress",
+          isMerged: false,
+          mergeIndicator: "QA_PENDING",
+        });
+        args.task.status = "RUNNING";
+        args.task.merge_indicator = "QA_PENDING";
       } else if (continued.applied) {
         clearMergeProjectionForRerun(args.task);
         this.deps.projectManagementRepository.updateTask(taskId, {
@@ -2278,6 +2423,99 @@ export class QualityAssuranceService {
         args.task.id,
         args.run.summaryMarkdown || "QA requested follow-up changes.",
         continued.applied,
+      ),
+    };
+  }
+
+  private reconcileAwaitingProviderTaskQaRun(args: {
+    run: QaReviewRunRecord;
+    task: Subtask;
+    taskRun: TaskRunRecord | null;
+  }): TaskQaReviewOutcome {
+    const executionRepository = this.deps.executionRepository as Partial<ExecutionRepository>;
+    const taskRun = args.run.taskRunId && typeof executionRepository.getTaskRun === "function"
+      ? executionRepository.getTaskRun(args.run.taskRunId) || args.taskRun
+      : args.taskRun;
+    const payload = this.deps.qaReviewRepository.getRun(args.run.id)?.payload || args.run.payload || {};
+    const continuationStartedAt = typeof payload.continuationStartedAt === "string"
+      ? Date.parse(payload.continuationStartedAt)
+      : Number.NaN;
+    const taskRunFinishedAt = taskRun?.finishedAt ? Date.parse(taskRun.finishedAt) : Number.NaN;
+    const expectedSessionId = args.run.targetSessionId?.trim() || args.task.session_id?.trim();
+    const sessionMatches = !expectedSessionId
+      || !taskRun?.sessionId
+      || taskRun.sessionId === expectedSessionId;
+    const completedAfterDispatch = taskRun?.state === "COMPLETED"
+      && sessionMatches
+      && Number.isFinite(continuationStartedAt)
+      && Number.isFinite(taskRunFinishedAt)
+      && taskRunFinishedAt > continuationStartedAt;
+
+    if (completedAfterDispatch) {
+      const reconciledAt = taskRun?.finishedAt || new Date().toISOString();
+      this.deps.qaReviewRepository.updateRun(args.run.id, {
+        payload: {
+          ...payload,
+          continuationStatus: "completed",
+          continuationMode: "jules",
+          continuationSettledAt: reconciledAt,
+          continuationReconciled: true,
+          continued: true,
+          followUpNoProgress: false,
+          followUpBlocker: null,
+        },
+      });
+      if (args.task.record_id) {
+        clearMergeProjectionForRerun(args.task);
+        this.deps.projectManagementRepository.updateTask(args.task.record_id, {
+          status: "coding_completed",
+          isMerged: false,
+          mergeIndicator: "QA_PENDING",
+        });
+      }
+      args.task.status = "CODING_COMPLETED";
+      args.task.is_merged = false;
+      args.task.merge_indicator = "QA_PENDING";
+      return {
+        reviewed: true,
+        reopenedTask: true,
+        mergeBlocked: true,
+        reportText: renderQaChangesRequestedReport(
+          args.task.id,
+          args.run.summaryMarkdown || "QA requested follow-up changes.",
+          true,
+        ),
+      };
+    }
+
+    // API acceptance only proves that Jules queued the same-session follow-up.
+    // Keep the task in progress and retain the durable awaiting checkpoint so
+    // a process restart observes the provider run instead of resending it.
+    if (
+      args.task.status !== "RUNNING"
+      || args.task.is_merged === true
+      || args.task.merge_indicator !== "QA_PENDING"
+    ) {
+      if (args.task.record_id) {
+        clearMergeProjectionForRerun(args.task);
+        this.deps.projectManagementRepository.updateTask(args.task.record_id, {
+          status: "in_progress",
+          isMerged: false,
+          mergeIndicator: "QA_PENDING",
+        });
+      }
+      args.task.status = "RUNNING";
+      args.task.is_merged = false;
+      args.task.merge_indicator = "QA_PENDING";
+    }
+    return {
+      reviewed: false,
+      reopenedTask: false,
+      mergeBlocked: true,
+      reportText: renderQaChangesRequestedReport(
+        args.task.id,
+        args.run.summaryMarkdown || "QA requested follow-up changes.",
+        false,
       ),
     };
   }
@@ -2366,6 +2604,66 @@ export class QualityAssuranceService {
     };
   }
 
+  private resolveQaFollowUpProviderRecovery(args: {
+    invocation: ProviderInvocationUsageRecord | null;
+    payload: Record<string, unknown> | null;
+    provider: CliQaProvider;
+    task: Subtask;
+    taskRun: TaskRunRecord | null;
+  }): { invocation: ProviderInvocationUsageRecord; providerOutcome: TaskExecutionOutcome } | null {
+    const { invocation, payload } = args;
+    if (
+      !invocation
+      || !payload
+      || payload.continuationStatus !== "running"
+      || invocation.status !== "completed"
+      || invocation.provider !== args.provider
+      || invocation.purpose !== "task_coding"
+    ) {
+      return null;
+    }
+
+    const expectedTaskRunId = args.taskRun?.id?.trim();
+    if (expectedTaskRunId && invocation.taskRunId !== expectedTaskRunId) {
+      return null;
+    }
+    const expectedTaskId = args.taskRun?.taskId?.trim() || args.task.record_id?.trim();
+    if (expectedTaskId && invocation.taskId && invocation.taskId !== expectedTaskId) {
+      return null;
+    }
+
+    const checkpointedInvocationId = typeof payload.continuationProviderInvocationId === "string"
+      ? payload.continuationProviderInvocationId.trim()
+      : "";
+    const explicitlyCheckpointed = payload.continuationProviderStatus === "completed"
+      && checkpointedInvocationId === invocation.id;
+    const baselineRecordedAt = typeof payload.continuationWorkspaceBaseRecordedAt === "string"
+      ? Date.parse(payload.continuationWorkspaceBaseRecordedAt)
+      : Number.NaN;
+    const invocationCompletedAt = Date.parse(invocation.finishedAt || invocation.updatedAt);
+    const completedAfterBaseline = Number.isFinite(baselineRecordedAt)
+      && Number.isFinite(invocationCompletedAt)
+      && invocationCompletedAt >= baselineRecordedAt;
+    if (!explicitlyCheckpointed && !completedAfterBaseline) {
+      return null;
+    }
+
+    const outcomeKind = payload.continuationProviderOutcomeKind;
+    const blocker = typeof payload.continuationProviderBlocker === "string"
+      ? payload.continuationProviderBlocker.trim()
+      : "";
+    const providerOutcome: TaskExecutionOutcome = explicitlyCheckpointed && outcomeKind === "completed"
+      ? { kind: "completed", blocker: null }
+      : explicitlyCheckpointed && outcomeKind === "blocked"
+        ? {
+            kind: "blocked",
+            blocker: blocker || "The coding agent reported an external blocker without a specific reason.",
+          }
+        : { kind: "unknown", blocker: null };
+
+    return { invocation, providerOutcome };
+  }
+
   private async continueCliTaskSession(args: {
     provider: CliQaProvider;
     sessionId: string;
@@ -2392,14 +2690,34 @@ export class QualityAssuranceService {
       githubToken: settings.git.githubToken,
       gitlabToken: settings.git.gitlabToken,
     });
+    const workspaceTaskId = args.taskRun?.taskId || args.task.record_id;
+    const recordedWorkspaceTarget = workspaceTaskId
+      && typeof this.deps.executionRepository.getLatestTaskWorkspaceResumeTarget === "function"
+      ? this.deps.executionRepository.getLatestTaskWorkspaceResumeTarget(
+        workspaceTaskId,
+        args.taskRun?.sprintRunId || undefined,
+      )
+      : null;
+    const knownWorkerBranch = args.task.worker_branch?.trim()
+      || args.taskRun?.workerBranch?.trim()
+      || null;
+    const durableWorkspaceTarget = recordedWorkspaceTarget
+      && (!recordedWorkspaceTarget.provider || recordedWorkspaceTarget.provider === args.provider)
+      && (!knownWorkerBranch
+        || !recordedWorkspaceTarget.workerBranch
+        || recordedWorkspaceTarget.workerBranch === knownWorkerBranch)
+      ? recordedWorkspaceTarget
+      : null;
+    const workspaceSessionId = durableWorkspaceTarget?.sessionId || args.sessionId;
     const {
       worktreePath,
       hasPreservedWorkspace,
       currentBranch: resolvedWorkspaceBranch,
     } = await this.invocationWorkspacePreparer.resolveContinuationWorkspace({
       repoPath: args.repoPath,
-      sessionId: args.sessionId,
+      sessionId: workspaceSessionId,
       executionMode: workflowSettings.executionMode,
+      worktreePath: durableWorkspaceTarget?.worktreePath,
     });
     let workerBranch = args.task.worker_branch?.trim()
       || args.taskRun?.workerBranch?.trim()
@@ -2526,6 +2844,8 @@ export class QualityAssuranceService {
           worktreePath,
           workerBranch,
           featureBranch: args.featureBranch,
+          resumeSessionId: workspaceSessionId,
+          allowExistingWorkerBranch: true,
           gitAuth,
           gitPolicy,
         });
@@ -2617,8 +2937,8 @@ export class QualityAssuranceService {
 
     const providerPrompt = buildProviderPrompt(`${promptBody}\n\n${workspaceGuidance}`, followUpProviderSettings.thinkingMode, args.provider);
     const previousInvocation = this.deps.executionRepository.getLatestProviderInvocationUsageBySession(args.sessionId, "task_coding");
-    const persistedContinuationPayload = args.qaContinuationRunId
-      ? this.deps.qaReviewRepository.getRun(args.qaContinuationRunId)?.payload
+    let persistedContinuationPayload = args.qaContinuationRunId
+      ? this.deps.qaReviewRepository.getRun(args.qaContinuationRunId)?.payload ?? null
       : null;
     const persistedWorkspaceBaseRef = typeof persistedContinuationPayload?.continuationWorkspaceBaseRef === "string"
       ? persistedContinuationPayload.continuationWorkspaceBaseRef.trim()
@@ -2637,6 +2957,7 @@ export class QualityAssuranceService {
             continuationWorkspaceBaseRecordedAt: new Date().toISOString(),
           },
         });
+        persistedContinuationPayload = this.deps.qaReviewRepository.getRun(run.id)?.payload || run.payload;
       }
     }
     // The shared QA coding path is also used by sprint-completion handoffs.
@@ -2657,50 +2978,116 @@ export class QualityAssuranceService {
     args.task.intervention_owner = undefined;
     args.task.intervention_hint = undefined;
     this.deps.sessionTracking.updateSession(args.sessionId, { state: "RUNNING" });
-    this.deps.sessionTracking.appendActivity(args.sessionId, {
-      originator: "system",
-      description: "Quality assurance requested a follow-up implementation pass.",
-    });
-
-    const result = await this.providerExecutionService.executeProvider({
-      projectId: args.scope.projectId!,
-      sprintId: args.scope.sprintId,
-      taskId: args.taskRun?.taskId,
-      taskRunId: args.taskRun?.id,
-      sprintRunId: args.taskRun?.sprintRunId,
-      dispatchId: args.taskRun?.dispatchId,
-      purpose: "task_coding",
-      type: "cli_task_followup",
+    const recoveredProvider = this.resolveQaFollowUpProviderRecovery({
+      invocation: previousInvocation,
+      payload: persistedContinuationPayload,
       provider: args.provider,
-      prompt: providerPrompt,
-      cwd: worktreePath,
-      ...buildProviderSettingsOverride(effectiveModel, followUpProviderSettings),
-      sessionId: args.sessionId,
-      workflowSettings,
-      repoPath: args.repoPath,
-      continueSessionId: previousInvocation?.nativeSessionId || (args.provider === "claude-code" ? null : args.sessionId),
-      // opencode's `export <sessionID>` is cumulative for the whole session, so
-      // this follow-up (which resumes the same session) needs the prior
-      // invocation's raw snapshot as a baseline to subtract out — otherwise it
-      // would re-report every earlier turn's tokens too. See
-      // execute-provider-stage.ts for the analogous first-pass wiring.
-      openCodeBaselineRawUsageJson: args.provider === "opencode" ? (previousInvocation?.rawUsageJson ?? null) : null,
-      agentMcpAccess: workerAgent?.id
-        ? workerClarificationAgentMcpAccess(workerAgent.mcpAccess)
-        : undefined,
-      mcpAgentId: workerAgent?.id ?? null,
+      task: args.task,
+      taskRun: args.taskRun,
     });
+    let providerOutcome: TaskExecutionOutcome;
+    if (recoveredProvider) {
+      providerOutcome = recoveredProvider.providerOutcome;
+      this.deps.sessionTracking.appendActivity(args.sessionId, {
+        originator: "system",
+        description: "Recovered completed QA follow-up work after restart; continuing with Git finalization without invoking the coding agent again.",
+      });
+      this.appendTaskEvent(args.taskRun, "qa_followup_provider_completion_recovered", {
+        provider: args.provider,
+        workerBranch,
+        recoveredProviderInvocationId: recoveredProvider.invocation.id,
+        recoveredProviderFinishedAt: recoveredProvider.invocation.finishedAt,
+      });
+      if (args.qaContinuationRunId) {
+        const run = this.deps.qaReviewRepository.getRun(args.qaContinuationRunId);
+        if (run) {
+          this.deps.qaReviewRepository.updateRun(run.id, {
+            payload: {
+              ...(run.payload || {}),
+              continuationProviderStatus: "completed",
+              continuationProviderInvocationId: recoveredProvider.invocation.id,
+              continuationProviderCompletedAt: recoveredProvider.invocation.finishedAt
+                || recoveredProvider.invocation.updatedAt,
+              continuationProviderRecovered: true,
+            },
+          });
+        }
+      }
+    } else {
+      this.deps.sessionTracking.appendActivity(args.sessionId, {
+        originator: "system",
+        description: "Quality assurance requested a follow-up implementation pass.",
+      });
+      const result = await this.providerExecutionService.executeProvider({
+        projectId: args.scope.projectId!,
+        sprintId: args.scope.sprintId,
+        taskId: args.taskRun?.taskId,
+        taskRunId: args.taskRun?.id,
+        sprintRunId: args.taskRun?.sprintRunId,
+        dispatchId: args.taskRun?.dispatchId,
+        purpose: "task_coding",
+        type: "cli_task_followup",
+        provider: args.provider,
+        prompt: providerPrompt,
+        cwd: worktreePath,
+        ...buildProviderSettingsOverride(effectiveModel, followUpProviderSettings),
+        sessionId: args.sessionId,
+        workspaceSessionId,
+        workflowSettings,
+        repoPath: args.repoPath,
+        workspaceLifecycle: "continue",
+        continueSessionId: previousInvocation?.nativeSessionId
+          || (args.provider === "claude-code" || args.provider === "codex" ? null : args.sessionId),
+        continueSessionWithoutNativeId: args.provider === "codex"
+          && Boolean(previousInvocation)
+          && !previousInvocation?.nativeSessionId,
+        // opencode's `export <sessionID>` is cumulative for the whole session, so
+        // this follow-up (which resumes the same session) needs the prior
+        // invocation's raw snapshot as a baseline to subtract out — otherwise it
+        // would re-report every earlier turn's tokens too. See
+        // execute-provider-stage.ts for the analogous first-pass wiring.
+        openCodeBaselineRawUsageJson: args.provider === "opencode" ? (previousInvocation?.rawUsageJson ?? null) : null,
+        agentMcpAccess: workerAgent?.id
+          ? workerClarificationAgentMcpAccess(workerAgent.mcpAccess)
+          : undefined,
+        mcpAgentId: workerAgent?.id ?? null,
+      });
 
-    if (!result.ok) {
-      this.deps.sessionTracking.updateSession(args.sessionId, { state: "FAILED" });
-      throw new Error(result.stderr || result.stdout || "CLI QA follow-up failed.");
+      if (!result.ok) {
+        this.deps.sessionTracking.updateSession(args.sessionId, { state: "FAILED" });
+        throw new Error(result.stderr || result.stdout || "CLI QA follow-up failed.");
+      }
+      providerOutcome = parseTaskExecutionOutcomeFromProviderOutput({
+        conversation: result.usageTelemetry.conversation,
+        text: result.text,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      });
+      if (args.qaContinuationRunId) {
+        const run = this.deps.qaReviewRepository.getRun(args.qaContinuationRunId);
+        if (run) {
+          const completedInvocation = this.deps.executionRepository
+            .getLatestProviderInvocationUsageBySession(args.sessionId, "task_coding");
+          this.deps.qaReviewRepository.updateRun(run.id, {
+            payload: {
+              ...(run.payload || {}),
+              continuationProviderStatus: "completed",
+              continuationProviderInvocationId: completedInvocation?.status === "completed"
+                ? completedInvocation.id
+                : undefined,
+              continuationProviderCompletedAt: completedInvocation?.status === "completed"
+                ? completedInvocation.finishedAt || completedInvocation.updatedAt
+                : new Date().toISOString(),
+              continuationProviderOutcomeKind: providerOutcome.kind,
+              continuationProviderBlocker: providerOutcome.kind === "blocked"
+                ? providerOutcome.blocker
+                : null,
+              continuationProviderRecovered: false,
+            },
+          });
+        }
+      }
     }
-    const providerOutcome = parseTaskExecutionOutcomeFromProviderOutput({
-      conversation: result.usageTelemetry.conversation,
-      text: result.text,
-      stdout: result.stdout,
-      stderr: result.stderr,
-    });
 
     if (settings.memory?.enabled && settings.memory.autoCaptureSprint) {
       await this.captureMemoriesFromWorkspace(
@@ -2725,8 +3112,9 @@ export class QualityAssuranceService {
         : {
           name: workflowSettings.containerGitUserName,
           email: workflowSettings.containerGitUserEmail,
-        },
+      },
       githubMode: settings.git.githubMode,
+      allowExistingWorkerBranch: true,
     });
 
     let hasUnpushed = applyResult.hasChanges;
@@ -2893,7 +3281,13 @@ export class QualityAssuranceService {
   ): Promise<void> {
     const currentBranch = await this.workspaceManager.resolveCurrentBranch(worktreePath);
     if (currentBranch !== workerBranch) {
-      await this.runWorkspaceCommand(worktreePath, "git", ["checkout", workerBranch]).catch(() => undefined);
+      await this.runWorkspaceCommand(worktreePath, "git", ["checkout", workerBranch]);
+      const checkedOutBranch = await this.workspaceManager.resolveCurrentBranch(worktreePath);
+      if (checkedOutBranch !== workerBranch) {
+        throw new Error(
+          `Cannot continue CLI QA fixes: workspace ${worktreePath} is on '${checkedOutBranch || "unknown"}' instead of '${workerBranch}'.`,
+        );
+      }
     }
 
     // The original task committed and pushed its work to origin/<workerBranch> via a
@@ -3074,7 +3468,8 @@ function buildReviewScopeInstructions(triggerType: QaReviewTriggerType, currentT
 
   return [
     `- This is a single-task QA review. The only task under review is ${currentTaskKey}.`,
-    "- Treat `SPRINT TASKS` and non-current entries in `FULL TASK INSTRUCTIONS` as context only, not as deliverables for this review.",
+    "- `PREVIOUSLY COMPLETED SPRINT TASKS` contains title-only historical context. Those sibling tasks are not deliverables for this review.",
+    "- The complete current-task details, prompt, dependencies, and recent activity are provided in `CURRENT TASK UNDER REVIEW`.",
     "- Assume the current workspace/branch contains only the current task's changes on top of its base branch. Independent sibling tasks may be completed in separate branches or PRs and may be absent here.",
     "- A task-level review must pass when the current task satisfies its own prompt, even if other completed sprint tasks are not present in this branch.",
     "- Do not request changes because files, commits, PRs, or behavior from other completed sibling tasks are missing from this branch.",

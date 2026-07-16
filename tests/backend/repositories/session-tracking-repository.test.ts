@@ -32,6 +32,39 @@ describe("SessionTrackingRepository", () => {
     expect(repo.getSession("cli-codex-running")?.outputs).toEqual([
       { pullRequest: { url: undefined, workerBranch: "task/feature-t01-codex" } },
     ]);
+    expect(repo.getSession("cli-codex-running")?.prompt).toBe("");
+  });
+
+  it("stores prompts only for Jules because CLI invocation messages are already durable", async () => {
+    const repo = await createRepo();
+    const oversizedPrompt = "wide-dag-context".repeat(100_000);
+
+    repo.createSession({ id: "cli-large", provider: "codex", prompt: oversizedPrompt });
+    repo.createSession({ id: "jules-large", provider: "jules", prompt: oversizedPrompt });
+
+    expect(repo.getSession("cli-large")?.prompt).toBe("");
+    expect(repo.getSession("jules-large")?.prompt).toBe(oversizedPrompt);
+  });
+
+  it("removes legacy local CLI prompt copies once when opening an upgraded database", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-prompt-migration-"));
+    tempDirs.push(dir);
+    const databasePath = path.join(dir, "session-tracking.db");
+    const initial = new SessionTrackingRepository(databasePath);
+    initial.createSession({ id: "legacy-cli", provider: "codex" });
+    initial.createSession({ id: "legacy-jules", provider: "jules", prompt: "hosted prompt" });
+    initial.getDatabase().prepare("UPDATE provider_sessions SET prompt = ? WHERE id = ?")
+      .run("legacy duplicated prompt", "legacy-cli");
+    initial.getDatabase().exec("PRAGMA user_version = 0");
+    initial.close();
+
+    const upgraded = new SessionTrackingRepository(databasePath);
+
+    expect(upgraded.getSession("legacy-cli")?.prompt).toBe("");
+    expect(upgraded.getSession("legacy-jules")?.prompt).toBe("hosted prompt");
+    const version = upgraded.getDatabase().prepare("PRAGMA user_version").get() as { user_version: number };
+    expect(version.user_version).toBe(1);
+    upgraded.close();
   });
 
   it("recovers interrupted running cli sessions and leaves other sessions untouched", async () => {
@@ -365,13 +398,18 @@ describe("SessionTrackingRepository", () => {
 
   it("lists sessions", async () => {
     const repo = await createRepo();
-    repo.createSession({ id: "s1", provider: "jules", title: "T1" });
+    repo.createSession({ id: "s1", provider: "jules", title: "T1", prompt: "large prompt" });
     repo.createSession({ id: "s2", provider: "gemini", title: "T2" });
     
     const list = repo.listSessions(10);
     expect(list.sessions).toHaveLength(2);
     expect(list.sessions.map(s => s.id)).toContain("s1");
     expect(list.sessions.map(s => s.id)).toContain("s2");
+    expect(list.sessions.find(s => s.id === "s1")?.prompt).toBe("large prompt");
+
+    const syncProjection = repo.listSessions(10, { includePrompt: false });
+    expect(syncProjection.sessions.find(s => s.id === "s1")?.prompt).toBe("");
+    expect(syncProjection.sessions.find(s => s.id === "s1")?.title).toBe("T1");
   });
 
   it("fetches recent activities", async () => {

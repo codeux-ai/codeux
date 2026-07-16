@@ -8,6 +8,8 @@ import {
   type GitHttpAuthOptions,
 } from "../../../services/git-http-auth.js";
 import type { IWorkspaceManager } from "./workspace-manager.js";
+import { createRepositoryGitTempDirectory } from "../../git/repository-git-temp.js";
+import { pushWorkerBranch } from "../../git/worker-branch-push.js";
 
 const TEMP_EXPORT_PATHSPEC = ":(exclude).code-ux-export-*";
 
@@ -36,6 +38,11 @@ export interface AppliedWorkspacePatchResult {
 export interface GitCommitIdentity {
   name: string;
   email: string;
+}
+
+export interface FreshWorkerBranchOwnership {
+  worktreePath: string;
+  initialTip: string;
 }
 
 const parseGitNumstat = (diffOutput: string): NonNullable<AppliedWorkspacePatchResult["stats"]> => {
@@ -74,7 +81,6 @@ const buildCommitIdentityEnv = (
   };
 };
 
-const GIT_PUSH_RETRY_ATTEMPTS = 3;
 const GIT_REF_UPDATE_RETRY_ATTEMPTS = 8;
 const NULL_GIT_OBJECT_ID = "0".repeat(40);
 
@@ -90,24 +96,6 @@ class ConcurrentGitRefUpdateError extends Error {
     );
     this.name = "ConcurrentGitRefUpdateError";
   }
-}
-
-const resolveGitAdministrativeDirectory = async (repoPath: string): Promise<string | null> => {
-  const dotGitPath = path.join(repoPath, ".git");
-  try {
-    const stat = await fs.stat(dotGitPath);
-    if (stat.isDirectory()) return dotGitPath;
-    if (!stat.isFile()) return null;
-    const match = /^gitdir:\s*(.+)$/i.exec((await fs.readFile(dotGitPath, "utf8")).trim());
-    return match ? path.resolve(repoPath, match[1]) : null;
-  } catch {
-    return null;
-  }
-};
-
-function isRetryableGitPushError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /exit code 137|SIGKILL|no output captured|RPC failed|remote end hung up unexpectedly|early EOF/i.test(message);
 }
 
 export class WorkspaceArtifactService {
@@ -301,6 +289,17 @@ export class WorkspaceArtifactService {
     gitIdentity?: GitCommitIdentity;
     githubMode?: "REMOTE" | "LOCAL";
     /**
+     * Allow an existing local or remote worker ref to be continued. Fresh task invocations set
+     * this to false so a same-name ref is treated as an allocation collision, never reused.
+     */
+    allowExistingWorkerBranch?: boolean;
+    /**
+     * Fresh HOST workspaces atomically create their local worker branch during `git worktree add`.
+     * This proof lets finalization accept only that exact owned ref while remote publication still
+     * uses the expected-absent lease.
+     */
+    freshWorkerBranchOwnership?: FreshWorkerBranchOwnership;
+    /**
      * When true, a merge commit is recorded even if the resolved tree is identical to
      * the base tree, as long as a parent ref is not yet an ancestor of the base. This is
      * required for merge-conflict resolution: a conflict resolved by keeping the source
@@ -331,8 +330,8 @@ export class WorkspaceArtifactService {
     // Keep patch transaction files under Git's administrative directory whenever possible.
     // Containerized Git can then reuse the warm project helper container; putting the index in
     // the host temp directory forces every Git command onto a new helper because of the extra bind.
-    const gitAdministrativeDirectory = await resolveGitAdministrativeDirectory(args.repoPath);
-    const tempDir = await fs.mkdtemp(path.join(gitAdministrativeDirectory ?? os.tmpdir(), "code-ux-patch-"));
+    const tempDir = await createRepositoryGitTempDirectory(args.repoPath, "patch-")
+      ?? await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-patch-"));
     const patchPath = path.join(tempDir, "workspace.patch");
     const indexPath = path.join(tempDir, "workspace.index");
 
@@ -387,7 +386,13 @@ export class WorkspaceArtifactService {
 
       if (args.githubMode !== "LOCAL") {
         const pushEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(args.repoPath, args.gitAuth ?? {});
-        await this.pushWorkerBranchWithRetry(args.repoPath, args.workerBranch, pushEnv ?? process.env);
+        await pushWorkerBranch({
+          runner: runCommandStrict,
+          repoPath: args.repoPath,
+          workerBranch: args.workerBranch,
+          env: pushEnv ?? process.env,
+          allowExistingWorkerBranch: args.allowExistingWorkerBranch !== false,
+        });
       }
 
       return {
@@ -530,6 +535,8 @@ export class WorkspaceArtifactService {
     workerBranch: string;
     githubMode?: "REMOTE" | "LOCAL";
     gitAuth?: GitHttpAuthOptions;
+    allowExistingWorkerBranch?: boolean;
+    freshWorkerBranchOwnership?: FreshWorkerBranchOwnership;
   }): Promise<{ commitBaseRef: string; expectedWorkerTip: string | null }> {
     const localRef = `refs/heads/${args.workerBranch}`;
     let expectedWorkerTip: string | null = null;
@@ -543,10 +550,30 @@ export class WorkspaceArtifactService {
       // A fresh worker branch may not exist in the host repository yet.
     }
 
+    if (expectedWorkerTip && args.allowExistingWorkerBranch === false) {
+      const ownsLocalWorkerBranch = args.freshWorkerBranchOwnership
+        ? await this.verifyFreshWorkerBranchOwnership({
+          repoPath: args.repoPath,
+          workerBranch: args.workerBranch,
+          expectedWorkerTip,
+          ownership: args.freshWorkerBranchOwnership,
+        })
+        : false;
+      if (!ownsLocalWorkerBranch) {
+        throw new Error(
+          `Fresh worker branch allocation collided with existing local ref '${args.workerBranch}'.`,
+        );
+      }
+    }
+
     if (args.githubMode === "LOCAL") {
       if (expectedWorkerTip && await this.isAncestor(args.repoPath, args.baseRef, expectedWorkerTip)) {
         return { commitBaseRef: expectedWorkerTip, expectedWorkerTip };
       }
+      return { commitBaseRef: args.baseRef, expectedWorkerTip };
+    }
+
+    if (args.allowExistingWorkerBranch === false) {
       return { commitBaseRef: args.baseRef, expectedWorkerTip };
     }
 
@@ -574,6 +601,68 @@ export class WorkspaceArtifactService {
     return { commitBaseRef: args.baseRef, expectedWorkerTip };
   }
 
+  private async verifyFreshWorkerBranchOwnership(args: {
+    repoPath: string;
+    workerBranch: string;
+    expectedWorkerTip: string;
+    ownership: FreshWorkerBranchOwnership;
+  }): Promise<boolean> {
+    const normalizedOwnedPath = await this.normalizeWorktreePath(args.ownership.worktreePath);
+    let worktreeList: string;
+    try {
+      worktreeList = (await runCommandStrict(
+        "git",
+        ["worktree", "list", "--porcelain"],
+        args.repoPath,
+        process.env,
+        { trimOutput: false },
+      )).stdout;
+    } catch {
+      return false;
+    }
+
+    const expectedBranchRef = `refs/heads/${args.workerBranch}`;
+    let ownsRegisteredWorktree = false;
+    for (const record of worktreeList.split(/\r?\n\r?\n/)) {
+      let worktreePath: string | null = null;
+      let head: string | null = null;
+      let branch: string | null = null;
+      for (const line of record.split(/\r?\n/)) {
+        if (line.startsWith("worktree ")) {
+          worktreePath = line.slice("worktree ".length);
+        } else if (line.startsWith("HEAD ")) {
+          head = line.slice("HEAD ".length);
+        } else if (line.startsWith("branch ")) {
+          branch = line.slice("branch ".length);
+        }
+      }
+      if (
+        worktreePath
+        && head === args.expectedWorkerTip
+        && branch === expectedBranchRef
+        && await this.normalizeWorktreePath(worktreePath) === normalizedOwnedPath
+      ) {
+        ownsRegisteredWorktree = true;
+        break;
+      }
+    }
+    if (!ownsRegisteredWorktree) {
+      return false;
+    }
+
+    return await this.isAncestor(
+      args.repoPath,
+      args.ownership.initialTip,
+      args.expectedWorkerTip,
+    );
+  }
+
+  private async normalizeWorktreePath(worktreePath: string): Promise<string> {
+    const resolved = path.resolve(worktreePath);
+    const normalized = await fs.realpath(resolved).catch(() => resolved);
+    return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+  }
+
   private async isAncestor(repoPath: string, ancestorRef: string, descendantRef: string): Promise<boolean> {
     try {
       await runCommandStrict("git", ["merge-base", "--is-ancestor", ancestorRef, descendantRef], repoPath);
@@ -583,21 +672,4 @@ export class WorkspaceArtifactService {
     }
   }
 
-  private async pushWorkerBranchWithRetry(
-    repoPath: string,
-    workerBranch: string,
-    env: NodeJS.ProcessEnv,
-  ): Promise<void> {
-    const pushArgs = ["push", "-u", "origin", `refs/heads/${workerBranch}:refs/heads/${workerBranch}`];
-    for (let attempt = 1; attempt <= GIT_PUSH_RETRY_ATTEMPTS; attempt += 1) {
-      try {
-        await runCommandStrict("git", pushArgs, repoPath, env);
-        return;
-      } catch (error) {
-        if (attempt >= GIT_PUSH_RETRY_ATTEMPTS || !isRetryableGitPushError(error)) {
-          throw error;
-        }
-      }
-    }
-  }
 }

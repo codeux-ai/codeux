@@ -11,13 +11,25 @@ const WORKFLOWS = {
   openrouterSprintE2e: ".github/workflows/openrouter-sprint-e2e.yml",
   mockupSprintOrchestration: ".github/workflows/mockup-sprint-orchestration.yml",
 } as const;
+const ALL_WORKFLOWS = {
+  ...WORKFLOWS,
+  modelsCatalog: ".github/workflows/models-catalog.yml",
+  runtimeImage: ".github/workflows/runtime-image.yml",
+} as const;
 
 const PLAYWRIGHT_CONFIG = "playwright.config.ts";
+const CORE_FACTORY = "src/app/dependency-factory/core-factory.ts";
 const RELEASE_INSTALL_VERIFIER = "scripts/verify-release-install.mjs";
 const ELECTRON_RUNTIME_PREPARER = "scripts/prepare-electron-runtime-deps.mjs";
+const DEPENDABOT_CONFIG = ".github/dependabot.yml";
+const PNPM_WORKSPACE = "pnpm-workspace.yaml";
+const MANAGED_RUNTIME_DOCKERFILE = "containers/runtime/Dockerfile";
+const ELECTRON_INSTALL_SMOKE = "pnpm run electron:smoke-installed";
 const REQUIRED_INSTALL = "pnpm install --frozen-lockfile --ignore-scripts";
-const PACKAGE_MANAGER_VERSION = "11.13.0";
+const PACKAGE_MANAGER_VERSION = "11.13.1";
 const MINIMUM_NODE_VERSION = "22.13";
+const PNPM_ACTION_REF = "pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9";
+const RELEASE_ACTION_REF = "softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2";
 
 type PackageJson = {
   packageManager?: string;
@@ -40,12 +52,14 @@ function getJobBlock(workflow: string, jobName: string): string {
   return block ?? "";
 }
 
-function expectPinnedMajorActionVersions(workflow: string, label: string): void {
-  const actionUses = workflow.match(/uses:\s*[^@\s]+@[^\s]+/g) ?? [];
+function expectImmutableActionVersions(workflow: string, label: string): void {
+  const actionUses = workflow.match(/uses:\s*[^@\s]+@[^\s]+(?:\s+#\s+[^\n]+)?/g) ?? [];
 
   expect(actionUses.length, `${label} should use GitHub Actions`).toBeGreaterThan(0);
   for (const actionUse of actionUses) {
-    expect(actionUse, `${label} should pin action versions to an explicit major version`).toMatch(/@v\d+$/);
+    expect(actionUse, `${label} should pin actions to immutable commit SHAs`).toMatch(
+      /@[0-9a-f]{40}\s+#\s+v?\d+(?:\.\d+){1,2}$/,
+    );
   }
 }
 
@@ -77,7 +91,7 @@ function expectManualOnly(workflow: string, label: string): void {
 }
 
 describe("GitHub workflow health", () => {
-  it("keeps package toolchain policy pinned to pnpm 11.13.0 and Node 22.13 or newer", async () => {
+  it("keeps package toolchain policy pinned to pnpm 11.13.1 and Node 22.13 or newer", async () => {
     const packageJson = JSON.parse(await readRepoFile("package.json")) as PackageJson;
 
     expect(packageJson.packageManager).toBe(`pnpm@${PACKAGE_MANAGER_VERSION}`);
@@ -85,7 +99,23 @@ describe("GitHub workflow health", () => {
     expect(packageJson.scripts?.audit).toBe("pnpm audit --audit-level=high");
   });
 
-  it("keeps security-relevant workflows on least-privilege permissions and pinned major actions", async () => {
+  it("pins every workflow action to an immutable reviewed release commit", async () => {
+    const workflows = await Promise.all(
+      Object.entries(ALL_WORKFLOWS).map(async ([label, workflowPath]) => [
+        label,
+        await readRepoFile(workflowPath),
+      ] as const),
+    );
+
+    for (const [label, workflow] of workflows) {
+      expectImmutableActionVersions(workflow, label);
+      expect(workflow, `${label} should resolve pnpm from packageManager`).not.toMatch(
+        /uses: pnpm\/action-setup@[^\n]+\n\s+with:\n\s+version:/,
+      );
+    }
+  });
+
+  it("keeps security-relevant workflows on least-privilege permissions", async () => {
     const workflows = await Promise.all(
       Object.entries(WORKFLOWS).map(async ([label, workflowPath]) => [
         label,
@@ -94,7 +124,6 @@ describe("GitHub workflow health", () => {
     );
 
     for (const [label, workflow] of workflows) {
-      expectPinnedMajorActionVersions(workflow, label);
       expectNoBroadWorkflowPermissions(workflow, label);
     }
 
@@ -159,7 +188,8 @@ describe("GitHub workflow health", () => {
       expect(job).toContain("needs: preflight");
       expect(job).toContain(REQUIRED_INSTALL);
       expect(job).toContain("node-version: ${{ env.NODE_VERSION }}");
-      expect(job).toContain("version: ${{ env.PNPM_VERSION }}");
+      expect(job).toContain(PNPM_ACTION_REF);
+      expect(job).not.toMatch(/Setup pnpm[\s\S]*?\n\s+version:/);
       expect(job).toContain("run_install: false");
     }
 
@@ -167,7 +197,8 @@ describe("GitHub workflow health", () => {
       expect(job).toContain("needs: [static, build, security-audit]");
       expect(job).toContain(REQUIRED_INSTALL);
       expect(job).toContain("node-version: ${{ env.NODE_VERSION }}");
-      expect(job).toContain("version: ${{ env.PNPM_VERSION }}");
+      expect(job).toContain(PNPM_ACTION_REF);
+      expect(job).not.toMatch(/Setup pnpm[\s\S]*?\n\s+version:/);
       expect(job).toContain("run_install: false");
     }
 
@@ -251,6 +282,14 @@ describe("GitHub workflow health", () => {
     expect(releaseCandidate).toContain("node node_modules/electron/install.js");
     expect(releaseCandidate).toContain("pnpm run electron:prepare-deps");
     expect(releaseCandidate).toContain("pnpm exec electron-builder --config electron-builder.config.cjs ${{ matrix.electron-target }} --publish never");
+    expect(releaseCandidate).toContain("sudo apt-get install --no-install-recommends -y libopenjp2-tools xvfb");
+    expect(releaseCandidate).toContain("name: Install and start release candidate");
+    expect(releaseCandidate).toContain(ELECTRON_INSTALL_SMOKE);
+    expect(releaseCandidate).toContain("id: build_desktop_package");
+    expect(releaseCandidate).toContain("id: smoke_installed_candidate");
+    expect(releaseCandidate).toContain("if: ${{ always() && steps.build_desktop_package.outcome == 'success' }}");
+    expectCommandBefore(releaseCandidate, "name: Build unsigned desktop package", "name: Install and start release candidate");
+    expectCommandBefore(releaseCandidate, "name: Install and start release candidate", "name: Upload release candidate artifacts");
     expect(releaseCandidate).toContain("if-no-files-found: error");
     expect(releaseCandidate).not.toContain("pnpm run audit");
     expect(releaseCandidate).not.toContain("pnpm run build");
@@ -272,6 +311,30 @@ describe("GitHub workflow health", () => {
     expect(electronRuntimePreparer).toContain('const onnxRuntimeInstallMode = "skip";');
     expect(electronRuntimePreparer).toContain("onnxRuntimeInstallMode,");
     expect(electronRuntimePreparer).toContain("ONNXRUNTIME_NODE_INSTALL: onnxRuntimeInstallMode");
+    expect(electronRuntimePreparer).toContain('"--config.node-linker=hoisted"');
+    expect(electronRuntimePreparer).toContain("validateRuntimeTree();");
+  });
+
+  it("enforces package-age review and automated dependency update tracking", async () => {
+    const [workspace, dependabot, runtimeDockerfile] = await Promise.all([
+      readRepoFile(PNPM_WORKSPACE),
+      readRepoFile(DEPENDABOT_CONFIG),
+      readRepoFile(MANAGED_RUNTIME_DOCKERFILE),
+    ]);
+
+    expect(workspace).toContain("minimumReleaseAge: 1440");
+    expect(workspace).toContain("minimumReleaseAgeStrict: true");
+    expect(workspace).toContain("minimumReleaseAgeExclude:");
+    expect(workspace).toContain(
+      "allowBuilds:\n  electron-winstaller: false\n  onnxruntime-node: true",
+    );
+    expect(dependabot).toContain("package-ecosystem: npm");
+    expect(dependabot).toContain("package-ecosystem: github-actions");
+    expect(dependabot).toContain("package-ecosystem: docker");
+    expect(dependabot.match(/target-branch: dev/g)).toHaveLength(3);
+    expect(runtimeDockerfile).toMatch(/^FROM node:24-trixie-slim@sha256:[0-9a-f]{64} AS base/m);
+    expect(runtimeDockerfile).toContain("ARG NPM_VERSION=12.0.1");
+    expect(runtimeDockerfile).toContain("ARG PNPM_VERSION=11.13.1");
   });
 
   it("keeps legacy main ruleset contexts coupled to their current validation gates", async () => {
@@ -316,7 +379,10 @@ describe("GitHub workflow health", () => {
     expect(releaseChecks).toContain("name: Release Candidate Diagnostics");
     expectManualOnly(releaseChecks, "Release candidate diagnostics");
     expect(releaseChecks).toContain("node scripts/verify-release-install.mjs");
-    expect(releaseChecks).toContain("pnpm run ${{ matrix.electron-script }} -- --publish never");
+    expect(releaseChecks).toContain("pnpm run electron:prepare-deps && pnpm exec electron-builder");
+    expect(releaseChecks).toContain("${{ matrix.electron-target }} --publish never");
+    expect(releaseChecks).not.toContain("pnpm run ${{ matrix.electron-script }}");
+    expect(releaseChecks).toContain(ELECTRON_INSTALL_SMOKE);
 
     expect(mockup).toContain("name: Mockup Sprint Diagnostics");
     expectManualOnly(mockup, "Mockup sprint diagnostics");
@@ -339,7 +405,7 @@ describe("GitHub workflow health", () => {
     expect(preflight).toContain("Verify release tag is on main");
     expect(publish).toContain("needs: release-preflight");
     expect(publish).toContain("id-token: write");
-    expect(publish).toContain("npm install -g npm@11.5.1");
+    expect(publish).toContain("npm install -g npm@12.0.1");
     expect(publish).toContain("npm provenance dependency OK");
     expect(publish).toContain("npm publish");
     expect(publish).not.toContain("pnpm run test:backend:coverage");
@@ -347,10 +413,11 @@ describe("GitHub workflow health", () => {
     expect(desktop).toContain("needs: release-preflight");
     expect(desktop).toContain("contents: write");
     expect(desktop).toContain("max-parallel: 3");
-    expect(desktop).toContain("softprops/action-gh-release@v2");
+    expect(desktop).toContain(RELEASE_ACTION_REF);
     expect(desktop).toContain("node node_modules/electron/install.js");
     expect(desktop).toContain("pnpm run build && pnpm run electron:prepare-deps && pnpm exec electron-builder");
     expect(desktop).toContain("--publish never");
+    expect(desktop).toContain(ELECTRON_INSTALL_SMOKE);
     expectCommandBefore(release, "run: pnpm install --frozen-lockfile --ignore-scripts", "run: pnpm run audit");
 
     expect(desktopRelease).toContain("name: Desktop Release Diagnostics");
@@ -358,17 +425,23 @@ describe("GitHub workflow health", () => {
     expect(desktopRelease).toContain("permissions:\n  contents: read");
     expect(desktopRelease).toContain('GH_TOKEN: ""');
     expect(desktopRelease).not.toContain("softprops/action-gh-release");
+    expect(desktopRelease).toContain("pnpm run build && pnpm run electron:prepare-deps && pnpm exec electron-builder");
+    expect(desktopRelease).toContain("${{ matrix.electron-target }} --publish never");
+    expect(desktopRelease).not.toContain("pnpm run ${{ matrix.script }}");
+    expect(desktopRelease).toContain(ELECTRON_INSTALL_SMOKE);
   });
 
   it("keeps Playwright config isolated, serialized, and failure-artifact friendly", async () => {
     const config = await readRepoFile(PLAYWRIGHT_CONFIG);
+    const coreFactory = await readRepoFile(CORE_FACTORY);
 
-    expect(config).toContain("command: 'pnpm exec vite build && node dist/index.js'");
+    expect(config).toContain("command: 'node ./node_modules/vite/bin/vite.js build && node dist/index.js'");
     expect(config).toContain("process.env.CODEUX_E2E_DASHBOARD_PORT || process.env.DASHBOARD_PORT || '4464'");
     expect(config).toContain("baseURL: dashboardBaseUrl");
     expect(config).toContain("url: `${dashboardBaseUrl}/health`");
     expect(config).toContain("CODE_UX_DIRECTORY_BROWSER_ROOTS: os.tmpdir()");
     expect(config).toContain("CODEUX_E2E_PROVIDER_CLI_SHIM: mockProviderCliPath");
+    expect(coreFactory).toContain("process.env.CODEUX_E2E_PROVIDER_CLI_SHIM?.trim()");
     expect(config).toContain("CODE_UX_DISABLE_MCP_STDIO: '1'");
     expect(config).toContain("MCP_HTTP_ENABLED: 'false'");
     expect(config).toContain("CODE_UX_CONTAINERIZED_GIT: '0'");
@@ -421,7 +494,11 @@ describe("GitHub workflow health", () => {
     expect(runnerScript).toContain("DAG dependency merge invariant failed");
     expect(runnerScript).toContain("writeRuntimeLogToConsole");
     expect(runnerScript).toContain("function assertQaHistory(homeDir, records, projectRun)");
-    expect(runnerScript).toContain("resolveExpectedQaOutcomes(reviews, expectation.outcomes, taskKey)");
+    expect(runnerScript).toContain("allowRepeatedIntermediateOutcomes: expectation.allowRepeatedIntermediateOutcomes");
+    expect(runnerScript).toContain("recoveryBackedRepeatedReviewIds: new Set(recoveryBackedQaCycles.map");
+    expect(runnerScript).toContain("'qa_followup_provider_completion_recovered'");
+    expect(runnerScript).toContain("findRecoveryBackedQaCycles({");
+    expect(runnerScript).toContain("assertExpectedTaskCodingInvocations(history.invocations, expected.taskCodingCounts, {");
     expect(runnerScript).toContain("to be superseded by a later completed expected outcome");
     expect(runnerScript).toContain("expected QA follow-up for");
     expect(runnerScript).toContain('resolveExpectedQaOutcomes(sprintReviews, expected.sprintOutcomes || [], "sprint completion")');
@@ -439,8 +516,9 @@ describe("GitHub workflow health", () => {
     expect(scenarioScript).toContain('"mockup-qa:fix-write src/qa-dag/follow-up-final.js');
     expect(scenarioScript).toContain('"mockup-sprint-qa:require-file src/qa-dag/final.js');
     expect(scenarioScript).toContain('outcomes: ["changes_requested", "pass"]');
+    expect(scenarioScript.match(/allowRepeatedIntermediateOutcomes: true/g)).toHaveLength(2);
     expect(scenarioScript).toContain("requireSameWorkerBranch: true");
-    expect(scenarioScript.match(/injectMainCiFix:/g)).toHaveLength(2);
+    expect(scenarioScript.match(/injectMainCiFix:/g)).toHaveLength(3);
     expect(scenarioScript).toContain("minimumCompletedCiFixes: 1");
     expect(scenarioScript).toContain("requireSprintLevelCiFix: true");
     expect(scenarioScript).toContain('"qa-dag-follow-up": 2');

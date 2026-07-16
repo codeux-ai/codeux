@@ -24,6 +24,8 @@ afterEach(async () => {
 
 describe("PlanningAgentService Integration", () => {
   beforeEach(() => {
+    vi.spyOn(gitBranchSyncService, "fetchOriginIfAvailable")
+      .mockResolvedValue(true);
     vi.spyOn(gitBranchSyncService, "syncRemoteBranchIfAvailable")
       .mockResolvedValue(true);
     vi.spyOn(WorkspaceManager.prototype, "createSnapshotWorkspace")
@@ -345,12 +347,12 @@ describe("PlanningAgentService Integration", () => {
 
     await service.planSprint(project.id, sprint.id, {});
 
-    expect(gitBranchSyncService.syncRemoteBranchIfAvailable).toHaveBeenCalledWith(
+    expect(gitBranchSyncService.fetchOriginIfAvailable).toHaveBeenCalledWith(
       project.baseDir,
-      "dev",
       expect.objectContaining({
         githubToken: expect.any(String),
       }),
+      ["dev"],
     );
     expect(WorkspaceManager.prototype.createSnapshotWorkspace).toHaveBeenCalledWith(
       project.baseDir,

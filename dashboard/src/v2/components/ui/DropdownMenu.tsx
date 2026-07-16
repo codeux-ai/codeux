@@ -37,6 +37,14 @@ interface DropdownMenuProps {
   menuAriaLabel?: string;
 }
 
+interface DropdownCoordinates {
+  top: number;
+  left: number;
+  maxHeight?: number;
+}
+
+const VIEWPORT_PADDING = 8;
+
 type DropdownMenuItemProps = JSX.HTMLAttributes<HTMLButtonElement> & {
   children?: ComponentChildren;
   disabled?: boolean;
@@ -115,7 +123,7 @@ export const DropdownMenu = ({
   const triggerRef = externalTriggerRef || localTriggerRef;
   const menuRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
-  const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const [coords, setCoords] = useState<DropdownCoordinates>({ top: 0, left: 0 });
   const [transformOrigin, setTransformOrigin] = useState<string>("top center");
 
   // Generate a unique ID for ARIA wiring if none exists
@@ -156,33 +164,62 @@ export const DropdownMenu = ({
     if (!triggerRef.current || !menuRef.current) return;
 
     const triggerRect = triggerRef.current.getBoundingClientRect();
-    const menuRect = menuRef.current.getBoundingClientRect();
+    const menuElement = menuRef.current;
+    const menuRect = menuElement.getBoundingClientRect();
+    // Transforms and a previous max-height can make the visual rectangle smaller
+    // than the menu's contents. Position against the intrinsic dimensions so a
+    // growing action list still flips before it becomes unreachable.
+    const intrinsicRect = {
+      ...menuRect,
+      width: Math.max(menuRect.width, menuElement.scrollWidth),
+      height: Math.max(menuRect.height, menuElement.scrollHeight),
+    } as DOMRect;
+    const viewport = {
+      width: window.innerWidth,
+      height: window.innerHeight,
+    };
+    let top: number;
+    let left: number;
+    let nextTransformOrigin = "top center";
+
     if (computePosition) {
       const custom = computePosition({
         triggerRect,
-        menuRect,
-        viewport: {
-          width: window.innerWidth,
-          height: window.innerHeight,
-        },
+        menuRect: intrinsicRect,
+        viewport,
         defaultPosition: position,
         defaultAlign: align,
         gap,
       });
-      setCoords({ top: custom.top, left: custom.left });
-      setTransformOrigin(custom.transformOrigin ?? "top center");
-      return;
+      top = custom.top;
+      left = custom.left;
+      nextTransformOrigin = custom.transformOrigin ?? "top center";
+    } else {
+      const calculated = calculatePosition({
+        triggerRect,
+        contentRect: intrinsicRect,
+        position,
+        align,
+        gap,
+        padding: VIEWPORT_PADDING,
+        viewportWidth: viewport.width,
+        viewportHeight: viewport.height,
+      });
+      top = calculated.top;
+      left = calculated.left;
     }
-    const { top, left } = calculatePosition({
-      triggerRect,
-      contentRect: menuRect,
-      position,
-      align,
-      gap,
-      padding: 8,
+
+    const maxHeight = Math.max(
+      0,
+      viewport.height - Math.max(VIEWPORT_PADDING, top) - VIEWPORT_PADDING,
+    );
+    setCoords((current) => {
+      if (current.top === top && current.left === left && current.maxHeight === maxHeight) {
+        return current;
+      }
+      return { top, left, maxHeight };
     });
-    setCoords({ top, left });
-    setTransformOrigin("top center");
+    setTransformOrigin(nextTransformOrigin);
   }, [align, computePosition, gap, position, triggerRef]);
 
   useEffect(() => {
@@ -197,6 +234,16 @@ export const DropdownMenu = ({
   useLayoutEffect(() => {
     if (isOpen && isRendered) updatePosition();
   }, [isOpen, isRendered, updatePosition]);
+
+  useLayoutEffect(() => {
+    if (!isOpen || !isRendered || typeof ResizeObserver === "undefined") return undefined;
+
+    const observer = new ResizeObserver(() => updatePosition());
+    if (triggerRef.current) observer.observe(triggerRef.current);
+    if (menuRef.current) observer.observe(menuRef.current);
+
+    return () => observer.disconnect();
+  }, [isOpen, isRendered, triggerRef, updatePosition]);
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -426,8 +473,8 @@ export const DropdownMenu = ({
             role="menu"
             aria-label={menuAriaLabel}
             aria-labelledby={menuAriaLabel ? undefined : (isValidElement(children) && (children.props as any).id ? (children.props as any).id : triggerId)}
-            className={`fixed z-[100] bg-white dark:bg-void-800 border border-black/[0.08] dark:border-white/[0.08] shadow-[0_16px_36px_rgba(15,23,42,0.14)] dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)] rounded-2xl p-2 ${!isOpen ? "pointer-events-none" : ""} ${className}`}
-            style={{ top: coords.top, left: coords.left, transformOrigin }}
+            className={`fixed z-[100] max-h-[calc(100dvh-1rem)] overflow-y-auto bg-white dark:bg-void-800 border border-black/[0.08] dark:border-white/[0.08] shadow-[0_16px_36px_rgba(15,23,42,0.14)] dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)] rounded-2xl p-2 ${!isOpen ? "pointer-events-none" : ""} ${className}`}
+            style={{ top: coords.top, left: coords.left, maxHeight: coords.maxHeight, transformOrigin }}
             onClick={(e) => e.stopPropagation()}
           >
             {enhancedContent}

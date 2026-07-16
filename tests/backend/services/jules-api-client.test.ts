@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { JulesApiClient } from "../../../src/integrations/jules-api-client.js";
+import { JulesApiClient, JulesApiRequestError } from "../../../src/integrations/jules-api-client.js";
 import axios from "axios";
 
 const mockAxiosInstance = {
@@ -71,6 +71,25 @@ describe("JulesApiClient", () => {
       vi.mocked(mockAxios().post).mockResolvedValue({ data: { id: "s1" } });
       const res = await client.createSession({ prompt: "p", sourceContext: { source: "src" } });
       expect(res.id).toBe("s1");
+    });
+
+    it("surfaces the Jules response message when session creation is rejected", async () => {
+      vi.mocked(mockAxios().post).mockRejectedValue({
+        message: "Request failed with status code 400",
+        response: {
+          status: 400,
+          data: { error: { status: "INVALID_ARGUMENT", message: "Session request is invalid" } },
+        },
+      });
+
+      await expect(client.createSession({
+        prompt: "p",
+        sourceContext: { source: "src" },
+      })).rejects.toEqual(expect.objectContaining({
+        name: "JulesApiRequestError",
+        status: 400,
+        message: "Jules API create session failed (HTTP 400 INVALID_ARGUMENT): Session request is invalid",
+      } satisfies Partial<JulesApiRequestError>));
     });
 
     it("gets session", async () => {

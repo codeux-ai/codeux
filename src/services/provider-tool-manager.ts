@@ -10,6 +10,7 @@ import type {
 import { commandRunner, runStreamingCommand, type CommandResult } from "./cli-process-runner.js";
 import { managedRuntimeService, type ManagedRuntimeService } from "./managed-runtime-service.js";
 import type { Logger } from "../shared/logging/logger.js";
+import { getRuntimeOwnerDockerArgs } from "../shared/config/runtime-owner.js";
 
 export const PROVIDER_TOOL_MOUNT = "/opt/code-ux/provider-tool";
 
@@ -271,6 +272,7 @@ export class ProviderToolManager {
       const create = await this.commands.run("docker", [
         "volume", "create",
         "--label", "code-ux.managed=true",
+        ...getRuntimeOwnerDockerArgs(),
         "--label", "ai.codeux.asset=provider-tool",
         "--label", `ai.codeux.provider=${provider}`,
         "--label", `ai.codeux.version=${this.labelValue(release.version)}`,
@@ -410,6 +412,7 @@ export class ProviderToolManager {
     return await this.commands.stream("docker", [
       "run", "--rm",
       "--label", "code-ux.managed=true",
+      ...getRuntimeOwnerDockerArgs(),
       "--label", `ai.codeux.provider-installer=${provider}`,
       "-e", "DISABLE_AUTOUPDATER=1",
       "-e", "OPENCODE_DISABLE_AUTOUPDATE=true",

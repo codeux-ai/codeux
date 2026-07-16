@@ -28,6 +28,8 @@ interface GitCIStatusPanelProps {
   error: string | null;
 }
 
+const MAX_VISIBLE_GIT_WARNINGS = 5;
+
 function statusTone(value: string | null): string {
   if (!value) {
     return "text-slate-400";
@@ -117,6 +119,8 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
   }
 
   const activeCiCount = status.ciRuns.filter((run) => isActiveCiState(run.status) || isActiveCiState(run.conclusion)).length;
+  const visibleWarnings = status.warnings.slice(0, MAX_VISIBLE_GIT_WARNINGS);
+  const hiddenWarningCount = Math.max(0, status.warnings.length - visibleWarnings.length);
 
   return (
     <div role="region" aria-label={t("gitCiPrStatus")} aria-live="polite" className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white p-7 shadow-sm dark:border-white/[0.08] dark:bg-void-800">
@@ -168,9 +172,14 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
         {status.warnings.length > 0 && (
           <div role="status" aria-live="polite" className="rounded-xl border border-status-amber/20 bg-status-amber/[0.04] p-4">
             <span className="mb-2 block text-[8px] font-bold uppercase tracking-[0.14em] text-status-amber">{t("warnings")}</span>
-            {status.warnings.map((warning) => (
-              <p key={warning} className="break-words text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">{warning}</p>
+            {visibleWarnings.map((warning, index) => (
+              <p key={`${index}:${warning}`} className="break-words text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">{warning}</p>
             ))}
+            {hiddenWarningCount > 0 && (
+              <p className="mt-1 text-[11px] font-medium leading-relaxed text-status-amber">
+                {tp("additionalGitWarningsHidden", hiddenWarningCount)}
+              </p>
+            )}
           </div>
         )}
 

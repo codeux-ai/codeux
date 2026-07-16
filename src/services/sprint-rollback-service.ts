@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
-import os from "node:os";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import type {
   CreateSprintRollbackInput,
@@ -278,7 +277,9 @@ export class SprintRollbackService {
     rollbackBranch: string;
     integrationCommitSha: string;
   }): Promise<void> {
-    const worktreePath = await mkdtemp(path.join(os.tmpdir(), "code-ux-rollback-"));
+    const worktreeRoot = path.join(args.repoPath, ".worktrees");
+    await mkdir(worktreeRoot, { recursive: true });
+    const worktreePath = await mkdtemp(path.join(worktreeRoot, "code-ux-rollback-"));
     let worktreeAdded = false;
     try {
       const defaultBranchRef = args.githubMode === "REMOTE"

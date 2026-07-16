@@ -39,20 +39,44 @@ const successfulCi: CiStatusPresentation = {
 };
 
 describe("deriveWorkflowStatusPresentation", () => {
-  it("keeps a durable six-stage flow when CI evidence is absent", () => {
+  it("keeps a durable seven-stage sprint flow when CI evidence is absent", () => {
     const presentation = deriveWorkflowStatusPresentation({ scope: "sprint", status: "running" });
 
     expect(presentation.stages.map((stage) => stage.id)).toEqual([
+      "planning",
       "coding",
-      "pull_request",
       "qa",
+      "pull_request",
       "checks",
       "merge",
       "completion",
     ]);
     expect(presentation.label).toBe("Coding in progress");
-    expect(presentation.stages[1]).toMatchObject({ state: "pending", statusLabel: "Waiting for pull request" });
+    expect(presentation.stages[0]).toMatchObject({ state: "successful", statusLabel: "Planning complete" });
+    expect(presentation.stages[3]).toMatchObject({ state: "pending", statusLabel: "Waiting for pull request" });
     expect(presentation.accessibleLabel).toContain("Completion: Completion pending");
+  });
+
+  it("shows active sprint planning as the first workflow stage", () => {
+    const presentation = deriveWorkflowStatusPresentation({
+      scope: "sprint",
+      status: "idle",
+      tasksCount: 0,
+      planningStatus: "running",
+    });
+
+    expect(presentation).toMatchObject({ state: "in_progress", label: "Planning in progress" });
+    expect(presentation.stages.map((stage) => stage.id)).toEqual([
+      "planning",
+      "coding",
+      "qa",
+      "pull_request",
+      "checks",
+      "merge",
+      "completion",
+    ]);
+    expect(presentation.stages[0]).toMatchObject({ state: "in_progress", statusLabel: "Planning in progress" });
+    expect(presentation.stages.slice(1).every((stage) => stage.state === "pending")).toBe(true);
   });
 
   it("keeps a running sprint on Coding instead of aggregating task gate activity", () => {
@@ -72,12 +96,37 @@ describe("deriveWorkflowStatusPresentation", () => {
     });
 
     expect(presentation).toMatchObject({ state: "in_progress", label: "Coding in progress" });
-    expect(presentation.stages[0]).toMatchObject({ state: "in_progress", statusLabel: "Coding in progress" });
-    expect(presentation.stages[1]).toMatchObject({ state: "pending", statusLabel: "Waiting for pull request" });
+    expect(presentation.stages[1]).toMatchObject({ state: "in_progress", statusLabel: "Coding in progress" });
     expect(presentation.stages[2]).toMatchObject({ state: "pending", statusLabel: "QA pending" });
-    expect(presentation.stages[3]).toMatchObject({ state: "pending", statusLabel: "Checks pending" });
-    expect(presentation.stages[4]).toMatchObject({ state: "pending", statusLabel: "Merge pending" });
+    expect(presentation.stages[3]).toMatchObject({ state: "pending", statusLabel: "Waiting for pull request" });
+    expect(presentation.stages[4]).toMatchObject({ state: "pending", statusLabel: "Checks pending" });
+    expect(presentation.stages[5]).toMatchObject({ state: "pending", statusLabel: "Merge pending" });
   });
+
+  it.each(["failed", "cancelled"] as const)(
+    "does not let historical %s planning override a running sprint",
+    (planningStatus) => {
+      const presentation = deriveWorkflowStatusPresentation({
+        scope: "sprint",
+        status: "running",
+        completion: 60,
+        tasksCount: 4,
+        planningStatus,
+        ciPresentation: successfulCi,
+      });
+
+      expect(presentation).toMatchObject({ state: "in_progress", label: "Coding in progress" });
+      expect(presentation.stages[0]).toMatchObject({
+        state: "successful",
+        statusLabel: "Planning complete",
+      });
+      expect(presentation.stages[1]).toMatchObject({
+        state: "in_progress",
+        statusLabel: "Coding in progress",
+      });
+      expect(presentation.stages.slice(2, 6).every((stage) => stage.state === "pending")).toBe(true);
+    },
+  );
 
   it("uses an active sprint-completion review as the QA stage in German", () => {
     const presentation = deriveWorkflowStatusPresentation({
@@ -96,9 +145,9 @@ describe("deriveWorkflowStatusPresentation", () => {
     }, "de");
 
     expect(presentation).toMatchObject({ state: "in_progress", label: "QA läuft" });
-    expect(presentation.stages[0]).toMatchObject({ state: "successful", statusLabel: "Implementierung abgeschlossen" });
+    expect(presentation.stages[1]).toMatchObject({ state: "successful", statusLabel: "Implementierung abgeschlossen" });
     expect(presentation.stages[2]).toMatchObject({ state: "in_progress", statusLabel: "Prüfung läuft" });
-    expect(presentation.stages[3]).toMatchObject({ state: "successful", statusLabel: "Checks passed" });
+    expect(presentation.stages[4]).toMatchObject({ state: "successful", statusLabel: "Checks passed" });
   });
 
   it("restores a completed QA outcome when remediation reaches 100%", () => {
@@ -117,7 +166,7 @@ describe("deriveWorkflowStatusPresentation", () => {
     });
 
     expect(presentation).toMatchObject({ state: "failed", tone: "qa_changes", label: "QA changes" });
-    expect(presentation.stages[0]).toMatchObject({ state: "successful", statusLabel: "Coding complete" });
+    expect(presentation.stages[1]).toMatchObject({ state: "successful", statusLabel: "Coding complete" });
     expect(presentation.stages[2]).toMatchObject({ state: "failed", statusLabel: "Changes requested" });
   });
 
@@ -148,11 +197,31 @@ describe("deriveWorkflowStatusPresentation", () => {
     });
 
     expect(presentation).toMatchObject({ state: "successful", label: "Completed" });
-    expect(presentation.stages[1]).toMatchObject({ state: "successful", statusLabel: "Pull request ready" });
-    expect(presentation.stages[3]).toMatchObject({ state: "successful", statusLabel: "Checks passed" });
-    expect(presentation.stages[4]).toMatchObject({ state: "successful", statusLabel: "Merged" });
+    expect(presentation.stages[3]).toMatchObject({ state: "successful", statusLabel: "Pull request ready" });
+    expect(presentation.stages[4]).toMatchObject({ state: "successful", statusLabel: "Checks passed" });
+    expect(presentation.stages[5]).toMatchObject({ state: "successful", statusLabel: "Merged" });
     expect(presentation.stages.every((stage) => stage.state === "successful")).toBe(true);
   });
+
+  it.each(["failed", "cancelled"] as const)(
+    "does not let historical %s planning override a completed sprint",
+    (planningStatus) => {
+      const presentation = deriveWorkflowStatusPresentation({
+        scope: "sprint",
+        status: "completed",
+        completion: 100,
+        tasksCount: 4,
+        planningStatus,
+      });
+
+      expect(presentation).toMatchObject({ state: "successful", label: "Completed" });
+      expect(presentation.stages[0]).toMatchObject({
+        state: "successful",
+        statusLabel: "Planning complete",
+      });
+      expect(presentation.stages.every((stage) => stage.state === "successful")).toBe(true);
+    },
+  );
 
   it("uses the bright blue QA-edit tone for requested changes", () => {
     const presentation = deriveWorkflowStatusPresentation({

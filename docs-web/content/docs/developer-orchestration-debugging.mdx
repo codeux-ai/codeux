@@ -13,6 +13,7 @@ Use this suite when a sprint stalls, local merges fail, worker-owned attention i
 | Full mockup pentest | `pnpm run test:orchestration:full` | Manual escalation for all deterministic mockup scenarios: smoke, CI repair, merge conflict, parallel DAG, dirty checkout, multi-project overrides. |
 | Large DAG stress | `pnpm run test:orchestration:large-dag` | Heavy 129-task mockup DAG with wide fan-out and layered joins. |
 | Full heavy pentest | `pnpm run test:orchestration:pentest` | Default mockup catalog plus heavy stress scenarios. |
+| Extreme DAG recovery | `pnpm run test:orchestration:extreme-dag` | Local-only 400-task adversarial DAG, eight runtime restarts, QA context-cap validation, and resource ceilings; never runs in CI. |
 | Backend broadening | `pnpm run test:backend` | Full backend suite after focused fixes. |
 | Release validation | `pnpm run lint && pnpm run build` | Type safety and compiled server/dashboard output. |
 
@@ -24,9 +25,11 @@ Run `pnpm run test:orchestration:ci-dag` for the Linux no-secret CI lane. It bui
 
 Run `pnpm run test:orchestration:ci-dag:electron` for the native macOS and Windows Electron lane. It launches `dist/electron/main.js`, waits for the embedded Code UX server, and runs the same QA DAG shape through a host-execution mockup fixture.
 
-In GitHub Actions, `08 Orchestration` is one OS matrix: Linux runs the Docker-backed compiled-runtime DAG, and macOS/Windows run the Electron DAG with Electron binary install and native dependency rebuild exposed as separate steps. Each DAG job has a 25-minute workflow timeout, and the mockup runner bounds individual HTTP calls at 60 seconds plus the full project run at the configured `--timeout-ms`. During orchestration, it streams redacted runtime stdout/stderr, emits `mockup_pentest_progress` records on sprint/task changes plus 15-second heartbeats, fails after `--stall-timeout-ms 180000` when no sprint, task status, merge, or expected-output state changes after polling starts, and writes a final Markdown table to `GITHUB_STEP_SUMMARY`. Progress records contain status counts and at most 32 changed tasks rather than repeating a wide DAG on every heartbeat; failures retain the full snapshot. Successful status reads are retained in a bounded trace without resetting the no-state-progress timer. Claimed tasks waiting on adaptive CPU/memory admission persist low-frequency wait events and dispatch heartbeats; the runner emits `mockup_pentest_provider_admission_wait` for diagnosis, but those heartbeats do not reset the no-state-progress stall timer.
+In GitHub Actions, `08 Orchestration` is one OS matrix: Linux runs the Docker-backed compiled-runtime DAG, and macOS/Windows run the Electron DAG with Electron binary install and native dependency rebuild exposed as separate steps. Each DAG job has a 25-minute workflow timeout, and the mockup runner bounds individual HTTP calls at 60 seconds plus the full project run at the configured `--timeout-ms`. During orchestration, it streams redacted runtime stdout/stderr, emits `mockup_pentest_progress` records on sprint/task changes plus 15-second heartbeats, fails after `--stall-timeout-ms 180000` when no sprint, task status, merge, expected-output state, or explicitly requested completed runtime restart changes after polling starts, and writes a final Markdown table to `GITHUB_STEP_SUMMARY`. Progress records contain status counts and at most 32 changed tasks rather than repeating a wide DAG on every heartbeat; failures retain the full snapshot. Successful status reads are retained in a bounded trace without resetting the no-state-progress timer. Finite completed restart events reset the watchdog so the configured interval measures post-recovery progress; admission heartbeats and failed restart attempts do not. Claimed tasks waiting on adaptive CPU/memory admission persist low-frequency wait events and dispatch heartbeats; the runner emits `mockup_pentest_provider_admission_wait` for diagnosis, but those heartbeats do not reset the no-state-progress stall timer.
 
 ## Local Branch Merge Drain
+
+The local session snapshot used for watch-loop state matching excludes stored CLI prompts. Full prompts remain available through direct session and invocation reads, while large QA or planning payloads are not decoded into the server heap on every watch cycle.
 
 The orchestrator performs a final branch-only merge drain immediately before rendering merge protocol instructions during an `orchestrate` cycle. This handles fast local CLI tasks that finish and push a worker branch after the earlier merge-gate snapshot but before protocol handling. If the CI DAG artifact shows a task stuck at `coding_completed` with `mergeIndicator: null`, a `cli_git_pushed` event, and a later `protocol_merge_required` event, inspect this final drain before increasing stall timeouts or rerunning blindly.
 
@@ -50,7 +53,28 @@ Run `pnpm run test:orchestration:full` manually when a scheduler, provider, CI, 
 
 Run `pnpm run test:orchestration:large-dag` for a heavy 129-task DAG with 96 leaf tasks, 24 batch joins, 6 group joins, one final manifest, and one validation task. Use `pnpm run test:orchestration:pentest` for the default catalog plus heavy stress scenarios.
 
+Run `pnpm run test:orchestration:extreme-dag` only as an explicit local pentest. It creates 400 deterministic tasks with wide, distant, diagonal, no-change, and long-tail dependency cases; runs task QA across every output-producing task including one changes-requested/follow-up/pass cycle; requires sprint QA and routed sprint-level CI repair; restarts the complete isolated runtime eight times; and enforces exact graph, merge, final-output, RSS, WAL, task-run, event, invocation, and 16-active-reservation scheduler invariants. The helper contract permits one project Git helper and at most 16 concurrent workspace sidecars; the restart contract caps failed task runs at 160 and final task-attempt amplification at 1.45, while the Docker contract requires zero non-running owner-scoped containers in the final sample. The sampler uses `docker ps -a`, so `created`, exited, and dead leaks are visible. SQLite and Docker observation failures fail closed rather than becoming empty resource samples. After each completed Docker project run, the runner reads its exact task-session ids from the isolated database and waits for those workspace/runtime volumes to disappear; this cleanup duration uses a monotonic clock so host time corrections cannot produce negative telemetry. Final owner-scoped volume removal is also mandatory; only an explicit Docker `No such volume` response is tolerated when another cleanup path wins the list/inspect/remove race. p50 ceilings are 20 seconds for preparation, 10 seconds for Git finalization, and 35 seconds for the complete CLI workflow. Task QA contains full details only for the current task plus title-only completed siblings. Inert instruction padding pushes the unshortened sprint-QA context above 100,000 estimated tokens, every executable directive remains in the retained first half, and separate task/sprint prompt-size assertions prove both policies engaged. Restart-interrupted coding charges are refunded idempotently per task run, so the restart storm cannot exhaust a healthy task's coding guardrail. It is marked `localOnly`, so `all`, `pentest`, and CI never select it. Resource samples and final phase percentiles are retained in the project-run `resource-samples.json` artifact.
+
 ## Local merge checklist
+
+If a live provider invocation reports `container ... is not running` while an isolated restart test
+is active, compare its timestamps with the test's restart events. Current builds label every managed
+Docker asset with a state-home-derived runtime owner; startup cleanup and shutdown select only that
+owner. Warm-helper retries invalidate only the failed generation and fall back to one-shot execution
+if the replacement also stops.
+
+If a restart artifact records a provider container-name conflict, compare the failure timestamp with
+the restart request and server-exit timestamps. Shutdown disposal must not relaunch an aborted
+spawner command in-process. Name-conflict recovery inspects the exact container and removes only a
+managed, same-owner, same-session container in a non-running `created`, `exited`, or `dead` state;
+running same-session and foreign containers remain untouched.
+
+If Jules session creation returns HTTP `400` for several ready tasks, inspect the bounded provider
+message on the execution invocation. Active-session/concurrency responses must leave the dispatch
+queued and enter learned-cap backoff; source or branch validation responses remain failures with
+their provider explanation. If restart marks a Jules task failed while Jules still reports it
+active, compare the linked task run and invocation timestamps: startup recovery must restore remote
+active truth before terminal local reconciliation.
 
 1. Confirm `/ready` is healthy.
 2. Inspect `sprint_runs`, run events, and active `project_attention_items` in `~/.code-ux/app.db`.
@@ -84,6 +108,8 @@ When a Docker-backed sprint appears capped but no matching provider containers a
 - Only idle/orphaned Docker provider rows should be failed for retry.
 
 ## Memory profile
+
+Wide LOCAL DAG cycles batch latest task-run lookup for Git-finalization evidence. When profiling, repeated status-derivation or merge-protocol passes should not issue one latest-run query for every task, including tasks that have not started.
 
 After deterministic lanes pass, run a long profile against compiled-runtime mockup scenarios:
 

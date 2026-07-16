@@ -2,8 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
-import { runSessionSyncStep } from "../../../src/sprint/steps/session-sync-step.js";
-import type { Subtask } from "../../../src/contracts/app-types.js";
+import {
+  buildProviderActivityEventPayload,
+  runSessionSyncStep,
+} from "../../../src/sprint/steps/session-sync-step.js";
+import type { JulesActivity, Subtask } from "../../../src/contracts/app-types.js";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
@@ -16,6 +19,30 @@ afterEach(async () => {
 });
 
 describe("runSessionSyncStep", () => {
+  it("bounds oversized provider activity payloads before durable event persistence", () => {
+    const oversized = `${"head".repeat(10_000)}${"tail".repeat(10_000)}`;
+    const activity: JulesActivity = {
+      id: oversized,
+      name: oversized,
+      createTime: "2026-07-15T00:00:00.000Z",
+      description: oversized,
+      agentMessaged: { agentMessage: oversized },
+      progressUpdated: { title: "Progress", description: oversized },
+      planApproved: { planId: oversized },
+      sessionCompleted: { output: oversized },
+    };
+
+    const payload = buildProviderActivityEventPayload(activity, "session-1", "sessions/session-1", "codex");
+    expect((payload.activityId as string).length).toBeLessThanOrEqual(2 * 1024);
+    expect((payload.activityName as string).length).toBeLessThanOrEqual(2 * 1024);
+    expect((payload.description as string).length).toBeLessThanOrEqual(16 * 1024);
+    expect((payload.agentMessaged as { agentMessage: string }).agentMessage.length).toBeLessThanOrEqual(16 * 1024);
+    expect((payload.progressUpdated as { description: string }).description.length).toBeLessThanOrEqual(16 * 1024);
+    expect((payload.planApproved as { planId: string }).planId.length).toBeLessThanOrEqual(2 * 1024);
+    expect(payload.sessionCompleted).toEqual(expect.objectContaining({ truncated: true }));
+    expect(JSON.stringify(payload).length).toBeLessThan(80 * 1024);
+  });
+
   it("skips session polling for terminal local CLI tasks that already have merge evidence", async () => {
     const listSessions = vi.fn().mockResolvedValue({ sessions: [] });
     const subtasks: Subtask[] = [

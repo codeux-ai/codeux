@@ -141,7 +141,11 @@ export class DatabaseMaintenanceService {
    */
   runPeriodicMaintenance(): void {
     if (this.hasActiveProviderInvocations()) {
-      this.deps.logger.debug("Skipping periodic database maintenance while provider invocations are active.");
+      // PASSIVE checkpoints never wait for readers or writers. Keep the write-heavy retention
+      // work deferred, but bound WAL growth for continuously busy runtimes where there may not be
+      // an idle maintenance window for hours.
+      this.deps.logger.debug("Skipping periodic database pruning while provider invocations are active.");
+      this.checkpointWalDatabases();
       return;
     }
 

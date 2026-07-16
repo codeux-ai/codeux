@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionTrackingRepository } from "../../../src/repositories/session-tracking-repository.js";
 import { DockerAssetPruneService } from "../../../src/services/docker-asset-prune-service.js";
+import { getRuntimeOwnerLabel } from "../../../src/shared/config/runtime-owner.js";
 
 import * as fs from "fs/promises";
 import { runCommandStrict } from "../../../src/services/cli-process-runner.js";
@@ -19,6 +20,68 @@ describe("DockerAssetPruneService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fs.readFile).mockRejectedValue(new Error("missing"));
+  });
+
+  it("scopes every startup Docker scan to the current runtime state home", async () => {
+    const sessionTracking = {
+      listTrackedCliSessions: vi.fn(() => []),
+    } as unknown as SessionTrackingRepository;
+    vi.mocked(runCommandStrict).mockResolvedValue({
+      ok: true,
+      stdout: "",
+      stderr: "",
+      code: 0,
+    } as any);
+
+    await new DockerAssetPruneService(sessionTracking).cleanupOnStartup();
+
+    const dockerCalls = vi.mocked(runCommandStrict).mock.calls.map((call) => call[1]);
+    const ownerFilter = `label=${getRuntimeOwnerLabel()}`;
+    const assetScans = dockerCalls.filter((args) => (
+      (args[0] === "ps" && args.includes("label=code-ux.helper"))
+      || (args[0] === "ps" && args.includes("label=code-ux.login=true"))
+      || (args[0] === "ps" && args.includes("label=code-ux.command"))
+      || (args[0] === "volume" && args[1] === "ls")
+    ));
+    expect(assetScans.length).toBeGreaterThanOrEqual(6);
+    expect(assetScans.every((args) => args.includes(ownerFilter))).toBe(true);
+  });
+
+  it("removes owner-scoped provider containers left in running or created state", async () => {
+    const sessionTracking = {
+      listTrackedCliSessions: vi.fn(() => []),
+    } as unknown as SessionTrackingRepository;
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => ({
+      ok: true,
+      stdout: args[0] === "ps" && args.includes("label=code-ux.command")
+        ? "provider-running\nprovider-created\n"
+        : "",
+      stderr: "",
+      code: 0,
+    } as any));
+
+    const result = await new DockerAssetPruneService(sessionTracking).cleanupOnStartup();
+
+    expect(result.prunedProviderContainers).toEqual(["provider-running", "provider-created"]);
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      ["rm", "-f", "-v", "provider-running", "provider-created"],
+      expect.any(String),
+      process.env,
+      { timeout: 10_000 },
+    );
+    expect(vi.mocked(runCommandStrict).mock.calls).toEqual(expect.arrayContaining([
+      expect.arrayContaining([
+        "docker",
+        expect.arrayContaining([
+          "ps",
+          "-aq",
+          "label=code-ux.managed=true",
+          "label=code-ux.command",
+          `label=${getRuntimeOwnerLabel()}`,
+        ]),
+      ]),
+    ]));
   });
 
   it("prunes stale workspace volumes while preserving cached setup images on startup", async () => {
@@ -139,6 +202,98 @@ describe("DockerAssetPruneService", () => {
       process.env,
       { timeout: 10_000 },
     );
+  });
+
+  it("preserves old hashed snapshot volumes by their durable logical-session label", async () => {
+    const activeSessionId = `cli-codex-${"a".repeat(60)}`;
+    const activeWorkspace = "code-ux-repo-aaaaaaaaaaaa-cli-codex-aaaaaaaaaaaaaaaaaaaaaaaaaaaa-deadbeef";
+    const orphanedWorkspace = "code-ux-repo-aaaaaaaaaaaa-cli-codex-bbbbbbbbbbbbbbbbbbbbbbbbbbbb-feedface";
+    const oldCreatedAt = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const sessionTracking = {
+      listTrackedCliSessions: vi.fn(() => [
+        { id: activeSessionId, state: "FAILED", provider: "codex", repoPath: "/repo/a", updateTime: "" },
+      ]),
+    } as unknown as SessionTrackingRepository;
+
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "volume" && args[1] === "ls" && args.includes("label=code-ux.workspace=true")) {
+        return {
+          ok: true,
+          stdout: [activeWorkspace, orphanedWorkspace].join("\n"),
+          stderr: "",
+          code: 0,
+        } as any;
+      }
+      if (args[0] === "volume" && args[1] === "ls" && args.includes("label=code-ux.workspace-runtime=true")) {
+        return {
+          ok: true,
+          stdout: [`${activeWorkspace}-runtime`, `${orphanedWorkspace}-runtime`].join("\n"),
+          stderr: "",
+          code: 0,
+        } as any;
+      }
+      if (args[0] === "volume" && args[1] === "inspect") {
+        return {
+          ok: true,
+          stdout: JSON.stringify(args.slice(2).map((name) => ({
+            Name: name,
+            CreatedAt: oldCreatedAt,
+            Labels: name.startsWith(activeWorkspace)
+              ? { "code-ux.workspace-session": activeSessionId }
+              : { "code-ux.workspace-session": "cli-codex-orphaned" },
+          }))),
+          stderr: "",
+          code: 0,
+        } as any;
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0 } as any;
+    });
+
+    const result = await new DockerAssetPruneService(sessionTracking).cleanupOnStartup();
+
+    expect(result.prunedWorkspaceVolumes).toEqual([
+      orphanedWorkspace,
+      `${orphanedWorkspace}-runtime`,
+    ]);
+    expect(result.prunedWorkspaceVolumes).not.toContain(activeWorkspace);
+    expect(result.prunedWorkspaceVolumes).not.toContain(`${activeWorkspace}-runtime`);
+  });
+
+  it("preserves active non-provider workspace sessions supplied by startup recovery", async () => {
+    const planningWorkspaceSessionId = `planning-${"a".repeat(36)}-${"b".repeat(36)}`;
+    const planningWorkspace = "code-ux-repo-aaaaaaaaaaaa-planning-aaaaaaaaaaaaaaaaaaaaaaaaaaaa-cafebabe";
+    const oldCreatedAt = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const sessionTracking = {
+      listTrackedCliSessions: vi.fn(() => []),
+    } as unknown as SessionTrackingRepository;
+
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "volume" && args[1] === "ls" && args.includes("label=code-ux.workspace=true")) {
+        return { ok: true, stdout: planningWorkspace, stderr: "", code: 0 } as any;
+      }
+      if (args[0] === "volume" && args[1] === "ls" && args.includes("label=code-ux.workspace-runtime=true")) {
+        return { ok: true, stdout: `${planningWorkspace}-runtime`, stderr: "", code: 0 } as any;
+      }
+      if (args[0] === "volume" && args[1] === "inspect") {
+        return {
+          ok: true,
+          stdout: JSON.stringify(args.slice(2).map((name) => ({
+            Name: name,
+            CreatedAt: oldCreatedAt,
+            Labels: { "code-ux.workspace-session": planningWorkspaceSessionId },
+          }))),
+          stderr: "",
+          code: 0,
+        } as any;
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0 } as any;
+    });
+
+    const result = await new DockerAssetPruneService(sessionTracking, undefined, {
+      protectedWorkspaceSessionIds: () => [planningWorkspaceSessionId],
+    }).cleanupOnStartup();
+
+    expect(result.prunedWorkspaceVolumes).toEqual([]);
   });
 
   it("preserves completed tracked CLI workspace volumes until explicit cleanup", async () => {

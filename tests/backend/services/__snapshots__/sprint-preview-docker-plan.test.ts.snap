@@ -20,6 +20,8 @@ exports[`SprintPreviewDockerPlanBuilder > matches snapshot 1`] = `
   "--label",
   "code-ux.managed=true",
   "--label",
+  "code-ux.runtime-owner=<runtime-owner>",
+  "--label",
   "code-ux.preview=true",
   "--label",
   "code-ux.project-id=proj-1",

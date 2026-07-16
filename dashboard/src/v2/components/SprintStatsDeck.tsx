@@ -241,18 +241,21 @@ export function useLiveTaskTimingSummaries(args: {
   events: ExecutionRuntimeEventSummary[];
   sprintRuns: ExecutionSprintRunSummary[];
   nowIso: string;
+  includeTaskDetails?: boolean;
 }): {
   sprintTiming: LiveSprintTimingSummary;
   taskTimings: LiveTaskTimingSummary[];
   taskTimingMap: Map<string, LiveTaskTimingSummary>;
 } {
-  const taskTimings = buildLiveTaskTimingSummaries({
-    tasks: args.tasks,
-    dispatches: args.dispatches,
-    events: args.events,
-    sprintRuns: args.sprintRuns,
-    nowIso: args.nowIso,
-  });
+  const taskTimings = args.includeTaskDetails === false
+    ? []
+    : buildLiveTaskTimingSummaries({
+        tasks: args.tasks,
+        dispatches: args.dispatches,
+        events: args.events,
+        sprintRuns: args.sprintRuns,
+        nowIso: args.nowIso,
+      });
 
   return {
     sprintTiming: buildLiveSprintTimingSummary({

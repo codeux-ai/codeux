@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { computeEnvDiff } from "../../../../src/shared/subprocess/command-spawner-client.js";
+import {
+  MAX_SPAWNER_STREAM_LINE_CHARS,
+  boundSpawnerStreamLine,
+} from "../../../../src/shared/subprocess/command-spawner-protocol.js";
 
 describe("computeEnvDiff", () => {
   it("returns useBaseEnv when the effective env matches the base", () => {
@@ -37,5 +41,17 @@ describe("computeEnvDiff", () => {
     const base = { PATH: "/usr/bin" };
     const effective = { PATH: "/usr/bin", UNDEFINED_KEY: undefined } as NodeJS.ProcessEnv;
     expect(computeEnvDiff(base, effective)).toEqual({ useBaseEnv: true });
+  });
+});
+
+describe("boundSpawnerStreamLine", () => {
+  it("bounds oversized live IPC lines while retaining diagnostic head and tail context", () => {
+    const line = `${"head".repeat(20_000)}${"tail".repeat(20_000)}`;
+    const bounded = boundSpawnerStreamLine(line);
+
+    expect(bounded).toHaveLength(MAX_SPAWNER_STREAM_LINE_CHARS);
+    expect(bounded.startsWith("head")).toBe(true);
+    expect(bounded.endsWith("tail")).toBe(true);
+    expect(bounded).toContain("stream line truncated");
   });
 });

@@ -18,6 +18,7 @@ import { createDebouncedSaver, loadWindowState, saveWindowState } from "./window
 import { ElectronCredentialKeyPersistence } from "./credential-key-persistence.js";
 import { ElectronSafeStorageKeyProvider } from "../infrastructure/security/electron-safe-storage-key-provider.js";
 import { setProcessCredentialKeyProvider } from "../services/credentials/key-provider-registry.js";
+import { exitElectronStartupSmoke, writeElectronStartupSmoke } from "./startup-smoke.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -293,6 +294,33 @@ function createMainWindow(url: string): BrowserWindow {
     }
   });
 
+  const startupSmokePath = process.env.CODE_UX_ELECTRON_STARTUP_SMOKE_FILE?.trim();
+  if (startupSmokePath) {
+    window.webContents.once("did-finish-load", () => {
+      void writeElectronStartupSmoke(startupSmokePath, {
+        version: app.getVersion(),
+        platform: process.platform,
+        arch: process.arch,
+        packaged: app.isPackaged,
+        dashboardOrigin: url,
+        rendererUrl: window.webContents.getURL(),
+      }).then(() => {
+        if (process.env.CODE_UX_ELECTRON_STARTUP_SMOKE_EXIT === "1") {
+          // This is an install/start probe, not a user-driven shutdown. Newer macOS runners can
+          // defer both the AppKit quit cycle and Electron's app.exit() after renderer readiness.
+          // The marker is already durably renamed at this point, so end only this isolated probe
+          // through the Node process boundary. Production shutdowns still drain the embedded
+          // server through the before-quit handler below.
+          exitElectronStartupSmoke();
+        }
+      }).catch((error: unknown) => {
+        process.exitCode = 1;
+        console.error("Failed to record Electron startup smoke readiness", error);
+        app.quit();
+      });
+    });
+  }
+
   void window.loadURL(url);
   return window;
 }
@@ -416,7 +444,17 @@ app.on("before-quit", (event) => {
 
   event.preventDefault();
   isQuitting = true;
-  void stopServer().finally(() => app.quit());
+  void stopServer()
+    .catch((error: unknown) => {
+      process.exitCode = 1;
+      console.error("Failed to stop Code UX runtime during Electron shutdown", error);
+    })
+    .finally(() => {
+      // The first quit request is deliberately cancelled while the embedded server closes.
+      // Re-entering app.quit() after that cancellation can leave a packaged macOS process alive,
+      // so finish the already-drained shutdown without another before-quit cycle.
+      app.exit(typeof process.exitCode === "number" ? process.exitCode : 0);
+    });
 });
 
 app.on("window-all-closed", () => {

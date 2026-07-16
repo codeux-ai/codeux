@@ -812,7 +812,12 @@ describe("ConnectionChatRepository", () => {
   });
 
   it("publishes realtime thread and message events", async () => {
-    const { projectRepository, connectionRepository, realtimeEventRepository } = await createRepositoriesWithRealtime();
+    const {
+      storage,
+      projectRepository,
+      connectionRepository,
+      realtimeEventRepository,
+    } = await createRepositoriesWithRealtime();
     const project = projectRepository.createProject({
       name: "Realtime Chat Project",
       sourceType: "local",
@@ -829,11 +834,32 @@ describe("ConnectionChatRepository", () => {
 
     const projectEvents = realtimeEventRepository.listEventsSince([`project:${project.id}`], 0, 20);
     const threadEvents = realtimeEventRepository.listEventsSince([`thread:${thread.id}`], 0, 20);
+    const overlappingScopeEvents = realtimeEventRepository.listEventsSince([
+      `project:${project.id}`,
+      `thread:${thread.id}`,
+    ], 0, 20);
+    const storedConversationEvents = storage.getDatabase().prepare(`
+      SELECT scope_type, scope_id, event_type
+      FROM dashboard_realtime_events
+      WHERE event_type LIKE 'conversation.%'
+      ORDER BY sequence ASC
+    `).all() as Array<{
+      scope_type: string;
+      scope_id: string;
+      event_type: string;
+    }>;
 
     expect(projectEvents.some((event) => event.eventType === "conversation.thread.updated")).toBe(true);
     expect(projectEvents.some((event) => event.eventType === "conversation.message.created")).toBe(true);
     expect(threadEvents.some((event) => event.entityId === thread.id)).toBe(true);
     expect(threadEvents.some((event) => event.entityId === message.id)).toBe(true);
+    expect(projectEvents).toHaveLength(3);
+    expect(threadEvents).toHaveLength(3);
+    expect(overlappingScopeEvents).toHaveLength(3);
+    expect(storedConversationEvents).toHaveLength(3);
+    expect(storedConversationEvents.every((event) => (
+      event.scope_type === "project" && event.scope_id === project.id
+    ))).toBe(true);
   });
 
   it("deletes a thread, cascades its messages, and publishes a realtime delete event", async () => {

@@ -117,16 +117,23 @@ describe("ActionFeedbackRegion", () => {
     expect(clearError).toHaveBeenCalledTimes(1);
   });
 
-  it("restores focus when the focused dismiss button is clicked", () => {
+  it("restores focus when the focused dismiss button is removed", async () => {
     const dismiss = vi.fn();
 
-    render(
+    const { rerender } = render(
       <div>
         <div role="main" tabIndex={-1}>Main Content</div>
         <ActionFeedbackRegion
           status="warning"
           message="Warning message"
-          onDismiss={dismiss}
+          onDismiss={() => {
+            dismiss();
+            rerender(
+              <div>
+                <div role="main" tabIndex={-1}>Main Content</div>
+              </div>
+            );
+          }}
         />
       </div>
     );
@@ -138,7 +145,9 @@ describe("ActionFeedbackRegion", () => {
     fireEvent.click(dismissBtn);
 
     expect(dismiss).toHaveBeenCalled();
-    expect(document.activeElement?.getAttribute("role")).toBe("main");
+    await waitFor(() => {
+      expect(document.activeElement?.getAttribute("role")).toBe("main");
+    });
   });
 
   it("keeps blocking errors persistent until caller dismissal or clear", () => {
@@ -182,7 +191,9 @@ describe("ActionFeedbackRegion", () => {
 
     expect(retryAction).toHaveBeenCalledTimes(1);
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Retry save in progress" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Retry save" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Retry save" })).toHaveAttribute("aria-busy", "true");
+      expect(screen.getByRole("status")).toHaveTextContent("Retry save in progress");
     });
 
     resolveRetry();

@@ -5,6 +5,7 @@ import { queryExecutionTaskDispatches } from "./execution-task-dispatches-query.
 import { queryProjectExecutionSnapshotInvocations } from "./execution-invocations-query.js";
 import { queryExecutionRuntimeEvents } from "./execution-runtime-events-query.js";
 import { buildHumanInterventionSummaryBySprintRun, listActiveAttentionRowsForProject } from "./execution-human-intervention-query.js";
+import { queryExecutionSprintWorkflowProjections } from "./execution-sprint-workflow-projection-query.js";
 import { withWallTime } from "./execution-usage-query.js";
 
 import { ExecutionDashboardSnapshot, ExecutionUsageTotals } from "../../contracts/app-types.js";
@@ -55,6 +56,7 @@ export function queryProjectExecutionSnapshot(
     sprintRunIds: uniqueExpandedSprintRunIds,
     selectedSprintId: options.selectedSprintId,
   });
+  const sprintWorkflowProjections = queryExecutionSprintWorkflowProjections(db, projectId);
 
   const activeAttentionItems = listActiveAttentionRowsForProject(db, projectId);
   const humanInterventionBySprintRunId = buildHumanInterventionSummaryBySprintRun(
@@ -100,6 +102,7 @@ export function queryProjectExecutionSnapshot(
     primaryAssignedWorker: null,
     overflowAssignedWorkers: [],
     attentionItems: [],
+    sprintWorkflowProjections,
     recentEvents: runtimeEvents.map((row) => mapExecutionRuntimeEventSummaryRow(row)),
     recentInvocations,
     updatedAt: nowIso,

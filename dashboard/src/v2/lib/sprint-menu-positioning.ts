@@ -40,15 +40,21 @@ export function computeSprintActionMenuPosition(
   const left = Math.max(VIEWPORT_PADDING, Math.min(rightAlignedLeft, maxLeft));
 
   const belowTop = triggerRect.bottom + MENU_GAP;
-  const canFitBelow = belowTop + height <= viewport.height - VIEWPORT_PADDING;
-  const top = canFitBelow
+  const spaceBelow = Math.max(0, viewport.height - VIEWPORT_PADDING - belowTop);
+  const spaceAbove = Math.max(0, triggerRect.top - MENU_GAP - VIEWPORT_PADDING);
+  const canFitBelow = height <= spaceBelow;
+  const canFitAbove = height <= spaceAbove;
+  // When both sides fit, prefer the larger region. This stays stable if the
+  // first layout pass underestimates a long menu while fonts or actions settle.
+  const placeBelow = canFitBelow && (!canFitAbove || spaceBelow >= spaceAbove);
+  const top = placeBelow
     ? belowTop
     : Math.max(VIEWPORT_PADDING, triggerRect.top - height - MENU_GAP);
 
   return {
     top,
     left,
-    placement: canFitBelow ? "bottom" : "top",
-    transformOrigin: canFitBelow ? "top right" : "bottom right",
+    placement: placeBelow ? "bottom" : "top",
+    transformOrigin: placeBelow ? "top right" : "bottom right",
   };
 }

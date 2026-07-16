@@ -613,6 +613,83 @@ describe("DashboardRealtimeWebSocketServer", () => {
     });
   });
 
+  it("routes one conversation event to project and thread subscribers without duplicating overlapping clients", () => {
+    const projectClient = setupClient();
+    const threadClient = setupClient();
+    const overlappingClient = setupClient();
+
+    projectClient.sendClientMessage({
+      type: "set_subscriptions",
+      scopes: ["project:p1"],
+      lastSequence: 0,
+    });
+    threadClient.sendClientMessage({
+      type: "set_subscriptions",
+      scopes: ["thread:t1"],
+      lastSequence: 0,
+    });
+    overlappingClient.sendClientMessage({
+      type: "set_subscriptions",
+      scopes: ["project:p1", "thread:t1"],
+      lastSequence: 0,
+    });
+
+    (projectClient.socket.write as any).mockClear();
+    (threadClient.socket.write as any).mockClear();
+    (overlappingClient.socket.write as any).mockClear();
+
+    const subscribeCallback = realtimeService.subscribe.mock.calls[0][0];
+    subscribeCallback(createRealtimeEvent({
+      sequence: 12,
+      scopeType: "project",
+      scopeId: "p1",
+      scope: "project:p1",
+      eventType: "conversation.message.created",
+      entityType: "conversation_message",
+      entityId: "m1",
+      projectId: "p1",
+      threadId: "t1",
+      payload: {
+        id: "m1",
+        threadId: "t1",
+      },
+    }));
+
+    expect(projectClient.socket.write).toHaveBeenCalledTimes(1);
+    expect(threadClient.socket.write).toHaveBeenCalledTimes(1);
+    expect(overlappingClient.socket.write).toHaveBeenCalledTimes(1);
+    expect(projectClient.getWrittenJson()).toEqual([
+      expect.objectContaining({
+        type: "event",
+        event: expect.objectContaining({
+          sequence: 12,
+          scope: "project:p1",
+          entityId: "m1",
+        }),
+      }),
+    ]);
+    expect(threadClient.getWrittenJson()).toEqual([
+      expect.objectContaining({
+        type: "event",
+        event: expect.objectContaining({
+          sequence: 12,
+          scope: "thread:t1",
+          entityId: "m1",
+        }),
+      }),
+    ]);
+    expect(overlappingClient.getWrittenJson()).toEqual([
+      expect.objectContaining({
+        type: "event",
+        event: expect.objectContaining({
+          sequence: 12,
+          scope: "project:p1",
+          entityId: "m1",
+        }),
+      }),
+    ]);
+  });
+
   it("does not serialize realtime event payloads when no clients are subscribed to the scope", () => {
     const unrelatedClient = setupClient();
 
@@ -657,15 +734,15 @@ describe("DashboardRealtimeWebSocketServer", () => {
   it("disconnects slow websocket clients before buffering unbounded realtime frames", () => {
     const { sendClientMessage, socket } = setupClient();
 
-    Object.defineProperty(socket, "writable", { value: true, configurable: true });
-    Object.defineProperty(socket, "destroyed", { value: false, configurable: true });
-    Object.defineProperty(socket, "writableLength", { value: 20 * 1024 * 1024, configurable: true });
-
     sendClientMessage({
       type: "set_subscriptions",
       scopes: ["project:p1:live"],
       lastSequence: 0,
     });
+
+    Object.defineProperty(socket, "writable", { value: true, configurable: true });
+    Object.defineProperty(socket, "destroyed", { value: false, configurable: true });
+    Object.defineProperty(socket, "writableLength", { value: 20 * 1024 * 1024, configurable: true });
 
     const subscribeCallback = realtimeService.subscribe.mock.calls[0][0];
     subscribeCallback({

@@ -99,8 +99,17 @@ function getExecutionSnapshotSignature(payload: unknown): string | null {
   const connections = arrayField(payload, "connections");
   const overflowAssignedWorkers = arrayField(payload, "overflowAssignedWorkers");
   const attentionItems = arrayField(payload, "attentionItems");
+  const sprintWorkflowProjections = arrayField(payload, "sprintWorkflowProjections");
   const recentEvents = arrayField(payload, "recentEvents");
-  if (!sprintRuns || !taskDispatches || !connections || !overflowAssignedWorkers || !attentionItems || !recentEvents) {
+  if (
+    !sprintRuns
+    || !taskDispatches
+    || !connections
+    || !overflowAssignedWorkers
+    || !attentionItems
+    || !sprintWorkflowProjections
+    || !recentEvents
+  ) {
     return null;
   }
 
@@ -116,6 +125,7 @@ function getExecutionSnapshotSignature(payload: unknown): string | null {
     getAssignedWorkerSignature(payload.primaryAssignedWorker),
     signatureCollection(overflowAssignedWorkers, getAssignedWorkerSignature),
     signatureCollection(attentionItems, getAttentionItemSignature),
+    signatureCollection(sprintWorkflowProjections, getSprintWorkflowProjectionSignature),
     signatureCollection(recentEvents, getRuntimeEventSignature),
     signatureCollection(recentInvocations, getInvocationSignature),
   ]);
@@ -283,8 +293,20 @@ function getAttentionItemSignature(item: unknown): string {
     signatureValue(value.severity),
     signatureValue(value.ownerType),
     signatureValue(value.status),
+    signatureValue(value.assignedWorkerEndpointId),
+    signatureValue(value.title),
+    signatureValue(value.summaryMarkdown),
     signatureValue(value.claimedAt),
     signatureValue(value.resolvedAt),
+  ]);
+}
+
+function getSprintWorkflowProjectionSignature(item: unknown): string {
+  const value = objectOrEmpty(item);
+  return joinSignatureParts([
+    signatureValue(value.sprintId),
+    signatureValue(value.planningStatus),
+    getAttentionItemSignature(value.humanIntervention),
   ]);
 }
 

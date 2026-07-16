@@ -14,6 +14,100 @@ export class JulesNotFoundError extends Error {
   }
 }
 
+const MAX_JULES_API_ERROR_MESSAGE_CHARS = 2_048;
+const JULES_SESSION_CAPACITY_PATTERN = /(?:concurren\w*|too many|max(?:imum)?|limit|quota|capacity|resource\s+exhausted).{0,80}(?:active\s+)?sessions?|(?:active\s+)?sessions?.{0,80}(?:concurren\w*|too many|max(?:imum)?|limit|quota|capacity|resource\s+exhausted)/i;
+const JULES_CONCURRENT_TASK_STATES = new Set(["QUEUED", "PLANNING", "IN_PROGRESS"]);
+
+/**
+ * Jules exposes session state but no dedicated subscription-slot endpoint.
+ * Waiting/paused sessions do not represent executing work and can accumulate
+ * well beyond a plan's concurrent-task limit, so counting every non-terminal
+ * session permanently starves admission on established accounts.
+ */
+export function isJulesSessionConsumingConcurrentTask(session: Pick<JulesSession, "state">): boolean {
+  const state = String(session.state || "STATE_UNSPECIFIED").trim().toUpperCase();
+  if (state === "STATE_UNSPECIFIED") {
+    // Unknown states are counted conservatively until Jules reports a known one.
+    return true;
+  }
+  return JULES_CONCURRENT_TASK_STATES.has(state);
+}
+
+/**
+ * An actionable, bounded Jules API failure. Axios' default message only includes
+ * the HTTP status, which previously discarded the provider's explanation and
+ * made capacity responses indistinguishable from malformed requests.
+ */
+export class JulesApiRequestError extends Error {
+  readonly cause?: unknown;
+
+  constructor(
+    message: string,
+    public readonly status: number | null,
+    public readonly apiStatus: string | null,
+    cause?: unknown,
+  ) {
+    super(message);
+    this.name = "JulesApiRequestError";
+    this.cause = cause;
+  }
+}
+
+export function isJulesSessionCapacityError(error: unknown): boolean {
+  if (!(error instanceof JulesApiRequestError)) {
+    return false;
+  }
+  return (error.status === 400 || error.status === 409 || error.status === 429)
+    && JULES_SESSION_CAPACITY_PATTERN.test(error.message);
+}
+
+function boundJulesApiErrorText(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const sanitized = value
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/(api[_-]?key|x-goog-api-key)\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!sanitized) {
+    return null;
+  }
+  return sanitized.slice(0, MAX_JULES_API_ERROR_MESSAGE_CHARS);
+}
+
+function toJulesApiRequestError(error: unknown, operation: string): JulesApiRequestError {
+  const candidate = error && typeof error === "object"
+    ? error as {
+        message?: unknown;
+        response?: {
+          status?: unknown;
+          data?: unknown;
+        };
+      }
+    : null;
+  const status = typeof candidate?.response?.status === "number" ? candidate.response.status : null;
+  const data = candidate?.response?.data;
+  const payload = data && typeof data === "object" ? data as Record<string, unknown> : null;
+  const nestedError = payload?.error && typeof payload.error === "object"
+    ? payload.error as Record<string, unknown>
+    : null;
+  const apiStatus = boundJulesApiErrorText(nestedError?.status ?? payload?.status);
+  const providerMessage = boundJulesApiErrorText(
+    nestedError?.message
+      ?? payload?.message
+      ?? (typeof data === "string" ? data : null),
+  );
+  const fallbackMessage = boundJulesApiErrorText(candidate?.message) || "Unknown Jules API error";
+  const statusLabel = status === null ? "" : ` (HTTP ${status}${apiStatus ? ` ${apiStatus}` : ""})`;
+  return new JulesApiRequestError(
+    `Jules API ${operation} failed${statusLabel}: ${providerMessage || fallbackMessage}`,
+    status,
+    apiStatus,
+    error,
+  );
+}
+
 export function isNotFoundError(error: unknown): boolean {
   if (!error || typeof error !== "object") {
     return false;
@@ -65,9 +159,16 @@ export interface JulesApiClientOptions {
    */
   sessionsCacheTtlMs?: number;
   /**
+   * Maximum age of a session snapshot used to admit a new Jules session.
+   * Capacity checks are stricter than watch-loop synchronization and never
+   * serve stale data after a failed refresh. Defaults to 10 seconds; local
+   * atomic claims account for sessions created inside that window.
+   */
+  sessionsCapacityCacheTtlMs?: number;
+  /**
    * Upper bound on how many sessions the shared snapshot paginates through per
-   * refresh. Active sessions are always the most recent, so this caps work on
-   * accounts with thousands of historical sessions. Defaults to 300.
+   * refresh. This bounds watch-loop work on accounts with thousands of
+   * historical sessions. Defaults to 300.
    */
   maxSnapshotSessions?: number;
   /** Injectable clock for deterministic tests. Defaults to `Date.now`. */
@@ -183,17 +284,21 @@ export class JulesApiClient implements JulesClient {
   private readonly minRequestIntervalMs: number;
   private readonly maxTransientRetries: number;
   private readonly sessionsCacheTtlMs: number;
+  private readonly sessionsCapacityCacheTtlMs: number;
   private readonly maxSnapshotSessions: number;
   private readonly now: () => number;
   private nextRequestSlot = 0;
   private sessionSnapshot: { at: number; sessions: JulesSession[] } | null = null;
   private sessionSnapshotInFlight: Promise<JulesSession[]> | null = null;
+  private sessionCapacitySnapshot: { at: number; sessions: JulesSession[] } | null = null;
+  private sessionCapacitySnapshotInFlight: Promise<JulesSession[]> | null = null;
 
   constructor(options: JulesApiClientOptions) {
     this.apiKey = this.normalizeApiKey(options.apiKey);
     this.minRequestIntervalMs = Math.max(0, options.minRequestIntervalMs ?? 250);
     this.maxTransientRetries = Math.max(0, options.maxTransientRetries ?? 4);
     this.sessionsCacheTtlMs = Math.max(0, options.sessionsCacheTtlMs ?? 12_000);
+    this.sessionsCapacityCacheTtlMs = Math.max(0, options.sessionsCapacityCacheTtlMs ?? 10_000);
     this.maxSnapshotSessions = Math.max(1, options.maxSnapshotSessions ?? 300);
     this.now = options.now ?? Date.now;
     this.axiosInstance = axios.create({
@@ -391,9 +496,17 @@ export class JulesApiClient implements JulesClient {
 
   async createSession(data: JulesCreateSessionRequest): Promise<JulesSession> {
     this.ensureApiKey();
-    const response = await this.axiosInstance.post<JulesSession>("/sessions", data);
-    this.invalidateSessionsCache();
-    return response.data;
+    try {
+      const response = await this.axiosInstance.post<JulesSession>("/sessions", data);
+      this.invalidateSessionsCache();
+      return response.data;
+    } catch (error) {
+      // A rejected create can be a subscription-cap race. Force any admission
+      // diagnostic that follows to read the provider again instead of reusing
+      // the optimistic pre-create snapshot.
+      this.invalidateSessionsCache();
+      throw toJulesApiRequestError(error, "create session");
+    }
   }
 
   async getSession(sessionId: string): Promise<JulesSession> {
@@ -443,12 +556,45 @@ export class JulesApiClient implements JulesClient {
     return this.sessionSnapshotInFlight;
   }
 
+  /**
+   * Returns a bounded, API-backed preflight snapshot for admission control.
+   * The Jules list API has pagination but no state filter or subscription-slot
+   * counter, and old waiting sessions can occur deep in account history. A
+   * complete history scan before every dispatch would make admission slower as
+   * the account ages. Instead concurrent dispatches share one fresh first-page
+   * preflight, local claims provide the atomic hard cap, and a provider-side
+   * FAILED_PRECONDITION remains an authoritative retryable capacity deferral.
+   * Unlike watch-loop synchronization this path never serves stale data after
+   * an API error.
+   */
+  async getSessionsForCapacityCheck(): Promise<JulesSession[]> {
+    const fresh = this.sessionCapacitySnapshot
+      && (this.now() - this.sessionCapacitySnapshot.at) < this.sessionsCapacityCacheTtlMs;
+    if (fresh) {
+      return this.sessionCapacitySnapshot!.sessions;
+    }
+    if (this.sessionCapacitySnapshotInFlight) {
+      return this.sessionCapacitySnapshotInFlight;
+    }
+    this.sessionCapacitySnapshotInFlight = this.refreshSessionCapacitySnapshot()
+      .finally(() => { this.sessionCapacitySnapshotInFlight = null; });
+    return this.sessionCapacitySnapshotInFlight;
+  }
+
   /** Drops the cached session snapshot so the next read re-fetches fresh state. */
   invalidateSessionsCache(): void {
     this.sessionSnapshot = null;
+    this.sessionCapacitySnapshot = null;
   }
 
-  private async refreshSessionSnapshot(): Promise<JulesSession[]> {
+  private async refreshSessionCapacitySnapshot(): Promise<JulesSession[]> {
+    const response = await this.listSessions({ page_size: 100 });
+    const sessions = response.sessions || [];
+    this.sessionCapacitySnapshot = { at: this.now(), sessions };
+    return sessions;
+  }
+
+  private async refreshSessionSnapshot(allowStaleOnError = true): Promise<JulesSession[]> {
     try {
       const all: JulesSession[] = [];
       let pageToken: string | undefined = undefined;
@@ -461,7 +607,7 @@ export class JulesApiClient implements JulesClient {
       this.sessionSnapshot = { at: this.now(), sessions: all };
       return all;
     } catch (error) {
-      if (this.sessionSnapshot) {
+      if (allowStaleOnError && this.sessionSnapshot) {
         // Serve stale rather than failing every sprint's sync on a blip; the
         // timestamp is left untouched so the next call retries promptly.
         return this.sessionSnapshot.sessions;

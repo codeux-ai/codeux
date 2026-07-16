@@ -15,6 +15,7 @@ import { runCommandStrict, type CommandResult } from "../cli-process-runner.js";
 import type { CredentialBroker } from "../credentials/credential-broker.js";
 import type { EgressPolicyService } from "../node-flows/egress-policy-service.js";
 import { CUSTOM_NODE_EGRESS_SOCKET_DIRECTORY, CustomNodeEgressBroker } from "./custom-node-egress-broker.js";
+import { getRuntimeOwnerDockerArgs } from "../../shared/config/runtime-owner.js";
 
 export const CUSTOM_NODE_CONTAINER_SCRATCH = "/tmp/codeux";
 
@@ -42,6 +43,7 @@ export function buildCustomNodeDockerRunArgs(input: CustomNodeDockerPlanInput): 
     "--tmpfs", `${CUSTOM_NODE_CONTAINER_SCRATCH}:rw,nosuid,nodev,noexec,size=${limits.scratchMb}m,mode=700,uid=65532,gid=65532`,
     "--log-driver", "none",
     "--label", "code-ux.managed=true",
+    ...getRuntimeOwnerDockerArgs(),
     "--label", "code-ux.custom-node=true",
     "--label", `code-ux.custom-node-digest=${input.artifact.digest}`,
   ];

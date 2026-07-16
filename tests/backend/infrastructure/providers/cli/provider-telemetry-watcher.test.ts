@@ -200,6 +200,83 @@ describe("ProviderTelemetryWatcher", () => {
     await watcher.stop();
   });
 
+  it("passes append-parsed Claude deltas without retaining or joining the raw JSONL", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const jsonl = `${JSON.stringify({
+      type: "assistant",
+      sessionId: "claude-chunk-session",
+      timestamp: "2026-07-14T00:00:01.000Z",
+      message: {
+        id: "claude-message-1",
+        role: "assistant",
+        content: [{ type: "text", text: "incremental Claude output" }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+    })}\n`;
+    const bytes = Buffer.from(jsonl);
+    const readChunk = vi.fn(async (
+      _nativeSessionId: string,
+      cursor: { sourceId: string | null; offset: number },
+    ) => cursor.offset === 0
+      ? {
+          sourceId: "claude-file",
+          startOffset: 0,
+          nextOffset: bytes.length,
+          totalBytes: bytes.length,
+          contentBase64: bytes.toString("base64"),
+          reset: true,
+        }
+      : {
+          sourceId: "claude-file",
+          startOffset: bytes.length,
+          nextOffset: bytes.length,
+          totalBytes: bytes.length,
+          contentBase64: "",
+          reset: false,
+        });
+    const opts = {
+      provider: "claude-code" as const,
+      model: "test-model",
+      prompt: "test",
+      cwd: "/cwd",
+      startedMs: Date.parse("2026-07-14T00:00:00.000Z"),
+      workflowSettings: { executionMode: "DOCKER" as const },
+      signal: controller.signal,
+      getAccumulatedRawStdout: () => "",
+      getAccumulatedStderr: () => "",
+      nativeSessionId: "claude-chunk-session",
+      sessionId: "sess-1",
+      antigravityLogPath: null,
+      readClaudeSessionJsonl: vi.fn(),
+      readClaudeSessionJsonlChunk: readChunk,
+      readCodexLatestSessionJson: vi.fn(),
+      readQwenLogData: vi.fn(),
+      parseAntigravityConversationId: vi.fn(),
+      readAntigravityTranscript: vi.fn(),
+      resolveAntigravityDatabase: vi.fn(),
+      onTelemetry: vi.fn(),
+    };
+    const watcher = new ProviderTelemetryWatcher(opts as any);
+    watcher.start();
+
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(readChunk).toHaveBeenNthCalledWith(1, "claude-chunk-session", { sourceId: null, offset: 0 });
+    expect(opts.readClaudeSessionJsonl).not.toHaveBeenCalled();
+    expect(collectProviderUsageTelemetry).toHaveBeenCalledTimes(1);
+    expect(collectProviderUsageTelemetry).toHaveBeenCalledWith(expect.objectContaining({
+      claudeSessionJsonl: null,
+      claudeSessionLog: expect.objectContaining({
+        conversation: [expect.objectContaining({ text: "incremental Claude output" })],
+        conversationRevision: 1,
+      }),
+    }));
+
+    controller.abort();
+    await watcher.stop();
+  });
+
   it.each([
     {
       provider: "claude-code" as const,

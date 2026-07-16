@@ -130,6 +130,19 @@ describe("QaReviewRepository", () => {
     });
     expect(repository.countTaskRuns(task.id)).toBe(2);
     expect(repository.countDecisiveTaskRuns(task.id)).toBe(1);
+    const snapshots = repository.listTaskReviewSnapshots([task.id, "task-without-reviews", task.id]);
+    expect(snapshots.get(task.id)).toMatchObject({
+      latestRun: expect.objectContaining({ id: cancelledTaskRun.id }),
+      latestCycleRuns: [expect.objectContaining({ id: cancelledTaskRun.id })],
+      runsUsed: 2,
+      decisiveRuns: 1,
+    });
+    expect(snapshots.get("task-without-reviews")).toEqual({
+      latestRun: null,
+      latestCycleRuns: [],
+      runsUsed: 0,
+      decisiveRuns: 0,
+    });
 
     expect(repository.hasSprintReviewRun(sprint.id)).toBe(false);
 

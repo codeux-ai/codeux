@@ -33,6 +33,7 @@ import {
 } from "../infrastructure/git/git-status-policy.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks } from "./git-http-auth.js";
 import { commandRunner, type CommandResult } from "../shared/subprocess/command-runner.js";
+import { createHash } from "node:crypto";
 
 export type { GitTrackingRequest };
 
@@ -53,6 +54,7 @@ interface RepoPlumbing {
 }
 
 const FAILED_RUN_DETAILS_CONCURRENCY = 3;
+const FAILED_RUN_DETAILS_LIMIT = 5;
 const GIT_MUTATION_TIMEOUT_MS = 8000;
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
@@ -104,6 +106,8 @@ export class GitStatusService {
     this.queryClient.setProvider(provider, hostDomain, repoTarget, this.preferApi && !!token);
     return { provider, token };
   }
+  private static readonly STATUS_CACHE_LIMIT = 128;
+  private static readonly STATUS_CACHE_MAX_RETENTION_MS = 60_000;
   private static statusCache = new Map<string, { timestamp: number; promise: Promise<GitTrackingStatus> }>();
 
   // Local git plumbing (rev-parse / branch / remote / status) is repository-level and does not
@@ -111,12 +115,35 @@ export class GitStatusService {
   // sprint/dashboard caller. This stops the same project from spinning up a fresh batch of
   // `alpine/git` containers on every watch-loop cycle for each feature branch.
   private static readonly REPO_PLUMBING_CACHE_MS = 10_000;
+  private static readonly REPO_PLUMBING_CACHE_LIMIT = 128;
   private static repoPlumbingCache = new Map<string, { timestamp: number; promise: Promise<RepoPlumbing> }>();
+
+  private static pruneCache<T>(
+    cache: Map<string, { timestamp: number; promise: Promise<T> }>,
+    maxAgeMs: number,
+    limit: number,
+  ): void {
+    const oldestAllowed = Date.now() - maxAgeMs;
+    for (const [key, entry] of cache) {
+      if (entry.timestamp < oldestAllowed) cache.delete(key);
+    }
+    while (cache.size >= limit) {
+      const oldest = cache.keys().next();
+      if (oldest.done) break;
+      cache.delete(oldest.value);
+    }
+  }
 
   public static invalidateCache(repoPath?: string): void {
     if (repoPath) {
       for (const key of GitStatusService.statusCache.keys()) {
-        if (key.includes(`"repoPath":"${repoPath}"`)) {
+        let cachedRepoPath: unknown;
+        try {
+          cachedRepoPath = (JSON.parse(key) as { repoPath?: unknown }).repoPath;
+        } catch {
+          cachedRepoPath = undefined;
+        }
+        if (cachedRepoPath === repoPath) {
           GitStatusService.statusCache.delete(key);
         }
       }
@@ -139,8 +166,16 @@ export class GitStatusService {
     const key = this.repoPath;
     const cached = GitStatusService.repoPlumbingCache.get(key);
     if (cached && Date.now() - cached.timestamp < GitStatusService.REPO_PLUMBING_CACHE_MS) {
+      GitStatusService.repoPlumbingCache.delete(key);
+      GitStatusService.repoPlumbingCache.set(key, cached);
       return cached.promise;
     }
+    if (cached) GitStatusService.repoPlumbingCache.delete(key);
+    GitStatusService.pruneCache(
+      GitStatusService.repoPlumbingCache,
+      GitStatusService.REPO_PLUMBING_CACHE_MS,
+      GitStatusService.REPO_PLUMBING_CACHE_LIMIT,
+    );
     const promise = this.fetchRepoPlumbing();
     GitStatusService.repoPlumbingCache.set(key, { timestamp: Date.now(), promise });
     try {
@@ -209,11 +244,16 @@ export class GitStatusService {
   private async fetchFailedRunJobs(
     runId: number,
     ghToken?: string
-  ): Promise<{ failedJobs: GitCiFailedJob[]; warnings: string[] }> {
+  ): Promise<{ failedJobs: GitCiFailedJob[]; warnings: string[]; logFailureCount: number }> {
     const warnings: string[] = [];
+    let logFailureCount = 0;
     const result = await this.queryClient.ghRunViewJobs(runId, ghToken);
     if (!result.ok) {
-      return { failedJobs: [], warnings: [`Failed to fetch failed jobs for run ${runId}.`] };
+      return {
+        failedJobs: [],
+        warnings: [`Failed to fetch failed jobs for current run ${runId}.`],
+        logFailureCount,
+      };
     }
 
     const parsed = parseJson<Record<string, unknown>>(result.stdout);
@@ -259,14 +299,14 @@ export class GitStatusService {
         const logResult = await this.fetchFailedJobLogExcerpt(runId, jobId, failedSteps, ghToken);
         failedJob.logExcerpt = logResult.logExcerpt;
         if (logResult.warning) {
-          warnings.push(logResult.warning);
+          logFailureCount += 1;
         }
       }
 
       failedJobs.push(failedJob);
     }
 
-    return { failedJobs, warnings };
+    return { failedJobs, warnings, logFailureCount };
   }
 
   private async enrichFailedRunDetails(
@@ -274,26 +314,34 @@ export class GitStatusService {
     ghToken?: string
   ): Promise<{ runs: GitCiRunStatus[]; warnings: string[] }> {
     const warnings: string[] = [];
-    const seenHeadWorkflows = new Set<string>();
-    const failedCandidates = runs.filter((run) => {
-      if (run.id === null || !isRunFailed(run)) {
-        return false;
-      }
+    const seenBranchWorkflows = new Set<string>();
+    const failedCandidates: GitCiRunStatus[] = [];
+    // `runs` is sorted newest-first by the caller. The newest run for a branch/workflow pair is
+    // authoritative: an older failure is no longer actionable after a newer success or active run.
+    // Keep all lightweight run metadata in the response, but bound expensive jobs/log enrichment
+    // to the same small current window that operators can act on in the dashboard.
+    for (const run of runs) {
       const workflow = run.workflowName || run.name;
-      const duplicateKey = run.headSha ? `${run.headSha}\0${workflow}` : null;
-      if (duplicateKey && seenHeadWorkflows.has(duplicateKey)) {
-        return false;
+      const branchIdentity = run.headBranch || run.headSha || `run-${run.id ?? run.url}`;
+      const currentKey = `${branchIdentity}\0${workflow}`;
+      if (seenBranchWorkflows.has(currentKey)) {
+        continue;
       }
-      if (duplicateKey) {
-        seenHeadWorkflows.add(duplicateKey);
+      seenBranchWorkflows.add(currentKey);
+      if (run.id === null || !isRunFailed(run)) {
+        continue;
       }
-      return true;
-    });
+      failedCandidates.push(run);
+      if (failedCandidates.length >= FAILED_RUN_DETAILS_LIMIT) {
+        break;
+      }
+    }
     if (failedCandidates.length === 0) {
       return { runs, warnings };
     }
 
     const failedJobsByRunId = new Map<number, GitCiFailedJob[]>();
+    let failedLogCount = 0;
 
     let i = 0;
     const executeNext = async (): Promise<void> => {
@@ -303,6 +351,7 @@ export class GitStatusService {
         if (details.warnings.length > 0) {
           warnings.push(...details.warnings);
         }
+        failedLogCount += details.logFailureCount;
         failedJobsByRunId.set(runId, details.failedJobs);
       }
     };
@@ -312,6 +361,12 @@ export class GitStatusService {
       () => executeNext(),
     );
     await Promise.all(workers);
+
+    if (failedLogCount > 0) {
+      warnings.push(
+        `Failed to fetch logs for ${failedLogCount} failed CI ${failedLogCount === 1 ? "job" : "jobs"} across the current runs. Use the per-job log command to inspect them directly.`,
+      );
+    }
 
     const enrichedRuns = runs.map((run) => {
       if (run.id === null) {
@@ -339,19 +394,25 @@ export class GitStatusService {
 
   async getStatus(mode: "REMOTE" | "LOCAL", tokens: GitHostTokens | string = {}, trackingRequest?: GitTrackingRequest, cacheTtlMs?: number): Promise<GitTrackingStatus> {
     const normalizedTokens = this.normalizeTokens(tokens);
+    const tokenFingerprint = (value: string | null | undefined): string | undefined => value?.trim()
+      ? createHash("sha256").update(value.trim()).digest("base64url")
+      : undefined;
     const cacheKey = JSON.stringify({
       repoPath: this.repoPath,
       mode,
-      githubToken: normalizedTokens.githubToken?.trim() || undefined,
-      gitlabToken: normalizedTokens.gitlabToken?.trim() || undefined,
+      githubTokenHash: tokenFingerprint(normalizedTokens.githubToken),
+      gitlabTokenHash: tokenFingerprint(normalizedTokens.gitlabToken),
       trackingRequest,
     });
 
     if (cacheTtlMs && cacheTtlMs > 0) {
       const cached = GitStatusService.statusCache.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < cacheTtlMs) {
+        GitStatusService.statusCache.delete(cacheKey);
+        GitStatusService.statusCache.set(cacheKey, cached);
         return cached.promise;
       }
+      if (cached) GitStatusService.statusCache.delete(cacheKey);
     }
 
     const fetchPromise = (async () => {
@@ -486,6 +547,11 @@ export class GitStatusService {
     })();
 
     if (cacheTtlMs && cacheTtlMs > 0) {
+      GitStatusService.pruneCache(
+        GitStatusService.statusCache,
+        GitStatusService.STATUS_CACHE_MAX_RETENTION_MS,
+        GitStatusService.STATUS_CACHE_LIMIT,
+      );
       GitStatusService.statusCache.set(cacheKey, { timestamp: Date.now(), promise: fetchPromise });
     }
 

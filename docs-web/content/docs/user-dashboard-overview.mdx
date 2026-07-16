@@ -16,8 +16,8 @@ A choice of theme (Light / Dark / System) is in the top bar; navigation mode ove
 
 Primary navigation also follows the persisted experience mode in **Settings → General**:
 
-- **Easy** — Chat, Browser Preview, Stats, Live, Settings/Config, and the internal Docs page.
-- **Standard** — Chat, Overview, Sprints, Tasks, Agents, Stats, Browser Preview, Docs, and Settings/Config.
+- **Easy** — Chat, Sprints, Browser Preview, Stats, Live, Settings/Config, and the internal Docs page.
+- **Standard** — Chat, Overview, Sprints, Tasks, Agents, Nodes, Stats, Scheduler, Browser Preview, Live, Docs, and Settings/Config.
 - **Expert** — the full navigation, and the default for new or legacy settings.
 
 Hidden pages remain registered routes, Docs opens the external project docs, and Browser Preview still follows the project sprint-preview visibility settings.

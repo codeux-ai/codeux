@@ -2,7 +2,7 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import * as pathPosix from "path/posix";
-import { createHash } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { sanitizeToken } from "../../../services/cli-workflow-utils.js";
 import { CliWorkflowSettings } from "../../../contracts/app-types.js";
 import { CommandResult, runCommandStrict } from "../../../services/cli-process-runner.js";
@@ -10,6 +10,7 @@ import { extractPathHints, normalizePathHint } from "../../../services/cli-workf
 import { workspaceVolumeHelperPool } from "./workspace-volume-helper.js";
 import { CONTAINER_RUNTIME_HOME } from "./provider-runtime-artifacts.js";
 import { getHomeCodeUxPath } from "../../../shared/config/code-ux-paths.js";
+import { getRuntimeOwnerDockerArgs } from "../../../shared/config/runtime-owner.js";
 import {
   buildGitHttpAuthEnvForRepoWithFallbacks,
   buildNonInteractiveGitEnv,
@@ -75,6 +76,13 @@ export interface SnapshotWorkspaceOptions {
 
 export interface PrepareWorktreeOptions {
   remoteOnly?: boolean;
+  /**
+   * Refresh the remote refs needed to seed the workspace. Local-mode invocations disable this
+   * because their task and feature branches are authoritative in the project repository.
+   */
+  refreshRemote?: boolean;
+  /** Whether this workspace intentionally continues an already allocated worker branch. */
+  allowExistingWorkerBranch?: boolean;
 }
 
 export interface IWorkspaceManager {
@@ -82,12 +90,19 @@ export interface IWorkspaceManager {
   buildWorkspaceRef(repoPath: string, workspaceKey: string, executionMode: CliWorkflowSettings["executionMode"]): string;
   createSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout, options?: SnapshotWorkspaceOptions): Promise<string>;
   createHostSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string>;
-  createOrReuseSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string>;
+  createOrReuseSnapshotWorkspace(
+    repoPath: string,
+    sessionId: string,
+    checkout?: SnapshotCheckout,
+    beforeCreate?: () => Promise<void>,
+  ): Promise<string>;
   resolveResumeWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): Promise<string | undefined>;
   resolveCurrentBranch(worktreePath: string): Promise<string | null>;
-  prepareWorktree(repoPath: string, worktreePath: string, workerBranch: string, featureBranch: string, resumeSessionId?: string, gitAuth?: GitHttpAuthOptions, options?: PrepareWorktreeOptions): Promise<{ worktreePath: string; resumed: boolean }>;
+  prepareWorktree(repoPath: string, worktreePath: string, workerBranch: string, featureBranch: string, resumeSessionId?: string, gitAuth?: GitHttpAuthOptions, options?: PrepareWorktreeOptions): Promise<{ worktreePath: string; resumed: boolean; createdFreshWorkerBranch?: boolean }>;
   fastForwardResumedWorkspace(worktreePath: string, workerBranch: string, repoPath: string, gitAuth?: GitHttpAuthOptions): Promise<boolean>;
   removeWorktree(repoPath: string, worktreePath: string): Promise<void>;
+  reserveWorkspaceHelper(worktreePath: string): () => void;
+  releaseWorkspaceHelper(worktreePath: string): Promise<void>;
   buildWorkspaceGuidance(taskPrompt: string, worktreePath: string): Promise<string>;
   runWorkspaceCommand(worktreePath: string, command: string, args: string[], options?: WorkspaceCommandOptions): Promise<CommandResult>;
   readWorkspaceFile(worktreePath: string, relativePath: string): Promise<string | null>;
@@ -131,6 +146,34 @@ interface ExpiringValue<T> {
   promise: Promise<T>;
 }
 
+/**
+ * Process-scoped knowledge about provider runtime volumes.
+ *
+ * Workspace preparation and provider execution intentionally use separate service objects, but
+ * they operate on the same Docker volumes. Sharing this registry prevents a second manager from
+ * recreating and re-chowning a runtime volume that the preparation manager just initialized.
+ */
+export class RuntimeVolumeRegistry {
+  readonly knownPresent = new Set<string>();
+  readonly owners = new Map<string, string>();
+  readonly ensureOperations = new Map<string, Promise<void>>();
+  readonly repairOperations = new Map<string, Promise<void>>();
+
+  forget(runtimeVolumeName: string): void {
+    this.knownPresent.delete(runtimeVolumeName);
+    this.owners.delete(runtimeVolumeName);
+  }
+
+  clear(): void {
+    this.knownPresent.clear();
+    this.owners.clear();
+    this.ensureOperations.clear();
+    this.repairOperations.clear();
+  }
+}
+
+const sharedRuntimeVolumeRegistry = new RuntimeVolumeRegistry();
+
 const parseWorkspaceHandle = (value: string): { volumeName: string } => {
   if (!isWorkspaceHandle(value)) {
     throw new Error(`Unsupported workspace reference: ${value}`);
@@ -169,6 +212,10 @@ const DOCKER_WORKSPACE_ENV_KEYS = new Set([
   "GIT_AUTHOR_NAME",
   "GIT_COMMITTER_EMAIL",
   "GIT_COMMITTER_NAME",
+  "GIT_ASKPASS",
+  "GIT_CONFIG_COUNT",
+  "GIT_INDEX_FILE",
+  "GIT_TERMINAL_PROMPT",
   "GCM_INTERACTIVE",
   "SSH_ASKPASS",
 ]);
@@ -181,13 +228,14 @@ const DEFAULT_WORKSPACE_GIT_IDENTITY: Record<string, string> = {
 };
 
 const shouldForwardWorkspaceEnv = (key: string): boolean => (
-  key.startsWith("GIT_")
-  || key.startsWith("GIT_CONFIG_")
-  || DOCKER_WORKSPACE_ENV_KEYS.has(key)
+  DOCKER_WORKSPACE_ENV_KEYS.has(key)
+  || /^GIT_CONFIG_(?:KEY|VALUE)_\d+$/.test(key)
 );
 
-const buildWorkspaceDockerEnvArgs = (env: NodeJS.ProcessEnv): string[] => {
-  const args: string[] = [];
+const buildWorkspaceEnvironment = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv => {
+  const result: NodeJS.ProcessEnv = {
+    HOME: CONTAINER_WORKSPACE_HELPER_HOME,
+  };
   const dockerEnv = {
     ...DEFAULT_WORKSPACE_GIT_IDENTITY,
     ...env,
@@ -196,23 +244,55 @@ const buildWorkspaceDockerEnvArgs = (env: NodeJS.ProcessEnv): string[] => {
     if (typeof value !== "string" || !shouldForwardWorkspaceEnv(key)) {
       continue;
     }
-    args.push("-e", `${key}=${value}`);
+    result[key] = value;
   }
-  return args;
+  return result;
+};
+
+const NETWORK_GIT_COMMANDS = new Set(["clone", "fetch", "ls-remote", "pull", "push", "submodule"]);
+
+const resolveGitSubcommand = (args: readonly string[]): string | null => {
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (!arg) continue;
+    if (arg === "-C" || arg === "-c" || arg === "--config-env" || arg === "--git-dir" || arg === "--work-tree") {
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("-")) continue;
+    return arg;
+  }
+  return null;
+};
+
+const requiresNetworkedWorkspaceContainer = (command: string, args: readonly string[]): boolean => (
+  command === "git" && NETWORK_GIT_COMMANDS.has(resolveGitSubcommand(args) || "")
+);
+
+const assertWorkspaceHelperResult = (
+  result: CommandResult,
+  command: string,
+  args: readonly string[],
+): CommandResult => {
+  if (result.ok) return result;
+  const detail = result.stderr || result.stdout || `Unknown error (exit code ${result.code ?? "unknown"}, no output captured)`;
+  throw new Error(`${command} ${args.join(" ")} failed: ${detail}`);
 };
 
 export class WorkspaceManager implements IWorkspaceManager {
   private readonly repoLocks = new Map<string, Promise<void>>();
   private readonly verifiedRepoRoots = new Map<string, Promise<void>>();
   private readonly workspaceLocks = new Map<string, Promise<void>>();
+  private readonly workspaceSessionIds = new Map<string, string>();
   private readonly remoteFetches = new Map<string, Promise<void>>();
   private readonly remoteFetchFreshUntil = new Map<string, number>();
-  private readonly runtimeVolumesKnownPresent = new Set<string>();
-  private readonly runtimeVolumeOwners = new Map<string, string>();
-  private readonly runtimeVolumeRepairs = new Map<string, Promise<void>>();
   private readonly gitBundleLeases = new Map<string, GitBundleLease>();
   private readonly publicHelperImageChecks = new Map<string, Promise<void>>();
   private readonly originUrlCache = new Map<string, ExpiringValue<string | null>>();
+
+  constructor(
+    private readonly runtimeVolumeRegistry: RuntimeVolumeRegistry = sharedRuntimeVolumeRegistry,
+  ) {}
 
   buildWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): string {
     return this.buildWorkspaceRef(repoPath, sessionId, executionMode);
@@ -225,16 +305,23 @@ export class WorkspaceManager implements IWorkspaceManager {
     const normalizedRepoPath = path.resolve(repoPath);
     const repoName = sanitizeToken(path.basename(normalizedRepoPath)) || "repo";
     const repoHash = createHash("sha256").update(normalizedRepoPath).digest("hex").slice(0, 12);
-    const volumeName = `code-ux-${repoName}-${repoHash}-${sanitizeToken(workspaceKey)}`;
-    return `${WORKSPACE_HANDLE_PREFIX}${volumeName}`;
+    const sanitizedWorkspaceKey = sanitizeToken(workspaceKey);
+    const workspaceToken = workspaceKey.length > 48
+      ? `${sanitizedWorkspaceKey.slice(0, 39).replace(/[._-]+$/g, "")}-${createHash("sha256").update(workspaceKey).digest("hex").slice(0, 8)}`
+      : sanitizedWorkspaceKey;
+    const volumeName = `code-ux-${repoName}-${repoHash}-${workspaceToken}`;
+    const workspaceRef = `${WORKSPACE_HANDLE_PREFIX}${volumeName}`;
+    this.workspaceSessionIds.set(workspaceRef, workspaceKey);
+    return workspaceRef;
   }
 
   async createSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout, _options?: SnapshotWorkspaceOptions): Promise<string> {
     await this.assertExactGitWorktreeRoot(repoPath);
     const workspaceRef = this.buildWorktreePath(repoPath, `${sessionId}-snapshot`, "DOCKER");
+    this.workspaceSessionIds.set(workspaceRef, sessionId);
     const refLookup = this.createRefLookup(repoPath);
     await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
-    await this.createVolume(workspaceRef);
+    await this.createVolume(workspaceRef, sessionId);
     if (await this.trySeedSingleBranchWorkspace(repoPath, workspaceRef, checkout, refLookup).catch(() => false)) {
       return workspaceRef;
     }
@@ -292,9 +379,15 @@ export class WorkspaceManager implements IWorkspaceManager {
     return workspacePath;
   }
 
-  async createOrReuseSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string> {
+  async createOrReuseSnapshotWorkspace(
+    repoPath: string,
+    sessionId: string,
+    checkout?: SnapshotCheckout,
+    beforeCreate?: () => Promise<void>,
+  ): Promise<string> {
     await this.assertExactGitWorktreeRoot(repoPath);
     const workspaceRef = this.buildWorktreePath(repoPath, `${sessionId}-snapshot`, "DOCKER");
+    this.workspaceSessionIds.set(workspaceRef, sessionId);
     return await this.withWorkspaceLock(workspaceRef, async () => {
       if (await this.workspaceExists(workspaceRef)) {
         try {
@@ -308,8 +401,12 @@ export class WorkspaceManager implements IWorkspaceManager {
           await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
         }
       }
+      // Remote refs are needed only when a snapshot must actually be materialized. Keep the
+      // callback inside the workspace lock so a valid preserved volume returns without network
+      // traffic and concurrent creators cannot duplicate the refresh.
+      await beforeCreate?.();
       const refLookup = this.createRefLookup(repoPath);
-      await this.createVolume(workspaceRef);
+      await this.createVolume(workspaceRef, sessionId);
       if (await this.trySeedSingleBranchWorkspace(repoPath, workspaceRef, checkout, refLookup).catch(() => false)) {
         return workspaceRef;
       }
@@ -441,19 +538,30 @@ export class WorkspaceManager implements IWorkspaceManager {
     resumeSessionId?: string,
     gitAuth?: GitHttpAuthOptions,
     options: PrepareWorktreeOptions = {},
-  ): Promise<{ worktreePath: string; resumed: boolean }> {
+  ): Promise<{ worktreePath: string; resumed: boolean; createdFreshWorkerBranch?: boolean }> {
     let resumed = false;
+    let createdFreshWorkerBranch = false;
     const workspaceRef = worktreePath;
+    const workspaceSessionId = this.resolveWorkspaceSessionId(workspaceRef);
+    const isFreshWorkerBranch = !resumeSessionId && options.allowExistingWorkerBranch !== true;
 
     await this.assertExactGitWorktreeRoot(repoPath);
-    // Only the worker and feature branch tips matter for resolving the start ref, so fetch just
-    // those instead of every ref. A bare `git fetch origin` pulls all refs, which on repos that
-    // have run many sprints means thousands of branches on every task prep. In-flight fetches are
-    // deduplicated per repo+branch so a wide DAG does not stampede the same origin ref, but the
-    // expensive workspace seeding path is not serialized behind a repo-wide lock.
-    const fetchEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, gitAuth ?? {});
-    const fetchRefs = Array.from(new Set([workerBranch, featureBranch].filter((branch) => Boolean(branch))));
-    await Promise.all(fetchRefs.map((branch) => this.fetchRemoteBranchBestEffort(repoPath, branch, fetchEnv ?? process.env)));
+    // Fresh remote tasks start from the feature branch; their generated worker branch normally
+    // does not exist on origin yet. Continuations also refresh the worker branch because it may
+    // contain the provider's previously pushed commits. Local-mode invocations skip remote
+    // refresh entirely, avoiding serialized failing fetches in repositories without an origin.
+    if (options.refreshRemote !== false) {
+      const fetchEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, gitAuth ?? {});
+      const fetchRefs = Array.from(new Set(
+        (resumeSessionId || options.remoteOnly !== true
+          ? [workerBranch, featureBranch]
+          : [featureBranch])
+          .filter((branch) => Boolean(branch)),
+      ));
+      await Promise.all(fetchRefs.map((branch) => (
+        this.fetchRemoteBranchBestEffort(repoPath, branch, fetchEnv ?? process.env)
+      )));
+    }
 
     const refLookup = this.createRefLookup(repoPath);
 
@@ -470,10 +578,17 @@ export class WorkspaceManager implements IWorkspaceManager {
         return;
       }
 
-      const startRef = await this.resolveWorktreeStartRef(repoPath, workerBranch, featureBranch, refLookup, options.remoteOnly === true);
+      const startRef = await this.resolveWorktreeStartRef(
+        repoPath,
+        workerBranch,
+        featureBranch,
+        refLookup,
+        options.remoteOnly === true,
+        !isFreshWorkerBranch,
+      );
       if (isWorkspaceHandle(workspaceRef)) {
         await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
-        await this.createVolume(workspaceRef);
+        await this.createVolume(workspaceRef, workspaceSessionId);
         // Coding tasks only need the worker and feature branches to resolve the start ref; seed just
         // those instead of every accumulated branch (falls back to the full seed if a ref is missing).
         await this.seedAndCheckoutBranchVolume(
@@ -489,7 +604,7 @@ export class WorkspaceManager implements IWorkspaceManager {
           await this.assertWorkspaceHasHead(workspaceRef);
         } catch {
           await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
-          await this.createVolume(workspaceRef);
+          await this.createVolume(workspaceRef, workspaceSessionId);
           await this.seedWorkspaceFromBundle(
             repoPath,
             workspaceRef,
@@ -503,18 +618,22 @@ export class WorkspaceManager implements IWorkspaceManager {
         await this.withRepoLock(repoPath, async () => {
           await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
           await fs.mkdir(path.dirname(workspaceRef), { recursive: true });
+          const worktreeArgs = isFreshWorkerBranch
+            ? ["worktree", "add", "--force", "-b", workerBranch, workspaceRef, startRef]
+            : ["worktree", "add", "--force", "-B", workerBranch, workspaceRef, startRef];
           try {
-            await runCommandStrict("git", ["worktree", "add", "--force", "-B", workerBranch, workspaceRef, startRef], repoPath);
+            await runCommandStrict("git", worktreeArgs, repoPath);
           } catch {
             await runCommandStrict("git", ["worktree", "prune"], repoPath).catch(() => undefined);
             await fs.rm(workspaceRef, { recursive: true, force: true }).catch(() => undefined);
-            await runCommandStrict("git", ["worktree", "add", "--force", "-B", workerBranch, workspaceRef, startRef], repoPath);
+            await runCommandStrict("git", worktreeArgs, repoPath);
           }
+          createdFreshWorkerBranch = isFreshWorkerBranch;
         });
       }
     });
 
-    return { worktreePath: workspaceRef, resumed };
+    return { worktreePath: workspaceRef, resumed, createdFreshWorkerBranch };
   }
 
   private async assertWorkspaceHasHead(worktreePath: string): Promise<void> {
@@ -609,8 +728,8 @@ export class WorkspaceManager implements IWorkspaceManager {
       const { volumeName } = parseWorkspaceHandle(worktreePath);
       if (!await this.isCodeUxManagedVolume(volumeName)) {
         const runtimeVolumeName = buildRuntimeVolumeName(volumeName);
-        this.runtimeVolumesKnownPresent.delete(runtimeVolumeName);
-        this.runtimeVolumeOwners.delete(runtimeVolumeName);
+        this.runtimeVolumeRegistry.forget(runtimeVolumeName);
+        this.workspaceSessionIds.delete(worktreePath);
         return;
       }
       // Tear down the persistent read helper first; it holds the volume mounted and would
@@ -621,14 +740,28 @@ export class WorkspaceManager implements IWorkspaceManager {
         runCommandStrict("docker", ["volume", "rm", "-f", volumeName], process.cwd()).catch(() => undefined),
         runCommandStrict("docker", ["volume", "rm", "-f", runtimeVolumeName], process.cwd()).catch(() => undefined),
       ]);
-      this.runtimeVolumesKnownPresent.delete(runtimeVolumeName);
-      this.runtimeVolumeOwners.delete(runtimeVolumeName);
+      this.runtimeVolumeRegistry.forget(runtimeVolumeName);
+      this.workspaceSessionIds.delete(worktreePath);
       return;
     }
 
     await runCommandStrict("git", ["worktree", "remove", "--force", worktreePath], repoPath).catch(() => undefined);
     await fs.rm(worktreePath, { recursive: true, force: true }).catch(() => undefined);
     await runCommandStrict("git", ["worktree", "prune"], repoPath).catch(() => undefined);
+  }
+
+  async releaseWorkspaceHelper(worktreePath: string): Promise<void> {
+    if (!isWorkspaceHandle(worktreePath)) return;
+    const { volumeName } = parseWorkspaceHandle(worktreePath);
+    await workspaceVolumeHelperPool.releaseVolume(volumeName);
+  }
+
+  reserveWorkspaceHelper(worktreePath: string): () => void {
+    if (!isWorkspaceHandle(worktreePath)) return () => undefined;
+    const { volumeName } = parseWorkspaceHandle(worktreePath);
+    // Normal workspace commands mount both the task workspace and its provider-runtime volume.
+    // Reservations must use that exact composite key or the live helper remains LRU-evictable.
+    return workspaceVolumeHelperPool.reserve(volumeName, buildRuntimeVolumeName(volumeName));
   }
 
   async buildWorkspaceGuidance(taskPrompt: string, worktreePath: string): Promise<string> {
@@ -700,19 +833,61 @@ export class WorkspaceManager implements IWorkspaceManager {
     const { volumeName } = parseWorkspaceHandle(worktreePath);
     const ownerSpec = getWorkspaceOwnerSpec();
     await this.ensurePublicHelperImage(WORKSPACE_HELPER_IMAGE, process.cwd(), options.env ?? process.env);
+    if (requiresNetworkedWorkspaceContainer(command, args)) {
+      return await this.runNetworkedWorkspaceCommand(volumeName, command, args, options, ownerSpec);
+    }
+    const result = await workspaceVolumeHelperPool.exec(
+      volumeName,
+      [command, ...args],
+      buildRuntimeVolumeName(volumeName),
+      {
+        environment: buildWorkspaceEnvironment(options.env ?? process.env),
+        signal: options.signal,
+        stdinFile: options.stdinFile,
+        trimOutput: options.trimOutput,
+        user: ownerSpec,
+        workdir: CONTAINER_WORKSPACE_ROOT,
+      },
+    );
+    return assertWorkspaceHelperResult(result, command, args);
+  }
+
+  private async runNetworkedWorkspaceCommand(
+    volumeName: string,
+    command: string,
+    args: string[],
+    options: WorkspaceCommandOptions,
+    ownerSpec: string,
+  ): Promise<CommandResult> {
+    const environment = buildWorkspaceEnvironment(options.env ?? process.env);
+    const containerName = `code-ux-net-git-${createHash("sha256")
+      .update(`${volumeName}:${randomUUID()}`)
+      .digest("hex")
+      .slice(0, 24)}`;
     const dockerArgs = [
       "run",
       "--rm",
       "-i",
+      "--name",
+      containerName,
+      "--label",
+      "code-ux.managed=true",
+      "--label",
+      "code-ux.helper=network-git",
+      ...getRuntimeOwnerDockerArgs(),
+      "--security-opt",
+      "no-new-privileges",
+      "--pull",
+      "never",
       "--workdir",
       CONTAINER_WORKSPACE_ROOT,
       "--mount",
       `type=volume,source=${volumeName},target=${CONTAINER_WORKSPACE_ROOT}`,
+      "--mount",
+      "type=tmpfs,target=/git",
       "--entrypoint",
       command,
-      "-e",
-      `HOME=${CONTAINER_WORKSPACE_HELPER_HOME}`,
-      ...buildWorkspaceDockerEnvArgs(options.env ?? process.env),
+      ...Object.entries(environment).flatMap(([key, value]) => typeof value === "string" ? ["-e", `${key}=${value}`] : []),
       WORKSPACE_HELPER_IMAGE,
       ...args,
     ];
@@ -781,9 +956,11 @@ export class WorkspaceManager implements IWorkspaceManager {
     return isWorkspaceHandle(worktreePath) ? CONTAINER_WORKSPACE_ROOT : path.resolve(worktreePath);
   }
 
-  private async createVolume(worktreePath: string): Promise<void> {
+  private async createVolume(worktreePath: string, workspaceSessionId?: string): Promise<void> {
+    const resolvedWorkspaceSessionId = workspaceSessionId?.trim() || this.resolveWorkspaceSessionId(worktreePath);
+    this.workspaceSessionIds.set(worktreePath, resolvedWorkspaceSessionId);
     const { volumeName } = parseWorkspaceHandle(worktreePath);
-    await this.createManagedWorkspaceVolume(volumeName);
+    await this.createManagedWorkspaceVolume(volumeName, resolvedWorkspaceSessionId);
     await this.ensureRuntimeVolume(worktreePath, { initializeOwnership: false });
   }
 
@@ -797,8 +974,52 @@ export class WorkspaceManager implements IWorkspaceManager {
   ): Promise<void> {
     const { volumeName } = parseWorkspaceHandle(worktreePath);
     const runtimeVolumeName = buildRuntimeVolumeName(volumeName);
-    const sessionKey = volumeName.match(/^code-ux-.+-([a-f0-9]{12})-(.+)$/)?.[2] || volumeName;
-    if (!this.runtimeVolumesKnownPresent.has(runtimeVolumeName)) {
+    const ownerSpec = options.ownerSpec || getWorkspaceOwnerSpec();
+    for (;;) {
+      const existing = this.runtimeVolumeRegistry.ensureOperations.get(runtimeVolumeName);
+      if (existing) {
+        await existing;
+        continue;
+      }
+      if (
+        this.runtimeVolumeRegistry.knownPresent.has(runtimeVolumeName)
+        && (
+          options.initializeOwnership === false
+          || !ownerSpec
+          || (
+            !options.forceOwnershipInitialization
+            && this.runtimeVolumeRegistry.owners.get(runtimeVolumeName) === ownerSpec
+          )
+        )
+      ) {
+        return;
+      }
+      const ensure = this.ensureRuntimeVolumeInternal(
+        worktreePath,
+        runtimeVolumeName,
+        ownerSpec,
+        options,
+      ).finally(() => {
+        if (this.runtimeVolumeRegistry.ensureOperations.get(runtimeVolumeName) === ensure) {
+          this.runtimeVolumeRegistry.ensureOperations.delete(runtimeVolumeName);
+        }
+      });
+      this.runtimeVolumeRegistry.ensureOperations.set(runtimeVolumeName, ensure);
+      return await ensure;
+    }
+  }
+
+  private async ensureRuntimeVolumeInternal(
+    worktreePath: string,
+    runtimeVolumeName: string,
+    ownerSpec: string,
+    options: {
+      initializeOwnership?: boolean;
+      forceOwnershipInitialization?: boolean;
+    },
+  ): Promise<void> {
+    if (!this.runtimeVolumeRegistry.knownPresent.has(runtimeVolumeName)) {
+      const sessionKey = this.resolveWorkspaceSessionId(worktreePath);
       await runCommandStrict(
         "docker",
         [
@@ -808,22 +1029,25 @@ export class WorkspaceManager implements IWorkspaceManager {
           RUNTIME_VOLUME_LABEL,
           "--label",
           `${WORKSPACE_SESSION_LABEL_PREFIX}${sessionKey}`,
+          ...getRuntimeOwnerDockerArgs(),
           runtimeVolumeName,
         ],
         process.cwd(),
       );
-      this.runtimeVolumesKnownPresent.add(runtimeVolumeName);
+      this.runtimeVolumeRegistry.knownPresent.add(runtimeVolumeName);
     }
-    const ownerSpec = options.ownerSpec || getWorkspaceOwnerSpec();
     if (
       options.initializeOwnership === false
       || !ownerSpec
-      || (!options.forceOwnershipInitialization && this.runtimeVolumeOwners.get(runtimeVolumeName) === ownerSpec)
+      || (
+        !options.forceOwnershipInitialization
+        && this.runtimeVolumeRegistry.owners.get(runtimeVolumeName) === ownerSpec
+      )
     ) {
       return;
     }
     await this.initializeRuntimeVolumeOwnership(runtimeVolumeName, ownerSpec);
-    this.runtimeVolumeOwners.set(runtimeVolumeName, ownerSpec);
+    this.runtimeVolumeRegistry.owners.set(runtimeVolumeName, ownerSpec);
   }
 
   async repairRuntimeVolume(
@@ -832,15 +1056,15 @@ export class WorkspaceManager implements IWorkspaceManager {
   ): Promise<void> {
     const { volumeName } = parseWorkspaceHandle(worktreePath);
     const runtimeVolumeName = buildRuntimeVolumeName(volumeName);
-    const existing = this.runtimeVolumeRepairs.get(runtimeVolumeName);
+    const existing = this.runtimeVolumeRegistry.repairOperations.get(runtimeVolumeName);
     if (existing) return await existing;
     const repair = this.repairRuntimeVolumeInternal(worktreePath, volumeName, runtimeVolumeName, options)
       .finally(() => {
-        if (this.runtimeVolumeRepairs.get(runtimeVolumeName) === repair) {
-          this.runtimeVolumeRepairs.delete(runtimeVolumeName);
+        if (this.runtimeVolumeRegistry.repairOperations.get(runtimeVolumeName) === repair) {
+          this.runtimeVolumeRegistry.repairOperations.delete(runtimeVolumeName);
         }
       });
-    this.runtimeVolumeRepairs.set(runtimeVolumeName, repair);
+    this.runtimeVolumeRegistry.repairOperations.set(runtimeVolumeName, repair);
     return await repair;
   }
 
@@ -850,15 +1074,14 @@ export class WorkspaceManager implements IWorkspaceManager {
     runtimeVolumeName: string,
     options: { initializeOwnership: boolean; ownerSpec?: string },
   ): Promise<void> {
-    this.runtimeVolumesKnownPresent.delete(runtimeVolumeName);
-    this.runtimeVolumeOwners.delete(runtimeVolumeName);
+    this.runtimeVolumeRegistry.forget(runtimeVolumeName);
     const managed = await runCommandStrict(
       "docker",
       ["volume", "inspect", "--format", "{{ index .Labels \"code-ux.workspace-runtime\" }}", runtimeVolumeName],
       process.cwd(),
     ).then((result) => result.stdout.trim() === "true").catch(() => false);
     if (managed) {
-      this.runtimeVolumesKnownPresent.add(runtimeVolumeName);
+      this.runtimeVolumeRegistry.knownPresent.add(runtimeVolumeName);
     } else {
       await workspaceVolumeHelperPool.releaseVolume(workspaceVolumeName).catch(() => undefined);
       await runCommandStrict("docker", ["volume", "rm", "-f", runtimeVolumeName], process.cwd()).catch(() => undefined);
@@ -870,8 +1093,7 @@ export class WorkspaceManager implements IWorkspaceManager {
     });
   }
 
-  private async createManagedWorkspaceVolume(volumeName: string): Promise<void> {
-    const sessionKey = volumeName.match(/^code-ux-.+-([a-f0-9]{12})-(.+)$/)?.[2] || volumeName;
+  private async createManagedWorkspaceVolume(volumeName: string, sessionKey: string): Promise<void> {
     await runCommandStrict(
       "docker",
       [
@@ -881,13 +1103,29 @@ export class WorkspaceManager implements IWorkspaceManager {
         WORKSPACE_VOLUME_LABEL,
         "--label",
         `${WORKSPACE_SESSION_LABEL_PREFIX}${sessionKey}`,
+        ...getRuntimeOwnerDockerArgs(),
         volumeName,
       ],
       process.cwd(),
     );
   }
 
-  private async initializeRuntimeVolumeOwnership(runtimeVolumeName: string, ownerSpec: string): Promise<void> {
+  private resolveWorkspaceSessionId(worktreePath: string): string {
+    const remembered = this.workspaceSessionIds.get(worktreePath)?.trim();
+    if (remembered) {
+      return remembered;
+    }
+    if (!isWorkspaceHandle(worktreePath)) {
+      return path.basename(worktreePath);
+    }
+    const { volumeName } = parseWorkspaceHandle(worktreePath);
+    return volumeName.match(/^code-ux-.+-([a-f0-9]{12})-(.+)$/)?.[2] || volumeName;
+  }
+
+  private async initializeRuntimeVolumeOwnership(
+    runtimeVolumeName: string,
+    ownerSpec: string,
+  ): Promise<void> {
     await this.ensurePublicHelperImage(WORKSPACE_HELPER_IMAGE, process.cwd(), process.env);
     await runCommandStrict(
       "docker",
@@ -1104,9 +1342,8 @@ export class WorkspaceManager implements IWorkspaceManager {
         "set -e",
         "tmp=$(mktemp)",
         "cat > \"$tmp\"",
-        "rm -rf /workspace/* /workspace/.[!.]* /workspace/..?* 2>/dev/null || true",
-        // See the single-branch seed path above: the helper is root while the
-        // persistent volume root belongs to the provider UID/GID.
+        "(rm -rf /workspace/* /workspace/.[!.]* /workspace/..?* 2>/dev/null || true)",
+        // The helper is root while the persistent volume root belongs to the provider UID/GID.
         "git config --global --add safe.directory /workspace",
         "git init /workspace >/dev/null",
         "git -C /workspace symbolic-ref HEAD refs/heads/code-ux-bootstrap-$$",
@@ -1115,7 +1352,7 @@ export class WorkspaceManager implements IWorkspaceManager {
         "rm -f \"$tmp\"",
         originUrl
           ? `git -C /workspace remote set-url origin ${shellQuote(originUrl)}`
-          : "git -C /workspace remote remove origin >/dev/null 2>&1 || true",
+          : "(git -C /workspace remote remove origin >/dev/null 2>&1 || true)",
         ...this.buildLocalBranchAliasCommands(localBranchAliases),
         "git -C /workspace config user.name \"${CODE_UX_GIT_USER_NAME:-Code UX}\"",
         "git -C /workspace config user.email \"${CODE_UX_GIT_USER_EMAIL:-agents@codeux.ai}\"",
@@ -1126,28 +1363,20 @@ export class WorkspaceManager implements IWorkspaceManager {
         ownerSpec ? this.buildRuntimeOwnershipMarkerCommand(ownerSpec) : null,
       ].filter((step): step is string => Boolean(step)).join(" && ");
 
-      await runCommandStrict(
-        "docker",
-        [
-          "run",
-          "--rm",
-          "-i",
-          "--mount",
-          `type=volume,source=${volumeName},target=${CONTAINER_WORKSPACE_ROOT}`,
-          "--mount",
-          `type=volume,source=${runtimeVolumeName},target=${CONTAINER_RUNTIME_HOME}`,
-          "--entrypoint",
-          "sh",
-          WORKSPACE_HELPER_IMAGE,
-          "-lc",
-          initScript,
-        ],
-        repoPath,
-        process.env,
-        { stdinFile: bundlePath },
+      const commandArgs = ["sh", "-lc", initScript];
+      const result = await workspaceVolumeHelperPool.exec(
+        volumeName,
+        commandArgs,
+        runtimeVolumeName,
+        {
+          environment: buildWorkspaceEnvironment(process.env),
+          stdinFile: bundlePath,
+          workdir: CONTAINER_WORKSPACE_ROOT,
+        },
       );
-      if (ownerSpec) this.runtimeVolumeOwners.set(runtimeVolumeName, ownerSpec);
-      this.runtimeVolumesKnownPresent.add(runtimeVolumeName);
+      assertWorkspaceHelperResult(result, commandArgs[0], commandArgs.slice(1));
+      if (ownerSpec) this.runtimeVolumeRegistry.owners.set(runtimeVolumeName, ownerSpec);
+      this.runtimeVolumeRegistry.knownPresent.add(runtimeVolumeName);
     });
   }
 
@@ -1220,7 +1449,18 @@ export class WorkspaceManager implements IWorkspaceManager {
   }
 
   private async createGitBundle(repoPath: string, bundleRefArgs: string[]): Promise<{ bundlePath: string; tempDir: string }> {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-bundle-"));
+    // Keep the temporary output under `.git` so the project helper's existing bind mount can write
+    // it via `docker exec`. An OS-temp destination needs an extra bind mount and forces the command
+    // runner back to a cold one-shot Git container. Linked worktrees whose `.git` is a file safely
+    // fall back to the OS temp root.
+    let tempDir: string;
+    try {
+      const bundleRoot = path.join(path.resolve(repoPath), ".git", "code-ux-bundles");
+      await fs.mkdir(bundleRoot, { recursive: true, mode: 0o700 });
+      tempDir = await fs.mkdtemp(path.join(bundleRoot, "bundle-"));
+    } catch {
+      tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-bundle-"));
+    }
     const bundlePath = path.join(tempDir, "repo.bundle");
     try {
       await runCommandStrict("git", ["bundle", "create", bundlePath, ...bundleRefArgs], repoPath);
@@ -1318,8 +1558,9 @@ export class WorkspaceManager implements IWorkspaceManager {
     featureBranch: string,
     refLookup: RefLookup = this.createRefLookup(repoPath),
     remoteOnly = false,
+    includeWorkerBranch = true,
   ): Promise<string> {
-    if (await refLookup(`refs/remotes/origin/${workerBranch}`)) {
+    if (includeWorkerBranch && await refLookup(`refs/remotes/origin/${workerBranch}`)) {
       return `origin/${workerBranch}`;
     }
     if (remoteOnly) {
@@ -1328,7 +1569,7 @@ export class WorkspaceManager implements IWorkspaceManager {
       }
       throw new Error(`Cannot prepare remote-only isolated workspace: neither origin/${workerBranch} nor origin/${featureBranch} exists.`);
     }
-    if (await refLookup(`refs/heads/${workerBranch}`)) {
+    if (includeWorkerBranch && await refLookup(`refs/heads/${workerBranch}`)) {
       return workerBranch;
     }
     if (await refLookup(`refs/remotes/origin/${featureBranch}`)) {

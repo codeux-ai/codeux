@@ -100,7 +100,11 @@ import {
   type RuntimeProcessLockRelease,
 } from "../services/runtime-process-lock.js";
 import { workspaceVolumeHelperPool } from "../infrastructure/providers/cli/workspace-volume-helper.js";
-import { disposeCommandSpawner, shutdownGitHelperPool } from "../shared/subprocess/command-runner.js";
+import {
+  disposeCommandSpawner,
+  setSelectedProjectGitHelper,
+  shutdownGitHelperPool,
+} from "../shared/subprocess/command-runner.js";
 import { LocalMcpCliConfigService } from "../services/local-mcp-cli-config-service.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { ChatProviderIngressService } from "../services/chat-provider-ingress-service.js";
@@ -239,6 +243,7 @@ export class CodeUxServer {
   private liveSnapshotInterval: ReturnType<typeof setInterval> | null = null;
   private walCheckpointInterval: ReturnType<typeof setInterval> | null = null;
   private readonly startupTaskTimers = new Set<ReturnType<typeof setTimeout>>();
+  private startupContainerCleanupPromise: Promise<void> | null = null;
   private mcpHttpHandle: McpHttpTransportHandle | null = null;
   private dashboardHandle: DashboardServerHandle | null = null;
   private mcpServiceBound = false;
@@ -360,6 +365,10 @@ export class CodeUxServer {
           scope.sprintId,
         ).settings;
       },
+      listDurableRemoteSessions: () => this.julesApi.getSessionsForCapacityCheck(),
+      resumeInterruptedPlanningInvocation: (invocationId, mode) => (
+        this.planningAgentService.recoverInterruptedInvocation(invocationId, mode)
+      ),
       logger: this.logger.child({ component: "runtime-startup-recovery-service" }),
     });
     this.dashboardRealtimeService = deps.dashboardRealtimeService;
@@ -426,6 +435,12 @@ export class CodeUxServer {
     this.startupTaskTimers.clear();
     this.virtualWorkerService.stop();
     this.schedulerService.stop();
+    const requestedDispatchStops = await this.shutdownContainerService.requestActiveDispatchStops().catch((error) => {
+      this.logger.warn("Failed to request active dispatch stops during shutdown", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return 0;
+    });
     disposeCommandSpawner();
     await shutdownGitHelperPool().catch((error) => {
       this.logger.warn("Failed to stop Docker git helper containers during shutdown", {
@@ -437,7 +452,7 @@ export class CodeUxServer {
         error: error instanceof Error ? error.message : String(error),
       });
     });
-    await this.shutdownContainerService.stopRunningContainers().catch((error) => {
+    await this.shutdownContainerService.stopRemainingContainers(requestedDispatchStops).catch((error) => {
       this.logger.warn("Failed to stop running containers during shutdown", {
         error: error instanceof Error ? error.message : String(error),
       });
@@ -466,6 +481,40 @@ export class CodeUxServer {
       }
     }
     await this.releaseProjectManagerRuntimeLock();
+
+    // Flush the final write burst and close every SQLite connection explicitly. The CLI exits via
+    // process.exit() after this method, so relying on process teardown leaves large WAL files behind
+    // after busy sprints and skips SQLite's normal last-connection checkpoint.
+    try {
+      const failures = new DatabaseMaintenanceService({
+        appDbStorage: this.appDbStorage,
+        sessionTracking: this.sessionTracking,
+        settingsRepository: this.settingsRepository,
+        logger: this.logger.child({ component: "database-maintenance-service" }),
+      }).checkpointWalDatabases();
+      if (failures.length > 0) {
+        this.logger.warn("Final WAL checkpoint completed with failures", { databases: failures });
+      }
+    } catch (error) {
+      this.logger.warn("Final WAL checkpoint failed during shutdown", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    for (const [label, closeDatabase] of [
+      ["app", () => this.appDbStorage.close()],
+      ["session tracking", () => this.sessionTracking.close()],
+      ["settings", () => this.settingsRepository.close()],
+    ] as const) {
+      try {
+        closeDatabase();
+      } catch (error) {
+        this.logger.warn("Failed to close SQLite database during shutdown", {
+          database: label,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
   }
 
   private async closeHttpServer(server: HttpServer): Promise<void> {
@@ -627,29 +676,31 @@ export class CodeUxServer {
   }
 
   private startRuntimeCleanupLoop(): void {
-    if (this.appConfig.runtimeRole !== "project_manager" || this.runtimeCleanupInterval) {
+    if (this.appConfig.runtimeRole !== "project_manager" || this.runtimeCleanupInterval || this.isClosing) {
       return;
     }
 
     const runCleanup = (): void => {
+      if (this.isClosing) {
+        return;
+      }
       void this.runtimeCleanupService.cleanup().catch((error) => {
         this.logger.error("Runtime cleanup sweep failed", { error });
       });
     };
 
-    const initialTimer = setTimeout(runCleanup, CodeUxServer.LOOP_INITIAL_DELAY_MS);
-    initialTimer.unref?.();
+    this.scheduleTrackedTimer(CodeUxServer.LOOP_INITIAL_DELAY_MS, runCleanup);
     this.runtimeCleanupInterval = setInterval(runCleanup, CodeUxServer.RUNTIME_CLEANUP_INTERVAL_MS);
     this.runtimeCleanupInterval.unref?.();
   }
 
   private startSprintPreviewLoop(): void {
-    if (this.appConfig.runtimeRole !== "project_manager" || this.sprintPreviewInterval) {
+    if (this.appConfig.runtimeRole !== "project_manager" || this.sprintPreviewInterval || this.isClosing) {
       return;
     }
 
     const reconcile = (): void => {
-      if (this.sprintPreviewReconcileInFlight) {
+      if (this.isClosing || this.sprintPreviewReconcileInFlight) {
         return;
       }
       this.sprintPreviewReconcileInFlight = true;
@@ -669,18 +720,20 @@ export class CodeUxServer {
       });
     };
 
-    const initialTimer = setTimeout(reconcile, CodeUxServer.LOOP_INITIAL_DELAY_MS);
-    initialTimer.unref?.();
+    this.scheduleTrackedTimer(CodeUxServer.LOOP_INITIAL_DELAY_MS, reconcile);
     this.sprintPreviewInterval = setInterval(reconcile, CodeUxServer.RUNTIME_CLEANUP_INTERVAL_MS);
     this.sprintPreviewInterval.unref?.();
   }
 
   private startLiveSnapshotLoop(): void {
-    if (this.appConfig.runtimeRole !== "project_manager" || this.liveSnapshotInterval) {
+    if (this.appConfig.runtimeRole !== "project_manager" || this.liveSnapshotInterval || this.isClosing) {
       return;
     }
 
     const refreshLiveSnapshot = (): void => {
+      if (this.isClosing) {
+        return;
+      }
       const projectId = this.projectManagementRepository.getSelectedProjectId();
       if (!projectId) {
         return;
@@ -691,14 +744,13 @@ export class CodeUxServer {
       this.dashboardRealtimeService.scheduleProjectGitRefresh(projectId);
     };
 
-    const initialTimer = setTimeout(refreshLiveSnapshot, 250);
-    initialTimer.unref?.();
+    this.scheduleTrackedTimer(250, refreshLiveSnapshot);
     this.liveSnapshotInterval = setInterval(refreshLiveSnapshot, CodeUxServer.LIVE_SNAPSHOT_REFRESH_INTERVAL_MS);
     this.liveSnapshotInterval.unref?.();
   }
 
   private startWalCheckpointLoop(): void {
-    if (this.appConfig.runtimeRole !== "project_manager" || this.walCheckpointInterval) {
+    if (this.appConfig.runtimeRole !== "project_manager" || this.walCheckpointInterval || this.isClosing) {
       return;
     }
 
@@ -710,6 +762,9 @@ export class CodeUxServer {
     });
 
     const checkpoint = (): void => {
+      if (this.isClosing) {
+        return;
+      }
       try {
         this.advanceDeferredDatabaseMigrations();
         if (!this.appDbStorage.hasPendingMaintenanceCriticalIndexes()) {
@@ -1072,7 +1127,10 @@ export class CodeUxServer {
   }
 
   private async listSessionsForSync(): Promise<{ sessions?: JulesSession[] }> {
-    const tracked = this.sessionTracking.listSessions(300).sessions;
+    // Session sync matches durable task/run metadata and never reads local CLI prompts.
+    // QA prompts can contain a full 400-task context, so projecting them into every
+    // one-second watch cycle creates a large transient heap proportional to session count.
+    const tracked = this.sessionTracking.listSessions(300, { includePrompt: false }).sessions;
     let julesSessions: JulesSession[] = [];
     if (this.isJulesApiConfigured()) {
       try {
@@ -1317,36 +1375,52 @@ export class CodeUxServer {
     return await this.activityCacheService.getLiveActivitiesForActiveTasks();
   }
 
-  private scheduleStartupTask(label: string, delayMs: number, task: () => Promise<void>): void {
+  private scheduleTrackedTimer(delayMs: number, task: () => void): void {
     const timer = setTimeout(() => {
       this.startupTaskTimers.delete(timer);
       if (this.isClosing) {
         return;
       }
-      void task().catch((error) => {
-        this.logger.error?.(`${label} failed`, { error });
-      });
+      task();
     }, delayMs);
     timer.unref?.();
     this.startupTaskTimers.add(timer);
+  }
+
+  private scheduleStartupTask(label: string, delayMs: number, task: () => Promise<void>): void {
+    this.scheduleTrackedTimer(delayMs, () => {
+      void task().catch((error) => {
+        this.logger.error?.(`${label} failed`, { error });
+      });
+    });
   }
 
   private scheduleBackgroundStartupTasks(): void {
     this.scheduleStartupTask(
       "Startup recovery",
       CodeUxServer.STARTUP_RECOVERY_DELAY_MS,
-      () => this.runStartupRecovery(),
+      async () => {
+        await this.ensureStartupContainerCleanup();
+        await this.runStartupRecovery();
+      },
     );
     this.scheduleStartupTask(
       "Startup container cleanup",
       CodeUxServer.STARTUP_CONTAINER_CLEANUP_DELAY_MS,
-      () => this.runStartupContainerCleanup(),
+      () => this.ensureStartupContainerCleanup(),
     );
     this.scheduleStartupTask(
       "Startup maintenance",
       CodeUxServer.STARTUP_MAINTENANCE_DELAY_MS,
       () => this.runStartupMaintenance(),
     );
+  }
+
+  private ensureStartupContainerCleanup(): Promise<void> {
+    if (!this.startupContainerCleanupPromise) {
+      this.startupContainerCleanupPromise = this.runStartupContainerCleanup();
+    }
+    return this.startupContainerCleanupPromise;
   }
 
   private async runStartupRecovery(): Promise<void> {
@@ -1385,9 +1459,40 @@ export class CodeUxServer {
       await new DockerAssetPruneService(
         this.sessionTracking,
         this.logger.child({ component: "docker-asset-prune-service" }),
+        {
+          protectedWorkspaceSessionIds: () => {
+            const sessionIds = new Set(
+              this.executionRepository
+                .listRunningProviderInvocationUsages()
+                .map((invocation) => invocation.sessionId?.trim())
+                .filter((sessionId): sessionId is string => Boolean(sessionId)),
+            );
+            for (const invocation of this.executionRepository.listActiveExecutionInvocationsByTypes(["planning"])) {
+              sessionIds.add(`planning-${invocation.projectId}-${invocation.sprintId || "project"}`);
+            }
+            return sessionIds;
+          },
+        },
       ).cleanupOnStartup();
     } catch (error) {
       this.logger.error?.("Failed to prune stale Docker assets on startup", { error });
+    }
+
+    // Startup pruning removes helper generations left by a crashed process. Only create the
+    // selected project's persistent generation after that destructive pass has completed, then
+    // allow sprint/provider recovery to begin. This prevents a slow prune from deleting a newly
+    // recovered helper.
+    const selectedProjectId = this.projectManagementRepository.getSelectedProjectId();
+    const selectedProject = selectedProjectId
+      ? this.projectManagementRepository.getProject(selectedProjectId)
+      : null;
+    try {
+      await setSelectedProjectGitHelper(selectedProject?.baseDir || null);
+    } catch (error) {
+      this.logger.warn("Failed to prewarm selected-project Git helper after startup cleanup", {
+        projectId: selectedProjectId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

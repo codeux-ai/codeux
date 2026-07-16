@@ -428,58 +428,25 @@ export class TaskRerunService {
 
     let commitHash: string | undefined;
 
-    // Search by PR number first
+    // One fixed-string scan covers every conventional PR merge message and the historical
+    // fallback. The previous per-pattern loop could start four Git processes for the same history.
     if (prNumber) {
-      const grepPatterns = [
-        `Merge pull request #${prNumber}`,
-        `(#${prNumber})`,
-        `PR #${prNumber}`,
-      ];
-
-      for (const pattern of grepPatterns) {
-        const result = await commandRunner.run(
-          "git",
-          ["log", "--first-parent", `--grep=${pattern}`, "--format=%H", "-n", "1"],
-          { cwd: repoPath }
-        );
-        const hash = result.stdout.trim();
-        if (hash) {
-          commitHash = hash;
-          break;
-        }
-      }
-
-      if (!commitHash) {
-        const fallbackResult = await commandRunner.run(
-          "git",
-          ["log", "--first-parent", `--grep=#${prNumber}`, "--format=%H", "-n", "1"],
-          { cwd: repoPath }
-        );
-        const hash = fallbackResult.stdout.trim();
-        if (hash) {
-          commitHash = hash;
-        }
-      }
+      const result = await commandRunner.run(
+        "git",
+        ["log", "--first-parent", "--fixed-strings", `--grep=#${prNumber}`, "--format=%H", "-n", "1"],
+        { cwd: repoPath },
+      );
+      commitHash = result.stdout.trim() || undefined;
     }
 
     // Fallback search by worker branch
     if (!commitHash && workerBranch) {
-      const patterns = [
-        `Merge branch '${workerBranch}'`,
-        workerBranch,
-      ];
-      for (const pattern of patterns) {
-        const result = await commandRunner.run(
-          "git",
-          ["log", "--first-parent", `--grep=${pattern}`, "--format=%H", "-n", "1"],
-          { cwd: repoPath }
-        );
-        const hash = result.stdout.trim();
-        if (hash) {
-          commitHash = hash;
-          break;
-        }
-      }
+      const result = await commandRunner.run(
+        "git",
+        ["log", "--first-parent", "--fixed-strings", `--grep=${workerBranch}`, "--format=%H", "-n", "1"],
+        { cwd: repoPath },
+      );
+      commitHash = result.stdout.trim() || undefined;
     }
 
     if (!commitHash) {

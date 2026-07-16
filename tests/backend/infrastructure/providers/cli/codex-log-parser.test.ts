@@ -462,6 +462,35 @@ describe("CodexRolloutAccumulator", () => {
     expect(result.conversation[1]).toMatchObject({ toolOutput: "passed", toolStatus: "completed" });
   });
 
+  it("stops retaining duplicate event messages after canonical turns arrive", () => {
+    const accumulator = new CodexRolloutAccumulator();
+    const fallback = JSON.stringify({
+      type: "event_msg",
+      timestamp: "2026-06-01T10:00:00.000Z",
+      payload: { type: "agent_message", message: "fallback draft" },
+    });
+    const canonical = responseItem("2026-06-01T10:00:01.000Z", {
+      id: "msg-1",
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: "canonical answer" }],
+    });
+    const first = accumulator.update(`${fallback}\n${canonical}`);
+    const revision = first.conversationRevision;
+
+    const duplicateAfterCanonical = JSON.stringify({
+      type: "event_msg",
+      timestamp: "2026-06-01T10:00:02.000Z",
+      payload: { type: "agent_message", message: "duplicate canonical answer" },
+    });
+    const second = accumulator.update(`${fallback}\n${canonical}\n${duplicateAfterCanonical}`);
+
+    expect(second.conversation).toEqual([
+      expect.objectContaining({ kind: "assistant", text: "canonical answer" }),
+    ]);
+    expect(second.conversationRevision).toBe(revision);
+  });
+
   it("resets safely after truncation or source rotation", () => {
     const accumulator = new CodexRolloutAccumulator();
     const first = [sessionMeta("old"), userMessage("2026-06-01T10:00:00.000Z", "old prompt")].join("\n");

@@ -34,6 +34,8 @@ import { fetchOriginIfAvailable } from "./git-branch-sync-service.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
 import { resolveLanguageForPath } from "./file-browser-language.js";
 import { MAX_TREE_ENTRIES, MAX_FILE_BYTES, PRUNED_DIRECTORIES, normalizeAndValidatePath, isPrunedPath } from "./file-browser-scan-policy.js";
+import { getRuntimeOwnerDockerArgs, getRuntimeOwnerLabel } from "../shared/config/runtime-owner.js";
+import { createRepositoryGitTempDirectory } from "../infrastructure/git/repository-git-temp.js";
 
 const FILE_BROWSER_LABEL = "code-ux.file-browser=true";
 const FILE_BROWSER_IMAGE = "alpine:3.20";
@@ -157,6 +159,7 @@ export class SprintFileBrowserService {
           ...DOCKER_DROP_ALL_CAPS_ARGS,
           "--label", FILE_BROWSER_LABEL,
           "--label", "code-ux.managed=true",
+          ...getRuntimeOwnerDockerArgs(),
           "--label", `code-ux.project-id=${projectId}`,
           "--label", `code-ux.sprint-id=${sprintId}`,
           "--label", `code-ux.session-id=${session.id}`,
@@ -399,6 +402,7 @@ export class SprintFileBrowserService {
       "create",
       "--label", "code-ux.file-browser-volume=true",
       "--label", "code-ux.managed=true",
+      ...getRuntimeOwnerDockerArgs(),
       "--label", `code-ux.project-id=${projectId}`,
       "--label", `code-ux.sprint-id=${sprintId}`,
       "--label", `code-ux.session-id=${sessionId}`,
@@ -810,7 +814,7 @@ export class SprintFileBrowserService {
     gitAuthOptions?: GitHttpAuthOptions,
   ): Promise<void> {
     if (syncLatestFromOrigin) {
-      await fetchOriginIfAvailable(repoPath, gitAuthOptions);
+      await fetchOriginIfAvailable(repoPath, gitAuthOptions, [featureBranch, defaultBranch]);
     }
     await this.ensureBranchExists(repoPath, featureBranch, defaultBranch, gitAuthOptions || {});
     const exportRef = await this.resolveExistingRef(repoPath, featureBranch);
@@ -823,7 +827,18 @@ export class SprintFileBrowserService {
     await fs.mkdir(path.dirname(archivePath), { recursive: true });
     await fs.rm(archivePath, { force: true }).catch(() => undefined);
 
-    await runCommandStrict("git", ["archive", "--format=tar", "-o", archivePath, exportRef], repoPath);
+    const gitTempDirectory = await createRepositoryGitTempDirectory(repoPath, "browser-archive-");
+    const gitArchivePath = gitTempDirectory ? path.join(gitTempDirectory, "workspace.tar") : archivePath;
+    try {
+      await runCommandStrict("git", ["archive", "--format=tar", "-o", gitArchivePath, exportRef], repoPath);
+      if (gitArchivePath !== archivePath) {
+        await fs.copyFile(gitArchivePath, archivePath);
+      }
+    } finally {
+      if (gitTempDirectory) {
+        await fs.rm(gitTempDirectory, { recursive: true, force: true }).catch(() => undefined);
+      }
+    }
   }
 
   private async ensureBranchExists(
@@ -903,6 +918,7 @@ export class SprintFileBrowserService {
           "ps",
           "-a",
           "--filter", `label=${FILE_BROWSER_LABEL}`,
+          "--filter", `label=${getRuntimeOwnerLabel()}`,
           "--format",
           "{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Label \"code-ux.project-id\"}}\t{{.Label \"code-ux.sprint-id\"}}\t{{.Label \"code-ux.session-id\"}}",
         ],

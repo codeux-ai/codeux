@@ -14,14 +14,16 @@ export async function openSettingsCategory(
   await page.goto('/config');
   await expect(page.getByRole('heading', { name: 'Settings & Integration' })).toBeVisible();
   await selectSettingsScope(page, scope);
-  if (await page.locator(`[data-active-category="${categoryId}"]`).isVisible()) {
+  const activeCategory = page.locator(`[data-active-category="${categoryId}"]`);
+  if (await activeCategory.isVisible()) {
     return;
   }
-  await page
+  const categoryButton = page
     .getByRole('navigation', { name: 'Settings categories' })
-    .getByRole('button', { name: categoryName, exact: true })
-    .click();
-  await expect(page.locator(`[data-active-category="${categoryId}"]`)).toBeVisible();
+    .getByRole('button', { name: categoryName });
+  await expect(categoryButton).toBeVisible();
+  await categoryButton.click();
+  await expect(activeCategory).toBeVisible();
 }
 
 export async function openSettingsSection(

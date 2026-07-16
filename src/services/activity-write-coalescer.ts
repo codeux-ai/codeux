@@ -51,7 +51,11 @@ export class ActivityWriteCoalescer {
   }
 
   push(description: string, originator?: string): void {
-    this.buffer.push({ description, originator, createTime: new Date().toISOString() });
+    this.buffer.push({
+      description: this.boundDescription(description),
+      originator,
+      createTime: new Date().toISOString(),
+    });
     if (this.buffer.length >= this.maxBuffer) {
       this.flush();
       return;
@@ -109,6 +113,18 @@ export class ActivityWriteCoalescer {
       compacted.push({ ...item });
     }
     return compacted;
+  }
+
+  private boundDescription(description: string): string {
+    if (description.length <= this.maxChunkChars) {
+      return description;
+    }
+    const marker = "\n… [activity truncated] …\n";
+    const retainedChars = Math.max(this.maxChunkChars - marker.length, 0);
+    const headChars = Math.ceil(retainedChars / 2);
+    const tailChars = retainedChars - headChars;
+    return `${description.slice(0, headChars)}${marker}${tailChars > 0 ? description.slice(-tailChars) : ""}`
+      .slice(0, this.maxChunkChars);
   }
 
   /** Flush any remaining buffered activities and cancel the pending timer. */

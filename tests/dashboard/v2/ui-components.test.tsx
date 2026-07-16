@@ -578,6 +578,65 @@ describe("UI Components Coverage", () => {
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 
+  it("passes DropdownMenu intrinsic height to custom positioning near the viewport edge", async () => {
+    const rect = (values: Partial<DOMRect>): DOMRect => ({
+      x: values.left ?? 0,
+      y: values.top ?? 0,
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+      width: 0,
+      height: 0,
+      toJSON: () => ({}),
+      ...values,
+    });
+    const originalInnerHeight = window.innerHeight;
+    const boundsSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function () {
+      if (this.getAttribute("role") === "menu") {
+        return rect({ top: 0, right: 240, bottom: 40, left: 0, width: 240, height: 40 });
+      }
+      if (this.getAttribute("aria-haspopup") === "menu") {
+        return rect({ top: 700, right: 140, bottom: 732, left: 100, width: 40, height: 32 });
+      }
+      return rect({});
+    });
+    const scrollHeightSpy = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function () {
+      return this.getAttribute("role") === "menu" ? 360 : 0;
+    });
+    const computePosition = vi.fn(({ triggerRect, menuRect }: { triggerRect: DOMRect; menuRect: DOMRect }) => ({
+      top: triggerRect.top - menuRect.height - 8,
+      left: triggerRect.left,
+    }));
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 768 });
+
+    try {
+      render(
+        <DropdownMenu
+          isOpen
+          onOpenChange={() => {}}
+          menuAriaLabel="Long actions"
+          computePosition={computePosition}
+          content={<DropdownMenuItem>Delete</DropdownMenuItem>}
+        >
+          <button type="button">Long actions</button>
+        </DropdownMenu>
+      );
+
+      const menu = await screen.findByRole("menu", { name: "Long actions" });
+      await waitFor(() => {
+        expect(menu).toHaveStyle({ top: "332px", left: "100px", maxHeight: "428px" });
+      });
+      expect(computePosition).toHaveBeenLastCalledWith(expect.objectContaining({
+        menuRect: expect.objectContaining({ height: 360 }),
+      }));
+    } finally {
+      boundsSpy.mockRestore();
+      scrollHeightSpy.mockRestore();
+      Object.defineProperty(window, "innerHeight", { configurable: true, value: originalInnerHeight });
+    }
+  });
+
   it("uses instant Dialog transitions when reduced motion is enabled", () => {
     vi.mocked(useReducedMotion).mockReturnValue(true);
 

@@ -111,6 +111,7 @@ export interface SearchResults {
 
 interface SearchOverlayProps {
     anchorRef?: preact.RefObject<HTMLDivElement | null>;
+    restoreFocusRef?: preact.RefObject<HTMLElement | null>;
     committedSearchQuery?: string;
     isLoading?: boolean;
     isOpen: boolean;
@@ -121,7 +122,7 @@ interface SearchOverlayProps {
     hasProjectData?: boolean;
 }
 
-export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef, committedSearchQuery, isOpen, onClose, searchQuery, onSearchChange, results, isLoading, hasProjectData = true }) => {
+export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef, restoreFocusRef, committedSearchQuery, isOpen, onClose, searchQuery, onSearchChange, results, isLoading, hasProjectData = true }) => {
     const { translate, translatePlural } = useOptionalDashboardI18n();
     const overlayRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -129,6 +130,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
     const containerRef = useFocusTrap(isOpen, {
         onClose,
         initialFocusRef: inputRef,
+        restoreFocusRef,
         restoreFocus: true
     }) as preact.RefObject<HTMLDivElement>;
     const [focusedIndex, setFocusedIndex] = useState(-1);

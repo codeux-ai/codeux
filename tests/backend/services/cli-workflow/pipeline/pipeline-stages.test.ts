@@ -26,6 +26,7 @@ const createMockContext = (): PipelineContext => {
     title: "test title",
     repoPath: "/repo",
     worktreePath: "/repo/worktree",
+    allowExistingWorkerBranch: false,
     workflowSettings: {
       executionMode: "HOST",
       resumeFailedTaskInSameWorkspace: false,
@@ -169,6 +170,7 @@ const createMockContext = (): PipelineContext => {
       resolveResumeWorktreePath: vi.fn(),
       prepareWorktree: vi.fn(),
       removeWorktree: vi.fn(),
+      releaseWorkspaceHelper: vi.fn(),
       buildWorkspaceGuidance: vi.fn(),
     } as any,
     invocationWorkspacePreparer: {
@@ -229,7 +231,11 @@ const createMockContext = (): PipelineContext => {
 describe("executePrepareStage", () => {
   it("prepares the worktree and resolves provider prompt", async () => {
     const ctx = createMockContext();
-    vi.mocked(ctx.invocationWorkspacePreparer.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
+    vi.mocked(ctx.invocationWorkspacePreparer.prepareWorktree).mockResolvedValue({
+      worktreePath: "/repo/worktree",
+      resumed: false,
+      createdFreshWorkerBranch: true,
+    });
     vi.mocked(ctx.workspaceManager.buildWorkspaceGuidance).mockResolvedValue("guidance");
     vi.mocked(ctx.runCommand).mockResolvedValue({ ok: true, stdout: "head-sha\n", stderr: "" });
     vi.mocked(ctx.deps.getWorkerInstruction).mockResolvedValue("worker guide content");
@@ -238,6 +244,10 @@ describe("executePrepareStage", () => {
 
     expect(result.worktreePath).toBe("/repo/worktree");
     expect(result.initialHead).toBe("head-sha");
+    expect(ctx.freshWorkerBranchOwnership).toEqual({
+      worktreePath: "/repo/worktree",
+      initialTip: "head-sha",
+    });
     expect(result.providerPrompt).toContain("worker guide content");
     expect(result.providerPrompt).toContain("test prompt");
     expect(result.providerPrompt).toContain("guidance");
@@ -253,6 +263,7 @@ describe("executePrepareStage", () => {
       workerBranch: "worker-branch",
       featureBranch: "feature-branch",
       resumeSessionId: undefined,
+      allowExistingWorkerBranch: false,
       gitAuth: { githubToken: "token", gitlabToken: undefined },
       gitPolicy: {
         githubMode: "LOCAL",
@@ -613,6 +624,35 @@ describe("executeProviderStage", () => {
     expect(vi.mocked(ctx.providerRunner.runProvider).mock.calls[1]?.[0]?.continueSessionId).toBe("native-rate-limit");
   });
 
+  it("never passes the logical task workspace id as a Codex native resume id", async () => {
+    const ctx = createMockContext();
+    ctx.provider = "codex";
+    (ctx.deps.executionRepository as any).getLatestProviderInvocationUsageBySession = vi.fn().mockReturnValue({
+      sessionId: ctx.workspaceSessionId,
+      nativeSessionId: null,
+      provider: "codex",
+      purpose: "task_coding",
+    });
+    vi.mocked(ctx.providerRunner.runProvider).mockResolvedValue({
+      ok: true,
+      code: 0,
+      stdout: "success",
+      stderr: "",
+      nativeSessionId: null,
+      usageTelemetry: { transcriptText: "success transcript" } as any,
+    });
+
+    await executeProviderStage(ctx, "prompt");
+
+    expect(ctx.providerRunner.runProvider).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "codex",
+      sessionId: "test-session",
+      workspaceSessionId: "test-session",
+      continueSessionId: null,
+      continueSessionWithoutNativeId: true,
+    }));
+  });
+
   it("stops retrying rate-limited provider runs after the configured max", async () => {
     const ctx = createMockContext();
     ctx.workflowSettings.maxRateLimitRetries = 1;
@@ -646,6 +686,10 @@ describe("executeProviderStage", () => {
 describe("executeGitFinalizeStage", () => {
   it("returns { hasChanges: false } when there are no changes or unpushed commits", async () => {
     const ctx = createMockContext();
+    ctx.freshWorkerBranchOwnership = {
+      worktreePath: ctx.worktreePath,
+      initialTip: ctx.initialHead,
+    };
 
     vi.mocked(ctx.prService.hasUnpushedCommits).mockResolvedValue(false);
     vi.mocked(ctx.prService.hasWorkerBranchCommitsAgainstFeature).mockResolvedValue(false);
@@ -664,6 +708,11 @@ describe("executeGitFinalizeStage", () => {
       gitAuth: { githubToken: "token", gitlabToken: undefined },
       gitIdentity: undefined,
       githubMode: "LOCAL",
+      allowExistingWorkerBranch: false,
+      freshWorkerBranchOwnership: {
+        worktreePath: ctx.worktreePath,
+        initialTip: ctx.initialHead,
+      },
     });
     expect(ctx.deps.sessionTracking.updateSession).toHaveBeenCalledWith(ctx.sessionId, { state: "COMPLETED" });
   });
@@ -726,7 +775,13 @@ describe("executeGitFinalizeStage", () => {
     expect(ctx.runCommand).toHaveBeenNthCalledWith(
       1,
       "git",
-      ["push", "-u", "origin", "refs/heads/worker-branch:refs/heads/worker-branch"],
+      [
+        "push",
+        "-u",
+        "--force-with-lease=refs/heads/worker-branch:",
+        "origin",
+        "refs/heads/worker-branch:refs/heads/worker-branch",
+      ],
       "/repo",
       expect.anything(),
     );
@@ -742,6 +797,65 @@ describe("executeGitFinalizeStage", () => {
       pushedBranch: "worker-branch",
       commitSha: "feedbeef",
     });
+  });
+
+  it("accepts an ambiguous direct fresh-branch push when the remote contains the local tip", async () => {
+    const ctx = createMockContext();
+    ctx.settings.git.githubMode = "REMOTE";
+    const branchTip = "1".repeat(40);
+
+    vi.mocked(ctx.prService.hasUnpushedCommits).mockResolvedValue(true);
+    vi.mocked(ctx.prService.hasWorkerBranchCommitsAgainstFeature).mockResolvedValue(true);
+    vi.mocked(ctx.runCommand)
+      .mockRejectedValueOnce(new Error("git push failed: exit code 137, no output captured"))
+      .mockResolvedValueOnce({ ok: true, stdout: `${branchTip}\n`, stderr: "" })
+      .mockResolvedValueOnce({
+        ok: true,
+        stdout: `${branchTip}\trefs/heads/worker-branch\n`,
+        stderr: "",
+      })
+      .mockResolvedValueOnce({ ok: true, stdout: `${branchTip}\n`, stderr: "" });
+
+    const result = await executeGitFinalizeStage(ctx);
+
+    expect(ctx.runCommand).toHaveBeenNthCalledWith(
+      2,
+      "git",
+      ["rev-parse", "--verify", "refs/heads/worker-branch"],
+      "/repo",
+      expect.anything(),
+    );
+    expect(ctx.runCommand).toHaveBeenNthCalledWith(
+      3,
+      "git",
+      ["ls-remote", "--heads", "origin", "refs/heads/worker-branch"],
+      "/repo",
+      expect.anything(),
+    );
+    expect(ctx.runCommand.mock.calls.filter((call) => call[1][0] === "push")).toHaveLength(1);
+    expect(result.commitSha).toBe(branchTip);
+  });
+
+  it("allows a resumed invocation to advance its existing remote worker branch", async () => {
+    const ctx = createMockContext();
+    ctx.settings.git.githubMode = "REMOTE";
+    ctx.allowExistingWorkerBranch = true;
+
+    vi.mocked(ctx.prService.hasUnpushedCommits).mockResolvedValue(true);
+    vi.mocked(ctx.prService.hasWorkerBranchCommitsAgainstFeature).mockResolvedValue(true);
+    vi.mocked(ctx.runCommand)
+      .mockResolvedValueOnce({ ok: true, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ ok: true, stdout: "feedbeef\n", stderr: "" });
+
+    await executeGitFinalizeStage(ctx);
+
+    expect(ctx.runCommand).toHaveBeenNthCalledWith(
+      1,
+      "git",
+      ["push", "-u", "origin", "refs/heads/worker-branch:refs/heads/worker-branch"],
+      "/repo",
+      expect.anything(),
+    );
   });
 });
 
@@ -913,6 +1027,7 @@ describe("executeCleanupStage", () => {
     await executeCleanupStage(ctx);
 
     expect(ctx.workspaceManager.removeWorktree).toHaveBeenCalledWith("/repo", "/repo/worktree");
+    expect(ctx.workspaceManager.releaseWorkspaceHelper).not.toHaveBeenCalled();
   });
 
   it("preserves the worktree if cleanupWorktreeOnSuccess is false and workflow succeeded", async () => {
@@ -923,6 +1038,7 @@ describe("executeCleanupStage", () => {
     await executeCleanupStage(ctx);
 
     expect(ctx.workspaceManager.removeWorktree).not.toHaveBeenCalled();
+    expect(ctx.workspaceManager.releaseWorkspaceHelper).toHaveBeenCalledWith("/repo/worktree");
     expect(ctx.deps.sessionTracking.appendActivity).toHaveBeenCalledWith(ctx.sessionId, expect.objectContaining({
       description: expect.stringContaining("Preserving worktree")
     }));
@@ -937,6 +1053,7 @@ describe("executeCleanupStage", () => {
     await executeCleanupStage(ctx);
 
     expect(ctx.workspaceManager.removeWorktree).not.toHaveBeenCalled();
+    expect(ctx.workspaceManager.releaseWorkspaceHelper).toHaveBeenCalledWith("/repo/worktree");
     expect(ctx.deps.sessionTracking.appendActivity).toHaveBeenCalledWith(ctx.sessionId, expect.objectContaining({
       description: expect.stringContaining("Preserving worktree")
     }));

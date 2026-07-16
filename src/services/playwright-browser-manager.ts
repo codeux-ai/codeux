@@ -9,6 +9,7 @@ import type {
 import { commandRunner, runStreamingCommand, type CommandResult } from "./cli-process-runner.js";
 import { managedRuntimeService, type ManagedRuntimeService } from "./managed-runtime-service.js";
 import type { Logger } from "../shared/logging/logger.js";
+import { getRuntimeOwnerDockerArgs } from "../shared/config/runtime-owner.js";
 
 export const PLAYWRIGHT_BROWSERS_MOUNT = "/ms-playwright";
 
@@ -147,6 +148,7 @@ export class PlaywrightBrowserManager {
       const created = await this.commands.run("docker", [
         "volume", "create",
         "--label", "code-ux.managed=true",
+        ...getRuntimeOwnerDockerArgs(),
         "--label", "ai.codeux.asset=playwright-browser",
         "--label", `ai.codeux.version=${this.labelValue(version)}`,
         "--label", `ai.codeux.compatibility=${compatibilityKey}`,
@@ -164,6 +166,7 @@ export class PlaywrightBrowserManager {
       const install = await this.commands.stream("docker", [
         "run", "--rm",
         "--label", "code-ux.managed=true",
+        ...getRuntimeOwnerDockerArgs(),
         "--label", "ai.codeux.browser-installer=playwright",
         "--mount", `type=volume,source=${volumeName},target=${PLAYWRIGHT_BROWSERS_MOUNT}`,
         image,

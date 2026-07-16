@@ -26,6 +26,18 @@ describe("computeSprintActionMenuPosition", () => {
     expect(result.left).toBe(280);
   });
 
+  it("uses the larger region when an early menu measurement fits on both sides", () => {
+    const result = computeSprintActionMenuPosition(
+      { top: 432, left: 1054, right: 1130, bottom: 478, width: 76, height: 46 },
+      { width: 1216, height: 720 },
+      { width: 184, height: 180 },
+    );
+
+    expect(result.placement).toBe("top");
+    expect(result.top).toBe(244);
+    expect(result.left).toBe(946);
+  });
+
   it("clamps to viewport right edge padding for large menus", () => {
     const result = computeSprintActionMenuPosition(
       { top: 120, left: 890, right: 920, bottom: 150, width: 30, height: 30 },

@@ -11,6 +11,10 @@ import type {
   SpawnerRunMessage,
   SpawnerRawResult,
 } from "./command-spawner-protocol.js";
+import {
+  MAX_SPAWNER_STREAM_LINE_CHARS,
+  boundSpawnerStreamLine,
+} from "./command-spawner-protocol.js";
 import { BoundedTextBuffer } from "./bounded-text-buffer.js";
 
 const KILL_GRACE_MS = 2_000;
@@ -77,8 +81,12 @@ function runJob(message: SpawnerRunMessage): void {
 
   const stdout = new BoundedTextBuffer(options.maxStdoutChars ?? 5 * 1024 * 1024);
   const stderr = new BoundedTextBuffer(options.maxStderrChars ?? 4096);
-  const stdoutLineBuffer = new BoundedTextBuffer(options.maxStdoutChars ?? 5 * 1024 * 1024);
-  const stderrLineBuffer = new BoundedTextBuffer(options.maxStderrChars ?? 4096);
+  const stdoutLineBuffer = new BoundedTextBuffer(
+    Math.min(options.maxStdoutChars ?? 5 * 1024 * 1024, MAX_SPAWNER_STREAM_LINE_CHARS),
+  );
+  const stderrLineBuffer = new BoundedTextBuffer(
+    Math.min(options.maxStderrChars ?? 4096, MAX_SPAWNER_STREAM_LINE_CHARS),
+  );
   let stdoutClipped = false;
   let stderrClipped = false;
   let timedOut = false;
@@ -100,7 +108,7 @@ function runJob(message: SpawnerRunMessage): void {
   const flushLineBuffer = (buffer: BoundedTextBuffer, stream: "stdoutLine" | "stderrLine"): void => {
     const trimmed = buffer.takeString().trim();
     if (trimmed.length > 0) {
-      send({ type: stream, id, line: trimmed });
+      send({ type: stream, id, line: boundSpawnerStreamLine(trimmed) });
     }
   };
 
@@ -131,7 +139,7 @@ function runJob(message: SpawnerRunMessage): void {
     for (const line of completed.split("\n")) {
       const trimmed = line.trim();
       if (trimmed.length > 0) {
-        send({ type: stream, id, line: trimmed });
+        send({ type: stream, id, line: boundSpawnerStreamLine(trimmed) });
       }
     }
     pending.append(text.slice(lastNewline + 1));

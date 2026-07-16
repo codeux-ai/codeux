@@ -51,6 +51,8 @@ import { ensureDefaultCodeUxAssetsInstalled } from "./code-ux-default-assets-ser
 import { fetchOriginIfAvailable } from "./git-branch-sync-service.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
 import { mergePreviewEnvironmentVariables, sanitizePreviewEnvironmentVariables } from "../shared/preview-environment.js";
+import { getRuntimeOwnerDockerArgs, getRuntimeOwnerLabel } from "../shared/config/runtime-owner.js";
+import { createRepositoryGitTempDirectory } from "../infrastructure/git/repository-git-temp.js";
 
 const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -440,6 +442,7 @@ export class SprintPreviewService {
       "create",
       "--label", "code-ux.preview-volume=true",
       "--label", "code-ux.managed=true",
+      ...getRuntimeOwnerDockerArgs(),
       "--label", `code-ux.project-id=${projectId}`,
       "--label", `code-ux.sprint-id=${sprintId}`,
       "--label", `code-ux.session-id=${sessionId}`,
@@ -1203,7 +1206,7 @@ export class SprintPreviewService {
     try {
       const result = await runCommandStrict(
         "docker",
-        ["ps", "-aq", "--filter", "label=code-ux.preview=true"],
+        ["ps", "-aq", "--filter", "label=code-ux.preview=true", "--filter", `label=${getRuntimeOwnerLabel()}`],
         process.cwd(),
       );
       return result.stdout
@@ -1223,6 +1226,7 @@ export class SprintPreviewService {
           "ps",
           "-a",
           "--filter", "label=code-ux.preview=true",
+          "--filter", `label=${getRuntimeOwnerLabel()}`,
           "--format",
           "{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Label \"code-ux.project-id\"}}\t{{.Label \"code-ux.sprint-id\"}}\t{{.Label \"code-ux.session-id\"}}\t{{.Label \"code-ux.host-port\"}}",
         ],
@@ -1342,7 +1346,18 @@ export class SprintPreviewService {
     await fs.mkdir(path.dirname(archivePath), { recursive: true });
     await fs.rm(archivePath, { force: true }).catch(() => undefined);
 
-    await runCommandStrict("git", ["archive", "--format=tar", "-o", archivePath, exportRef], repoPath);
+    const gitTempDirectory = await createRepositoryGitTempDirectory(repoPath, "preview-archive-");
+    const gitArchivePath = gitTempDirectory ? path.join(gitTempDirectory, "workspace.tar") : archivePath;
+    try {
+      await runCommandStrict("git", ["archive", "--format=tar", "-o", gitArchivePath, exportRef], repoPath);
+      if (gitArchivePath !== archivePath) {
+        await fs.copyFile(gitArchivePath, archivePath);
+      }
+    } finally {
+      if (gitTempDirectory) {
+        await fs.rm(gitTempDirectory, { recursive: true, force: true }).catch(() => undefined);
+      }
+    }
   }
 
   private async ensurePreviewBranchExists(
@@ -1352,6 +1367,9 @@ export class SprintPreviewService {
     gitAuthOptions?: GitHttpAuthOptions,
   ): Promise<void> {
     if (await this.localBranchExists(repoPath, featureBranch)) {
+      return;
+    }
+    if (await this.remoteTrackingRefExists(repoPath, featureBranch)) {
       return;
     }
     if (await this.remoteBranchExists(repoPath, featureBranch, gitAuthOptions)) {
@@ -1390,7 +1408,7 @@ export class SprintPreviewService {
     gitAuthOptions?: GitHttpAuthOptions,
   ): Promise<string> {
     if (syncLatestFromOrigin) {
-      await fetchOriginIfAvailable(repoPath, gitAuthOptions);
+      await fetchOriginIfAvailable(repoPath, gitAuthOptions, [featureBranch, defaultBranch]);
     }
     await this.ensurePreviewBranchExists(repoPath, featureBranch, defaultBranch, gitAuthOptions);
     return await this.resolvePreviewExportRef(repoPath, featureBranch);

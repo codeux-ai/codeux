@@ -35,6 +35,7 @@ vi.mock("../../../src/services/cli-process-runner.js", () => ({
 }));
 
 vi.mock("../../../src/shared/subprocess/command-runner.js", () => ({
+  acquireProjectGitHelper: vi.fn(() => vi.fn().mockResolvedValue(undefined)),
   commandRunner: {
     run: vi.fn().mockResolvedValue({ ok: true, stdout: "", stderr: "" }),
   },
@@ -106,6 +107,9 @@ describe("QualityAssuranceService", () => {
       .mockResolvedValue("docker-volume://qa-snapshot");
     const removeWorktree = vi.spyOn((service as any).workspaceManager, "removeWorktree")
       .mockResolvedValue(undefined);
+    const releaseSnapshotReservation = vi.fn();
+    const reserveWorkspaceHelper = vi.spyOn((service as any).workspaceManager, "reserveWorkspaceHelper")
+      .mockReturnValue(releaseSnapshotReservation);
 
     const result = await (service as any).runReview({
       triggerType: "sprint_completion",
@@ -127,6 +131,8 @@ describe("QualityAssuranceService", () => {
       cwd: "docker-volume://qa-snapshot",
     }));
     expect(removeWorktree).toHaveBeenCalledWith("/repo/project", "docker-volume://qa-snapshot");
+    expect(reserveWorkspaceHelper).toHaveBeenCalledWith(expect.stringMatching(/^docker-volume:\/\//));
+    expect(releaseSnapshotReservation).toHaveBeenCalledOnce();
   });
 
   it("runs HOST-mode QA against a detached review-branch snapshot", async () => {
@@ -419,7 +425,7 @@ describe("QualityAssuranceService", () => {
       provider: "qwen-code",
       worker_branch: "task/update-alpha",
       pr_url: "https://example.test/pull/1",
-      activities: [],
+      activities: [{ description: "Current task activity remains complete." }],
     };
     const prompt = (service as any).buildReviewPrompt({
       triggerType: "task_completion",
@@ -435,9 +441,18 @@ describe("QualityAssuranceService", () => {
           depends_on: [],
           is_independent: true,
           status: "COMPLETED",
-          provider: "qwen-code",
+          provider: "codex",
           worker_branch: "task/update-beta",
           pr_url: "https://example.test/pull/2",
+          activities: [{ description: "Sibling activity must not be included." }],
+        },
+        {
+          id: "T03",
+          title: "Pending gamma task",
+          prompt: "This task has not run yet.",
+          depends_on: [],
+          is_independent: true,
+          status: "pending",
           activities: [],
         },
       ],
@@ -446,14 +461,124 @@ describe("QualityAssuranceService", () => {
 
     expect(prompt).toContain("## REVIEW SCOPE");
     expect(prompt).toContain("This is a single-task QA review. The only task under review is T01.");
-    expect(prompt).toContain("## FULL TASK INSTRUCTIONS (SPRINT CONTEXT; ONLY CURRENT TASK IS UNDER REVIEW)");
+    expect(prompt).toContain("## PREVIOUSLY COMPLETED SPRINT TASKS (TITLES ONLY)");
+    expect(prompt).toContain("- Update beta.md");
+    expect(prompt).not.toContain("T02");
+    expect(prompt).not.toContain("Pending gamma task");
+    expect(prompt).not.toContain("Write exactly one line to beta.md.");
+    expect(prompt).not.toContain("Sibling activity must not be included.");
+    expect(prompt).not.toContain("task/update-beta");
+    expect(prompt).not.toContain("https://example.test/pull/2");
+    expect(prompt).not.toContain("Provider: codex");
     expect(prompt).toContain("## CURRENT TASK UNDER REVIEW");
+    expect(prompt).toContain("Write exactly one line to alpha.md.");
+    expect(prompt).toContain("Current task activity remains complete.");
+    expect(prompt).toContain("Depends on: none");
     expect(prompt).toContain("Assume the current workspace/branch contains only the current task's changes on top of its base branch.");
     expect(prompt).toContain("A task-level review must pass when the current task satisfies its own prompt");
     expect(prompt).toContain("Do not request changes because files, commits, PRs, or behavior from other completed sibling tasks are missing from this branch.");
     expect(prompt).toContain("Do not tell the coding session to implement, restore, or modify another task's scope.");
     expect(prompt).toContain("For task-level reviews, review only the current task and return `targetTaskKey` as the current task key when changes are required.");
-    expect(prompt).toContain("Write exactly one line to beta.md.");
+  });
+
+  it("shows the first half of every task instruction when sprint QA context exceeds 100k tokens", () => {
+    const service = new QualityAssuranceService({
+      projectManagementRepository: {} as any,
+      executionRepository: {} as any,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {} as any,
+      qaReviewRepository: {} as any,
+      taskService: {} as any,
+      agentPresetSyncService: {} as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+    const subtasks = Array.from({ length: 400 }, (_, index) => {
+      const taskNumber = index + 1;
+      return {
+        id: `T${taskNumber}`,
+        title: `Task ${taskNumber}`,
+        prompt: [
+          `Instruction ${taskNumber} first-half: ${"x".repeat(600)}`,
+          `Instruction ${taskNumber} second-half: ${"z".repeat(600)}`,
+        ].join("\n"),
+        depends_on: [],
+        is_independent: true,
+        status: "COMPLETED",
+        activities: [{ description: `Full activity ${taskNumber}: ${"y".repeat(100)}` }],
+      };
+    });
+    const prompt = (service as any).buildReviewPrompt({
+      triggerType: "sprint_completion",
+      projectName: "Extreme QA Project",
+      sprintGoal: "Validate a wide DAG.",
+      agentInstructions: "Review critically.",
+      subtasks,
+      currentTask: null,
+    });
+
+    expect(prompt).toContain("exceeding the 100,000-token threshold");
+    expect(prompt.match(/Every task remains listed in order, but each task instruction below contains only its first half\./g))
+      .toHaveLength(1);
+    expect(prompt).toContain("Instruction 1 first-half:");
+    expect(prompt).not.toContain("Instruction 1 second-half:");
+    expect(prompt).toContain("Instruction 399 first-half:");
+    expect(prompt).not.toContain("Instruction 399 second-half:");
+    expect(prompt).toContain("Instruction 400 first-half:");
+    expect(prompt).not.toContain("Instruction 400 second-half:");
+    expect(prompt).toContain("Full activity 1:");
+    expect(prompt).toContain("Full activity 400:");
+    expect(prompt).toContain("Recent activity excerpts are not shortened.");
+  });
+
+  it("keeps extreme-DAG task QA title-only for completed siblings and full for the current task", () => {
+    const service = new QualityAssuranceService({
+      projectManagementRepository: {} as any,
+      executionRepository: {} as any,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {} as any,
+      qaReviewRepository: {} as any,
+      taskService: {} as any,
+      agentPresetSyncService: {} as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+    const subtasks = Array.from({ length: 400 }, (_, index) => {
+      const taskNumber = index + 1;
+      return {
+        id: `T${taskNumber}`,
+        title: `Completed sibling title ${taskNumber}`,
+        prompt: `Full instruction ${taskNumber}: ${"x".repeat(1_000)}`,
+        depends_on: taskNumber === 400 ? ["T399"] : [],
+        is_independent: taskNumber !== 400,
+        status: taskNumber === 400 ? "CODING_COMPLETED" : "completed",
+        activities: [{ description: `Full activity ${taskNumber}: ${"y".repeat(100)}` }],
+      };
+    });
+
+    const prompt = (service as any).buildReviewPrompt({
+      triggerType: "task_completion",
+      projectName: "Extreme QA Project",
+      sprintGoal: "Validate a wide DAG.",
+      agentInstructions: "Review critically.",
+      subtasks,
+      currentTask: subtasks[399],
+    });
+
+    expect(prompt.length).toBeGreaterThan(5_000);
+    expect(prompt.length).toBeLessThan(50_000);
+    expect(prompt).toContain("- Completed sibling title 1");
+    expect(prompt).toContain("- Completed sibling title 399");
+    expect(prompt).not.toContain("- Completed sibling title 400");
+    expect(prompt).not.toContain("Full instruction 1:");
+    expect(prompt).not.toContain("Full activity 1:");
+    expect(prompt).toContain("Full instruction 400:");
+    expect(prompt).toContain("Full activity 400:");
+    expect(prompt).toContain("Depends on: T399");
   });
 
   it("creates sprint follow-up tasks from QA output", async () => {
@@ -1437,6 +1562,34 @@ describe("QualityAssuranceService", () => {
     status: "COMPLETED" as const,
   };
 
+  it("computes wide-DAG QA merge gates from one repository snapshot", () => {
+    const latestRun = {
+      id: "qa-run-1",
+      taskId: "task-1",
+      status: "completed",
+      outcome: "pass",
+      summaryMarkdown: "Passed.",
+      runIndex: 1,
+    };
+    const listTaskReviewSnapshots = vi.fn().mockReturnValue(new Map([
+      ["task-1", { latestRun, latestCycleRuns: [latestRun], runsUsed: 1, decisiveRuns: 1 }],
+      ["task-2", { latestRun: null, latestCycleRuns: [], runsUsed: 0, decisiveRuns: 0 }],
+    ]));
+    const service = buildGateService({ listTaskReviewSnapshots });
+    const secondTask = { ...noPrCompletedTask, id: "T2", record_id: "task-2" };
+
+    const gates = service.getTaskMergeGateStatuses({
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      tasks: [noPrCompletedTask, secondTask],
+    });
+
+    expect(listTaskReviewSnapshots).toHaveBeenCalledOnce();
+    expect(listTaskReviewSnapshots).toHaveBeenCalledWith(["task-1", "task-2"]);
+    expect(gates.get("task-1")).toMatchObject({ mergeAllowed: true, reason: "passed" });
+    expect(gates.get("task-2")).toMatchObject({ mergeAllowed: false, reason: "pending_review" });
+  });
+
   it("fails closed (no merge) when the verdict budget is exhausted without a pass", () => {
     // A single decisive QA verdict that did not pass, at the cap of 1. This is
     // the exact hole that used to silently complete no-PR tasks.
@@ -2172,6 +2325,145 @@ describe("QualityAssuranceService", () => {
       followUpNoProgress: true,
       followUpBlocker: "transient provider failure",
     });
+  });
+
+  it("awaits an accepted Jules QA continuation across restart and reconciles only after provider completion", async () => {
+    const sendSessionMessage = vi.fn().mockResolvedValue({});
+    const updateTask = vi.fn();
+    let taskRun = {
+      id: "task-run-jules",
+      taskId: "task-1",
+      sprintRunId: "sprint-run-1",
+      sessionId: "jules-session-1",
+      provider: "jules",
+      state: "COMPLETED",
+      startedAt: "2026-07-14T08:00:00.000Z",
+      finishedAt: "2026-07-14T08:05:00.000Z",
+    } as any;
+    let storedRun = {
+      id: "qa-run-jules",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      sprintRunId: "sprint-run-1",
+      taskId: "task-1",
+      taskRunId: taskRun.id,
+      triggerType: "task_completion",
+      status: "completed",
+      outcome: "changes_requested",
+      runIndex: 3,
+      targetSessionId: "jules-session-1",
+      summaryMarkdown: "The hosted task needs a repair.",
+      fixInstructions: "Repair the hosted implementation.",
+      payload: { continuationStatus: "pending" },
+      startedAt: "2026-07-14T08:06:00.000Z",
+      finishedAt: "2026-07-14T08:07:00.000Z",
+    } as any;
+    const qaReviewRepository = {
+      getRun: vi.fn(() => storedRun),
+      updateRun: vi.fn((_id: string, update: Record<string, unknown>) => {
+        storedRun = { ...storedRun, ...update };
+        return storedRun;
+      }),
+    } as any;
+    const executionRepository = {
+      getTaskRun: vi.fn(() => taskRun),
+      listExecutionInvocations: vi.fn().mockReturnValue([]),
+      appendTaskRunEvent: vi.fn(),
+    } as any;
+    const buildService = () => new QualityAssuranceService({
+      projectManagementRepository: { updateTask } as any,
+      executionRepository,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {} as any,
+      qaReviewRepository,
+      taskService: {} as any,
+      agentPresetSyncService: {} as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+      getGithubToken: () => undefined,
+      sendSessionMessage,
+    });
+    const task = {
+      record_id: "task-1",
+      id: "T1",
+      title: "Hosted task",
+      prompt: "Implement the hosted task.",
+      depends_on: [],
+      is_independent: true,
+      status: "CODING_COMPLETED",
+      provider: "jules",
+      session_id: "jules-session-1",
+    } as any;
+    const continuationArgs = {
+      run: storedRun,
+      task,
+      taskRun,
+      repoPath: "/repo/project",
+      featureBranch: "feature/sprint-1",
+      scope: { projectId: "project-1", sprintId: "sprint-1" },
+      decisiveRuns: 3,
+      maxTaskReviewRuns: 3,
+    };
+
+    const dispatched = await (buildService() as any).continuePendingTaskQaRun(continuationArgs);
+
+    expect(dispatched).toMatchObject({ reviewed: true, reopenedTask: true, mergeBlocked: true });
+    expect(sendSessionMessage).toHaveBeenCalledTimes(1);
+    expect(storedRun.payload).toMatchObject({
+      continuationStatus: "awaiting_provider",
+      continuationMode: "jules",
+      continued: true,
+      postExhaustionVerificationEligible: true,
+    });
+    expect(storedRun.payload.continuationDispatchedAt).toEqual(expect.any(String));
+    expect(storedRun.payload.continuationSettledAt).toBeUndefined();
+    expect(task).toMatchObject({ status: "RUNNING", is_merged: false, merge_indicator: "QA_PENDING" });
+    expect(updateTask).toHaveBeenLastCalledWith("task-1", expect.objectContaining({
+      status: "in_progress",
+      isMerged: false,
+      mergeIndicator: "QA_PENDING",
+    }));
+
+    // Simulate a process restart after session sync observed the hosted run.
+    // The durable awaiting checkpoint must reconcile state without another API
+    // message, even though the in-memory continuation lock no longer exists.
+    taskRun = { ...taskRun, state: "RUNNING", finishedAt: null };
+    const waiting = await (buildService() as any).continuePendingTaskQaRun({
+      ...continuationArgs,
+      run: storedRun,
+      taskRun,
+    });
+    expect(waiting).toMatchObject({ reviewed: false, reopenedTask: false, mergeBlocked: true });
+    expect(sendSessionMessage).toHaveBeenCalledTimes(1);
+    expect(storedRun.payload.continuationStatus).toBe("awaiting_provider");
+
+    const continuationStartedAt = Date.parse(storedRun.payload.continuationStartedAt as string);
+    taskRun = {
+      ...taskRun,
+      state: "COMPLETED",
+      finishedAt: new Date(continuationStartedAt + 1_000).toISOString(),
+    };
+    const reconciled = await (buildService() as any).continuePendingTaskQaRun({
+      ...continuationArgs,
+      run: storedRun,
+      taskRun,
+    });
+
+    expect(reconciled).toMatchObject({ reviewed: true, reopenedTask: true, mergeBlocked: true });
+    expect(sendSessionMessage).toHaveBeenCalledTimes(1);
+    expect(storedRun.payload).toMatchObject({
+      continuationStatus: "completed",
+      continuationMode: "jules",
+      continuationReconciled: true,
+      continued: true,
+      postExhaustionVerificationEligible: true,
+    });
+    expect(task).toMatchObject({ status: "CODING_COMPLETED", merge_indicator: "QA_PENDING" });
+    expect(updateTask).toHaveBeenLastCalledWith("task-1", expect.objectContaining({
+      status: "coding_completed",
+      isMerged: false,
+      mergeIndicator: "QA_PENDING",
+    }));
   });
 
   it("defers a legacy QA continuation while newer coding is active and reconciles it after completion", async () => {
@@ -3273,7 +3565,7 @@ describe("QualityAssuranceService", () => {
       sendSessionMessage: async () => ({}),
     });
     vi.spyOn(service as any, "runReview").mockRejectedValue(
-      new Error("Command spawner host exited (code=null, signal=SIGINT)"),
+      new Error("Virtual QA worker failed: Helper container pool is shutting down."),
     );
 
     const outcome = await service.reviewCompletedTask({
@@ -3951,9 +4243,9 @@ describe("QualityAssuranceService", () => {
       "docker-volume://session-1",
       "task/feature-sprint-1-T1-gemini-recovered",
       "feature/sprint-1",
-      undefined,
-      expect.any(Object),
-      { remoteOnly: true },
+      "session-1",
+      { githubToken: "", gitlabToken: "" },
+      { remoteOnly: true, refreshRemote: true, allowExistingWorkerBranch: true },
     );
     expect(updateTaskRunMock).toHaveBeenCalledWith("task-run-123", { workerBranch: "task/feature-sprint-1-T1-gemini-recovered" });
     expect(updateTaskRunMock).toHaveBeenCalledWith("task-run-123", { state: "COMPLETED" });
@@ -4097,9 +4389,9 @@ describe("QualityAssuranceService", () => {
       "docker-volume://session-1",
       "task/feature-sprint-1-T1-gemini-pr-recovered",
       "feature/sprint-1",
-      undefined,
-      expect.any(Object),
-      { remoteOnly: true },
+      "session-1",
+      { githubToken: "", gitlabToken: "" },
+      { remoteOnly: true, refreshRemote: true, allowExistingWorkerBranch: true },
     );
     expect(updateTaskRunMock).toHaveBeenCalledWith("task-run-123", { workerBranch: "task/feature-sprint-1-T1-gemini-pr-recovered" });
     expect(updateTaskRunMock).toHaveBeenLastCalledWith("task-run-123", {
@@ -4135,6 +4427,12 @@ describe("QualityAssuranceService", () => {
       } as any,
       executionRepository: {
         getLatestProviderInvocationUsageBySession: vi.fn().mockReturnValue(null),
+        getLatestTaskWorkspaceResumeTarget: vi.fn().mockReturnValue({
+          provider: "gemini",
+          sessionId: "workspace-session",
+          workerBranch: "feature/task-1",
+          worktreePath: "/durable-worktree",
+        }),
         createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-followup" }),
         appendExecutionInvocationMessage: vi.fn(),
         updateExecutionInvocation: vi.fn(),
@@ -4170,8 +4468,11 @@ describe("QualityAssuranceService", () => {
       sendSessionMessage: async () => ({}),
     });
 
-    vi.spyOn((service as any).workspaceManager, "resolveResumeWorktreePath").mockResolvedValue("/worktree");
-    vi.spyOn((service as any).workspaceManager, "buildWorktreePath").mockReturnValue("/worktree");
+    const workspaceExists = vi.spyOn((service as any).workspaceManager, "workspaceExists")
+      .mockImplementation(async (worktreePath: string) => worktreePath === "/durable-worktree");
+    const resolveResumeWorktreePath = vi.spyOn((service as any).workspaceManager, "resolveResumeWorktreePath")
+      .mockResolvedValue(undefined);
+    vi.spyOn((service as any).workspaceManager, "buildWorktreePath").mockReturnValue("/new-session-worktree");
     vi.spyOn((service as any).workspaceManager, "resolveCurrentBranch").mockResolvedValue("feature/task-1");
     const prepareWorktree = vi.spyOn((service as any).workspaceManager, "prepareWorktree").mockResolvedValue(undefined);
     vi.spyOn((service as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("");
@@ -4219,22 +4520,26 @@ describe("QualityAssuranceService", () => {
     expect(prepareWorktree).not.toHaveBeenCalled();
     // The stale resumed workspace is fast-forwarded onto the pushed worker-branch tip.
     expect(fastForwardResumedWorkspace).toHaveBeenCalledWith(
-      "/worktree",
+      "/durable-worktree",
       "feature/task-1",
       "/repo",
       expect.objectContaining({}),
     );
     // It must NOT use the old silent ff-only merge that left the base ref stale.
     expect(runWorkspaceCommand).not.toHaveBeenCalledWith(
-      "/worktree",
+      "/durable-worktree",
       "git",
       ["merge", "--ff-only", "origin/feature/task-1"],
     );
     expect(runProvider).toHaveBeenCalledWith(expect.objectContaining({
-      cwd: "/worktree",
+      cwd: "/durable-worktree",
+      workspaceSessionId: "workspace-session",
+      workspaceLifecycle: "continue",
     }));
     // initialHead (and thus the patch base) is the fast-forwarded tip.
-    expect((service as any).workspaceArtifactService.exportBinaryPatch).toHaveBeenCalledWith("/worktree", "pushed-worker-tip");
+    expect((service as any).workspaceArtifactService.exportBinaryPatch).toHaveBeenCalledWith("/durable-worktree", "pushed-worker-tip");
+    expect(workspaceExists).toHaveBeenCalledWith("/durable-worktree");
+    expect(resolveResumeWorktreePath).not.toHaveBeenCalled();
   });
 
   it("reuses the durable QA patch baseline when restart happens after the provider committed", async () => {
@@ -4243,6 +4548,7 @@ describe("QualityAssuranceService", () => {
       payload: {
         continuationStatus: "running",
         continuationWorkspaceBaseRef: "original-worker-tip",
+        continuationWorkspaceBaseRecordedAt: "2026-07-16T10:00:00.000Z",
       },
     } as any;
     const qaReviewRepository = {
@@ -4256,8 +4562,20 @@ describe("QualityAssuranceService", () => {
     const service = new QualityAssuranceService({
       projectManagementRepository: { updateTask, getSprint: vi.fn().mockReturnValue(null) } as any,
       executionRepository: {
-        getLatestProviderInvocationUsageBySession: vi.fn().mockReturnValue({ nativeSessionId: "native-followup" }),
+        getLatestProviderInvocationUsageBySession: vi.fn().mockReturnValue({
+          id: "completed-qa-followup",
+          taskId: "task-record-1",
+          taskRunId: "task-run-1",
+          sessionId: "cli-codex-task-1",
+          provider: "codex",
+          purpose: "task_coding",
+          status: "completed",
+          nativeSessionId: "native-followup",
+          finishedAt: "2026-07-16T10:00:05.000Z",
+          updatedAt: "2026-07-16T10:00:05.000Z",
+        }),
         updateTaskRun: vi.fn(),
+        appendTaskRunEvent: vi.fn(),
       } as any,
       guardrailService: qaGuardrailStub(),
       sessionTracking: { updateSession: vi.fn(), appendActivity: vi.fn() } as any,
@@ -4288,20 +4606,7 @@ describe("QualityAssuranceService", () => {
         code: 0,
       }),
     );
-    vi.spyOn((service as any).providerExecutionService, "executeProvider").mockImplementation(async () => {
-      expect(updateTask).toHaveBeenLastCalledWith("task-record-1", {
-        status: "coding_completed",
-        isMerged: false,
-        mergeIndicator: "QA_PENDING",
-      });
-      return {
-        ok: true,
-        stdout: "",
-        stderr: "",
-        text: "already completed before restart",
-        usageTelemetry: { conversation: [], rawUsageJson: null },
-      };
-    });
+    const executeProvider = vi.spyOn((service as any).providerExecutionService, "executeProvider");
     const exportPatch = vi.spyOn((service as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("");
     vi.spyOn((service as any).workspaceArtifactService, "applyPatchToBranch").mockResolvedValue({ hasChanges: false });
     vi.spyOn((service as any).prService, "hasUnpushedCommits").mockResolvedValue(false);
@@ -4321,7 +4626,13 @@ describe("QualityAssuranceService", () => {
         status: "CODING_COMPLETED",
         worker_branch: "feature/task-1",
       },
-      taskRun: null,
+      taskRun: {
+        id: "task-run-1",
+        taskId: "task-record-1",
+        sprintRunId: "sprint-run-1",
+        dispatchId: "dispatch-1",
+        workerBranch: "feature/task-1",
+      },
       repoPath: "/repo",
       featureBranch: "feature/sprint-1",
       scope: { projectId: "project-1", sprintId: "sprint-1" },
@@ -4330,12 +4641,63 @@ describe("QualityAssuranceService", () => {
     });
 
     expect(result.producedMergeWork).toBe(true);
+    expect(executeProvider).not.toHaveBeenCalled();
     expect(exportPatch).toHaveBeenCalledWith("/worktree", "original-worker-tip");
     expect(runWorkspaceCommand).toHaveBeenCalledWith(
       "/worktree",
       "git",
       ["rev-parse", "--verify", "original-worker-tip^{commit}"],
     );
+  });
+
+  it("does not recover a stale coding invocation completed before the QA patch baseline", () => {
+    const service = new QualityAssuranceService({
+      projectManagementRepository: {} as any,
+      executionRepository: {} as any,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {} as any,
+      qaReviewRepository: {} as any,
+      taskService: {} as any,
+      agentPresetSyncService: {} as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+
+    const recovery = (service as any).resolveQaFollowUpProviderRecovery({
+      invocation: {
+        id: "initial-coding",
+        taskId: "task-record-1",
+        taskRunId: "task-run-1",
+        sessionId: "cli-codex-task-1",
+        provider: "codex",
+        purpose: "task_coding",
+        status: "completed",
+        finishedAt: "2026-07-16T09:59:59.000Z",
+        updatedAt: "2026-07-16T09:59:59.000Z",
+      },
+      payload: {
+        continuationStatus: "running",
+        continuationWorkspaceBaseRecordedAt: "2026-07-16T10:00:00.000Z",
+      },
+      provider: "codex",
+      task: {
+        id: "T1",
+        record_id: "task-record-1",
+        title: "Fix thing",
+        prompt: "Implement the fix",
+        depends_on: [],
+        is_independent: true,
+        status: "CODING_COMPLETED",
+      },
+      taskRun: {
+        id: "task-run-1",
+        taskId: "task-record-1",
+      },
+    });
+
+    expect(recovery).toBeNull();
   });
 
   it("resets stale merged state when a CLI QA follow-up opens a new PR", async () => {
@@ -4681,6 +5043,7 @@ describe("QualityAssuranceService", () => {
 
     vi.spyOn((service as any).workspaceManager, "resolveResumeWorktreePath").mockResolvedValue("/worktree");
     vi.spyOn((service as any).workspaceManager, "buildWorktreePath").mockReturnValue("/worktree");
+    vi.spyOn((service as any).workspaceManager, "resolveCurrentBranch").mockResolvedValue("feature/task-1");
     vi.spyOn((service as any).workspaceManager, "prepareWorktree").mockResolvedValue(undefined);
     vi.spyOn((service as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("");
     vi.spyOn(service as any, "runWorkspaceCommand").mockResolvedValue({ stdout: "abc123\n", stderr: "" });
