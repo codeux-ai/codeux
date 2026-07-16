@@ -316,6 +316,7 @@ export class CliWorkflowService {
       workflowSettings: effectiveWorkflowSettings,
       worktreePath,
       workspaceSessionId,
+      allowExistingWorkerBranch: Boolean(args.resumeFromFailedSessionId),
       abortSignal: abortController.signal,
       initialHead: "",
       workflowSucceeded: false,

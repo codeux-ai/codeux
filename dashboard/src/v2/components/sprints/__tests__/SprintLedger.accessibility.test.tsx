@@ -8,7 +8,7 @@ import { SprintLedger } from "../SprintLedger.js";
 import { SprintLedgerRow } from "../SprintLedgerRow.js";
 import { SprintLedgerHeader } from "../SprintLedgerHeader.js";
 import { SprintLedgerBulkActions } from "../SprintLedgerBulkActions.js";
-import type { Sprint } from "../../../types.js";
+import type { ExecutionAttentionItemSummary, Sprint } from "../../../types.js";
 import type { CiStatusPresentation } from "../../../lib/ci-status-presentation.js";
 import { renderWithI18n } from "../../../../../../tests/dashboard/render-with-i18n.js";
 
@@ -65,6 +65,31 @@ const failedCiStatus: CiStatusPresentation = {
     { id: "merge", label: "Merge", state: "pending", statusLabel: "Blocked by checks" },
   ],
 };
+
+function humanAttention(
+  overrides: Partial<ExecutionAttentionItemSummary> = {},
+): ExecutionAttentionItemSummary {
+  return {
+    id: "attention-human",
+    sprintId: mockSprint.id,
+    taskId: "task-1",
+    sprintRunId: "run-1",
+    dispatchId: "dispatch-1",
+    attentionType: "human_escalation_required",
+    severity: "high",
+    ownerType: "human",
+    status: "open",
+    assignedWorkerEndpointId: null,
+    title: "Manual approval required",
+    summaryMarkdown: "Review the changes",
+    payload: { instructions: "Approve or request changes" },
+    openedAt: "2026-07-16T08:00:00.000Z",
+    claimedAt: null,
+    resolvedAt: null,
+    updatedAt: "2026-07-16T08:00:00.000Z",
+    ...overrides,
+  };
+}
 
 describe("SprintLedger Accessibility", () => {
   it("renders an accessible table name/caption", () => {
@@ -222,14 +247,7 @@ describe("SprintLedger Accessibility", () => {
             isEven={false}
             activeRun={undefined}
             pauseResumeRun={undefined}
-            humanIntervention={{
-              title: "Manual approval required",
-              reason: "Review the changes",
-              instructions: "Approve or request changes",
-              attentionType: null,
-              severity: "high",
-              ownerType: "human",
-            }}
+            workflowHumanIntervention={humanAttention()}
             isAnyBulkPending={false}
             pendingActionIds={new Set()}
             onToggleRow={vi.fn()}
@@ -282,14 +300,12 @@ describe("SprintLedger Accessibility", () => {
             isEven={false}
             activeRun={undefined}
             pauseResumeRun={undefined}
-            humanIntervention={{
+            workflowHumanIntervention={humanAttention({
               title: "Operator review required",
-              reason: "Confirm the CI repair",
-              instructions: "Resume after review",
+              summaryMarkdown: "Confirm the CI repair",
+              payload: { instructions: "Resume after review" },
               attentionType: "ci_fix_required",
-              severity: "high",
-              ownerType: "human",
-            }}
+            })}
             ciStatus={failedCiStatus}
             isAnyBulkPending={false}
             pendingActionIds={new Set()}
@@ -310,8 +326,8 @@ describe("SprintLedger Accessibility", () => {
     expect(screen.getByText("Paused")).toBeVisible();
     expect(screen.getByText("Needs you")).toBeVisible();
     expect(screen.queryByText("CI")).not.toBeInTheDocument();
-    const ciTrigger = screen.getByRole("button", { name: /CI status: CI failed.*Show workflow details/i });
-    expect(ciTrigger).toHaveAccessibleName(/CI status: CI failed/i);
+    const ciTrigger = screen.getByRole("button", { name: /CI status: Human needed.*CI evidence: CI failed/i });
+    expect(ciTrigger).toHaveAccessibleName(/CI status: Human needed/i);
     expect(container.querySelector('[data-ci-icon="failure"]')).toHaveClass("text-status-red");
 
     await user.click(ciTrigger);

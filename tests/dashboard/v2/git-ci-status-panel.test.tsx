@@ -24,7 +24,15 @@ describe("GitCIStatusPanel localization", () => {
             dirty: true,
             mode: "REMOTE",
             tracking: { label: "origin/custom-runtime-label" },
-            warnings: ["KEEP runtime Git warning verbatim"],
+            warnings: [
+              "KEEP runtime Git warning verbatim",
+              "KEEP warning 2",
+              "KEEP warning 3",
+              "KEEP warning 4",
+              "KEEP warning 5",
+              "KEEP warning 6",
+              "KEEP warning 7",
+            ],
             openPullRequests: [{
               number: 42,
               title: "KEEP PR title verbatim",
@@ -56,7 +64,41 @@ describe("GitCIStatusPanel localization", () => {
     expect(screen.getByText("KEEP PR title verbatim")).toBeInTheDocument();
     expect(screen.getByText("KEEP workflow verbatim")).toBeInTheDocument();
     expect(screen.getByText("KEEP runtime Git warning verbatim")).toBeInTheDocument();
+    expect(screen.getByText("2 weitere Warnungen werden ausgeblendet, damit dieser Bereich reaktionsschnell bleibt.")).toBeInTheDocument();
+    expect(screen.queryByText("KEEP warning 6")).not.toBeInTheDocument();
     expect(screen.getByText(/BLOCKED BY POLICY/)).toBeInTheDocument();
     expect(screen.getByText("2 Kommentare")).toBeInTheDocument();
+  });
+
+  it("bounds unexpected warning floods to five details and one summary", () => {
+    const warnings = Array.from({ length: 1_000 }, (_, index) => `Runtime warning ${index + 1}`);
+
+    render(
+      <DashboardI18nProvider initialLocale="en" storage={null}>
+        <GitCIStatusPanel
+          error={null}
+          status={{
+            branch: "feature/test",
+            dirty: false,
+            mode: "REMOTE",
+            tracking: { label: "Feature PR CI" },
+            warnings,
+            openPullRequests: [],
+            ciRuns: [],
+            mergedPullRequests: [],
+            lastUpdated: "2026-07-14T12:00:00.000Z",
+          } as never}
+        />
+      </DashboardI18nProvider>,
+    );
+
+    const warningPanel = screen.getByText("Warnings").parentElement;
+    expect(warningPanel).not.toBeNull();
+    expect(warningPanel?.querySelectorAll("p")).toHaveLength(6);
+    expect(screen.getByText("Runtime warning 1")).toBeInTheDocument();
+    expect(screen.getByText("Runtime warning 5")).toBeInTheDocument();
+    expect(screen.queryByText("Runtime warning 6")).not.toBeInTheDocument();
+    expect(screen.queryByText("Runtime warning 1000")).not.toBeInTheDocument();
+    expect(screen.getByText("995 additional warnings hidden to keep this panel responsive.")).toBeInTheDocument();
   });
 });

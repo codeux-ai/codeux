@@ -29,7 +29,8 @@ vi.mock("../../../../../src/infrastructure/providers/cli/docker-credential-mount
 vi.mock("../../../../../src/infrastructure/providers/cli/docker-setup-image-cache.js", () => ({
   DockerSetupImageCache: vi.fn().mockImplementation(function DockerSetupImageCache() {
     return {
-    resolveImage: vi.fn(async () => ({ image: "node:24", runSetupScriptAtRuntime: false })),
+      invalidateImage: vi.fn(),
+      resolveImage: vi.fn(async () => ({ image: "node:24", runSetupScriptAtRuntime: false })),
     };
   }),
 }));
@@ -39,6 +40,7 @@ vi.mock("../../../../../src/infrastructure/providers/cli/docker-runtime-paths.js
 
 import { runCommandStrict, runStreamingCommand } from "../../../../../src/services/cli-process-runner.js";
 import { DockerSetupImageCache } from "../../../../../src/infrastructure/providers/cli/docker-setup-image-cache.js";
+import { getRuntimeOwnerId, RUNTIME_OWNER_LABEL } from "../../../../../src/shared/config/runtime-owner.js";
 
 const createRunner = (): DockerRunner => new DockerRunner(
   {
@@ -96,6 +98,33 @@ describe("DockerRunner", () => {
     });
 
     expect(result.cwd).toBe("docker-volume://existing");
+  });
+
+  it("reuses one setup image cache instance across provider invocations", async () => {
+    const sharedRunner = createRunner();
+    expect(DockerSetupImageCache).toHaveBeenCalledTimes(1);
+
+    for (const sessionId of ["session-1", "session-2"]) {
+      await sharedRunner.runProviderInDocker({
+        command: "codex",
+        args: ["exec", "--help"],
+        cwd: "docker-volume://workspace-1",
+        providerEnv: {},
+        sessionId,
+        providerLabel: "codex",
+        workflowSettings: {
+          executionMode: "DOCKER",
+          containerImage: "node:24",
+          containerSetupScriptPath: "",
+          containerCacheSetupScriptImage: false,
+        } as any,
+        repoPath: "/repo/project",
+        onActivity: vi.fn(),
+      });
+    }
+
+    expect(DockerSetupImageCache).toHaveBeenCalledTimes(1);
+    expect((sharedRunner as any).setupImageCache.resolveImage).toHaveBeenCalledTimes(2);
   });
 
   it("reads only the requested latest transcript byte range and parses helper metadata", async () => {
@@ -167,7 +196,12 @@ describe("DockerRunner", () => {
       reuseExisting: true,
     });
 
-    expect(createOrReuseSnapshotWorkspace).toHaveBeenCalledWith("/repo/project", "chat-thread-1", undefined);
+    expect(createOrReuseSnapshotWorkspace).toHaveBeenCalledWith(
+      "/repo/project",
+      "chat-thread-1",
+      undefined,
+      expect.any(Function),
+    );
     expect(result.cwd).toBe("docker-volume://qwen-session-1");
     await result.cleanup();
     expect(removeWorktree).not.toHaveBeenCalled();
@@ -190,6 +224,7 @@ describe("DockerRunner", () => {
       "/repo/project",
       "chat-thread-1",
       { branch: "develop" },
+      expect.any(Function),
     );
   });
 
@@ -293,7 +328,7 @@ describe("DockerRunner", () => {
     expect(bootstrapScript).toContain("stat -c '%u:%g'");
     expect(bootstrapScript).toContain("CODE_UX_LAUNCH_ARTIFACT_INVALID:provider-tool");
     expect(bootstrapScript).toContain("CODE_UX_LAUNCH_ARTIFACT_INVALID:playwright-browser");
-    const cacheInstance = vi.mocked(DockerSetupImageCache).mock.results[0]?.value as any;
+    const cacheInstance = (runner as any).setupImageCache;
     expect(cacheInstance.resolveImage).toHaveBeenCalledWith(expect.objectContaining({
       installPlaywrightBrowsers: false,
       runtimeRoot: "/runtime-root",
@@ -681,7 +716,26 @@ describe("DockerRunner", () => {
     vi.mocked(runStreamingCommand)
       .mockResolvedValueOnce({ ok: false, stdout: "", stderr: conflict, code: 125 } as any)
       .mockResolvedValueOnce({ ok: true, stdout: "done", stderr: "", code: 0 } as any);
-    vi.spyOn(runner as any, "sleep").mockResolvedValue(undefined);
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "inspect") {
+        return {
+          ok: true,
+          stdout: JSON.stringify({
+            Config: {
+              Labels: {
+                "code-ux.managed": "true",
+                [RUNTIME_OWNER_LABEL]: getRuntimeOwnerId(),
+                "code-ux.session-id": "session-1",
+              },
+            },
+            State: { Running: false, Status: "created" },
+          }),
+          stderr: "",
+          code: 0,
+        } as any;
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0 } as any;
+    });
     const onActivity = vi.fn();
 
     const result = await runner.runProviderInDocker({
@@ -708,9 +762,175 @@ describe("DockerRunner", () => {
       ["rm", "-f", "-v", "code-ux-qwen-code-session-1"],
       process.cwd(),
     );
+    const removeCallIndex = vi.mocked(runCommandStrict).mock.calls.findIndex(([, args]) =>
+      args[0] === "rm" && args.includes("code-ux-qwen-code-session-1")
+    );
+    const firstRunOrder = vi.mocked(runStreamingCommand).mock.invocationCallOrder[0];
+    const removeOrder = vi.mocked(runCommandStrict).mock.invocationCallOrder[removeCallIndex];
+    const secondRunOrder = vi.mocked(runStreamingCommand).mock.invocationCallOrder[1];
+    expect(firstRunOrder).toBeLessThan(removeOrder);
+    expect(removeOrder).toBeLessThan(secondRunOrder);
     expect(onActivity).toHaveBeenCalledWith(
       "Retrying qwen-code after reclaiming stale Docker container code-ux-qwen-code-session-1.",
       "provider",
+    );
+  });
+
+  it("preserves an active owned same-session container after a duplicate launch conflict", async () => {
+    const conflict = 'docker: Error response from daemon: Conflict. The container name "/code-ux-mockup-cli-session-1" is already in use.';
+    vi.mocked(runStreamingCommand).mockResolvedValue({
+      ok: false,
+      stdout: "",
+      stderr: conflict,
+      code: 125,
+    } as any);
+    vi.mocked(runCommandStrict).mockResolvedValue({
+      ok: true,
+      stdout: JSON.stringify({
+        Config: {
+          Labels: {
+            "code-ux.managed": "true",
+            [RUNTIME_OWNER_LABEL]: getRuntimeOwnerId(),
+            "code-ux.session-id": "session-1",
+          },
+        },
+        State: { Running: true, Status: "running" },
+      }),
+      stderr: "",
+      code: 0,
+    } as any);
+    const onActivity = vi.fn();
+
+    const result = await runner.runProviderInDocker({
+      command: "mockup-cli",
+      args: [],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "mockup-cli",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(runStreamingCommand).toHaveBeenCalledOnce();
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      ["inspect", "--format", "{{json .}}", "code-ux-mockup-cli-session-1"],
+      process.cwd(),
+    );
+    expect(runCommandStrict).not.toHaveBeenCalledWith(
+      "docker",
+      ["rm", "-f", "-v", "code-ux-mockup-cli-session-1"],
+      process.cwd(),
+    );
+    expect(onActivity).toHaveBeenCalledWith(
+      "Preserving active Docker container code-ux-mockup-cli-session-1 after a duplicate same-session launch was rejected.",
+      "provider",
+    );
+  });
+
+  it("does not remove the existing same-session container when shutdown aborts on a name conflict", async () => {
+    const conflict = 'docker: Error response from daemon: Conflict. The container name "/code-ux-mockup-cli-session-1" is already in use.';
+    vi.mocked(runStreamingCommand).mockResolvedValue({
+      ok: false,
+      stdout: "",
+      stderr: conflict,
+      code: 125,
+    } as any);
+    const controller = new AbortController();
+    controller.abort("runtime shutdown");
+
+    const result = await runner.runProviderInDocker({
+      command: "mockup-cli",
+      args: [],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "mockup-cli",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      signal: controller.signal,
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(runStreamingCommand).toHaveBeenCalledOnce();
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      ["kill", "code-ux-mockup-cli-session-1"],
+      process.cwd(),
+    );
+    expect(runCommandStrict).not.toHaveBeenCalledWith(
+      "docker",
+      ["inspect", "--format", "{{json .}}", "code-ux-mockup-cli-session-1"],
+      process.cwd(),
+    );
+    expect(runCommandStrict).not.toHaveBeenCalledWith(
+      "docker",
+      ["rm", "-f", "-v", "code-ux-mockup-cli-session-1"],
+      process.cwd(),
+    );
+  });
+
+  it("does not reclaim a same-name container owned by another runtime", async () => {
+    const conflict = 'docker: Error response from daemon: Conflict. The container name "/code-ux-codex-session-1" is already in use.';
+    vi.mocked(runStreamingCommand).mockResolvedValue({
+      ok: false,
+      stdout: "",
+      stderr: conflict,
+      code: 125,
+    } as any);
+    vi.mocked(runCommandStrict).mockResolvedValue({
+      ok: true,
+      stdout: JSON.stringify({
+        Config: {
+          Labels: {
+            "code-ux.managed": "true",
+            [RUNTIME_OWNER_LABEL]: "different-runtime",
+            "code-ux.session-id": "session-1",
+          },
+        },
+        State: { Running: false, Status: "exited" },
+      }),
+      stderr: "",
+      code: 0,
+    } as any);
+
+    const result = await runner.runProviderInDocker({
+      command: "codex",
+      args: ["exec", "--help"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "codex",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(runStreamingCommand).toHaveBeenCalledOnce();
+    expect(runCommandStrict).not.toHaveBeenCalledWith(
+      "docker",
+      ["rm", "-f", "-v", "code-ux-codex-session-1"],
+      process.cwd(),
     );
   });
 
@@ -845,6 +1065,49 @@ describe("DockerRunner", () => {
     expect((runner as any).runtimeService.invalidateImage).toHaveBeenCalledWith("node:24");
     expect((runner as any).runtimeService.resolveImage).toHaveBeenCalledTimes(2);
     expect(runStreamingCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it("invalidates and rebuilds a missing derived setup image after launch failure", async () => {
+    const setupImageCache = (runner as any).setupImageCache;
+    setupImageCache.resolveImage.mockResolvedValue({
+      image: "code-ux-setup-cache-node-24:abc123",
+      runSetupScriptAtRuntime: false,
+    });
+    vi.mocked(runStreamingCommand)
+      .mockResolvedValueOnce({
+        ok: false,
+        stdout: "",
+        stderr: "docker: No such image: code-ux-setup-cache-node-24:abc123",
+        code: 125,
+      } as any)
+      .mockResolvedValueOnce({ ok: true, stdout: "done", stderr: "", code: 0 } as any);
+
+    const result = await runner.runProviderInDocker({
+      command: "codex",
+      args: ["exec", "--help"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "codex",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImageMode: "custom",
+        containerImage: "node:24",
+        containerSetupScriptPath: "/repo/.code-ux/container/setup.sh",
+        containerCacheSetupScriptImage: true,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(setupImageCache.invalidateImage)
+      .toHaveBeenCalledWith("code-ux-setup-cache-node-24:abc123");
+    expect(setupImageCache.resolveImage).toHaveBeenCalledTimes(2);
+    expect((runner as any).runtimeService.invalidateImage).not.toHaveBeenCalled();
+    expect(runStreamingCommand).toHaveBeenCalledTimes(2);
+    const firstDockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
+    expect(firstDockerArgs).toEqual(expect.arrayContaining(["--pull", "never"]));
   });
 
   it("mounts provider argv from a file so long prompts do not enter the host docker command line", async () => {

@@ -373,6 +373,7 @@ export const liveMessages = defineDashboardMessages({
     merges: "Merges",
     updated: "Updated",
     warnings: "Warnings",
+    additionalGitWarningsHidden: { one: "{count} additional warning hidden to keep this panel responsive.", other: "{count} additional warnings hidden to keep this panel responsive." },
     noOpenPrs: "No open PRs tracked.",
     noCiRuns: "No CI runs yet for tracked PRs.",
     noRecentMerges: "No recent merges.",
@@ -470,6 +471,7 @@ export const liveMessages = defineDashboardMessages({
     systemStoppedDetail: "Resolve the stop condition and restart when ready.",
   },
   de: {
+    additionalGitWarningsHidden: { one: "{count} weitere Warnung wird ausgeblendet, damit dieser Bereich reaktionsschnell bleibt.", other: "{count} weitere Warnungen werden ausgeblendet, damit dieser Bereich reaktionsschnell bleibt." },
     liveSession: "Live-Sitzung", sprintPipeline: "Sprint-Pipeline", taskPipeline: "Aufgaben-Pipeline", stats: "Statistik", race: "Rennen", dag: "DAG",
     statsViewSelected: "Statistikansicht ausgewählt.", raceViewSelected: "Rennansicht ausgewählt.", dagViewSelected: "DAG-Ansicht ausgewählt.", loadingSprintRace: "Sprint-Rennen wird geladen.", loadingSprintDag: "Sprint-DAG wird geladen.", loadingLiveTelemetry: "Live-Sitzungsdaten werden geladen.", waitingForSprintStart: "Warten auf den Sprint-Start", waitingForSprintDescription: "Starte einen Sprint, um Live-Aufgabendaten, Protokollausgaben und Laufzeitaktivitäten für dieses Projekt zu aktivieren.", awaitingSprintDecomposition: "Warten auf Sprint-Zerlegung …", noFilteredTasks: "Keine Aufgaben mit Status {filter}.",
     forceCompleteTask: "Aufgabe zwangsweise abschließen", forceCompleteConfirm: "Aufgabe \"{task}\" als abgeschlossen markieren? Dadurch wird der normale Laufzeit-Abschluss umgangen.", forceComplete: "Zwangsweise abschließen", forceCompletingTask: "Aufgabe \"{task}\" wird zwangsweise abgeschlossen. Der aktuelle Laufzeit-Snapshot bleibt sichtbar, während die Aktualisierung bestätigt wird.", taskCompleted: "Aufgabe \"{task}\" wurde als abgeschlossen markiert.", forceCompleteFailed: "Aufgabe \"{task}\" konnte nicht zwangsweise abgeschlossen werden.",
@@ -579,7 +581,7 @@ export const liveMessages = defineDashboardMessages({
   },
 });
 
-export type LivePluralMessageKey = "filterResults" | "vessels" | "needsAttention" | "invocationFailedCount" | "invocationRunningCount" | "dependenciesIn" | "dependenciesOut" | "commentsCount" | "messages";
+export type LivePluralMessageKey = "filterResults" | "vessels" | "needsAttention" | "invocationFailedCount" | "invocationRunningCount" | "dependenciesIn" | "dependenciesOut" | "commentsCount" | "messages" | "additionalGitWarningsHidden";
 export type LiveMessageKey = Exclude<keyof typeof liveMessages.en, LivePluralMessageKey>;
 
 export const translateLiveMessage = (

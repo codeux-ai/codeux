@@ -108,5 +108,10 @@ export function isQaReviewCancellationError(error: unknown): boolean {
   return (
     /Command spawner host exited/i.test(message)
       && /(signal=SIGINT|signal=SIGTERM|signal=SIGHUP)/i.test(message)
-  ) || /provider invocation cancelled|invocation cancelled/i.test(message);
+  )
+    || /provider invocation cancelled|invocation cancelled/i.test(message)
+    || /\bCommand aborted\b/i.test(message)
+    || /\bHelper container pool is shutting down\b/i.test(message)
+    || /\bWorkspace sidecar pool is shutting down\b/i.test(message)
+    || /\bWorkspace sidecar fallback is unavailable while the runtime is shutting down\b/i.test(message);
 }

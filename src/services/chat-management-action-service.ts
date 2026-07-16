@@ -215,6 +215,9 @@ export interface ProcessManagementActionArgs {
   customModel?: string;
   sessionId: string;
   continueSessionId?: string | null;
+  /** Continue the workspace-local provider conversation without treating the
+   *  logical dashboard thread id as a native provider session id. */
+  continueSessionWithoutNativeId?: boolean;
   /** Baseline for opencode's cumulative session export, when `continueSessionId`
    *  resumes an earlier chat turn's session. See chat-thread-runtime-service.ts. */
   openCodeBaselineRawUsageJson?: Record<string, unknown> | null;
@@ -357,6 +360,7 @@ export class ChatManagementActionService {
         customModel: args.customModel,
         sessionId: args.sessionId,
         continueSessionId: args.continueSessionId,
+        continueSessionWithoutNativeId: args.continueSessionWithoutNativeId,
         openCodeBaselineRawUsageJson: args.openCodeBaselineRawUsageJson,
         workflowSettings: args.settings.cliWorkflow,
         repoPath: args.repoPath,
@@ -474,6 +478,7 @@ export class ChatManagementActionService {
         customModel: args.customModel,
         sessionId: args.sessionId,
         continueSessionId: args.continueSessionId,
+        continueSessionWithoutNativeId: args.continueSessionWithoutNativeId,
         openCodeBaselineRawUsageJson: args.openCodeBaselineRawUsageJson,
         workflowSettings: args.settings.cliWorkflow,
         repoPath: args.repoPath,

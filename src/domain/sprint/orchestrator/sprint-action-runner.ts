@@ -4,7 +4,6 @@ import type { WatchLoopRunner } from "./watch-loop-runner.js";
 import type { AutomationInterventionsSettings, AutomationLevel, CiIntelligenceSettings, SprintLoopStepSettings, Subtask, DashboardStatusSnapshot } from "../../../contracts/app-types.js";
 import type { SprintAgentArgs } from "../../../sprint/sprint-types.js";
 import type { SprintExecutionContext } from "../../../services/sprint-execution-state-service.js";
-import { acquireProjectGitHelperForSprint } from "../../../shared/subprocess/command-runner.js";
 
 export class SprintActionRunner {
   constructor(
@@ -59,8 +58,6 @@ export class SprintActionRunner {
       return { content: [{ type: "text", text: fullReport }] };
     }
 
-    const releaseProjectGitHelper = acquireProjectGitHelperForSprint(options.repoPath);
-    try {
     const cycleResult = await this.cycleRunner.run({
       action: "orchestrate",
       automationLevel: options.automationLevel,
@@ -87,9 +84,6 @@ export class SprintActionRunner {
       watchLoopEnabled: options.watchLoopEnabled,
       cycleResult,
     });
-    } finally {
-      await releaseProjectGitHelper();
-    }
   }
 
   async runStatus(options: {

@@ -31,7 +31,11 @@ import { workspaceVolumeHelperPool, type WorkspaceVolumeHelperPool } from "./wor
 import { CONTAINER_RUNTIME_HOME, CONTAINER_WORKSPACE_ROOT } from "./provider-runtime-artifacts.js";
 import type { CliProviderId } from "./provider-command-specs.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../../../shared/config/code-ux-paths.js";
-import { getRuntimeOwnerDockerArgs } from "../../../shared/config/runtime-owner.js";
+import {
+  getRuntimeOwnerDockerArgs,
+  getRuntimeOwnerId,
+  RUNTIME_OWNER_LABEL,
+} from "../../../shared/config/runtime-owner.js";
 import { ensureDefaultCodeUxAssetsInstalled } from "../../../services/code-ux-default-assets-service.js";
 import { DEFAULT_PLAYWRIGHT_MCP_SERVER_ID } from "../../../repositories/settings-defaults.js";
 import { sanitizeInvocationOutputText } from "../../../services/invocation-output-sanitizer.js";
@@ -68,7 +72,19 @@ const PROVIDER_PROMPT_SINGLE_ARG_HARD_LIMIT_BYTES = 120 * 1024;
 const PROVIDER_CPU_SHARES = "768";
 const LAUNCH_ARTIFACT_INVALID_PREFIX = "CODE_UX_LAUNCH_ARTIFACT_INVALID:";
 
-type LaunchArtifactKind = "runtime-volume" | "provider-tool" | "playwright-browser" | "runtime-image";
+type LaunchArtifactKind =
+  | "runtime-volume"
+  | "provider-tool"
+  | "playwright-browser"
+  | "setup-image"
+  | "runtime-image";
+
+type ProviderContainerConflictState =
+  | "active"
+  | "foreign"
+  | "missing"
+  | "reclaimed"
+  | "unknown";
 
 export interface IDockerRunner {
   ensureWorkspace(args: {
@@ -123,6 +139,7 @@ export class DockerRunner implements IDockerRunner {
     private readonly runtimeService: ManagedRuntimeService = managedRuntimeService,
     private readonly toolManager: ProviderToolManager = providerToolManager,
     private readonly browserManager: PlaywrightBrowserManager = playwrightBrowserManager,
+    private readonly setupImageCache: DockerSetupImageCache = new DockerSetupImageCache(),
   ) {}
 
   async ensureWorkspace(args: {
@@ -213,7 +230,7 @@ export class DockerRunner implements IDockerRunner {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-docker-"));
 
     try {
-      const resolvedImage = await new DockerSetupImageCache().resolveImage({
+      let resolvedImage = await this.setupImageCache.resolveImage({
         baseImage,
         setupScriptPath,
         cacheEnabled: workflowSettings.containerCacheSetupScriptImage,
@@ -252,7 +269,11 @@ export class DockerRunner implements IDockerRunner {
         ...DOCKER_NO_NEW_PRIVILEGES_ARGS,
         "--cpu-shares",
         PROVIDER_CPU_SHARES,
-        ...(workflowSettings.containerImageMode !== "custom" ? ["--pull", "never"] : []),
+        ...(
+          workflowSettings.containerImageMode !== "custom" || resolvedImage.image !== baseImage
+            ? ["--pull", "never"]
+            : []
+        ),
         "--workdir",
         CONTAINER_WORKSPACE_ROOT,
         "--label",
@@ -457,6 +478,7 @@ export class DockerRunner implements IDockerRunner {
       }
 
       let finalDockerResult: CommandResult | null = null;
+      let cleanupContainerByName = true;
       try {
         const runDocker = async (): Promise<CommandResult> => {
           await this.workspaceManager.ensureRuntimeVolume(cwd, {
@@ -475,8 +497,18 @@ export class DockerRunner implements IDockerRunner {
         const repairedArtifacts = new Set<LaunchArtifactKind>();
         let reclaimedContainerName = false;
         for (;;) {
+          const hasContainerNameConflict = this.isDockerNameConflict(result, containerName);
+          if (hasContainerNameConflict) {
+            // This `docker run` did not create the named container. Do not let
+            // final cleanup remove a container owned by an earlier process or
+            // a concurrently running invocation.
+            cleanupContainerByName = false;
+          }
           if (result.ok || signal?.aborted) break;
-          const invalidArtifact = this.detectInvalidLaunchArtifact(result, workflowSettings.containerImageMode !== "custom");
+          const invalidArtifact = this.detectInvalidLaunchArtifact(result, {
+            managedImage: workflowSettings.containerImageMode !== "custom",
+            setupImage: launchImage !== baseImage,
+          });
           if (invalidArtifact && !repairedArtifacts.has(invalidArtifact)) {
             repairedArtifacts.add(invalidArtifact);
             emitActivity(`Repairing invalid Docker launch artifact (${invalidArtifact}) before retrying ${providerLabel}.`, "provider");
@@ -495,14 +527,18 @@ export class DockerRunner implements IDockerRunner {
               this.browserManager.invalidatePreparedVolume(previousVolume);
               preparedBrowser = await this.browserManager.prepare(workflowSettings, { resolvedImage: baseImage });
               this.replaceDockerVolumeSource(dockerArgs, previousVolume, preparedBrowser.volumeName);
-            } else if (invalidArtifact === "runtime-image") {
-              this.runtimeService.invalidateImage(baseImage);
-              const repairedBaseImage = await this.runtimeService.resolveImage(
-                workflowSettings,
-                installPlaywrightBrowsers ? "browser" : "base",
-              );
-              const repairedImage = await new DockerSetupImageCache().resolveImage({
-                baseImage: repairedBaseImage,
+            } else if (invalidArtifact === "setup-image" || invalidArtifact === "runtime-image") {
+              if (invalidArtifact === "setup-image") {
+                this.setupImageCache.invalidateImage(launchImage);
+              } else {
+                this.runtimeService.invalidateImage(baseImage);
+                baseImage = await this.runtimeService.resolveImage(
+                  workflowSettings,
+                  installPlaywrightBrowsers ? "browser" : "base",
+                );
+              }
+              resolvedImage = await this.setupImageCache.resolveImage({
+                baseImage,
                 setupScriptPath,
                 cacheEnabled: workflowSettings.containerCacheSetupScriptImage,
                 installPlaywrightBrowsers: workflowSettings.containerImageMode === "custom" && installPlaywrightBrowsers,
@@ -514,22 +550,37 @@ export class DockerRunner implements IDockerRunner {
                 mapSourcePathForDaemon: (sourcePath, label) =>
                   this.mapDockerSourcePathForDaemon(sourcePath, repoPath, sessionId, label, emitActivity),
               });
-              this.replaceDockerImage(dockerArgs, launchImage, repairedImage.image);
-              baseImage = repairedBaseImage;
-              launchImage = repairedImage.image;
+              this.replaceDockerImage(dockerArgs, launchImage, resolvedImage.image);
+              launchImage = resolvedImage.image;
             }
             result = await runDocker();
             finalDockerResult = result;
             continue;
           }
-          if (!reclaimedContainerName && this.isDockerNameConflict(result, containerName)) {
+          if (!reclaimedContainerName && hasContainerNameConflict) {
             reclaimedContainerName = true;
-            emitActivity(`Retrying ${providerLabel} after reclaiming stale Docker container ${containerName}.`, "provider");
-            await this.removeProviderContainer(containerName);
-            await this.sleep(500);
-            result = await runDocker();
-            finalDockerResult = result;
-            continue;
+            const conflictState = await this.reconcileProviderContainerNameConflict(
+              containerName,
+              sessionId,
+            );
+            if (conflictState === "reclaimed" || conflictState === "missing") {
+              emitActivity(`Retrying ${providerLabel} after reclaiming stale Docker container ${containerName}.`, "provider");
+              cleanupContainerByName = true;
+              result = await runDocker();
+              finalDockerResult = result;
+              continue;
+            }
+            if (conflictState === "active") {
+              emitActivity(
+                `Preserving active Docker container ${containerName} after a duplicate same-session launch was rejected.`,
+                "provider",
+              );
+            } else if (conflictState === "foreign") {
+              emitActivity(
+                `Refusing to reclaim Docker container ${containerName} because its ownership labels do not match this invocation.`,
+                "provider",
+              );
+            }
           }
           break;
         }
@@ -541,7 +592,7 @@ export class DockerRunner implements IDockerRunner {
         // A stopped `docker run --rm` normally removes itself. The explicit
         // cleanup also covers the narrow restart window where Docker created
         // the container but the client died before the container could start.
-        if (abortKillIssued || (finalDockerResult && !finalDockerResult.ok)) {
+        if (cleanupContainerByName && (abortKillIssued || (finalDockerResult && !finalDockerResult.ok))) {
           await this.removeProviderContainer(containerName);
         }
       }
@@ -650,17 +701,18 @@ export class DockerRunner implements IDockerRunner {
     return checks.join("\n");
   }
 
-  private detectInvalidLaunchArtifact(result: CommandResult, managedImage: boolean): LaunchArtifactKind | null {
+  private detectInvalidLaunchArtifact(
+    result: CommandResult,
+    image: { managedImage: boolean; setupImage: boolean },
+  ): LaunchArtifactKind | null {
     if (result.ok) return null;
     const text = `${result.stderr || ""}\n${result.stdout || ""}`;
     for (const kind of ["runtime-volume", "provider-tool", "playwright-browser"] as const) {
       if (text.includes(`${LAUNCH_ARTIFACT_INVALID_PREFIX}${kind}`)) return kind;
     }
-    if (
-      managedImage
-      && /(?:no such image|unable to find image|manifest unknown|pull access denied)/i.test(text)
-    ) {
-      return "runtime-image";
+    if (/(?:no such image|unable to find image|manifest unknown|pull access denied)/i.test(text)) {
+      if (image.setupImage) return "setup-image";
+      if (image.managedImage) return "runtime-image";
     }
     return null;
   }
@@ -703,14 +755,61 @@ export class DockerRunner implements IDockerRunner {
     await runCommandStrict("docker", ["rm", "-f", "-v", containerName], process.cwd()).catch(() => undefined);
   }
 
+  private async reconcileProviderContainerNameConflict(
+    containerName: string,
+    sessionId: string,
+  ): Promise<ProviderContainerConflictState> {
+    let result: CommandResult;
+    try {
+      result = await runCommandStrict(
+        "docker",
+        ["inspect", "--format", "{{json .}}", containerName],
+        process.cwd(),
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return /no such (?:container|object)/i.test(message) ? "missing" : "unknown";
+    }
+    if (!result.ok) {
+      const output = `${result.stderr || ""}\n${result.stdout || ""}`;
+      return /no such (?:container|object)/i.test(output) ? "missing" : "unknown";
+    }
+
+    let inspected: {
+      Config?: { Labels?: Record<string, string> | null };
+      State?: { Running?: boolean; Status?: string };
+    };
+    try {
+      inspected = JSON.parse(result.stdout);
+    } catch {
+      return "unknown";
+    }
+
+    const labels = inspected.Config?.Labels || {};
+    if (
+      labels["code-ux.managed"] !== "true"
+      || labels[RUNTIME_OWNER_LABEL] !== getRuntimeOwnerId()
+      || labels["code-ux.session-id"] !== sessionId
+    ) {
+      return "foreign";
+    }
+
+    const status = String(inspected.State?.Status || "").toLowerCase();
+    if (inspected.State?.Running === true || status === "running" || status === "restarting" || status === "paused") {
+      return "active";
+    }
+    if (!["created", "exited", "dead"].includes(status)) {
+      return "unknown";
+    }
+
+    await this.removeProviderContainer(containerName);
+    return "reclaimed";
+  }
+
   private isDockerNameConflict(result: CommandResult, containerName: string): boolean {
     const text = `${result.stderr || ""}\n${result.stdout || ""}`;
     return text.includes("Conflict. The container name")
       && text.includes(`/${containerName}`);
-  }
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private shellSingleQuote(value: string): string {

@@ -113,7 +113,14 @@ interface ProjectGitHelperLease {
 const projectGitHelperLeases = new Map<string, ProjectGitHelperLease>();
 const projectGitExecLimits = new Map<string, GitExecLimit>();
 const projectGitInFlight = new Map<string, Set<Promise<CommandResult>>>();
-const projectGitHelpersReleasing = new Set<string>();
+const projectGitHelperReleasePromises = new Map<string, Promise<void>>();
+interface SelectedProjectGitHelper {
+  cwd: string;
+  poolKey: string;
+  release: () => Promise<void>;
+}
+let selectedProjectGitHelper: SelectedProjectGitHelper | null = null;
+let selectedProjectGitHelperTransition: Promise<void> = Promise.resolve();
 
 function getGitHelperPool(): DockerHelperContainerPool {
   if (!gitHelperPool) {
@@ -174,11 +181,11 @@ async function drainProjectGitExecutions(poolKey: string): Promise<void> {
 }
 
 /**
- * Keeps one lazy Git helper warm while a project has an active sprint. Multiple sprints for the
+ * Keeps one lazy Git helper warm while a project workflow is active. Concurrent workflows for the
  * same project share a reference-counted lease; the final release drains commands and removes the
  * helper. Outside an active lease, Git uses the isolated one-shot path and leaves no warm helper.
  */
-export function acquireProjectGitHelperForSprint(cwd: string): () => Promise<void> {
+export function acquireProjectGitHelper(cwd: string): () => Promise<void> {
   const context = CommandRunner.resolveGitPoolContextForPath(cwd);
   if (!context) {
     return async () => undefined;
@@ -208,14 +215,25 @@ export function acquireProjectGitHelperForSprint(cwd: string): () => Promise<voi
       return;
     }
 
+    // Give an immediate pause→resume or planning→orchestration handoff a chance to reuse the
+    // physical helper. New holders increment this same lease while in-flight commands drain.
+    await drainProjectGitExecutions(context.poolKey);
+    if (lease.holders > 0 || projectGitHelperLeases.get(context.poolKey) !== lease) {
+      return;
+    }
+
     projectGitHelperLeases.delete(context.poolKey);
-    projectGitHelpersReleasing.add(context.poolKey);
-    try {
-      await drainProjectGitExecutions(context.poolKey);
+    const releasePromise = (async () => {
       lease.releaseReservation?.();
       await gitHelperPool?.release(context.poolKey);
+    })();
+    projectGitHelperReleasePromises.set(context.poolKey, releasePromise);
+    try {
+      await releasePromise;
     } finally {
-      projectGitHelpersReleasing.delete(context.poolKey);
+      if (projectGitHelperReleasePromises.get(context.poolKey) === releasePromise) {
+        projectGitHelperReleasePromises.delete(context.poolKey);
+      }
       if (!projectGitHelperLeases.has(context.poolKey)) {
         projectGitExecLimits.delete(context.poolKey);
         projectGitInFlight.delete(context.poolKey);
@@ -224,27 +242,70 @@ export function acquireProjectGitHelperForSprint(cwd: string): () => Promise<voi
   };
 }
 
-/** Removes the persistent git helper container bound to a project root. */
-export async function releaseGitHelperForCwd(cwd: string): Promise<void> {
-  if (!gitHelperPool) {
-    return;
-  }
+/**
+ * Starts and validates the already-leased helper. Acquiring a lease is intentionally lazy for
+ * background workflows; dashboard selection calls this eagerly so subsequent chat/planning Git
+ * operations only pay `docker exec` latency.
+ */
+export async function prewarmProjectGitHelper(cwd: string): Promise<void> {
   const context = CommandRunner.resolveGitPoolContextForPath(cwd);
-  if (!context) {
+  if (!context || !projectGitHelperLeases.has(context.poolKey)) {
     return;
   }
-  const lease = projectGitHelperLeases.get(context.poolKey);
-  projectGitHelperLeases.delete(context.poolKey);
-  projectGitHelpersReleasing.add(context.poolKey);
-  try {
-    await drainProjectGitExecutions(context.poolKey);
-    lease?.releaseReservation?.();
-    await gitHelperPool.release(context.poolKey).catch(() => undefined);
-  } finally {
-    projectGitHelpersReleasing.delete(context.poolKey);
-    projectGitExecLimits.delete(context.poolKey);
-    projectGitInFlight.delete(context.poolKey);
+  const result = await commandRunner.run("git", ["--version"], {
+    cwd,
+    env: { ...process.env, CODE_UX_CONTAINERIZED_GIT: "1" },
+    timeout: 10_000,
+  });
+  if (!result.ok) {
+    throw new Error(result.stderr || result.stdout || "Failed to validate project Git helper.");
   }
+}
+
+/**
+ * Owns the persistent lease for the dashboard-selected project. A switch prepares the replacement
+ * before releasing the previous project so there is never a selection window that falls back to
+ * one-shot Git. Active sprint/invocation leases remain independent and keep background projects
+ * alive after the dashboard selects another project.
+ */
+export function setSelectedProjectGitHelper(cwd: string | null): Promise<void> {
+  const requestedCwd = cwd?.trim() || null;
+  const transition = selectedProjectGitHelperTransition
+    .catch(() => undefined)
+    .then(async () => {
+      const context = requestedCwd
+        ? CommandRunner.resolveGitPoolContextForPath(requestedCwd)
+        : null;
+      const current = selectedProjectGitHelper;
+
+      if (current && context?.poolKey === current.poolKey && projectGitHelperLeases.has(current.poolKey)) {
+        await prewarmProjectGitHelper(requestedCwd as string);
+        return;
+      }
+
+      if (!context || !requestedCwd) {
+        selectedProjectGitHelper = null;
+        await current?.release();
+        return;
+      }
+
+      const release = acquireProjectGitHelper(requestedCwd);
+      try {
+        await prewarmProjectGitHelper(requestedCwd);
+      } catch (error) {
+        await release();
+        throw error;
+      }
+
+      selectedProjectGitHelper = {
+        cwd: requestedCwd,
+        poolKey: context.poolKey,
+        release,
+      };
+      await current?.release();
+    });
+  selectedProjectGitHelperTransition = transition.catch(() => undefined);
+  return transition;
 }
 
 /** Drains the process-wide git helper pool during server shutdown. */
@@ -254,19 +315,18 @@ export async function shutdownGitHelperPool(): Promise<void> {
     ...projectGitHelperLeases.keys(),
     ...projectGitInFlight.keys(),
   ]);
-  for (const key of keys) {
-    projectGitHelpersReleasing.add(key);
-  }
   await Promise.all([...keys].map((key) => drainProjectGitExecutions(key)));
   for (const lease of projectGitHelperLeases.values()) {
     lease.releaseReservation?.();
   }
   projectGitHelperLeases.clear();
+  selectedProjectGitHelper = null;
+  selectedProjectGitHelperTransition = Promise.resolve();
   await pool?.shutdown();
   gitHelperPool = null;
   projectGitExecLimits.clear();
   projectGitInFlight.clear();
-  projectGitHelpersReleasing.clear();
+  projectGitHelperReleasePromises.clear();
 }
 
 export class CommandRunner {
@@ -309,8 +369,7 @@ export class CommandRunner {
       if (
         poolContext
         && !isRuntimeShutdownInProgress()
-        && projectGitHelperLeases.has(poolContext.poolKey)
-        && !projectGitHelpersReleasing.has(poolContext.poolKey)
+        && (projectGitHelperLeases.get(poolContext.poolKey)?.holders ?? 0) > 0
         && this.buildGitContainerPathMappings(poolContext.mountRoot, args, env).length === 0
       ) {
         const pooledOptions = safeCwd === undefined && safeStdinFile === undefined
@@ -330,8 +389,15 @@ export class CommandRunner {
     env: NodeJS.ProcessEnv,
     options: CommandOptions,
   ): Promise<CommandResult> {
+    // A holder can arrive while the prior final holder is physically stopping the old helper.
+    // Wait for that short transition, then create/reuse the replacement through the pooled path;
+    // never fall back to a throwaway container merely because ownership changed concurrently.
+    await projectGitHelperReleasePromises.get(context.poolKey)?.catch(() => undefined);
     const pool = getGitHelperPool();
     const projectLease = projectGitHelperLeases.get(context.poolKey);
+    if (!projectLease || projectLease.holders <= 0) {
+      return this.spawnProcess(this.resolveCommand("git", args, options), options);
+    }
     if (projectLease && !projectLease.releaseReservation) {
       projectLease.releaseReservation = pool.reserve(context.poolKey);
     }
@@ -447,7 +513,15 @@ export class CommandRunner {
         if (!(error instanceof HostUnavailableError)) {
           throw error;
         }
-        // Host unavailable/aborted-before-dispatch: fall through to the in-process path.
+        if (safeOptions.signal?.aborted || isRuntimeShutdownInProgress()) {
+          return {
+            ok: false,
+            code: null,
+            stdout: "",
+            stderr: "Command aborted",
+          };
+        }
+        // A non-shutdown host failure can still use the in-process performance fallback.
       }
     }
     return this.spawnProcessInline(resolvedCommand, safeOptions);

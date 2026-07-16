@@ -370,6 +370,40 @@ export class ChatThreadRuntimeService {
     this.quicksprintLauncher = launcher;
   }
 
+  public async prewarmThreadWorkspace(projectId: string, threadId: string): Promise<void> {
+    if (!this.deps.providerRunner.prewarmWorkspace) {
+      return;
+    }
+    const project = this.deps.projectManagementRepository.getProject(projectId);
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}`);
+    }
+    const dashboardSettings = this.deps.getDashboardSettings({ projectId });
+    const defaultBranch = resolveEffectiveDefaultBranch(project, dashboardSettings);
+    const invocationWorkspace = buildProviderInvocationWorkspaceOptions({
+      workflowSettings: dashboardSettings.cliWorkflow,
+      gitPolicy: {
+        githubMode: resolveEffectiveGithubMode(project, dashboardSettings),
+        defaultBranch,
+        githubToken: dashboardSettings.git?.githubToken,
+        gitlabToken: dashboardSettings.git?.gitlabToken,
+      },
+      lifecycle: "continue",
+    });
+
+    await this.deps.providerRunner.prewarmWorkspace({
+      cwd: project.baseDir,
+      repoPath: project.baseDir,
+      sessionId: threadId,
+      workspaceSessionId: threadId,
+      workflowSettings: dashboardSettings.cliWorkflow,
+      snapshotCheckout: invocationWorkspace.snapshotCheckout,
+      gitPolicy: invocationWorkspace.gitPolicy,
+      githubToken: invocationWorkspace.githubToken,
+      gitlabToken: invocationWorkspace.gitlabToken,
+    });
+  }
+
   public async resolveThreadRoute(
     thread: Pick<ConversationThreadRecord, "connectionId" | "projectId" | "runtimeState">,
     liveAssignments: ReturnType<ProjectWorkerAssignmentRepository["listAssignmentsForProject"]>,
@@ -522,8 +556,19 @@ export class ChatThreadRuntimeService {
     if (!route.providerId || !route.model || typeof route.apiKey !== "string") {
       throw new Error("Failed to resolve a chat worker for thread compaction.");
     }
-    const continueSessionId = activeSessionId || resolveLogicalCompactionContinuationId(route.providerId, thread.id);
-    if (!continueSessionId) {
+    const latestDashboardReplyUsage = route.providerId === "codex"
+      ? this.deps.executionRepository.getLatestProviderInvocationUsageBySession(thread.id, "dashboard_reply")
+      : null;
+    const persistedNativeSessionId = latestDashboardReplyUsage?.provider === "codex"
+      ? latestDashboardReplyUsage.nativeSessionId?.trim() || null
+      : null;
+    const continueSessionId = route.providerId === "codex"
+      ? persistedNativeSessionId
+      : activeSessionId || resolveLogicalCompactionContinuationId(route.providerId, thread.id);
+    const continueSessionWithoutNativeId = route.providerId === "codex"
+      && !continueSessionId
+      && Boolean(activeSessionId);
+    if (!continueSessionId && !continueSessionWithoutNativeId) {
       throw new Error(`Native chat compaction for ${route.providerId} requires an active provider session. Send a message in this thread before compacting it.`);
     }
 
@@ -534,6 +579,7 @@ export class ChatThreadRuntimeService {
       messages,
       route,
       continueSessionId,
+      continueSessionWithoutNativeId,
     );
     const compactedSessionId = compacted.nativeSessionId || compacted.summary.nativeSessionId || compacted.continueSessionId || null;
 
@@ -1404,6 +1450,7 @@ export class ChatThreadRuntimeService {
 
     let promptContent = "";
     let continueSessionId: string | null = null;
+    let continueSessionWithoutNativeId = false;
     const baseMcpConnection = this.deps.getMcpConnectionInfo?.() ?? null;
     const mcpConnection = baseMcpConnection
       ? { ...baseMcpConnection, threadId: thread.id }
@@ -1445,7 +1492,16 @@ export class ChatThreadRuntimeService {
       });
     } else {
       promptContent = buildChatContinuationPrompt(latestMessage, pendingAction, mcpAvailable, thread.title, suppressRichWidgets);
-      continueSessionId = runtimeState.sessionIds![0];
+      if (provider === "codex") {
+        const latestDashboardReplyUsage = this.deps.executionRepository
+          .getLatestProviderInvocationUsageBySession(thread.id, "dashboard_reply");
+        continueSessionId = latestDashboardReplyUsage?.provider === "codex"
+          ? latestDashboardReplyUsage.nativeSessionId?.trim() || null
+          : null;
+        continueSessionWithoutNativeId = !continueSessionId;
+      } else {
+        continueSessionId = runtimeState.sessionIds![0];
+      }
     }
 
     // opencode's `export <sessionID>` is cumulative for the whole session, so
@@ -1486,13 +1542,17 @@ export class ChatThreadRuntimeService {
       customModel: route.customModel,
       sessionId: thread.id,
       continueSessionId,
+      continueSessionWithoutNativeId,
       openCodeBaselineRawUsageJson,
       settings: dashboardSettings,
       prompt: finalPrompt,
       repoPath: project.baseDir,
       snapshotCheckout: invocationWorkspace.snapshotCheckout,
       gitPolicy: invocationWorkspace.gitPolicy,
-      workspaceLifecycle: continueSessionId ? "continue" : invocationWorkspace.workspaceLifecycle,
+      // Dashboard threads retain their own prepared snapshot volume. A new thread
+      // still gets an isolated workspace, while replay/restart turns reuse that
+      // complete snapshot instead of removing and reseeding it before every agent.
+      workspaceLifecycle: "continue",
       mcpConnection,
       agentMcpAccess,
       mcpAgentId: respondingAgent.id,
@@ -1613,8 +1673,9 @@ export class ChatThreadRuntimeService {
     thread: ConversationThreadRecord,
     messages: ConversationMessageRecord[],
     route: ThreadRouteResolution,
-    continueSessionId: string,
-  ): Promise<{ summary: ConversationCompactionSummary & { nativeSessionId?: string | null }; nativeSessionId: string | null; continueSessionId: string }> {
+    continueSessionId: string | null,
+    continueSessionWithoutNativeId: boolean,
+  ): Promise<{ summary: ConversationCompactionSummary & { nativeSessionId?: string | null }; nativeSessionId: string | null; continueSessionId: string | null }> {
     const provider = route.providerId!;
     // Fold customModel into the model so a local-redirect instance (customModel/customBaseUrl)
     // compacts against its configured endpoint rather than the real subscription. The runner
@@ -1636,7 +1697,7 @@ export class ChatThreadRuntimeService {
     const project = this.deps.projectManagementRepository.getProject(projectId);
     const defaultBranch = resolveEffectiveDefaultBranch(project ?? {}, dashboardSettings);
     const githubToken = this.deps.getGithubToken();
-    if (!continueSessionId) {
+    if (!continueSessionId && !continueSessionWithoutNativeId) {
       throw new Error("Native chat compaction requires an active provider session to continue.");
     }
     const execInvocation = this.deps.executionRepository.createExecutionInvocation({
@@ -1710,6 +1771,7 @@ export class ChatThreadRuntimeService {
           lifecycle: "continue",
         }),
         continueSessionId,
+        continueSessionWithoutNativeId,
         nativeSessionOperation: "compact",
       });
 

@@ -18,6 +18,12 @@ Provider CLIs are not baked into either image. Activated providers are downloade
 
 The browser payload follows the same pattern. When enabled, Code UX downloads the browser matched to the pinned Playwright version directly into a user-local versioned volume, verifies it offline, and mounts it read-only. Code UX does not redistribute the browser through GHCR.
 
+For explicit setup extensions, each Docker runner keeps verified content-addressed setup images hot in process. Warm invocations reuse the verified image without another Docker image inspection or build-context rewrite. If Docker reports that the derived image was removed, Code UX invalidates that readiness entry, rebuilds or resolves the setup image, and retries the launch. Concurrent processes poll setup-image build locks with a short adaptive delay, and a stale provider-container name is reclaimed before an immediate retry.
+
+Managed workspace and runtime volumes carry the original logical workspace-session label even when their Docker names use a shortened content hash. Startup cleanup compares that durable label with tracked provider sessions and active planning recovery work before removing old volumes; legacy unshortened volume names remain supported as a fallback. This prevents restart cleanup from deleting the preserved snapshot needed by an interrupted provider continuation.
+
+Within one runtime process, independent workspace-manager instances share a runtime-volume readiness and ownership registry. Concurrent preparation and provider launch therefore coalesce volume creation and ownership repair instead of starting duplicate `chown` helpers. Local stress runners wait for terminal owner-scoped workspace cleanup and remove only volumes belonging to their isolated state home before exit, preventing repeated DAG runs from slowing later Docker operations.
+
 ## Controls
 
 | Control | Behavior |

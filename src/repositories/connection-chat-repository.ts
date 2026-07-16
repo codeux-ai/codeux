@@ -1338,16 +1338,6 @@ export class ConnectionChatRepository {
       threadId: thread.id,
       payload: thread,
     });
-    this.realtimeService.publishRawEvent({
-      scopeType: "thread",
-      scopeId: thread.id,
-      eventType: "conversation.thread.updated",
-      entityType: "conversation_thread",
-      entityId: thread.id,
-      projectId: thread.projectId,
-      threadId: thread.id,
-      payload: thread,
-    });
   }
 
   private publishThreadDeletedEvent(projectId: string, threadId: string): void {
@@ -1363,16 +1353,6 @@ export class ConnectionChatRepository {
     this.realtimeService.publishRawEvent({
       scopeType: "project",
       scopeId: projectId,
-      eventType: "conversation.thread.deleted",
-      entityType: "conversation_thread",
-      entityId: threadId,
-      projectId,
-      threadId,
-      payload,
-    });
-    this.realtimeService.publishRawEvent({
-      scopeType: "thread",
-      scopeId: threadId,
       eventType: "conversation.thread.deleted",
       entityType: "conversation_thread",
       entityId: threadId,
@@ -1401,16 +1381,6 @@ export class ConnectionChatRepository {
       threadId,
       payload: message,
     });
-    this.realtimeService.publishRawEvent({
-      scopeType: "thread",
-      scopeId: threadId,
-      eventType: "conversation.message.created",
-      entityType: "conversation_message",
-      entityId: message.id,
-      projectId,
-      threadId,
-      payload: message,
-    });
   }
 
   private publishMessageUpdatedEvent(
@@ -1425,16 +1395,6 @@ export class ConnectionChatRepository {
     this.realtimeService.publishRawEvent({
       scopeType: "project",
       scopeId: projectId,
-      eventType: "conversation.message.updated",
-      entityType: "conversation_message",
-      entityId: message.id,
-      projectId,
-      threadId,
-      payload: message,
-    });
-    this.realtimeService.publishRawEvent({
-      scopeType: "thread",
-      scopeId: threadId,
       eventType: "conversation.message.updated",
       entityType: "conversation_message",
       entityId: message.id,

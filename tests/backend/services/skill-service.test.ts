@@ -7,9 +7,14 @@ import { AgentPresetRepository } from "../../../src/repositories/agent-preset-re
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { SkillRepository } from "../../../src/repositories/skill-repository.js";
 import { SkillService, type SkillEmbeddingProvider } from "../../../src/services/skill-service.js";
-import { ContainerizedSkillStorageGitRunner, SkillStorageVersionControlService } from "../../../src/services/skill-storage-version-control-service.js";
+import {
+  ContainerizedSkillStorageGitRunner,
+  type SkillStorageGitRunner,
+  SkillStorageVersionControlService,
+} from "../../../src/services/skill-storage-version-control-service.js";
 import { FakeSkillStorageGitRunner } from "../helpers/fake-skill-storage-git-runner.js";
 import { commandRunner } from "../../../src/services/cli-process-runner.js";
+import type { SkillRecord, SkillStorageRecord } from "../../../src/contracts/skill-types.js";
 
 const tempDirs: string[] = [];
 
@@ -97,6 +102,210 @@ describe("SkillService", () => {
       if (previous === undefined) delete process.env.CODE_UX_GIT_CONTAINER_MODE;
       else process.env.CODE_UX_GIT_CONTAINER_MODE = previous;
     }
+  });
+
+  it("reuses an unchanged materialized skill snapshot without launching Git again", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-skill-snapshot-cache-"));
+    tempDirs.push(dir);
+    const gitRunner = new FakeSkillStorageGitRunner();
+    const release = vi.fn(async () => undefined);
+    const acquire = vi.fn(() => release);
+    const service = new SkillStorageVersionControlService(path.join(dir, "skill-storages"), gitRunner, acquire);
+    const storage: SkillStorageRecord = {
+      id: "storage-1",
+      projectId: "project-1",
+      name: "Runtime skills",
+      description: "Reusable runtime guidance.",
+      storageKind: "project",
+      createdAt: "2026-07-16T00:00:00.000Z",
+      updatedAt: "2026-07-16T00:00:00.000Z",
+    };
+    const skill: SkillRecord = {
+      id: "skill-1",
+      projectId: "project-1",
+      storageId: storage.id,
+      name: "Fast startup",
+      description: "Avoid repeated runtime work.",
+      contentMarkdown: "Reuse the materialized snapshot.",
+      sourceType: "manual",
+      sourceRef: null,
+      contentHash: "hash-1",
+      tags: ["performance"],
+      appliesTo: ["runtime"],
+      version: "1.0.0",
+      createdAt: "2026-07-16T00:00:00.000Z",
+      updatedAt: "2026-07-16T00:00:00.000Z",
+    };
+
+    const first = await service.synchronize(storage.projectId, storage, [skill]);
+    const gitCallCount = gitRunner.calls.length;
+    const second = await service.synchronize(storage.projectId, storage, [skill]);
+
+    expect(second).toEqual(first);
+    expect(gitRunner.calls).toHaveLength(gitCallCount);
+    expect(acquire).toHaveBeenCalledTimes(1);
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it("repairs a tampered index before reusing an otherwise unchanged snapshot", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-skill-snapshot-index-"));
+    tempDirs.push(dir);
+    const gitRunner = new FakeSkillStorageGitRunner();
+    const release = vi.fn(async () => undefined);
+    const acquire = vi.fn(() => release);
+    const service = new SkillStorageVersionControlService(path.join(dir, "skill-storages"), gitRunner, acquire);
+    const storage: SkillStorageRecord = {
+      id: "storage-1",
+      projectId: "project-1",
+      name: "Runtime skills",
+      description: "Reusable runtime guidance.",
+      storageKind: "project",
+      createdAt: "2026-07-16T00:00:00.000Z",
+      updatedAt: "2026-07-16T00:00:00.000Z",
+    };
+    const repositoryPath = service.getRepositoryPath(storage.projectId, storage.id);
+
+    const first = await service.synchronize(storage.projectId, storage, []);
+    await fs.writeFile(path.join(repositoryPath, ".git", "index"), "staged-but-uncommitted");
+    const callsBeforeRepair = gitRunner.calls.length;
+
+    await expect(service.synchronize(storage.projectId, storage, [])).resolves.toEqual(first);
+    expect(gitRunner.calls.slice(callsBeforeRepair).map((call) => call.args[0])).toEqual([
+      "add",
+      "status",
+      "rev-parse",
+    ]);
+    expect(gitRunner.calls.filter((call) => call.args[0] === "commit")).toHaveLength(1);
+    expect(acquire).toHaveBeenCalledTimes(2);
+    expect(release).toHaveBeenCalledTimes(2);
+
+    const callsAfterRepair = gitRunner.calls.length;
+    await expect(service.synchronize(storage.projectId, storage, [])).resolves.toEqual(first);
+    expect(gitRunner.calls).toHaveLength(callsAfterRepair);
+  });
+
+  it("recovers staged materialization after a crash instead of adopting the stale HEAD", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-skill-snapshot-crash-"));
+    tempDirs.push(dir);
+    const gitRunner = new FakeSkillStorageGitRunner();
+    const acquire = vi.fn(() => vi.fn(async () => undefined));
+    const storage: SkillStorageRecord = {
+      id: "storage-1",
+      projectId: "project-1",
+      name: "Runtime skills",
+      description: "Reusable runtime guidance.",
+      storageKind: "project",
+      createdAt: "2026-07-16T00:00:00.000Z",
+      updatedAt: "2026-07-16T00:00:00.000Z",
+    };
+    const originalSkill: SkillRecord = {
+      id: "skill-1",
+      projectId: storage.projectId,
+      storageId: storage.id,
+      name: "Crash recovery",
+      description: "Keep committed provenance accurate.",
+      contentMarkdown: "Original committed content.",
+      sourceType: "manual",
+      sourceRef: null,
+      contentHash: "hash-1",
+      tags: ["reliability"],
+      appliesTo: ["runtime"],
+      version: "1.0.0",
+      createdAt: "2026-07-16T00:00:00.000Z",
+      updatedAt: "2026-07-16T00:00:00.000Z",
+    };
+    const repositoriesRoot = path.join(dir, "skill-storages");
+    const initialService = new SkillStorageVersionControlService(repositoriesRoot, gitRunner, acquire);
+    const first = await initialService.synchronize(storage.projectId, storage, [originalSkill]);
+    const updatedSkill: SkillRecord = {
+      ...originalSkill,
+      contentMarkdown: "Materialized and staged before the process crashed.",
+      contentHash: "hash-2",
+      updatedAt: "2026-07-16T01:00:00.000Z",
+    };
+    let interruptNextAdd = true;
+    const interruptedRunner: SkillStorageGitRunner = {
+      run: async (args, cwd) => {
+        const result = await gitRunner.run(args, cwd);
+        if (interruptNextAdd && args[0] === "add") {
+          interruptNextAdd = false;
+          throw new Error("simulated crash after git add");
+        }
+        return result;
+      },
+    };
+    const interruptedService = new SkillStorageVersionControlService(repositoriesRoot, interruptedRunner, acquire);
+
+    await expect(interruptedService.synchronize(storage.projectId, storage, [updatedSkill]))
+      .rejects.toThrow("simulated crash after git add");
+
+    const recoveryService = new SkillStorageVersionControlService(repositoriesRoot, gitRunner, acquire);
+    const recovered = await recoveryService.synchronize(storage.projectId, storage, [updatedSkill]);
+    expect(recovered.revision).not.toBe(first.revision);
+    expect(gitRunner.calls.filter((call) => call.args[0] === "commit")).toHaveLength(2);
+    await expect(fs.readFile(path.join(recovered.repositoryPath, ".git", "code-ux-storage-snapshot.json"), "utf8"))
+      .resolves.toContain(recovered.revision);
+  });
+
+  it("adopts an unchanged markerless snapshot only after a guarded Git cleanliness check", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-skill-snapshot-adopt-"));
+    tempDirs.push(dir);
+    const revision = "a".repeat(40);
+    const calls: string[][] = [];
+    const gitRunner: SkillStorageGitRunner = {
+      run: async (args, cwd) => {
+        calls.push([...args]);
+        if (args[0] === "add") {
+          await fs.writeFile(path.join(cwd, ".git", "index"), "verified-clean-index");
+        }
+        return {
+          stdout: args[0] === "rev-parse" ? revision : "",
+          stderr: "",
+        };
+      },
+    };
+    const acquire = vi.fn(() => vi.fn(async () => undefined));
+    const service = new SkillStorageVersionControlService(path.join(dir, "skill-storages"), gitRunner, acquire);
+    const storage: SkillStorageRecord = {
+      id: "storage-1",
+      projectId: "project-1",
+      name: "Runtime skills",
+      description: "Reusable runtime guidance.",
+      storageKind: "project",
+      createdAt: "2026-07-16T00:00:00.000Z",
+      updatedAt: "2026-07-16T00:00:00.000Z",
+    };
+    const repositoryPath = service.getRepositoryPath(storage.projectId, storage.id);
+    await fs.mkdir(path.join(repositoryPath, ".git", "refs", "heads"), { recursive: true });
+    await fs.mkdir(path.join(repositoryPath, "skills"), { recursive: true });
+    await fs.writeFile(path.join(repositoryPath, ".git", "HEAD"), "ref: refs/heads/main\n");
+    await fs.writeFile(path.join(repositoryPath, ".git", "refs", "heads", "main"), `${revision}\n`);
+    await fs.writeFile(path.join(repositoryPath, "storage.json"), `${JSON.stringify({
+      schemaVersion: 1,
+      id: storage.id,
+      projectId: storage.projectId,
+      name: storage.name,
+      description: storage.description,
+      storageKind: storage.storageKind,
+      skillCount: 0,
+    }, null, 2)}\n`);
+
+    await expect(service.synchronize(storage.projectId, storage, [])).resolves.toEqual({
+      repositoryPath,
+      revision,
+    });
+    expect(calls.map((args) => args[0])).toEqual(["add", "status", "rev-parse"]);
+    expect(acquire).toHaveBeenCalledTimes(1);
+    await expect(fs.readFile(path.join(repositoryPath, ".git", "code-ux-storage-snapshot.json"), "utf8"))
+      .resolves.toContain(revision);
+
+    const callsAfterAdoption = calls.length;
+    await expect(service.synchronize(storage.projectId, storage, [])).resolves.toEqual({
+      repositoryPath,
+      revision,
+    });
+    expect(calls).toHaveLength(callsAfterAdoption);
+    expect(acquire).toHaveBeenCalledTimes(1);
   });
 
   it("imports and renders skill markdown with frontmatter metadata", async () => {

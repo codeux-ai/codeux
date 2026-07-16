@@ -61,6 +61,7 @@ export class StructuredProviderResponseService {
     let parseRetriesUsed = 0;
     let providerAttempts = 0;
     let continueSessionId = args.continueSessionId;
+    let continueSessionWithoutNativeId = args.continueSessionWithoutNativeId === true;
     // opencode's `export <sessionID>` is cumulative for the whole session, so
     // a retry that resumes the same session (line ~128 below) needs the prior
     // attempt's raw snapshot as a baseline, updated after every attempt —
@@ -90,6 +91,7 @@ export class StructuredProviderResponseService {
         ...args,
         prompt: currentPrompt,
         continueSessionId,
+        continueSessionWithoutNativeId,
         openCodeBaselineRawUsageJson,
         expectTextOutput: true,
       });
@@ -146,8 +148,19 @@ export class StructuredProviderResponseService {
         throw lastError;
       }
 
-      nativeSessionId = result.nativeSessionId || (args.provider === "opencode" ? null : continueSessionId) || null;
-      continueSessionId = nativeSessionId || args.sessionId;
+      if (result.nativeSessionId) {
+        nativeSessionId = result.nativeSessionId;
+        continueSessionId = result.nativeSessionId;
+        continueSessionWithoutNativeId = false;
+      } else if (args.provider === "codex") {
+        nativeSessionId = null;
+        continueSessionId = null;
+        continueSessionWithoutNativeId = true;
+      } else {
+        nativeSessionId = (args.provider === "opencode" ? null : continueSessionId) || null;
+        continueSessionId = nativeSessionId || args.sessionId;
+        continueSessionWithoutNativeId = false;
+      }
 
       try {
         const parsed = args.parseFn(bodyMarkdown);

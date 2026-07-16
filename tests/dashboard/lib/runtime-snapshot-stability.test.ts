@@ -42,6 +42,7 @@ function createExecution(overrides: Partial<ExecutionDashboardSnapshot> = {}): E
     primaryAssignedWorker: null,
     overflowAssignedWorkers: [],
     attentionItems: [],
+    sprintWorkflowProjections: [],
     recentEvents: [],
     updatedAt: "2026-03-26T10:00:00.000Z",
     ...overrides,
@@ -271,6 +272,7 @@ describe("runtime snapshot stability", () => {
       primaryAssignedWorker: null,
       overflowAssignedWorkers: [],
       attentionItems: [],
+      sprintWorkflowProjections: [],
       recentEvents: [],
       updatedAt: null,
     });
@@ -306,6 +308,54 @@ describe("runtime snapshot stability", () => {
     });
 
     expect(stabilizeExecutionSnapshot(previousExecution, nextExecution)).toBe(nextExecution);
+  });
+
+  it("keeps active planning and human workflow projections stable outside bounded feeds", () => {
+    const previousExecution = createExecution({
+      sprintWorkflowProjections: [{
+        sprintId: "sprint-1",
+        planningStatus: "running",
+        humanIntervention: null,
+      }],
+    });
+    const equivalentExecution = createExecution({
+      sprintWorkflowProjections: previousExecution.sprintWorkflowProjections.map((projection) => ({ ...projection })),
+      updatedAt: "2026-03-26T10:00:05.000Z",
+    });
+    const emptyExecution = createExecution({
+      projectId: null,
+      projectName: null,
+      sprintWorkflowProjections: [],
+      updatedAt: null,
+    });
+
+    expect(hasActiveExecutionSnapshot(previousExecution)).toBe(true);
+    expect(stabilizeExecutionSnapshot(previousExecution, equivalentExecution).sprintWorkflowProjections).toBe(
+      previousExecution.sprintWorkflowProjections,
+    );
+    expect(stabilizeExecutionSnapshot(previousExecution, emptyExecution)).toBe(previousExecution);
+  });
+
+  it("treats durable workflow projection changes as execution updates", () => {
+    const previousExecution = createExecution({
+      sprintWorkflowProjections: [{
+        sprintId: "sprint-1",
+        planningStatus: "running",
+        humanIntervention: null,
+      }],
+    });
+    const nextExecution = createExecution({
+      sprintWorkflowProjections: [{
+        sprintId: "sprint-1",
+        planningStatus: "completed",
+        humanIntervention: null,
+      }],
+    });
+
+    expect(areExecutionSnapshotsEquivalent(previousExecution, nextExecution)).toBe(false);
+    const stabilized = stabilizeExecutionSnapshot(previousExecution, nextExecution);
+    expect(stabilized).not.toBe(previousExecution);
+    expect(stabilized.sprintWorkflowProjections).toBe(nextExecution.sprintWorkflowProjections);
   });
 
   it("treats execution snapshots with only fetch timestamp changes as equivalent", () => {
@@ -597,6 +647,11 @@ describe("runtime snapshot stability", () => {
       createdAt: "2026-03-26T10:00:02.000Z",
       payload: { summaryMarkdown: "Started" },
     }];
+    const sprintWorkflowProjections = [{
+      sprintId: "sprint-1",
+      planningStatus: "completed",
+      humanIntervention: null,
+    }];
     const recentInvocations = [{
       id: "invocation-1",
       projectId: "project-1",
@@ -634,6 +689,7 @@ describe("runtime snapshot stability", () => {
         taskDispatches,
         connections,
         attentionItems,
+        sprintWorkflowProjections,
         recentEvents,
         recentInvocations,
       }),
@@ -654,6 +710,7 @@ describe("runtime snapshot stability", () => {
         taskDispatches: previous.execution.taskDispatches.map((dispatch) => ({ ...dispatch })),
         connections: previous.execution.connections.map((connection) => ({ ...connection })),
         attentionItems: previous.execution.attentionItems.map((item) => ({ ...item })),
+        sprintWorkflowProjections: previous.execution.sprintWorkflowProjections.map((projection) => ({ ...projection })),
         recentEvents: previous.execution.recentEvents.map((event) => ({ ...event })),
         recentInvocations: previous.execution.recentInvocations?.map((invocation) => ({ ...invocation })),
         updatedAt: "2026-03-26T10:00:05.000Z",
@@ -669,6 +726,7 @@ describe("runtime snapshot stability", () => {
     expect(stabilized.execution.taskDispatches).toBe(previous.execution.taskDispatches);
     expect(stabilized.execution.connections).toBe(previous.execution.connections);
     expect(stabilized.execution.attentionItems).toBe(previous.execution.attentionItems);
+    expect(stabilized.execution.sprintWorkflowProjections).toBe(previous.execution.sprintWorkflowProjections);
     expect(stabilized.execution.recentEvents).toBe(previous.execution.recentEvents);
     expect(stabilized.execution.recentInvocations).toBe(previous.execution.recentInvocations);
   });

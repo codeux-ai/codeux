@@ -1910,8 +1910,8 @@ describe("VirtualWorkerService", () => {
       "fix/branch",
       "fix/branch",
       "cli-codex-existing",
-      expect.anything(),
-      { remoteOnly: true },
+      { githubToken: "", gitlabToken: "" },
+      { remoteOnly: true, refreshRemote: true, allowExistingWorkerBranch: true },
     );
   });
 
@@ -2130,8 +2130,8 @@ describe("VirtualWorkerService", () => {
       "src",
       "tgt",
       expect.stringMatching(/^virtual-merge-codex-/),
-      expect.anything(),
-      { remoteOnly: true },
+      { githubToken: "", gitlabToken: "" },
+      { remoteOnly: true, refreshRemote: true, allowExistingWorkerBranch: true },
     );
     expect(projectManagementRepository.getTask(task.id)?.mergeIndicator).toBeNull();
     expect(projectManagementRepository.getTask(task.id)?.isMerged).toBe(false);

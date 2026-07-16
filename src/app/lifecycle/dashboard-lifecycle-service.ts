@@ -111,6 +111,7 @@ import type { CredentialBroker } from "../../services/credentials/credential-bro
 import type { ChatProviderSecretService } from "../../services/chat-provider-secret-service.js";
 import type { ChatProviderVerificationService } from "../../services/chat-provider-verification-service.js";
 import type { ChatConnectorRegistry } from "../../domain/chat-connectors/registry.js";
+import { setSelectedProjectGitHelper } from "../../shared/subprocess/command-runner.js";
 
 const updateCheckerService = new UpdateCheckerService();
 
@@ -578,6 +579,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
           primaryAssignedWorker: null,
           overflowAssignedWorkers: [],
           attentionItems: [],
+          sprintWorkflowProjections: [],
           recentEvents: [],
           updatedAt: null,
         };
@@ -742,14 +744,55 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     getProject: (projectId) => deps.projectManagementRepository.getProject(projectId),
     getProjectInitializationState: (projectId) => deps.projectInitializationStateService.getProjectInitializationState(projectId),
     updateProject: (projectId, input) => deps.projectManagementRepository.updateProject(projectId, input),
-    deleteProject: (projectId) => deps.projectManagementRepository.deleteProject(projectId),
-    selectProject: (projectId) => {
+    deleteProject: (projectId) => {
+      const wasSelected = deps.projectManagementRepository.getSelectedProjectId() === projectId;
+      deps.projectManagementRepository.deleteProject(projectId);
+      if (wasSelected) {
+        const selectedProjectId = deps.projectManagementRepository.getSelectedProjectId();
+        const selectedProject = selectedProjectId
+          ? deps.projectManagementRepository.getProject(selectedProjectId)
+          : null;
+        void setSelectedProjectGitHelper(selectedProject?.baseDir || null).catch((error) => {
+          deps.logger.warn("Failed to switch selected-project Git helper after project deletion", {
+            projectId: selectedProjectId,
+            deletedProjectId: projectId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+      }
+    },
+    selectProject: async (projectId) => {
       const selectedProjectId = deps.projectManagementRepository.setSelectedProjectId(projectId);
       cache.invalidateProjects();
       if (projectId) {
         cache.invalidateProjectExecution(projectId);
       }
       deps.projectManagementRepository.notifyProjectsUpdated();
+      const selectedProject = selectedProjectId
+        ? deps.projectManagementRepository.getProject(selectedProjectId)
+        : null;
+      try {
+        await setSelectedProjectGitHelper(selectedProject?.baseDir || null);
+      } catch (error) {
+        // Project selection remains usable when Docker is temporarily unavailable. The next
+        // project-scoped Git operation uses the same lease path and repairs/retries the helper.
+        deps.logger.warn("Failed to prewarm selected-project Git helper", {
+          projectId: selectedProjectId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      const latestThread = selectedProjectId
+        ? deps.connectionChatRepository.listThreads(selectedProjectId)[0]
+        : null;
+      if (selectedProjectId && latestThread) {
+        void deps.chatThreadRuntimeService.prewarmThreadWorkspace(selectedProjectId, latestThread.id).catch((error) => {
+          deps.logger.warn("Failed to prewarm selected-project chat workspace", {
+            projectId: selectedProjectId,
+            threadId: latestThread.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+      }
       return selectedProjectId;
     },
     selectSprint: (projectId, sprintId) => {
@@ -835,7 +878,17 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     readInstructionFile: (projectId, fileId) => instructionFileService.readInstructionFile(projectId, fileId),
     writeInstructionFile: (projectId, fileId, content) => instructionFileService.writeInstructionFile(projectId, fileId, content),
     listConversationThreads: (projectId) => deps.connectionChatRepository.listThreads(projectId),
-    createConversationThread: (projectId, input) => deps.connectionChatRepository.createThread(projectId, input),
+    createConversationThread: (projectId, input) => {
+      const thread = deps.connectionChatRepository.createThread(projectId, input);
+      void deps.chatThreadRuntimeService.prewarmThreadWorkspace(projectId, thread.id).catch((error) => {
+        deps.logger.warn("Failed to prewarm new chat workspace", {
+          projectId,
+          threadId: thread.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+      return thread;
+    },
     updateConversationThread: (threadId, input) => deps.chatThreadRuntimeService.updateConversationThread(threadId, input),
     updateThreadRoute: (threadId, input) => deps.chatThreadRuntimeService.updateThreadRoute(threadId, input),
     compactThreadSession: (threadId) => deps.chatThreadRuntimeService.compactThreadSession(threadId),

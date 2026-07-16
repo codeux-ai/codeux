@@ -74,8 +74,8 @@ The OS Software catalog is a static reference. It does not participate in Settin
 
 Experience mode is controlled from **Settings -> General** with three user-facing choices:
 
-- **Easy** — shows the essentials: General, Appearance, Integrations, and Danger Zone. Primary navigation shows Chat, Browser Preview, Stats, Live, Settings/Config, and Docs.
-- **Standard** — the balanced project-operation surface: General, Appearance, AI Models, Sprint & Git, Browser Preview, Techstacks, Agents, Memory, Integrations, and Danger Zone. Primary navigation shows Chat, Overview, Sprints, Tasks, Agents, Stats, Browser Preview, Docs, and Settings/Config.
+- **Easy** — shows the essentials: General, Appearance, Integrations, and Danger Zone. Primary navigation shows Chat, Sprints, Browser Preview, Stats, Live, Settings/Config, and Docs.
+- **Standard** — the balanced project-operation surface: General, Appearance, AI Models, Sprint & Git, Browser Preview, Techstacks, Agents, Memory, Integrations, and Danger Zone. Primary navigation shows Chat, Overview, Sprints, Tasks, Agents, Nodes, Stats, Scheduler, Browser Preview, Live, Docs, and Settings/Config.
 - **Expert** — shows all settings categories and advanced cards, and is the default for new or legacy settings.
 
 Changing mode filters what is visible. It does not delete hidden values, mutate project overrides, or save anything until you use the normal Save action.

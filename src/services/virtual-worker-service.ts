@@ -86,6 +86,7 @@ interface TaskCiFixContinuation {
   sessionId: string;
   resumeSessionId: string;
   continueSessionId: string | null;
+  continueSessionWithoutNativeId: boolean;
   taskRunId: string | null;
   previousInvocation: ProviderInvocationUsageRecord | null;
   workerAgent: AgentPresetRecord | null;
@@ -916,7 +917,10 @@ export class VirtualWorkerService {
       sessionId,
       resumeSessionId: workspaceTarget?.sessionId || sessionId,
       continueSessionId: previousInvocation?.nativeSessionId
-        || (provider === "claude-code" ? null : sessionId),
+        || (provider === "claude-code" || provider === "codex" ? null : sessionId),
+      continueSessionWithoutNativeId: provider === "codex"
+        && Boolean(previousInvocation)
+        && !previousInvocation?.nativeSessionId,
       taskRunId: taskRun?.sessionId ? taskRun.id : workspaceTarget?.taskRunId || taskRun?.id || null,
       previousInvocation,
       workerAgent,
@@ -1545,6 +1549,9 @@ export class VirtualWorkerService {
             customBaseUrl: providerSettings.customBaseUrl,
             customModel: providerSettings.customModel,
             continueSessionId: repairRuntime.nativeSessionId,
+            continueSessionWithoutNativeId: provider === "codex"
+              && !repairRuntime.nativeSessionId
+              && Boolean(savedRuntime),
             openCodeBaselineRawUsageJson: provider === "opencode"
               ? previousInvocation?.rawUsageJson ?? null
               : null,
@@ -2079,6 +2086,9 @@ export class VirtualWorkerService {
           customModel: providerSettings.customModel,
           taskRunId: taskContinuation?.taskRunId || undefined,
           continueSessionId: repairRuntime.nativeSessionId,
+          continueSessionWithoutNativeId: provider === "codex"
+            && !repairRuntime.nativeSessionId
+            && Boolean(savedRuntime || taskContinuation?.continueSessionWithoutNativeId),
           openCodeBaselineRawUsageJson: provider === "opencode"
             ? previousInvocation?.rawUsageJson ?? null
             : null,
@@ -2539,6 +2549,7 @@ export class VirtualWorkerService {
     customModel?: string;
     taskRunId?: string;
     continueSessionId?: string | null;
+    continueSessionWithoutNativeId?: boolean;
     openCodeBaselineRawUsageJson?: Record<string, unknown> | null;
     githubToken: string;
     agentMcpAccess?: AgentMcpAccessConfig | null;
@@ -2594,6 +2605,7 @@ export class VirtualWorkerService {
       customModel: args.customModel,
       sessionId: args.sessionId,
       continueSessionId: args.continueSessionId,
+      continueSessionWithoutNativeId: args.continueSessionWithoutNativeId,
       openCodeBaselineRawUsageJson: args.openCodeBaselineRawUsageJson,
       workflowSettings: args.workflowSettings,
       repoPath: args.repoPath,

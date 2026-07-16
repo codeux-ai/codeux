@@ -153,6 +153,13 @@ function createExecution(updatedAt = "2026-03-30T09:00:00.000Z"): ExecutionDashb
         updatedAt: "2026-03-30T09:00:00.000Z",
       },
     ],
+    sprintWorkflowProjections: [
+      {
+        sprintId: "sprint-1",
+        planningStatus: "running",
+        humanIntervention: null,
+      },
+    ],
     recentEvents: [
       {
         id: "event-1",
@@ -346,6 +353,20 @@ describe("dashboard realtime payload fingerprint", () => {
       status: "completed",
       finishedAt: "2026-03-30T09:02:00.000Z",
     }));
+
+    expect(getDashboardRealtimePayloadFingerprint("project.execution.updated", previous)).not.toBe(
+      getDashboardRealtimePayloadFingerprint("project.execution.updated", next),
+    );
+  });
+
+  it("changes when durable sprint workflow evidence changes", () => {
+    const previous = createExecution();
+    const next = clone(previous);
+    next.sprintWorkflowProjections[0] = {
+      ...next.sprintWorkflowProjections[0],
+      planningStatus: "completed",
+      humanIntervention: next.attentionItems[0],
+    };
 
     expect(getDashboardRealtimePayloadFingerprint("project.execution.updated", previous)).not.toBe(
       getDashboardRealtimePayloadFingerprint("project.execution.updated", next),

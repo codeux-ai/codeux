@@ -106,8 +106,8 @@ describe("qa-review-branch-resolution", () => {
       if (args[0] === "for-each-ref") {
         return {
           stdout: [
-            `origin/${oldBranch}`,
-            `origin/${newBranch}`,
+            `origin/${oldBranch}\0${100}`,
+            `origin/${newBranch}\0${200}`,
           ].join("\n"),
         };
       }
@@ -116,12 +116,6 @@ describe("qa-review-branch-resolution", () => {
       }
       if (args[0] === "rev-list" && args[2] === `origin/feature/main..origin/${newBranch}`) {
         return { stdout: "2\n" };
-      }
-      if (args[0] === "log" && args[3] === `origin/${oldBranch}`) {
-        return { stdout: "100\n" };
-      }
-      if (args[0] === "log" && args[3] === `origin/${newBranch}`) {
-        return { stdout: "200\n" };
       }
       throw new Error(`unexpected git args: ${args.join(" ")}`);
     });

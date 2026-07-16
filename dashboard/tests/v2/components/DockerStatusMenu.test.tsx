@@ -5,6 +5,7 @@ import { render, screen, waitFor, fireEvent, cleanup, within } from "@testing-li
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { DockerStatusMenu } from "../../../src/v2/components/DockerStatusMenu.js";
+import { clearLivePayloadCacheForTests } from "../../../src/lib/api/dashboard-api.js";
 import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
 
@@ -84,6 +85,7 @@ const mockFetchResponses = (containers: unknown, readiness: unknown = mockReadin
 
 describe("DockerStatusMenu", () => {
   beforeEach(() => {
+    clearLivePayloadCacheForTests();
     vi.stubGlobal("fetch", vi.fn());
   });
 

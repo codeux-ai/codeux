@@ -345,6 +345,11 @@ describe("DashboardSnapshotCache", () => {
             projectName: `Project ${selectedSprintId}`,
             sprintRuns: [{ id: `run-${selectedSprintId}`, status: "running" }],
             taskDispatches: [],
+            sprintWorkflowProjections: [{
+              sprintId: selectedSprintId,
+              planningStatus: "completed",
+              humanIntervention: null,
+            }],
             recentEvents: [{ id: `event-${selectedSprintId}` }],
             recentInvocations: [{ id: `invocation-${selectedSprintId}` }],
           };
@@ -363,6 +368,16 @@ describe("DashboardSnapshotCache", () => {
       expect(leanSprint1.recentInvocations).toEqual([]);
       expect(leanSprint2.recentEvents).toEqual([]);
       expect(leanSprint2.recentInvocations).toEqual([]);
+      expect(leanSprint1.sprintWorkflowProjections).toEqual([{
+        sprintId: "sprint-1",
+        planningStatus: "completed",
+        humanIntervention: null,
+      }]);
+      expect(leanSprint2.sprintWorkflowProjections).toEqual([{
+        sprintId: "sprint-2",
+        planningStatus: "completed",
+        humanIntervention: null,
+      }]);
       expect(fullSprint1.recentEvents).toEqual([{ id: "event-sprint-1" }]);
       expect(fullSprint1.recentInvocations).toEqual([{ id: "invocation-sprint-1" }]);
       expect(fullSprint2.recentEvents).toEqual([{ id: "event-sprint-2" }]);

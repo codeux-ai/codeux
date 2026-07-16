@@ -22,6 +22,9 @@ vi.mock('../../../../src/repositories/execution/execution-human-intervention-que
   buildHumanInterventionSummaryBySprintRun: vi.fn(() => new Map()),
   listActiveAttentionRowsForProject: vi.fn(() => [])
 }));
+vi.mock('../../../../src/repositories/execution/execution-sprint-workflow-projection-query.js', () => ({
+  queryExecutionSprintWorkflowProjections: vi.fn(() => [])
+}));
 vi.mock('../../../../src/repositories/execution/execution-usage-query.js', () => ({
   withWallTime: vi.fn((usage, wallTime) => ({ ...usage, wallTime }))
 }));
@@ -111,6 +114,23 @@ describe('queryProjectExecutionSnapshot', () => {
     expect(snapshot.recentInvocations).toEqual([invocation]);
   });
 
+  it('includes durable sprint workflow projections independently of bounded feeds', async () => {
+    const { queryExecutionSprintWorkflowProjections } = await import(
+      '../../../../src/repositories/execution/execution-sprint-workflow-projection-query.js'
+    );
+    const projection = {
+      sprintId: 'sprint-1',
+      planningStatus: 'running',
+      humanIntervention: null,
+    };
+    (queryExecutionSprintWorkflowProjections as any).mockReturnValueOnce([projection]);
+
+    const snapshot = queryProjectExecutionSnapshot(mockDb as DatabaseAdapter, mockStorage, 'proj-1', mockDeps);
+
+    expect(queryExecutionSprintWorkflowProjections).toHaveBeenCalledWith(mockDb, 'proj-1');
+    expect(snapshot.sprintWorkflowProjections).toEqual([projection]);
+  });
+
   it('merges selected sprint and expanded run invocations into the live feed', async () => {
     const { queryExecutionSprintRuns } = await import('../../../../src/repositories/execution/execution-sprint-runs-query.js');
     const { queryExecutionRuntimeEvents } = await import('../../../../src/repositories/execution/execution-runtime-events-query.js');
@@ -190,6 +210,7 @@ async function importRealSnapshotQuery(): Promise<typeof import("../../../../src
   vi.doUnmock("../../../../src/repositories/execution/execution-runtime-events-query.js");
   vi.doUnmock("../../../../src/repositories/execution/execution-invocations-query.js");
   vi.doUnmock("../../../../src/repositories/execution/execution-human-intervention-query.js");
+  vi.doUnmock("../../../../src/repositories/execution/execution-sprint-workflow-projection-query.js");
   vi.doUnmock("../../../../src/repositories/execution/execution-usage-query.js");
   vi.doUnmock("../../../../src/repositories/execution/execution-read-model-mappers.js");
   return import("../../../../src/repositories/execution/project-execution-snapshot-query.js");

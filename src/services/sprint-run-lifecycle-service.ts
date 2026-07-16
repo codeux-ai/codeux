@@ -9,6 +9,9 @@ import type {
 import type { SprintStatus } from "../contracts/project-management-types.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
+import { acquireProjectGitHelper } from "../shared/subprocess/command-runner.js";
+
+type ProjectGitHelperLeaseFactory = (repoPath: string) => () => Promise<void>;
 
 export interface SprintRunLifecycleServiceDeps {
   executionRepository: Pick<
@@ -22,7 +25,8 @@ export interface SprintRunLifecycleServiceDeps {
     | "renewLease"
     | "updateSprintRun"
   >;
-  projectManagementRepository: Pick<ProjectManagementRepository, "getRawSprintStatus" | "updateSprint">;
+  projectManagementRepository: Pick<ProjectManagementRepository, "getProject" | "getRawSprintStatus" | "updateSprint">;
+  acquireProjectGitHelper?: ProjectGitHelperLeaseFactory;
 }
 
 export interface SprintRunTransitionInput {
@@ -54,11 +58,17 @@ export function mapSprintRunStatusToSprintStatus(status: SprintRunStatus): Sprin
 }
 
 export class SprintRunLifecycleService {
-  constructor(private readonly deps: SprintRunLifecycleServiceDeps) {}
+  private readonly projectGitHelperReleasesBySprintRunId = new Map<string, () => Promise<void>>();
+  private readonly acquireProjectGitHelper: ProjectGitHelperLeaseFactory;
+
+  constructor(private readonly deps: SprintRunLifecycleServiceDeps) {
+    this.acquireProjectGitHelper = deps.acquireProjectGitHelper ?? acquireProjectGitHelper;
+  }
 
   createRun(input: CreateSprintRunInput): SprintRunRecord {
     const sprintRun = this.deps.executionRepository.createSprintRun(input);
     this.syncSprintStatus(sprintRun.sprintId, sprintRun.status);
+    this.syncProjectGitHelper(sprintRun);
     return sprintRun;
   }
 
@@ -66,6 +76,7 @@ export class SprintRunLifecycleService {
     const updated = this.deps.executionRepository.updateSprintRun(sprintRunId, input);
     if (input.status) {
       this.syncSprintStatus(updated.sprintId, updated.status);
+      this.syncProjectGitHelper(updated);
     }
     return updated;
   }
@@ -118,6 +129,7 @@ export class SprintRunLifecycleService {
     ) {
       if (latestRun) {
         this.syncSprintStatus(latestRun.sprintId, latestRun.status);
+        this.syncProjectGitHelper(latestRun);
       }
       return false;
     }
@@ -154,6 +166,7 @@ export class SprintRunLifecycleService {
     const updated = this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(sprintRunId);
     if (updated) {
       this.syncSprintStatus(updated.sprintId, updated.status);
+      this.syncProjectGitHelper(updated);
     }
     return updated;
   }
@@ -165,4 +178,35 @@ export class SprintRunLifecycleService {
     }
     this.deps.projectManagementRepository.updateSprint(sprintId, { status: nextStatus });
   }
+
+  private syncProjectGitHelper(sprintRun: SprintRunRecord): void {
+    if (isActiveSprintRunStatus(sprintRun.status)) {
+      if (this.projectGitHelperReleasesBySprintRunId.has(sprintRun.id)) {
+        return;
+      }
+
+      const repoPath = this.deps.projectManagementRepository.getProject(sprintRun.projectId)?.baseDir.trim();
+      if (!repoPath) {
+        return;
+      }
+
+      this.projectGitHelperReleasesBySprintRunId.set(
+        sprintRun.id,
+        this.acquireProjectGitHelper(repoPath),
+      );
+      return;
+    }
+
+    const release = this.projectGitHelperReleasesBySprintRunId.get(sprintRun.id);
+    if (!release) {
+      return;
+    }
+
+    this.projectGitHelperReleasesBySprintRunId.delete(sprintRun.id);
+    void release().catch(() => undefined);
+  }
+}
+
+function isActiveSprintRunStatus(status: SprintRunStatus): boolean {
+  return status === "queued" || status === "running" || status === "cancel_requested";
 }

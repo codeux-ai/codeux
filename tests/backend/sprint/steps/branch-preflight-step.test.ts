@@ -106,6 +106,7 @@ describe("SprintOrchestrator - Preflight Logic", () => {
 vi.mock("fs/promises");
 vi.mock("../../../../src/shared/subprocess/command-runner.js", () => {
   return {
+    acquireProjectGitHelper: vi.fn(() => vi.fn().mockResolvedValue(undefined)),
     commandRunner: {
       run: vi.fn()
     }
@@ -201,6 +202,26 @@ describe("runBranchPreflightStep (Async)", () => {
 
     expect(result).toEqual({ existsLocal: true, existsRemote: true });
     expect(commandRunner.run).toHaveBeenCalledWith("git", ["show-ref", "--verify", "refs/remotes/origin/feature/sprint1"], { cwd: "/valid-repo" });
+  });
+
+  it("uses refreshed tracking refs without another network probe", async () => {
+    vi.mocked(fs.stat).mockResolvedValue({ isDirectory: () => true } as any);
+    vi.mocked(commandRunner.run)
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "true\n", stderr: "" })
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" });
+
+    const result = await runBranchPreflightStep("/valid-repo", "feature/sprint1", {
+      authEnv: {},
+      remoteRefsFresh: true,
+    });
+
+    expect(result).toEqual({ existsLocal: true, existsRemote: true });
+    expect(commandRunner.run).not.toHaveBeenCalledWith(
+      "git",
+      ["ls-remote", "--heads", "origin", "feature/sprint1"],
+      expect.anything(),
+    );
   });
 
   it("returns existsLocal false and existsRemote false if isGitRepository throws", async () => {
@@ -482,6 +503,25 @@ describe("runBranchPreflightStep (Async)", () => {
     const branch = await resolveUniqueSprintBranchName("/valid-repo", "feature/sprint-122-implementation");
 
     expect(branch).toBe("feature/sprint-122-implementation");
+  });
+
+  it("does not fetch again when the orchestrator already refreshed origin", async () => {
+    vi.mocked(commandRunner.run)
+      .mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "" });
+
+    const branch = await resolveUniqueSprintBranchName(
+      "/valid-repo",
+      "feature/sprint-122-implementation",
+      { remoteRefsFresh: true },
+    );
+
+    expect(branch).toBe("feature/sprint-122-implementation");
+    expect(commandRunner.run).not.toHaveBeenCalledWith(
+      "git",
+      ["fetch", "origin", "--prune"],
+      expect.anything(),
+    );
   });
 
   it("appends a numeric suffix when the generated branch exists locally", async () => {
