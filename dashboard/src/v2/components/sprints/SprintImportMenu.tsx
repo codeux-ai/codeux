@@ -2,7 +2,8 @@
 import { h } from "preact";
 import { createPortal } from "preact/compat";
 import { useCallback, useState, useRef, useEffect, useLayoutEffect } from "preact/hooks";
-import { Boxes, CheckSquare, Download, FileText, Github, Gitlab, Layers, ListTodo, Palette, Shapes } from "lucide-preact";
+import { Boxes, CheckSquare, Download, FileText, Layers, ListTodo, Palette, Shapes } from "lucide-preact";
+import { Github, Gitlab } from "../icons/GitHostIcons.js";
 import { JiraIcon } from "../icons/JiraIcon.js";
 import { useDashboardI18n } from "../../i18n/index.js";
 import { sprintsMessages } from "../../i18n/messages/sprints.js";

@@ -32,6 +32,7 @@ const runtimeImportProbe = [
   "@modelcontextprotocol/sdk/server/index.js",
   "@modelcontextprotocol/sdk/types.js",
   "dotenv",
+  "onnxruntime-node",
   "zod",
 ];
 

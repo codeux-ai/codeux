@@ -1,7 +1,8 @@
 import type { FunctionComponent } from "preact";
-import { ShieldCheck, Info, Library, Github, Star, BookOpen } from "lucide-preact";
+import { ShieldCheck, Info, Library, Star, BookOpen } from "lucide-preact";
 import { getSafeUrl } from "../../lib/safe-url.js";
 import { useOnboardingMessages } from "../../i18n/messages/onboarding.js";
+import { Github } from "../icons/GitHostIcons.js";
 
 const CODEUX_REPO_URL = "https://github.com/codeux-ai/codeux";
 

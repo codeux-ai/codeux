@@ -1,9 +1,10 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
-import { AlertTriangle, Boxes, CheckSquare, ChevronDown, FileText, Github, Gitlab, Layers, ListTodo, Palette, Shapes, SlidersHorizontal, X } from "lucide-preact";
+import { AlertTriangle, Boxes, CheckSquare, ChevronDown, FileText, Layers, ListTodo, Palette, Shapes, SlidersHorizontal, X } from "lucide-preact";
 import type {
   IssueImportErrorCopy,
   IssueImportProviderMetadata,
 } from "../../../lib/issue-import-view-models.js";
+import { Github, Gitlab } from "../../icons/GitHostIcons.js";
 import { JiraIcon } from "../../icons/JiraIcon.js";
 import { useDashboardI18n } from "../../../i18n/index.js";
 import { sprintsMessages } from "../../../i18n/messages/sprints.js";

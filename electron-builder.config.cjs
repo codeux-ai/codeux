@@ -24,6 +24,9 @@ function onNodeModuleFile(filePath) {
 }
 
 module.exports = {
+  toolsets: {
+    nsis: "1.2.1",
+  },
   appId: "com.codeux.desktop",
   productName: "Code UX",
   artifactName: "Code-UX-${version}-${os}-${arch}.${ext}",

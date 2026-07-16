@@ -6,6 +6,21 @@ import { describe, expect, it } from "vitest";
 const require = createRequire(import.meta.url);
 
 describe("electron-builder packaged defaults", () => {
+  it("uses the current NSIS toolset instead of the legacy installer runtime", () => {
+    const config = require("../../electron-builder.config.cjs") as {
+      toolsets?: { nsis?: string };
+    };
+    const packageJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8")) as {
+      devDependencies?: Record<string, string>;
+      packageManager?: string;
+    };
+
+    expect(config.toolsets?.nsis).toBe("1.2.1");
+    expect(packageJson.devDependencies?.["electron-builder"]).toBe("26.15.6");
+    expect(packageJson.devDependencies?.tslib).toBe("^2.8.1");
+    expect(packageJson.packageManager).toBe("pnpm@11.13.1");
+  });
+
   it("packages the automatic model-pricing catalogue used by desktop stats", () => {
     const config = require("../../electron-builder.config.cjs") as {
       files?: string[];
@@ -119,6 +134,7 @@ describe("electron-builder packaged defaults", () => {
     expect(preparer).toContain("validateRuntimeTree();");
     expect(preparer).toContain("@modelcontextprotocol/sdk/server/index.js");
     expect(preparer).toContain('"zod"');
+    expect(preparer).toContain('"onnxruntime-node"');
     expect(config.linux?.executableName).toBe("codeux");
   });
 
@@ -136,12 +152,9 @@ describe("electron-builder packaged defaults", () => {
     expect(installerSmoke).toContain('findArtifact(".deb")');
     expect(installerSmoke).toContain('["/S", "/currentuser", `/D=${installDirectory}`]');
     expect(installerSmoke).toContain("windowsVerbatimArguments: true");
-    expect(installerSmoke).toContain("WINDOWS_ACCESS_VIOLATION");
-    expect(installerSmoke).toContain("WINDOWS_INSTALL_RETRY_DELAYS_MS = [1_500, 5_000, 15_000]");
-    expect(installerSmoke).toContain("WINDOWS_INSTALL_RETRY_DELAYS_MS.length + 1");
-    expect(installerSmoke).toContain("normalizedStatus === WINDOWS_ACCESS_VIOLATION");
-    expect(installerSmoke).toContain("WINDOWS_INSTALL_RETRY_DELAYS_MS[attempt - 1]");
-    expect(installerSmoke).toContain("retrying in ${retryDelayMs}ms with a fresh directory");
+    expect(installerSmoke).not.toContain("WINDOWS_INSTALL_RETRY_DELAYS_MS");
+    expect(installerSmoke).not.toContain("WINDOWS_ACCESS_VIOLATION");
+    expect(installerSmoke).toContain("failed during silent install with status");
     expect(installerSmoke).toContain('findArtifact(".dmg")');
     expect(installerSmoke).toContain('run("hdiutil", ["attach"');
     expect(installerSmoke).toContain('input: "Y\\n"');
