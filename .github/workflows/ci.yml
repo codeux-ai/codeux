@@ -582,7 +582,11 @@ jobs:
             electron-target: --mac
             artifact-name: release-candidate-macos
           - name: Windows
-            os: windows-latest
+            # Keep native package build/install validation on the stable Server 2022 image.
+            # windows-latest moved to Server 2025 in June 2026, where freshly built unsigned
+            # NSIS launchers can terminate with 0xC0000005 before extraction. The Windows
+            # orchestration and Playwright lanes still exercise windows-latest separately.
+            os: windows-2022
             electron-target: --win
             artifact-name: release-candidate-windows
     env:

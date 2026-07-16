@@ -130,7 +130,9 @@ jobs:
             electron-target: --mac
             artifact-name: code-ux-macos
           - name: Windows
-            os: windows-latest
+            # Keep published NSIS build/install verification aligned with the release-candidate
+            # lane. Runtime and browser coverage still run on windows-latest before release.
+            os: windows-2022
             electron-target: --win
             artifact-name: code-ux-windows
     env:

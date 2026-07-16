@@ -20,6 +20,7 @@ const ELECTRON_INSTALL_SMOKE = "pnpm run electron:smoke-installed";
 const REQUIRED_INSTALL = "pnpm install --frozen-lockfile --ignore-scripts";
 const PACKAGE_MANAGER_VERSION = "11.13.0";
 const MINIMUM_NODE_VERSION = "22.13";
+const STABLE_WINDOWS_PACKAGING_RUNNER = "windows-2022";
 
 type PackageJson = {
   packageManager?: string;
@@ -250,6 +251,8 @@ describe("GitHub workflow health", () => {
     expect(releaseCandidate).not.toContain("ci-dag");
     expect(releaseCandidate).not.toContain("e2e");
     expect(releaseCandidate).toContain("max-parallel: 3");
+    expect(releaseCandidate).toContain(`os: ${STABLE_WINDOWS_PACKAGING_RUNNER}`);
+    expect(releaseCandidate).not.toContain("os: windows-latest");
     expect(releaseCandidate).toContain("node node_modules/electron/install.js");
     expect(releaseCandidate).toContain("pnpm run electron:prepare-deps");
     expect(releaseCandidate).toContain("pnpm exec electron-builder --config electron-builder.config.cjs ${{ matrix.electron-target }} --publish never");
@@ -330,6 +333,8 @@ describe("GitHub workflow health", () => {
     expect(releaseChecks).toContain("node scripts/verify-release-install.mjs");
     expect(releaseChecks).toContain("pnpm run electron:prepare-deps && pnpm exec electron-builder");
     expect(releaseChecks).toContain("${{ matrix.electron-target }} --publish never");
+    expect(releaseChecks).toContain(`os: ${STABLE_WINDOWS_PACKAGING_RUNNER}`);
+    expect(releaseChecks).not.toContain("os: windows-latest");
     expect(releaseChecks).not.toContain("pnpm run ${{ matrix.electron-script }}");
     expect(releaseChecks).toContain(ELECTRON_INSTALL_SMOKE);
 
@@ -362,6 +367,8 @@ describe("GitHub workflow health", () => {
     expect(desktop).toContain("needs: release-preflight");
     expect(desktop).toContain("contents: write");
     expect(desktop).toContain("max-parallel: 3");
+    expect(desktop).toContain(`os: ${STABLE_WINDOWS_PACKAGING_RUNNER}`);
+    expect(desktop).not.toContain("os: windows-latest");
     expect(desktop).toContain("softprops/action-gh-release@v2");
     expect(desktop).toContain("node node_modules/electron/install.js");
     expect(desktop).toContain("pnpm run build && pnpm run electron:prepare-deps && pnpm exec electron-builder");
@@ -376,6 +383,8 @@ describe("GitHub workflow health", () => {
     expect(desktopRelease).not.toContain("softprops/action-gh-release");
     expect(desktopRelease).toContain("pnpm run build && pnpm run electron:prepare-deps && pnpm exec electron-builder");
     expect(desktopRelease).toContain("${{ matrix.electron-target }} --publish never");
+    expect(desktopRelease).toContain(`os: ${STABLE_WINDOWS_PACKAGING_RUNNER}`);
+    expect(desktopRelease).not.toContain("os: windows-latest");
     expect(desktopRelease).not.toContain("pnpm run ${{ matrix.script }}");
     expect(desktopRelease).toContain(ELECTRON_INSTALL_SMOKE);
   });

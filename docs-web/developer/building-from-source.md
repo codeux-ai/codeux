@@ -176,11 +176,14 @@ when that destination contains spaces, and it explicitly selects current-user in
 interactive beta notice aborts before initializing `nsDialogs` during silent installs while
 remaining visible in the normal installer. The exact transient `0xC0000005` termination sometimes
 seen while a GitHub runner inspects a newly produced unsigned installer receives bounded retries
-after 1.5, 5, and 15 seconds with fresh destinations; other failures are not retried. On macOS the
-harness accepts the DMG's embedded MIT license through `hdiutil` stdin, validates readiness, then
-owns probe teardown with `SIGTERM` and a bounded `SIGKILL` fallback because Electron/AppKit can
-defer both Electron and Node exit paths. Production Electron shutdowns still drain the embedded
-runtime normally.
+after 1.5, 5, and 15 seconds with fresh destinations; other failures are not retried. Native
+Windows package build/install lanes use `windows-2022` because `windows-latest` moved to Server 2025
+and can terminate a fresh unsigned NSIS launcher before extraction. Windows orchestration and the
+full Playwright matrix remain on `windows-latest`, preserving current-runner runtime coverage. On
+macOS the harness accepts the DMG's embedded MIT license through `hdiutil` stdin, validates
+readiness, then owns probe teardown with `SIGTERM` and a bounded `SIGKILL` fallback because
+Electron/AppKit can defer both Electron and Node exit paths. Production Electron shutdowns still
+drain the embedded runtime normally.
 
 They must also include `assets/models-dev/catalog.json`. The automatic token-pricing path reads this snapshot beside the compiled runtime; without it, known models can appear unpriced only in the desktop build. Electron packaging tests pin both runtime assets and a representative GPT-5.5 catalogue rate.
 

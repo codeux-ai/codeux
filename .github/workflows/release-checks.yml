@@ -29,7 +29,10 @@ jobs:
             electron-target: --mac
             artifact-name: release-checks-macos
           - name: Windows
-            os: windows-latest
+            # Match the blocking and published desktop lanes. windows-latest is Server 2025,
+            # whose hosted-runner security inspection can crash a fresh unsigned NSIS launcher
+            # before extraction; Windows runtime/E2E coverage remains on windows-latest in CI.
+            os: windows-2022
             electron-target: --win
             artifact-name: release-checks-windows
 

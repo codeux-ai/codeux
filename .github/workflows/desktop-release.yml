@@ -30,7 +30,9 @@ jobs:
             electron-target: --linux
             artifact-name: code-ux-linux
           - name: Windows
-            os: windows-latest
+            # Use the stable packaging image; windows-latest runtime compatibility is covered by
+            # the normal Windows orchestration and Playwright matrices.
+            os: windows-2022
             electron-target: --win
             artifact-name: code-ux-windows
           - name: macOS
