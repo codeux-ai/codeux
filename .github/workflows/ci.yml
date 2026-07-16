@@ -646,12 +646,15 @@ jobs:
         run: pnpm run electron:prepare-deps
 
       - name: Build unsigned desktop package
+        id: build_desktop_package
         run: pnpm exec electron-builder --config electron-builder.config.cjs ${{ matrix.electron-target }} --publish never
 
       - name: Install and start release candidate
+        id: smoke_installed_candidate
         run: pnpm run electron:smoke-installed
 
       - name: Upload release candidate artifacts
+        if: ${{ always() && steps.build_desktop_package.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
