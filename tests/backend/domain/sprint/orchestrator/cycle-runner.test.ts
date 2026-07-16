@@ -3356,6 +3356,107 @@ describe("CycleRunner attention sync", () => {
       expect(deps.qualityAssuranceService.reviewCompletedTask).not.toHaveBeenCalled();
     });
 
+    it("does not escalate an exhausted task while an accepted Jules QA follow-up is still running", async () => {
+      const deps = buildDeps();
+      vi.mocked(deps.executionRepository.getLatestTaskRun).mockReturnValue({
+        id: "task-run-jules-followup",
+        taskId: "task-1",
+        sprintRunId: "run-1",
+        provider: "jules",
+        sessionId: "jules-session-1",
+        state: "RUNNING",
+        startedAt: "2026-07-02T07:30:00.000Z",
+        finishedAt: null,
+      } as any);
+      vi.mocked(deps.executionRepository.listExecutionInvocations).mockReturnValue([]);
+      const reviewCompletedTask = vi.fn().mockResolvedValue({
+        reviewed: false,
+        reopenedTask: false,
+        mergeBlocked: true,
+        reportText: "Waiting for hosted QA follow-up completion.",
+      });
+      deps.qualityAssuranceService = {
+        getTaskMergeGateStatus: vi.fn().mockReturnValue({
+          mergeAllowed: false,
+          reason: "retries_exhausted",
+          summary: "QA requested one final follow-up.",
+          latestRun: {
+            id: "qa-run-jules-followup",
+            projectId: "project-1",
+            taskRunId: "task-run-jules-followup",
+            targetSessionId: "jules-session-1",
+            status: "completed",
+            outcome: "changes_requested",
+            fixInstructions: "Apply the final repair.",
+            startedAt: "2026-07-02T07:36:30.000Z",
+            finishedAt: "2026-07-02T07:40:16.000Z",
+            payload: {
+              continuationStatus: "awaiting_provider",
+              continuationMode: "jules",
+              continued: true,
+              postExhaustionVerificationEligible: true,
+            },
+          },
+          runsUsed: 4,
+          maxRuns: 3,
+        }),
+        reviewCompletedTask,
+      } as any;
+      deps.getDashboardSettings = vi.fn().mockReturnValue({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        agents: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents,
+          qualityAssurance: {
+            ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+            enabled: true,
+            exhaustionPolicy: "ESCALATE_TO_HUMAN",
+          },
+        },
+      });
+
+      const runner = new CycleRunner(deps);
+      const task: any = {
+        id: "T1",
+        record_id: "task-1",
+        project_id: "project-1",
+        title: "Hosted follow-up",
+        prompt: "do work",
+        depends_on: [],
+        is_independent: true,
+        // Reproduces the stale code-complete projection that previously let
+        // exhaustion win while the hosted task run was still active.
+        status: "CODING_COMPLETED",
+        merge_indicator: "QA_PENDING",
+        provider: "jules",
+        session_id: "jules-session-1",
+      };
+
+      await (runner as any).reviewCompletedTasks(
+        [task],
+        new Map([["T1", "CODING_COMPLETED"]]),
+        {
+          executionContext: {
+            project: { id: "project-1", name: "Project 1" } as any,
+            sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+            sprintNumber: 1,
+            repoPath: "/repo/project-1",
+            featureBranch: "feature/sprint-1",
+            defaultBranch: "main",
+          },
+          repoPath: "/repo/project-1",
+          sprintRunId: "run-1",
+        } as any,
+        deps.getDashboardSettings(),
+      );
+
+      expect(reviewCompletedTask).toHaveBeenCalledTimes(1);
+      expect(deps.projectManagementRepository.updateTask).not.toHaveBeenCalledWith(
+        "task-1",
+        expect.objectContaining({ status: "QA_REVIEW_FAILED" }),
+      );
+      expect(deps.projectAttentionService.openItems).not.toHaveBeenCalled();
+    });
+
     it("ESCALATE_TO_HUMAN is idempotent after a task is parked in QA_REVIEW_FAILED", async () => {
       const deps = buildDeps();
       deps.qualityAssuranceService = {

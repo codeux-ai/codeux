@@ -34,6 +34,7 @@ import { LiveTransportBanner } from "./components/live-session/LiveTransportBann
 import { LiveTaskFilterStrip } from "./components/live-session/LiveTaskFilterStrip.js";
 import { LiveSessionRuntimeSidebar } from "./components/live-session/LiveSessionRuntimeSidebar.js";
 import { useProjectData } from "./context/project-data.js";
+import { useDashboardExperienceMode } from "./context/experience-mode.js";
 import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { useReducedMotion } from "./hooks/use-reduced-motion.js";
 import { useRouteProjectSelection } from "./hooks/use-route-project-selection.js";
@@ -70,6 +71,7 @@ const EMPTY_LIVE_SESSION_RUNTIME_STATE = {
 export const LiveSessionPage: FunctionComponent = () => {
 
     const { locale, t } = useLiveI18n();
+    const shellExperienceMode = useDashboardExperienceMode();
     const contentRef = useRef<HTMLDivElement>(null);
     const prefersReducedMotion = useReducedMotion();
     const interactionTokens = useInteractionTokens();
@@ -110,6 +112,10 @@ export const LiveSessionPage: FunctionComponent = () => {
     }, [routeProjectReady, routeSprintId, selectedNavigationSprintId, selectSprint]);
     const effectiveNavigationSprintId = routeSprintId ?? selectedNavigationSprintId;
     const { data: effectiveSettings } = useProjectEffectiveSettings(liveProjectId);
+    const experienceMode = shellExperienceMode === undefined
+        ? effectiveSettings?.settings?.appearance?.experienceMode ?? "EXPERT"
+        : shellExperienceMode;
+    const showOperationalDetails = experienceMode === "EXPERT";
     const sprintKeyPrefix = effectiveSettings?.settings?.git?.sprintKeyPrefix || "SPR";
     const {
         error,
@@ -133,7 +139,10 @@ export const LiveSessionPage: FunctionComponent = () => {
         data: gitStatus,
         error: gitStatusError,
         refresh: refreshGitStatus,
-    } = useProjectGitStatus(liveProjectId, routeProjectReady && !projectsLoading && !!liveProjectId);
+    } = useProjectGitStatus(
+        liveProjectId,
+        showOperationalDetails && routeProjectReady && !projectsLoading && !!liveProjectId,
+    );
     const realtimeProjectId = liveProjectId || execution.projectId || status.project_id || null;
     const sprintScopeId = selectedSprintId || status.sprint_id || null;
     const { selectedSession } = usePreviewSessions({
@@ -144,13 +153,16 @@ export const LiveSessionPage: FunctionComponent = () => {
 
     const [agentPresetsMap, setAgentPresetsMap] = useState<Map<string, AgentPreset>>(new Map());
     useEffect(() => {
-        if (!liveProjectId) return;
+        if (!liveProjectId || !showOperationalDetails) {
+            setAgentPresetsMap(new Map());
+            return;
+        }
         let cancelled = false;
         fetchAgentPresets(liveProjectId).then(presets => {
             if (!cancelled) setAgentPresetsMap(new Map(presets.map(p => [p.id, p])));
         }).catch(() => {});
         return () => { cancelled = true; };
-    }, [liveProjectId]);
+    }, [liveProjectId, showOperationalDetails]);
 
     const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
     const { feedback, setPending, setSuccess, setError, clearFeedback, clearError } = useActionFeedback();
@@ -251,6 +263,7 @@ export const LiveSessionPage: FunctionComponent = () => {
         events: sprintEvents,
         sprintRuns: sprintRuns,
         nowIso,
+        includeTaskDetails: showOperationalDetails,
     });
 
     const hasLiveDurationTicker = useMemo(
@@ -270,8 +283,10 @@ export const LiveSessionPage: FunctionComponent = () => {
     }, [hasLiveDurationTicker]);
 
     const { filteredTasks, taskCounts, announcement: filterResultAnnouncement } = useMemo(
-        () => deriveFilteredLiveSessionTasks(visibleTasksWithLiveActivities, visibleStats, activeFilter, locale),
-        [activeFilter, locale, visibleStats, visibleTasksWithLiveActivities],
+        () => showOperationalDetails
+            ? deriveFilteredLiveSessionTasks(visibleTasksWithLiveActivities, visibleStats, activeFilter, locale)
+            : deriveFilteredLiveSessionTasks([], visibleStats, "All", locale),
+        [activeFilter, locale, showOperationalDetails, visibleStats, visibleTasksWithLiveActivities],
     );
     const selectionMovementStyle = useMemo(() => ({
         transitionDuration: interactionTokens.selectionMovement.duration,
@@ -283,19 +298,21 @@ export const LiveSessionPage: FunctionComponent = () => {
     }), [interactionTokens.listReorder.duration, interactionTokens.listReorder.ease]);
 
     const taskCardItems = useMemo(() => (
-        deriveLiveSessionTaskCardItems({
-            filteredTasks,
-            dispatches: sprintDispatches,
-            events: sprintEvents,
-            invocations: sprintInvocations,
-            attentionItems: sprintAttentionItems,
-            taskTimingMap,
-            rerunningIds,
-            forceCompletePendingIds,
-            forceCompleteErrorByTaskId,
-            optimisticallyCompletedTaskIds,
-        })
-    ), [filteredTasks, forceCompleteErrorByTaskId, forceCompletePendingIds, optimisticallyCompletedTaskIds, rerunningIds, sprintAttentionItems, sprintDispatches, sprintEvents, sprintInvocations, taskTimingMap]);
+        showOperationalDetails
+            ? deriveLiveSessionTaskCardItems({
+                filteredTasks,
+                dispatches: sprintDispatches,
+                events: sprintEvents,
+                invocations: sprintInvocations,
+                attentionItems: sprintAttentionItems,
+                taskTimingMap,
+                rerunningIds,
+                forceCompletePendingIds,
+                forceCompleteErrorByTaskId,
+                optimisticallyCompletedTaskIds,
+            })
+            : []
+    ), [filteredTasks, forceCompleteErrorByTaskId, forceCompletePendingIds, optimisticallyCompletedTaskIds, rerunningIds, showOperationalDetails, sprintAttentionItems, sprintDispatches, sprintEvents, sprintInvocations, taskTimingMap]);
 
     const transportBannerViewModel = useMemo(
         () => deriveLiveTransportBannerViewModel({ transportState, isRecovering, error, snapshotUpdatedAt, locale }),
@@ -430,11 +447,15 @@ export const LiveSessionPage: FunctionComponent = () => {
                     <SprintDag
                         tasks={visibleTasksWithLiveActivities}
                         dispatches={sprintDispatches}
+                        events={sprintEvents}
+                        attentionItems={sprintAttentionItems}
                         hasSprintContext={hasSprintContext}
                     />
                 </Suspense>
             )}
 
+            {showOperationalDetails && (
+            <>
             {/* ── Section Divider ─────────────────────────────────────── */}
             <SectionDivider label={t("taskPipeline")} />
 
@@ -531,6 +552,8 @@ export const LiveSessionPage: FunctionComponent = () => {
                     />
                 </div>
             </div>
+            </>
+            )}
         </PageContainer>
     );
 };

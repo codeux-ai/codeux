@@ -397,7 +397,8 @@ describe("SprintPreviewService unit tests", () => {
       expect(stopSessionSpy).toHaveBeenCalledWith("oldest");
       expect(fetchOriginIfAvailable).toHaveBeenCalledWith("/repo", {
         githubToken: undefined,
-      });
+        gitlabToken: undefined,
+      }, ["feature/sprint-1", "main"]);
     });
 
     it("uses the resolved runtime root when host runtime paths are Windows-style", async () => {

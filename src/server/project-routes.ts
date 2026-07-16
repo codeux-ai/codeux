@@ -163,10 +163,10 @@ export function registerProjectRoutes(router: Express, deps: DashboardDependenci
     }
   }));
 
-  router.put("/api/projects/:projectId/select", syncRoute((req, res) => {
+  router.put("/api/projects/:projectId/select", asyncRoute(async (req, res) => {
     try {
       const projectId = parseTrimmedString(req.params.projectId);
-      res.json({ selectedProjectId: deps.selectProject(projectId || null) });
+      res.json({ selectedProjectId: await deps.selectProject(projectId || null) });
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to select project"));
     }

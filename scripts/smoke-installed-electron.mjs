@@ -65,7 +65,12 @@ async function installWindowsCandidate(temporaryRoot) {
   const installer = await findArtifact(".exe");
   const installDirectory = path.join(temporaryRoot, "installed", "Code UX");
   await mkdir(installDirectory, { recursive: true });
-  run(installer, ["/S", `/D=${installDirectory}`]);
+  // NSIS requires /D= to be the final, completely unquoted command-line segment even when the
+  // destination contains spaces. Node otherwise quotes that argument on Windows and the generated
+  // installer can terminate before extracting the application.
+  run(installer, ["/S", `/D=${installDirectory}`], {
+    windowsVerbatimArguments: true,
+  });
   const executable = path.join(installDirectory, "Code UX.exe");
   await access(executable);
   return { command: executable, args: [] };
@@ -77,7 +82,12 @@ async function installMacCandidate(temporaryRoot) {
   const installDirectory = path.join(temporaryRoot, "Applications");
   await mkdir(mountDirectory, { recursive: true });
   await mkdir(installDirectory, { recursive: true });
-  run("hdiutil", ["attach", "-nobrowse", "-readonly", "-mountpoint", mountDirectory, dmg]);
+  // Electron Builder embeds the project license in the DMG. hdiutil writes that agreement to the
+  // terminal and cancels on EOF, so the non-interactive release runner must accept it explicitly.
+  run("hdiutil", ["attach", "-nobrowse", "-readonly", "-mountpoint", mountDirectory, dmg], {
+    input: "Y\n",
+    stdio: ["pipe", "inherit", "inherit"],
+  });
   try {
     const mountedEntries = await readdir(mountDirectory, { withFileTypes: true });
     const appEntry = mountedEntries.find((entry) => entry.isDirectory() && entry.name.endsWith(".app"));

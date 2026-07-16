@@ -1,6 +1,7 @@
 import type { PipelineContext } from "./pipeline-context.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "../../git-http-auth.js";
 import { isRuntimeShutdownInProgress } from "../../shutdown-state.js";
+import { pushWorkerBranch } from "../../../infrastructure/git/worker-branch-push.js";
 
 export async function executeGitFinalizeStage(ctx: PipelineContext): Promise<{
   hasChanges: boolean;
@@ -35,6 +36,8 @@ export async function executeGitFinalizeStage(ctx: PipelineContext): Promise<{
     gitAuth,
     gitIdentity,
     githubMode: ctx.settings.git.githubMode,
+    allowExistingWorkerBranch: ctx.allowExistingWorkerBranch,
+    freshWorkerBranchOwnership: ctx.freshWorkerBranchOwnership,
   });
 
   if (applied.hasChanges) {
@@ -62,12 +65,13 @@ export async function executeGitFinalizeStage(ctx: PipelineContext): Promise<{
 
   if (hasUnpushed && ctx.settings.git.githubMode !== "LOCAL") {
     const pushEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(ctx.repoPath, gitAuth);
-    await ctx.runCommand(
-      "git",
-      ["push", "-u", "origin", `refs/heads/${ctx.workerBranch}:refs/heads/${ctx.workerBranch}`],
-      ctx.repoPath,
-      pushEnv ?? process.env,
-    );
+    await pushWorkerBranch({
+      runner: ctx.runCommand,
+      repoPath: ctx.repoPath,
+      workerBranch: ctx.workerBranch,
+      env: pushEnv ?? process.env,
+      allowExistingWorkerBranch: ctx.allowExistingWorkerBranch,
+    });
   }
 
   const headResult = await ctx.runCommand(

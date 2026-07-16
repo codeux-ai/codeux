@@ -10,6 +10,8 @@ import { SprintActionRunner } from "../../../src/domain/sprint/orchestrator/spri
 describe("SprintOrchestrator core execution", () => {
   it("automatically plans an unplanned sprint once and deduplicates repeated starts", async () => {
     const { deps } = buildDeps();
+    const releaseGitHelper = vi.fn(async () => undefined);
+    deps.acquireProjectGitHelper = vi.fn(() => releaseGitHelper);
     deps.getDashboardSettings = () => ({
       ...DEFAULT_DASHBOARD_SETTINGS,
       sprintLoopSteps: {
@@ -47,6 +49,9 @@ describe("SprintOrchestrator core execution", () => {
     expect(repeated.content[0].text).toContain("planning is already in progress");
     expect(deps.sprintRunLifecycleService.createRun).not.toHaveBeenCalled();
     expect(deps.startTask).not.toHaveBeenCalled();
+    expect(deps.acquireProjectGitHelper).toHaveBeenCalledTimes(2);
+    expect(deps.acquireProjectGitHelper).toHaveBeenCalledWith("/tmp/repo");
+    expect(releaseGitHelper).toHaveBeenCalledTimes(2);
 
     finishPlanning();
     await planningPromise;

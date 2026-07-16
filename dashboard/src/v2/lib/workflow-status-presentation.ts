@@ -8,7 +8,7 @@ import type {
 import type { DashboardLocale } from "../i18n/index.js";
 import { translateTask, type TaskTextKey } from "../i18n/messages/tasks.js";
 
-export type WorkflowStageId = "coding" | "pull_request" | "qa" | "checks" | "merge" | "completion";
+export type WorkflowStageId = "planning" | "coding" | "pull_request" | "qa" | "checks" | "merge" | "completion";
 
 export interface WorkflowStage {
   id: WorkflowStageId;
@@ -24,7 +24,7 @@ export interface WorkflowStatusPresentation {
   label: string;
   accessibleLabel: string;
   requiresHuman: boolean;
-  stages: [WorkflowStage, WorkflowStage, WorkflowStage, WorkflowStage, WorkflowStage, WorkflowStage];
+  stages: WorkflowStage[];
 }
 
 export interface WorkflowHumanInterventionEvidence {
@@ -45,12 +45,15 @@ export interface WorkflowStatusPresentationInput {
   scope: "task" | "sprint";
   status: string;
   completion?: number;
+  tasksCount?: number;
+  planningStatus?: string | null;
   review?: SprintReviewSummary | null;
   ciPresentation?: CiStatusPresentation | null;
   humanIntervention?: WorkflowHumanInterventionEvidence | null;
 }
 
 const WORKFLOW_COPY_KEYS: Readonly<Record<string, TaskTextKey>> = {
+  Planning: "workflowPlanning", "Planning in progress": "workflowPlanningInProgress", "Planning complete": "workflowPlanningComplete", "Planning paused": "workflowPlanningPaused", "Planning failed": "workflowPlanningFailed", "Planning cancelled": "workflowPlanningCancelled", "Planning pending": "workflowPlanningPending",
   "Pull request": "workflowPullRequest", "Pull request ready": "workflowPullRequestReady", "CI checks": "workflowCiChecks", "Checks passed": "workflowChecksPassed", Merge: "workflowMerge", Merged: "workflowMerged", "Waiting for pull request": "workflowWaitingForPullRequest", "Checks pending": "workflowChecksPending", "Merge pending": "workflowMergePending",
   QA: "workflowQa", "Review in progress": "workflowReviewInProgress", "Changes requested": "workflowChangesRequested", "Review failed": "workflowReviewFailed", "QA passed": "workflowQaPassed", "QA cleared": "workflowQaCleared", "No review required": "workflowNoReviewRequired", "Review pending": "workflowReviewPending", "QA pending": "workflowQaPending",
   Coding: "workflowCoding", "Coding cancelled": "workflowCodingCancelled", "Coding failed": "workflowCodingFailed", "Coding complete": "workflowCodingComplete", "Coding queued": "workflowCodingQueued", "Quota wait": "workflowQuotaWait", "Provider capacity wait": "workflowProviderCapacityWait", "Preparing workspace": "workflowPreparingWorkspace", "Coding in progress": "workflowCodingInProgress", "Coding blocked": "workflowCodingBlocked", "Coding paused": "workflowCodingPaused", "Waiting to start": "workflowWaitingToStart",
@@ -217,6 +220,26 @@ function deriveCodingStage(
   return { id: "coding", label: "Coding", state: "pending", statusLabel: "Waiting to start" };
 }
 
+function derivePlanningStage(input: WorkflowStatusPresentationInput, status: string): WorkflowStage {
+  const planningStatus = normalizeStatus(input.planningStatus ?? "");
+  if (planningStatus === "running") {
+    return { id: "planning", label: "Planning", state: "in_progress", statusLabel: "Planning in progress" };
+  }
+  if (planningStatus === "paused") {
+    return { id: "planning", label: "Planning", state: "in_progress", statusLabel: "Planning paused" };
+  }
+  if (status === "idle" && planningStatus === "failed") {
+    return { id: "planning", label: "Planning", state: "failed", statusLabel: "Planning failed" };
+  }
+  if (status === "idle" && planningStatus === "cancelled") {
+    return { id: "planning", label: "Planning", state: "failed", statusLabel: "Planning cancelled" };
+  }
+  if ((input.tasksCount ?? 0) > 0 || status !== "idle" || planningStatus === "completed") {
+    return { id: "planning", label: "Planning", state: "successful", statusLabel: "Planning complete" };
+  }
+  return { id: "planning", label: "Planning", state: "pending", statusLabel: "Planning pending" };
+}
+
 function deriveCompletionStage(status: string): WorkflowStage {
   if (status === "completed") {
     return { id: "completion", label: "Completion", state: "successful", statusLabel: "Workflow complete" };
@@ -246,11 +269,12 @@ function displayLabel(stages: readonly WorkflowStage[]): string {
   const completion = stages[stages.length - 1];
   if (completion.state === "successful") return "Completed";
   const furthestSuccessful = [...stages].reverse().find((stage) => stage.state === "successful");
-  if (!furthestSuccessful) return "Coding pending";
+  if (!furthestSuccessful) return stages[0]?.id === "planning" ? "Planning pending" : "Coding pending";
   if (furthestSuccessful.id === "merge") return "Merged";
   if (furthestSuccessful.id === "checks") return "CI passed";
   if (furthestSuccessful.id === "qa") return "QA passed";
   if (furthestSuccessful.id === "pull_request") return "PR ready";
+  if (furthestSuccessful.id === "planning") return "Coding pending";
   return "PR pending";
 }
 
@@ -259,24 +283,38 @@ export function deriveWorkflowStatusPresentation(
   locale: DashboardLocale = "en",
 ): WorkflowStatusPresentation {
   const status = normalizeStatus(input.status);
+  const planningStatus = normalizeStatus(input.planningStatus ?? "");
+  const planningOwnsWorkflow = input.scope === "sprint"
+    && (
+      ["running", "paused"].includes(planningStatus)
+      || (status === "idle" && ["failed", "cancelled"].includes(planningStatus))
+    );
   const workflowCompleted = status === "completed";
   const suppressRunningSprintTaskGates = input.scope === "sprint"
-    && status === "running"
-    && input.completion !== 100;
+    && ((status === "running" && input.completion !== 100) || planningOwnsWorkflow);
   const ciPresentation = suppressRunningSprintTaskGates ? null : input.ciPresentation;
   const stageReview = suppressRunningSprintTaskGates ? null : input.review;
   const pullRequest = resolveCiStep("pull_request", ciPresentation?.steps[0], workflowCompleted);
   const checks = resolveCiStep("checks", ciPresentation?.steps[1], workflowCompleted);
   const merge = resolveCiStep("merge", ciPresentation?.steps[2], workflowCompleted);
   const ciSteps = [pullRequest, checks, merge];
-  const stages = [
-    deriveCodingStage(status, stageReview, ciSteps),
-    { ...pullRequest, id: "pull_request" as const },
-    deriveReviewStage(stageReview, status, ciSteps),
-    { ...checks, id: "checks" as const, label: "CI" },
-    { ...merge, id: "merge" as const },
-    deriveCompletionStage(status),
-  ] as WorkflowStatusPresentation["stages"];
+  const coding = deriveCodingStage(status, stageReview, ciSteps);
+  const qa = deriveReviewStage(stageReview, status, ciSteps);
+  const pullRequestStage = { ...pullRequest, id: "pull_request" as const };
+  const checksStage = { ...checks, id: "checks" as const, label: "CI" };
+  const mergeStage = { ...merge, id: "merge" as const };
+  const completionStage = deriveCompletionStage(status);
+  const stages: WorkflowStage[] = input.scope === "sprint"
+    ? [
+        derivePlanningStage(input, status),
+        coding,
+        qa,
+        pullRequestStage,
+        checksStage,
+        mergeStage,
+        completionStage,
+      ]
+    : [coding, pullRequestStage, qa, checksStage, mergeStage, completionStage];
   const failed = stages.some((stage) => stage.state === "failed");
   const active = stages.some((stage) => stage.state === "in_progress");
   const requiresHuman = isActiveHumanIntervention(input.humanIntervention);
@@ -284,28 +322,28 @@ export function deriveWorkflowStatusPresentation(
     ? "failed"
     : active
       ? "in_progress"
-      : stages[5].state === "successful"
+      : completionStage.state === "successful"
         ? "successful"
         : "pending";
   const label = localizeWorkflowCopy(locale, requiresHuman ? "Human needed" : displayLabel(stages));
   const qaChangesRequested = stages.some((stage) => (
     stage.id === "qa" && stage.state === "failed" && stage.statusLabel === "Changes requested"
   ));
-  const localizedStages = stages.map((stage, index) => {
-    const observed = index === 1
+  const localizedStages = stages.map((stage) => {
+    const observed = stage.id === "pull_request"
       ? ciPresentation?.steps[0]
-      : index === 3
+      : stage.id === "checks"
         ? ciPresentation?.steps[1]
-        : index === 4
+        : stage.id === "merge"
           ? ciPresentation?.steps[2]
           : null;
     const preserveObservedCopy = observed && !(workflowCompleted && observed.state !== "successful");
     return {
       ...stage,
-      label: index === 3 ? localizeWorkflowCopy(locale, "CI") : preserveObservedCopy ? stage.label : localizeWorkflowCopy(locale, stage.label),
+      label: stage.id === "checks" ? localizeWorkflowCopy(locale, "CI") : preserveObservedCopy ? stage.label : localizeWorkflowCopy(locale, stage.label),
       statusLabel: preserveObservedCopy ? stage.statusLabel : localizeWorkflowCopy(locale, stage.statusLabel),
     };
-  }) as WorkflowStatusPresentation["stages"];
+  });
   return {
     scope: input.scope,
     state,

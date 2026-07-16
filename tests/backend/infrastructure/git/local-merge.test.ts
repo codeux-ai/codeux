@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { runCommandStrict } from "../../../../src/services/cli-process-runner.js";
-import { acquireProjectGitHelperForSprint } from "../../../../src/shared/subprocess/command-runner.js";
+import { acquireProjectGitHelper } from "../../../../src/shared/subprocess/command-runner.js";
 import {
   getCheckedOutRef,
   restoreCheckedOutRef,
@@ -195,7 +195,7 @@ describe("local-merge helpers", () => {
     const previousGitContainerMode = process.env.CODE_UX_GIT_CONTAINER_MODE;
     process.env.CODE_UX_CONTAINERIZED_GIT = "1";
     delete process.env.CODE_UX_GIT_CONTAINER_MODE;
-    const releaseGitHelper = acquireProjectGitHelperForSprint(repo);
+    const releaseGitHelper = acquireProjectGitHelper(repo);
 
     try {
       await git(repo, "checkout", "feature");
@@ -840,10 +840,10 @@ describe("findRecoverableWorkerBranch", () => {
   });
 
   it("prefers the most recently committed matching branch", async () => {
-    await makeWorkerBranch(`${prefix}old`, true);
+    await makeWorkerBranch(`${prefix}0001`, true);
     // A second attempt's branch, committed later, should win.
-    await git(repo, "branch", `${prefix}new`, "feature");
-    await git(repo, "checkout", `${prefix}new`);
+    await git(repo, "branch", `${prefix}0002`, "feature");
+    await git(repo, "checkout", `${prefix}0002`);
     await commitFile(repo, "newer.md", "newer\n", "feat: newer work");
     await git(repo, "checkout", "main");
 
@@ -853,7 +853,7 @@ describe("findRecoverableWorkerBranch", () => {
       branchPrefix: prefix,
     });
 
-    expect(found).toBe(`${prefix}new`);
+    expect(found).toBe(`${prefix}0002`);
   });
 
   describe("deleteBranchLocally", () => {

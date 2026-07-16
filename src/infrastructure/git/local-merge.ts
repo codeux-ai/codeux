@@ -244,34 +244,44 @@ export async function findRecoverableWorkerBranch(args: {
   runner?: LocalMergeRunner;
 }): Promise<string | null> {
   const runner = args.runner ?? defaultRunner;
-  let names: string[];
+  let candidates: Array<{ name: string; when: number }>;
   try {
-    const out = await runner("git", ["for-each-ref", "--format=%(refname:short)", "refs/heads/"], args.repoPath);
-    names = out.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
+    const out = await runner(
+      "git",
+      ["for-each-ref", "--format=%(refname:short)%00%(committerdate:unix)", "refs/heads/"],
+      args.repoPath,
+    );
+    candidates = out.stdout
+      .split("\n")
+      .map((line) => {
+        const [name = "", rawWhen = ""] = line.trim().split("\0");
+        return { name, when: Number.parseInt(rawWhen, 10) || 0 };
+      })
+      .filter(({ name }) => name.startsWith(args.branchPrefix));
   } catch {
     return null;
   }
 
-  let best: { name: string; when: number } | null = null;
-  for (const name of names) {
-    if (!name.startsWith(args.branchPrefix)) continue;
-    let ahead = 0;
+  const recoverable = (await Promise.all(candidates.map(async (candidate) => {
     try {
-      const res = await runner("git", ["rev-list", "--count", `${args.featureBranch}..${name}`], args.repoPath);
-      ahead = Number.parseInt(res.stdout.trim(), 10) || 0;
+      const res = await runner(
+        "git",
+        ["rev-list", "--count", `${args.featureBranch}..${candidate.name}`],
+        args.repoPath,
+      );
+      return (Number.parseInt(res.stdout.trim(), 10) || 0) > 0 ? candidate : null;
     } catch {
-      continue;
+      return null;
     }
-    if (ahead <= 0) continue;
-    let when = 0;
-    try {
-      const res = await runner("git", ["log", "-1", "--format=%ct", name], args.repoPath);
-      when = Number.parseInt(res.stdout.trim(), 10) || 0;
-    } catch {
-      when = 0;
-    }
-    if (!best || when > best.when) best = { name, when };
-  }
+  }))).filter((candidate): candidate is { name: string; when: number } => candidate !== null);
+  const best = recoverable.reduce<{ name: string; when: number } | null>(
+    (current, candidate) => !current
+      || candidate.when > current.when
+      || (candidate.when === current.when && candidate.name > current.name)
+      ? candidate
+      : current,
+    null,
+  );
   return best?.name ?? null;
 }
 

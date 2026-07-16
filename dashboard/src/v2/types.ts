@@ -38,6 +38,7 @@ import type {
   UpdateMcpConnectionInput,
 } from "../../../src/contracts/connection-chat-types.js";
 import type {
+  ExecutionAttentionItemSummary,
   ExecutionHumanInterventionSummary,
   ExecutionUsageTotals,
   ExecutionUsageBucketSummary,
@@ -407,6 +408,7 @@ export type {
   SprintStatus,
   StartListenInput,
   StartListenResponse,
+  ExecutionAttentionItemSummary,
   ExecutionHumanInterventionSummary,
   ExecutionUsageTotals,
   ExecutionUsageBucketSummary,

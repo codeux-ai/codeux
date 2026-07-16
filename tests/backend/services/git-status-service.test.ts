@@ -168,7 +168,94 @@ describe("GitStatusService", () => {
 
     const status = await service.getStatus("REMOTE", "token", undefined);
 
-    expect(status.warnings).toContain("Failed to fetch failed jobs for run 101.");
+    expect(status.warnings).toContain("Failed to fetch failed jobs for current run 101.");
+  });
+
+  it("does not hydrate a historical failure superseded by a newer run", async () => {
+    const runJobs = vi.fn();
+    runner.mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === "run" && args[1] === "view") runJobs();
+      return { ok: true, stdout: JSON.stringify({ jobs: [] }), stderr: "" };
+    });
+    const enrich = (service as unknown as {
+      enrichFailedRunDetails: (runs: any[]) => Promise<{ runs: any[]; warnings: string[] }>;
+    }).enrichFailedRunDetails.bind(service);
+    const runs = [
+      { id: 102, name: "CI", workflowName: "CI", status: "completed", conclusion: "success", event: "push", headBranch: "dev", url: "new", updatedAt: "2026-01-02" },
+      { id: 101, name: "CI", workflowName: "CI", status: "completed", conclusion: "failure", event: "push", headBranch: "dev", url: "old", updatedAt: "2026-01-01" },
+    ];
+
+    const result = await enrich(runs);
+
+    expect(result.runs).toEqual(runs);
+    expect(result.warnings).toEqual([]);
+    expect(runJobs).not.toHaveBeenCalled();
+  });
+
+  it("bounds failed-job hydration to five current branch/workflow pairs", async () => {
+    runner.mockResolvedValue({ ok: true, stdout: JSON.stringify({ jobs: [] }), stderr: "" });
+    const enrich = (service as unknown as {
+      enrichFailedRunDetails: (runs: any[]) => Promise<{ runs: any[]; warnings: string[] }>;
+    }).enrichFailedRunDetails.bind(service);
+    const runs = Array.from({ length: 8 }, (_, index) => ({
+      id: 200 + index,
+      name: `CI ${index}`,
+      workflowName: `CI ${index}`,
+      status: "completed",
+      conclusion: "failure",
+      event: "push",
+      headBranch: `feature/${index}`,
+      url: `run-${index}`,
+      updatedAt: `2026-01-${String(9 - index).padStart(2, "0")}`,
+    }));
+
+    await enrich(runs);
+
+    const jobsCalls = runner.mock.calls.filter(([, args]: [string, string[]]) => (
+      args[0] === "run" && args[1] === "view" && args.includes("jobs")
+    ));
+    expect(jobsCalls).toHaveLength(5);
+  });
+
+  it("aggregates failed log retrieval warnings while retaining direct log commands", async () => {
+    runner.mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args.includes("jobs")) {
+        return {
+          ok: true,
+          stdout: JSON.stringify({
+            jobs: [
+              { databaseId: 301, conclusion: "failure", name: "first", steps: [] },
+              { databaseId: 302, conclusion: "failure", name: "second", steps: [] },
+            ],
+          }),
+          stderr: "",
+        };
+      }
+      return { ok: false, stdout: "", stderr: "logs unavailable" };
+    });
+    const enrich = (service as unknown as {
+      enrichFailedRunDetails: (runs: any[]) => Promise<{ runs: any[]; warnings: string[] }>;
+    }).enrichFailedRunDetails.bind(service);
+
+    const result = await enrich([{
+      id: 201,
+      name: "CI",
+      workflowName: "CI",
+      status: "completed",
+      conclusion: "failure",
+      event: "push",
+      headBranch: "dev",
+      url: "run",
+      updatedAt: "2026-01-01",
+    }]);
+
+    expect(result.warnings).toEqual([
+      "Failed to fetch logs for 2 failed CI jobs across the current runs. Use the per-job log command to inspect them directly.",
+    ]);
+    expect(result.runs[0].failedJobs.map((job: any) => job.logCommand)).toEqual([
+      "gh run view 201 --job 301 --log-failed",
+      "gh run view 201 --job 302 --log-failed",
+    ]);
   });
 
   it("handles empty failed log excerpt gracefully", async () => {

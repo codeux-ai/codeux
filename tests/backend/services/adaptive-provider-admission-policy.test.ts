@@ -47,6 +47,20 @@ describe("AdaptiveProviderAdmissionPolicy", () => {
     expect(policy.getEffectiveLimit({ provider: "codex", configuredLimit: 5, purpose: "worker_reply" })).toBe(5);
   });
 
+  it("keeps both background slots on a compact healthy host", () => {
+    const snapshot: ProviderAdmissionResourceSnapshot = {
+      ...healthy(),
+      cpuCount: 4,
+      loadOneMinute: 2,
+      totalMemoryBytes: 16 * GIB,
+      freeMemoryBytes: 12 * GIB,
+    };
+    const { policy } = createPolicy(snapshot);
+
+    expect(policy.getEffectiveLimit({ provider: "codex", configuredLimit: 4, purpose: "task_coding" })).toBe(2);
+    expect(policy.getEffectiveLimit({ provider: "codex", configuredLimit: 4, purpose: "dashboard_reply" })).toBe(2);
+  });
+
   it("freezes background expansion under pressure but admits one interactive reply", () => {
     const snapshot = { ...healthy(), loadOneMinute: 32 };
     const running = Array.from({ length: 6 }, () => invocation("task_coding"));

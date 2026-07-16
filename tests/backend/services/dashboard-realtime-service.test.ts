@@ -117,6 +117,7 @@ function buildExecutionRealtimeSnapshot(options?: { updatedAt?: string }) {
     ],
     primaryAssignedWorker: null,
     overflowAssignedWorkers: [],
+    sprintWorkflowProjections: [],
     attentionItems: [
       {
         id: "attention-1",

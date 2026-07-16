@@ -47,6 +47,16 @@ export interface PipelineContext {
   repoPath: string;
   worktreePath: string;
   workspaceSessionId: string;
+  /** Whether this invocation intentionally continues an already allocated worker branch. */
+  allowExistingWorkerBranch: boolean;
+  /**
+   * Proof that a fresh HOST invocation atomically created and owns the local worker branch.
+   * Fresh remote publication still requires the origin ref to be absent.
+   */
+  freshWorkerBranchOwnership?: {
+    worktreePath: string;
+    initialTip: string;
+  };
   abortSignal?: AbortSignal;
   /** Durable execution invocation created before workspace preparation begins. */
   executionInvocationId?: string;

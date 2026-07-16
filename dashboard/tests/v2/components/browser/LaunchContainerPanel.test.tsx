@@ -24,8 +24,9 @@ test("renders No Sprints state", () => {
       launchBusy={false}
     />
   );
-  expect(screen.getByRole("button")).toHaveTextContent("Disabled: No Sprint");
-  expect(screen.getByRole("button")).toBeDisabled();
+  const launchButton = screen.getByRole("button", { name: "Launch preview container" });
+  expect(launchButton).toHaveTextContent("Disabled: No Sprint");
+  expect(launchButton).toBeDisabled();
 });
 
 test("renders Unavailable state", () => {
@@ -39,8 +40,9 @@ test("renders Unavailable state", () => {
       launchBusy={false}
     />
   );
-  expect(screen.getByRole("button")).toHaveTextContent("Disabled: No Project");
-  expect(screen.getByRole("button")).toBeDisabled();
+  const launchButton = screen.getByRole("button", { name: "Launch preview container" });
+  expect(launchButton).toHaveTextContent("Disabled: No Project");
+  expect(launchButton).toBeDisabled();
 });
 
 test("renders Starting state", () => {
@@ -54,8 +56,9 @@ test("renders Starting state", () => {
       launchBusy={true}
     />
   );
-  expect(screen.getByRole("button")).toHaveTextContent("Launching...");
-  expect(screen.getByRole("button")).toBeDisabled();
+  const launchButton = screen.getByRole("button", { name: "Launching preview container" });
+  expect(launchButton).toHaveTextContent("Launching...");
+  expect(launchButton).toBeDisabled();
 });
 
 test("renders Launch Container state", () => {
@@ -70,6 +73,7 @@ test("renders Launch Container state", () => {
       launchBusy={false}
     />
   );
-  expect(screen.getByRole("button")).toHaveTextContent("Launch Container");
-  expect(screen.getByRole("button")).not.toBeDisabled();
+  const launchButton = screen.getByRole("button", { name: "Launch preview container" });
+  expect(launchButton).toHaveTextContent("Launch Container");
+  expect(launchButton).not.toBeDisabled();
 });

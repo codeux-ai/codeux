@@ -83,6 +83,8 @@ Per cycle, for every task in `CODING_COMPLETED`:
 5. **If CI failing** → if `waitForJulesCiAutofix: true` and retry budget remains, dispatch a `VirtualWorkerService` doing `ci_fix` tasks; else create an attention item.
 6. **If CI green** → check comment-resolution gate; if pass, run `featurePrAutoMergeMode` policy.
 
+Each CI-repair attempt corresponds to one provider invocation. Restart recovery, workspace preparation, and Git publication reconciliation reuse the same attempt without spending the budget again. A no-change provider result must run a real provider continuation on the next attempt. When the cap is reached, Code UX opens one deduplicated human handoff; resolving it resets the exact task or final-merge CI-repair budget.
+
 The same flow drives the *main branch* merge during finalisation, using `mainBranchAutoMergeMode` and the `resolveMainMergeConflicts` / `resolveAllCommentsBeforeMainMerge` toggles.
 
 ## GitHub mode

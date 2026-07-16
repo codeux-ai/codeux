@@ -53,6 +53,12 @@ A subscription set may include `lastSequence` from a previous connection. The se
 
 A client may subscribe to as many scopes as needed.
 
+Conversation mutations are persisted once under `project:<id>` and carry `threadId` as a routing
+alias for `thread:<threadId>`. A thread-only subscriber therefore still receives the event with
+`event.scope` rewritten to its subscribed thread scope. A client subscribed to both the project and
+the thread receives one event, not duplicate project/thread copies. Replay and scope watermarks use
+the same alias rule.
+
 ## Reconnection
 
 Recommended client behaviour:

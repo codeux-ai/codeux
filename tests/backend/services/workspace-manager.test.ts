@@ -51,6 +51,9 @@ describe("WorkspaceManager", () => {
       worktreePath,
       "task/feature-sprint-1-t1-qwen",
       "feature/sprint-1",
+      undefined,
+      undefined,
+      { allowExistingWorkerBranch: true },
     );
 
     const workspaceHead = (await git(worktreePath, ["rev-parse", "HEAD"])).stdout.trim();

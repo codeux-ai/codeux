@@ -119,7 +119,7 @@ describe("SprintLedger Component", () => {
     );
 
     expect(screen.getByText("Running")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /CI status: Coding in progress/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Workflow status: Coding in progress/i })).toBeInTheDocument();
     expect(screen.queryByText("Merge")).not.toBeInTheDocument();
   });
 
@@ -404,13 +404,31 @@ describe("SprintLedger Component", () => {
       status: "paused",
     };
 
-    const interventionBySprintId = new Map([["sprint-paused", mockIntervention]]);
+    const workflowHumanInterventionBySprintId = new Map([["sprint-paused", {
+      id: "attention-human",
+      sprintId: "sprint-paused",
+      taskId: "task-1",
+      sprintRunId: "run-1",
+      dispatchId: "dispatch-1",
+      attentionType: "human_escalation_required",
+      severity: "high",
+      ownerType: "human",
+      status: "open",
+      assignedWorkerEndpointId: null,
+      title: mockIntervention.title,
+      summaryMarkdown: mockIntervention.reason,
+      payload: { instructions: mockIntervention.instructions },
+      openedAt: "2026-07-16T08:00:00.000Z",
+      claimedAt: null,
+      resolvedAt: null,
+      updatedAt: "2026-07-16T08:00:00.000Z",
+    }]]);
 
     renderWithI18n(
       <SprintLedger
         {...defaultProps}
         sprints={[pausedSprint]}
-        interventionBySprintId={interventionBySprintId}
+        workflowHumanInterventionBySprintId={workflowHumanInterventionBySprintId}
       />
     );
 

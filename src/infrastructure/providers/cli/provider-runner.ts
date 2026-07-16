@@ -117,9 +117,15 @@ export interface ProviderRunInput {
    *  continue/resume mode. */
   nativeSessionOperation?: NativeSessionOperation;
   /** Pass a previous nativeSessionId to continue an existing CLI session.
-   *  Claude Code: uses --resume. Gemini: adds --resume. Codex: uses exec resume --last.
+   *  Claude Code: uses --resume. Gemini: adds --resume. Codex: addresses that
+   *  exact native session.
    *  Qwen Code uses project-scoped --continue because Code UX logical ids are not Qwen saved-session ids. */
   continueSessionId?: string | null;
+  /** Continue through the provider's workspace-local latest-session fallback
+   *  when no native provider session id was observed. For Codex this emits
+   *  `exec resume --last` and deliberately leaves logical Code UX ids out of
+   *  the native resume-id position. */
+  continueSessionWithoutNativeId?: boolean;
   /** Whether a missing resumable provider conversation may be replaced by a
    *  fresh conversation. Disable this when the caller promises strict
    *  same-session continuity, such as restart recovery for sprint planning. */
@@ -140,8 +146,21 @@ export interface ProviderRunInput {
 }
 
 export interface IProviderRunner {
+  prewarmWorkspace?(input: ProviderWorkspaceInput): Promise<void>;
   runProvider(input: ProviderRunInput): Promise<ProviderRunResult>;
   runProviderForText(input: ProviderRunInput): Promise<ProviderRunResult & { text: string }>;
+}
+
+export interface ProviderWorkspaceInput {
+  cwd: string;
+  repoPath: string;
+  sessionId: string;
+  workspaceSessionId?: string;
+  workflowSettings: CliWorkflowSettings;
+  snapshotCheckout?: SnapshotCheckout;
+  gitPolicy?: InvocationWorkspaceGitPolicy;
+  githubToken?: string;
+  gitlabToken?: string;
 }
 
 export class ProviderRunner implements IProviderRunner {
@@ -154,12 +173,40 @@ export class ProviderRunner implements IProviderRunner {
     this.logger = logger ?? createLogger({ bindings: { component: "ProviderRunner" } });
   }
 
+  async prewarmWorkspace(input: ProviderWorkspaceInput): Promise<void> {
+    if (
+      input.workflowSettings.executionMode !== "DOCKER"
+      || input.cwd.startsWith("docker-volume://")
+    ) {
+      return;
+    }
+
+    const prepared = await this.dockerRunner.ensureWorkspace({
+      cwd: input.cwd,
+      repoPath: input.repoPath,
+      sessionId: input.workspaceSessionId || input.sessionId,
+      snapshotCheckout: input.snapshotCheckout,
+      gitPolicy: input.gitPolicy || (input.snapshotCheckout?.remoteOnly
+        ? buildInvocationGitPolicy({
+          githubMode: "REMOTE",
+          githubToken: input.githubToken,
+          gitlabToken: input.gitlabToken,
+        })
+        : undefined),
+      preserve: true,
+      reuseExisting: true,
+    });
+    await prepared.cleanup();
+  }
+
   private async executeWithWorkspace<T>(
     input: ProviderRunInput,
     callback: (prepared: { cwd: string; cleanup: () => Promise<void> }, outputPath: string | null) => Promise<T>
   ): Promise<T> {
     const preserveSessionWorkspace = this.shouldPreserveSessionWorkspace(input);
-    const reuseExistingWorkspace = input.workspaceLifecycle === "continue" || Boolean(input.continueSessionId);
+    const reuseExistingWorkspace = input.workspaceLifecycle === "continue"
+      || Boolean(input.continueSessionId)
+      || input.continueSessionWithoutNativeId === true;
     const prepared = input.workflowSettings.executionMode === "DOCKER"
       ? await this.dockerRunner.ensureWorkspace({
         cwd: input.cwd,
@@ -266,6 +313,7 @@ export class ProviderRunner implements IProviderRunner {
     nativeSessionOperation?: NativeSessionOperation;
     codexOutputPath?: string | null;
     continueSessionId?: string | null;
+    continueSessionWithoutNativeId?: boolean;
     allowFreshSessionFallback?: boolean;
     openCodeBaselineUsage?: Record<string, unknown> | null;
     mcpConnection?: McpConnectionInfo | null;
@@ -274,7 +322,13 @@ export class ProviderRunner implements IProviderRunner {
     googleDriveMount?: GoogleDriveRuntimeMount;
   }): Promise<ProviderRunResult> {
     const { provider, cwd, model, apiKey, providerMountAuth, providerAuthPath, sessionId, workflowSettings, repoPath, githubToken, gitlabToken, signal, onActivity, onTelemetry } = input;
-    const prompt = this.resolveNativeSessionOperationPrompt(provider, input.prompt, input.nativeSessionOperation, input.continueSessionId);
+    const prompt = this.resolveNativeSessionOperationPrompt(
+      provider,
+      input.prompt,
+      input.nativeSessionOperation,
+      input.continueSessionId,
+      input.continueSessionWithoutNativeId === true,
+    );
     const startedMs = Date.now();
     const runModel = model;
     // Resolve where qwen-code should write its OpenAI request/response logs, as seen
@@ -304,7 +358,7 @@ export class ProviderRunner implements IProviderRunner {
 
     const applicableCustomServers = enabledCustomServersFor(input.customMcpServers, provider);
     const hasMcpConfig = !!input.mcpConnection || applicableCustomServers.length > 0;
-    const continueSession = !!input.continueSessionId;
+    const continueSession = Boolean(input.continueSessionId) || input.continueSessionWithoutNativeId === true;
     const codexProviderArgs = this.buildCodexCustomProviderArgs(provider, input, workflowSettings);
     const spec = this.buildCommandSpec(
       provider,
@@ -684,11 +738,12 @@ export class ProviderRunner implements IProviderRunner {
     prompt: string,
     operation: NativeSessionOperation | undefined,
     continueSessionId: string | null | undefined,
+    continueSessionWithoutNativeId: boolean,
   ): string {
     if (!operation) {
       return prompt;
     }
-    if (!continueSessionId) {
+    if (!continueSessionId && !continueSessionWithoutNativeId) {
       throw new Error(`Native session operation '${operation}' requires continueSessionId for provider ${provider}.`);
     }
     const nativePrompt = getNativeSessionOperationPrompt(provider, operation);
@@ -1132,9 +1187,21 @@ export class ProviderRunner implements IProviderRunner {
         }
         return { command: process.execPath, args };
       }
-      // `codex exec resume --last` continues the most recent session in the cwd
+      const codexResumeSessionId = nativeSessionId?.trim();
+      // Prefer the persisted native session ID so a reusable workspace containing
+      // multiple Codex sessions cannot resume an unrelated "latest" conversation.
+      // Keep --last as a compatibility fallback for legacy continuation callers
+      // that do not have a native session ID.
       const args = continueSession
-        ? ["exec", "resume", "--last", "--yolo", "--json", "--output-last-message", codexOutputPath]
+        ? [
+            "exec",
+            "resume",
+            ...(codexResumeSessionId ? [] : ["--last"]),
+            "--yolo",
+            "--json",
+            "--output-last-message",
+            codexOutputPath,
+          ]
         : ["exec", "--yolo", "--json", "--output-last-message", codexOutputPath];
       args.push(...codexProviderArgs);
       if (thinkingMode) {
@@ -1142,6 +1209,9 @@ export class ProviderRunner implements IProviderRunner {
       }
       if (model && model !== "default") {
         args.push("--model", model);
+      }
+      if (continueSession && codexResumeSessionId) {
+        args.push(codexResumeSessionId);
       }
       args.push(prompt);
       return { command: "codex", args };

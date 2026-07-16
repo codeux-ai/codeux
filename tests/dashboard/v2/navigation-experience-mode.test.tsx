@@ -124,13 +124,13 @@ const modeExpectations: Array<{
 }> = [
   {
     mode: "EASY",
-    dock: ["Chat", "Browser", "Stats", "Live", "Config", "Docs"],
-    sidebar: ["Chat", "Browser Preview", "Stats", "Live", "Settings", "Docs"],
+    dock: ["Chat", "Sprints", "Browser", "Stats", "Live", "Config", "Docs"],
+    sidebar: ["Chat", "Sprints", "Browser Preview", "Stats", "Live", "Settings", "Docs"],
   },
   {
     mode: "STANDARD",
-    dock: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Nodes", "Stats", "Browser", "Docs", "Config"],
-    sidebar: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Nodes", "Stats", "Browser Preview", "Docs", "Settings"],
+    dock: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Nodes", "Stats", "Schedule", "Browser", "Live", "Docs", "Config"],
+    sidebar: ["Chat", "Overview", "Sprints", "Tasks", "Agents", "Nodes", "Stats", "Schedule", "Browser Preview", "Live", "Docs", "Settings"],
   },
   {
     mode: "EXPERT",
@@ -205,7 +205,7 @@ describe("primary navigation experience modes", () => {
 
     render(<KineticDock />);
 
-    expect(getDockNavigationLabels()).toEqual(["Chat", "Stats", "Live", "Config", "Docs"]);
+    expect(getDockNavigationLabels()).toEqual(["Chat", "Sprints", "Stats", "Live", "Config", "Docs"]);
     expect(screen.queryByRole("link", { name: "Browser" })).not.toBeInTheDocument();
   });
 

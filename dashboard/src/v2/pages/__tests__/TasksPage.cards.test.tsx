@@ -961,6 +961,7 @@ describe("TasksPage.cards Integration", () => {
   });
 
   it("supports German filtering and reports deletion failures verbatim", async () => {
+    const user = userEvent.setup();
     const task = createMockTask({
       recordId: "task_rec_de",
       id: "TASK_KEY_DE",
@@ -994,12 +995,18 @@ describe("TasksPage.cards Integration", () => {
     expect(screen.getAllByRole("region", { name: "Aufgabenboard" })).toHaveLength(2);
     expect(screen.getByText("Keep stored task title")).toBeInTheDocument();
     expect(screen.getByText("Aktiv")).toBeInTheDocument();
-    expect(screen.getByText("14. Juli – 20. Juli")).toBeInTheDocument();
+    const sprintScopeTrigger = screen.getByRole("button", { name: /Sprint-Bereich der Aufgaben:/i });
+    fireEvent.click(sprintScopeTrigger);
+    expect(screen.getAllByText("14. Juli – 20. Juli")).toHaveLength(2);
     expect(screen.queryByText("Wrong preformatted date")).not.toBeInTheDocument();
+    fireEvent.click(sprintScopeTrigger);
     fireEvent.click(screen.getByRole("tab", { name: "Aufgaben mit hoher Priorität anzeigen" }));
     expect(await screen.findByText(/Aufgabenfilter geändert.*Priorität Hoch/i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Aufgabe TASK_KEY_DE löschen/i }));
+    const actionTrigger = screen.getByRole("button", { name: "Aufgabenaktionen für Aufgabe TASK_KEY_DE öffnen: Keep stored task title" });
+    await user.click(actionTrigger);
+    const actionMenu = await screen.findByRole("menu", { name: "Aktionen für Aufgabe TASK_KEY_DE: Keep stored task title" });
+    await user.click(within(actionMenu).getByRole("menuitem", { name: /Aufgabe TASK_KEY_DE löschen/i }));
     const confirmDelete = screen.getByRole("button", { name: /Aufgabe löschen/i });
     fireEvent.pointerDown(confirmDelete);
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Backend delete detail 42"), { timeout: 2000 });

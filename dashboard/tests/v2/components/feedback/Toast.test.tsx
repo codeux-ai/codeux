@@ -122,16 +122,18 @@ describe("Toast", () => {
     expect(screen.getByRole("button", { name: "Dismiss toast" })).toBeInTheDocument();
   });
 
-  it("shifts focus to document.body on dismiss when active", () => {
+  it("shifts focus to document.body after the active toast is dismissed", async () => {
     const onDismiss = vi.fn();
-
-    render(
+    const { rerender } = render(
       <div>
         <Toast
           id="1"
           type="success"
           message="Toast message"
-          onDismiss={onDismiss}
+          onDismiss={(id) => {
+            onDismiss(id);
+            rerender(<div />);
+          }}
         />
       </div>
     );
@@ -142,7 +144,9 @@ describe("Toast", () => {
 
     fireEvent.click(dismissBtn);
     expect(onDismiss).toHaveBeenCalledWith("1");
-    expect(document.activeElement).toBe(document.body);
+    await waitFor(() => {
+      expect(document.activeElement).toBe(document.body);
+    });
   });
 
   it("auto-dismisses non-error toasts but keeps blocking errors persistent", () => {
@@ -224,7 +228,9 @@ describe("Toast", () => {
 
     expect(retryAction).toHaveBeenCalledTimes(1);
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Retry save in progress" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Retry save" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Retry save" })).toHaveAttribute("aria-busy", "true");
+      expect(screen.getByRole("status")).toHaveTextContent("Retry save in progress");
     });
 
     resolveRetry();

@@ -131,13 +131,20 @@ describe("electron-builder packaged defaults", () => {
 
     expect(installerSmoke).toContain('findArtifact(".deb")');
     expect(installerSmoke).toContain('["/S", `/D=${installDirectory}`]');
+    expect(installerSmoke).toContain("windowsVerbatimArguments: true");
     expect(installerSmoke).toContain('findArtifact(".dmg")');
     expect(installerSmoke).toContain('run("hdiutil", ["attach"');
+    expect(installerSmoke).toContain('input: "Y\\n"');
+    expect(installerSmoke).toContain('stdio: ["pipe", "inherit", "inherit"]');
     expect(installerSmoke).toContain('const versionMarker = `-${packageJson.version}-`');
     expect(installerSmoke).toContain("entry.name.includes(versionMarker)");
     expect(installerSmoke).toContain("CODE_UX_ELECTRON_STARTUP_SMOKE_FILE");
     expect(installerSmoke).toContain("marker.packaged !== true");
     expect(mainProcessSource).toContain('window.webContents.once("did-finish-load"');
     expect(mainProcessSource).toContain("writeElectronStartupSmoke");
+    expect(mainProcessSource).toContain('CODE_UX_ELECTRON_STARTUP_SMOKE_EXIT === "1"');
+    expect(mainProcessSource).toContain("app.exit(0)");
+    expect(mainProcessSource).toContain('app.on("before-quit"');
+    expect(mainProcessSource).toContain('app.exit(typeof process.exitCode === "number" ? process.exitCode : 0)');
   });
 });

@@ -22,6 +22,7 @@ export interface DockerAssetPruneServiceOptions {
   dockerConcurrency?: number;
   fileSystemConcurrency?: number;
   dockerBatchSize?: number;
+  protectedWorkspaceSessionIds?: () => Iterable<string>;
 }
 
 interface DockerVolumeInspection {
@@ -33,6 +34,7 @@ interface DockerVolumeInspection {
 const WORKSPACE_VOLUME_PREFIX = "code-ux-";
 const WORKSPACE_VOLUME_LABEL = "code-ux.workspace=true";
 const RUNTIME_VOLUME_LABEL = "code-ux.workspace-runtime=true";
+const WORKSPACE_SESSION_LABEL = "code-ux.workspace-session";
 const RUNTIME_VOLUME_SUFFIX = "-runtime";
 const DOCKER_PRUNE_TIMEOUT_MS = 10_000;
 const DOCKER_REMOVE_BATCH_SIZE = 50;
@@ -45,6 +47,7 @@ export class DockerAssetPruneService {
   private readonly dockerSemaphore: AsyncSemaphore;
   private readonly fileSystemSemaphore: AsyncSemaphore;
   private readonly dockerBatchSize: number;
+  private readonly protectedWorkspaceSessionIds: () => Iterable<string>;
   private cleanupInFlight: Promise<DockerAssetPruneResult> | null = null;
 
   constructor(
@@ -60,6 +63,7 @@ export class DockerAssetPruneService {
     this.dockerBatchSize = Number.isFinite(configuredBatchSize)
       ? Math.max(1, configuredBatchSize)
       : DOCKER_REMOVE_BATCH_SIZE;
+    this.protectedWorkspaceSessionIds = options.protectedWorkspaceSessionIds ?? (() => []);
   }
 
   cleanupOnStartup(): Promise<DockerAssetPruneResult> {
@@ -160,11 +164,30 @@ export class DockerAssetPruneService {
     for (const session of this.sessionTrackingRepository.listTrackedCliSessions()) {
       activeSessionIds.add(session.id);
     }
-    const createdAtByVolume = await this.readVolumeCreationTimes(volumeNames);
+    try {
+      for (const sessionId of this.protectedWorkspaceSessionIds()) {
+        const normalized = String(sessionId || "").trim();
+        if (normalized) {
+          activeSessionIds.add(normalized);
+        }
+      }
+    } catch (error) {
+      this.logger?.warn("Failed to resolve protected Docker workspace sessions during startup cleanup", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    const inspections = await this.readVolumeInspections(volumeNames);
     const recentCutoff = Date.now() - WORKSPACE_VOLUME_CREATION_GRACE_MS;
     const staleVolumes: string[] = [];
 
     for (const volumeName of volumeNames) {
+      const inspection = inspections.get(volumeName);
+      const labeledSessionId = inspection?.Labels?.[WORKSPACE_SESSION_LABEL]?.trim();
+      if (labeledSessionId && activeSessionIds.has(labeledSessionId)) {
+        continue;
+      }
+      // Volumes created before the durable session label was introduced remain
+      // recoverable when their unmodified name token matches a tracked session.
       const workspaceKey = this.extractWorkspaceKey(volumeName);
       if (!workspaceKey) {
         continue;
@@ -172,29 +195,17 @@ export class DockerAssetPruneService {
       if (activeSessionIds.has(workspaceKey)) {
         continue;
       }
-      const createdAt = createdAtByVolume.get(volumeName);
+      const createdAt = Date.parse(inspection?.CreatedAt || "");
       // A workspace is created before its provider session is persisted. Never
       // let an overlapping startup scan delete that short-lived untracked
       // window and cause Docker to recreate an empty volume at launch.
-      if (createdAt !== undefined && createdAt >= recentCutoff) {
+      if (Number.isFinite(createdAt) && createdAt >= recentCutoff) {
         continue;
       }
       staleVolumes.push(volumeName);
     }
 
     return await this.removeDockerItems(["volume", "rm", "-f"], staleVolumes);
-  }
-
-  private async readVolumeCreationTimes(volumeNames: string[]): Promise<Map<string, number>> {
-    const createdAtByVolume = new Map<string, number>();
-    const inspections = await this.readVolumeInspections(volumeNames);
-    for (const [name, entry] of inspections) {
-      const createdAt = Date.parse(entry.CreatedAt || "");
-      if (Number.isFinite(createdAt)) {
-        createdAtByVolume.set(name, createdAt);
-      }
-    }
-    return createdAtByVolume;
   }
 
   private async pruneOrphanedLoginContainers(): Promise<string[]> {

@@ -18,6 +18,11 @@ export interface GuardrailRefundResult {
   count: number;
 }
 
+export interface GuardrailRecordResult {
+  applied: boolean;
+  count: number;
+}
+
 export const GUARDRAIL_LEDGER_PURPOSES: GuardrailLedgerPurpose[] = [...GUARDRAIL_JOB_TYPES, "qa_review"];
 
 interface GuardrailLedgerRow {
@@ -52,6 +57,46 @@ export class GuardrailRepository {
         updated_at = excluded.updated_at
     `).run(id, input.projectId, input.taskId, input.purpose, now, now);
     return this.getCount(input.taskId, input.purpose);
+  }
+
+  /**
+   * Atomically records an invocation once for a durable attempt key. Replaying the
+   * same provider attempt after a process restart returns the existing count.
+   */
+  recordOnce(input: {
+    projectId: string;
+    taskId: string;
+    purpose: GuardrailLedgerPurpose;
+    sourceKey: string;
+    reason?: string;
+  }): GuardrailRecordResult {
+    return this.db.transaction(() => {
+      const now = new Date().toISOString();
+      const inserted = this.db.prepare(`
+        INSERT OR IGNORE INTO guardrail_ledger_adjustments
+          (id, project_id, task_id, purpose, adjustment, source_key, reason, created_at)
+        VALUES (?, ?, ?, ?, 0, ?, ?, ?)
+      `).run(
+        `gra_${randomUUID().replace(/-/g, "")}`,
+        input.projectId,
+        input.taskId,
+        input.purpose,
+        input.sourceKey,
+        input.reason ?? null,
+        now,
+      ).changes > 0;
+      if (inserted) {
+        const id = `gr_${randomUUID().replace(/-/g, "")}`;
+        this.db.prepare(`
+          INSERT INTO guardrail_ledger (id, project_id, task_id, purpose, count, created_at, updated_at)
+          VALUES (?, ?, ?, ?, 1, ?, ?)
+          ON CONFLICT(task_id, purpose) DO UPDATE SET
+            count = count + 1,
+            updated_at = excluded.updated_at
+        `).run(id, input.projectId, input.taskId, input.purpose, now, now);
+      }
+      return { applied: inserted, count: this.getCount(input.taskId, input.purpose) };
+    });
   }
 
   /**

@@ -155,7 +155,7 @@ describe("SprintCell visuals", () => {
       />,
     );
 
-    const workflowTrigger = screen.getByRole("button", { name: /CI status: Coding failed.*Show workflow details/i });
+    const workflowTrigger = screen.getByRole("button", { name: /Workflow status: Coding failed.*Show workflow details/i });
 
     expect(screen.queryByRole("status", { name: "Sprint execution failed" })).not.toBeInTheDocument();
     expect(screen.queryByText("Execution failed")).not.toBeInTheDocument();
@@ -167,7 +167,7 @@ describe("SprintCell visuals", () => {
     expect(workflowTrigger).toHaveTextContent("Coding failed");
 
     fireEvent.click(workflowTrigger);
-    const workflowDetails = screen.getByRole("region", { name: "CI workflow details" });
+    const workflowDetails = screen.getByRole("region", { name: "Workflow details" });
     expect(within(workflowDetails).getAllByText("Coding failed")).toHaveLength(2);
     expect(within(workflowDetails).getByText("Workflow failed")).toBeVisible();
   });
@@ -178,13 +178,24 @@ describe("SprintCell visuals", () => {
         sprint={{ ...sprint, status: "paused" }}
         isEven={false}
         accentColor="text-signal-600 dark:text-signal-300"
-        humanIntervention={{
-          title: "Approval required",
-          reason: "A reviewer is needed",
-          instructions: "Review the execution",
+        workflowHumanIntervention={{
+          id: "attention-human",
+          sprintId: sprint.id,
+          taskId: "task-1",
+          sprintRunId: "run-1",
+          dispatchId: "dispatch-1",
           attentionType: "human_escalation_required",
           severity: "high",
           ownerType: "human",
+          status: "open",
+          assignedWorkerEndpointId: null,
+          title: "Approval required",
+          summaryMarkdown: "A reviewer is needed",
+          payload: { instructions: "Review the execution" },
+          openedAt: "2026-07-16T08:00:00.000Z",
+          claimedAt: null,
+          resolvedAt: null,
+          updatedAt: "2026-07-16T08:00:00.000Z",
         }}
       />,
     );
@@ -341,13 +352,13 @@ describe("SprintCell visuals", () => {
 
     expect(screen.queryByText("Running")).not.toBeInTheDocument();
     expect(screen.queryByText("CI")).not.toBeInTheDocument();
-    const ciTrigger = screen.getByRole("button", { name: /CI status: Coding in progress.*Show workflow details/i });
+    const ciTrigger = screen.getByRole("button", { name: /Workflow status: Coding in progress.*Show workflow details/i });
     expect(ciTrigger).toHaveClass("text-signal-700");
     expect(ciTrigger).toHaveTextContent("Coding in progress");
     expect(container.querySelector('[data-ci-icon="failure"]')).not.toBeInTheDocument();
 
     fireEvent.click(ciTrigger);
-    const workflow = screen.getByRole("region", { name: "CI workflow details" });
+    const workflow = screen.getByRole("region", { name: "Workflow details" });
     expect(within(workflow).getByText("Pull request")).toBeVisible();
     expect(within(workflow).getByText("CI")).toBeVisible();
     expect(within(workflow).getByText("Merge")).toBeVisible();
@@ -388,7 +399,7 @@ describe("SprintCell visuals", () => {
     );
 
     expect(screen.getByText(sprintName)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /CI status: QA running/i })).toHaveTextContent("QA running");
+    expect(screen.getByRole("button", { name: /Workflow status: QA running/i })).toHaveTextContent("QA running");
     expect(screen.queryByText("Merge running")).not.toBeInTheDocument();
   });
 });

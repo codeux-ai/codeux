@@ -139,6 +139,8 @@ This split keeps tool contracts stable while allowing orchestration internals to
 
 Persistent skills use `SkillService` as the backend boundary. The MCP layer does not write markdown files into project workspaces and does not duplicate persistence logic; it validates payloads, formats concise responses, and calls the service.
 
+The versioned runtime mount is content-addressed. An unchanged materialized storage is verified from its manifest and skill markdown through direct filesystem reads, then reuses a persisted marker only when its revision still matches `.git/HEAD` and its recorded Git-index fingerprint matches the current index bytes. This keeps the common path helper-free without mistaking staged or interrupted materialization for a committed revision. Markerless, stale-marker, or index-mismatch repositories take the guarded Git path once to prove or commit the snapshot before a new marker is written. Changed storage content acquires one helper lease for the complete add/status/commit/revision transaction, so a provider invocation never starts one helper container per Git command.
+
 Runtime behavior:
 
 - `manage_skills` is a Code UX management tool in the `agents_memory` category. It supports storage CRUD, skill markdown import/export, agent storage attachment management, and the skill-authoring prompt.

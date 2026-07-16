@@ -54,6 +54,7 @@ interface RepoPlumbing {
 }
 
 const FAILED_RUN_DETAILS_CONCURRENCY = 3;
+const FAILED_RUN_DETAILS_LIMIT = 5;
 const GIT_MUTATION_TIMEOUT_MS = 8000;
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
@@ -243,11 +244,16 @@ export class GitStatusService {
   private async fetchFailedRunJobs(
     runId: number,
     ghToken?: string
-  ): Promise<{ failedJobs: GitCiFailedJob[]; warnings: string[] }> {
+  ): Promise<{ failedJobs: GitCiFailedJob[]; warnings: string[]; logFailureCount: number }> {
     const warnings: string[] = [];
+    let logFailureCount = 0;
     const result = await this.queryClient.ghRunViewJobs(runId, ghToken);
     if (!result.ok) {
-      return { failedJobs: [], warnings: [`Failed to fetch failed jobs for run ${runId}.`] };
+      return {
+        failedJobs: [],
+        warnings: [`Failed to fetch failed jobs for current run ${runId}.`],
+        logFailureCount,
+      };
     }
 
     const parsed = parseJson<Record<string, unknown>>(result.stdout);
@@ -293,14 +299,14 @@ export class GitStatusService {
         const logResult = await this.fetchFailedJobLogExcerpt(runId, jobId, failedSteps, ghToken);
         failedJob.logExcerpt = logResult.logExcerpt;
         if (logResult.warning) {
-          warnings.push(logResult.warning);
+          logFailureCount += 1;
         }
       }
 
       failedJobs.push(failedJob);
     }
 
-    return { failedJobs, warnings };
+    return { failedJobs, warnings, logFailureCount };
   }
 
   private async enrichFailedRunDetails(
@@ -308,26 +314,34 @@ export class GitStatusService {
     ghToken?: string
   ): Promise<{ runs: GitCiRunStatus[]; warnings: string[] }> {
     const warnings: string[] = [];
-    const seenHeadWorkflows = new Set<string>();
-    const failedCandidates = runs.filter((run) => {
-      if (run.id === null || !isRunFailed(run)) {
-        return false;
-      }
+    const seenBranchWorkflows = new Set<string>();
+    const failedCandidates: GitCiRunStatus[] = [];
+    // `runs` is sorted newest-first by the caller. The newest run for a branch/workflow pair is
+    // authoritative: an older failure is no longer actionable after a newer success or active run.
+    // Keep all lightweight run metadata in the response, but bound expensive jobs/log enrichment
+    // to the same small current window that operators can act on in the dashboard.
+    for (const run of runs) {
       const workflow = run.workflowName || run.name;
-      const duplicateKey = run.headSha ? `${run.headSha}\0${workflow}` : null;
-      if (duplicateKey && seenHeadWorkflows.has(duplicateKey)) {
-        return false;
+      const branchIdentity = run.headBranch || run.headSha || `run-${run.id ?? run.url}`;
+      const currentKey = `${branchIdentity}\0${workflow}`;
+      if (seenBranchWorkflows.has(currentKey)) {
+        continue;
       }
-      if (duplicateKey) {
-        seenHeadWorkflows.add(duplicateKey);
+      seenBranchWorkflows.add(currentKey);
+      if (run.id === null || !isRunFailed(run)) {
+        continue;
       }
-      return true;
-    });
+      failedCandidates.push(run);
+      if (failedCandidates.length >= FAILED_RUN_DETAILS_LIMIT) {
+        break;
+      }
+    }
     if (failedCandidates.length === 0) {
       return { runs, warnings };
     }
 
     const failedJobsByRunId = new Map<number, GitCiFailedJob[]>();
+    let failedLogCount = 0;
 
     let i = 0;
     const executeNext = async (): Promise<void> => {
@@ -337,6 +351,7 @@ export class GitStatusService {
         if (details.warnings.length > 0) {
           warnings.push(...details.warnings);
         }
+        failedLogCount += details.logFailureCount;
         failedJobsByRunId.set(runId, details.failedJobs);
       }
     };
@@ -346,6 +361,12 @@ export class GitStatusService {
       () => executeNext(),
     );
     await Promise.all(workers);
+
+    if (failedLogCount > 0) {
+      warnings.push(
+        `Failed to fetch logs for ${failedLogCount} failed CI ${failedLogCount === 1 ? "job" : "jobs"} across the current runs. Use the per-job log command to inspect them directly.`,
+      );
+    }
 
     const enrichedRuns = runs.map((run) => {
       if (run.id === null) {

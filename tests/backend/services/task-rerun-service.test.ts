@@ -409,7 +409,7 @@ describe("TaskRerunService", () => {
     expect(commandRunner.run).toHaveBeenCalledWith("git", ["checkout", "feature/sprint7-implementation"], expect.any(Object));
     expect(commandRunner.run).toHaveBeenCalledWith(
       "git",
-      ["log", "--first-parent", "--grep=Merge pull request #12", "--format=%H", "-n", "1"],
+      ["log", "--first-parent", "--fixed-strings", "--grep=#12", "--format=%H", "-n", "1"],
       expect.any(Object)
     );
     expect(commandRunner.run).toHaveBeenCalledWith("git", ["rev-parse", "--verify", "merge-commit-hash-123^2"], expect.any(Object));
