@@ -494,7 +494,11 @@ describe("GitHub workflow health", () => {
     expect(runnerScript).toContain("DAG dependency merge invariant failed");
     expect(runnerScript).toContain("writeRuntimeLogToConsole");
     expect(runnerScript).toContain("function assertQaHistory(homeDir, records, projectRun)");
-    expect(runnerScript).toContain("resolveExpectedQaOutcomes(reviews, expectation.outcomes, taskKey)");
+    expect(runnerScript).toContain("allowRepeatedIntermediateOutcomes: expectation.allowRepeatedIntermediateOutcomes");
+    expect(runnerScript).toContain("recoveryBackedRepeatedReviewIds: new Set(recoveryBackedQaCycles.map");
+    expect(runnerScript).toContain("'qa_followup_provider_completion_recovered'");
+    expect(runnerScript).toContain("findRecoveryBackedQaCycles({");
+    expect(runnerScript).toContain("assertExpectedTaskCodingInvocations(history.invocations, expected.taskCodingCounts, {");
     expect(runnerScript).toContain("to be superseded by a later completed expected outcome");
     expect(runnerScript).toContain("expected QA follow-up for");
     expect(runnerScript).toContain('resolveExpectedQaOutcomes(sprintReviews, expected.sprintOutcomes || [], "sprint completion")');
@@ -512,6 +516,7 @@ describe("GitHub workflow health", () => {
     expect(scenarioScript).toContain('"mockup-qa:fix-write src/qa-dag/follow-up-final.js');
     expect(scenarioScript).toContain('"mockup-sprint-qa:require-file src/qa-dag/final.js');
     expect(scenarioScript).toContain('outcomes: ["changes_requested", "pass"]');
+    expect(scenarioScript.match(/allowRepeatedIntermediateOutcomes: true/g)).toHaveLength(2);
     expect(scenarioScript).toContain("requireSameWorkerBranch: true");
     expect(scenarioScript.match(/injectMainCiFix:/g)).toHaveLength(3);
     expect(scenarioScript).toContain("minimumCompletedCiFixes: 1");
