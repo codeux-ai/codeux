@@ -172,11 +172,13 @@ The installed-Electron smoke uses each platform's native package and waits until
 backend and renderer are ready and the readiness marker is durably written. Linux and Windows then
 require the isolated app probe to exit with code zero. On Windows the harness passes the NSIS
 silent-install arguments verbatim so the required final `/D=` destination remains unquoted even
-when that destination contains spaces, and retries only the known transient `0xC0000005` installer
-access violation once in a fresh directory. On macOS the harness accepts the DMG's embedded MIT
-license through `hdiutil` stdin, validates readiness, then owns probe teardown with `SIGTERM` and a
-bounded `SIGKILL` fallback because Electron/AppKit can defer both Electron and Node exit paths.
-Production Electron shutdowns still drain the embedded runtime normally.
+when that destination contains spaces. The exact transient `0xC0000005` termination sometimes seen
+while a GitHub runner inspects a newly produced unsigned installer receives bounded retries after
+1.5, 5, and 15 seconds with fresh destinations; other failures are not retried. On macOS the harness
+accepts the DMG's embedded MIT license through `hdiutil` stdin, validates readiness, then owns probe
+teardown with `SIGTERM` and a bounded `SIGKILL` fallback because Electron/AppKit can defer both
+Electron and Node exit paths. Production Electron shutdowns still drain the embedded runtime
+normally.
 
 They must also include `assets/models-dev/catalog.json`. The automatic token-pricing path reads this snapshot beside the compiled runtime; without it, known models can appear unpriced only in the desktop build. Electron packaging tests pin both runtime assets and a representative GPT-5.5 catalogue rate.
 
