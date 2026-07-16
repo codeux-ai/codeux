@@ -19,7 +19,8 @@ const artifactDirectory = path.resolve(
 const timeoutMs = Number.parseInt(process.env.CODE_UX_ELECTRON_SMOKE_TIMEOUT_MS || "120000", 10);
 const packageJson = JSON.parse(await readFile(path.join(projectRoot, "package.json"), "utf8"));
 const WINDOWS_ACCESS_VIOLATION = 0xC0000005;
-const WINDOWS_INSTALL_ATTEMPTS = 2;
+const WINDOWS_INSTALL_RETRY_DELAYS_MS = [1_500, 5_000, 15_000];
+const WINDOWS_INSTALL_ATTEMPTS = WINDOWS_INSTALL_RETRY_DELAYS_MS.length + 1;
 const MAC_TERMINATION_GRACE_MS = 5_000;
 
 function runResult(command, args, options = {}) {
@@ -106,10 +107,12 @@ async function installWindowsCandidate(temporaryRoot) {
         `${installer} failed during silent install: ${JSON.stringify(failures)}.`,
       );
     }
+    const retryDelayMs = WINDOWS_INSTALL_RETRY_DELAYS_MS[attempt - 1];
     console.warn(
-      `Windows installer hit transient access violation on attempt ${attempt}; retrying once in a fresh directory.`,
+      `Windows installer hit transient access violation on attempt ${attempt}; `
+      + `retrying in ${retryDelayMs}ms with a fresh directory.`,
     );
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
   }
   throw new Error(`${installer} did not produce an installed application.`);
 }

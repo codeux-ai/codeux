@@ -133,8 +133,11 @@ describe("electron-builder packaged defaults", () => {
     expect(installerSmoke).toContain('["/S", `/D=${installDirectory}`]');
     expect(installerSmoke).toContain("windowsVerbatimArguments: true");
     expect(installerSmoke).toContain("WINDOWS_ACCESS_VIOLATION");
+    expect(installerSmoke).toContain("WINDOWS_INSTALL_RETRY_DELAYS_MS = [1_500, 5_000, 15_000]");
+    expect(installerSmoke).toContain("WINDOWS_INSTALL_RETRY_DELAYS_MS.length + 1");
     expect(installerSmoke).toContain("normalizedStatus === WINDOWS_ACCESS_VIOLATION");
-    expect(installerSmoke).toContain("retrying once in a fresh directory");
+    expect(installerSmoke).toContain("WINDOWS_INSTALL_RETRY_DELAYS_MS[attempt - 1]");
+    expect(installerSmoke).toContain("retrying in ${retryDelayMs}ms with a fresh directory");
     expect(installerSmoke).toContain('findArtifact(".dmg")');
     expect(installerSmoke).toContain('run("hdiutil", ["attach"');
     expect(installerSmoke).toContain('input: "Y\\n"');
