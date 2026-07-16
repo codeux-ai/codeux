@@ -18,7 +18,7 @@ import { createDebouncedSaver, loadWindowState, saveWindowState } from "./window
 import { ElectronCredentialKeyPersistence } from "./credential-key-persistence.js";
 import { ElectronSafeStorageKeyProvider } from "../infrastructure/security/electron-safe-storage-key-provider.js";
 import { setProcessCredentialKeyProvider } from "../services/credentials/key-provider-registry.js";
-import { writeElectronStartupSmoke } from "./startup-smoke.js";
+import { exitElectronStartupSmoke, writeElectronStartupSmoke } from "./startup-smoke.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -306,13 +306,12 @@ function createMainWindow(url: string): BrowserWindow {
         rendererUrl: window.webContents.getURL(),
       }).then(() => {
         if (process.env.CODE_UX_ELECTRON_STARTUP_SMOKE_EXIT === "1") {
-          // This is an install/start probe, not a user-driven shutdown. On macOS, requesting the
-          // normal AppKit quit cycle from the did-finish-load promise can be deferred until another
-          // native termination event arrives, leaving an otherwise healthy RC alive on the runner.
-          // Electron documents app.exit() as the immediate, deterministic exit path; the regular
-          // before-quit handler below remains responsible for draining the embedded server during
-          // every production shutdown.
-          app.exit(0);
+          // This is an install/start probe, not a user-driven shutdown. Newer macOS runners can
+          // defer both the AppKit quit cycle and Electron's app.exit() after renderer readiness.
+          // The marker is already durably renamed at this point, so end only this isolated probe
+          // through the Node process boundary. Production shutdowns still drain the embedded
+          // server through the before-quit handler below.
+          exitElectronStartupSmoke();
         }
       }).catch((error: unknown) => {
         process.exitCode = 1;
