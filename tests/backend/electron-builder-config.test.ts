@@ -9,6 +9,13 @@ describe("electron-builder packaged defaults", () => {
   it("uses the current NSIS toolset instead of the legacy installer runtime", () => {
     const config = require("../../electron-builder.config.cjs") as {
       toolsets?: { nsis?: string };
+      nsis?: {
+        customNsisResources?: {
+          version?: string;
+          url?: string;
+          checksum?: string;
+        };
+      };
     };
     const packageJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8")) as {
       devDependencies?: Record<string, string>;
@@ -16,6 +23,11 @@ describe("electron-builder packaged defaults", () => {
     };
 
     expect(config.toolsets?.nsis).toBe("1.2.1");
+    expect(config.nsis?.customNsisResources).toEqual({
+      version: "3.4.1",
+      url: "https://github.com/electron-userland/electron-builder-binaries/releases/download/nsis-resources-3.4.1/nsis-resources-3.4.1.7z",
+      checksum: "593a9a92ef958321293ac6a2ee61e64bf1bd543142a5bd6b3d310709cc924103",
+    });
     expect(packageJson.devDependencies?.["electron-builder"]).toBe("26.15.6");
     expect(packageJson.devDependencies?.tslib).toBe("^2.8.1");
     expect(packageJson.packageManager).toBe("pnpm@11.13.1");
