@@ -131,7 +131,7 @@ It is staged as:
 
 The main branch ruleset still includes historical context names from older CI numbering and matrix definitions. Compatibility aggregate jobs emit those names only after the corresponding current backend, dashboard, audit, package, orchestration, 18-shard E2E, or desktop release-candidate gate succeeds. They preserve branch-protection compatibility without replacing any current validation job and can be removed once a repository administrator cleans up the obsolete ruleset entries.
 
-`Playwright Diagnostics`, `Release Candidate Diagnostics`, and `Mockup Sprint Diagnostics` are manual-only rerun workflows. A PR cannot be merged with red CI.
+`Playwright Diagnostics`, `Release Candidate Diagnostics`, and `Mockup Sprint Diagnostics` are manual-only rerun workflows. Desktop diagnostics invoke Electron Builder directly with an explicit platform target and `--publish never`, preventing CI auto-detection from turning an artifact-only validation into a publish attempt. A PR cannot be merged with red CI.
 
 ## Smoke test
 

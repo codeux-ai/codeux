@@ -328,7 +328,9 @@ describe("GitHub workflow health", () => {
     expect(releaseChecks).toContain("name: Release Candidate Diagnostics");
     expectManualOnly(releaseChecks, "Release candidate diagnostics");
     expect(releaseChecks).toContain("node scripts/verify-release-install.mjs");
-    expect(releaseChecks).toContain("pnpm run ${{ matrix.electron-script }} -- --publish never");
+    expect(releaseChecks).toContain("pnpm run electron:prepare-deps && pnpm exec electron-builder");
+    expect(releaseChecks).toContain("${{ matrix.electron-target }} --publish never");
+    expect(releaseChecks).not.toContain("pnpm run ${{ matrix.electron-script }}");
     expect(releaseChecks).toContain(ELECTRON_INSTALL_SMOKE);
 
     expect(mockup).toContain("name: Mockup Sprint Diagnostics");
@@ -372,6 +374,9 @@ describe("GitHub workflow health", () => {
     expect(desktopRelease).toContain("permissions:\n  contents: read");
     expect(desktopRelease).toContain('GH_TOKEN: ""');
     expect(desktopRelease).not.toContain("softprops/action-gh-release");
+    expect(desktopRelease).toContain("pnpm run build && pnpm run electron:prepare-deps && pnpm exec electron-builder");
+    expect(desktopRelease).toContain("${{ matrix.electron-target }} --publish never");
+    expect(desktopRelease).not.toContain("pnpm run ${{ matrix.script }}");
     expect(desktopRelease).toContain(ELECTRON_INSTALL_SMOKE);
   });
 
