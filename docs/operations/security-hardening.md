@@ -16,7 +16,7 @@ This page documents the concrete security posture of Code UX. Code UX operates a
 
 Dependency vulnerability scanning is enforced via our CI/CD pipeline.
 
-During the CI process, dependencies are evaluated with the standard `pnpm run audit` command (which enforces `pnpm audit --audit-level=high`) alongside normal tests and builds. The repository pins pnpm 11.13.0, whose native audit implementation uses npm's supported bulk-advisory API. The process respects the frozen lockfile installation structure and blocks builds with high-severity risks.
+During the CI process, dependencies are evaluated with the standard `pnpm run audit` command (which enforces `pnpm audit --audit-level=high`) alongside normal tests and builds. The repository pins pnpm 11.13.1, whose native audit implementation uses npm's supported bulk-advisory API. The process respects the frozen lockfile installation structure and blocks builds with high-severity risks.
 
 Release publishing, release checks, and desktop packaging workflows also run `pnpm run audit` after dependency installation and before packaging or publishing artifacts. This keeps dependency risk evaluation on every artifact-producing path, not only on pull request CI.
 
@@ -25,7 +25,9 @@ Release publishing, release checks, and desktop packaging workflows also run `pn
 Automated guardrails enforce the repository's dependency and workflow security posture:
 
 - GitHub Actions dependency installs must use `pnpm install --frozen-lockfile --ignore-scripts`. Packaging workflows that need native Electron rebuilds keep the install script-free and run the explicit rebuild step (`pnpm run electron:install-deps`) afterward.
-- Security-relevant workflows declare explicit least-privilege `permissions` and pin action references to the major action versions already used by the project.
+- Security-relevant workflows declare explicit least-privilege `permissions`. Every third-party and first-party action reference is pinned to a reviewed immutable commit SHA, with the corresponding release version retained as an inline comment.
+- pnpm enforces a strict 24-hour minimum package age. Explicitly reviewed current releases may be listed by exact package and version under `minimumReleaseAgeExclude`; unreviewed immature resolutions fail in non-interactive CI.
+- Dependabot checks npm packages, GitHub Actions, and the managed runtime Docker base weekly against `dev`, so action runtime deprecations, dependency updates, and base-image refreshes are surfaced before release work.
 - `scripts/check-quality-guardrails.mjs` scans production code and scripts for `curl | bash`, `wget | sh`, `eval`, shell-enabled child process execution, and Docker `--privileged` usage.
 - Known provider CLI fallback installers are narrowly allowlisted by exact source line and rationale. They remain bounded to documented provider hosts, run inside provider containers, and are used only when the expected provider command is absent.
 

@@ -16,7 +16,7 @@ The runner is secret-gated. If `OPENROUTER_API_KEY` is not set, it prints a skip
 
 ## GitHub Actions
 
-`.github/workflows/openrouter-sprint-e2e.yml` runs this validation on pushes to `main` and through manual dispatch. The workflow installs dependencies with pnpm 11.13.0 on Node 22, builds the compiled runtime, and then invokes the runner.
+`.github/workflows/openrouter-sprint-e2e.yml` runs this validation on pushes to `main` and through manual dispatch. The workflow installs dependencies with pnpm 11.13.1 on Node 22, builds the compiled runtime, and then invokes the runner.
 
 The workflow passes `OPENROUTER_API_KEY` from repository secrets. Until that secret is configured, the runner prints its skip message and exits successfully. Set the optional repository variable `CODEUX_E2E_OPENROUTER_MODEL` to override the default model; otherwise the workflow uses `openai/gpt-5-mini`.
 

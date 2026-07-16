@@ -15,7 +15,6 @@ import {
   BookOpen,
   FolderOpen,
   GitBranch,
-  Github,
   Info,
   KeyRound,
   Layers,
@@ -30,6 +29,7 @@ import {
   Terminal,
   X,
 } from "lucide-preact";
+import { Github } from "../icons/GitHostIcons.js";
 import { fetchOnboardingReadiness, installOnboardingDependencies } from "../../../lib/api/dashboard-api.js";
 import { fetchSystemSettings, saveSystemSettings } from "../../lib/settings-api.js";
 import { ONBOARDING_OPEN_EVENT, ONBOARDING_STORAGE_KEY, startDashboardTour } from "../../lib/onboarding-control.js";

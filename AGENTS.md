@@ -21,7 +21,7 @@
 - `tests/` and dashboard `__tests__/`: Vitest suites. `.github/workflows/`: CI pipelines.
 
 ## Build, Test, and Development Commands
-Package manager is **pnpm** (`pnpm@11.13.0`), Node **22.13+**. Use `pnpm`, not `npm`.
+Package manager is **pnpm** (`pnpm@11.13.1`), Node **22.13+**. Use `pnpm`, not `npm`.
 - `pnpm install`: Install dependencies.
 - `pnpm run dev`: Run server from source (`node --import ./scripts/tsnode-register.mjs src/index.ts`).
 - `pnpm run build`: server `tsc` + dashboard typecheck + `vite build`.

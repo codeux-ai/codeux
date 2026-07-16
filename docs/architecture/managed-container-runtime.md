@@ -6,7 +6,7 @@ Code UX uses a shared, auto-updating Linux runtime for Docker-backed provider in
 
 The runtime is published from `containers/runtime/Dockerfile` to `ghcr.io/codeux-ai/codeux-runtime` for `linux/amd64` and `linux/arm64`.
 
-- `1-base` is based on `node:24-trixie-slim` and includes the shared development toolchain: JavaScript package managers, Python, Git/GitHub CLI, compilers, keyring support, preview utilities, and common Unix diagnostics.
+- `1-base` is based on the current multi-architecture `node:24-trixie-slim` manifest pinned by digest and includes the shared development toolchain: JavaScript package managers, Python, Git/GitHub CLI, compilers, keyring support, preview utilities, and common Unix diagnostics. Runtime tool versions are explicit (`npm` 12.0.1, pnpm 11.13.1, Yarn 1.22.22, Bun 1.3.14, and `serve` 14.2.6) so rebuilding a channel does not silently select a different package-manager binary.
 - `1-browser` extends the base target with pinned open-source Playwright, Playwright MCP, and Linux browser dependencies. It intentionally contains no browser binary.
 
 The publish workflow builds both targets, smoke-tests their tool inventory, emits SBOM and provenance attestations, and signs each published digest with Sigstore. Channel tags are discovery pointers only. `ManagedRuntimeService` pulls the channel, resolves the local `RepoDigest`, verifies Node 24 in a network-isolated smoke container, and stores only immutable digests as the active runtime.
