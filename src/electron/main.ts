@@ -439,7 +439,17 @@ app.on("before-quit", (event) => {
 
   event.preventDefault();
   isQuitting = true;
-  void stopServer().finally(() => app.quit());
+  void stopServer()
+    .catch((error: unknown) => {
+      process.exitCode = 1;
+      console.error("Failed to stop Code UX runtime during Electron shutdown", error);
+    })
+    .finally(() => {
+      // The first quit request is deliberately cancelled while the embedded server closes.
+      // Re-entering app.quit() after that cancellation can leave a packaged macOS process alive,
+      // so finish the already-drained shutdown without another before-quit cycle.
+      app.exit(typeof process.exitCode === "number" ? process.exitCode : 0);
+    });
 });
 
 app.on("window-all-closed", () => {

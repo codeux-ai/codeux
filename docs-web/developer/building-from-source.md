@@ -172,7 +172,9 @@ The installed-Electron smoke uses each platform's native package. On Windows it 
 silent-install arguments verbatim so the required final `/D=` destination remains unquoted even
 when that destination contains spaces. On macOS it accepts the DMG's embedded MIT license through
 `hdiutil` stdin before mounting. After installation, every platform uses the same readiness and
-clean-exit proof to start the installed application.
+clean-exit proof to start the installed application. Electron drains the embedded runtime after
+the initial quit request, then exits with the resulting process code; it does not enter a second
+macOS quit cycle that can leave the packaged process alive.
 
 They must also include `assets/models-dev/catalog.json`. The automatic token-pricing path reads this snapshot beside the compiled runtime; without it, known models can appear unpriced only in the desktop build. Electron packaging tests pin both runtime assets and a representative GPT-5.5 catalogue rate.
 
