@@ -24,6 +24,14 @@ export interface ElectronStartupSmokeInput {
   now?: () => Date;
 }
 
+export type ElectronStartupSmokeExit = (code: number) => never;
+
+export function exitElectronStartupSmoke(
+  exitProcess: ElectronStartupSmokeExit = (code) => process.exit(code),
+): never {
+  return exitProcess(0);
+}
+
 export async function writeElectronStartupSmoke(
   markerPath: string,
   input: ElectronStartupSmokeInput,
