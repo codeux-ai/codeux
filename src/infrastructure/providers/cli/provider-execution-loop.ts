@@ -7,6 +7,7 @@ export interface ProviderExecutionLoopOptions {
   command: string;
   args: string[];
   continueSession: boolean;
+  allowFreshSessionFallback?: boolean;
   antigravityLogPath?: string | null;
   runCmd: (command: string, args: string[]) => Promise<CommandResult>;
   trackingOnActivity: (desc: string, originator?: string) => void;
@@ -22,6 +23,7 @@ export async function runProviderExecutionLoop(options: ProviderExecutionLoopOpt
   const {
     provider,
     continueSession,
+    allowFreshSessionFallback = true,
     antigravityLogPath,
     runCmd,
     trackingOnActivity,
@@ -46,7 +48,13 @@ export async function runProviderExecutionLoop(options: ProviderExecutionLoopOpt
 
   // `claude --resume <id>` fails with "No conversation found" when the prior
   // conversation is gone. Retry once with a fresh session instead.
-  if (!result.ok && provider === "claude-code" && continueSession && isClaudeConversationNotFoundError(result)) {
+  if (
+    !result.ok
+    && provider === "claude-code"
+    && continueSession
+    && allowFreshSessionFallback
+    && isClaudeConversationNotFoundError(result)
+  ) {
     trackingOnActivity("Claude Code could not resume the previous conversation (no conversation found). Retrying once with a fresh session...", "provider");
     const freshSpec = buildFreshClaudeSpec();
     command = freshSpec.command;
@@ -57,7 +65,13 @@ export async function runProviderExecutionLoop(options: ProviderExecutionLoopOpt
   // `opencode run --session <id>` fails with "Session not found" if the native
   // session was removed from OpenCode's local store. Preserve the workspace and
   // retry once as a new OpenCode session instead of failing the task immediately.
-  if (!result.ok && provider === "opencode" && continueSession && isOpenCodeSessionNotFoundError(result)) {
+  if (
+    !result.ok
+    && provider === "opencode"
+    && continueSession
+    && allowFreshSessionFallback
+    && isOpenCodeSessionNotFoundError(result)
+  ) {
     trackingOnActivity("OpenCode could not resume the previous session (session not found). Retrying once with a fresh session...", "provider");
     const freshSpec = buildFreshOpenCodeSpec();
     command = freshSpec.command;

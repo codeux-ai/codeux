@@ -222,6 +222,17 @@ export class InvocationRecoveryService {
     invocation: ExecutionInvocationRecord,
     activeContainerSessionIds: ReadonlySet<string>,
   ): { status: "completed" | "failed" | "cancelled"; message: string } | null {
+    const durableProviderInvocation = invocation.providerInvocationId
+      ? this.deps.executionRepository.getProviderInvocationUsage(invocation.providerInvocationId)
+      : null;
+    if (this.isRunningDurableRemoteInvocation(durableProviderInvocation)) {
+      // Hosted sessions survive the Code UX process. Local sprint/task
+      // projections can be terminal because of an interrupted scheduler, but
+      // they are not evidence that the remote work stopped. Session sync owns
+      // the authoritative terminal transition for this invocation.
+      return null;
+    }
+
     const taskRun = invocation.taskRunId ? this.deps.executionRepository.getTaskRun(invocation.taskRunId) : null;
     if (taskRun && isTerminalTaskRunState(taskRun)) {
       return {
@@ -373,6 +384,9 @@ export class InvocationRecoveryService {
     if (providerInvocation.purpose !== "task_coding" || providerInvocation.status !== "running") {
       return null;
     }
+    if (this.isRunningDurableRemoteInvocation(providerInvocation)) {
+      return null;
+    }
     if (providerInvocation.taskRunId) {
       const taskRun = this.deps.executionRepository.getTaskRun(providerInvocation.taskRunId);
       if (taskRun && !isTerminalTaskRunState(taskRun)) {
@@ -441,6 +455,21 @@ export class InvocationRecoveryService {
     return null;
   }
 
+  private isRunningDurableRemoteInvocation(
+    invocation: ProviderInvocationUsageRecord | null,
+  ): boolean {
+    if (
+      !invocation
+      || invocation.provider !== "jules"
+      || invocation.status !== "running"
+      || invocation.invocationSource !== "EXTERNAL_API"
+    ) {
+      return false;
+    }
+    const sessionId = (invocation.nativeSessionId || invocation.sessionId || "").trim();
+    return sessionId.length > 0 && !sessionId.startsWith("jules-pending:");
+  }
+
   private resolveInterruptedStructuredInvocation(
     invocation: ExecutionInvocationRecord,
     activeContainerSessionIds: ReadonlySet<string>,
@@ -450,7 +479,7 @@ export class InvocationRecoveryService {
     const purpose = invocation.type === "qa_review" ? "QA review" : "planning";
 
     if (!invocation.providerInvocationId) {
-      if (ageMs < QA_RUN_START_TIMEOUT_MS) {
+      if (invocation.type !== "planning" && ageMs < QA_RUN_START_TIMEOUT_MS) {
         return null;
       }
       return {
@@ -461,7 +490,7 @@ export class InvocationRecoveryService {
 
     const providerInvocation = this.deps.executionRepository.getProviderInvocationUsage(invocation.providerInvocationId);
     if (!providerInvocation) {
-      if (ageMs < QA_RUN_START_TIMEOUT_MS) {
+      if (invocation.type !== "planning" && ageMs < QA_RUN_START_TIMEOUT_MS) {
         return null;
       }
       return {

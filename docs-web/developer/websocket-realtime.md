@@ -90,6 +90,19 @@ If the WebSocket connection cannot be established, consumers continue using thei
 - An invalid client frame produces `snapshot_required` with reason `invalid_client_message`; reconnect with a valid `set_subscriptions` payload.
 - If a requested resource no longer exists, its REST recovery request reports that condition and the consumer should remove the corresponding scope.
 
+## Flow control and idle work
+
+The server checks subscription interest before assembling project execution, runtime, structure,
+live, Git, overview, and project-collection payloads. With no interested client, those background
+refreshes do not run their database loaders or assemble heavy frames. Lightweight in-memory
+watermarks still advance so a disconnected client can detect missed invalidations on reconnect.
+
+All outbound paths—including replay, `subscribed`, `snapshot_required`, and ordinary event
+frames—check the projected socket queue size. A client that cannot drain the bounded queue is
+disconnected and should recover through the normal reconnect/snapshot flow. TCP keepalive also
+helps remove abandoned peers; clients must treat disconnect as recoverable rather than relying on
+an indefinitely buffered stream.
+
 ## Sample session
 
 ```text

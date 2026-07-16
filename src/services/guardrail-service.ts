@@ -117,6 +117,31 @@ export class GuardrailService {
     return count;
   }
 
+  /** Refunds an operationally interrupted invocation without erasing genuine failures. */
+  refund(
+    scope: GuardrailScope,
+    taskId: string,
+    purpose: GuardrailLedgerPurpose,
+    sourceKey: string,
+    reason?: string,
+  ): number {
+    const result = this.repo.refund({
+      projectId: scope.projectId,
+      taskId,
+      purpose,
+      sourceKey,
+      reason,
+    });
+    this.logger?.debug?.("Guardrail invocation refunded", {
+      taskId,
+      purpose,
+      sourceKey,
+      applied: result.applied,
+      count: result.count,
+    });
+    return result.count;
+  }
+
   getCounts(taskId: string): Record<GuardrailLedgerPurpose, number> {
     return this.repo.getCounts(taskId);
   }

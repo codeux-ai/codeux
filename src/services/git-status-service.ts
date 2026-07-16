@@ -33,6 +33,7 @@ import {
 } from "../infrastructure/git/git-status-policy.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks } from "./git-http-auth.js";
 import { commandRunner, type CommandResult } from "../shared/subprocess/command-runner.js";
+import { createHash } from "node:crypto";
 
 export type { GitTrackingRequest };
 
@@ -104,6 +105,8 @@ export class GitStatusService {
     this.queryClient.setProvider(provider, hostDomain, repoTarget, this.preferApi && !!token);
     return { provider, token };
   }
+  private static readonly STATUS_CACHE_LIMIT = 128;
+  private static readonly STATUS_CACHE_MAX_RETENTION_MS = 60_000;
   private static statusCache = new Map<string, { timestamp: number; promise: Promise<GitTrackingStatus> }>();
 
   // Local git plumbing (rev-parse / branch / remote / status) is repository-level and does not
@@ -111,12 +114,35 @@ export class GitStatusService {
   // sprint/dashboard caller. This stops the same project from spinning up a fresh batch of
   // `alpine/git` containers on every watch-loop cycle for each feature branch.
   private static readonly REPO_PLUMBING_CACHE_MS = 10_000;
+  private static readonly REPO_PLUMBING_CACHE_LIMIT = 128;
   private static repoPlumbingCache = new Map<string, { timestamp: number; promise: Promise<RepoPlumbing> }>();
+
+  private static pruneCache<T>(
+    cache: Map<string, { timestamp: number; promise: Promise<T> }>,
+    maxAgeMs: number,
+    limit: number,
+  ): void {
+    const oldestAllowed = Date.now() - maxAgeMs;
+    for (const [key, entry] of cache) {
+      if (entry.timestamp < oldestAllowed) cache.delete(key);
+    }
+    while (cache.size >= limit) {
+      const oldest = cache.keys().next();
+      if (oldest.done) break;
+      cache.delete(oldest.value);
+    }
+  }
 
   public static invalidateCache(repoPath?: string): void {
     if (repoPath) {
       for (const key of GitStatusService.statusCache.keys()) {
-        if (key.includes(`"repoPath":"${repoPath}"`)) {
+        let cachedRepoPath: unknown;
+        try {
+          cachedRepoPath = (JSON.parse(key) as { repoPath?: unknown }).repoPath;
+        } catch {
+          cachedRepoPath = undefined;
+        }
+        if (cachedRepoPath === repoPath) {
           GitStatusService.statusCache.delete(key);
         }
       }
@@ -139,8 +165,16 @@ export class GitStatusService {
     const key = this.repoPath;
     const cached = GitStatusService.repoPlumbingCache.get(key);
     if (cached && Date.now() - cached.timestamp < GitStatusService.REPO_PLUMBING_CACHE_MS) {
+      GitStatusService.repoPlumbingCache.delete(key);
+      GitStatusService.repoPlumbingCache.set(key, cached);
       return cached.promise;
     }
+    if (cached) GitStatusService.repoPlumbingCache.delete(key);
+    GitStatusService.pruneCache(
+      GitStatusService.repoPlumbingCache,
+      GitStatusService.REPO_PLUMBING_CACHE_MS,
+      GitStatusService.REPO_PLUMBING_CACHE_LIMIT,
+    );
     const promise = this.fetchRepoPlumbing();
     GitStatusService.repoPlumbingCache.set(key, { timestamp: Date.now(), promise });
     try {
@@ -339,19 +373,25 @@ export class GitStatusService {
 
   async getStatus(mode: "REMOTE" | "LOCAL", tokens: GitHostTokens | string = {}, trackingRequest?: GitTrackingRequest, cacheTtlMs?: number): Promise<GitTrackingStatus> {
     const normalizedTokens = this.normalizeTokens(tokens);
+    const tokenFingerprint = (value: string | null | undefined): string | undefined => value?.trim()
+      ? createHash("sha256").update(value.trim()).digest("base64url")
+      : undefined;
     const cacheKey = JSON.stringify({
       repoPath: this.repoPath,
       mode,
-      githubToken: normalizedTokens.githubToken?.trim() || undefined,
-      gitlabToken: normalizedTokens.gitlabToken?.trim() || undefined,
+      githubTokenHash: tokenFingerprint(normalizedTokens.githubToken),
+      gitlabTokenHash: tokenFingerprint(normalizedTokens.gitlabToken),
       trackingRequest,
     });
 
     if (cacheTtlMs && cacheTtlMs > 0) {
       const cached = GitStatusService.statusCache.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < cacheTtlMs) {
+        GitStatusService.statusCache.delete(cacheKey);
+        GitStatusService.statusCache.set(cacheKey, cached);
         return cached.promise;
       }
+      if (cached) GitStatusService.statusCache.delete(cacheKey);
     }
 
     const fetchPromise = (async () => {
@@ -486,6 +526,11 @@ export class GitStatusService {
     })();
 
     if (cacheTtlMs && cacheTtlMs > 0) {
+      GitStatusService.pruneCache(
+        GitStatusService.statusCache,
+        GitStatusService.STATUS_CACHE_MAX_RETENTION_MS,
+        GitStatusService.STATUS_CACHE_LIMIT,
+      );
       GitStatusService.statusCache.set(cacheKey, { timestamp: Date.now(), promise: fetchPromise });
     }
 

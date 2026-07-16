@@ -187,7 +187,8 @@ Production refinement shipped on March 15, 2026:
 
 - project execution, runtime-status, and structure refresh scheduling now also fan into `project.live.updated`, so the Live page always receives a fresh combined snapshot after any committed runtime mutation
 - the server now performs a periodic background live-snapshot refresh for the selected project so git status and other slower-changing runtime metadata continue to stream even when no new task event is being written
-- large live and git snapshot publishers check websocket subscription demand before running their loaders, so task churn does not assemble or serialize heavy frames when no tab is subscribed to `project:<projectId>:live` or `project:<projectId>:git`
+- live, git, project execution, runtime-status, structure, overview, and project-collection publishers check websocket subscription demand before running their loaders, so task churn does not assemble or serialize heavy frames when no tab owns the corresponding scope; lightweight non-replayable watermarks still advance so disconnected clients can detect missed invalidations
+- every outbound frame path, including replay, subscription acknowledgements, and recovery control frames, checks the projected socket queue size; clients that cross the queue ceiling are disconnected before Node retains another frame, and TCP keepalive detects abandoned peers
 
 ## What This Improves
 
@@ -269,7 +270,7 @@ The live dashboard transport is designed to send updates as fast as mutations oc
 To measure current latency and payload sizes against a representative active-project fixture, run the benchmark harness:
 
 ```bash
-node --loader ts-node/esm scripts/measure-live-snapshot.ts
+node --import ./scripts/tsnode-register.mjs scripts/measure-live-snapshot.ts
 ```
 
 This harness tracks:

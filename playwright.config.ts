@@ -114,7 +114,7 @@ export default defineConfig({
     // Rebuild the dashboard with gated workspaces enabled so navigation specs
     // exercise the production route tree instead of depending on a caller's
     // previously built dashboard assets.
-    command: 'pnpm exec vite build && node dist/index.js',
+    command: 'node ./node_modules/vite/bin/vite.js build && node dist/index.js',
     // Poll the liveness probe (/health) rather than the readiness probe (/ready).
     // /ready only returns 200 once a project has a live-status timestamp, which
     // never happens in a clean CI checkout, so it would hang until timeout.

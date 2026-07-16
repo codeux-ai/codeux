@@ -23,11 +23,17 @@ const fingerprintPath = path.join(runtimeDir, ".runtime-fingerprint");
 const packageJson = JSON.parse(readFileSync(path.join(projectRoot, "package.json"), "utf8"));
 const lockfile = readFileSync(path.join(projectRoot, "pnpm-lock.yaml"), "utf8");
 const workspace = readFileSync(path.join(projectRoot, "pnpm-workspace.yaml"), "utf8");
-const pruneVersion = 4;
+const pruneVersion = 5;
 const targetPlatform = process.env.CODE_UX_ELECTRON_TARGET_PLATFORM || process.platform;
 const targetArch = process.env.CODE_UX_ELECTRON_TARGET_ARCH || process.arch;
 const keepAllNativeBinaries = process.env.CODE_UX_ELECTRON_KEEP_ALL_NATIVE_BINARIES === "1";
 const onnxRuntimeInstallMode = "skip";
+const runtimeImportProbe = [
+  "@modelcontextprotocol/sdk/server/index.js",
+  "@modelcontextprotocol/sdk/types.js",
+  "dotenv",
+  "zod",
+];
 
 const fingerprint = crypto
   .createHash("sha256")
@@ -47,6 +53,7 @@ const fingerprint = crypto
 if (existsSync(nodeModulesDir) && existsSync(fingerprintPath)) {
   const currentFingerprint = readFileSync(fingerprintPath, "utf8").trim();
   if (currentFingerprint === fingerprint) {
+    validateRuntimeTree();
     console.log("Electron runtime dependencies are up to date.");
     process.exit(0);
   }
@@ -74,13 +81,12 @@ writeFileSync(
 // flat hoisted top level, pairing packages with wrong dependency versions
 // (e.g. type-is@2 + media-typer@0.3, which silently disabled express.json()
 // parsing and broke MCP initialize for provider containers).
-writeFileSync(path.join(runtimeDir, ".npmrc"), "node-linker=hoisted\n");
 copyFileSync(path.join(projectRoot, "pnpm-lock.yaml"), path.join(runtimeDir, "pnpm-lock.yaml"));
 copyFileSync(path.join(projectRoot, "pnpm-workspace.yaml"), path.join(runtimeDir, "pnpm-workspace.yaml"));
 
 execFileSync(
   "pnpm",
-  ["install", "--prod", "--frozen-lockfile"],
+  ["install", "--prod", "--frozen-lockfile", "--config.node-linker=hoisted"],
   {
     cwd: runtimeDir,
     stdio: "inherit",
@@ -131,6 +137,55 @@ function pruneTree(dir) {
       rmSync(entryPath, { force: true });
     }
   }
+}
+
+function packageDirectory(packageName) {
+  return path.join(nodeModulesDir, ...packageName.split("/"));
+}
+
+function collectSymlinks(dir, links = []) {
+  if (!existsSync(dir)) {
+    return links;
+  }
+
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const entryPath = path.join(dir, entry.name);
+    if (entry.isSymbolicLink()) {
+      links.push(path.relative(nodeModulesDir, entryPath));
+      continue;
+    }
+    if (entry.isDirectory()) {
+      collectSymlinks(entryPath, links);
+    }
+  }
+  return links;
+}
+
+function validateRuntimeTree() {
+  const missingDependencies = Object.keys(packageJson.dependencies || {})
+    .filter((dependency) => !existsSync(path.join(packageDirectory(dependency), "package.json")));
+  if (missingDependencies.length > 0) {
+    throw new Error(
+      `Electron runtime dependency tree is incomplete: ${missingDependencies.join(", ")}`,
+    );
+  }
+
+  const symlinks = collectSymlinks(nodeModulesDir);
+  if (symlinks.length > 0) {
+    throw new Error(
+      "Electron runtime dependency tree is not copy-safe; pnpm produced symbolic links: "
+      + symlinks.slice(0, 10).join(", "),
+    );
+  }
+
+  const importExpression = runtimeImportProbe
+    .map((specifier) => `import(${JSON.stringify(specifier)})`)
+    .join(",");
+  execFileSync(
+    process.execPath,
+    ["--input-type=module", "--eval", `await Promise.all([${importExpression}])`],
+    { cwd: runtimeDir, stdio: "inherit" },
+  );
 }
 
 function normalizeNativePlatform(platform) {
@@ -239,8 +294,12 @@ function directorySize(dir) {
   return size;
 }
 
+// Runtime command shims are unused by the packaged app and are commonly
+// symlinks even in an otherwise hoisted tree.
+rmSync(path.join(nodeModulesDir, ".bin"), { recursive: true, force: true });
 pruneTree(nodeModulesDir);
 pruneOnnxRuntimeNativeBinaries(nodeModulesDir);
+validateRuntimeTree();
 writeFileSync(fingerprintPath, `${fingerprint}\n`);
 
 const fileCount = countFiles(nodeModulesDir);

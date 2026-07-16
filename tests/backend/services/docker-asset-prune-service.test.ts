@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionTrackingRepository } from "../../../src/repositories/session-tracking-repository.js";
 import { DockerAssetPruneService } from "../../../src/services/docker-asset-prune-service.js";
+import { getRuntimeOwnerLabel } from "../../../src/shared/config/runtime-owner.js";
 
 import * as fs from "fs/promises";
 import { runCommandStrict } from "../../../src/services/cli-process-runner.js";
@@ -19,6 +20,68 @@ describe("DockerAssetPruneService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fs.readFile).mockRejectedValue(new Error("missing"));
+  });
+
+  it("scopes every startup Docker scan to the current runtime state home", async () => {
+    const sessionTracking = {
+      listTrackedCliSessions: vi.fn(() => []),
+    } as unknown as SessionTrackingRepository;
+    vi.mocked(runCommandStrict).mockResolvedValue({
+      ok: true,
+      stdout: "",
+      stderr: "",
+      code: 0,
+    } as any);
+
+    await new DockerAssetPruneService(sessionTracking).cleanupOnStartup();
+
+    const dockerCalls = vi.mocked(runCommandStrict).mock.calls.map((call) => call[1]);
+    const ownerFilter = `label=${getRuntimeOwnerLabel()}`;
+    const assetScans = dockerCalls.filter((args) => (
+      (args[0] === "ps" && args.includes("label=code-ux.helper"))
+      || (args[0] === "ps" && args.includes("label=code-ux.login=true"))
+      || (args[0] === "ps" && args.includes("label=code-ux.command"))
+      || (args[0] === "volume" && args[1] === "ls")
+    ));
+    expect(assetScans.length).toBeGreaterThanOrEqual(6);
+    expect(assetScans.every((args) => args.includes(ownerFilter))).toBe(true);
+  });
+
+  it("removes owner-scoped provider containers left in running or created state", async () => {
+    const sessionTracking = {
+      listTrackedCliSessions: vi.fn(() => []),
+    } as unknown as SessionTrackingRepository;
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => ({
+      ok: true,
+      stdout: args[0] === "ps" && args.includes("label=code-ux.command")
+        ? "provider-running\nprovider-created\n"
+        : "",
+      stderr: "",
+      code: 0,
+    } as any));
+
+    const result = await new DockerAssetPruneService(sessionTracking).cleanupOnStartup();
+
+    expect(result.prunedProviderContainers).toEqual(["provider-running", "provider-created"]);
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      ["rm", "-f", "-v", "provider-running", "provider-created"],
+      expect.any(String),
+      process.env,
+      { timeout: 10_000 },
+    );
+    expect(vi.mocked(runCommandStrict).mock.calls).toEqual(expect.arrayContaining([
+      expect.arrayContaining([
+        "docker",
+        expect.arrayContaining([
+          "ps",
+          "-aq",
+          "label=code-ux.managed=true",
+          "label=code-ux.command",
+          `label=${getRuntimeOwnerLabel()}`,
+        ]),
+      ]),
+    ]));
   });
 
   it("prunes stale workspace volumes while preserving cached setup images on startup", async () => {

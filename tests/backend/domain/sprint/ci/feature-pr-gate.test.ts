@@ -150,6 +150,20 @@ describe("FeaturePrGateService", () => {
     );
   });
 
+  it("loads latest task runs once for a wide gate evaluation", async () => {
+    const cachedRun = { id: "run-1", state: "COMPLETED", workerBranch: "feat/T1" };
+    const listLatestTaskRuns = vi.fn().mockReturnValue(new Map([
+      ["task-record-1", cachedRun],
+    ]));
+    (context.executionRepository as any).listLatestTaskRuns = listLatestTaskRuns;
+
+    await service.evaluateCiGate(subtasks, context);
+
+    expect(listLatestTaskRuns).toHaveBeenCalledTimes(1);
+    expect(listLatestTaskRuns).toHaveBeenCalledWith(["task-record-1"], "sprint-run-1");
+    expect(context.executionRepository?.getLatestTaskRun).not.toHaveBeenCalled();
+  });
+
   it("marks task as completed with PR_ONLY indicator when featurePrAutoMergeMode is CREATE_PR", async () => {
     // Override the autoMergeMode
     context.ciIntelligence.featurePrAutoMergeMode = "CREATE_PR" as any;

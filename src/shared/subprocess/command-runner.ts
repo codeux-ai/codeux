@@ -7,7 +7,9 @@ import { createHash } from "crypto";
 import {
   DockerHelperContainerPool,
   HELPER_LABEL,
+  HELPER_OWNER_NAME_SUFFIX,
 } from "../../infrastructure/providers/cli/docker-helper-pool.js";
+import { getRuntimeOwnerDockerArgs } from "../config/runtime-owner.js";
 import {
   CommandSpawnerClient,
   HostUnavailableError,
@@ -16,6 +18,7 @@ import type { SpawnerCommandOptions, SpawnerRawResult } from "./command-spawner-
 import { isRuntimeShutdownInProgress } from "../../services/shutdown-state.js";
 import { BoundedTextBuffer } from "./bounded-text-buffer.js";
 import { expandHomePath } from "../config/home-path.js";
+import pLimit from "p-limit";
 
 declare const spawnCommandBrand: unique symbol;
 declare const spawnArgumentBrand: unique symbol;
@@ -101,10 +104,21 @@ const GIT_PATH_ENV_KEYS = new Set([
  * cli-process-runner resolves before first use.
  */
 let gitHelperPool: DockerHelperContainerPool | null = null;
+const PROJECT_GIT_EXEC_CONCURRENCY = 4;
+type GitExecLimit = ReturnType<typeof pLimit>;
+interface ProjectGitHelperLease {
+  holders: number;
+  releaseReservation: (() => void) | null;
+}
+const projectGitHelperLeases = new Map<string, ProjectGitHelperLease>();
+const projectGitExecLimits = new Map<string, GitExecLimit>();
+const projectGitInFlight = new Map<string, Set<Promise<CommandResult>>>();
+const projectGitHelpersReleasing = new Set<string>();
+
 function getGitHelperPool(): DockerHelperContainerPool {
   if (!gitHelperPool) {
     gitHelperPool = new DockerHelperContainerPool({
-      nameFor: (key) => `code-ux-git-helper-${createHash("sha1").update(key).digest("hex").slice(0, 24)}`,
+      nameFor: (key) => `code-ux-git-helper-${HELPER_OWNER_NAME_SUFFIX}-${createHash("sha1").update(key).digest("hex").slice(0, 24)}`,
       buildCreateArgs: (key, name) => {
         const parsed = JSON.parse(key) as { mountRoot: string; uid?: number; gid?: number };
         const userArgs = parsed.uid !== undefined && parsed.gid !== undefined && parsed.uid !== 0
@@ -117,6 +131,7 @@ function getGitHelperPool(): DockerHelperContainerPool {
           name,
           "--label",
           `${HELPER_LABEL}=git`,
+          ...getRuntimeOwnerDockerArgs(),
           "--workdir",
           CONTAINER_REPO_ROOT,
           "--mount",
@@ -138,6 +153,77 @@ function getGitHelperPool(): DockerHelperContainerPool {
   return gitHelperPool;
 }
 
+function getProjectGitExecLimit(poolKey: string): GitExecLimit {
+  const existing = projectGitExecLimits.get(poolKey);
+  if (existing) {
+    return existing;
+  }
+  const created = pLimit(PROJECT_GIT_EXEC_CONCURRENCY);
+  projectGitExecLimits.set(poolKey, created);
+  return created;
+}
+
+async function drainProjectGitExecutions(poolKey: string): Promise<void> {
+  for (;;) {
+    const current = [...(projectGitInFlight.get(poolKey) || [])];
+    if (current.length === 0) {
+      return;
+    }
+    await Promise.allSettled(current);
+  }
+}
+
+/**
+ * Keeps one lazy Git helper warm while a project has an active sprint. Multiple sprints for the
+ * same project share a reference-counted lease; the final release drains commands and removes the
+ * helper. Outside an active lease, Git uses the isolated one-shot path and leaves no warm helper.
+ */
+export function acquireProjectGitHelperForSprint(cwd: string): () => Promise<void> {
+  const context = CommandRunner.resolveGitPoolContextForPath(cwd);
+  if (!context) {
+    return async () => undefined;
+  }
+  const existing = projectGitHelperLeases.get(context.poolKey);
+  if (existing) {
+    existing.holders += 1;
+  } else {
+    projectGitHelperLeases.set(context.poolKey, {
+      holders: 1,
+      releaseReservation: null,
+    });
+  }
+
+  let released = false;
+  return async () => {
+    if (released) {
+      return;
+    }
+    released = true;
+    const lease = projectGitHelperLeases.get(context.poolKey);
+    if (!lease) {
+      return;
+    }
+    lease.holders = Math.max(0, lease.holders - 1);
+    if (lease.holders > 0) {
+      return;
+    }
+
+    projectGitHelperLeases.delete(context.poolKey);
+    projectGitHelpersReleasing.add(context.poolKey);
+    try {
+      await drainProjectGitExecutions(context.poolKey);
+      lease.releaseReservation?.();
+      await gitHelperPool?.release(context.poolKey);
+    } finally {
+      projectGitHelpersReleasing.delete(context.poolKey);
+      if (!projectGitHelperLeases.has(context.poolKey)) {
+        projectGitExecLimits.delete(context.poolKey);
+        projectGitInFlight.delete(context.poolKey);
+      }
+    }
+  };
+}
+
 /** Removes the persistent git helper container bound to a project root. */
 export async function releaseGitHelperForCwd(cwd: string): Promise<void> {
   if (!gitHelperPool) {
@@ -147,14 +233,40 @@ export async function releaseGitHelperForCwd(cwd: string): Promise<void> {
   if (!context) {
     return;
   }
-  await gitHelperPool.release(context.poolKey).catch(() => undefined);
+  const lease = projectGitHelperLeases.get(context.poolKey);
+  projectGitHelperLeases.delete(context.poolKey);
+  projectGitHelpersReleasing.add(context.poolKey);
+  try {
+    await drainProjectGitExecutions(context.poolKey);
+    lease?.releaseReservation?.();
+    await gitHelperPool.release(context.poolKey).catch(() => undefined);
+  } finally {
+    projectGitHelpersReleasing.delete(context.poolKey);
+    projectGitExecLimits.delete(context.poolKey);
+    projectGitInFlight.delete(context.poolKey);
+  }
 }
 
 /** Drains the process-wide git helper pool during server shutdown. */
 export async function shutdownGitHelperPool(): Promise<void> {
   const pool = gitHelperPool;
-  gitHelperPool = null;
+  const keys = new Set([
+    ...projectGitHelperLeases.keys(),
+    ...projectGitInFlight.keys(),
+  ]);
+  for (const key of keys) {
+    projectGitHelpersReleasing.add(key);
+  }
+  await Promise.all([...keys].map((key) => drainProjectGitExecutions(key)));
+  for (const lease of projectGitHelperLeases.values()) {
+    lease.releaseReservation?.();
+  }
+  projectGitHelperLeases.clear();
   await pool?.shutdown();
+  gitHelperPool = null;
+  projectGitExecLimits.clear();
+  projectGitInFlight.clear();
+  projectGitHelpersReleasing.clear();
 }
 
 export class CommandRunner {
@@ -178,14 +290,33 @@ export class CommandRunner {
     args: string[],
     options: CommandOptions = {}
   ): Promise<CommandResult> {
-    // Poolable git commands (containerized, only the working tree mounted, no stdin) are
+    // Poolable git commands (containerized and only the project tree mounted) are
     // executed inside a persistent helper container instead of a throwaway `docker run --rm`.
-    if (command === "git" && this.shouldRunGitInContainer(options) && !options.stdinFile) {
-      const cwd = this.resolveHostPath(options.cwd ?? process.cwd());
+    if (command === "git" && this.shouldRunGitInContainer(options)) {
+      // Validate caller-controlled spawn inputs before `pool.ensure()` can create a helper.
+      // stdin files stay on the host and are streamed through `docker exec -i`; they do not
+      // require another bind mount and therefore remain eligible for the warm helper.
+      this.validateSpawnArgs(args);
+      const safeCwd = this.validateSpawnCwd(options.cwd);
+      const cwd = safeCwd ?? this.resolveHostPath(process.cwd());
+      const safeStdinFile = options.stdinFile
+        ? this.validateStdinFile(options.stdinFile, safeCwd)
+        : undefined;
       const env = options.env ?? process.env;
       const poolContext = this.resolveGitPoolContext(cwd);
-      if (poolContext && this.buildGitContainerPathMappings(poolContext.mountRoot, args, env).length === 0) {
-        return this.runPooledGitCommand(poolContext, args, env, options);
+      // Once shutdown starts, the server drains the warm pool. Late Git work must stay on the
+      // containerized one-shot path so it cannot recreate a persistent helper behind that drain.
+      if (
+        poolContext
+        && !isRuntimeShutdownInProgress()
+        && projectGitHelperLeases.has(poolContext.poolKey)
+        && !projectGitHelpersReleasing.has(poolContext.poolKey)
+        && this.buildGitContainerPathMappings(poolContext.mountRoot, args, env).length === 0
+      ) {
+        const pooledOptions = safeCwd === undefined && safeStdinFile === undefined
+          ? options
+          : { ...options, cwd: safeCwd, stdinFile: safeStdinFile };
+        return this.runPooledGitCommand(poolContext, args, env, pooledOptions);
       }
     }
 
@@ -200,11 +331,26 @@ export class CommandRunner {
     options: CommandOptions,
   ): Promise<CommandResult> {
     const pool = getGitHelperPool();
-    const execPrefix = ["exec", "--workdir", context.containerCwd, ...this.buildGitContainerEnvArgs(env, context.mountRoot, [])];
+    const projectLease = projectGitHelperLeases.get(context.poolKey);
+    if (projectLease && !projectLease.releaseReservation) {
+      projectLease.releaseReservation = pool.reserve(context.poolKey);
+    }
+    const execPrefix = [
+      "exec",
+      ...(options.stdinFile ? ["-i"] : []),
+      "--workdir",
+      context.containerCwd,
+      ...this.buildGitContainerEnvArgs(env, context.mountRoot, []),
+    ];
     const execCommand = ["git", ...this.rewriteGitArgsForContainer(context.mountRoot, args, [])];
+    // This includes command-scoped auth/config environment values. Validate the complete exec
+    // argv before helper creation so malformed environment cannot cause container churn.
+    this.validateSpawnArgs([...execPrefix, ...execCommand]);
 
-    const runViaExec = async (): Promise<CommandResult> => {
-      const containerId = await pool.ensure(context.poolKey);
+    const runOneShot = (): Promise<CommandResult> => (
+      this.spawnProcess(this.resolveCommand("git", args, options), options)
+    );
+    const runViaExec = async (containerId: string): Promise<CommandResult> => {
       pool.touch(context.poolKey);
       return this.spawnProcess(
         { command: "docker", args: [...execPrefix, containerId, ...execCommand], containerHostCwd: context.mountRoot },
@@ -212,23 +358,46 @@ export class CommandRunner {
       );
     };
 
-    let result: CommandResult;
-    try {
-      result = await runViaExec();
-    } catch {
-      // Could not start/reach the helper — fall back to a one-shot run --rm so the op still works.
-      return this.spawnProcess(this.resolveCommand("git", args, options), options);
-    }
-
-    if (!result.ok && pool.isContainerGone(result)) {
-      pool.invalidate(context.poolKey);
+    const runPinnedGeneration = async (): Promise<{ containerId: string; result: CommandResult }> => {
+      let commandStarted = false;
       try {
-        result = await runViaExec();
-      } catch {
-        return this.spawnProcess(this.resolveCommand("git", args, options), options);
+        return await pool.withContainer(context.poolKey, async (containerId) => {
+          commandStarted = true;
+          return { containerId, result: await runViaExec(containerId) };
+        });
+      } catch (error) {
+        if (commandStarted) {
+          throw error;
+        }
+        return { containerId: "", result: await runOneShot() };
+      }
+    };
+
+    const execute = async (): Promise<CommandResult> => {
+      let attempt = await runPinnedGeneration();
+      if (attempt.containerId && !attempt.result.ok && pool.isContainerGone(attempt.result)) {
+        pool.invalidate(context.poolKey, attempt.containerId);
+        attempt = await runPinnedGeneration();
+        if (attempt.containerId && !attempt.result.ok && pool.isContainerGone(attempt.result)) {
+          pool.invalidate(context.poolKey, attempt.containerId);
+          return runOneShot();
+        }
+      }
+      return attempt.result;
+    };
+
+    const operation = getProjectGitExecLimit(context.poolKey)(execute);
+    const inFlight = projectGitInFlight.get(context.poolKey) || new Set<Promise<CommandResult>>();
+    inFlight.add(operation);
+    projectGitInFlight.set(context.poolKey, inFlight);
+    try {
+      return await operation;
+    } finally {
+      inFlight.delete(operation);
+      if (inFlight.size === 0) {
+        projectGitInFlight.delete(context.poolKey);
       }
     }
-    return result;
   }
 
   /**
@@ -704,6 +873,7 @@ export class CommandRunner {
         "run",
         "--rm",
         "-i",
+        ...getRuntimeOwnerDockerArgs(),
         "--workdir",
         containerCwd,
         "--mount",

@@ -8,6 +8,22 @@ import type { Logger } from "../shared/logging/logger.js";
 
 const DEFAULT_LIVE_ACTIVITY_FETCH_TIMEOUT_MS = 30_000;
 const LIVE_ACTIVITY_FETCH_TIMEOUT_ERROR_NAME = "ActivityFetchTimeoutError";
+const MAX_LIVE_ACTIVITY_DESCRIPTION_CHARS = 64 * 1024;
+
+const boundLiveActivity = (activity: JulesActivity): JulesActivity => {
+  const description = activity.description;
+  if (typeof description !== "string" || description.length <= MAX_LIVE_ACTIVITY_DESCRIPTION_CHARS) {
+    return activity;
+  }
+  const marker = "\n… [activity preview truncated] …\n";
+  const retainedChars = MAX_LIVE_ACTIVITY_DESCRIPTION_CHARS - marker.length;
+  const headChars = Math.ceil(retainedChars / 2);
+  const tailChars = retainedChars - headChars;
+  return {
+    ...activity,
+    description: `${description.slice(0, headChars)}${marker}${description.slice(-tailChars)}`,
+  };
+};
 
 const getFetchFailureMetadata = (
   sessionName: string,
@@ -87,6 +103,13 @@ export class ActivityCacheService {
         )
       );
 
+      const activeSessionSet = new Set(activeSessionNames);
+      for (const cachedSessionName of this.liveActivitiesCache.keys()) {
+        if (!activeSessionSet.has(cachedSessionName)) {
+          this.liveActivitiesCache.delete(cachedSessionName);
+        }
+      }
+
       if (activeSessionNames.length === 0) {
         return {};
       }
@@ -124,7 +147,13 @@ export class ActivityCacheService {
                   },
                 },
               );
-              return { sessionName, activities, isNegative: activities.length === 0, failed: false };
+              const boundedActivities = activities.map(boundLiveActivity);
+              return {
+                sessionName,
+                activities: boundedActivities,
+                isNegative: boundedActivities.length === 0,
+                failed: false,
+              };
             } catch (error) {
               const cached = this.liveActivitiesCache.get(sessionName);
               if (cached && !cached.isNegative) {

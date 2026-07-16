@@ -429,6 +429,24 @@ describe("PlanningAgentService", () => {
       .find((record) => record.sprintId === sprint.id);
     expect(planningInvocation).toBeDefined();
     const messages = executionRepository.listExecutionInvocationMessages(planningInvocation!.id);
+    expect(messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        role: "user",
+        metadata: expect.objectContaining({
+          planningRequest: expect.objectContaining({
+            kind: "plan_sprint",
+            autoStart: true,
+            replan: false,
+            overrides: expect.objectContaining({
+              designGuidance: expect.objectContaining({
+                selectedTechStackId: "code-ux-product-stack",
+                selectedStyleguideId: "game-experience",
+              }),
+            }),
+          }),
+        }),
+      }),
+    ]));
     const executionPlanMessage = messages.find((message) => {
       const widgetMetadata = message.metadata?.widget_metadata as Record<string, unknown> | undefined;
       return widgetMetadata?.type === "planning_request" && widgetMetadata.status === "completed";
@@ -795,14 +813,15 @@ describe("PlanningAgentService", () => {
     expect(call?.continueSessionId).toBe("native-original");
     expect(call?.sessionId).toBe("planning-claude-code-old");
     expect(call?.prompt).toContain("Continue the previous planning attempt");
-    expect(call?.prompt).toContain("If the previous provider conversation cannot be resumed");
+    expect(call?.prompt).toContain("Use the original planning instructions below as the complete source of truth while continuing this conversation");
+    expect(call?.allowFreshSessionFallback).toBe(false);
     expect(call?.prompt).toContain("## Original Planning Instructions");
     expect(call?.prompt).toContain("Plan with context");
     expect(call?.prompt).toContain("Output the complete valid JSON sprint definition now");
     expect(executionRepository.getExecutionInvocation(failedInvocation.id)?.preservedAt).toEqual(expect.any(String));
   });
 
-  it("continues a cancelled planning invocation by reusing the preserved workspace", async () => {
+  it("automatically continues a restart-cancelled planning invocation with its durable options", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-cancel-continue-"));
     tempDirs.push(dir);
 
@@ -838,13 +857,14 @@ describe("PlanningAgentService", () => {
         }),
       }),
     };
+    const executionControlService = { orchestrateSprint: vi.fn().mockResolvedValue(undefined) };
     const service = new PlanningAgentService({
       projectManagementRepository: projectRepository,
       connectionChatRepository: connectionRepository,
       executionRepository,
       settingsRepository,
       agentPresetSyncService: syncService,
-      executionControlService: { orchestrateSprint: vi.fn() } as any,
+      executionControlService: executionControlService as any,
       providerRunner,
     });
 
@@ -876,10 +896,23 @@ describe("PlanningAgentService", () => {
       model: "claude-fable-5",
       errorMessage: "Cancelled from dashboard",
     });
+    executionRepository.appendExecutionInvocationMessage(cancelledInvocation.id, {
+      role: "user",
+      contentMarkdown: "Original planning prompt",
+      metadata: {
+        planningRequest: {
+          kind: "plan_sprint",
+          autoStart: true,
+          replan: false,
+        },
+      },
+    });
 
-    const continued = await service.restartInvocation(cancelledInvocation.id, "continue_session");
+    const continued = await service.recoverInterruptedInvocation(cancelledInvocation.id);
 
     expect(continued.createdTaskIds).toHaveLength(1);
+    expect(continued.started).toBe(true);
+    expect(executionControlService.orchestrateSprint).toHaveBeenCalledWith(project.id, sprint.id);
     expect(WorkspaceManager.prototype.createOrReuseSnapshotWorkspace).toHaveBeenCalledWith(repoPath, expect.stringContaining(sprint.id), expect.objectContaining({
       branch: "main",
       remoteOnly: true,
@@ -887,8 +920,77 @@ describe("PlanningAgentService", () => {
     expect(WorkspaceManager.prototype.createSnapshotWorkspace).not.toHaveBeenCalled();
     const call = vi.mocked(providerRunner.runProviderForText).mock.calls[0]?.[0];
     expect(call?.continueSessionId).toBe("native-cancelled");
+    expect(call?.allowFreshSessionFallback).toBe(false);
     expect(call?.prompt).toContain("Continue the previous planning attempt");
     expect(executionRepository.getExecutionInvocation(cancelledInvocation.id)?.preservedAt).toEqual(expect.any(String));
+    expect(executionRepository.listExecutionInvocationMessages(cancelledInvocation.id)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        role: "system",
+        metadata: expect.objectContaining({
+          recovery: "startup_planning_request_resumed",
+          continuationMode: "continue_session",
+        }),
+      }),
+    ]));
+
+    const preProviderSprint = projectRepository.createSprint(project.id, {
+      name: "Pre-provider Restart Sprint",
+      goal: "Recover the full planning request",
+    });
+    const preProviderInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: preProviderSprint.id,
+      type: "planning",
+      status: "failed",
+      provider: "claude-code",
+      errorMessage: "Restarted before provider linkage",
+    });
+    executionRepository.appendExecutionInvocationMessage(preProviderInvocation.id, {
+      role: "user",
+      contentMarkdown: "Original pre-provider planning prompt",
+      metadata: {
+        planningRequest: {
+          kind: "plan_sprint",
+          autoStart: false,
+          replan: false,
+        },
+      },
+    });
+
+    const retried = await service.recoverInterruptedInvocation(preProviderInvocation.id);
+
+    expect(retried.createdTaskIds).toHaveLength(1);
+    expect(retried.started).toBe(false);
+    const retryCall = vi.mocked(providerRunner.runProviderForText).mock.calls[1]?.[0];
+    expect(retryCall?.continueSessionId).toBeNull();
+    expect(retryCall?.prompt).toContain("Recover the full planning request");
+    expect(retryCall?.prompt).not.toContain("Continue the previous planning attempt");
+
+    const missingNativeSprint = projectRepository.createSprint(project.id, {
+      name: "Missing Native Session Sprint",
+      goal: "Do not silently replace the provider conversation",
+    });
+    const missingNativeUsage = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: missingNativeSprint.id,
+      sessionId: "planning-claude-code-missing-native",
+      provider: "claude-code",
+      purpose: "planning",
+      status: "cancelled",
+    });
+    const missingNativeInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: missingNativeSprint.id,
+      providerInvocationId: missingNativeUsage.id,
+      type: "planning",
+      status: "cancelled",
+      provider: "claude-code",
+    });
+
+    await expect(service.recoverInterruptedInvocation(missingNativeInvocation.id)).rejects.toThrow(
+      "Refusing to start a fresh session",
+    );
+    expect(providerRunner.runProviderForText).toHaveBeenCalledTimes(2);
   });
 
   it("stops virtual planning rate-limit retries after the configured max", async () => {

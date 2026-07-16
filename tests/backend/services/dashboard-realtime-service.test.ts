@@ -1213,8 +1213,48 @@ describe("DashboardRealtimeService backpressure and metrics", () => {
     await vi.advanceTimersByTimeAsync(100);
 
     expect(getProjectLiveSnapshot).not.toHaveBeenCalled();
-    expect(eventRepoMock.appendEvent).not.toHaveBeenCalled();
+    expect(eventRepoMock.appendEvent).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: "project.live.updated",
+      replayable: false,
+    }));
     expect(service.getMetrics("project.live.updated").skipped).toBe(1);
+  });
+
+  it("skips all snapshot loaders when no websocket scope has subscribers", async () => {
+    const loggerMock = { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn(), child: vi.fn() };
+    let sequence = 1;
+    const eventRepoMock = {
+      getLatestSequence: () => sequence,
+      appendEvent: vi.fn().mockImplementation((event) => ({ sequence: ++sequence, ...event })),
+    };
+    const loaders = {
+      getProjectLiveSnapshot: vi.fn(() => ({} as any)),
+      getProjectsSnapshot: vi.fn(() => ({} as any)),
+      getProjectExecutionSnapshot: vi.fn(() => ({} as any)),
+      getProjectStatusSnapshot: vi.fn(() => ({} as any)),
+      getOverviewTelemetrySnapshot: vi.fn(() => ({} as any)),
+    };
+    const service = new DashboardRealtimeService(eventRepoMock as any, loggerMock as any);
+    service.setScopeInterestResolver(() => false);
+    service.setSnapshotLoaders(loaders);
+
+    service.scheduleProjectExecutionRefresh("proj-1");
+    service.scheduleProjectRuntimeStatusRefresh("proj-1");
+    service.scheduleProjectStructureRefresh("proj-1");
+    service.scheduleProjectsRefresh();
+    await service.drain();
+
+    expect(loaders.getProjectLiveSnapshot).not.toHaveBeenCalled();
+    expect(loaders.getProjectsSnapshot).not.toHaveBeenCalled();
+    expect(loaders.getProjectExecutionSnapshot).not.toHaveBeenCalled();
+    expect(loaders.getProjectStatusSnapshot).not.toHaveBeenCalled();
+    expect(loaders.getOverviewTelemetrySnapshot).not.toHaveBeenCalled();
+    // The lightweight non-replayable watermark is still recorded so a disconnected client can
+    // detect that it missed invalidations. Only the expensive snapshot loaders are interest-gated.
+    expect(eventRepoMock.appendEvent).toHaveBeenCalled();
+    expect(eventRepoMock.appendEvent.mock.calls.every(([event]) => event.replayable === false)).toBe(true);
+    expect(service.getMetrics("execution_refresh").published).toBe(1);
+    expect(service.getMetrics("project.structure.updated").skipped).toBe(1);
   });
 
   it("bounds redundant burst snapshot writes to one publish per coalesced event type", async () => {

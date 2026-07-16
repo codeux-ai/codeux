@@ -245,6 +245,7 @@ export function createSprintDependencies(
     coreDeps.providerConcurrencyService,
     resolveDashboardSettings,
     logger.child({ component: "sprint-task-dispatch-service" }),
+    () => julesApi.getSessionsForCapacityCheck(),
   );
 
   projectAttentionService.setWorkerAttentionOpenedCallback((projectId) => {

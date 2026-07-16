@@ -4,6 +4,7 @@ export { commandRunner, type CommandResult, type CommandOptions };
 
 export interface StreamingCommandOptions {
   signal?: AbortSignal;
+  stdinFile?: string;
   trimOutput?: boolean;
   maxStdoutChars?: number;
   onStdoutLine?: (line: string) => void;
@@ -21,6 +22,7 @@ export const runStreamingCommand = async (
     cwd,
     env,
     signal: options.signal,
+    stdinFile: options.stdinFile,
     trimOutput: options.trimOutput,
     maxStdoutChars: options.maxStdoutChars,
     onStdoutLine: options.onStdoutLine,

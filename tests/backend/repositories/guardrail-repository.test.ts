@@ -57,6 +57,38 @@ describe("GuardrailRepository", () => {
     expect(repo.getTotal(taskId)).toBe(4);
   });
 
+  it("refunds an operational interruption exactly once without going below zero", async () => {
+    const { repo, projectId, taskId } = await createFixture();
+
+    repo.record({ projectId, taskId, purpose: "task_coding" });
+    repo.record({ projectId, taskId, purpose: "task_coding" });
+    expect(repo.refund({
+      projectId,
+      taskId,
+      purpose: "task_coding",
+      sourceKey: "runtime-restart:run-1",
+      reason: "runtime_restart_interrupted",
+    })).toEqual({ applied: true, count: 1 });
+    expect(repo.refund({
+      projectId,
+      taskId,
+      purpose: "task_coding",
+      sourceKey: "runtime-restart:run-1",
+    })).toEqual({ applied: false, count: 1 });
+    expect(repo.refund({
+      projectId,
+      taskId,
+      purpose: "task_coding",
+      sourceKey: "runtime-restart:run-2",
+    })).toEqual({ applied: true, count: 0 });
+    expect(repo.refund({
+      projectId,
+      taskId,
+      purpose: "task_coding",
+      sourceKey: "runtime-restart:run-3",
+    })).toEqual({ applied: true, count: 0 });
+  });
+
   it("resets all counters for a task", async () => {
     const { repo, projectId, taskId } = await createFixture();
 

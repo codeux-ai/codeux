@@ -24,6 +24,9 @@ export class DashboardSnapshotCachePolicy {
   static readonly HEADER_TOKEN_THROUGHPUT_CACHE_TTL_MS = 1_000;
   static readonly OVERVIEW_CACHE_TTL_MS = 500;
   static readonly PROJECTS_CACHE_TTL_MS = 500;
+  static readonly PROJECT_EXECUTION_CACHE_MAX_ENTRIES = 64;
+  static readonly PROJECT_STATS_CACHE_MAX_ENTRIES = 128;
+  static readonly HEADER_TOKEN_THROUGHPUT_CACHE_MAX_ENTRIES = 128;
 
   static getProjectExecutionSnapshotCacheScope(
     projectId: string,

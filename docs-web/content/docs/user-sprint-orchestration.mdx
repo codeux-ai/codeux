@@ -116,11 +116,20 @@ Docker capacity.
 
 For CLI/Docker providers, Code UX counts both running provider invocations and running task runs when enforcing provider capacity. A task run can reserve orchestration capacity before its provider invocation row starts, so this prevents wide DAGs from creating hidden running backlogs while provider calls appear idle.
 
+Before starting hosted work, Code UX also reads a fresh, coalesced Jules API preflight. Remote
+`QUEUED`, `PLANNING`, and `IN_PROGRESS` work counts against execution capacity; sessions waiting for
+approval/feedback or paused do not. The remaining local slots are claimed atomically, and an
+unavailable preflight leaves the task queued. Because Jules has no dedicated slot-count endpoint and
+its history is paginated, a provider capacity rejection remains authoritative and is retried after a
+short backoff rather than failing the task.
+
 Docker-backed task workspaces prepare independently. Code UX locks only the workspace being created or resumed, deduplicates exact remote-branch fetches, reuses short-lived targeted seed bundles for concurrent workspaces with identical ref tips, checks out the worker branch during the seed container, and caches the public helper image readiness check per process. Completed task patch export and host-side patch materialization are collapsed into single Git shell phases to avoid repeated helper-container startup and large argv transfers.
 
 On restart, interrupted local CLI task runs may be cancelled and redispatched, but their workspace volumes are preserved. If the coding provider had already finished, the resumed run continues with Git finalization from that workspace instead of invoking the coding agent again. Session sync treats finished local CLI task runs as terminal even if a stale cached session snapshot still reports the old session as running.
 
 With restart invocation policy `continue`, the same continuity applies to QA reviewers, CI-fix workers, and merge-conflict workers. Each resumed invocation keeps its logical session and preserved workspace, and continues the provider-native conversation when supported. QA reuses that review workspace only to finish the same interrupted review cycle; verification after a saved verdict starts from a fresh branch snapshot so it sees any coding follow-up. Code UX releases repair attention left claimed by the stopped virtual worker and returns it to the queue without consuming another repair attempt.
+
+Interrupted sprint planning also resumes automatically under `continue`. Code UX preserves the complete request and options and continues the exact provider-native conversation from the stable planning workspace. It fails closed if that recorded conversation cannot be resumed instead of silently starting a fresh one. A request stopped before provider linkage can be reissued from the durable full prompt because no provider session existed yet.
 
 Before a Docker snapshot is reused, Code UX verifies that it has a valid Git `HEAD`. If restart interrupted snapshot initialization after the volume was created, the runtime rebuilds that snapshot from the requested branch so resumed QA and provider work never starts from an empty workspace.
 

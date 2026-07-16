@@ -42,6 +42,14 @@ const TERMINAL_DISPATCH_STATUSES = new Set([
 ]);
 
 const DISPATCH_HEARTBEAT_INTERVAL_MS = 60_000;
+const MAX_PROVIDER_ACTIVITY_EVENT_TEXT_CHARS = 16 * 1024;
+const MAX_PROVIDER_ACTIVITY_IDENTIFIER_CHARS = 2 * 1024;
+const MAX_PROVIDER_ACTIVITY_PLAN_STEPS = 64;
+const WORKER_CLARIFICATION_EVENT_TYPES = [
+  "worker_clarification_requested",
+  "worker_clarification_continued",
+  "worker_clarification_replied",
+] as const;
 
 type WorkerClarificationSyncStatus = "none" | "pending" | "answered" | "settled" | "cancelled_run";
 
@@ -66,8 +74,10 @@ const resolveWorkerClarificationProjection = (
     return NO_WORKER_CLARIFICATION;
   }
 
-  const lifecycleEvents = deps.executionRepository.listTaskRunEvents(taskRun.id, 10_000)
-    .filter((event) => event.eventType.startsWith("worker_clarification_"));
+  const lifecycleEvents = deps.executionRepository.listTaskRunEvents(taskRun.id, 500, {
+    eventTypes: [...WORKER_CLARIFICATION_EVENT_TYPES],
+    skipValidation: true,
+  });
   const byClarificationId = new Map<string, {
     latestEventType: string;
     requestedAt: string;
@@ -234,6 +244,34 @@ const hasSubmittedReplyForActionRequiredState = (
   });
 };
 
+const boundProviderActivityText = (
+  value: string | undefined,
+  maxChars: number = MAX_PROVIDER_ACTIVITY_EVENT_TEXT_CHARS,
+): string | undefined => {
+  if (typeof value !== "string" || value.length <= maxChars) {
+    return value;
+  }
+  const marker = "\n… [provider activity truncated] …\n";
+  const retainedChars = maxChars - marker.length;
+  const headChars = Math.ceil(retainedChars / 2);
+  const tailChars = retainedChars - headChars;
+  return `${value.slice(0, headChars)}${marker}${value.slice(-tailChars)}`;
+};
+
+const boundProviderActivityValue = (value: unknown): unknown => {
+  if (value === null || value === undefined || typeof value !== "object") {
+    return value;
+  }
+  try {
+    const serialized = JSON.stringify(value);
+    return serialized.length <= MAX_PROVIDER_ACTIVITY_EVENT_TEXT_CHARS
+      ? value
+      : { truncated: true, originalChars: serialized.length };
+  } catch {
+    return { truncated: true, reason: "unserializable" };
+  }
+};
+
 const getActivityPreview = (activity: JulesActivity): string => {
   if (typeof activity.agentMessaged?.agentMessage === "string" && activity.agentMessaged.agentMessage.trim()) {
     return activity.agentMessaged.agentMessage.trim();
@@ -264,27 +302,50 @@ const getActivityKind = (activity: JulesActivity): string => {
   return "activity";
 };
 
-const buildProviderActivityEventPayload = (
+export const buildProviderActivityEventPayload = (
   activity: JulesActivity,
   sessionId: string | null,
   sessionName: string | null,
   provider: string | null,
 ): Record<string, unknown> => ({
-  activityId: activity.id,
-  activityName: activity.name,
-  sessionId,
-  sessionName,
-  provider,
+  activityId: boundProviderActivityText(activity.id, MAX_PROVIDER_ACTIVITY_IDENTIFIER_CHARS),
+  activityName: boundProviderActivityText(activity.name, MAX_PROVIDER_ACTIVITY_IDENTIFIER_CHARS),
+  sessionId: boundProviderActivityText(sessionId ?? undefined, MAX_PROVIDER_ACTIVITY_IDENTIFIER_CHARS) ?? null,
+  sessionName: boundProviderActivityText(sessionName ?? undefined, MAX_PROVIDER_ACTIVITY_IDENTIFIER_CHARS) ?? null,
+  provider: boundProviderActivityText(provider ?? undefined, MAX_PROVIDER_ACTIVITY_IDENTIFIER_CHARS) ?? null,
   kind: getActivityKind(activity),
-  preview: getActivityPreview(activity),
-  description: typeof activity.description === "string" ? activity.description : null,
-  agentMessaged: activity.agentMessaged || null,
-  userMessaged: activity.userMessaged || null,
-  progressUpdated: activity.progressUpdated || null,
-  planGenerated: activity.planGenerated || null,
-  planApproved: activity.planApproved || null,
-  sessionFailed: activity.sessionFailed || null,
-  sessionCompleted: activity.sessionCompleted ?? null,
+  preview: boundProviderActivityText(getActivityPreview(activity)),
+  description: boundProviderActivityText(activity.description) ?? null,
+  agentMessaged: activity.agentMessaged
+    ? { agentMessage: boundProviderActivityText(activity.agentMessaged.agentMessage) }
+    : null,
+  userMessaged: activity.userMessaged
+    ? { userMessage: boundProviderActivityText(activity.userMessaged.userMessage) }
+    : null,
+  progressUpdated: activity.progressUpdated
+    ? {
+        title: boundProviderActivityText(activity.progressUpdated.title),
+        description: boundProviderActivityText(activity.progressUpdated.description),
+      }
+    : null,
+  planGenerated: activity.planGenerated
+    ? {
+        plan: activity.planGenerated.plan
+          ? {
+              steps: activity.planGenerated.plan.steps
+                ?.slice(0, MAX_PROVIDER_ACTIVITY_PLAN_STEPS)
+                .map((step) => ({ title: boundProviderActivityText(step.title, 1_024) })),
+            }
+          : undefined,
+      }
+    : null,
+  planApproved: activity.planApproved
+    ? { planId: boundProviderActivityText(activity.planApproved.planId, MAX_PROVIDER_ACTIVITY_IDENTIFIER_CHARS) }
+    : null,
+  sessionFailed: activity.sessionFailed
+    ? { reason: boundProviderActivityText(activity.sessionFailed.reason) }
+    : null,
+  sessionCompleted: boundProviderActivityValue(activity.sessionCompleted) ?? null,
 });
 
 const normalizeSessionRef = (sessionRef: string | null | undefined): string | null => {

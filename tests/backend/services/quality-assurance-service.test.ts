@@ -106,6 +106,9 @@ describe("QualityAssuranceService", () => {
       .mockResolvedValue("docker-volume://qa-snapshot");
     const removeWorktree = vi.spyOn((service as any).workspaceManager, "removeWorktree")
       .mockResolvedValue(undefined);
+    const releaseSnapshotReservation = vi.fn();
+    const reserveWorkspaceHelper = vi.spyOn((service as any).workspaceManager, "reserveWorkspaceHelper")
+      .mockReturnValue(releaseSnapshotReservation);
 
     const result = await (service as any).runReview({
       triggerType: "sprint_completion",
@@ -127,6 +130,8 @@ describe("QualityAssuranceService", () => {
       cwd: "docker-volume://qa-snapshot",
     }));
     expect(removeWorktree).toHaveBeenCalledWith("/repo/project", "docker-volume://qa-snapshot");
+    expect(reserveWorkspaceHelper).toHaveBeenCalledWith(expect.stringMatching(/^docker-volume:\/\//));
+    expect(releaseSnapshotReservation).toHaveBeenCalledOnce();
   });
 
   it("runs HOST-mode QA against a detached review-branch snapshot", async () => {
@@ -419,7 +424,7 @@ describe("QualityAssuranceService", () => {
       provider: "qwen-code",
       worker_branch: "task/update-alpha",
       pr_url: "https://example.test/pull/1",
-      activities: [],
+      activities: [{ description: "Current task activity remains complete." }],
     };
     const prompt = (service as any).buildReviewPrompt({
       triggerType: "task_completion",
@@ -435,9 +440,18 @@ describe("QualityAssuranceService", () => {
           depends_on: [],
           is_independent: true,
           status: "COMPLETED",
-          provider: "qwen-code",
+          provider: "codex",
           worker_branch: "task/update-beta",
           pr_url: "https://example.test/pull/2",
+          activities: [{ description: "Sibling activity must not be included." }],
+        },
+        {
+          id: "T03",
+          title: "Pending gamma task",
+          prompt: "This task has not run yet.",
+          depends_on: [],
+          is_independent: true,
+          status: "pending",
           activities: [],
         },
       ],
@@ -446,14 +460,124 @@ describe("QualityAssuranceService", () => {
 
     expect(prompt).toContain("## REVIEW SCOPE");
     expect(prompt).toContain("This is a single-task QA review. The only task under review is T01.");
-    expect(prompt).toContain("## FULL TASK INSTRUCTIONS (SPRINT CONTEXT; ONLY CURRENT TASK IS UNDER REVIEW)");
+    expect(prompt).toContain("## PREVIOUSLY COMPLETED SPRINT TASKS (TITLES ONLY)");
+    expect(prompt).toContain("- Update beta.md");
+    expect(prompt).not.toContain("T02");
+    expect(prompt).not.toContain("Pending gamma task");
+    expect(prompt).not.toContain("Write exactly one line to beta.md.");
+    expect(prompt).not.toContain("Sibling activity must not be included.");
+    expect(prompt).not.toContain("task/update-beta");
+    expect(prompt).not.toContain("https://example.test/pull/2");
+    expect(prompt).not.toContain("Provider: codex");
     expect(prompt).toContain("## CURRENT TASK UNDER REVIEW");
+    expect(prompt).toContain("Write exactly one line to alpha.md.");
+    expect(prompt).toContain("Current task activity remains complete.");
+    expect(prompt).toContain("Depends on: none");
     expect(prompt).toContain("Assume the current workspace/branch contains only the current task's changes on top of its base branch.");
     expect(prompt).toContain("A task-level review must pass when the current task satisfies its own prompt");
     expect(prompt).toContain("Do not request changes because files, commits, PRs, or behavior from other completed sibling tasks are missing from this branch.");
     expect(prompt).toContain("Do not tell the coding session to implement, restore, or modify another task's scope.");
     expect(prompt).toContain("For task-level reviews, review only the current task and return `targetTaskKey` as the current task key when changes are required.");
-    expect(prompt).toContain("Write exactly one line to beta.md.");
+  });
+
+  it("shows the first half of every task instruction when sprint QA context exceeds 100k tokens", () => {
+    const service = new QualityAssuranceService({
+      projectManagementRepository: {} as any,
+      executionRepository: {} as any,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {} as any,
+      qaReviewRepository: {} as any,
+      taskService: {} as any,
+      agentPresetSyncService: {} as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+    const subtasks = Array.from({ length: 400 }, (_, index) => {
+      const taskNumber = index + 1;
+      return {
+        id: `T${taskNumber}`,
+        title: `Task ${taskNumber}`,
+        prompt: [
+          `Instruction ${taskNumber} first-half: ${"x".repeat(600)}`,
+          `Instruction ${taskNumber} second-half: ${"z".repeat(600)}`,
+        ].join("\n"),
+        depends_on: [],
+        is_independent: true,
+        status: "COMPLETED",
+        activities: [{ description: `Full activity ${taskNumber}: ${"y".repeat(100)}` }],
+      };
+    });
+    const prompt = (service as any).buildReviewPrompt({
+      triggerType: "sprint_completion",
+      projectName: "Extreme QA Project",
+      sprintGoal: "Validate a wide DAG.",
+      agentInstructions: "Review critically.",
+      subtasks,
+      currentTask: null,
+    });
+
+    expect(prompt).toContain("exceeding the 100,000-token threshold");
+    expect(prompt.match(/Every task remains listed in order, but each task instruction below contains only its first half\./g))
+      .toHaveLength(1);
+    expect(prompt).toContain("Instruction 1 first-half:");
+    expect(prompt).not.toContain("Instruction 1 second-half:");
+    expect(prompt).toContain("Instruction 399 first-half:");
+    expect(prompt).not.toContain("Instruction 399 second-half:");
+    expect(prompt).toContain("Instruction 400 first-half:");
+    expect(prompt).not.toContain("Instruction 400 second-half:");
+    expect(prompt).toContain("Full activity 1:");
+    expect(prompt).toContain("Full activity 400:");
+    expect(prompt).toContain("Recent activity excerpts are not shortened.");
+  });
+
+  it("keeps extreme-DAG task QA title-only for completed siblings and full for the current task", () => {
+    const service = new QualityAssuranceService({
+      projectManagementRepository: {} as any,
+      executionRepository: {} as any,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {} as any,
+      qaReviewRepository: {} as any,
+      taskService: {} as any,
+      agentPresetSyncService: {} as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+    const subtasks = Array.from({ length: 400 }, (_, index) => {
+      const taskNumber = index + 1;
+      return {
+        id: `T${taskNumber}`,
+        title: `Completed sibling title ${taskNumber}`,
+        prompt: `Full instruction ${taskNumber}: ${"x".repeat(1_000)}`,
+        depends_on: taskNumber === 400 ? ["T399"] : [],
+        is_independent: taskNumber !== 400,
+        status: taskNumber === 400 ? "CODING_COMPLETED" : "completed",
+        activities: [{ description: `Full activity ${taskNumber}: ${"y".repeat(100)}` }],
+      };
+    });
+
+    const prompt = (service as any).buildReviewPrompt({
+      triggerType: "task_completion",
+      projectName: "Extreme QA Project",
+      sprintGoal: "Validate a wide DAG.",
+      agentInstructions: "Review critically.",
+      subtasks,
+      currentTask: subtasks[399],
+    });
+
+    expect(prompt.length).toBeGreaterThan(5_000);
+    expect(prompt.length).toBeLessThan(50_000);
+    expect(prompt).toContain("- Completed sibling title 1");
+    expect(prompt).toContain("- Completed sibling title 399");
+    expect(prompt).not.toContain("- Completed sibling title 400");
+    expect(prompt).not.toContain("Full instruction 1:");
+    expect(prompt).not.toContain("Full activity 1:");
+    expect(prompt).toContain("Full instruction 400:");
+    expect(prompt).toContain("Full activity 400:");
+    expect(prompt).toContain("Depends on: T399");
   });
 
   it("creates sprint follow-up tasks from QA output", async () => {
@@ -1436,6 +1560,34 @@ describe("QualityAssuranceService", () => {
     is_independent: true,
     status: "COMPLETED" as const,
   };
+
+  it("computes wide-DAG QA merge gates from one repository snapshot", () => {
+    const latestRun = {
+      id: "qa-run-1",
+      taskId: "task-1",
+      status: "completed",
+      outcome: "pass",
+      summaryMarkdown: "Passed.",
+      runIndex: 1,
+    };
+    const listTaskReviewSnapshots = vi.fn().mockReturnValue(new Map([
+      ["task-1", { latestRun, latestCycleRuns: [latestRun], runsUsed: 1, decisiveRuns: 1 }],
+      ["task-2", { latestRun: null, latestCycleRuns: [], runsUsed: 0, decisiveRuns: 0 }],
+    ]));
+    const service = buildGateService({ listTaskReviewSnapshots });
+    const secondTask = { ...noPrCompletedTask, id: "T2", record_id: "task-2" };
+
+    const gates = service.getTaskMergeGateStatuses({
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      tasks: [noPrCompletedTask, secondTask],
+    });
+
+    expect(listTaskReviewSnapshots).toHaveBeenCalledOnce();
+    expect(listTaskReviewSnapshots).toHaveBeenCalledWith(["task-1", "task-2"]);
+    expect(gates.get("task-1")).toMatchObject({ mergeAllowed: true, reason: "passed" });
+    expect(gates.get("task-2")).toMatchObject({ mergeAllowed: false, reason: "pending_review" });
+  });
 
   it("fails closed (no merge) when the verdict budget is exhausted without a pass", () => {
     // A single decisive QA verdict that did not pass, at the cap of 1. This is

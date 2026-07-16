@@ -65,6 +65,12 @@ Live provider telemetry is metadata-first. `provider-telemetry-watcher.ts` check
 
 Final post-process usage collection remains authoritative. Live telemetry is best effort for dashboard freshness; final collection reconciles the persisted provider usage row when the provider finishes.
 
+Claude Code JSONL polling is append-only. The watcher retains parser state and an incomplete-line
+tail, feeds each appended record through `ClaudeCodeLogAccumulator` once, and persists only the
+changed conversation suffix. It does not concatenate and reparse the full growing session on every
+poll. Codex similarly ignores fallback `event_msg` user/assistant rows after canonical item records
+exist, preventing the same turn from being retained twice.
+
 Jules remains outside this local CLI parser and watcher path. Its remote session synchronizer records its transcript separately and derives estimated usage from accumulated input/output characters; Code UX does not describe those estimates as provider-native token telemetry.
 
 ## Dashboard and recovery behavior
@@ -75,7 +81,7 @@ The cinematic feedback model is separate from whichever invocation is selected i
 
 Logical tool activity is deduplicated by normalized `metadata.toolCallId`; a stable message id is the fallback only when no call id exists. The frontend refreshes this projection when the active invocation or its `messageCount`, `lastMessageAt`, or `updatedAt` changes, preserves same-invocation feedback during refresh, and aborts or generation-invalidates stale work after project/invocation changes. Terminal or missing invocations clear the feedback. A transcript request failure remains a local, non-fatal state and does not replace the normal chat transcript or make unrelated work foreground activity.
 
-Startup recovery reconciles stale workflow and provider rows from durable task-run, sprint-run, dispatch, process, and Docker-container evidence. Preparation-only rows can fail without provider linkage, terminal provider rows are reconciled without extending their usage window, and a recovered completed provider attempt may continue from its preserved workspace without a duplicate provider run.
+Startup recovery reconciles stale workflow and provider rows from durable task-run, sprint-run, dispatch, process, and Docker-container evidence. Preparation-only rows can fail without provider linkage, terminal provider rows are reconciled without extending their usage window, and a recovered completed provider attempt may continue from its preserved workspace without a duplicate provider run. Interrupted sprint-planning requests preserve their complete durable options and continue the exact recorded provider conversation in the stable planning workspace; a missing recorded conversation fails closed instead of becoming a fresh session. Only pre-provider interruptions are reissued from durable input because no provider conversation existed yet.
 
 ## Focused verification
 

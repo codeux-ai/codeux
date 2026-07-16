@@ -10,6 +10,7 @@ import { extractPathHints, normalizePathHint } from "../../../services/cli-workf
 import { workspaceVolumeHelperPool } from "./workspace-volume-helper.js";
 import { CONTAINER_RUNTIME_HOME } from "./provider-runtime-artifacts.js";
 import { getHomeCodeUxPath } from "../../../shared/config/code-ux-paths.js";
+import { getRuntimeOwnerDockerArgs } from "../../../shared/config/runtime-owner.js";
 import {
   buildGitHttpAuthEnvForRepoWithFallbacks,
   buildNonInteractiveGitEnv,
@@ -88,6 +89,8 @@ export interface IWorkspaceManager {
   prepareWorktree(repoPath: string, worktreePath: string, workerBranch: string, featureBranch: string, resumeSessionId?: string, gitAuth?: GitHttpAuthOptions, options?: PrepareWorktreeOptions): Promise<{ worktreePath: string; resumed: boolean }>;
   fastForwardResumedWorkspace(worktreePath: string, workerBranch: string, repoPath: string, gitAuth?: GitHttpAuthOptions): Promise<boolean>;
   removeWorktree(repoPath: string, worktreePath: string): Promise<void>;
+  reserveWorkspaceHelper(worktreePath: string): () => void;
+  releaseWorkspaceHelper(worktreePath: string): Promise<void>;
   buildWorkspaceGuidance(taskPrompt: string, worktreePath: string): Promise<string>;
   runWorkspaceCommand(worktreePath: string, command: string, args: string[], options?: WorkspaceCommandOptions): Promise<CommandResult>;
   readWorkspaceFile(worktreePath: string, relativePath: string): Promise<string | null>;
@@ -169,6 +172,10 @@ const DOCKER_WORKSPACE_ENV_KEYS = new Set([
   "GIT_AUTHOR_NAME",
   "GIT_COMMITTER_EMAIL",
   "GIT_COMMITTER_NAME",
+  "GIT_ASKPASS",
+  "GIT_CONFIG_COUNT",
+  "GIT_INDEX_FILE",
+  "GIT_TERMINAL_PROMPT",
   "GCM_INTERACTIVE",
   "SSH_ASKPASS",
 ]);
@@ -181,13 +188,14 @@ const DEFAULT_WORKSPACE_GIT_IDENTITY: Record<string, string> = {
 };
 
 const shouldForwardWorkspaceEnv = (key: string): boolean => (
-  key.startsWith("GIT_")
-  || key.startsWith("GIT_CONFIG_")
-  || DOCKER_WORKSPACE_ENV_KEYS.has(key)
+  DOCKER_WORKSPACE_ENV_KEYS.has(key)
+  || /^GIT_CONFIG_(?:KEY|VALUE)_\d+$/.test(key)
 );
 
-const buildWorkspaceDockerEnvArgs = (env: NodeJS.ProcessEnv): string[] => {
-  const args: string[] = [];
+const buildWorkspaceEnvironment = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv => {
+  const result: NodeJS.ProcessEnv = {
+    HOME: CONTAINER_WORKSPACE_HELPER_HOME,
+  };
   const dockerEnv = {
     ...DEFAULT_WORKSPACE_GIT_IDENTITY,
     ...env,
@@ -196,9 +204,39 @@ const buildWorkspaceDockerEnvArgs = (env: NodeJS.ProcessEnv): string[] => {
     if (typeof value !== "string" || !shouldForwardWorkspaceEnv(key)) {
       continue;
     }
-    args.push("-e", `${key}=${value}`);
+    result[key] = value;
   }
-  return args;
+  return result;
+};
+
+const NETWORK_GIT_COMMANDS = new Set(["clone", "fetch", "ls-remote", "pull", "push", "submodule"]);
+
+const resolveGitSubcommand = (args: readonly string[]): string | null => {
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (!arg) continue;
+    if (arg === "-C" || arg === "-c" || arg === "--config-env" || arg === "--git-dir" || arg === "--work-tree") {
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("-")) continue;
+    return arg;
+  }
+  return null;
+};
+
+const requiresNetworkedWorkspaceContainer = (command: string, args: readonly string[]): boolean => (
+  command === "git" && NETWORK_GIT_COMMANDS.has(resolveGitSubcommand(args) || "")
+);
+
+const assertWorkspaceHelperResult = (
+  result: CommandResult,
+  command: string,
+  args: readonly string[],
+): CommandResult => {
+  if (result.ok) return result;
+  const detail = result.stderr || result.stdout || `Unknown error (exit code ${result.code ?? "unknown"}, no output captured)`;
+  throw new Error(`${command} ${args.join(" ")} failed: ${detail}`);
 };
 
 export class WorkspaceManager implements IWorkspaceManager {
@@ -631,6 +669,20 @@ export class WorkspaceManager implements IWorkspaceManager {
     await runCommandStrict("git", ["worktree", "prune"], repoPath).catch(() => undefined);
   }
 
+  async releaseWorkspaceHelper(worktreePath: string): Promise<void> {
+    if (!isWorkspaceHandle(worktreePath)) return;
+    const { volumeName } = parseWorkspaceHandle(worktreePath);
+    await workspaceVolumeHelperPool.releaseVolume(volumeName);
+  }
+
+  reserveWorkspaceHelper(worktreePath: string): () => void {
+    if (!isWorkspaceHandle(worktreePath)) return () => undefined;
+    const { volumeName } = parseWorkspaceHandle(worktreePath);
+    // Normal workspace commands mount both the task workspace and its provider-runtime volume.
+    // Reservations must use that exact composite key or the live helper remains LRU-evictable.
+    return workspaceVolumeHelperPool.reserve(volumeName, buildRuntimeVolumeName(volumeName));
+  }
+
   async buildWorkspaceGuidance(taskPrompt: string, worktreePath: string): Promise<string> {
     const hints = extractPathHints(taskPrompt).slice(0, 10);
     const isDockerWorkspace = isWorkspaceHandle(worktreePath);
@@ -700,6 +752,33 @@ export class WorkspaceManager implements IWorkspaceManager {
     const { volumeName } = parseWorkspaceHandle(worktreePath);
     const ownerSpec = getWorkspaceOwnerSpec();
     await this.ensurePublicHelperImage(WORKSPACE_HELPER_IMAGE, process.cwd(), options.env ?? process.env);
+    if (requiresNetworkedWorkspaceContainer(command, args)) {
+      return await this.runNetworkedWorkspaceCommand(volumeName, command, args, options, ownerSpec);
+    }
+    const result = await workspaceVolumeHelperPool.exec(
+      volumeName,
+      [command, ...args],
+      buildRuntimeVolumeName(volumeName),
+      {
+        environment: buildWorkspaceEnvironment(options.env ?? process.env),
+        signal: options.signal,
+        stdinFile: options.stdinFile,
+        trimOutput: options.trimOutput,
+        user: ownerSpec,
+        workdir: CONTAINER_WORKSPACE_ROOT,
+      },
+    );
+    return assertWorkspaceHelperResult(result, command, args);
+  }
+
+  private async runNetworkedWorkspaceCommand(
+    volumeName: string,
+    command: string,
+    args: string[],
+    options: WorkspaceCommandOptions,
+    ownerSpec: string,
+  ): Promise<CommandResult> {
+    const environment = buildWorkspaceEnvironment(options.env ?? process.env);
     const dockerArgs = [
       "run",
       "--rm",
@@ -710,9 +789,7 @@ export class WorkspaceManager implements IWorkspaceManager {
       `type=volume,source=${volumeName},target=${CONTAINER_WORKSPACE_ROOT}`,
       "--entrypoint",
       command,
-      "-e",
-      `HOME=${CONTAINER_WORKSPACE_HELPER_HOME}`,
-      ...buildWorkspaceDockerEnvArgs(options.env ?? process.env),
+      ...Object.entries(environment).flatMap(([key, value]) => typeof value === "string" ? ["-e", `${key}=${value}`] : []),
       WORKSPACE_HELPER_IMAGE,
       ...args,
     ];
@@ -808,6 +885,7 @@ export class WorkspaceManager implements IWorkspaceManager {
           RUNTIME_VOLUME_LABEL,
           "--label",
           `${WORKSPACE_SESSION_LABEL_PREFIX}${sessionKey}`,
+          ...getRuntimeOwnerDockerArgs(),
           runtimeVolumeName,
         ],
         process.cwd(),
@@ -881,13 +959,17 @@ export class WorkspaceManager implements IWorkspaceManager {
         WORKSPACE_VOLUME_LABEL,
         "--label",
         `${WORKSPACE_SESSION_LABEL_PREFIX}${sessionKey}`,
+        ...getRuntimeOwnerDockerArgs(),
         volumeName,
       ],
       process.cwd(),
     );
   }
 
-  private async initializeRuntimeVolumeOwnership(runtimeVolumeName: string, ownerSpec: string): Promise<void> {
+  private async initializeRuntimeVolumeOwnership(
+    runtimeVolumeName: string,
+    ownerSpec: string,
+  ): Promise<void> {
     await this.ensurePublicHelperImage(WORKSPACE_HELPER_IMAGE, process.cwd(), process.env);
     await runCommandStrict(
       "docker",
@@ -1104,7 +1186,7 @@ export class WorkspaceManager implements IWorkspaceManager {
         "set -e",
         "tmp=$(mktemp)",
         "cat > \"$tmp\"",
-        "rm -rf /workspace/* /workspace/.[!.]* /workspace/..?* 2>/dev/null || true",
+        "(rm -rf /workspace/* /workspace/.[!.]* /workspace/..?* 2>/dev/null || true)",
         // See the single-branch seed path above: the helper is root while the
         // persistent volume root belongs to the provider UID/GID.
         "git config --global --add safe.directory /workspace",
@@ -1115,7 +1197,7 @@ export class WorkspaceManager implements IWorkspaceManager {
         "rm -f \"$tmp\"",
         originUrl
           ? `git -C /workspace remote set-url origin ${shellQuote(originUrl)}`
-          : "git -C /workspace remote remove origin >/dev/null 2>&1 || true",
+          : "(git -C /workspace remote remove origin >/dev/null 2>&1 || true)",
         ...this.buildLocalBranchAliasCommands(localBranchAliases),
         "git -C /workspace config user.name \"${CODE_UX_GIT_USER_NAME:-Code UX}\"",
         "git -C /workspace config user.email \"${CODE_UX_GIT_USER_EMAIL:-agents@codeux.ai}\"",
@@ -1126,26 +1208,18 @@ export class WorkspaceManager implements IWorkspaceManager {
         ownerSpec ? this.buildRuntimeOwnershipMarkerCommand(ownerSpec) : null,
       ].filter((step): step is string => Boolean(step)).join(" && ");
 
-      await runCommandStrict(
-        "docker",
-        [
-          "run",
-          "--rm",
-          "-i",
-          "--mount",
-          `type=volume,source=${volumeName},target=${CONTAINER_WORKSPACE_ROOT}`,
-          "--mount",
-          `type=volume,source=${runtimeVolumeName},target=${CONTAINER_RUNTIME_HOME}`,
-          "--entrypoint",
-          "sh",
-          WORKSPACE_HELPER_IMAGE,
-          "-lc",
-          initScript,
-        ],
-        repoPath,
-        process.env,
-        { stdinFile: bundlePath },
+      const commandArgs = ["sh", "-lc", initScript];
+      const result = await workspaceVolumeHelperPool.exec(
+        volumeName,
+        commandArgs,
+        runtimeVolumeName,
+        {
+          environment: buildWorkspaceEnvironment(process.env),
+          stdinFile: bundlePath,
+          workdir: CONTAINER_WORKSPACE_ROOT,
+        },
       );
+      assertWorkspaceHelperResult(result, commandArgs[0], commandArgs.slice(1));
       if (ownerSpec) this.runtimeVolumeOwners.set(runtimeVolumeName, ownerSpec);
       this.runtimeVolumesKnownPresent.add(runtimeVolumeName);
     });

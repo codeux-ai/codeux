@@ -2181,6 +2181,51 @@ describe("ExecutionRepository", () => {
     });
   });
 
+  it("filters and batches bounded task-run event slices for wide DAG reads", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Batched Event Project",
+      sourceType: "local",
+      sourceRef: "/workspace/batched-event-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Batched Event Sprint",
+      number: 4,
+    });
+    const taskRuns = ["one", "two"].map((title) => {
+      const task = projectRepository.createTask(project.id, {
+        sprintId: sprint.id,
+        title,
+      });
+      return executionRepository.createTaskRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        state: "RUNNING",
+      });
+    });
+    for (const taskRun of taskRuns) {
+      executionRepository.appendTaskRunEvent(taskRun.id, "provider_activity", "agent", { ignored: true });
+      executionRepository.appendTaskRunEvent(taskRun.id, "cli_git_pushed", "system", { pushedBranch: "task/branch" });
+      executionRepository.appendTaskRunEvent(taskRun.id, "ci_gate_status", "system", { state: "merged_branch" });
+    }
+
+    expect(executionRepository.listTaskRunEvents(taskRuns[0]!.id, 10, {
+      eventTypes: ["cli_git_pushed"],
+    }).map((event) => event.eventType)).toEqual(["cli_git_pushed"]);
+
+    const batched = executionRepository.listTaskRunEventsForRuns(
+      taskRuns.map((taskRun) => taskRun.id),
+      {
+        eventTypes: ["cli_git_pushed", "ci_gate_status"],
+        limitPerRun: 1,
+      },
+    );
+    expect([...batched.keys()]).toEqual(taskRuns.map((taskRun) => taskRun.id));
+    expect([...batched.values()].map((events) => events.length)).toEqual([1, 1]);
+    expect([...batched.values()].flat().every((event) => event.eventType !== "provider_activity")).toBe(true);
+  });
+
   it("projects sprint-run events into the unified runtime timeline", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({

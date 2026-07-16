@@ -31,6 +31,20 @@ export interface SpawnerCommandOptions {
   streamStderrLines?: boolean;
 }
 
+/** Live line callbacks are previews; keep a single newline-free provider write from becoming a huge IPC frame. */
+export const MAX_SPAWNER_STREAM_LINE_CHARS = 64 * 1024;
+
+export function boundSpawnerStreamLine(line: string): string {
+  if (line.length <= MAX_SPAWNER_STREAM_LINE_CHARS) {
+    return line;
+  }
+  const marker = "\n… [stream line truncated] …\n";
+  const retainedChars = MAX_SPAWNER_STREAM_LINE_CHARS - marker.length;
+  const headChars = Math.ceil(retainedChars / 2);
+  const tailChars = retainedChars - headChars;
+  return `${line.slice(0, headChars)}${marker}${line.slice(-tailChars)}`;
+}
+
 export interface SpawnerRunMessage {
   type: "run";
   id: number;

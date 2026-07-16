@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { parseClaudeCodeSessionJsonl } from "../../../../../src/infrastructure/providers/cli/provider-logs/claude-code-log-parser.js";
+import {
+  ClaudeCodeLogAccumulator,
+  parseClaudeCodeSessionJsonl,
+} from "../../../../../src/infrastructure/providers/cli/provider-logs/claude-code-log-parser.js";
 
 // ─── Test fixture helpers ────────────────────────────────────────────────────
 
@@ -684,5 +687,40 @@ describe("parseClaudeCodeSessionJsonl", () => {
       toolStatus: "error",
     });
     expect(JSON.stringify(result)).not.toContain("sk-test-secret");
+  });
+});
+
+describe("ClaudeCodeLogAccumulator", () => {
+  it("parses only appended chunks and reports the changed turn suffix", () => {
+    const first = makeUserEntry({ content: "Inspect the project." });
+    const second = makeAssistantEntry({
+      messageId: "msg_incremental",
+      content: [{ type: "text", text: "Inspection complete." }],
+    });
+    const accumulator = new ClaudeCodeLogAccumulator();
+
+    const partial = accumulator.appendChunk(`${first}\n${second.slice(0, 20)}`, "session-file");
+    expect(partial.conversation.map((turn) => turn.text)).toEqual(["Inspect the project."]);
+
+    const completed = accumulator.appendChunk(`${second.slice(20)}\n`, "session-file");
+    expect(completed.conversation.map((turn) => turn.text)).toEqual([
+      "Inspect the project.",
+      "Inspection complete.",
+    ]);
+    expect(completed.conversationRevision).toBe(2);
+    expect(completed.conversationChangedFromIndex).toBe(1);
+  });
+
+  it("resets retained state when the transcript source changes", () => {
+    const accumulator = new ClaudeCodeLogAccumulator();
+    accumulator.appendChunk(`${makeUserEntry({ content: "Old source" })}\n`, "old-source");
+
+    const result = accumulator.appendChunk(
+      `${makeUserEntry({ content: "New source" })}\n`,
+      "new-source",
+    );
+
+    expect(result.conversation.map((turn) => turn.text)).toEqual(["New source"]);
+    expect(result.conversationRevision).toBe(1);
   });
 });

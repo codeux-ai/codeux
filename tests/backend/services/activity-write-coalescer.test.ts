@@ -78,6 +78,22 @@ describe("ActivityWriteCoalescer", () => {
     expect(sink.batches[0].items.map((item) => item.originator)).toEqual(["agent", "agent", "provider"]);
   });
 
+  it("clips a single oversized activity before buffering it", () => {
+    const sink = makeSink();
+    const coalescer = new ActivityWriteCoalescer(sink, "s1", {
+      flushIntervalMs: 250,
+      maxChunkChars: 256,
+    });
+
+    coalescer.push(`${"a".repeat(400)}TAIL`, "agent");
+    coalescer.stop();
+
+    const description = sink.batches[0].items[0].description;
+    expect(description).toHaveLength(256);
+    expect(description).toContain("[activity truncated]");
+    expect(description.endsWith("TAIL")).toBe(true);
+  });
+
   it("stop() flushes the tail and a subsequent timer does not double-write", () => {
     const sink = makeSink();
     const coalescer = new ActivityWriteCoalescer(sink, "s1", { flushIntervalMs: 250 });

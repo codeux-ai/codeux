@@ -10,8 +10,8 @@ describe("useFocusTrap", () => {
     cleanup();
   });
 
-  const TestComponent = ({ active, onClose, empty = false, initialFocusRef, restoreFocus = true }: any) => {
-    const trapRef = useFocusTrap(active, { onClose, initialFocusRef, restoreFocus });
+  const TestComponent = ({ active, onClose, empty = false, initialFocusRef, restoreFocusRef, restoreFocus = true }: any) => {
+    const trapRef = useFocusTrap(active, { onClose, initialFocusRef, restoreFocusRef, restoreFocus });
     return (
       <div>
         <button id="outside">Outside</button>
@@ -180,6 +180,25 @@ describe("useFocusTrap", () => {
       expect(document.activeElement).toBe(trigger);
     });
     expect(focusSpy).toHaveBeenLastCalledWith({ preventScroll: true });
+  });
+
+  test("prefers an explicit return target when the captured trigger is replaced", async () => {
+    const capturedTrigger = document.createElement("button");
+    const replacementTrigger = document.createElement("button");
+    replacementTrigger.id = "replacement-trigger";
+    document.body.append(capturedTrigger, replacementTrigger);
+    capturedTrigger.focus();
+    const restoreFocusRef = { current: replacementTrigger };
+
+    const { unmount } = render(
+      <TestComponent active={true} onClose={() => {}} restoreFocusRef={restoreFocusRef} />,
+    );
+    await waitFor(() => expect(document.activeElement?.id).toBe("inside1"));
+    capturedTrigger.remove();
+    unmount();
+
+    await waitFor(() => expect(document.activeElement).toBe(replacementTrigger));
+    replacementTrigger.remove();
   });
 
   test("keeps focus trapped when the focused element is removed dynamically", async () => {

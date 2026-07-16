@@ -570,11 +570,16 @@ function processCodexRolloutLine(state: CodexRolloutParserState, rawLine: string
   }
 
   if (type === "event_msg" && payload) {
+    // event_msg user/assistant rows duplicate the canonical response_item
+    // stream. Keep them only until the first canonical turn arrives so
+    // fallback-only Codex versions still work without retaining a second copy
+    // of every message for the lifetime of a long invocation.
+    if (state.conversationGroups.length > 0) {
+      return true;
+    }
     const turns = eventMsgToTurns(payload, timestampMs);
     if (turns.length > 0 && isInWindow(timestampMs)) {
-      const changedFrom = state.conversationGroups.length > 0
-        ? state.conversationGroups.reduce((count, group) => count + group.turns.length, 0)
-        : state.fallbackEventConversation.length;
+      const changedFrom = state.fallbackEventConversation.length;
       state.fallbackEventConversation.push(...turns);
       state.conversationRevision += 1;
       state.conversationChangedFromIndex = state.conversationChangedFromIndex === null
@@ -594,6 +599,9 @@ function processCodexRolloutLine(state: CodexRolloutParserState, rawLine: string
     turnsFromCodexItem(payload, timestampMs),
   );
   if (changedGroupIndex !== null) {
+    if (state.fallbackEventConversation.length > 0) {
+      state.fallbackEventConversation = [];
+    }
     let changedFrom = 0;
     for (let index = 0; index < changedGroupIndex; index += 1) {
       changedFrom += state.conversationGroups[index]!.turns.length;

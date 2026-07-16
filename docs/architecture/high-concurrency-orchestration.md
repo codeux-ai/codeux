@@ -35,8 +35,36 @@ work is never killed; admission resumes as pressure falls.
 
 The policy does not call Docker. A rejected bounded claim may invoke stale-runtime reconciliation,
 but a claim with available capacity reaches the atomic SQLite boundary first.
-Unchanged provider-cap deferrals are coalesced to one structured diagnostic per provider every ten
-seconds, so a wide ready queue does not turn a one-second orchestration loop into a log-write loop.
+Provider-cap deferrals are limited to one structured diagnostic per sprint run and provider every
+ten seconds, even when the blocked queue changes. The throttle state lives on the long-lived cycle
+runner and is bounded, so per-cycle child loggers and wide ready queues cannot create a log-write
+loop or an unbounded diagnostics cache.
+
+Before creating a Jules session, Code UX reads a fresh, coalesced first page from `sessions.list` and
+counts remote states that consume concurrent execution (`QUEUED`, `PLANNING`, and `IN_PROGRESS`).
+Waiting-for-approval, waiting-for-feedback, and paused sessions do not consume this execution count;
+established accounts can retain more of those historical waiting sessions than their concurrent-task
+plan limit. Executing sessions visible to the API but absent from local runtime accounting reserve
+part of the configured cap, and the remaining local slots are claimed atomically. Capacity
+verification fails closed if the fresh preflight cannot be read.
+
+Jules does not expose a state-filtered list, subscription-slot counter, or atomic slot-reservation
+endpoint. Its history is paginated and old queued work can occur beyond the bounded preflight page,
+so the provider's create response remains authoritative for the unavoidable list/create and
+pagination races. Explicit capacity `400`/`409`/exhausted `429` responses and the generic
+`400 FAILED_PRECONDITION` currently emitted for a full subscription are retryable deferrals: Code UX
+releases the provisional claim and applies a 30-second learned-cap backoff. `INVALID_ARGUMENT` and
+other validation failures remain terminal with bounded provider detail.
+
+Persisted Jules sessions are durable across runtime restarts. Startup recovery preserves running
+hosted invocations even when a stale local sprint projection is terminal, then compares the cached
+Jules session snapshot and reactivates only remotely active, unmerged work. Completed or cancelled
+sprints and human-owned QA failures are never reopened by this repair. The startup snapshot repair
+has a five-second bound; a slow hosted API cannot hold readiness, and normal session sync completes
+the work later. If that bound expires, locally persisted Jules session ids plus running external
+provider rows are fail-safe evidence: startup keeps those rows and their sprint monitor alive until
+the late snapshot or ordinary session sync verifies the remote state. A timeout therefore cannot
+terminalize hosted work merely because the local sprint summary was already failed.
 
 ## Docker Inventory
 
@@ -94,6 +122,47 @@ Runtime volume ownership uses a durable `.codeux-owner` marker and the actual vo
 The recursive ownership repair runs only for a new volume, an owner mismatch, or recovery from an
 externally recreated volume. Ordinary launches do not run `chown -R`.
 
+Git control-plane work uses two bounded helper tiers. An active sprint holds a reference-counted
+project lease keyed by the repository's Git common directory and runtime owner. The first eligible
+Git command lazily starts one warm helper; concurrent sprints and worktrees for that project share
+it, with at most four commands executing in parallel. The last active sprint drains pending and
+in-flight commands and removes the helper. Projects without an active sprint use one-shot helpers,
+so idle projects retain no container. Different repositories remain isolated, which also keeps
+project-specific credentials separate. Credentials, Git environment, and stdin are attached only
+to the individual `docker exec`; they are never retained in the helper. Commands requiring an extra
+host bind mount remain one-shot. After runtime shutdown begins, late Git commands also use the
+containerized one-shot path so they cannot recreate a persistent generation after the warm pool has
+been drained.
+
+Docker-volume workspaces reuse one short-lived sidecar per active workspace/runtime-volume pair for
+local checkout, inspection, export, and bundle bootstrap commands. The sidecar is Git-capable,
+network-disabled, `no-new-privileges`, and receives only the explicit Git environment allowlist.
+Its transient Git home is a 1 MiB tmpfs. Coding and QA workflows reserve the exact
+workspace/runtime-volume pair for their complete prepare-through-finalize lifetime, so the pool
+cannot evict a sidecar merely because that workflow is temporarily between commands. Release drains
+in-flight work before removing the sidecar without deleting restartable volumes.
+Network Git commands use an isolated one-shot container. The workspace pool admits at most 16
+sidecars: a new workspace evicts the least-recently-used unreserved idle generation, or waits when
+every slot is executing or reserved. Helper creation and removal share a four-operation Docker
+control-plane limit. This keeps overlapping task-QA and coding waves inside the same resource bound
+without creating `created`/`dead` container storms. Otherwise-idle, unreserved sidecars expire after
+30 seconds, and shutdown drains both helper pools before owner-scoped Docker cleanup. Fresh helper
+creation runs first without a speculative remove; only an explicit Docker container-name conflict
+reclaims the deterministic name and retries once.
+The shutdown sequence signals every active dispatch before beginning that drain, so provider and
+workspace commands can release their helper leases concurrently instead of making restart latency
+depend on their natural completion. Small bounded-parallel removal batches then reconcile every
+remaining owner-scoped container state without exceeding the Docker command deadline during a
+full admission wave. Initial cleanup, preview-reconciliation, and live-snapshot callbacks share the
+server's tracked startup-timer set; shutdown clears that set before SQLite checkpoint/close, and
+periodic callbacks refuse new repository work once closing begins. Fast restarts therefore cannot
+leave a delayed loop callback querying closed storage.
+
+Wide LOCAL merge drains resolve each worker/feature relationship once, then reuse the detached
+merger's last published target SHA. Every publication remains a compare-and-swap update; only a CAS
+failure rereads and resets to the concurrently advanced target. Merge history stays serial and
+conflict attribution remains per task without repeating ref-existence scans for every branch.
+
 Provider container names are reclaimed only after Docker reports a real name conflict. The normal
 launch path no longer runs a speculative `docker rm`.
 
@@ -134,11 +203,15 @@ filesystem traversal. Runtime directory listing, age checks, and recursive remov
 filesystem operations with an eight-operation bound, so stale-path cleanup does not synchronously
 block container launch, telemetry, or dashboard work on the Node.js event loop.
 
-Startup Docker asset cleanup is also single-flight. Helper and login containers are removed before
-workspace volumes so mounted volumes retain the existing safety ordering. After that prerequisite,
-workspace, provider-tool, and browser-volume pipelines run independently. Docker inspection and
-removal use batches of at most 50 with at most four cleanup commands active at once; a failed batch
-falls back to bounded per-item work instead of a serial control-plane loop.
+Startup Docker asset cleanup is also single-flight. Helper containers and owner-scoped provider
+containers are removed before recovery and workspace-volume pruning. Provider cleanup includes
+running, exited, dead, and never-started `created` generations because a local Docker client cannot
+be reattached after process loss and `docker run --rm` cannot remove a container that never started.
+Shutdown likewise lists all states and force-removes owner-scoped containers; concurrent
+disappearance is an idempotent success. After that prerequisite, workspace, provider-tool, and
+browser-volume pipelines run independently. Docker inspection and removal use batches of at most 50
+with at most four cleanup commands active at once; a failed batch falls back to bounded per-item
+work instead of a serial control-plane loop.
 
 Tracked-session snapshots, the ten-minute new-workspace grace period, active managed-volume state,
 the newest-two cache generations, and the 30-day managed-volume retention window are unchanged.
@@ -166,6 +239,10 @@ while older files that predate that mode may safely no-op until an explicit offl
 
 - Independent queued dispatches within one project fan out up to both
   `workers.maxConcurrency` and effective provider capacity.
+- Each cycle starts no more work than the provider admission service's current purpose-aware
+  capacity, including adaptive reply reservations; configured capacity is only an upper bound.
+- Task QA runs in waves of at most four reviews. The cycle merges settled work and starts newly
+  unblocked coding before scheduling another QA wave.
 - Provider claims remain atomic across every project and runtime process.
 - Interactive work cannot exceed an explicit positive provider cap.
 - Existing providers are not killed in response to pressure.
@@ -176,6 +253,12 @@ while older files that predate that mode may safely no-op until an explicit offl
   overlap their own previous interval.
 - Periodic runtime and startup Docker cleanup cannot overlap themselves, block the event loop with
   synchronous recursive filesystem work, or issue unbounded Docker commands.
+- Every managed Docker container and volume carries a state-home-derived `code-ux.runtime-owner`
+  label. Startup pruning, preview/file-browser reconciliation, login cleanup, and shutdown select
+  that owner before removing assets, so an isolated stress-test runtime sharing the Docker daemon
+  cannot stop a live runtime. Warm Git/workspace helper names include the same owner identity;
+  generation-aware invalidation preserves a concurrent replacement and a second stopped-helper
+  result falls back to a one-shot command instead of failing the provider invocation.
 
 ## Focused Verification
 

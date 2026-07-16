@@ -97,4 +97,47 @@ describe("electron-builder packaged defaults", () => {
       }),
     ]));
   });
+
+  it("builds a copy-safe Electron runtime with its MCP peer dependency", () => {
+    const config = require("../../electron-builder.config.cjs") as {
+      linux?: { executableName?: string };
+    };
+    const packageJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+      scripts?: Record<string, string>;
+    };
+    const preparer = fs.readFileSync(
+      path.join(process.cwd(), "scripts", "prepare-electron-runtime-deps.mjs"),
+      "utf8",
+    );
+
+    expect(packageJson.dependencies).toHaveProperty("zod");
+    expect(packageJson.scripts?.["electron:smoke-installed"]).toBe(
+      "node scripts/smoke-installed-electron.mjs",
+    );
+    expect(preparer).toContain('"--config.node-linker=hoisted"');
+    expect(preparer).toContain("validateRuntimeTree();");
+    expect(preparer).toContain("@modelcontextprotocol/sdk/server/index.js");
+    expect(preparer).toContain('"zod"');
+    expect(config.linux?.executableName).toBe("codeux");
+  });
+
+  it("installs and launches every native package format for release smoke", () => {
+    const installerSmoke = fs.readFileSync(
+      path.join(process.cwd(), "scripts", "smoke-installed-electron.mjs"),
+      "utf8",
+    );
+    const mainProcessSource = fs.readFileSync(path.join(process.cwd(), "src/electron/main.ts"), "utf8");
+
+    expect(installerSmoke).toContain('findArtifact(".deb")');
+    expect(installerSmoke).toContain('["/S", `/D=${installDirectory}`]');
+    expect(installerSmoke).toContain('findArtifact(".dmg")');
+    expect(installerSmoke).toContain('run("hdiutil", ["attach"');
+    expect(installerSmoke).toContain('const versionMarker = `-${packageJson.version}-`');
+    expect(installerSmoke).toContain("entry.name.includes(versionMarker)");
+    expect(installerSmoke).toContain("CODE_UX_ELECTRON_STARTUP_SMOKE_FILE");
+    expect(installerSmoke).toContain("marker.packaged !== true");
+    expect(mainProcessSource).toContain('window.webContents.once("did-finish-load"');
+    expect(mainProcessSource).toContain("writeElectronStartupSmoke");
+  });
 });

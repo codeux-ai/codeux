@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { JulesApiClient, JulesNotFoundError } from "../../../src/integrations/jules-api-client.js";
+import {
+  isJulesSessionCapacityError,
+  isJulesSessionConsumingConcurrentTask,
+  JulesApiClient,
+  JulesApiRequestError,
+  JulesNotFoundError,
+} from "../../../src/integrations/jules-api-client.js";
 import axios from "axios";
 
 const mockInstance = Object.assign(
@@ -33,6 +39,18 @@ vi.mock("axios", () => {
 });
 
 describe("JulesApiClient coverage", () => {
+    it("counts only executing Jules states against concurrent-task capacity", () => {
+        expect(isJulesSessionConsumingConcurrentTask({ state: "QUEUED" })).toBe(true);
+        expect(isJulesSessionConsumingConcurrentTask({ state: "PLANNING" })).toBe(true);
+        expect(isJulesSessionConsumingConcurrentTask({ state: "IN_PROGRESS" })).toBe(true);
+        expect(isJulesSessionConsumingConcurrentTask({ state: "AWAITING_PLAN_APPROVAL" })).toBe(false);
+        expect(isJulesSessionConsumingConcurrentTask({ state: "AWAITING_USER_FEEDBACK" })).toBe(false);
+        expect(isJulesSessionConsumingConcurrentTask({ state: "PAUSED" })).toBe(false);
+        expect(isJulesSessionConsumingConcurrentTask({ state: "COMPLETED" })).toBe(false);
+        expect(isJulesSessionConsumingConcurrentTask({ state: "FAILED" })).toBe(false);
+        expect(isJulesSessionConsumingConcurrentTask({ state: undefined })).toBe(true);
+    });
+
     it("handles listAllSources pagination", async () => {
         vi.mocked(mockInstance.get)
             .mockResolvedValueOnce({ data: { sources: [{ id: "1" }], nextPageToken: "token" } })
@@ -78,6 +96,47 @@ describe("JulesApiClient coverage", () => {
         expect(client.resolveSessionName({ id: "" })).toBeUndefined();
         expect(client.resolveSessionName({ id: "1" })).toBe("sessions/1");
         expect(client.resolveSessionName({ name: "sessions/2" })).toBe("sessions/2");
+    });
+
+    it("preserves bounded provider detail for create-session capacity errors", async () => {
+        vi.mocked(mockInstance.post).mockRejectedValueOnce(Object.assign(new Error("Request failed with status code 400"), {
+          response: {
+            status: 400,
+            data: {
+              error: {
+                status: "INVALID_ARGUMENT",
+                message: "Maximum 10 active sessions reached; api_key=do-not-persist",
+              },
+            },
+          },
+        }));
+        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key", minRequestIntervalMs: 0 });
+
+        const error = await client.createSession({
+          prompt: "full task prompt",
+          sourceContext: { source: "sources/1" },
+        }).catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(JulesApiRequestError);
+        expect(error).toMatchObject({ status: 400, apiStatus: "INVALID_ARGUMENT" });
+        expect((error as Error).message).toContain("Maximum 10 active sessions reached");
+        expect((error as Error).message).not.toContain("do-not-persist");
+        expect(isJulesSessionCapacityError(error)).toBe(true);
+    });
+
+    it("does not classify unrelated create-session validation errors as capacity", async () => {
+        vi.mocked(mockInstance.post).mockRejectedValueOnce(Object.assign(new Error("Request failed with status code 400"), {
+          response: { status: 400, data: { error: { message: "startingBranch is invalid" } } },
+        }));
+        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key", minRequestIntervalMs: 0 });
+
+        const error = await client.createSession({
+          prompt: "p",
+          sourceContext: { source: "sources/1" },
+        }).catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(JulesApiRequestError);
+        expect(isJulesSessionCapacityError(error)).toBe(false);
     });
 
     it("interceptor adds api key if present", async () => {
@@ -188,6 +247,22 @@ describe("JulesApiClient coverage", () => {
         expect(r1.map((s) => s.id)).toEqual(["1"]);
     });
 
+    it("capacity checks coalesce and use one bounded first-page API request", async () => {
+        vi.mocked(mockInstance.get).mockReset();
+        let resolveGet: (v: unknown) => void = () => {};
+        vi.mocked(mockInstance.get).mockReturnValueOnce(new Promise((resolve) => { resolveGet = resolve; }));
+
+        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key", minRequestIntervalMs: 0, now: () => 0 });
+        const first = client.getSessionsForCapacityCheck();
+        const second = client.getSessionsForCapacityCheck();
+        resolveGet({ data: { sessions: [{ id: "active-1" }], nextPageToken: "more-history" } });
+        const [firstResult, secondResult] = await Promise.all([first, second]);
+
+        expect(mockInstance.get).toHaveBeenCalledTimes(1);
+        expect(firstResult).toBe(secondResult);
+        expect(firstResult.map((session) => session.id)).toEqual(["active-1"]);
+    });
+
     it("getCachedSessions serves the cached snapshot within the TTL and re-fetches after expiry", async () => {
         vi.mocked(mockInstance.get).mockReset();
         vi.mocked(mockInstance.get)
@@ -243,6 +318,28 @@ describe("JulesApiClient coverage", () => {
         expect((await client.getCachedSessions()).map((s) => s.id)).toEqual(["1"]);
         t = 2000; // expired -> refresh fails -> serve stale
         expect((await client.getCachedSessions()).map((s) => s.id)).toEqual(["1"]);
+    });
+
+    it("capacity checks fail closed instead of serving a stale session snapshot", async () => {
+        vi.mocked(mockInstance.get).mockReset();
+        vi.mocked(mockInstance.get)
+            .mockResolvedValueOnce({ data: { sessions: [{ id: "1" }] } })
+            .mockRejectedValueOnce(Object.assign(new Error("connect ETIMEDOUT"), { code: "ETIMEDOUT" }));
+
+        let t = 0;
+        const client = new JulesApiClient({
+            baseUrl: "http://url",
+            apiKey: "key",
+            minRequestIntervalMs: 0,
+            maxTransientRetries: 0,
+            sessionsCacheTtlMs: 10_000,
+            sessionsCapacityCacheTtlMs: 1_000,
+            now: () => t,
+        });
+        expect((await client.getCachedSessions()).map((s) => s.id)).toEqual(["1"]);
+        t = 2_000;
+
+        await expect(client.getSessionsForCapacityCheck()).rejects.toThrow("ETIMEDOUT");
     });
 
     it("retries transient network errors (ETIMEDOUT) then resolves", async () => {

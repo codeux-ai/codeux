@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { CycleRunner } from "../../../../../src/domain/sprint/orchestrator/cycle-runner.js";
+import {
+  CycleRunner,
+  resolveTaskQaReviewParallelism,
+} from "../../../../../src/domain/sprint/orchestrator/cycle-runner.js";
 import type { SprintOrchestratorDependencies } from "../../../../../src/sprint/sprint-orchestrator.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../../src/repositories/settings-defaults.js";
 
@@ -91,6 +94,67 @@ function buildDeps(): SprintOrchestratorDependencies {
 }
 
 describe("CycleRunner attention sync", () => {
+  it("preserves low provider capacities and reserves host capacity above the bounded QA ceiling", () => {
+    const settings = structuredClone(DEFAULT_DASHBOARD_SETTINGS);
+    settings.aiProvider.providers["mockup-cli"] = {
+      ...settings.aiProvider.providers.codex,
+      provider: "mockup-cli",
+      maxConcurrentTasks: 16,
+    } as any;
+    settings.aiProvider.invocationRouting.qa_review = {
+      ...settings.aiProvider.invocationRouting.qa_review,
+      provider: "mockup-cli",
+      allowedProviders: ["mockup-cli"],
+    };
+
+    expect(resolveTaskQaReviewParallelism(settings)).toBe(4);
+    settings.aiProvider.providers["mockup-cli"]!.maxConcurrentTasks = 100;
+    expect(resolveTaskQaReviewParallelism(settings)).toBe(4);
+    settings.aiProvider.providers["mockup-cli"]!.maxConcurrentTasks = 3;
+    expect(resolveTaskQaReviewParallelism(settings)).toBe(3);
+    settings.aiProvider.providers["mockup-cli"]!.maxConcurrentTasks = 0;
+    settings.aiProvider.invocationRouting.qa_review.allowedProviders = [];
+    settings.aiProvider.invocationRouting.qa_review.provider = null;
+    settings.aiProvider.provider = null;
+    expect(resolveTaskQaReviewParallelism(settings)).toBe(4);
+  });
+
+  it("batches latest task-run lookups when collecting wide local DAG git evidence", () => {
+    const deps = buildDeps();
+    const taskRun = {
+      id: "task-run-1",
+      taskId: "task-1",
+      provider: "codex",
+      mode: "docker_cli",
+      state: "COMPLETED",
+    } as any;
+    const listLatestTaskRuns = vi.fn().mockReturnValue(new Map([["task-1", taskRun]]));
+    const getLatestTaskRun = vi.fn();
+    const listTaskRunEventsForRuns = vi.fn().mockReturnValue(new Map([
+      ["task-run-1", [{ eventType: "cli_git_pushed", payload: { pushedBranch: "task/one" } }]],
+    ]));
+    (deps.executionRepository as any).listLatestTaskRuns = listLatestTaskRuns;
+    (deps.executionRepository as any).getLatestTaskRun = getLatestTaskRun;
+    (deps.executionRepository as any).listTaskRunEventsForRuns = listTaskRunEventsForRuns;
+
+    const result = (new CycleRunner(deps) as any).collectLocalCliGitEvidence([
+      { id: "T1", record_id: "task-1" },
+      { id: "T2", record_id: "task-2" },
+    ], {
+      githubMode: "LOCAL",
+      sprintRunId: "run-1",
+    });
+
+    expect(listLatestTaskRuns).toHaveBeenCalledOnce();
+    expect(listLatestTaskRuns).toHaveBeenCalledWith(["task-1", "task-2"], "run-1");
+    expect(getLatestTaskRun).not.toHaveBeenCalled();
+    expect(listTaskRunEventsForRuns).toHaveBeenCalledWith(["task-run-1"], {
+      eventTypes: ["cli_git_pushed", "cli_git_no_changes", "ci_gate_status"],
+      limitPerRun: 500,
+    });
+    expect(result.pushedTaskIds).toEqual(new Set(["task-1", "T1"]));
+  });
+
   it("never dispatches or reviews the audit task of an automatic rollback", async () => {
     const deps = buildDeps();
     const reviewCompletedTask = vi.fn();
@@ -3040,6 +3104,86 @@ describe("CycleRunner attention sync", () => {
     );
   });
 
+  it("waits for CLI Git finalization before starting task QA", async () => {
+    const deps = buildDeps();
+    const reviewCompletedTask = vi.fn().mockResolvedValue({
+      reviewed: true,
+      reopenedTask: false,
+      mergeBlocked: false,
+      reportText: "QA passed",
+    });
+    deps.qualityAssuranceService = {
+      getTaskMergeGateStatus: vi.fn().mockReturnValue({
+        mergeAllowed: false,
+        reason: "pending_review",
+        summary: "QA review is required before merge.",
+        latestRun: null,
+        runsUsed: 0,
+        maxRuns: 1,
+      }),
+      reviewCompletedTask,
+    } as any;
+    deps.getDashboardSettings = vi.fn().mockReturnValue({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      agents: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents,
+        qualityAssurance: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+          enabled: true,
+        },
+      },
+    });
+    vi.mocked(deps.executionRepository.getLatestTaskRun).mockReturnValue({
+      id: "task-run-awaiting-git",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      taskId: "task-1",
+      sprintRunId: "run-1",
+      dispatchId: "dispatch-1",
+      connectionId: null,
+      provider: "codex",
+      mode: "docker_cli",
+      sessionId: "cli-codex-awaiting-git",
+      sessionName: "sessions/cli-codex-awaiting-git",
+      state: "COMPLETED",
+      workerBranch: "task/awaiting-git",
+      prUrl: null,
+      startedAt: null,
+      finishedAt: null,
+      durationMs: null,
+    });
+
+    const runner = new CycleRunner(deps);
+    await (runner as any).reviewCompletedTasks(
+      [{
+        id: "T1",
+        record_id: "task-1",
+        title: "Await Git finalization",
+        prompt: "finish implementation",
+        depends_on: [],
+        is_independent: true,
+        status: "CODING_COMPLETED",
+        provider: "codex",
+        worker_branch: "task/awaiting-git",
+      }],
+      new Map([["T1", "RUNNING"]]),
+      {
+        executionContext: {
+          project: { id: "project-1", name: "Project 1" } as any,
+          sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+          sprintNumber: 1,
+        },
+        repoPath: "/repo/project-1",
+        sprintRunId: "run-1",
+        githubMode: "LOCAL",
+      } as any,
+      deps.getDashboardSettings(),
+      { pushedTaskIds: new Set(), settledTaskIds: new Set() },
+    );
+
+    expect(reviewCompletedTask).not.toHaveBeenCalled();
+  });
+
   it("replays a legacy failed QA fix handoff after restart even when old code changed the task state", async () => {
     const deps = buildDeps();
     const reviewCompletedTask = vi.fn().mockResolvedValue({
@@ -3829,6 +3973,62 @@ describe("CycleRunner attention sync", () => {
     resolveTask2!();
     resolveTask3!();
     await reviewPromise;
+  });
+
+  it("starts one bounded QA wave per cycle instead of queueing the whole backlog", async () => {
+    const deps = buildDeps();
+    let releaseReviews!: () => void;
+    const reviewGate = new Promise<void>((resolve) => {
+      releaseReviews = resolve;
+    });
+    deps.qualityAssuranceService = {
+      getTaskMergeGateStatus: vi.fn().mockReturnValue({
+        mergeAllowed: false,
+        reason: "pending_review",
+        summary: "QA review is required.",
+        latestRun: null,
+        runsUsed: 0,
+        maxRuns: 2,
+      }),
+      reviewCompletedTask: vi.fn().mockImplementation(async () => {
+        await reviewGate;
+        return { reviewed: true };
+      }),
+    } as any;
+    deps.getDashboardSettings = vi.fn().mockReturnValue({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      agents: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents,
+        qualityAssurance: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+          enabled: true,
+        },
+      },
+    });
+    const runner = new CycleRunner(deps);
+    const tasks = Array.from({ length: 9 }, (_, index) => ({
+      id: `T${index + 1}`,
+      record_id: `task-${index + 1}`,
+      status: "COMPLETED",
+      provider: "codex",
+    }));
+
+    const reviews = (runner as any).reviewCompletedTasks(
+      tasks,
+      new Map(tasks.map((task) => [task.id, "RUNNING"])),
+      {
+        executionContext: { project: { id: "proj-1" }, sprint: { id: "sprint-1" } },
+        sprintRunId: "run-1",
+      } as any,
+      deps.getDashboardSettings(),
+    );
+    await vi.waitFor(() => {
+      expect(deps.qualityAssuranceService.reviewCompletedTask).toHaveBeenCalledTimes(4);
+    });
+
+    releaseReviews();
+    await reviews;
+    expect(deps.qualityAssuranceService.reviewCompletedTask).toHaveBeenCalledTimes(4);
   });
 
   it("passes known task PR URLs to git polling and backfills the PR head before QA", async () => {

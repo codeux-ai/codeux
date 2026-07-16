@@ -172,6 +172,35 @@ describe('ActivityCacheService', () => {
       });
     });
 
+    it('evicts inactive sessions and bounds oversized live activity previews', async () => {
+      const oversizedActivity = {
+        ...mockActivity,
+        description: `${'a'.repeat(70_000)}TAIL`,
+      };
+      mockDeps.getSubtasks.mockReturnValue([mockTask]);
+      mockDeps.resolveSessionNameFromTask.mockReturnValue('session-1');
+      mockDeps.fetchRecentActivities.mockResolvedValue([oversizedActivity]);
+
+      const first = await service.getLiveActivitiesForActiveTasks();
+      expect(first['session-1'][0].description).toHaveLength(64 * 1024);
+      expect(first['session-1'][0].description).toContain('[activity preview truncated]');
+      expect(first['session-1'][0].description?.endsWith('TAIL')).toBe(true);
+
+      const secondTask = { ...mockTask, id: 'task-2' };
+      mockDeps.getSubtasks.mockReturnValue([secondTask]);
+      mockDeps.resolveSessionNameFromTask.mockReturnValue('session-2');
+      mockDeps.fetchRecentActivities.mockResolvedValue([{ ...mockActivity, id: 'act-2' }]);
+      await service.getLiveActivitiesForActiveTasks();
+
+      mockDeps.getSubtasks.mockReturnValue([mockTask]);
+      mockDeps.resolveSessionNameFromTask.mockReturnValue('session-1');
+      mockDeps.fetchRecentActivities.mockClear();
+      mockDeps.fetchRecentActivities.mockResolvedValue([mockActivity]);
+      await service.getLiveActivitiesForActiveTasks();
+
+      expect(mockDeps.fetchRecentActivities).toHaveBeenCalledWith('session-1', PAGE_SIZE);
+    });
+
     it('should return empty object if no active tasks', async () => {
       const inactiveTask = { ...mockTask, status: 'COMPLETED' as const };
       mockDeps.getSubtasks.mockReturnValue([inactiveTask]);

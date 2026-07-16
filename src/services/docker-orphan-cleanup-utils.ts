@@ -1,5 +1,6 @@
 import { runCommandStrict } from "./cli-process-runner.js";
 import type { Logger } from "../shared/logging/logger.js";
+import { getRuntimeOwnerLabel } from "../shared/config/runtime-owner.js";
 
 export async function pruneOrphanedDockerVolumes(args: {
   prefix: string;
@@ -9,7 +10,7 @@ export async function pruneOrphanedDockerVolumes(args: {
 }): Promise<number> {
   const result = await runCommandStrict(
     "docker",
-    ["volume", "ls", "-q"],
+    ["volume", "ls", "-q", "--filter", `label=${getRuntimeOwnerLabel()}`],
     process.cwd(),
   ).catch(() => null);
 

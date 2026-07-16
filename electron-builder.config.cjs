@@ -118,6 +118,7 @@ module.exports = {
   linux: {
     category: "Development",
     maintainer: "Pierre Voss <p.voss@codeux.ai>",
+    executableName: "codeux",
     target: [
       "AppImage",
       "deb",

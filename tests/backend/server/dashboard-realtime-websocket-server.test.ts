@@ -657,15 +657,15 @@ describe("DashboardRealtimeWebSocketServer", () => {
   it("disconnects slow websocket clients before buffering unbounded realtime frames", () => {
     const { sendClientMessage, socket } = setupClient();
 
-    Object.defineProperty(socket, "writable", { value: true, configurable: true });
-    Object.defineProperty(socket, "destroyed", { value: false, configurable: true });
-    Object.defineProperty(socket, "writableLength", { value: 20 * 1024 * 1024, configurable: true });
-
     sendClientMessage({
       type: "set_subscriptions",
       scopes: ["project:p1:live"],
       lastSequence: 0,
     });
+
+    Object.defineProperty(socket, "writable", { value: true, configurable: true });
+    Object.defineProperty(socket, "destroyed", { value: false, configurable: true });
+    Object.defineProperty(socket, "writableLength", { value: 20 * 1024 * 1024, configurable: true });
 
     const subscribeCallback = realtimeService.subscribe.mock.calls[0][0];
     subscribeCallback({

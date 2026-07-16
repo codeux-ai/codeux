@@ -26,6 +26,7 @@ describe("DashboardSnapshotCache", () => {
         getOverviewTelemetrySnapshot: vi.fn().mockReturnValue({ activeProjects: [] }),
         getProjectExecutionSnapshot: vi.fn().mockReturnValue({ projectId: "p1" }),
         getProjectStatsSnapshot: vi.fn().mockReturnValue({ stats: true }),
+        getHeaderTokenThroughputSnapshot: vi.fn().mockReturnValue({ throughput: true }),
       },
       connectionChatRepository: {
         listConnections: vi.fn().mockReturnValue([]),
@@ -167,6 +168,34 @@ describe("DashboardSnapshotCache", () => {
       expect(mockDeps.executionRepository.getProjectExecutionSnapshot).toHaveBeenNthCalledWith(2, "p1", {
         selectedSprintId: "sprint-1",
       });
+    });
+
+    it("bounds execution snapshots across many selected sprint scopes", () => {
+      for (let index = 0; index <= DashboardSnapshotCachePolicy.PROJECT_EXECUTION_CACHE_MAX_ENTRIES; index += 1) {
+        cache.getProjectExecutionSnapshot("p1", { selectedSprintId: `sprint-${index}` });
+      }
+
+      const callsAfterFill = mockDeps.executionRepository.getProjectExecutionSnapshot.mock.calls.length;
+      cache.getProjectExecutionSnapshot("p1", { selectedSprintId: "sprint-0" });
+
+      expect(mockDeps.executionRepository.getProjectExecutionSnapshot).toHaveBeenCalledTimes(callsAfterFill + 1);
+    });
+
+    it("bounds parameterized stats and throughput snapshots", () => {
+      for (let index = 0; index <= DashboardSnapshotCachePolicy.PROJECT_STATS_CACHE_MAX_ENTRIES; index += 1) {
+        cache.getProjectStatsSnapshot(`project-${index}`, { window: "7d" });
+      }
+      for (let index = 0; index <= DashboardSnapshotCachePolicy.HEADER_TOKEN_THROUGHPUT_CACHE_MAX_ENTRIES; index += 1) {
+        cache.getHeaderTokenThroughputSnapshot({ projectId: `project-${index}`, window: "24h" });
+      }
+
+      const statsCalls = mockDeps.executionRepository.getProjectStatsSnapshot.mock.calls.length;
+      const throughputCalls = mockDeps.executionRepository.getHeaderTokenThroughputSnapshot.mock.calls.length;
+      cache.getProjectStatsSnapshot("project-0", { window: "7d" });
+      cache.getHeaderTokenThroughputSnapshot({ projectId: "project-0", window: "24h" });
+
+      expect(mockDeps.executionRepository.getProjectStatsSnapshot).toHaveBeenCalledTimes(statsCalls + 1);
+      expect(mockDeps.executionRepository.getHeaderTokenThroughputSnapshot).toHaveBeenCalledTimes(throughputCalls + 1);
     });
 
     it("scopes active attention queues to the selected sprint while project-wide mode keeps all active items", async () => {

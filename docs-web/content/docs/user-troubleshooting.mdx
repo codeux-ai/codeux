@@ -122,6 +122,21 @@ CLI-backed tasks refresh the remote branch before preparing the worker branch. T
 
 **Fix:** verify `git fetch origin <branch>` works in the project repository and that the dashboard GitHub/GitLab token or local SSH setup can read the remote. Slow GitHub/GitLab smart HTTP connections may exceed short local timeouts; Code UX waits 120 seconds by default, and operators can raise it with `CODE_UX_GIT_FETCH_TIMEOUT_MS`.
 
+### Jules session creation returns HTTP 400
+
+Read the provider explanation stored on the failed/deferred invocation. If it reports an active
+session or concurrency ceiling, current builds keep the task queued, release the provisional slot,
+and retry after a short learned-cap backoff. If it reports an invalid source or starting branch,
+repair that request instead. A runtime restart must preserve persisted Jules sessions that remain
+active remotely; completed/cancelled sprints and merged tasks are not reopened. New dispatches first
+count executing `QUEUED`, `PLANNING`, and `IN_PROGRESS` sessions from a fresh, coalesced Jules API
+preflight and reserve visible remote capacity absent from local accounting. Waiting and paused history
+does not consume that execution count. If the preflight is unavailable, the task remains queued. Since
+Jules exposes no slot-count/state-filter endpoint and history is paginated, a create-time
+`FAILED_PRECONDITION` is also treated as authoritative capacity and retried instead of failing the task.
+If the bounded startup snapshot times out, locally durable Jules rows remain monitored until a late
+snapshot or normal session sync confirms their state; the timeout alone must not fail the sprint.
+
 ### CI autofix loops
 
 A `VirtualWorkerService` doing `ci_fix` tasks keeps trying and failing.
@@ -160,7 +175,9 @@ For packaged Windows builds, Docker errors that show `C:\...` as a container `--
 
 Current preview routing fixes **Forbidden: Untrusted host** without weakening application allowlists by presenting one coherent local upstream host boundary. Exit-code-137 previews report the actual termination and previously healthy previews receive one bounded recovery attempt. Docker commands require the explicit Docker Access setting and grant effective host-level control.
 
-For packaged Windows builds, `spawn ENAMETOOLONG` during Docker provider launch indicates an outdated build or a launch path still passing a large prompt through the host command line. Current Docker provider runs mount provider arguments from a generated file so large prompts do not become `docker run` arguments.
+For packaged Windows builds, `spawn ENAMETOOLONG` during Docker provider launch indicates an outdated build or a launch path still passing a large prompt through the host command line. A Linux container error such as `Argument list too long` has the same root cause at the container `execve` boundary. Current Docker provider runs mount provider arguments from a generated file and stream oversized prompts through stdin for supported CLIs, so large prompts become neither host `docker run` arguments nor reconstructed container arguments.
+
+A provider error containing `container ... is not running` can come from an older build whose startup or shutdown cleanup removed a warm Git/workspace helper owned by another Code UX runtime on the same Docker daemon. Current builds owner-scope managed Docker assets and retry a stopped helper with a one-shot fallback. Stop parallel older runtimes, update Code UX, restart once, and rerun the failed task; the original provider may never have been contacted.
 
 Chromium `tile_manager.cc` warnings about tile memory limits indicate renderer pressure. Current builds use an opaque desktop shell and GPU memory hints; hidden dashboard tabs also release animated WebGL and realtime resources, and the Nodes canvas uses a static background automatically. Returning to a tab reconnects realtime data and performs a fallback refresh. If warnings persist on older builds, switch to a lighter animation or set background mode to Static in Settings > Appearance.
 

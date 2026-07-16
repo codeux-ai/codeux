@@ -31,6 +31,7 @@ import { workspaceVolumeHelperPool, type WorkspaceVolumeHelperPool } from "./wor
 import { CONTAINER_RUNTIME_HOME, CONTAINER_WORKSPACE_ROOT } from "./provider-runtime-artifacts.js";
 import type { CliProviderId } from "./provider-command-specs.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../../../shared/config/code-ux-paths.js";
+import { getRuntimeOwnerDockerArgs } from "../../../shared/config/runtime-owner.js";
 import { ensureDefaultCodeUxAssetsInstalled } from "../../../services/code-ux-default-assets-service.js";
 import { DEFAULT_PLAYWRIGHT_MCP_SERVER_ID } from "../../../repositories/settings-defaults.js";
 import { sanitizeInvocationOutputText } from "../../../services/invocation-output-sanitizer.js";
@@ -62,6 +63,8 @@ const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
 );
 
 const CONTAINER_PROVIDER_ARGV_FILE = "/opt/code-ux/provider-argv.sh";
+const PROVIDER_PROMPT_ARG_MAX_BYTES = 48 * 1024;
+const PROVIDER_PROMPT_SINGLE_ARG_HARD_LIMIT_BYTES = 120 * 1024;
 const PROVIDER_CPU_SHARES = "768";
 const LAUNCH_ARTIFACT_INVALID_PREFIX = "CODE_UX_LAUNCH_ARTIFACT_INVALID:";
 
@@ -80,6 +83,7 @@ export interface IDockerRunner {
   runProviderInDocker(args: {
     command: string;
     args: string[];
+    prompt?: string;
     cwd: string;
     providerEnv: NodeJS.ProcessEnv;
     sessionId: string;
@@ -158,6 +162,7 @@ export class DockerRunner implements IDockerRunner {
   async runProviderInDocker(input: {
     command: string;
     args: string[];
+    prompt?: string;
     cwd: string;
     providerEnv: NodeJS.ProcessEnv;
     sessionId: string;
@@ -222,9 +227,15 @@ export class DockerRunner implements IDockerRunner {
           this.mapDockerSourcePathForDaemon(sourcePath, repoPath, sessionId, label, emitActivity),
       });
 
+      const launch = this.prepareProviderLaunch(providerLabel, args, input.prompt);
       const argvFilePath = path.join(tempRoot, "provider-argv.sh");
-      await this.writeRestrictiveFile(argvFilePath, this.buildProviderArgvFile(args));
+      await this.writeRestrictiveFile(argvFilePath, this.buildProviderArgvFile(launch.args));
       const argvFileSource = this.mapDockerSourcePathForDaemon(argvFilePath, repoPath, sessionId, "provider argv", emitActivity);
+      let promptFilePath: string | undefined;
+      if (launch.stdinPrompt !== null) {
+        promptFilePath = path.join(tempRoot, "provider-prompt.txt");
+        await this.writeRestrictiveFile(promptFilePath, launch.stdinPrompt);
+      }
       const envFilePath = path.join(tempRoot, "provider.env");
       await writeDockerEnvFile(envFilePath, pickContainerEnv(providerEnv));
       const envFileSource = this.mapDockerSourcePathForDaemon(envFilePath, repoPath, sessionId, "provider env", emitActivity);
@@ -246,12 +257,13 @@ export class DockerRunner implements IDockerRunner {
         CONTAINER_WORKSPACE_ROOT,
         "--label",
         "code-ux.managed=true",
+        ...getRuntimeOwnerDockerArgs(),
         "--label",
         `code-ux.session-id=${sessionId}`,
         "--label",
         `code-ux.command=${command}`,
         "--label",
-        `code-ux.args-count=${args.length}`,
+        `code-ux.args-count=${launch.args.length}`,
         "--mount",
         toDockerMountArg({
           source: workspace.volumeName,
@@ -444,6 +456,7 @@ export class DockerRunner implements IDockerRunner {
         }
       }
 
+      let finalDockerResult: CommandResult | null = null;
       try {
         const runDocker = async (): Promise<CommandResult> => {
           await this.workspaceManager.ensureRuntimeVolume(cwd, {
@@ -452,11 +465,13 @@ export class DockerRunner implements IDockerRunner {
           });
           return runStreamingCommand("docker", dockerArgs, process.cwd(), process.env, {
             signal,
+            stdinFile: promptFilePath,
             onStdoutLine: (line) => emitActivity(line, "agent"),
             onStderrLine: (line) => emitActivity(`[${providerLabel}] ${line}`, "provider"),
           });
         };
         let result = await runDocker();
+        finalDockerResult = result;
         const repairedArtifacts = new Set<LaunchArtifactKind>();
         let reclaimedContainerName = false;
         for (;;) {
@@ -504,6 +519,7 @@ export class DockerRunner implements IDockerRunner {
               launchImage = repairedImage.image;
             }
             result = await runDocker();
+            finalDockerResult = result;
             continue;
           }
           if (!reclaimedContainerName && this.isDockerNameConflict(result, containerName)) {
@@ -512,6 +528,7 @@ export class DockerRunner implements IDockerRunner {
             await this.removeProviderContainer(containerName);
             await this.sleep(500);
             result = await runDocker();
+            finalDockerResult = result;
             continue;
           }
           break;
@@ -520,6 +537,12 @@ export class DockerRunner implements IDockerRunner {
       } finally {
         if (signal) {
           signal.removeEventListener("abort", killContainerOnAbort);
+        }
+        // A stopped `docker run --rm` normally removes itself. The explicit
+        // cleanup also covers the narrow restart window where Docker created
+        // the container but the client died before the container could start.
+        if (abortKillIssued || (finalDockerResult && !finalDockerResult.ok)) {
+          await this.removeProviderContainer(containerName);
         }
       }
     } finally {
@@ -534,6 +557,73 @@ export class DockerRunner implements IDockerRunner {
       `CODE_UX_PROVIDER_ARGS=(${quotedArgs})`,
       "",
     ].join("\n");
+  }
+
+  private prepareProviderLaunch(
+    provider: CliProviderId,
+    args: string[],
+    prompt: string | undefined,
+  ): { args: string[]; stdinPrompt: string | null } {
+    if (!prompt) {
+      return { args, stdinPrompt: null };
+    }
+
+    const promptIndex = args.findIndex((arg) => arg === prompt);
+    if (promptIndex < 0) {
+      return { args, stdinPrompt: null };
+    }
+
+    const isE2eShim = promptIndex > 0 && args[promptIndex - 1] === "--prompt";
+    const shouldExternalize = provider === "mockup-cli"
+      || isE2eShim
+      || Buffer.byteLength(prompt, "utf8") > PROVIDER_PROMPT_ARG_MAX_BYTES;
+    if (!shouldExternalize) {
+      return { args, stdinPrompt: null };
+    }
+
+    const launchArgs = [...args];
+    if (isE2eShim) {
+      launchArgs.splice(promptIndex - 1, 2);
+      return { args: launchArgs, stdinPrompt: prompt };
+    }
+
+    if (provider === "mockup-cli") {
+      launchArgs.splice(promptIndex, 1);
+      return { args: launchArgs, stdinPrompt: prompt };
+    }
+
+    if (provider === "gemini" || provider === "qwen-code") {
+      const promptFlagIndex = promptIndex - 1;
+      if (promptFlagIndex >= 0 && ["-p", "--p", "--prompt"].includes(launchArgs[promptFlagIndex])) {
+        launchArgs.splice(promptFlagIndex, 2);
+      } else {
+        launchArgs.splice(promptIndex, 1);
+      }
+      return { args: launchArgs, stdinPrompt: prompt };
+    }
+
+    if (provider === "claude-code" || provider === "opencode") {
+      launchArgs.splice(promptIndex, 1);
+      return { args: launchArgs, stdinPrompt: prompt };
+    }
+
+    if (provider === "codex") {
+      launchArgs[promptIndex] = "-";
+      return { args: launchArgs, stdinPrompt: prompt };
+    }
+
+    // Antigravity print mode requires one value for -p/--print and does not
+    // publish a file/stdin prompt contract. Splitting the value would turn the
+    // remaining chunks into unrelated positional arguments, so retain the exact
+    // invocation while it is below Linux MAX_ARG_STRLEN and fail this invocation
+    // explicitly before execve can abort with an opaque E2BIG error.
+    if (Buffer.byteLength(prompt, "utf8") <= PROVIDER_PROMPT_SINGLE_ARG_HARD_LIMIT_BYTES) {
+      return { args, stdinPrompt: null };
+    }
+    throw new Error(
+      `Antigravity cannot safely accept a ${Buffer.byteLength(prompt, "utf8")}-byte prompt in Docker: `
+      + `its -p/--print contract requires one argument and the safe limit is ${PROVIDER_PROMPT_SINGLE_ARG_HARD_LIMIT_BYTES} bytes.`,
+    );
   }
 
   private buildLaunchArtifactValidation(args: {

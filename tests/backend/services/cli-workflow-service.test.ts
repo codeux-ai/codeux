@@ -694,6 +694,9 @@ describe("CliWorkflowService unpushed commit detection", () => {
       logger: { error: vi.fn() },
     };
     const service = new CliWorkflowService(deps as any);
+    const releaseWorkspaceReservation = vi.fn();
+    const reserveWorkspaceHelper = vi.spyOn((service as any).workspaceManager, "reserveWorkspaceHelper")
+      .mockReturnValue(releaseWorkspaceReservation);
 
     // Mock the external stages
     const { executePrepareStage } = await import("../../../src/services/cli-workflow/pipeline/prepare-stage.js");
@@ -733,6 +736,8 @@ describe("CliWorkflowService unpushed commit detection", () => {
       expect.objectContaining({ completionTimestamp: expect.any(String) }),
     );
     expect(executeCleanupStage).toHaveBeenCalled();
+    expect(reserveWorkspaceHelper).toHaveBeenCalledWith(expect.stringMatching(/^docker-volume:\/\//));
+    expect(releaseWorkspaceReservation).toHaveBeenCalledOnce();
     expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
       "run-1",
       "cli_prepare_started",
@@ -777,7 +782,10 @@ describe("CliWorkflowService unpushed commit detection", () => {
     );
   });
 
-  it("resumes Git finalization without invoking the provider twice after a restart crash window", async () => {
+  it.each([
+    "terminal_provider_active_dispatch_mismatch",
+    "shutdown_interrupted_after_provider_completion",
+  ])("resumes Git finalization without invoking the provider twice after a restart crash window marked by %s", async (recoveryReason) => {
     let storedInvocation: Record<string, unknown> | null = null;
     const executionRepository = {
       getTaskRun: vi.fn().mockReturnValue({
@@ -812,7 +820,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
         {
           eventType: "task_dispatch_reconciled",
           payload: {
-            reason: "terminal_provider_active_dispatch_mismatch",
+            reason: recoveryReason,
             providerStatus: "completed",
           },
         },

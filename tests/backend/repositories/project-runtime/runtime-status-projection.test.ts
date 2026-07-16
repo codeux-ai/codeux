@@ -247,6 +247,36 @@ describe("RuntimeStatusProjection", () => {
     expect(refreshedStatus.subtasks[0]?.activities?.map((activity) => activity.id)).toEqual(["act-1", "act-2"]);
   });
 
+  it("bounds oversized legacy activity fields before retaining live projections", async () => {
+    const { projection } = await createProjection();
+    const huge = "x".repeat(1_000_000);
+
+    const activity = projection.mapTaskActivityRow({
+      task_id: "task-1",
+      session_id: "session-1",
+      session_name: "session-1",
+      provider: "codex",
+      activity_id: "activity-1",
+      activity_name: "activity-1",
+      created_at: "2024-01-01T10:05:00Z",
+      originator: "agent",
+      payload_json: JSON.stringify({
+        description: huge,
+        agentMessaged: { agentMessage: huge },
+        progressUpdated: { title: huge, description: huge },
+        planGenerated: { plan: { steps: Array.from({ length: 100 }, () => ({ title: huge })) } },
+        sessionCompleted: { transcript: huge },
+      }),
+    });
+
+    expect(activity?.description?.length).toBeLessThanOrEqual(8 * 1024);
+    expect(activity?.agentMessaged?.agentMessage?.length).toBeLessThanOrEqual(8 * 1024);
+    expect(activity?.progressUpdated?.description?.length).toBeLessThanOrEqual(8 * 1024);
+    expect(activity?.planGenerated?.plan?.steps).toHaveLength(32);
+    expect(activity?.sessionCompleted).toEqual({ truncated: true, originalChars: 1_000_017 });
+    expect(JSON.stringify(activity).length).toBeLessThan(64 * 1024);
+  });
+
   it("projects latest task self-reflection ratings for live status and omits unrated tasks", async () => {
     const { projection, projectRepository, executionRepository, ratingRepository } = await createProjection();
 

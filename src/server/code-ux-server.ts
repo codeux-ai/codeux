@@ -360,6 +360,10 @@ export class CodeUxServer {
           scope.sprintId,
         ).settings;
       },
+      listDurableRemoteSessions: () => this.julesApi.getSessionsForCapacityCheck(),
+      resumeInterruptedPlanningInvocation: (invocationId, mode) => (
+        this.planningAgentService.recoverInterruptedInvocation(invocationId, mode)
+      ),
       logger: this.logger.child({ component: "runtime-startup-recovery-service" }),
     });
     this.dashboardRealtimeService = deps.dashboardRealtimeService;
@@ -426,6 +430,12 @@ export class CodeUxServer {
     this.startupTaskTimers.clear();
     this.virtualWorkerService.stop();
     this.schedulerService.stop();
+    const requestedDispatchStops = await this.shutdownContainerService.requestActiveDispatchStops().catch((error) => {
+      this.logger.warn("Failed to request active dispatch stops during shutdown", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return 0;
+    });
     disposeCommandSpawner();
     await shutdownGitHelperPool().catch((error) => {
       this.logger.warn("Failed to stop Docker git helper containers during shutdown", {
@@ -437,7 +447,7 @@ export class CodeUxServer {
         error: error instanceof Error ? error.message : String(error),
       });
     });
-    await this.shutdownContainerService.stopRunningContainers().catch((error) => {
+    await this.shutdownContainerService.stopRemainingContainers(requestedDispatchStops).catch((error) => {
       this.logger.warn("Failed to stop running containers during shutdown", {
         error: error instanceof Error ? error.message : String(error),
       });
@@ -466,6 +476,40 @@ export class CodeUxServer {
       }
     }
     await this.releaseProjectManagerRuntimeLock();
+
+    // Flush the final write burst and close every SQLite connection explicitly. The CLI exits via
+    // process.exit() after this method, so relying on process teardown leaves large WAL files behind
+    // after busy sprints and skips SQLite's normal last-connection checkpoint.
+    try {
+      const failures = new DatabaseMaintenanceService({
+        appDbStorage: this.appDbStorage,
+        sessionTracking: this.sessionTracking,
+        settingsRepository: this.settingsRepository,
+        logger: this.logger.child({ component: "database-maintenance-service" }),
+      }).checkpointWalDatabases();
+      if (failures.length > 0) {
+        this.logger.warn("Final WAL checkpoint completed with failures", { databases: failures });
+      }
+    } catch (error) {
+      this.logger.warn("Final WAL checkpoint failed during shutdown", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    for (const [label, closeDatabase] of [
+      ["app", () => this.appDbStorage.close()],
+      ["session tracking", () => this.sessionTracking.close()],
+      ["settings", () => this.settingsRepository.close()],
+    ] as const) {
+      try {
+        closeDatabase();
+      } catch (error) {
+        this.logger.warn("Failed to close SQLite database during shutdown", {
+          database: label,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
   }
 
   private async closeHttpServer(server: HttpServer): Promise<void> {
@@ -627,29 +671,31 @@ export class CodeUxServer {
   }
 
   private startRuntimeCleanupLoop(): void {
-    if (this.appConfig.runtimeRole !== "project_manager" || this.runtimeCleanupInterval) {
+    if (this.appConfig.runtimeRole !== "project_manager" || this.runtimeCleanupInterval || this.isClosing) {
       return;
     }
 
     const runCleanup = (): void => {
+      if (this.isClosing) {
+        return;
+      }
       void this.runtimeCleanupService.cleanup().catch((error) => {
         this.logger.error("Runtime cleanup sweep failed", { error });
       });
     };
 
-    const initialTimer = setTimeout(runCleanup, CodeUxServer.LOOP_INITIAL_DELAY_MS);
-    initialTimer.unref?.();
+    this.scheduleTrackedTimer(CodeUxServer.LOOP_INITIAL_DELAY_MS, runCleanup);
     this.runtimeCleanupInterval = setInterval(runCleanup, CodeUxServer.RUNTIME_CLEANUP_INTERVAL_MS);
     this.runtimeCleanupInterval.unref?.();
   }
 
   private startSprintPreviewLoop(): void {
-    if (this.appConfig.runtimeRole !== "project_manager" || this.sprintPreviewInterval) {
+    if (this.appConfig.runtimeRole !== "project_manager" || this.sprintPreviewInterval || this.isClosing) {
       return;
     }
 
     const reconcile = (): void => {
-      if (this.sprintPreviewReconcileInFlight) {
+      if (this.isClosing || this.sprintPreviewReconcileInFlight) {
         return;
       }
       this.sprintPreviewReconcileInFlight = true;
@@ -669,18 +715,20 @@ export class CodeUxServer {
       });
     };
 
-    const initialTimer = setTimeout(reconcile, CodeUxServer.LOOP_INITIAL_DELAY_MS);
-    initialTimer.unref?.();
+    this.scheduleTrackedTimer(CodeUxServer.LOOP_INITIAL_DELAY_MS, reconcile);
     this.sprintPreviewInterval = setInterval(reconcile, CodeUxServer.RUNTIME_CLEANUP_INTERVAL_MS);
     this.sprintPreviewInterval.unref?.();
   }
 
   private startLiveSnapshotLoop(): void {
-    if (this.appConfig.runtimeRole !== "project_manager" || this.liveSnapshotInterval) {
+    if (this.appConfig.runtimeRole !== "project_manager" || this.liveSnapshotInterval || this.isClosing) {
       return;
     }
 
     const refreshLiveSnapshot = (): void => {
+      if (this.isClosing) {
+        return;
+      }
       const projectId = this.projectManagementRepository.getSelectedProjectId();
       if (!projectId) {
         return;
@@ -691,14 +739,13 @@ export class CodeUxServer {
       this.dashboardRealtimeService.scheduleProjectGitRefresh(projectId);
     };
 
-    const initialTimer = setTimeout(refreshLiveSnapshot, 250);
-    initialTimer.unref?.();
+    this.scheduleTrackedTimer(250, refreshLiveSnapshot);
     this.liveSnapshotInterval = setInterval(refreshLiveSnapshot, CodeUxServer.LIVE_SNAPSHOT_REFRESH_INTERVAL_MS);
     this.liveSnapshotInterval.unref?.();
   }
 
   private startWalCheckpointLoop(): void {
-    if (this.appConfig.runtimeRole !== "project_manager" || this.walCheckpointInterval) {
+    if (this.appConfig.runtimeRole !== "project_manager" || this.walCheckpointInterval || this.isClosing) {
       return;
     }
 
@@ -710,6 +757,9 @@ export class CodeUxServer {
     });
 
     const checkpoint = (): void => {
+      if (this.isClosing) {
+        return;
+      }
       try {
         this.advanceDeferredDatabaseMigrations();
         if (!this.appDbStorage.hasPendingMaintenanceCriticalIndexes()) {
@@ -1072,7 +1122,10 @@ export class CodeUxServer {
   }
 
   private async listSessionsForSync(): Promise<{ sessions?: JulesSession[] }> {
-    const tracked = this.sessionTracking.listSessions(300).sessions;
+    // Session sync matches durable task/run metadata and never reads local CLI prompts.
+    // QA prompts can contain a full 400-task context, so projecting them into every
+    // one-second watch cycle creates a large transient heap proportional to session count.
+    const tracked = this.sessionTracking.listSessions(300, { includePrompt: false }).sessions;
     let julesSessions: JulesSession[] = [];
     if (this.isJulesApiConfigured()) {
       try {
@@ -1317,18 +1370,24 @@ export class CodeUxServer {
     return await this.activityCacheService.getLiveActivitiesForActiveTasks();
   }
 
-  private scheduleStartupTask(label: string, delayMs: number, task: () => Promise<void>): void {
+  private scheduleTrackedTimer(delayMs: number, task: () => void): void {
     const timer = setTimeout(() => {
       this.startupTaskTimers.delete(timer);
       if (this.isClosing) {
         return;
       }
-      void task().catch((error) => {
-        this.logger.error?.(`${label} failed`, { error });
-      });
+      task();
     }, delayMs);
     timer.unref?.();
     this.startupTaskTimers.add(timer);
+  }
+
+  private scheduleStartupTask(label: string, delayMs: number, task: () => Promise<void>): void {
+    this.scheduleTrackedTimer(delayMs, () => {
+      void task().catch((error) => {
+        this.logger.error?.(`${label} failed`, { error });
+      });
+    });
   }
 
   private scheduleBackgroundStartupTasks(): void {

@@ -1311,6 +1311,7 @@ function runMigrationsInternal(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_execution_leases_scope", "execution_leases", "scope_type, scope_id");
   ensureIndex(db, "idx_task_run_events_task_run_created", "task_run_events", "task_run_id, created_at DESC");
   ensureIndex(db, "idx_task_run_events_task_run_created_id", "task_run_events", "task_run_id, created_at DESC, id DESC");
+  ensureIndex(db, "idx_task_run_events_task_run_type_created_id", "task_run_events", "task_run_id, event_type, created_at DESC, id DESC");
   ensureReadIndexSql(
     db,
     "idx_task_run_events_provider_activity_run_created",
@@ -1563,6 +1564,25 @@ function runMigrationsInternal(db: DatabaseAdapter): void {
   migrateGuardrailLedgerDropTaskForeignKey(db);
   ensureUniqueIndex(db, "idx_guardrail_ledger_task_purpose", "guardrail_ledger", "task_id, purpose");
   ensureIndex(db, "idx_guardrail_ledger_project", "guardrail_ledger", "project_id, task_id");
+
+  // Runtime restarts are operational interruptions, not failed agent attempts. Keep each
+  // guardrail refund durable and idempotent so a second startup recovery cannot refund the
+  // same interrupted task run twice.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS guardrail_ledger_adjustments (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      task_id TEXT NOT NULL,
+      purpose TEXT NOT NULL,
+      adjustment INTEGER NOT NULL,
+      source_key TEXT NOT NULL UNIQUE,
+      reason TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    )
+  `);
+  ensureIndex(db, "idx_guardrail_ledger_adjustments_task", "guardrail_ledger_adjustments", "task_id, purpose");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS knowledge_documents (

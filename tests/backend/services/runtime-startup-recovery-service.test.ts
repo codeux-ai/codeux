@@ -29,13 +29,18 @@ const tempDirs: string[] = [];
 
 async function createFixture(options?: {
   recoverSprintRun?: SprintOrchestrator["recoverSprintRun"];
-  logger?: Pick<Logger, "info" | "error">;
+  logger?: Pick<Logger, "info" | "warn" | "error">;
   dockerService?: {
     listContainers: () => Promise<Array<{ id?: string; names?: string; labels?: Record<string, string> }>>;
     removeContainers?: (containerIds: string[], options?: { removeVolumes?: boolean }) => Promise<void>;
   };
   isProcessAlive?: (pid: number) => boolean;
   getDashboardSettings?: () => DashboardSettings;
+  listDurableRemoteSessions?: () => Promise<Array<{ id: string; name: string; state?: string; prompt: string }>>;
+  resumeInterruptedPlanningInvocation?: (
+    invocationId: string,
+    mode: "continue_session" | "retry_full_prompt",
+  ) => Promise<unknown>;
 }) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-startup-recovery-"));
   tempDirs.push(dir);
@@ -75,6 +80,8 @@ async function createFixture(options?: {
     } as SprintOrchestrator,
     dockerService: options?.dockerService as any,
     getDashboardSettings: options?.getDashboardSettings ?? (() => DEFAULT_DASHBOARD_SETTINGS),
+    listDurableRemoteSessions: options?.listDurableRemoteSessions,
+    resumeInterruptedPlanningInvocation: options?.resumeInterruptedPlanningInvocation,
     isProcessAlive: options?.isProcessAlive,
     logger: options?.logger,
   });
@@ -992,13 +999,14 @@ describe("RuntimeStartupRecoveryService", () => {
     });
   });
 
-  it("fails stale running planning invocation audit rows without provider runtime linkage on startup", async () => {
+  it("resumes even a freshly-created planning request interrupted before provider linkage", async () => {
+    const resumeInterruptedPlanningInvocation = vi.fn().mockResolvedValue(undefined);
     const {
       projectRepository,
       executionRepository,
       sessionTracking,
       service,
-    } = await createFixture();
+    } = await createFixture({ resumeInterruptedPlanningInvocation });
 
     const project = projectRepository.createProject({
       name: "Planning Audit Recovery Project",
@@ -1016,7 +1024,7 @@ describe("RuntimeStartupRecoveryService", () => {
       type: "planning",
       provider: "qwen-code",
       status: "running",
-      startedAt: "2026-03-29T10:00:00.000Z",
+      startedAt: new Date().toISOString(),
     });
 
     const result = await service.recover();
@@ -1026,12 +1034,15 @@ describe("RuntimeStartupRecoveryService", () => {
       status: "failed",
       errorMessage: expect.stringContaining("without provider runtime linkage"),
     });
+    expect(result.resumedPlanningInvocationIds).toEqual([invocation.id]);
+    expect(resumeInterruptedPlanningInvocation).toHaveBeenCalledWith(invocation.id, "continue_session");
   });
 
   it("fails a stale pre-provider CLI coding row with useful recovery evidence", async () => {
     const {
       projectRepository,
       executionRepository,
+      guardrailRepository,
       service,
     } = await createFixture();
 
@@ -1066,6 +1077,57 @@ describe("RuntimeStartupRecoveryService", () => {
         }),
       }),
     ]));
+  });
+
+  it("schedules one continuation for a planning request interrupted mid-provider", async () => {
+    const resumeInterruptedPlanningInvocation = vi.fn().mockResolvedValue(undefined);
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture({
+      resumeInterruptedPlanningInvocation,
+      dockerService: { listContainers: vi.fn().mockResolvedValue([]) },
+    });
+    const project = projectRepository.createProject({
+      name: "Planning Provider Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/planning-provider-recovery-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Planning Provider Recovery Sprint",
+      number: 22,
+      status: "planning",
+    });
+    const providerUsage = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sessionId: "planning-qwen-restart",
+      nativeSessionId: "native-qwen-restart",
+      provider: "qwen-code",
+      purpose: "planning",
+      status: "running",
+      executionMode: "DOCKER",
+      startedAt: "2026-03-29T10:00:00.000Z",
+    });
+    const invocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      providerInvocationId: providerUsage.id,
+      type: "planning",
+      provider: "qwen-code",
+      status: "running",
+      startedAt: "2026-03-29T10:00:01.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledContainerInvocationIds).toContain(providerUsage.id);
+    expect(result.resumedPlanningInvocationIds).toEqual([invocation.id]);
+    expect(resumeInterruptedPlanningInvocation).toHaveBeenCalledTimes(1);
+    expect(resumeInterruptedPlanningInvocation).toHaveBeenCalledWith(invocation.id, "continue_session");
+    expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({ status: "cancelled" });
+    expect(executionRepository.getProviderInvocationUsage(providerUsage.id)).toMatchObject({ status: "cancelled" });
   });
 
   it("settles an interrupted CLI workflow from terminal provider and dispatch evidence", async () => {
@@ -1191,6 +1253,230 @@ describe("RuntimeStartupRecoveryService", () => {
         }),
       }),
     ]));
+  });
+
+  it("requeues recovered provider completion when restart interrupts before Git finalization", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      guardrailRepository,
+      sessionTracking,
+      service,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Post-provider Git recovery project",
+      sourceType: "local",
+      sourceRef: "/workspace/post-provider-git-recovery",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Post-provider Git recovery sprint",
+      number: 91,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Finalize recovered branch",
+      executorType: "docker_cli",
+      status: "coding_completed",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "docker_cli",
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "completed",
+      startedAt: "2026-07-15T10:00:00.000Z",
+      finishedAt: "2026-07-15T10:01:00.000Z",
+    });
+    const sessionId = "cli-codex-post-provider-git";
+    const workerBranch = "task/post-provider-git";
+    sessionTracking.createSession({
+      id: sessionId,
+      provider: "codex",
+      state: "RUNNING",
+      taskId: buildTaskRunKey(project.baseDir, sprint.number, "T01"),
+      title: "Finalize recovered branch",
+      featureBranch: "feature/post-provider-git",
+      workerBranch,
+      repoPath: project.baseDir,
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "codex",
+      mode: "docker_cli",
+      sessionId,
+      sessionName: `sessions/${sessionId}`,
+      state: "COMPLETED",
+      workerBranch,
+      startedAt: "2026-07-15T10:00:00.000Z",
+      finishedAt: "2026-07-15T10:01:00.000Z",
+    });
+    executionRepository.appendTaskRunEvent(taskRun.id, "cli_workspace_bound", "system", {
+      workspaceSessionId: sessionId,
+      worktreePath: `docker-volume://${sessionId}`,
+    });
+    executionRepository.appendTaskRunEvent(taskRun.id, "cli_provider_completed", "system", {
+      provider: "codex",
+    });
+    const providerInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      taskRunId: taskRun.id,
+      sessionId,
+      provider: "codex",
+      purpose: "task_coding",
+      executionMode: "DOCKER",
+      status: "completed",
+      startedAt: "2026-07-15T10:00:05.000Z",
+      finishedAt: "2026-07-15T10:00:55.000Z",
+    });
+    guardrailRepository.record({ projectId: project.id, taskId: task.id, purpose: "task_coding" });
+
+    const result = await service.recover();
+
+    expect(result.recoveredCliSessionIds).toEqual([sessionId]);
+    expect(result.reconciledPostProviderTaskRunIds).toEqual([taskRun.id]);
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({ state: "FAILED" });
+    expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({
+      status: "cancelled",
+      errorMessage: null,
+    });
+    expect(projectRepository.getTask(task.id)).toMatchObject({
+      status: "pending",
+      isMerged: false,
+    });
+    expect(executionRepository.getProviderInvocationUsage(providerInvocation.id)).toMatchObject({
+      status: "completed",
+    });
+    expect(guardrailRepository.getCount(task.id, "task_coding")).toBe(0);
+    expect(executionRepository.listTaskRunEvents(taskRun.id)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        eventType: "task_dispatch_reconciled",
+        payload: expect.objectContaining({
+          reason: "shutdown_interrupted_after_provider_completion",
+          providerStatus: "completed",
+        }),
+      }),
+    ]));
+    expect(executionRepository.getLatestTaskWorkspaceResumeTarget(task.id, sprintRun.id)).toMatchObject({
+      taskRunId: taskRun.id,
+      sessionId,
+      workerBranch,
+      worktreePath: `docker-volume://${sessionId}`,
+    });
+  });
+
+  it("does not requeue finalized or non-recovered terminal CLI workflows", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      sessionTracking,
+      service,
+    } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Terminal CLI recovery exclusions",
+      sourceType: "local",
+      sourceRef: "/workspace/terminal-cli-recovery-exclusions",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Terminal CLI recovery exclusions sprint",
+      number: 92,
+      status: "running",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "docker_cli",
+      status: "running",
+    });
+    const fixtures = [
+      { key: "T01", finalEvent: "cli_git_pushed", recovered: true },
+      { key: "T02", finalEvent: "cli_git_no_changes", recovered: true },
+      { key: "T03", finalEvent: "cli_workflow_completed", recovered: true },
+      { key: "T04", finalEvent: null, recovered: false },
+    ] as const;
+    const runIds: string[] = [];
+
+    for (const fixture of fixtures) {
+      const task = projectRepository.createTask(project.id, {
+        sprintId: sprint.id,
+        taskKey: fixture.key,
+        title: `Terminal exclusion ${fixture.key}`,
+        executorType: "docker_cli",
+        status: "coding_completed",
+      });
+      const dispatch = executionRepository.createTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        executorType: "docker_cli",
+        status: "completed",
+      });
+      const sessionId = `cli-codex-terminal-${fixture.key.toLowerCase()}`;
+      sessionTracking.createSession({
+        id: sessionId,
+        provider: "codex",
+        state: fixture.recovered ? "RUNNING" : "COMPLETED",
+        taskId: buildTaskRunKey(project.baseDir, sprint.number, fixture.key),
+        title: fixture.key,
+        featureBranch: "feature/terminal-exclusions",
+        workerBranch: `task/${fixture.key.toLowerCase()}`,
+        repoPath: project.baseDir,
+      });
+      const taskRun = executionRepository.createTaskRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        dispatchId: dispatch.id,
+        provider: "codex",
+        mode: "docker_cli",
+        sessionId,
+        state: "COMPLETED",
+        workerBranch: `task/${fixture.key.toLowerCase()}`,
+      });
+      runIds.push(taskRun.id);
+      executionRepository.createProviderInvocationUsage({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        dispatchId: dispatch.id,
+        taskRunId: taskRun.id,
+        sessionId,
+        provider: "codex",
+        purpose: "task_coding",
+        executionMode: "DOCKER",
+        status: "completed",
+      });
+      if (fixture.finalEvent) {
+        executionRepository.appendTaskRunEvent(taskRun.id, fixture.finalEvent, "system", {});
+      }
+    }
+
+    const result = await service.recover();
+
+    expect(result.reconciledPostProviderTaskRunIds).toEqual([]);
+    for (const runId of runIds) {
+      expect(executionRepository.getTaskRun(runId)).toMatchObject({ state: "COMPLETED" });
+    }
   });
 
   it("reconciles stale non-task execution audit rows when the provider invocation already failed", async () => {
@@ -1975,6 +2261,224 @@ describe("RuntimeStartupRecoveryService", () => {
     });
   });
 
+  it("reactivates local projections when a durable Jules session is still active remotely", async () => {
+    const listDurableRemoteSessions = vi.fn().mockResolvedValue([{
+      id: "jules-active-after-restart",
+      name: "sessions/jules-active-after-restart",
+      state: "IN_PROGRESS",
+      prompt: "Continue the hosted task.",
+    }]);
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture({ listDurableRemoteSessions });
+
+    const project = projectRepository.createProject({
+      name: "Durable Remote Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/durable-remote-recovery-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Durable Remote Recovery Sprint",
+      number: 20,
+      status: "failed",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Preserve hosted work",
+      executorType: "jules",
+      status: "pending",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "jules",
+      status: "failed",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "jules",
+      status: "failed",
+    });
+    executionRepository.updateTaskDispatch(dispatch.id, {
+      status: "failed",
+      startedAt: "2026-03-29T10:00:00.000Z",
+      finishedAt: "2026-03-29T10:05:00.000Z",
+      errorMessage: "Provider session failed before dispatch reconciliation.",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "jules",
+      mode: "jules",
+      sessionId: "jules-active-after-restart",
+      sessionName: "sessions/jules-active-after-restart",
+      state: "FAILED",
+      startedAt: "2026-03-29T10:00:00.000Z",
+      finishedAt: "2026-03-29T10:05:00.000Z",
+    });
+    const usage = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      taskRunId: taskRun.id,
+      sessionId: "jules-active-after-restart",
+      nativeSessionId: "jules-active-after-restart",
+      provider: "jules",
+      purpose: "task_coding",
+      status: "failed",
+      startedAt: "2026-03-29T10:00:00.000Z",
+      finishedAt: "2026-03-29T10:05:00.000Z",
+      invocationSource: "EXTERNAL_API",
+    });
+    const invocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      taskRunId: taskRun.id,
+      providerInvocationId: usage.id,
+      type: "task_coding",
+      provider: "jules",
+      status: "failed",
+      startedAt: "2026-03-29T10:00:00.000Z",
+      finishedAt: "2026-03-29T10:05:00.000Z",
+      errorMessage: "Recovered stale task coding invocation after the linked sprint run was already failed.",
+      invocationSource: "EXTERNAL_API",
+    });
+
+    const result = await service.recover();
+
+    expect(listDurableRemoteSessions).toHaveBeenCalledTimes(1);
+    expect(result.reactivatedDurableRemoteTaskRunIds).toEqual([taskRun.id]);
+    expect(result.reactivatedDurableRemoteSprintRunIds).toEqual([sprintRun.id]);
+    expect(projectRepository.getRawSprintStatus(sprint.id)).toBe("running");
+    expect(projectRepository.getTask(task.id)).toMatchObject({ status: "in_progress" });
+    expect(executionRepository.getSprintRun(sprintRun.id)).toMatchObject({ status: "running", finishedAt: null });
+    expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({ status: "running", finishedAt: null, errorMessage: null });
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({ state: "RUNNING", finishedAt: null });
+    expect(executionRepository.getProviderInvocationUsage(usage.id)).toMatchObject({ status: "running", finishedAt: null });
+    expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({ status: "running", finishedAt: null, errorMessage: null });
+  });
+
+  it("bounds durable remote reconciliation so provider latency cannot block readiness", async () => {
+    vi.useFakeTimers();
+    try {
+      const logger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      const {
+        service,
+        projectRepository,
+        executionRepository,
+      } = await createFixture({
+        logger,
+        listDurableRemoteSessions: () => new Promise(() => undefined),
+      });
+      const project = projectRepository.createProject({
+        name: "Timeout Fail-safe Project",
+        sourceType: "local",
+        sourceRef: "/workspace/timeout-fail-safe-project",
+      });
+      const sprint = projectRepository.createSprint(project.id, {
+        name: "Timeout Fail-safe Sprint",
+        number: 25,
+        status: "failed",
+      });
+      const task = projectRepository.createTask(project.id, {
+        sprintId: sprint.id,
+        title: "Preserve unverifiable hosted work",
+        executorType: "jules",
+        status: "pending",
+      });
+      const sprintRun = executionRepository.createSprintRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+        executorMode: "jules",
+        status: "failed",
+      });
+      const dispatch = executionRepository.createTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint.id,
+        sprintRunId: sprintRun.id,
+        taskId: task.id,
+        executorType: "jules",
+        status: "failed",
+      });
+      executionRepository.updateTaskDispatch(dispatch.id, {
+        status: "failed",
+        finishedAt: "2026-03-29T10:05:00.000Z",
+        errorMessage: "Earlier scheduler projection failed.",
+      });
+      const taskRun = executionRepository.createTaskRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+        sprintRunId: sprintRun.id,
+        taskId: task.id,
+        dispatchId: dispatch.id,
+        provider: "jules",
+        mode: "jules",
+        sessionId: "jules-timeout-fail-safe",
+        sessionName: "sessions/jules-timeout-fail-safe",
+        state: "FAILED",
+        finishedAt: "2026-03-29T10:05:00.000Z",
+      });
+      executionRepository.createProviderInvocationUsage({
+        projectId: project.id,
+        sprintId: sprint.id,
+        sprintRunId: sprintRun.id,
+        taskId: task.id,
+        taskRunId: taskRun.id,
+        dispatchId: dispatch.id,
+        sessionId: "jules-timeout-fail-safe",
+        nativeSessionId: "jules-timeout-fail-safe",
+        provider: "jules",
+        purpose: "task_coding",
+        status: "running",
+        invocationSource: "EXTERNAL_API",
+      });
+
+      const recovery = (service as unknown as {
+        reconcileDurableRemoteSessions: () => Promise<{
+          reactivatedTaskRunIds: string[];
+          reactivatedSprintRunIds: string[];
+        }>;
+      }).reconcileDurableRemoteSessions();
+      vi.advanceTimersByTime(5_000);
+      await Promise.resolve();
+      const result = await recovery;
+
+      expect(result.reactivatedTaskRunIds).toEqual([taskRun.id]);
+      expect(result.reactivatedSprintRunIds).toEqual([sprintRun.id]);
+      expect(projectRepository.getRawSprintStatus(sprint.id)).toBe("running");
+      expect(projectRepository.getTask(task.id)).toMatchObject({ status: "in_progress" });
+      expect(executionRepository.getSprintRun(sprintRun.id)).toMatchObject({ status: "running", finishedAt: null });
+      expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({ state: "RUNNING", finishedAt: null });
+      expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({ status: "running", finishedAt: null });
+      expect(logger.warn).toHaveBeenCalledWith(
+        "Could not reconcile durable remote sessions during startup",
+        expect.objectContaining({
+          provider: "jules",
+          error: expect.stringContaining("timed out after 5000ms"),
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("rehydrates active Jules sessions from terminal sprint runs and resumes one recovered run", async () => {
     const {
       projectRepository,
@@ -2338,6 +2842,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const {
       projectRepository,
       executionRepository,
+      guardrailRepository,
       service,
     } = await createFixture();
 
@@ -2379,9 +2884,11 @@ describe("RuntimeStartupRecoveryService", () => {
       dispatchId: dispatch.id,
       provider: "codex",
       mode: "docker_cli",
+      sessionId: "cli-codex-restart-refund",
       state: "RUNNING",
       durationMs: 321,
     });
+    guardrailRepository.record({ projectId: project.id, taskId: task.id, purpose: "task_coding" });
 
     const result = await service.recover();
 
@@ -2405,6 +2912,10 @@ describe("RuntimeStartupRecoveryService", () => {
       }),
     });
     expect(projectRepository.getTask(task.id)?.status).toBe("pending");
+    expect(guardrailRepository.getCount(task.id, "task_coding")).toBe(0);
+
+    await service.recover();
+    expect(guardrailRepository.getCount(task.id, "task_coding")).toBe(0);
   });
 
   it("cancels interrupted local dispatches even when their Docker session container survived restart", async () => {

@@ -33,7 +33,13 @@ import {
 
 import { randomUUID } from "crypto";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
-import { ConcurrencyConflictError, EntityNotFoundError, RepositoryError, ValidationError } from "./repository-utils.js";
+import {
+  ConcurrencyConflictError,
+  EntityNotFoundError,
+  RepositoryError,
+  ValidationError,
+  executeChunkedInQuery,
+} from "./repository-utils.js";
 import { DatabaseAdapter } from "./db/database-adapter.js";
 import { AppDbStorage } from "./app-db-storage.js";
 import { toNumber, parsePayloadJson } from "./repository-utils.js";
@@ -1486,16 +1492,74 @@ export class ExecutionRepository {
     return inserted;
   }
 
-  listTaskRunEvents(taskRunId: string, limit: number = 50): TaskRunEventRecord[] {
-    requireTaskRun((id) => this.getTaskRun(id), taskRunId);
+  listTaskRunEvents(
+    taskRunId: string,
+    limit: number = 50,
+    options?: { eventTypes?: string[]; skipValidation?: boolean },
+  ): TaskRunEventRecord[] {
+    if (!options?.skipValidation) {
+      requireTaskRun((id) => this.getTaskRun(id), taskRunId);
+    }
+    const eventTypes = [...new Set(options?.eventTypes?.map((value) => value.trim()).filter(Boolean) ?? [])];
+    const eventTypeClause = eventTypes.length > 0
+      ? `AND event_type IN (${eventTypes.map(() => "?").join(", ")})`
+      : "";
     const rows = this.db.prepare(`
       SELECT *
       FROM task_run_events
       WHERE task_run_id = ?
+      ${eventTypeClause}
       ORDER BY created_at DESC, rowid DESC
       LIMIT ?
-    `).all(taskRunId, Math.max(1, limit)) as unknown as TaskRunEventRow[];
+    `).all(taskRunId, ...eventTypes, Math.max(1, limit)) as unknown as TaskRunEventRow[];
     return rows.map((row) => this.mapTaskRunEventRow(row));
+  }
+
+  /**
+   * Loads a bounded event slice for many already-resolved task runs in one SQL
+   * pass. Orchestration uses this after loading the task runs themselves, so
+   * missing IDs intentionally map to empty arrays instead of triggering one
+   * existence query per task.
+   */
+  listTaskRunEventsForRuns(
+    taskRunIds: string[],
+    options: { eventTypes: string[]; limitPerRun?: number },
+  ): Map<string, TaskRunEventRecord[]> {
+    const normalizedTaskRunIds = [...new Set(taskRunIds.map((value) => value.trim()).filter(Boolean))];
+    const eventTypes = [...new Set(options.eventTypes.map((value) => value.trim()).filter(Boolean))];
+    const eventsByTaskRunId = new Map<string, TaskRunEventRecord[]>(
+      normalizedTaskRunIds.map((taskRunId) => [taskRunId, []]),
+    );
+    if (normalizedTaskRunIds.length === 0 || eventTypes.length === 0) {
+      return eventsByTaskRunId;
+    }
+
+    const eventTypePlaceholders = eventTypes.map(() => "?").join(", ");
+    const rankedRows = executeChunkedInQuery<TaskRunEventRow & { event_rank: number }>(
+      (sql) => this.db.prepare(sql),
+      {
+        sqlPrefix: `
+          SELECT * FROM (
+            SELECT task_run_events.*,
+                   ROW_NUMBER() OVER (
+                     PARTITION BY task_run_id
+                     ORDER BY created_at DESC, rowid DESC
+                   ) AS event_rank
+            FROM task_run_events
+            WHERE task_run_id`,
+        sqlSuffix: `
+              AND event_type IN (${eventTypePlaceholders})
+          ) ranked_events
+          WHERE event_rank <= ?
+          ORDER BY task_run_id ASC, created_at DESC, id DESC`,
+        items: normalizedTaskRunIds,
+        bindParamsAfter: [...eventTypes, Math.max(1, options.limitPerRun ?? 500)],
+      },
+    );
+    for (const row of rankedRows) {
+      eventsByTaskRunId.get(row.task_run_id)?.push(this.mapTaskRunEventRow(row));
+    }
+    return eventsByTaskRunId;
   }
 
   listSprintRunEvents(sprintRunId: string, limit: number = 50): SprintRunEventRecord[] {

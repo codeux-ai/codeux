@@ -1,5 +1,6 @@
 import * as fs from "fs/promises";
 import * as path from "path";
+import { performance } from "node:perf_hooks";
 import { getProjectLiveSnapshot, ProjectLiveSnapshotDeps } from "../src/app/live/project-live-snapshot.js";
 import { DashboardRealtimeService } from "../src/services/dashboard-realtime-service.js";
 
@@ -14,6 +15,9 @@ async function main() {
   const mockDeps: ProjectLiveSnapshotDeps = {
     projectManagementRepository: {
       getSelectedProjectId: () => fixtureData.projectId,
+      getSelectedSprintId: () => fixtureData.selectedSprintId,
+      sprintBelongsToProject: (_pid: string, sprintId: string) =>
+        fixtureData.listSprintsResult.sprints.some((sprint: { id: string }) => sprint.id === sprintId),
       listSprints: (pid: string) => {
         return fixtureData.listSprintsResult;
       },
@@ -39,10 +43,6 @@ async function main() {
           metrics.executionMs.push(meta.executionMs);
           metrics.gitMs.push(meta.gitMs);
 
-          metrics.executionSizeBytes.push(meta.executionSizeBytes);
-          metrics.gitSizeBytes.push(meta.gitSizeBytes);
-          metrics.statusSizeBytes.push(meta.statusSizeBytes);
-          metrics.payloadSizeBytes.push(meta.payloadSizeBytes);
         }
       },
       warn: () => {},
@@ -63,20 +63,28 @@ async function main() {
     gitSizeBytes: [] as number[],
     statusSizeBytes: [] as number[],
     payloadSizeBytes: [] as number[],
+    wallBuildTimes: [] as number[],
     publishCadenceMs: [] as number[],
   };
 
-  const ITERATIONS = 100;
+  const ITERATIONS = 1_000;
   console.log(`\nRunning ${ITERATIONS} iterations of snapshot assembly...`);
 
   for (let i = 0; i < ITERATIONS; i++) {
-    await getProjectLiveSnapshot(mockDeps, projectId);
+    const startedAt = performance.now();
+    const snapshot = await getProjectLiveSnapshot(mockDeps, projectId);
+    metrics.wallBuildTimes.push(performance.now() - startedAt);
+    metrics.executionSizeBytes.push(Buffer.byteLength(JSON.stringify(snapshot.execution), "utf8"));
+    metrics.gitSizeBytes.push(Buffer.byteLength(JSON.stringify(snapshot.gitStatus), "utf8"));
+    metrics.statusSizeBytes.push(Buffer.byteLength(JSON.stringify(snapshot.status), "utf8"));
+    metrics.payloadSizeBytes.push(Buffer.byteLength(JSON.stringify(snapshot), "utf8"));
   }
 
   const avg = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length;
 
   console.log("\n--- Snapshot Assembly Latency (Average) ---");
-  console.log(`Total Build Time: ${avg(metrics.buildTimes).toFixed(2)} ms`);
+  console.log(`Measured Wall Time: ${avg(metrics.wallBuildTimes).toFixed(3)} ms`);
+  console.log(`Instrumented Build Time: ${avg(metrics.buildTimes).toFixed(2)} ms`);
   console.log(`  |- Project Mgmt: ${avg(metrics.projectMgmtMs).toFixed(2)} ms`);
   console.log(`  |- Runtime Status: ${avg(metrics.runtimeMs).toFixed(2)} ms`);
   console.log(`  |- Execution State: ${avg(metrics.executionMs).toFixed(2)} ms`);

@@ -85,6 +85,7 @@ export interface UpdateTrackedSessionInput {
 }
 
 const SESSION_DB_PATH = getHomeCodeUxPath("session-tracking.db");
+const SESSION_TRACKING_SCHEMA_VERSION = 1;
 
 const resolveDbPath = (dbPath?: string): string => {
   if (dbPath && dbPath.trim().length > 0) {
@@ -131,14 +132,37 @@ export class SessionTrackingRepository {
       CREATE INDEX IF NOT EXISTS idx_provider_activities_session_time
       ON provider_activities (session_id, create_time DESC);
     `);
+    const schemaVersionRow = this.db.prepare("PRAGMA user_version").get() as {
+      user_version?: number;
+    } | undefined;
+    if (Number(schemaVersionRow?.user_version || 0) < SESSION_TRACKING_SCHEMA_VERSION) {
+      this.db.transaction(() => {
+        // Local prompts are already stored with the durable execution invocation. Remove legacy
+        // duplicates once so upgraded installations stop carrying wide-DAG prompt blobs forward.
+        this.db.prepare(`
+          UPDATE provider_sessions
+          SET prompt = NULL
+          WHERE provider != 'jules' AND prompt IS NOT NULL
+        `).run();
+        this.db.exec(`PRAGMA user_version = ${SESSION_TRACKING_SCHEMA_VERSION}`);
+      });
+    }
   }
 
   getDatabase(): DatabaseAdapter {
     return this.db;
   }
 
+  close(): void {
+    this.db.close();
+  }
+
   createSession(input: CreateTrackedSessionInput): JulesSession {
     const now = new Date().toISOString();
+    // CLI prompts are already durable in the execution invocation/message store and can contain
+    // an entire wide-DAG context. The legacy session database only needs prompts for Jules usage
+    // estimation, so avoid writing a second multi-megabyte copy for every local provider session.
+    const storedPrompt = input.provider === "jules" ? input.prompt ?? null : null;
     this.db.prepare(`
       INSERT INTO provider_sessions (
         id, provider, task_id, title, prompt, state, create_time, update_time, feature_branch, worker_branch, pr_url, repo_path
@@ -159,7 +183,7 @@ export class SessionTrackingRepository {
       input.provider,
       input.taskId ?? null,
       input.title ?? null,
-      input.prompt ?? null,
+      storedPrompt,
       input.state ?? "RUNNING",
       now,
       now,
@@ -263,9 +287,13 @@ export class SessionTrackingRepository {
     return row ? this.rowToSession(row) : null;
   }
 
-  listSessions(limit: number = 200): { sessions: JulesSession[] } {
+  listSessions(
+    limit: number = 200,
+    options: { includePrompt?: boolean } = {},
+  ): { sessions: JulesSession[] } {
+    const promptSelection = options.includePrompt === false ? "NULL AS prompt" : "prompt";
     const rows = this.db.prepare(`
-      SELECT id, provider, task_id, title, prompt, state, create_time, update_time, feature_branch, worker_branch, pr_url, repo_path
+      SELECT id, provider, task_id, title, ${promptSelection}, state, create_time, update_time, feature_branch, worker_branch, pr_url, repo_path
       FROM provider_sessions
       ORDER BY create_time DESC
       LIMIT ?

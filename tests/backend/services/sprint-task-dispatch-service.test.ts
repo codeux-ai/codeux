@@ -8,6 +8,7 @@ import { ExecutionRepository } from "../../../src/repositories/execution-reposit
 import { SprintTaskDispatchService, ProviderCapReachedError } from "../../../src/services/sprint-task-dispatch-service.js";
 import { ProviderConcurrencyService } from "../../../src/services/provider-concurrency-service.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
+import { JulesApiRequestError } from "../../../src/integrations/jules-api-client.js";
 
 const tempDirs: string[] = [];
 
@@ -646,6 +647,298 @@ describe("SprintTaskDispatchService", () => {
 
     const messages = executionRepository.listExecutionInvocationMessages(julesInvocation.id);
     expect(messages.some((message) => message.contentMarkdown.includes("Jules dispatch failed: Jules API unavailable"))).toBe(true);
+  });
+
+  it("defers Jules capacity responses without failing the task or leaking the claimed slot", async () => {
+    const { projectManagementRepository, executionRepository, taskService, service } = await createFixture();
+    const project = projectManagementRepository.createProject({
+      name: "Jules Capacity Project",
+      sourceType: "local",
+      sourceRef: "/workspace/jules-capacity-project",
+    });
+    const sprint = projectManagementRepository.createSprint(project.id, {
+      name: "Jules Capacity Sprint",
+      number: 21,
+    });
+    const taskRecord = projectManagementRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Wait for hosted capacity",
+      promptMarkdown: "Start when a hosted session slot becomes available.",
+      executorType: "jules",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      executorMode: "jules",
+    });
+    taskService.resolveTaskProvider.mockReturnValue("jules");
+    taskService.startSprintTask.mockRejectedValue(new JulesApiRequestError(
+      "Jules API create session failed (HTTP 400 INVALID_ARGUMENT): Maximum active sessions reached",
+      400,
+      "INVALID_ARGUMENT",
+    ));
+    const startArgs = {
+      task: {
+        id: taskRecord.taskKey,
+        record_id: taskRecord.id,
+        title: taskRecord.title,
+        prompt: taskRecord.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "PENDING" as const,
+      },
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      featureBranch: "feature/sprint-21",
+      repoPath: "/workspace/jules-capacity-project",
+      sprintNumber: 21,
+    };
+
+    await expect(service.startTask(startArgs)).rejects.toBeInstanceOf(ProviderCapReachedError);
+    await expect(service.startTask(startArgs)).rejects.toBeInstanceOf(ProviderCapReachedError);
+
+    expect(taskService.startSprintTask).toHaveBeenCalledTimes(1);
+    const [dispatch] = executionRepository.listTaskDispatches({
+      projectId: project.id,
+      sprintRunId: sprintRun.id,
+      taskId: taskRecord.id,
+    });
+    expect(dispatch).toMatchObject({ status: "queued", finishedAt: null, errorMessage: null });
+    expect(executionRepository.getLatestTaskRun(taskRecord.id, sprintRun.id)).toMatchObject({
+      state: "PENDING",
+      finishedAt: null,
+    });
+    expect(projectManagementRepository.getTask(taskRecord.id)).toMatchObject({ status: "pending" });
+    const [usage] = executionRepository.listProviderInvocationsForTask(project.id, taskRecord.id);
+    expect(usage).toMatchObject({ provider: "jules", status: "cancelled" });
+    const [invocation] = executionRepository.listExecutionInvocations({
+      projectId: project.id,
+      sprintRunId: sprintRun.id,
+    });
+    expect(invocation).toMatchObject({ provider: "jules", status: "cancelled", errorMessage: null });
+  });
+
+  it("reserves Jules slots for remotely active API sessions outside local accounting", async () => {
+    const { projectManagementRepository, executionRepository, taskService, service } = await createFixture();
+    const project = projectManagementRepository.createProject({
+      name: "Remote Jules Capacity Project",
+      sourceType: "local",
+      sourceRef: "/workspace/remote-jules-capacity-project",
+    });
+    const sprint = projectManagementRepository.createSprint(project.id, {
+      name: "Remote Jules Capacity Sprint",
+      number: 23,
+    });
+    const firstTask = projectManagementRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Use the final remote slot",
+      promptMarkdown: "Start only if the API reports one slot.",
+      executorType: "jules",
+    });
+    const secondTask = projectManagementRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Wait behind the remote capacity cap",
+      promptMarkdown: "Do not create a sixteenth session.",
+      executorType: "jules",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      executorMode: "jules",
+    });
+    const remoteSessions = Array.from({ length: 14 }, (_, index) => ({
+      id: `remote-active-${index}`,
+      name: `sessions/remote-active-${index}`,
+      prompt: "Existing remote work",
+      state: "IN_PROGRESS",
+    }));
+    const listJulesSessionsForCapacity = vi.fn().mockResolvedValue(remoteSessions);
+    const capacityAwareService = new SprintTaskDispatchService(
+      executionRepository,
+      projectManagementRepository,
+      taskService as any,
+      (service as any).guardrailService,
+      (service as any).providerConcurrencyService,
+      () => DEFAULT_DASHBOARD_SETTINGS,
+      (service as any).logger,
+      listJulesSessionsForCapacity,
+    );
+    taskService.resolveTaskProvider.mockReturnValue("jules");
+    taskService.startSprintTask.mockResolvedValue({
+      id: "jules-final-slot",
+      name: "sessions/jules-final-slot",
+      provider: "jules",
+    });
+    const buildArgs = (taskRecord: typeof firstTask) => ({
+      task: {
+        id: taskRecord.taskKey,
+        record_id: taskRecord.id,
+        title: taskRecord.title,
+        prompt: taskRecord.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "PENDING" as const,
+      },
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      featureBranch: "feature/sprint-23",
+      repoPath: "/workspace/remote-jules-capacity-project",
+      sprintNumber: 23,
+    });
+
+    await expect(capacityAwareService.startTask(buildArgs(firstTask))).resolves.toMatchObject({
+      id: "jules-final-slot",
+    });
+    await expect(capacityAwareService.startTask(buildArgs(secondTask))).rejects.toMatchObject({
+      provider: "jules",
+      limit: 15,
+      currentCount: 15,
+    });
+
+    expect(listJulesSessionsForCapacity).toHaveBeenCalledTimes(2);
+    expect(taskService.startSprintTask).toHaveBeenCalledTimes(1);
+    expect(projectManagementRepository.getTask(secondTask.id)).toMatchObject({ status: "pending" });
+    expect(executionRepository.getLatestTaskRun(secondTask.id, sprintRun.id)).toMatchObject({
+      state: "PENDING",
+      finishedAt: null,
+    });
+  });
+
+  it("defers Jules dispatch when the API capacity check is unavailable", async () => {
+    const { projectManagementRepository, executionRepository, taskService, service } = await createFixture();
+    const project = projectManagementRepository.createProject({
+      name: "Jules Capacity Check Project",
+      sourceType: "local",
+      sourceRef: "/workspace/jules-capacity-check-project",
+    });
+    const sprint = projectManagementRepository.createSprint(project.id, {
+      name: "Jules Capacity Check Sprint",
+      number: 24,
+    });
+    const taskRecord = projectManagementRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Wait for a verified provider slot",
+      promptMarkdown: "Fail closed when Jules cannot report active sessions.",
+      executorType: "jules",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      executorMode: "jules",
+    });
+    const capacityAwareService = new SprintTaskDispatchService(
+      executionRepository,
+      projectManagementRepository,
+      taskService as any,
+      (service as any).guardrailService,
+      (service as any).providerConcurrencyService,
+      () => DEFAULT_DASHBOARD_SETTINGS,
+      (service as any).logger,
+      vi.fn().mockRejectedValue(new Error("Jules list sessions unavailable")),
+    );
+    taskService.resolveTaskProvider.mockReturnValue("jules");
+
+    await expect(capacityAwareService.startTask({
+      task: {
+        id: taskRecord.taskKey,
+        record_id: taskRecord.id,
+        title: taskRecord.title,
+        prompt: taskRecord.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "PENDING",
+      },
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      featureBranch: "feature/sprint-24",
+      repoPath: "/workspace/jules-capacity-check-project",
+      sprintNumber: 24,
+    })).rejects.toThrow("Provider concurrency cap reached for jules");
+
+    expect(taskService.startSprintTask).not.toHaveBeenCalled();
+    expect(projectManagementRepository.getTask(taskRecord.id)).toMatchObject({ status: "pending" });
+  });
+
+  it("defers a generic Jules failed precondition even when the bounded snapshot is under capacity", async () => {
+    const { projectManagementRepository, executionRepository, taskService, service } = await createFixture();
+    const project = projectManagementRepository.createProject({
+      name: "Jules Precondition Capacity Project",
+      sourceType: "local",
+      sourceRef: "/workspace/jules-precondition-capacity-project",
+    });
+    const sprint = projectManagementRepository.createSprint(project.id, {
+      name: "Jules Precondition Capacity Sprint",
+      number: 26,
+    });
+    const taskRecord = projectManagementRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Recheck ambiguous provider capacity",
+      promptMarkdown: "Treat the provider rejection as authoritative when pagination hides older running work.",
+      executorType: "jules",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      executorMode: "jules",
+    });
+    const makeRemoteSessions = (count: number) => Array.from({ length: count }, (_, index) => ({
+      id: `precondition-active-${index}`,
+      name: `sessions/precondition-active-${index}`,
+      prompt: "Existing remote work",
+      state: "IN_PROGRESS",
+    }));
+    const listJulesSessionsForCapacity = vi.fn()
+      .mockResolvedValueOnce(makeRemoteSessions(14))
+      .mockResolvedValueOnce(makeRemoteSessions(14));
+    const capacityAwareService = new SprintTaskDispatchService(
+      executionRepository,
+      projectManagementRepository,
+      taskService as any,
+      (service as any).guardrailService,
+      (service as any).providerConcurrencyService,
+      () => DEFAULT_DASHBOARD_SETTINGS,
+      (service as any).logger,
+      listJulesSessionsForCapacity,
+    );
+    taskService.resolveTaskProvider.mockReturnValue("jules");
+    taskService.startSprintTask.mockRejectedValue(new JulesApiRequestError(
+      "Jules API create session failed (HTTP 400 FAILED_PRECONDITION): Precondition check failed.",
+      400,
+      "FAILED_PRECONDITION",
+    ));
+
+    await expect(capacityAwareService.startTask({
+      task: {
+        id: taskRecord.taskKey,
+        record_id: taskRecord.id,
+        title: taskRecord.title,
+        prompt: taskRecord.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "PENDING",
+      },
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      featureBranch: "feature/sprint-26",
+      repoPath: "/workspace/jules-precondition-capacity-project",
+      sprintNumber: 26,
+    })).rejects.toMatchObject({ provider: "jules", currentCount: 15 });
+
+    expect(listJulesSessionsForCapacity).toHaveBeenCalledTimes(2);
+    expect(taskService.startSprintTask).toHaveBeenCalledTimes(1);
+    expect(projectManagementRepository.getTask(taskRecord.id)).toMatchObject({ status: "pending" });
+    expect(executionRepository.getLatestTaskRun(taskRecord.id, sprintRun.id)).toMatchObject({
+      state: "PENDING",
+      finishedAt: null,
+    });
   });
 
   it("defers task start and records wait event when concurrency cap is reached", async () => {
