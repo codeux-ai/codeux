@@ -256,6 +256,9 @@ describe("GitHub workflow health", () => {
     expect(releaseCandidate).toContain("sudo apt-get install --no-install-recommends -y libopenjp2-tools xvfb");
     expect(releaseCandidate).toContain("name: Install and start release candidate");
     expect(releaseCandidate).toContain(ELECTRON_INSTALL_SMOKE);
+    expect(releaseCandidate).toContain("id: build_desktop_package");
+    expect(releaseCandidate).toContain("id: smoke_installed_candidate");
+    expect(releaseCandidate).toContain("if: ${{ always() && steps.build_desktop_package.outcome == 'success' }}");
     expectCommandBefore(releaseCandidate, "name: Build unsigned desktop package", "name: Install and start release candidate");
     expectCommandBefore(releaseCandidate, "name: Install and start release candidate", "name: Upload release candidate artifacts");
     expect(releaseCandidate).toContain("if-no-files-found: error");

@@ -132,6 +132,9 @@ describe("electron-builder packaged defaults", () => {
     expect(installerSmoke).toContain('findArtifact(".deb")');
     expect(installerSmoke).toContain('["/S", `/D=${installDirectory}`]');
     expect(installerSmoke).toContain("windowsVerbatimArguments: true");
+    expect(installerSmoke).toContain("WINDOWS_ACCESS_VIOLATION");
+    expect(installerSmoke).toContain("normalizedStatus === WINDOWS_ACCESS_VIOLATION");
+    expect(installerSmoke).toContain("retrying once in a fresh directory");
     expect(installerSmoke).toContain('findArtifact(".dmg")');
     expect(installerSmoke).toContain('run("hdiutil", ["attach"');
     expect(installerSmoke).toContain('input: "Y\\n"');
@@ -140,6 +143,12 @@ describe("electron-builder packaged defaults", () => {
     expect(installerSmoke).toContain("entry.name.includes(versionMarker)");
     expect(installerSmoke).toContain("CODE_UX_ELECTRON_STARTUP_SMOKE_FILE");
     expect(installerSmoke).toContain("marker.packaged !== true");
+    expect(installerSmoke).toContain('process.platform === "darwin"');
+    expect(installerSmoke).toContain('child.kill("SIGTERM")');
+    expect(installerSmoke).toContain('child.kill("SIGKILL")');
+    expect(installerSmoke).toContain("terminateValidatedMacProbe");
+    expect(installerSmoke).toContain("stopped.exit.code === 0");
+    expect(installerSmoke).toContain("stopped.exit.signal === stopped.termination");
     expect(mainProcessSource).toContain('window.webContents.once("did-finish-load"');
     expect(mainProcessSource).toContain("writeElectronStartupSmoke");
     expect(mainProcessSource).toContain('CODE_UX_ELECTRON_STARTUP_SMOKE_EXIT === "1"');
