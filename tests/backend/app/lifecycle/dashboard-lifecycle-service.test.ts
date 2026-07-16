@@ -421,6 +421,88 @@ describe("dashboard-lifecycle-service", () => {
       expect(mockDeps.guardrailService.resetPurpose).toHaveBeenCalledWith("task-1", "merge_conflict");
     });
 
+    it("resets the recorded CI-fix subject when its deduplicated handoff is resolved", async () => {
+      const escalation = {
+        id: "attention-ci-1",
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        taskId: null,
+        sprintRunId: "run-1",
+        dispatchId: null,
+        attentionType: "human_escalation_required",
+        severity: "high",
+        ownerType: "human",
+        status: "open",
+        assignedWorkerEndpointId: null,
+        title: "CI autofix guardrail reached",
+        summaryMarkdown: "Five provider attempts completed.",
+        payload: {
+          sourceAttentionType: "ci_fix",
+          guardrailPurpose: "ci_fix",
+          guardrailSubject: "main-merge-ci-fix:run-1",
+          guardrailAction: "human_handoff",
+        },
+        openedAt: "2026-03-09T00:00:00.000Z",
+        claimedAt: null,
+        resolvedAt: null,
+        updatedAt: "2026-03-09T00:00:00.000Z",
+      };
+      vi.mocked(mockDeps.projectAttentionRepository.getAttentionItem).mockReturnValue(escalation as any);
+      vi.mocked(mockDeps.projectAttentionRepository.resolveAttentionItem).mockReturnValue({
+        ...escalation,
+        status: "resolved",
+        resolvedAt: "2026-03-09T00:01:00.000Z",
+      } as any);
+
+      await bootDashboard(mockDeps);
+      const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+      setupArgs.resolveAttentionItem!("project-1", "attention-ci-1", {
+        status: "resolved",
+        reason: "dashboard_resolved",
+      });
+
+      expect(mockDeps.guardrailService.resetPurpose).toHaveBeenCalledWith(
+        "main-merge-ci-fix:run-1",
+        "ci_fix",
+      );
+    });
+
+    it("normalizes legacy CI-fix handoffs when resetting a task budget", async () => {
+      const escalation = {
+        id: "attention-ci-legacy",
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        taskId: "task-1",
+        sprintRunId: "run-1",
+        dispatchId: null,
+        attentionType: "human_escalation_required",
+        severity: "high",
+        ownerType: "human",
+        status: "open",
+        assignedWorkerEndpointId: null,
+        title: "Virtual worker escalation",
+        summaryMarkdown: "Legacy CI repair handoff.",
+        payload: { sourceAttentionType: "ci_fix_required" },
+        openedAt: "2026-03-09T00:00:00.000Z",
+        claimedAt: null,
+        resolvedAt: null,
+        updatedAt: "2026-03-09T00:00:00.000Z",
+      };
+      vi.mocked(mockDeps.projectAttentionRepository.getAttentionItem).mockReturnValue(escalation as any);
+      vi.mocked(mockDeps.projectAttentionRepository.resolveAttentionItem).mockReturnValue({
+        ...escalation,
+        status: "resolved",
+      } as any);
+
+      await bootDashboard(mockDeps);
+      const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+      setupArgs.resolveAttentionItem!("project-1", "attention-ci-legacy", {
+        status: "resolved",
+      });
+
+      expect(mockDeps.guardrailService.resetPurpose).toHaveBeenCalledWith("task-1", "ci_fix");
+    });
+
     it("resets QA review history when a QA human escalation is resolved", async () => {
       const escalation = {
         id: "attention-qa-1",

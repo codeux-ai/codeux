@@ -3,7 +3,10 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { SqliteDatabaseAdapter } from "../../../../src/repositories/db/sqlite-database-adapter.js";
-import { migrateGuardrailLedgerDropTaskForeignKey } from "../../../../src/repositories/db/app-db-migrations.js";
+import {
+  migrateGuardrailLedgerAdjustmentsDropTaskForeignKey,
+  migrateGuardrailLedgerDropTaskForeignKey,
+} from "../../../../src/repositories/db/app-db-migrations.js";
 
 const tempDirs: string[] = [];
 
@@ -26,6 +29,21 @@ const LEGACY_TABLE = `
     count INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+  )
+`;
+
+const LEGACY_ADJUSTMENTS_TABLE = `
+  CREATE TABLE guardrail_ledger_adjustments (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    purpose TEXT NOT NULL,
+    adjustment INTEGER NOT NULL,
+    source_key TEXT NOT NULL UNIQUE,
+    reason TEXT,
+    created_at TEXT NOT NULL,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
   )
@@ -88,6 +106,72 @@ describe("migrateGuardrailLedgerDropTaskForeignKey", () => {
       `);
       expect(() => migrateGuardrailLedgerDropTaskForeignKey(db)).not.toThrow();
       const fks = db.prepare("PRAGMA foreign_key_list(guardrail_ledger)").all() as Array<{ table?: string }>;
+      expect(fks.some((fk) => fk.table === "tasks")).toBe(false);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("migrateGuardrailLedgerAdjustmentsDropTaskForeignKey", () => {
+  it("drops the task foreign key while preserving durable adjustment markers", async () => {
+    const db = await makeDb();
+    try {
+      db.exec(LEGACY_ADJUSTMENTS_TABLE);
+      db.exec(`INSERT INTO projects (id) VALUES ('p1')`);
+      db.exec(`INSERT INTO tasks (id) VALUES ('t1')`);
+      db.exec(`
+        INSERT INTO guardrail_ledger_adjustments
+          (id, project_id, task_id, purpose, adjustment, source_key, reason, created_at)
+        VALUES ('a1', 'p1', 't1', 'task_coding', -1, 'restart:run-1', 'restart', 'now')
+      `);
+
+      migrateGuardrailLedgerAdjustmentsDropTaskForeignKey(db);
+
+      const fks = db.prepare("PRAGMA foreign_key_list(guardrail_ledger_adjustments)").all() as Array<{ table?: string }>;
+      expect(fks.some((fk) => fk.table === "tasks")).toBe(false);
+      expect(fks.some((fk) => fk.table === "projects")).toBe(true);
+      expect(db.prepare("SELECT source_key FROM guardrail_ledger_adjustments WHERE id = 'a1'").get())
+        .toEqual({ source_key: "restart:run-1" });
+      expect(() =>
+        db.exec(`
+          INSERT INTO guardrail_ledger_adjustments
+            (id, project_id, task_id, purpose, adjustment, source_key, reason, created_at)
+          VALUES (
+            'a2',
+            'p1',
+            'main-merge-ci-fix:sprint-run-1',
+            'ci_fix',
+            0,
+            'ci-fix-attempt:sprint-attempt-1',
+            'provider_started',
+            'now'
+          )
+        `),
+      ).not.toThrow();
+    } finally {
+      db.close();
+    }
+  });
+
+  it("is a no-op when the task foreign key is already absent", async () => {
+    const db = await makeDb();
+    try {
+      db.exec(`
+        CREATE TABLE guardrail_ledger_adjustments (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          task_id TEXT NOT NULL,
+          purpose TEXT NOT NULL,
+          adjustment INTEGER NOT NULL,
+          source_key TEXT NOT NULL UNIQUE,
+          reason TEXT,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        )
+      `);
+      expect(() => migrateGuardrailLedgerAdjustmentsDropTaskForeignKey(db)).not.toThrow();
+      const fks = db.prepare("PRAGMA foreign_key_list(guardrail_ledger_adjustments)").all() as Array<{ table?: string }>;
       expect(fks.some((fk) => fk.table === "tasks")).toBe(false);
     } finally {
       db.close();

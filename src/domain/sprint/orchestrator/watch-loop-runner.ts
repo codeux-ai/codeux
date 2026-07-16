@@ -1410,7 +1410,7 @@ function mainMergeAttentionItemKind(
   if (source === "merge_conflict") {
     return "merge_conflict";
   }
-  if (source === "ci_fix_required") {
+  if (source === "ci_fix_required" || source === "ci_fix") {
     return "ci_fix_required";
   }
   return null;

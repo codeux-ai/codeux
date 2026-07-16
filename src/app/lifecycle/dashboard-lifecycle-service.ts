@@ -329,11 +329,7 @@ function resetGuardrailForResolvedHumanAttention(
     return;
   }
 
-  if (!item.taskId) {
-    return;
-  }
-
-  if (sourceAttentionType === "qa_review" || isQaReviewHumanEscalation(item)) {
+  if (item.taskId && (sourceAttentionType === "qa_review" || isQaReviewHumanEscalation(item))) {
     const clearedRuns = deps.qaReviewRepository.resetTaskReviewRuns(item.taskId);
     deps.guardrailService.resetPurpose(item.taskId, "qa_review");
     const task = deps.projectManagementRepository.getTask(item.taskId);
@@ -356,14 +352,30 @@ function resetGuardrailForResolvedHumanAttention(
     return;
   }
 
+  const configuredPurpose = typeof item.payload?.guardrailPurpose === "string"
+    ? item.payload.guardrailPurpose
+    : sourceAttentionType === "ci_fix_required"
+      ? "ci_fix"
+      : sourceAttentionType;
   if (
-    typeof sourceAttentionType !== "string"
-    || !(GUARDRAIL_LEDGER_PURPOSES as string[]).includes(sourceAttentionType)
+    typeof configuredPurpose !== "string"
+    || !(GUARDRAIL_LEDGER_PURPOSES as string[]).includes(configuredPurpose)
   ) {
     return;
   }
 
-  deps.guardrailService.resetPurpose(item.taskId, sourceAttentionType as GuardrailLedgerPurpose);
+  const guardrailSubject = typeof item.payload?.guardrailSubject === "string"
+    && item.payload.guardrailSubject.trim().length > 0
+    ? item.payload.guardrailSubject.trim()
+    : item.taskId
+      || (configuredPurpose === "ci_fix" && item.sprintRunId
+        ? `main-merge-ci-fix:${item.sprintRunId}`
+        : null);
+  if (!guardrailSubject) {
+    return;
+  }
+
+  deps.guardrailService.resetPurpose(guardrailSubject, configuredPurpose as GuardrailLedgerPurpose);
 }
 
 function isQaReviewHumanEscalation(

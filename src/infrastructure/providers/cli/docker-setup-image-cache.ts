@@ -378,9 +378,15 @@ export class DockerSetupImageCache {
       }
 
       try {
+        await fs.mkdir(path.dirname(lockDir), { recursive: true });
         await fs.mkdir(lockDir);
         return true;
       } catch (error) {
+        if (this.isFileNotFoundError(error)) {
+          await delay(waitMs, undefined, { signal });
+          waitMs = Math.min(BUILD_LOCK_MAX_WAIT_MS, waitMs * 2);
+          continue;
+        }
         if (!this.isFileAlreadyExistsError(error)) {
           throw error;
         }
@@ -505,5 +511,12 @@ export class DockerSetupImageCache {
       && error !== null
       && "code" in error
       && (error as NodeJS.ErrnoException).code === "EEXIST";
+  }
+
+  private isFileNotFoundError(error: unknown): boolean {
+    return typeof error === "object"
+      && error !== null
+      && "code" in error
+      && (error as NodeJS.ErrnoException).code === "ENOENT";
   }
 }
