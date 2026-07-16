@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import * as fs from "fs/promises";
 import * as path from "path";
 import * as os from "os";
@@ -59,6 +60,16 @@ describe("WorkspaceManager", () => {
     expect(first).toMatch(/-[a-f0-9]{8}$/);
     expect(second).toMatch(/-[a-f0-9]{8}$/);
     expect(first.slice("docker-volume://".length).length).toBeLessThanOrEqual(83);
+  });
+
+  it("uses a strong digest for networked workspace container names", () => {
+    const source = readFileSync(
+      path.join(process.cwd(), "src/infrastructure/providers/cli/workspace-manager.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain('const containerName = `code-ux-net-git-${createHash("sha256")');
+    expect(source).not.toContain('const containerName = `code-ux-net-git-${createHash("sha1")');
   });
 
   it("labels hashed snapshot volumes with the original logical session id", async () => {
