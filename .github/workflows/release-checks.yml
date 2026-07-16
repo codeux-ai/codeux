@@ -22,15 +22,15 @@ jobs:
         include:
           - name: Linux
             os: ubuntu-latest
-            electron-script: electron:dist:linux
+            electron-target: --linux
             artifact-name: release-checks-linux
           - name: macOS
             os: macos-latest
-            electron-script: electron:dist:mac
+            electron-target: --mac
             artifact-name: release-checks-macos
           - name: Windows
             os: windows-latest
-            electron-script: electron:dist:win
+            electron-target: --win
             artifact-name: release-checks-windows
 
     env:
@@ -92,7 +92,7 @@ jobs:
         run: pnpm run electron:install-deps
 
       - name: Build desktop package
-        run: pnpm run ${{ matrix.electron-script }} -- --publish never
+        run: pnpm run electron:prepare-deps && pnpm exec electron-builder --config electron-builder.config.cjs ${{ matrix.electron-target }} --publish never
 
       - name: Install and start release candidate
         run: pnpm run electron:smoke-installed
