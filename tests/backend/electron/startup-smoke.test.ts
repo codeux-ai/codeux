@@ -1,8 +1,11 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import { writeElectronStartupSmoke } from "../../../src/electron/startup-smoke.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  exitElectronStartupSmoke,
+  writeElectronStartupSmoke,
+} from "../../../src/electron/startup-smoke.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -48,5 +51,15 @@ describe("Electron startup smoke marker", () => {
       dashboardOrigin: "http://127.0.0.1:4567",
       rendererUrl: "http://127.0.0.1:4567/",
     })).rejects.toThrow("must be absolute");
+  });
+
+  it("terminates the isolated readiness probe with code zero", () => {
+    const exitProcess = vi.fn((_code: number): never => {
+      throw new Error("process exited");
+    });
+
+    expect(() => exitElectronStartupSmoke(exitProcess)).toThrow("process exited");
+    expect(exitProcess).toHaveBeenCalledOnce();
+    expect(exitProcess).toHaveBeenCalledWith(0);
   });
 });
