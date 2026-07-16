@@ -18,8 +18,11 @@ const artifactDirectory = path.resolve(
 );
 const timeoutMs = Number.parseInt(process.env.CODE_UX_ELECTRON_SMOKE_TIMEOUT_MS || "120000", 10);
 const packageJson = JSON.parse(await readFile(path.join(projectRoot, "package.json"), "utf8"));
+const WINDOWS_ACCESS_VIOLATION = 0xC0000005;
+const WINDOWS_INSTALL_ATTEMPTS = 2;
+const MAC_TERMINATION_GRACE_MS = 5_000;
 
-function run(command, args, options = {}) {
+function runResult(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: projectRoot,
     encoding: "utf8",
@@ -29,9 +32,15 @@ function run(command, args, options = {}) {
   if (result.error) {
     throw result.error;
   }
+  return result;
+}
+
+function run(command, args, options = {}) {
+  const result = runResult(command, args, options);
   if (result.status !== 0) {
     throw new Error(`${command} exited with status ${result.status ?? "unknown"}.`);
   }
+  return result;
 }
 
 async function findArtifact(extension) {
@@ -63,17 +72,46 @@ async function installLinuxCandidate() {
 
 async function installWindowsCandidate(temporaryRoot) {
   const installer = await findArtifact(".exe");
-  const installDirectory = path.join(temporaryRoot, "installed", "Code UX");
-  await mkdir(installDirectory, { recursive: true });
-  // NSIS requires /D= to be the final, completely unquoted command-line segment even when the
-  // destination contains spaces. Node otherwise quotes that argument on Windows and the generated
-  // installer can terminate before extracting the application.
-  run(installer, ["/S", `/D=${installDirectory}`], {
-    windowsVerbatimArguments: true,
-  });
-  const executable = path.join(installDirectory, "Code UX.exe");
-  await access(executable);
-  return { command: executable, args: [] };
+  const failures = [];
+  for (let attempt = 1; attempt <= WINDOWS_INSTALL_ATTEMPTS; attempt += 1) {
+    const installDirectory = path.join(temporaryRoot, "installed", `Code UX attempt ${attempt}`);
+    await rm(installDirectory, { recursive: true, force: true });
+    await mkdir(installDirectory, { recursive: true });
+    // NSIS requires /D= to be the final, completely unquoted command-line segment even when the
+    // destination contains spaces. Node otherwise quotes that argument on Windows and the generated
+    // installer can terminate before extracting the application.
+    const result = runResult(installer, ["/S", `/D=${installDirectory}`], {
+      windowsVerbatimArguments: true,
+    });
+    if (result.status === 0) {
+      const executable = path.join(installDirectory, "Code UX.exe");
+      await access(executable);
+      return { command: executable, args: [] };
+    }
+
+    const normalizedStatus = typeof result.status === "number"
+      ? result.status >>> 0
+      : null;
+    failures.push({
+      attempt,
+      status: result.status,
+      normalizedStatus: normalizedStatus === null
+        ? null
+        : `0x${normalizedStatus.toString(16).toUpperCase().padStart(8, "0")}`,
+    });
+    const canRetry = attempt < WINDOWS_INSTALL_ATTEMPTS
+      && normalizedStatus === WINDOWS_ACCESS_VIOLATION;
+    if (!canRetry) {
+      throw new Error(
+        `${installer} failed during silent install: ${JSON.stringify(failures)}.`,
+      );
+    }
+    console.warn(
+      `Windows installer hit transient access violation on attempt ${attempt}; retrying once in a fresh directory.`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+  }
+  throw new Error(`${installer} did not produce an installed application.`);
 }
 
 async function installMacCandidate(temporaryRoot) {
@@ -124,6 +162,41 @@ function appendBounded(current, chunk) {
   return combined.length <= 65_536 ? combined : combined.slice(-65_536);
 }
 
+async function waitForExit(exitPromise, waitMs) {
+  return await Promise.race([
+    exitPromise,
+    new Promise((resolve) => setTimeout(() => resolve(null), waitMs)),
+  ]);
+}
+
+async function terminateValidatedMacProbe(child, exitPromise) {
+  const naturalExit = await waitForExit(exitPromise, 250);
+  if (naturalExit) {
+    return { exit: naturalExit, termination: "natural" };
+  }
+
+  if (!child.kill("SIGTERM")) {
+    const racedExit = await waitForExit(exitPromise, 250);
+    if (racedExit) {
+      return { exit: racedExit, termination: "natural" };
+    }
+    throw new Error("Unable to terminate the validated macOS Electron startup probe.");
+  }
+  const gracefulExit = await waitForExit(exitPromise, MAC_TERMINATION_GRACE_MS);
+  if (gracefulExit) {
+    return { exit: gracefulExit, termination: "SIGTERM" };
+  }
+
+  if (!child.kill("SIGKILL")) {
+    throw new Error("Validated macOS Electron startup probe ignored SIGTERM and could not be force-killed.");
+  }
+  const forcedExit = await waitForExit(exitPromise, MAC_TERMINATION_GRACE_MS);
+  if (!forcedExit) {
+    throw new Error("Validated macOS Electron startup probe did not report exit after SIGKILL.");
+  }
+  return { exit: forcedExit, termination: "SIGKILL" };
+}
+
 async function waitForInstalledApp(launch, temporaryRoot) {
   const markerPath = path.join(temporaryRoot, "startup-ready.json");
   const isolatedHome = path.join(temporaryRoot, "home");
@@ -148,7 +221,9 @@ async function waitForInstalledApp(launch, temporaryRoot) {
       MCP_HTTP_ENABLED: "false",
       CODE_UX_DISABLE_MCP_STDIO: "1",
       CODE_UX_ELECTRON_STARTUP_SMOKE_FILE: markerPath,
-      CODE_UX_ELECTRON_STARTUP_SMOKE_EXIT: "1",
+      ...(process.platform === "darwin"
+        ? {}
+        : { CODE_UX_ELECTRON_STARTUP_SMOKE_EXIT: "1" }),
     },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
@@ -205,10 +280,31 @@ async function waitForInstalledApp(launch, temporaryRoot) {
     throw new Error(`Installed Electron app returned an invalid startup marker: ${JSON.stringify(marker)}`);
   }
 
-  const exit = await Promise.race([
-    exitPromise,
-    new Promise((resolve) => setTimeout(() => resolve(null), 30_000)),
-  ]);
+  if (process.platform === "darwin") {
+    const stopped = await terminateValidatedMacProbe(child, exitPromise);
+    const cleanNaturalExit = stopped.termination === "natural"
+      && !stopped.exit.error
+      && stopped.exit.code === 0;
+    const harnessTerminated = stopped.termination !== "natural"
+      && !stopped.exit.error
+      && (
+        stopped.exit.code === 0
+        || (stopped.exit.code === null && stopped.exit.signal === stopped.termination)
+      );
+    if (!cleanNaturalExit && !harnessTerminated) {
+      throw new Error(
+        `Installed macOS Electron app became ready but probe termination was invalid: ${JSON.stringify(stopped)}\n`
+        + `stdout:\n${stdout}\nstderr:\n${stderr}`,
+      );
+    }
+    console.log(
+      `Installed Electron ${marker.version} became renderer-ready on ${marker.platform}/${marker.arch} `
+      + `at ${marker.dashboardOrigin}; the validated macOS probe was stopped by ${stopped.termination}.`,
+    );
+    return;
+  }
+
+  const exit = await waitForExit(exitPromise, 30_000);
   if (!exit || exit.error || exit.code !== 0) {
     child.kill();
     throw new Error(
