@@ -143,7 +143,7 @@ describe("electron-builder packaged defaults", () => {
     expect(mainProcessSource).toContain('window.webContents.once("did-finish-load"');
     expect(mainProcessSource).toContain("writeElectronStartupSmoke");
     expect(mainProcessSource).toContain('CODE_UX_ELECTRON_STARTUP_SMOKE_EXIT === "1"');
-    expect(mainProcessSource).toContain("app.exit(0)");
+    expect(mainProcessSource).toContain("exitElectronStartupSmoke()");
     expect(mainProcessSource).toContain('app.on("before-quit"');
     expect(mainProcessSource).toContain('app.exit(typeof process.exitCode === "number" ? process.exitCode : 0)');
   });

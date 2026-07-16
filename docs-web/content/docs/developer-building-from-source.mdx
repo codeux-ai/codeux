@@ -169,7 +169,9 @@ Electron and npm package builds must include the `docs-web` runtime catalog. The
 Electron runtime dependency preparation runs a production-only pnpm 11 install with `--config.node-linker=hoisted` passed on the command line. A nested runtime `.npmrc` is not enough once pnpm discovers the enclosing workspace. Preparation rejects symbolic links, missing direct production packages, and failed MCP SDK/`zod` imports so Electron Builder cannot silently copy a broken peer-dependency layout. The workspace `allowBuilds` policy approves only `onnxruntime-node`; preparation sets `ONNXRUNTIME_NODE_INSTALL=skip` because the CPU bindings used by Code UX are bundled and the upstream Linux default fetches optional CUDA/TensorRT binaries from NuGet. This keeps desktop packaging deterministic without suppressing the dependency postinstall or pnpm's build-policy check. Keep that allowlist narrow and review any addition as release-executed code.
 
 The installed-Electron smoke uses each platform's native package and exits its readiness probe
-immediately with code zero after the packaged backend and renderer are ready. On Windows it passes
+through the Node process boundary immediately with code zero after the packaged backend and
+renderer are ready and the readiness marker is durably written. This bypasses Electron/AppKit
+termination paths that newer macOS runners can defer even after `app.exit()`. On Windows it passes
 the NSIS silent-install arguments verbatim so the required final `/D=` destination remains unquoted
 even when that destination contains spaces. On macOS it accepts the DMG's embedded MIT license
 through `hdiutil` stdin before mounting. Production Electron shutdowns still drain the embedded
